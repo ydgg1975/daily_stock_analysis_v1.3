@@ -560,6 +560,7 @@ PUSHOVER_API_TOKEN=your_api_token
 ### YFinance
 - 免费，无需配置
 - 支持美股/港股数据
+- 美股历史数据与实时行情均统一使用 YFinance，以避免 akshare 美股复权异常导致的技术指标错误
 
 ---
 
@@ -732,6 +733,8 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 |------|------|------|
 | A股 | 6位数字 | `600519`、`000001`、`300750` |
 | 港股 | hk + 5位数字 | `hk00700`、`hk09988` |
+| 美股 | 1-5 字母（可选 .X 后缀） | `AAPL`、`TSLA`、`BRK.B` |
+| 美股指数 | SPX/DJI/IXIC 等 | `SPX`、`DJI`、`NASDAQ`、`VIX` |
 
 ### 注意事项
 
