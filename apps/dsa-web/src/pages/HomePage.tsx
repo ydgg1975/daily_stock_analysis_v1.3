@@ -103,9 +103,15 @@ const HomePage: React.FC = () => {
     const page = reset ? 1 : currentPage + 1;
 
     try {
+      // 为了确保包含今天的记录，endDate 设置为明天，这样可以包含今天全天的数据
+      // 同时避免因时区差异导致的日期偏差问题
+      // TODO: This is a hack, need to resolve date problem properly in the future
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      
       const response = await historyApi.getList({
         startDate: getRecentStartDate(30),
-        endDate: toDateInputValue(new Date()),
+        endDate: toDateInputValue(tomorrowDate),
         page,
         limit: pageSize,
       });
