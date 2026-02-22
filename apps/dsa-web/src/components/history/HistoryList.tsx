@@ -9,8 +9,8 @@ interface HistoryListProps {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  selectedQueryId?: string;
-  onItemClick: (queryId: string) => void;
+  selectedId?: number;  // 但技模式下一次配置需需修改为使用敘符为id
+  onItemClick: (recordId: number) => void;  // 调用时传递 id 而非 queryId
   onLoadMore: () => void;
   className?: string;
 }
@@ -24,7 +24,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   isLoading,
   isLoadingMore,
   hasMore,
-  selectedQueryId,
+  selectedId,
   onItemClick,
   onLoadMore,
   className = '',
@@ -88,10 +88,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({
           <div className="space-y-1.5">
             {items.map((item) => (
               <button
-                key={item.queryId}
+                key={item.id}
                 type="button"
-                onClick={() => onItemClick(item.queryId)}
-                className={`history-item w-full text-left ${selectedQueryId === item.queryId ? 'active' : ''
+                onClick={() => onItemClick(item.id)}
+                className={`history-item w-full text-left ${selectedId === item.id ? 'active' : ''
                   }`}
               >
                 <div className="flex items-center gap-2 w-full">

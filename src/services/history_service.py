@@ -89,6 +89,7 @@ class HistoryService:
             items = []
             for record in records:
                 items.append({
+                    "id": record.id,
                     "query_id": record.query_id,
                     "stock_code": record.code,
                     "stock_name": record.name,
@@ -167,6 +168,70 @@ class HistoryService:
             
         except Exception as e:
             logger.error(f"查询历史详情失败: {e}", exc_info=True)
+            return None
+
+    def get_history_detail_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
+        """
+        根据数据库主键 ID 获取历史报告详情
+        
+        由于 query_id 可能重复（批量分析时多条记录共享同一 query_id），
+        此方法使用主键 ID 确保精确查询唯一记录。
+        
+        Args:
+            record_id: 分析历史记录的主键 ID
+            
+        Returns:
+            完整的分析报告字典，不存在返回 None
+        """
+        try:
+            # 根据 ID 查询数据库
+            record = self.db.get_analysis_history_by_id(record_id)
+            
+            if not record:
+                return None
+            
+            # 解析 raw_result JSON
+            raw_result = None
+            if record.raw_result:
+                try:
+                    raw_result = json.loads(record.raw_result)
+                except json.JSONDecodeError:
+                    raw_result = record.raw_result
+            
+            # 解析 context_snapshot JSON
+            context_snapshot = None
+            if record.context_snapshot:
+                try:
+                    context_snapshot = json.loads(record.context_snapshot)
+                except json.JSONDecodeError:
+                    context_snapshot = record.context_snapshot
+            
+            # 计算情绪标签
+            sentiment_label = self._get_sentiment_label(record.sentiment_score or 50)
+            
+            return {
+                "id": record.id,
+                "query_id": record.query_id,
+                "stock_code": record.code,
+                "stock_name": record.name,
+                "report_type": record.report_type,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "analysis_summary": record.analysis_summary,
+                "operation_advice": record.operation_advice,
+                "trend_prediction": record.trend_prediction,
+                "sentiment_score": record.sentiment_score,
+                "sentiment_label": sentiment_label,
+                "ideal_buy": str(record.ideal_buy) if record.ideal_buy else None,
+                "secondary_buy": str(record.secondary_buy) if record.secondary_buy else None,
+                "stop_loss": str(record.stop_loss) if record.stop_loss else None,
+                "take_profit": str(record.take_profit) if record.take_profit else None,
+                "news_content": record.news_content,
+                "raw_result": raw_result,
+                "context_snapshot": context_snapshot,
+            }
+            
+        except Exception as e:
+            logger.error(f"根据 ID 查询历史详情失败: {e}", exc_info=True)
             return None
 
     def get_news_intel(self, query_id: str, limit: int = 20) -> List[Dict[str, str]]:
