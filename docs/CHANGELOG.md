@@ -7,7 +7,35 @@
 
 ## [Unreleased]
 
+### 变更（Breaking）
+- **Web 登录认证重构**：移除 `ADMIN_PASSWORD`、`ADMIN_PASSWORD_HASH`，改用 `ADMIN_AUTH_ENABLED` 开关 + 文件凭证。启用后首次访问在网页设置初始密码，支持「系统设置 > 修改密码」和 CLI `python -m src.auth reset_password` 重置。
+
+### 修复
+- 🐛 **StockTrendAnalyzer 从未执行** (Issue #357)
+  - 根因：`get_analysis_context` 仅返回 2 天数据且无 `raw_data`，pipeline 中 `raw_data in context` 始终为 False
+  - 修复：Step 3 直接调用 `get_data_range` 获取 90 日历天（约 60 交易日）历史数据用于趋势分析
+  - 改善：趋势分析失败时用 `logger.warning(..., exc_info=True)` 记录完整 traceback
+- 🐛 **BOT 与 WEB UI 股票代码大小写统一** (Issue #355)
+  - BOT `/analyze` 与 WEB UI 触发分析的股票代码统一为大写（如 `aapl` → `AAPL`）
+  - 新增 `canonical_stock_code()`，在 BOT、API、Config、CLI、task_queue 入口处规范化
+  - 历史记录与任务去重逻辑可正确识别同一股票（大小写不再影响）
+- 🐛 **ETF 分析仅关注指数走势** (Issue #274)
+  - 美股/港股 ETF（如 VOO、QQQ）与 A 股 ETF 不再纳入基金公司层面风险（诉讼、声誉等）
+  - 搜索维度：ETF/指数专用 risk_check、earnings、industry 查询，避免命中基金管理人新闻
+  - AI 提示：指数型标的分析约束，`risk_alerts` 不得出现基金管理人公司经营风险
+- 修复美股（如 ADBE）技术指标矛盾：akshare 美股复权数据异常，统一美股历史数据源为 YFinance（Issue #311）
+- 🐛 **美股指数实时行情与日线数据** (Issue #273)
+  - 修复 SPX、DJI、IXIC、NDX、VIX、RUT 等美股指数无法获取实时行情的问题
+  - 新增 `us_index_mapping` 模块，将用户输入（如 SPX）映射为 Yahoo Finance 符号（如 ^GSPC）
+  - 美股指数与美股股票日线数据直接路由至 YfinanceFetcher，避免遍历不支持的数据源
+  - 消除重复的美股识别逻辑，统一使用 `is_us_stock_code()` 函数
+
 ### 优化
+- 🎨 **首页输入栏布局对齐优化**
+  - 股票代码输入框左缘与历史记录 glass-card 框左对齐
+  - 分析按钮右缘与 Market Sentiment 外框右对齐
+  - Market Sentiment 卡片向下拉伸填满格子，消除与 STRATEGY POINTS 之间的空隙
+  - 窄屏时输入栏填满宽度，响应式对齐保持一致
 - 🔒 **CI 门禁统一（P0）**
   - 新增 `scripts/ci_gate.sh` 作为后端门禁单一入口
   - 主 CI 改为 `backend-gate`、`docker-build`、`web-gate` 三段式
@@ -29,9 +57,18 @@
   - 新增 `AI_REVIEW_STRICT` 开关，可选将 AI 审查失败升级为阻断
 
 ### 新增
+- **大盘复盘可选区域** (Issue #299)
+  - 支持 `MARKET_REVIEW_REGION` 环境变量：cn（A股）、us（美股）、both（两者）
+  - us 模式适合仅关注美股的用户，使用 SPX/纳斯达克/道指/VIX 等指数；both 模式可同时复盘 A 股与美股
+  - 默认 cn，保持向后兼容
 - 📊 **仅分析结果摘要** (Issue #262)
   - 支持 `REPORT_SUMMARY_ONLY` 环境变量，设为 `true` 时只推送汇总，不含个股详情
   - 默认 `false`，多股时适合快速浏览
+- **新闻时效性与乖离率优化** (Issue #296)
+  - `NEWS_MAX_AGE_DAYS`：新闻最大时效（天），默认 3，避免使用过时信息
+  - `BIAS_THRESHOLD`：乖离率阈值（%），默认 5.0，可配置
+  - 强势趋势股（多头排列且趋势强度 ≥70）自动放宽乖离率到 1.5 倍，避免错杀 LITE/SNDK 等趋势股
+  - AI System Prompt 增加 PE 估值关注和强势趋势放宽软性引导
 - 📷 **Markdown 转图片** (Issue #289)
   - 支持 `MARKDOWN_TO_IMAGE_CHANNELS` 配置，对 Telegram、企业微信、自定义 Webhook（Discord）、邮件以图片形式发送报告
   - 邮件为内联附件，增强对不支持 HTML 客户端的兼容性

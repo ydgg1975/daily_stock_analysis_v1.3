@@ -88,7 +88,17 @@ class Config:
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
-    
+
+    # === 新闻与分析筛选配置 ===
+    news_max_age_days: int = 3   # 新闻最大时效（天）
+    bias_threshold: float = 5.0  # 乖离率阈值（%），超过此值提示不追高
+
+    # === Agent 模式配置 ===
+    agent_mode: bool = False
+    agent_max_steps: int = 10
+    agent_skills: List[str] = field(default_factory=list)
+    agent_strategy_dir: Optional[str] = None
+
     # === 通知配置（可同时配置多个，全部推送）===
     
     # 企业微信 Webhook
@@ -188,7 +198,10 @@ class Config:
     schedule_enabled: bool = False            # 是否启用定时任务
     schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     schedule_run_immediately: bool = True     # 启动时是否立即执行一次
+    run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
+    # 大盘复盘市场区域：cn(A股)、us(美股)、both(两者)，us 适合仅关注美股的用户
+    market_review_region: str = "cn"
 
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
@@ -331,12 +344,12 @@ class Config:
                 os.environ['https_proxy'] = https_proxy
 
         
-        # 解析自选股列表（逗号分隔）
+        # 解析自选股列表（逗号分隔，统一为大写 Issue #355）
         stock_list_str = os.getenv('STOCK_LIST', '')
         stock_list = [
-            code.strip() 
-            for code in stock_list_str.split(',') 
-            if code.strip()
+            (c or "").strip().upper()
+            for c in stock_list_str.split(',')
+            if (c or "").strip()
         ]
         
         # 如果没有配置，使用默认的示例股票
@@ -392,6 +405,12 @@ class Config:
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
+            news_max_age_days=max(1, int(os.getenv('NEWS_MAX_AGE_DAYS', '3'))),
+            bias_threshold=max(1.0, float(os.getenv('BIAS_THRESHOLD', '5.0'))),
+            agent_mode=os.getenv('AGENT_MODE', 'false').lower() == 'true',
+            agent_max_steps=int(os.getenv('AGENT_MAX_STEPS', '10')),
+            agent_skills=[s.strip() for s in os.getenv('AGENT_SKILLS', '').split(',') if s.strip()],
+            agent_strategy_dir=os.getenv('AGENT_STRATEGY_DIR'),
             wechat_webhook_url=os.getenv('WECHAT_WEBHOOK_URL'),
             feishu_webhook_url=os.getenv('FEISHU_WEBHOOK_URL'),
             telegram_bot_token=os.getenv('TELEGRAM_BOT_TOKEN'),
@@ -444,7 +463,11 @@ class Config:
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             schedule_run_immediately=os.getenv('SCHEDULE_RUN_IMMEDIATELY', 'true').lower() == 'true',
+            run_immediately=os.getenv('RUN_IMMEDIATELY', 'true').lower() == 'true',
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
+            market_review_region=cls._parse_market_review_region(
+                os.getenv('MARKET_REVIEW_REGION', 'cn')
+            ),
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),
@@ -514,6 +537,18 @@ class Config:
         return result
 
     @classmethod
+    def _parse_market_review_region(cls, value: str) -> str:
+        """解析大盘复盘市场区域，非法值记录警告后回退为 cn"""
+        import logging
+        v = (value or 'cn').strip().lower()
+        if v in ('cn', 'us', 'both'):
+            return v
+        logging.getLogger(__name__).warning(
+            f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / us / both）"
+        )
+        return 'cn'
+
+    @classmethod
     def _resolve_realtime_source_priority(cls) -> str:
         """
         Resolve realtime source priority with automatic tushare injection.
@@ -571,12 +606,12 @@ class Config:
             stock_list_str = os.getenv('STOCK_LIST', '')
 
         stock_list = [
-            code.strip()
-            for code in stock_list_str.split(',')
-            if code.strip()
+            (c or "").strip().upper()
+            for c in stock_list_str.split(',')
+            if (c or "").strip()
         ]
 
-        if not stock_list:        
+        if not stock_list:
             stock_list = ['000001']
 
         self.stock_list = stock_list
