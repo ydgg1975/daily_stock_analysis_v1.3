@@ -123,7 +123,7 @@ export interface DuplicateTaskError {
 
 /** 历史记录摘要（列表展示用） */
 export interface HistoryItem {
-  id: number;  // 分析历史记录主键 ID（唯一标识）
+  id?: number;  // 分析历史记录主键 ID（唯一标识，与后端 Optional[int] 保持一致）
   queryId: string;  // 分析记录关联 query_id（批量分析时重复）
   stockCode: string;
   stockName?: string;

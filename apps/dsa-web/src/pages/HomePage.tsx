@@ -92,19 +92,27 @@ const HomePage: React.FC = () => {
   });
 
 // 加载历史列表
-  const fetchHistory = useCallback(async (autoSelectFirst = false, reset = true) => {
-    if (reset) {
-      setIsLoadingHistory(true);
+  const fetchHistory = useCallback(async (autoSelectFirst = false, reset = true, silent = false) => {
+    if (!silent) {
+      if (reset) {
+        setIsLoadingHistory(true);
+        setCurrentPage(1);
+      } else {
+        setIsLoadingMore(true);
+      }
+    } else if (reset) {
+      // Silent reset still needs page reset for correct API call
       setCurrentPage(1);
-    } else {
-      setIsLoadingMore(true);
     }
 
     const page = reset ? 1 : currentPage + 1;
 
     try {
-      // 为了确保包含今天的记录，endDate 设置为明天，这样可以包含今天全天的数据
-      // 同时避免因时区差异导致的日期偏差问题
+      // TODO: Proper timezone handling needed
+      // Using tomorrow as endDate is a temporary workaround to include today's records.
+      // This may incorrectly include tomorrow's data and is semantically inconsistent across timezones.
+      // Better solution: standardize backend & frontend to use UTC or fixed timezone (Asia/Shanghai),
+      // or construct endDate on frontend as end-of-day timestamp.
       const tomorrowDate = new Date();
       tomorrowDate.setDate(tomorrowDate.getDate() + 1);
       
@@ -157,6 +165,25 @@ const HomePage: React.FC = () => {
   // 初始加载 - 自动选择第一条
   useEffect(() => {
     fetchHistory(true);
+  }, [fetchHistory]);
+
+  // Background polling: re-fetch history every 30s for CLI-initiated analyses
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchHistory(false, true, true);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchHistory]);
+
+  // Refresh when tab regains visibility (e.g. user ran main.py in another terminal)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchHistory(false, true, true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchHistory]);
 
   // 点击历史项加载报告

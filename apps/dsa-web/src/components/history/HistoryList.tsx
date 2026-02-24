@@ -9,8 +9,8 @@ interface HistoryListProps {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  selectedId?: number;  // 但技模式下一次配置需需修改为使用敘符为id
-  onItemClick: (recordId: number) => void;  // 调用时传递 id 而非 queryId
+  selectedId?: number;  // Selected history record ID
+  onItemClick: (recordId: number) => void;  // Callback with record ID
   onLoadMore: () => void;
   className?: string;
 }

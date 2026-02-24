@@ -885,7 +885,7 @@ class DatabaseManager:
         with self.get_session() as session:
             result = session.execute(
                 select(AnalysisHistory).where(AnalysisHistory.id == record_id)
-            ).scalar_one_or_none()
+            ).scalars().first()
             return result
     
     def get_data_range(

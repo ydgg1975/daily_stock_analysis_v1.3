@@ -231,25 +231,28 @@ def get_history_detail(
 
 
 @router.get(
-    "/{query_id}/news",
+    "/{record_id}/news",
     response_model=NewsIntelResponse,
     responses={
         200: {"description": "新闻情报列表"},
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告关联新闻",
-    description="根据 query_id 获取关联的新闻情报列表（为空也返回 200）"
+    description="根据分析历史记录 ID 获取关联的新闻情报列表（为空也返回 200）"
 )
 def get_history_news(
-    query_id: str,
+    record_id: int,
     limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> NewsIntelResponse:
     """
     获取历史报告关联新闻
 
+    根据分析历史记录 ID 获取关联的新闻情报列表。
+    在内部完成 record_id → query_id 的解析。
+
     Args:
-        query_id: 分析记录唯一标识
+        record_id: 分析历史记录主键 ID
         limit: 返回数量限制
         db_manager: 数据库管理器依赖
 
@@ -258,7 +261,7 @@ def get_history_news(
     """
     try:
         service = HistoryService(db_manager)
-        items = service.get_news_intel(query_id=query_id, limit=limit)
+        items = service.get_news_intel_by_record_id(record_id=record_id, limit=limit)
 
         response_items = [
             NewsIntelItem(
