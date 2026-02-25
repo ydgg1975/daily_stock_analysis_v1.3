@@ -489,15 +489,20 @@ def _chunk_by_separators(content: str) -> tuple[list[str], str]:
     if "\n---\n" in content:
         sections = content.split("\n---\n")
         separator = "\n---\n"
-    elif "\n### " in content:
-        # 按 ### 分割
-        parts = content.split("\n### ")
-        sections = [parts[0]] + [f"### {p}" for p in parts[1:]]
+    elif "\n# " in content:
+        # 按 # 分割 (兼容一级标题)
+        parts = content.split("\n## ")
+        sections = [parts[0]] + [f"## {p}" for p in parts[1:]]
         separator = "\n"
     elif "\n## " in content:
         # 按 ## 分割 (兼容二级标题)
         parts = content.split("\n## ")
         sections = [parts[0]] + [f"## {p}" for p in parts[1:]]
+        separator = "\n"
+    elif "\n### " in content:
+        # 按 ### 分割
+        parts = content.split("\n### ")
+        sections = [parts[0]] + [f"### {p}" for p in parts[1:]]
         separator = "\n"
     elif "\n**" in content:
         # 按 ** 加粗标题分割 (兼容 AI 未输出标准 Markdown 标题的情况)
