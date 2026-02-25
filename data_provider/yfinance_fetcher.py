@@ -154,13 +154,21 @@ class YfinanceFetcher(BaseFetcher):
         
         try:
             # 使用 yfinance 下载数据
+            
             df = yf.download(
                 tickers=yf_code,
                 start=start_date,
                 end=end_date,
                 progress=False,  # 禁止进度条
                 auto_adjust=True,  # 自动调整价格（复权）
+                multi_level_index=True
             )
+            
+            # 筛选出 yf_code 的列
+            ticker_level = df.columns.get_level_values(1)
+            mask = ticker_level == yf_code
+            if mask.any():
+                df = df.loc[:, mask].copy()
             
             if df.empty:
                 raise DataFetchError(f"Yahoo Finance 未查询到 {stock_code} 的数据")
