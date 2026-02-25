@@ -35,6 +35,10 @@
   - 扩展 `analysis_tools` 与 `data_tools`，优化策略问股的工具调用链路与分析覆盖
 
 ### 修复（#patch）
+- 🐛 **Agent 策略渲染遗漏 framework 分类**（Issue #403）
+  - 根因：`get_skill_instructions()` 仅遍历 `trend/pattern/reversal` 三个分类，`category: framework` 的 4 个策略（箱体震荡、缠论、波浪理论、情绪周期）被静默丢弃
+  - 修复：补充 `framework` 分类，并增加动态回退机制，确保未来自定义分类不会遗漏
+  - 文档：`.env.example` 补充 `AGENT_SKILLS=all` 写法，`README.md` 配置表新增 `AGENT_SKILLS`
 - 🐛 **支持 DeepSeek 思考模式**（Issue #379）
   - 根因：Agent 模式（tool calls）下使用 DeepSeek 思考模式时，未在 assistant 消息中回传 `reasoning_content`，导致 API 返回 400
   - 修复：`llm_adapter._call_openai` 解析并透传 `reasoning_content`；`executor` 在 assistant_msg 中写入该字段
