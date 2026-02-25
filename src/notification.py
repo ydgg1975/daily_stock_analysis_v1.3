@@ -3023,9 +3023,9 @@ class NotificationService:
         Returns:
             是否发送成功
         """
-        # Discord 消息内容限制为 2000 字节，按字节分割，确保不超过限制
-        DISCORD_MAX_BYTES = 2000
-        chunks = chunk_content_by_max_words(content, DISCORD_MAX_BYTES)
+        # 分割内容，避免单条消息超过 Discord 限制
+        DISCORD_MAX_WORDS = 2000
+        chunks = chunk_content_by_max_words(content, DISCORD_MAX_WORDS)
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
