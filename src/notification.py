@@ -40,7 +40,7 @@ except ImportError:
 
 from src.config import get_config
 from src.analyzer import AnalysisResult
-from src.formatters import format_feishu_markdown, markdown_to_html_document
+from src.formatters import format_feishu_markdown, markdown_to_html_document, chunk_content_by_max_words
 from bot.models import BotMessage
 
 logger = logging.getLogger(__name__)
@@ -3023,14 +3023,18 @@ class NotificationService:
         Returns:
             是否发送成功
         """
+        # Discord 消息内容限制为 2000 字节，按字节分割，确保不超过限制
+        DISCORD_MAX_BYTES = 2000
+        chunks = chunk_content_by_max_words(content, DISCORD_MAX_BYTES)
+
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
-            return self._send_discord_webhook(content)
-        
+            return all(self._send_discord_webhook(chunk) for chunk in chunks)
+
         # 其次使用 Bot API（权限高，需要 channel_id）
         if self._discord_config['bot_token'] and self._discord_config['channel_id']:
-            return self._send_discord_bot(content)
-        
+            return all(self._send_discord_bot(chunk) for chunk in chunks)
+
         logger.warning("Discord 配置不完整，跳过推送")
         return False
 
