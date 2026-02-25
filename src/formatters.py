@@ -469,7 +469,6 @@ def chunk_feishu_content(content: str, max_bytes: int, send_func: Callable[[str]
     
     return success_count == total_chunks
 
-    
 def _chunk_by_separators(content: str) -> tuple[list[str], str]:
     """
     通过分割线等特殊字符将消息内容分割为多个区块
@@ -519,11 +518,19 @@ def _chunk_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> lis
     """
     if _effective_len(content, emoji_len) <= max_words:
         return [content]
+    if max_words <= 1:
+        raise ValueError("max_words must be greater than 1")
+
     sections = []
-    effective_max_words = max_words - len(TRUNCATION_SUFFIX)  # 预留后缀，避免边界超限
+    suffix = TRUNCATION_SUFFIX
+    effective_max_words = max_words - len(suffix)  # 预留后缀，避免边界超限
+    if effective_max_words <= 0:
+        effective_max_words = max_words
+        suffix = ""
+
     while True:
         chunk, content = _slice_at_effective_len(content, effective_max_words, emoji_len)
-        sections.append(chunk + TRUNCATION_SUFFIX)
+        sections.append(chunk + suffix)
         if _effective_len(content, emoji_len) <= effective_max_words:
             sections.append(content)
             break
@@ -558,14 +565,16 @@ def chunk_content_by_max_words(content: str, max_words: int, emoji_len: int = 2)
 
         # 如果单个 section 就超长，需要强制截断
         if section_word_len > max_words:
-            # 先发送当前积累的内容
+            # 先保存当前积累的内容
             if current_chunk:
                 chunks.append("".join(current_chunk))
                 current_chunk = []
                 current_word_len = 0
 
             # 强制截断这个超长 section
-            section_chunks = chunk_content_by_max_words(section[:-separator_len], effective_max_words, emoji_len)
+            section_chunks = chunk_content_by_max_words(
+                section[:-separator_len], effective_max_words, emoji_len
+                )
             section_chunks[-1] = section_chunks[-1] + separator
             chunks.extend(section_chunks)
             continue
@@ -586,6 +595,6 @@ def chunk_content_by_max_words(content: str, max_words: int, emoji_len: int = 2)
         chunks.append("".join(current_chunk))
 
     # 移除最后一个块的分割符
-    if chunks[-1][-separator_len:] == separator:
+    if chunks and chunks[-1][-separator_len:] == separator:
         chunks[-1] = chunks[-1][:-separator_len]
     return chunks

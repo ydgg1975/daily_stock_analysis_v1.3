@@ -201,6 +201,7 @@ class NotificationService:
         # 消息长度限制（字节）
         self._feishu_max_bytes = getattr(config, 'feishu_max_bytes', 20000)
         self._wechat_max_bytes = getattr(config, 'wechat_max_bytes', 4000)
+        self._discord_max_words = getattr(config, 'discord_max_words', 2000)
 
         # Markdown 转图片（Issue #289）
         self._markdown_to_image_channels = set(
@@ -3029,8 +3030,7 @@ class NotificationService:
             是否发送成功
         """
         # 分割内容，避免单条消息超过 Discord 限制
-        DISCORD_MAX_WORDS = 2000
-        chunks = chunk_content_by_max_words(content, DISCORD_MAX_WORDS)
+        chunks = chunk_content_by_max_words(content, self._discord_max_words)
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
