@@ -10,11 +10,15 @@
 import re
 import time
 from typing import List, Callable
+import logging
 
 import markdown2
 
 
+logger = logging.getLogger(__name__)
+
 TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
+MIN_MAX_WORDS = 10
 
 # Unicode code point ranges for emoji (symbols that count as 2 for effective length).
 _EMOJI_RANGES = [
@@ -60,24 +64,24 @@ def _effective_len(s: str, emoji_len: int = 2) -> int:
     return n
 
 
-def _slice_at_effective_len(s: str, max_effective: int, emoji_len: int = 2) -> tuple[str, str]:
+def _slice_at_effective_len(s: str, effective_len: int, emoji_len: int = 2) -> tuple[str, str]:
     """
     按有效长度分割字符串
     
     Args:
         s: 字符串
-        max_effective: 最大有效长度
+        effective_len: 有效长度
         emoji_len: 每个 emoji 的长度，默认为 2
         
     Returns:
         分割后的前、后部分字符串
     """
-    if _effective_len(s, emoji_len) <= max_effective:
+    if _effective_len(s, emoji_len) <= effective_len:
         return s, ""
     eff = 0
     for i, c in enumerate(s):
-        eff += emoji_len if _is_emoji(c) else 1 
-        if eff > max_effective:
+        eff += emoji_len if _is_emoji(c) else 1
+        if eff > effective_len:
             return s[:i], s[i:]
     return s, ""
 
@@ -518,8 +522,10 @@ def _chunk_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> lis
     """
     if _effective_len(content, emoji_len) <= max_words:
         return [content]
-    if max_words <= 1:
-        raise ValueError("max_words must be greater than 1")
+    if max_words < MIN_MAX_WORDS:
+        raise ValueError(
+            f"max_words={max_words} < {MIN_MAX_WORDS}, 可能陷入无限递归。"
+        )
 
     sections = []
     suffix = TRUNCATION_SUFFIX
@@ -531,8 +537,10 @@ def _chunk_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> lis
     while True:
         chunk, content = _slice_at_effective_len(content, effective_max_words, emoji_len)
         sections.append(chunk + suffix)
-        if _effective_len(content, emoji_len) <= effective_max_words:
-            sections.append(content)
+        effective_len = _effective_len(content, emoji_len)
+        if effective_len <= effective_max_words:
+            if effective_len > 0:
+                sections.append(content)
             break
     return sections
 
@@ -548,6 +556,15 @@ def chunk_content_by_max_words(content: str, max_words: int, emoji_len: int = 2)
     Returns:
         分割后的区块列表
     """
+    if max_words < MIN_MAX_WORDS:
+        # Safe guard，避免无限递归
+        # 理论上，max_words在每次递归中可以减小到无限小，但实际中不太可能发生，
+        # 除非每次_chunk_by_separators都能成功返回分隔符，且max_words初始值太小。
+        raise ValueError(f"max_words={max_words} < {MIN_MAX_WORDS}, 可能陷入无限递归。")
+    
+    if _effective_len(content, emoji_len) <= max_words:
+        return [content]
+
     sections, separator = _chunk_by_separators(content)
     if separator == "":
         # 无法智能分割，则强制按字数分割
@@ -595,6 +612,9 @@ def chunk_content_by_max_words(content: str, max_words: int, emoji_len: int = 2)
         chunks.append("".join(current_chunk))
 
     # 移除最后一个块的分割符
-    if chunks and chunks[-1][-separator_len:] == separator:
+    if (chunks and
+        len(chunks[-1]) > separator_len and
+        chunks[-1][-separator_len:] == separator
+        ):
         chunks[-1] = chunks[-1][:-separator_len]
     return chunks

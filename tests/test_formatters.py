@@ -8,7 +8,13 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.formatters import chunk_content_by_max_words, TRUNCATION_SUFFIX
+from src.formatters import (
+chunk_content_by_max_words, 
+TRUNCATION_SUFFIX,
+MIN_MAX_WORDS,
+_slice_at_effective_len, 
+_chunk_by_max_words
+)
 
 
 class TestChunkContentByMaxWords(unittest.TestCase):
@@ -61,3 +67,25 @@ class TestChunkContentByMaxWords(unittest.TestCase):
         text = "A" * 79 + "🎯"
         result = chunk_content_by_max_words(text, 80, emoji_len=2)
         self.assertEqual(len(result), 2)
+
+    def test_slice_at_effective_len_with_max_effective_at_least_emoji_len(self):
+        chunk, rest = _slice_at_effective_len("🎯", 2, emoji_len=2)
+        self.assertEqual(chunk, "🎯")
+        self.assertEqual(rest, "")
+
+    def test_chunk_by_max_words_emoji_first_char_makes_progress(self):
+        result = _chunk_by_max_words("🎯ab", MIN_MAX_WORDS, emoji_len=2)
+        self.assertGreaterEqual(len(result), 1)
+        self.assertEqual("".join(r.replace(TRUNCATION_SUFFIX, "") for r in result), "🎯ab")
+        
+    def test_chunk_raises_when_max_words_below_min_in_recursion(self):
+        # Safe guard测试，避免无限循环，抛出错误
+        with self.assertRaises(ValueError) as ctx:
+            chunk_content_by_max_words("\n---\n###\n**\n##\n\n", MIN_MAX_WORDS, emoji_len=2)
+        self.assertIn(str(MIN_MAX_WORDS), str(ctx.exception))
+
+    def test_chunk_by_max_words_raises_when_max_words_below_min(self):
+        # Safe guard测试，避免无限循环，抛出错误
+        with self.assertRaises(ValueError) as ctx:
+            _chunk_by_max_words("🎯ab", 2, emoji_len=2)
+        self.assertIn(str(MIN_MAX_WORDS), str(ctx.exception))
