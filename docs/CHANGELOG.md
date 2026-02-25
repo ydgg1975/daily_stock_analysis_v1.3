@@ -39,6 +39,7 @@
   - 根因：`get_skill_instructions()` 仅遍历 `trend/pattern/reversal` 三个分类，`category: framework` 的 4 个策略（箱体震荡、缠论、波浪理论、情绪周期）被静默丢弃
   - 修复：补充 `framework` 分类，并增加动态回退机制，确保未来自定义分类不会遗漏
   - 文档：`.env.example` 补充 `AGENT_SKILLS=all` 写法，`README.md` 配置表新增 `AGENT_SKILLS`
+  - Docker：Dockerfile 补充 `COPY strategies/`，docker-compose.yml 挂载 `strategies/` 目录（此前容器内策略目录缺失，导致所有策略均无法加载）
 - 🐛 **支持 DeepSeek 思考模式**（Issue #379）
   - 根因：Agent 模式（tool calls）下使用 DeepSeek 思考模式时，未在 assistant 消息中回传 `reasoning_content`，导致 API 返回 400
   - 修复：`llm_adapter._call_openai` 解析并透传 `reasoning_content`；`executor` 在 assistant_msg 中写入该字段
