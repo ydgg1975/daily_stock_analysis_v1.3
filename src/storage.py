@@ -36,6 +36,7 @@ from sqlalchemy import (
     Text,
     select,
     and_,
+    delete,
     desc,
 )
 from sqlalchemy.orm import (
@@ -1315,10 +1316,12 @@ class DatabaseManager:
             删除的消息数
         """
         with self.session_scope() as session:
-            count = session.query(ConversationMessage).filter(
-                ConversationMessage.session_id == session_id
-            ).delete()
-            return count
+            result = session.execute(
+                delete(ConversationMessage).where(
+                    ConversationMessage.session_id == session_id
+                )
+            )
+            return result.rowcount
 
 
 # 便捷函数
