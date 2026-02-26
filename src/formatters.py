@@ -10,12 +10,9 @@
 import re
 import time
 from typing import List, Callable
-import logging
 
 import markdown2
 
-
-logger = logging.getLogger(__name__)
 
 TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
 MIN_MAX_WORDS = 10

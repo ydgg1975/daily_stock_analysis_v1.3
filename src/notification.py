@@ -3030,7 +3030,11 @@ class NotificationService:
             是否发送成功
         """
         # 分割内容，避免单条消息超过 Discord 限制
-        chunks = chunk_content_by_max_words(content, self._discord_max_words)
+        try:
+            chunks = chunk_content_by_max_words(content, self._discord_max_words)
+        except ValueError as e:
+            logger.error(f"分割 Discord 消息失败: {e}, 尝试整段发送。")
+            chunks = [content]
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
