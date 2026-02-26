@@ -16,6 +16,7 @@ FastAPI 应用工厂模块
 """
 
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,8 +27,21 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from api.v1 import api_v1_router
+from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import RootResponse, HealthResponse
+from src.services.system_config_service import SystemConfigService
+
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    """Initialize and release shared services for the app lifecycle."""
+    app.state.system_config_service = SystemConfigService()
+    try:
+        yield
+    finally:
+        if hasattr(app.state, "system_config_service"):
+            delattr(app.state, "system_config_service")
 
 
 def create_app(static_dir: Optional[Path] = None) -> FastAPI:
@@ -57,6 +71,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             "当前版本暂无认证要求"
         ),
         version="1.0.0",
+        lifespan=app_lifespan,
     )
     
     # ============================================================
@@ -86,6 +101,8 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    add_auth_middleware(app)
     
     # ============================================================
     # 注册路由

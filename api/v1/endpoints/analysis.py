@@ -43,6 +43,7 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
 )
+from data_provider.base import canonical_stock_code
 from src.config import Config
 from src.services.task_queue import (
     get_task_queue,
@@ -115,7 +116,8 @@ def trigger_analysis(
             }
         )
 
-    # 去重
+    # 统一大小写后去重，确保 ['aapl', 'AAPL'] 被识别为同一股票（Issue #355）
+    stock_codes = [canonical_stock_code(c) for c in stock_codes]
     stock_codes = list(dict.fromkeys(stock_codes))
     stock_code = stock_codes[0]  # 当前只处理第一个
 
@@ -435,6 +437,29 @@ def get_analysis_status(task_id: str) -> TaskStatus:
 
         if records:
             record = records[0]
+            # Build report from DB record so completed tasks return real data
+            report_dict = AnalysisReport(
+                meta=ReportMeta(
+                    id=record.id,
+                    query_id=task_id,
+                    stock_code=record.code,
+                    stock_name=record.name,
+                    report_type=getattr(record, 'report_type', None),
+                    created_at=record.created_at.isoformat() if record.created_at else None,
+                ),
+                summary=ReportSummary(
+                    sentiment_score=record.sentiment_score,
+                    operation_advice=record.operation_advice,
+                    trend_prediction=record.trend_prediction,
+                    analysis_summary=record.analysis_summary,
+                ),
+                strategy=ReportStrategy(
+                    ideal_buy=str(getattr(record, 'ideal_buy', None)) if getattr(record, 'ideal_buy', None) is not None else None,
+                    secondary_buy=str(getattr(record, 'secondary_buy', None)) if getattr(record, 'secondary_buy', None) is not None else None,
+                    stop_loss=str(getattr(record, 'stop_loss', None)) if getattr(record, 'stop_loss', None) is not None else None,
+                    take_profit=str(getattr(record, 'take_profit', None)) if getattr(record, 'take_profit', None) is not None else None,
+                ),
+            ).model_dump()
             return TaskStatus(
                 task_id=task_id,
                 status="completed",
@@ -443,7 +468,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     query_id=task_id,
                     stock_code=record.code,
                     stock_name=record.name,
-                    report=None,
+                    report=report_dict,
                     created_at=record.created_at.isoformat() if record.created_at else datetime.now().isoformat()
                 ),
                 error=None
