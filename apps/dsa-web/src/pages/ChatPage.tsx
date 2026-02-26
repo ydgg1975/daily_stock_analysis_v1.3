@@ -204,6 +204,19 @@ const ChatPage: React.FC = () => {
     setProgressSteps([]);
 
     const currentSessionId = sessionIdRef.current;
+
+    // Optimistically add new session to sidebar if not already present
+    setSessions((prev) => {
+      if (prev.some((s) => s.session_id === currentSessionId)) return prev;
+      return [{
+        session_id: currentSessionId,
+        title: msgText.slice(0, 60),
+        message_count: 1,
+        created_at: new Date().toISOString(),
+        last_active: new Date().toISOString(),
+      }, ...prev];
+    });
+
     const payload: ChatStreamPayload = {
       message: userMessage.content,
       session_id: currentSessionId,
