@@ -87,6 +87,8 @@ SMTP_CONFIGS = {
     "aliyun.com": {"server": "smtp.aliyun.com", "port": 465, "ssl": True},
     # 139邮箱
     "139.com": {"server": "smtp.139.com", "port": 465, "ssl": True},
+    # icloud邮箱
+    "icloud.com": {"server": "smtp.mail.me.com", "port": 587, "ssl": False},
 }
 
 
