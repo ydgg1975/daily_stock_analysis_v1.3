@@ -68,7 +68,7 @@ jobs:
           # 飞书通知配置
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
           NOTIFICATION_TYPE: ${{ secrets.NOTIFICATION_TYPE }}
-          run: |
+       run: |
            python scripts/daily_analysis.py --mode ${{ github.event.inputs.mode }}
           # OpenAI 兼容 API（备选）
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
