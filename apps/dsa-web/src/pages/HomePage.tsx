@@ -111,6 +111,8 @@ const HomePage: React.FC = () => {
       }
     }
 
+    // page is always 1 when reset=true, regardless of currentPageRef; the ref
+    // is only used for load-more (reset=false) to get the next page number.
     const page = reset ? 1 : currentPageRef.current + 1;
 
     try {
@@ -213,6 +215,7 @@ const HomePage: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to fetch report:', err);
+      setStoreError(err instanceof Error ? err.message : '报告加载失败');
     }
   };
 

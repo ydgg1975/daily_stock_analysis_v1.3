@@ -31,10 +31,15 @@ export const toDateInputValue = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
+/**
+ * Returns the date N days ago as YYYY-MM-DD in Asia/Shanghai timezone.
+ * Consistent with getTodayInShanghai() so both ends of the date range
+ * are expressed in the same timezone as the backend.
+ */
 export const getRecentStartDate = (days: number): string => {
   const date = new Date();
   date.setDate(date.getDate() - days);
-  return toDateInputValue(date);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date);
 };
 
 /**
