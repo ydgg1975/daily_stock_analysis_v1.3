@@ -8,7 +8,7 @@ const categoryTitleMap: Record<SystemConfigCategory, string> = {
   system: '系统设置',
   agent: 'Agent 设置',
   backtest: '回测配置',
-  uncategorized: '未分类',
+  uncategorized: '其他',
 };
 
 const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
@@ -19,7 +19,7 @@ const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
   system: '管理调度、日志、端口等系统级参数。',
   agent: '管理 Agent 模式、技能与策略配置。',
   backtest: '管理回测开关、评估窗口和引擎参数。',
-  uncategorized: '暂未归类的配置项。',
+  uncategorized: '其他未归类的配置项。',
 };
 
 const fieldTitleMap: Record<string, string> = {
@@ -29,6 +29,7 @@ const fieldTitleMap: Record<string, string> = {
   SERPAPI_API_KEYS: 'SerpAPI API Keys',
   BRAVE_API_KEYS: 'Brave API Keys',
   REALTIME_SOURCE_PRIORITY: '实时数据源优先级',
+  ENABLE_REALTIME_TECHNICAL_INDICATORS: '盘中实时技术面',
   GEMINI_API_KEY: 'Gemini API Key',
   GEMINI_MODEL: 'Gemini 模型',
   GEMINI_TEMPERATURE: 'Gemini 温度参数',
@@ -62,6 +63,7 @@ const fieldDescriptionMap: Record<string, string> = {
   SERPAPI_API_KEYS: '用于新闻检索的 SerpAPI 密钥，支持逗号分隔多个。',
   BRAVE_API_KEYS: '用于新闻检索的 Brave Search 密钥，支持逗号分隔多个。',
   REALTIME_SOURCE_PRIORITY: '按逗号分隔填写数据源调用优先级。',
+  ENABLE_REALTIME_TECHNICAL_INDICATORS: '盘中分析时用实时价计算 MA5/MA10/MA20 与多头排列（Issue #234）；关闭则用昨日收盘。',
   GEMINI_API_KEY: '用于 Gemini 服务调用的密钥。',
   GEMINI_MODEL: '设置 Gemini 分析模型名称。',
   GEMINI_TEMPERATURE: '控制模型输出随机性，范围通常为 0.0 到 2.0。',
