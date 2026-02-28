@@ -17,67 +17,58 @@ import markdown2
 TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
 MIN_MAX_WORDS = 10
 
-# Unicode code point ranges for emoji (symbols that count as 2 for effective length).
-_EMOJI_RANGES = [
-    (0x2600, 0x26FF),   # Misc symbols
-    (0x2700, 0x27BF),   # Dingbats
-    (0x1F300, 0x1F5FF), # Misc Symbols and Pictographs
-    (0x1F600, 0x1F64F), # Emoticons
-    (0x1F650, 0x1F67F),
-    (0x1F680, 0x1F6FF), # Transport and Map
-    (0x1F900, 0x1F9FF), # Supplemental Symbols and Pictographs
-    (0x1F1E0, 0x1F1FF), # Flags
-]
+# Unicode code point ranges for special characters.
+_SPECIAL_CHAR_RANGE = (0x10000, 0xFFFFF)
 
 
-def _is_emoji(c: str) -> bool:
-    """判断字符是否为 emoji
+def _is_special_char(c: str) -> bool:
+    """判断字符是否为特殊字符
     
     Args:
         c: 字符
         
     Returns:
-        True 如果字符为 emoji，False 否则
+        True 如果字符为特殊字符，False 否则
     """
     if len(c) != 1:
         return False
     cp = ord(c)
-    return any(lo <= cp <= hi for lo, hi in _EMOJI_RANGES)
+    return _SPECIAL_CHAR_RANGE[0] <= cp <= _SPECIAL_CHAR_RANGE[1]
 
 
-def _effective_len(s: str, emoji_len: int = 2) -> int:
+def _effective_len(s: str, special_char_len: int = 2) -> int:
     """
     计算字符串的有效长度
     
     Args:
         s: 字符串
-        emoji_len: 每个 emoji 的长度，默认为 2
+        special_char_len: 每个特殊字符的长度，默认为 2
         
     Returns:
         s 的有效长度
     """
     n = len(s)
-    n += sum(emoji_len - 1 for c in s if _is_emoji(c))
+    n += sum(special_char_len - 1 for c in s if _is_special_char(c))
     return n
 
 
-def _slice_at_effective_len(s: str, effective_len: int, emoji_len: int = 2) -> tuple[str, str]:
+def _slice_at_effective_len(s: str, effective_len: int, special_char_len: int = 2) -> tuple[str, str]:
     """
     按有效长度分割字符串
     
     Args:
         s: 字符串
         effective_len: 有效长度
-        emoji_len: 每个 emoji 的长度，默认为 2
+        special_char_len: 每个特殊字符的长度，默认为 2
         
     Returns:
         分割后的前、后部分字符串
     """
-    if _effective_len(s, emoji_len) <= effective_len:
+    if _effective_len(s, special_char_len) <= effective_len:
         return s, ""
     eff = 0
     for i, c in enumerate(s):
-        eff += emoji_len if _is_emoji(c) else 1
+        eff += special_char_len if _is_special_char(c) else 1
         if eff > effective_len:
             return s[:i], s[i:]
     return s, ""
