@@ -10,7 +10,7 @@ from typing import Dict, Any
 import requests
 
 from src.config import Config
-from src.formatters import format_feishu_markdown, truncate_to_bytes
+from src.formatters import format_feishu_markdown, slice_at_max_bytes
 
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ class FeishuSender:
                     current_bytes = 0
                 
                 # 强制截断这个超长 section（按字节截断）
-                truncated = truncate_to_bytes(section, max_bytes - 200)
+                truncated, _ = slice_at_max_bytes(section, max_bytes - 200)
                 truncated += "\n\n...(本段内容过长已截断)"
                 chunks.append(truncated)
                 continue

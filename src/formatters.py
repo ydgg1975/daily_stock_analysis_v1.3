@@ -239,7 +239,17 @@ def markdown_to_plain_text(markdown_text: str) -> str:
     return text.strip()
 
 
-def chunk_markdown_by_bytes(content: str, max_bytes: int) -> List[str]:
+def chunk_content_by_max_bytes(content: str, max_bytes: int) -> List[str]:
+    """
+    按字节数智能分割消息内容
+    
+    Args:
+        content: 完整消息内容
+        max_bytes: 单条消息最大字节数
+        
+    Returns:
+        分割后的区块列表
+    """
     def get_bytes(s: str) -> int:
         return len(s.encode('utf-8'))
 
@@ -247,25 +257,14 @@ def chunk_markdown_by_bytes(content: str, max_bytes: int) -> List[str]:
         parts: List[str] = []
         remaining = text
         while remaining:
-            part = truncate_to_bytes(remaining, limit)
+            part, remaining = slice_at_max_bytes(remaining, limit)
             if not part:
                 break
             parts.append(part)
-            remaining = remaining[len(part):]
         return parts
 
     # 优先按分隔线/标题分割，保证分页自然
-    if "\n---\n" in content:
-        sections = content.split("\n---\n")
-        separator = "\n---\n"
-    elif "\n### " in content:
-        parts = content.split("\n### ")
-        sections = [parts[0]] + [f"### {p}" for p in parts[1:]]
-        separator = "\n"
-    else:
-        # fallback：按行拼接
-        sections = content.split("\n")
-        separator = "\n"
+    sections, separator = _chunk_by_separators(content)
 
     chunks: List[str] = []
     current_chunk: List[str] = []
@@ -304,6 +303,28 @@ def chunk_markdown_by_bytes(content: str, max_bytes: int) -> List[str]:
     # 移除空块
     return [c for c in (c.strip() for c in chunks) if c]
 
+
+def slice_at_max_bytes(text: str, max_bytes: int) -> str:
+    """
+    按字节数截断字符串，确保不会在多字节字符中间截断
+
+    Args:
+        text: 要截断的字符串
+        max_bytes: 最大字节数
+
+    Returns:
+        截断后的字符串
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text, ""
+
+    # 从最大字节数开始向前查找，找到完整的 UTF-8 字符边界
+    truncated = encoded[:max_bytes]
+    while truncated and (truncated[-1] & 0xC0) == 0x80:
+        truncated = truncated[:-1]
+
+    return truncated.decode('utf-8', errors='ignore'), text[len(truncated):]
 
 def format_feishu_markdown(content: str) -> str:
     """
@@ -626,9 +647,14 @@ def _chunk_by_separators(content: str) -> tuple[list[str], str]:
         parts = content.split("\n**")
         sections = [parts[0]] + [f"**{p}" for p in parts[1:]]
         separator = "\n"
+    elif "\n" in content:
+        # 按 \n 分割
+        sections = content.split("\n")
+        separator = "\n"
     else:
         return [content], ""
     return sections, separator
+
 
 def _chunk_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> list[str]:
     """
@@ -665,6 +691,7 @@ def _chunk_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> lis
                 sections.append(content)
             break
     return sections
+
 
 def chunk_content_by_max_words(content: str, max_words: int, emoji_len: int = 2) -> list[str]:
     """

@@ -12,7 +12,7 @@ import hashlib
 import requests
 
 from src.config import Config
-from src.formatters import truncate_to_bytes
+from src.formatters import slice_at_max_bytes
 
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ class WechatSender:
                     current_bytes = 0
                 
                 # 强制截断这个超长 section（按字节截断）
-                truncated = truncate_to_bytes(section, effective_max_bytes - 200)
+                truncated, _ = slice_at_max_bytes(section, effective_max_bytes - 200)
                 truncated += "\n\n...(本段内容过长已截断)"
                 chunks.append(truncated)
                 continue
