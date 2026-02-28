@@ -19,6 +19,7 @@
   - 密码输入框初始设为 readOnly，用户聚焦时解除，阻止浏览器自动填充
 
 ### 新增（#minor）
+- ⚙️ 新增加了icloud邮箱自动识别
 - 🚀 **桌面端 CI 自动发布到 GitHub Releases**
   - 新增 `.github/workflows/desktop-release.yml`
   - 支持 Windows 安装包（exe）+ 免安装包（zip）与 macOS x64/arm64 DMG 并行构建
