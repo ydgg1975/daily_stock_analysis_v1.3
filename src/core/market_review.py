@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-A股自选股智能分析系统 - 大盘复盘模块
+股票智能分析系统 - 大盘复盘模块（支持 A 股 / 美股）
 ===================================
 
 职责：
-1. 执行大盘复盘分析
-2. 生成复盘报告
+1. 根据 MARKET_REVIEW_REGION 配置选择市场区域（cn / us / both）
+2. 执行大盘复盘分析并生成复盘报告
 3. 保存和发送复盘报告
 """
 
@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from src.config import get_config
 from src.notification import NotificationService
 from src.market_analyzer import MarketAnalyzer
 from src.search_service import SearchService
@@ -28,7 +29,8 @@ def run_market_review(
     analyzer: Optional[GeminiAnalyzer] = None,
     search_service: Optional[SearchService] = None,
     send_notification: bool = True,
-    merge_notification: bool = False
+    merge_notification: bool = False,
+    override_region: Optional[str] = None,
 ) -> Optional[str]:
     """
     执行大盘复盘分析
@@ -39,20 +41,50 @@ def run_market_review(
         search_service: 搜索服务（可选）
         send_notification: 是否发送通知
         merge_notification: 是否合并推送（跳过本次推送，由 main 层合并个股+大盘后统一发送，Issue #190）
+        override_region: 覆盖 config 的 market_review_region（Issue #373 交易日过滤后有效子集）
 
     Returns:
         复盘报告文本
     """
     logger.info("开始执行大盘复盘分析...")
-    
+    config = get_config()
+    region = (
+        override_region
+        if override_region is not None
+        else (getattr(config, 'market_review_region', 'cn') or 'cn')
+    )
+    if region not in ('cn', 'us', 'both'):
+        region = 'cn'
+
     try:
-        market_analyzer = MarketAnalyzer(
-            search_service=search_service,
-            analyzer=analyzer
-        )
-        
-        # 执行复盘
-        review_report = market_analyzer.run_daily_review()
+        if region == 'both':
+            # 顺序执行 A 股 + 美股，合并报告
+            cn_analyzer = MarketAnalyzer(
+                search_service=search_service, analyzer=analyzer, region='cn'
+            )
+            us_analyzer = MarketAnalyzer(
+                search_service=search_service, analyzer=analyzer, region='us'
+            )
+            logger.info("生成 A 股大盘复盘报告...")
+            cn_report = cn_analyzer.run_daily_review()
+            logger.info("生成美股大盘复盘报告...")
+            us_report = us_analyzer.run_daily_review()
+            review_report = ''
+            if cn_report:
+                review_report = f"# A股大盘复盘\n\n{cn_report}"
+            if us_report:
+                if review_report:
+                    review_report += "\n\n---\n\n> 以下为美股大盘复盘\n\n"
+                review_report += f"# 美股大盘复盘\n\n{us_report}"
+            if not review_report:
+                review_report = None
+        else:
+            market_analyzer = MarketAnalyzer(
+                search_service=search_service,
+                analyzer=analyzer,
+                region=region,
+            )
+            review_report = market_analyzer.run_daily_review()
         
         if review_report:
             # 保存报告到文件
