@@ -162,7 +162,7 @@ class WechatSender:
         chunks = chunk_content_by_max_bytes(content, max_bytes, add_page_marker=True)
         total_chunks = len(chunks)
         success_count = 0
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             if self._send_wechat_message(chunk):
                 success_count += 1
             else:
