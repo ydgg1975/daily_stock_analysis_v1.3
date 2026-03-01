@@ -48,7 +48,7 @@ except ImportError:
     logger.warning("[Feishu Stream] 请运行: pip install lark-oapi")
 
 from bot.models import BotMessage, BotResponse, ChatType
-from src.formatters import format_feishu_markdown, chunk_feishu_content
+from src.formatters import format_feishu_markdown, chunk_content_by_max_bytes
 from src.config import get_config
 
 
@@ -181,13 +181,7 @@ class FeishuReplyClient:
             logger.info(
                 f"[Feishu Stream] 回复消息内容超长({content_bytes}字节)，将分批发送"
             )
-            return chunk_feishu_content(
-                formatted_text,
-                self._max_bytes,
-                lambda chunk: self._send_interactive_card(
-                    chunk, message_id=message_id, at_user=at_user, user_id=user_id
-                )
-            )
+            return self._send_to_chat_chunked(message_id, formatted_text, "message_id")
 
         # 单条消息，使用交互卡片
         return self._send_interactive_card(
@@ -216,18 +210,33 @@ class FeishuReplyClient:
             logger.info(
                 f"[Feishu Stream] 发送消息内容超长({content_bytes}字节)，将分批发送"
             )
-            return chunk_feishu_content(
-                formatted_text,
-                self._max_bytes,
-                lambda chunk: self._send_interactive_card(
-                    chunk, chat_id=chat_id, receive_id_type=receive_id_type
-                )
-            )
-
+            return self._send_to_chat_chunked(chat_id, formatted_text, receive_id_type)
+        
         # 单条消息，使用交互卡片
-        return self._send_interactive_card(
-            formatted_text, chat_id=chat_id, receive_id_type=receive_id_type
-        )
+        return self._send_interactive_card(formatted_text, chat_id=chat_id, receive_id_type=receive_id_type)
+        
+    def _send_to_chat_chunked(self, chat_id: str, content: str, receive_id_type: str = "chat_id") -> bool:
+        """
+        分批发送消息到指定会话（支持交互卡片和分段发送）
+        
+        Args:
+            chat_id: 会话 ID
+            content: 消息文本
+            receive_id_type: 接收者 ID 类型，默认 chat_id
+            
+        Returns:
+            是否全部发送成功
+        """
+        chunks = chunk_content_by_max_bytes(content, self._max_bytes, add_page_marker=True)
+        success_count = 0
+        for chunk in chunks:
+            if self._send_interactive_card(
+                chunk, chat_id=chat_id, receive_id_type=receive_id_type
+            ):
+                success_count += 1
+            else:
+                logger.error(f"[Feishu Stream] 发送消息失败: {chunk}")
+        return success_count == len(chunks)
 
 
 class FeishuStreamHandler:
