@@ -312,7 +312,7 @@ def chunk_content_by_max_bytes(content: str, max_bytes: int, add_page_marker: bo
             if section_bytes > effective_max_bytes:
                 # 先保存当前积累的内容
                 if current_chunk:
-                    chunks.append(separator.join(current_chunk))
+                    chunks.append("".join(current_chunk))
                     current_chunk = []
                     current_bytes = 0
 

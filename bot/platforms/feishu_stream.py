@@ -26,6 +26,7 @@ import logging
 import threading
 from datetime import datetime
 from typing import Optional, Callable
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -243,11 +244,13 @@ class FeishuReplyClient:
         """
         chunks = chunk_content_by_max_bytes(content, self._max_bytes, add_page_marker=True)
         success_count = 0
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             if send_func(chunk):
                 success_count += 1
             else:
                 logger.error(f"[Feishu Stream] 发送消息失败: {chunk}")
+            if i < len(chunks) - 1:
+                time.sleep(1)
         return success_count == len(chunks)
 
 

@@ -10,6 +10,7 @@ import logging
 import base64
 import hashlib
 import requests
+import time
 
 from src.config import Config
 from src.formatters import chunk_content_by_max_bytes
@@ -167,6 +168,8 @@ class WechatSender:
                 success_count += 1
             else:
                 logger.error(f"企业微信第 {i+1}/{total_chunks} 批发送失败")
+            if i < total_chunks - 1:
+                time.sleep(1)
         return success_count == len(chunks)
 
     def _gen_wechat_payload(self, content: str) -> dict:
