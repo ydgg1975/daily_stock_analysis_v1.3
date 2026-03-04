@@ -21,6 +21,7 @@ MIN_MAX_BYTES = 40
 
 # Unicode code point ranges for special characters.
 _SPECIAL_CHAR_RANGE = (0x10000, 0xFFFFF)
+_SPECIAL_CHAR_REGEX = re.compile(r'[\U00010000-\U000FFFFF]')
 
 
 def _page_marker(i: int, total: int) -> str:
@@ -42,6 +43,18 @@ def _is_special_char(c: str) -> bool:
     return _SPECIAL_CHAR_RANGE[0] <= cp <= _SPECIAL_CHAR_RANGE[1]
 
 
+def _count_special_chars(s: str) -> int:
+    """
+    计算字符串中的特殊字符数量
+    
+    Args:
+        s: 字符串
+    """
+    # reg find all (0x10000, 0xFFFFF)
+    match = _SPECIAL_CHAR_REGEX.findall(s)
+    return len(match)
+
+
 def _effective_len(s: str, special_char_len: int = 2) -> int:
     """
     计算字符串的有效长度
@@ -54,7 +67,7 @@ def _effective_len(s: str, special_char_len: int = 2) -> int:
         s 的有效长度
     """
     n = len(s)
-    n += sum(special_char_len - 1 for c in s if _is_special_char(c))
+    n += _count_special_chars(s) * (special_char_len - 1)
     return n
 
 
@@ -72,12 +85,14 @@ def _slice_at_effective_len(s: str, effective_len: int, special_char_len: int = 
     """
     if _effective_len(s, special_char_len) <= effective_len:
         return s, ""
-    eff = 0
-    for i, c in enumerate(s):
-        eff += special_char_len if _is_special_char(c) else 1
-        if eff > effective_len:
-            return s[:i], s[i:]
-    return s, ""
+    
+    s_ = s[:effective_len]
+    n_special_chars = _count_special_chars(s_)
+    residual_lens = n_special_chars * (special_char_len - 1) + len(s_) - effective_len
+    while residual_lens > 0:
+        residual_lens -= special_char_len if _is_special_char(s_[-1]) else 1
+        s_ = s_[:-1]
+    return s_, s[len(s_):]
 
 
 def markdown_to_html_document(markdown_text: str) -> str:
