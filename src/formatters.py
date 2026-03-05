@@ -332,7 +332,7 @@ def chunk_content_by_max_bytes(content: str, max_bytes: int, add_page_marker: bo
                     current_bytes = 0
 
                 # 强制按字节截断，避免整段被截断丢失
-                section_chunks = chunk_content_by_max_bytes(
+                section_chunks = _chunk(
                     section[:-separator_bytes], effective_max_bytes
                 )
                 section_chunks[-1] = section_chunks[-1] + separator
@@ -625,7 +625,7 @@ def chunk_content_by_max_words(
                     chunks.append("".join(current_chunk))
 
                 # 强制截断这个超长 section
-                section_chunks = chunk_content_by_max_words(
+                section_chunks = _chunk(
                     section[:-separator_len], effective_max_words, special_char_len
                     )
                 section_chunks[-1] = section_chunks[-1] + separator
