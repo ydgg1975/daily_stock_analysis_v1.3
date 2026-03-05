@@ -1158,10 +1158,10 @@ class SearchService:
     def __init__(
         self,
         bocha_keys: Optional[List[str]] = None,
-        minimax_keys: Optional[List[str]] = None,
         tavily_keys: Optional[List[str]] = None,
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
+        minimax_keys: Optional[List[str]] = None,
         news_max_age_days: int = 3,
     ):
         """
@@ -1169,10 +1169,10 @@ class SearchService:
 
         Args:
             bocha_keys: 博查搜索 API Key 列表
-            minimax_keys: MiniMax API Key 列表
             tavily_keys: Tavily API Key 列表
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
+            minimax_keys: MiniMax API Key 列表
             news_max_age_days: 新闻最大时效（天）
         """
         self._providers: List[BaseSearchProvider] = []
@@ -1184,25 +1184,25 @@ class SearchService:
             self._providers.append(BochaSearchProvider(bocha_keys))
             logger.info(f"已配置 Bocha 搜索，共 {len(bocha_keys)} 个 API Key")
 
-        # 2. MiniMax（Coding Plan Web Search，结构化结果）
-        if minimax_keys:
-            self._providers.append(MiniMaxSearchProvider(minimax_keys))
-            logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
-
-        # 3. Tavily（免费额度更多，每月 1000 次）
+        # 2. Tavily（免费额度更多，每月 1000 次）
         if tavily_keys:
             self._providers.append(TavilySearchProvider(tavily_keys))
             logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
 
-        # 4. Brave Search（隐私优先，全球覆盖）
+        # 3. Brave Search（隐私优先，全球覆盖）
         if brave_keys:
             self._providers.append(BraveSearchProvider(brave_keys))
             logger.info(f"已配置 Brave 搜索，共 {len(brave_keys)} 个 API Key")
 
-        # 5. SerpAPI 作为备选（每月 100 次）
+        # 4. SerpAPI 作为备选（每月 100 次）
         if serpapi_keys:
             self._providers.append(SerpAPISearchProvider(serpapi_keys))
             logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
+
+        # 5. MiniMax（Coding Plan Web Search，结构化结果）
+        if minimax_keys:
+            self._providers.append(MiniMaxSearchProvider(minimax_keys))
+            logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
         
         if not self._providers:
             logger.warning("未配置任何搜索引擎 API Key，新闻搜索功能将不可用")
