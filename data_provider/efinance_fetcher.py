@@ -21,11 +21,13 @@ EfinanceFetcher - 优先数据源 (Priority 0)
 """
 
 import logging
+import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
 import requests  # 引入 requests 以捕获异常
@@ -37,6 +39,8 @@ from tenacity import (
     before_sleep_log,
 )
 
+from patch.eastmoney_patch import eastmoney_patch
+from src.config import get_config
 from .base import BaseFetcher, DataFetchError, RateLimitError, STANDARD_COLUMNS
 from .realtime_types import (
     UnifiedRealtimeQuote, RealtimeSource,
@@ -109,6 +113,13 @@ _realtime_cache: Dict[str, Any] = {
     'ttl': 600  # 10分钟缓存有效期
 }
 
+# ETF 实时行情缓存（与股票分开缓存）
+_etf_realtime_cache: Dict[str, Any] = {
+    'data': None,
+    'timestamp': 0,
+    'ttl': 600  # 10分钟缓存有效期
+}
+
 
 def _is_etf_code(stock_code: str) -> bool:
     """
@@ -126,6 +137,18 @@ def _is_etf_code(stock_code: str) -> bool:
     """
     etf_prefixes = ('51', '52', '56', '58', '15', '16', '18')
     return stock_code.startswith(etf_prefixes) and len(stock_code) == 6
+
+
+def _is_us_code(stock_code: str) -> bool:
+    """
+    判断代码是否为美股
+    
+    美股代码规则：
+    - 1-5个大写字母，如 'AAPL', 'TSLA'
+    - 可能包含 '.'，如 'BRK.B'
+    """
+    code = stock_code.strip().upper()
+    return bool(re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', code))
 
 
 class EfinanceFetcher(BaseFetcher):
@@ -148,7 +171,7 @@ class EfinanceFetcher(BaseFetcher):
     """
     
     name = "EfinanceFetcher"
-    priority = 0  # 最高优先级，排在 AkshareFetcher 之前
+    priority = int(os.getenv("EFINANCE_PRIORITY", "0"))  # 最高优先级，排在 AkshareFetcher 之前
     
     def __init__(self, sleep_min: float = 1.5, sleep_max: float = 3.0):
         """
@@ -161,6 +184,9 @@ class EfinanceFetcher(BaseFetcher):
         self.sleep_min = sleep_min
         self.sleep_max = sleep_max
         self._last_request_time: Optional[float] = None
+        # 东财补丁开启才执行打补丁操作
+        if get_config().enable_eastmoney_patch:
+            eastmoney_patch()
     
     def _set_random_user_agent(self) -> None:
         """
@@ -197,8 +223,8 @@ class EfinanceFetcher(BaseFetcher):
         self._last_request_time = time.time()
     
     @retry(
-        stop=stop_after_attempt(5),  # 增加到5次
-        wait=wait_exponential(multiplier=1, min=4, max=60),  # 增加等待时间：4, 8, 16...
+        stop=stop_after_attempt(1),  # 减少到1次，避免触发限流
+        wait=wait_exponential(multiplier=1, min=4, max=60),  # 保持等待时间设置
         retry=retry_if_exception_type((
             ConnectionError,
             TimeoutError,
@@ -213,16 +239,21 @@ class EfinanceFetcher(BaseFetcher):
         从 efinance 获取原始数据
         
         根据代码类型自动选择 API：
+        - 美股：不支持，抛出异常让 DataFetcherManager 切换到其他数据源
         - 普通股票：使用 ef.stock.get_quote_history()
         - ETF 基金：使用 ef.fund.get_quote_history()
         
         流程：
-        1. 判断代码类型（股票/ETF）
+        1. 判断代码类型（美股/股票/ETF）
         2. 设置随机 User-Agent
         3. 执行速率限制（随机休眠）
         4. 调用对应的 efinance API
         5. 处理返回数据
         """
+        # 美股不支持，抛出异常让 DataFetcherManager 切换到 AkshareFetcher/YfinanceFetcher
+        if _is_us_code(stock_code):
+            raise DataFetchError(f"EfinanceFetcher 不支持美股 {stock_code}，请使用 AkshareFetcher 或 YfinanceFetcher")
+        
         # 根据代码类型选择不同的获取方法
         if _is_etf_code(stock_code):
             return self._fetch_etf_data(stock_code, start_date, end_date)
@@ -322,21 +353,23 @@ class EfinanceFetcher(BaseFetcher):
         beg_date = start_date.replace('-', '')
         end_date_fmt = end_date.replace('-', '')
         
-        logger.info(f"[API调用] ef.fund.get_quote_history(fund_code={stock_code}, "
-                   f"beg={beg_date}, end={end_date_fmt}, klt=101, fqt=1)")
+        logger.info(f"[API调用] ef.fund.get_quote_history(fund_code={stock_code})")
         
         try:
             import time as _time
             api_start = _time.time()
             
             # 调用 efinance 获取 ETF 日线数据
-            df = ef.fund.get_quote_history(
-                fund_code=stock_code,
-                beg=beg_date,
-                end=end_date_fmt,
-                klt=101,  # 日线
-                fqt=1     # 前复权
-            )
+            # 注意: ef.fund.get_quote_history 不支持 beg/end/klt/fqt 参数
+            # 它返回的是 NAV 数据: 日期, 单位净值, 累计净值, 涨跌幅
+            df = ef.fund.get_quote_history(fund_code=stock_code)
+            
+            # 手动过滤日期
+            if df is not None and not df.empty and '日期' in df.columns:
+                # 确保日期列是字符串格式，且格式匹配筛选条件
+                # ef 返回的日期通常是 'YYYY-MM-DD'
+                mask = (df['日期'] >= start_date) & (df['日期'] <= end_date)
+                df = df[mask].copy()
             
             api_elapsed = _time.time() - api_start
             
@@ -389,10 +422,25 @@ class EfinanceFetcher(BaseFetcher):
             # ETF 基金可能的列名
             '基金代码': 'code',
             '基金名称': 'name',
+            '单位净值': 'close',
         }
         
         # 重命名列
         df = df.rename(columns=column_mapping)
+        
+        # 对于 ETF 数据（只有 close/单位净值），补全其他 OHLC 列
+        # 这是一个近似处理，因为 efinance 基金接口不提供 OHLC 数据
+        if 'close' in df.columns and 'open' not in df.columns:
+            df['open'] = df['close']
+            df['high'] = df['close']
+            df['low'] = df['close']
+            
+        # 补全 volume 和 amount，如果缺失
+        if 'volume' not in df.columns:
+            df['volume'] = 0
+        if 'amount' not in df.columns:
+            df['amount'] = 0
+
         
         # 如果没有 code 列，手动添加
         if 'code' not in df.columns:
@@ -405,11 +453,12 @@ class EfinanceFetcher(BaseFetcher):
         
         return df
     
-    def get_realtime_quote(self, stock_code: str) -> Optional[EfinanceRealtimeQuote]:
+    def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
         """
         获取实时行情数据
         
         数据来源：ef.stock.get_realtime_quotes()
+        ETF 数据源：ef.stock.get_realtime_quotes(['ETF'])
         
         Args:
             stock_code: 股票代码
@@ -417,6 +466,10 @@ class EfinanceFetcher(BaseFetcher):
         Returns:
             UnifiedRealtimeQuote 对象，获取失败返回 None
         """
+        # ETF 需要单独请求 ETF 实时行情接口
+        if _is_etf_code(stock_code):
+            return self._get_etf_realtime_quote(stock_code)
+
         import efinance as ef
         circuit_breaker = get_realtime_circuit_breaker()
         source_key = "efinance"
@@ -480,6 +533,11 @@ class EfinanceFetcher(BaseFetcher):
             high_col = '最高' if '最高' in df.columns else 'high'
             low_col = '最低' if '最低' in df.columns else 'low'
             open_col = '开盘' if '开盘' in df.columns else 'open'
+            # efinance 也返回量比、市盈率、市值等字段
+            vol_ratio_col = '量比' if '量比' in df.columns else 'volume_ratio'
+            pe_col = '市盈率' if '市盈率' in df.columns else 'pe_ratio'
+            total_mv_col = '总市值' if '总市值' in df.columns else 'total_mv'
+            circ_mv_col = '流通市值' if '流通市值' in df.columns else 'circ_mv'
             
             quote = UnifiedRealtimeQuote(
                 code=stock_code,
@@ -495,15 +553,277 @@ class EfinanceFetcher(BaseFetcher):
                 high=safe_float(row.get(high_col)),
                 low=safe_float(row.get(low_col)),
                 open_price=safe_float(row.get(open_col)),
+                volume_ratio=safe_float(row.get(vol_ratio_col)),  # 量比
+                pe_ratio=safe_float(row.get(pe_col)),  # 市盈率
+                total_mv=safe_float(row.get(total_mv_col)),  # 总市值
+                circ_mv=safe_float(row.get(circ_mv_col)),  # 流通市值
             )
             
             logger.info(f"[实时行情-efinance] {stock_code} {quote.name}: 价格={quote.price}, 涨跌={quote.change_pct}%, "
-                       f"换手率={quote.turnover_rate}%")
+                       f"量比={quote.volume_ratio}, 换手率={quote.turnover_rate}%")
             return quote
             
         except Exception as e:
             logger.error(f"[API错误] 获取 {stock_code} 实时行情(efinance)失败: {e}")
             circuit_breaker.record_failure(source_key, str(e))
+            return None
+
+    def _get_etf_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
+        """
+        获取 ETF 实时行情
+
+        efinance 默认实时接口仅返回股票数据，ETF 需要显式传入 ['ETF']。
+        """
+        import efinance as ef
+        circuit_breaker = get_realtime_circuit_breaker()
+        source_key = "efinance_etf"
+
+        if not circuit_breaker.is_available(source_key):
+            logger.warning(f"[熔断] 数据源 {source_key} 处于熔断状态，跳过")
+            return None
+
+        try:
+            current_time = time.time()
+            if (
+                _etf_realtime_cache['data'] is not None and
+                current_time - _etf_realtime_cache['timestamp'] < _etf_realtime_cache['ttl']
+            ):
+                df = _etf_realtime_cache['data']
+                cache_age = int(current_time - _etf_realtime_cache['timestamp'])
+                logger.debug(f"[缓存命中] ETF实时行情(efinance) - 缓存年龄 {cache_age}s/{_etf_realtime_cache['ttl']}s")
+            else:
+                self._set_random_user_agent()
+                self._enforce_rate_limit()
+
+                logger.info("[API调用] ef.stock.get_realtime_quotes(['ETF']) 获取ETF实时行情...")
+                import time as _time
+                api_start = _time.time()
+                df = ef.stock.get_realtime_quotes(['ETF'])
+                api_elapsed = _time.time() - api_start
+
+                if df is not None and not df.empty:
+                    logger.info(f"[API返回] ETF 实时行情成功: {len(df)} 条, 耗时 {api_elapsed:.2f}s")
+                    circuit_breaker.record_success(source_key)
+                else:
+                    logger.warning(f"[API返回] ETF 实时行情为空, 耗时 {api_elapsed:.2f}s")
+                    df = pd.DataFrame()
+
+                _etf_realtime_cache['data'] = df
+                _etf_realtime_cache['timestamp'] = current_time
+
+            if df is None or df.empty:
+                logger.warning(f"[实时行情] ETF实时行情数据为空(efinance)，跳过 {stock_code}")
+                return None
+
+            code_col = '股票代码' if '股票代码' in df.columns else 'code'
+            code_series = df[code_col].astype(str).str.zfill(6)
+            target_code = str(stock_code).strip().zfill(6)
+            row = df[code_series == target_code]
+            if row.empty:
+                logger.warning(f"[API返回] 未找到 ETF {stock_code} 的实时行情(efinance)")
+                return None
+
+            row = row.iloc[0]
+            name_col = '股票名称' if '股票名称' in df.columns else 'name'
+            price_col = '最新价' if '最新价' in df.columns else 'price'
+            pct_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+            chg_col = '涨跌额' if '涨跌额' in df.columns else 'change'
+            vol_col = '成交量' if '成交量' in df.columns else 'volume'
+            amt_col = '成交额' if '成交额' in df.columns else 'amount'
+            turn_col = '换手率' if '换手率' in df.columns else 'turnover_rate'
+            amp_col = '振幅' if '振幅' in df.columns else 'amplitude'
+            high_col = '最高' if '最高' in df.columns else 'high'
+            low_col = '最低' if '最低' in df.columns else 'low'
+            open_col = '开盘' if '开盘' in df.columns else 'open'
+
+            quote = UnifiedRealtimeQuote(
+                code=target_code,
+                name=str(row.get(name_col, '')),
+                source=RealtimeSource.EFINANCE,
+                price=safe_float(row.get(price_col)),
+                change_pct=safe_float(row.get(pct_col)),
+                change_amount=safe_float(row.get(chg_col)),
+                volume=safe_int(row.get(vol_col)),
+                amount=safe_float(row.get(amt_col)),
+                turnover_rate=safe_float(row.get(turn_col)),
+                amplitude=safe_float(row.get(amp_col)),
+                high=safe_float(row.get(high_col)),
+                low=safe_float(row.get(low_col)),
+                open_price=safe_float(row.get(open_col)),
+            )
+
+            logger.info(
+                f"[ETF实时行情-efinance] {target_code} {quote.name}: "
+                f"价格={quote.price}, 涨跌={quote.change_pct}%, 换手率={quote.turnover_rate}%"
+            )
+            return quote
+        except Exception as e:
+            logger.error(f"[API错误] 获取 ETF {stock_code} 实时行情(efinance)失败: {e}")
+            circuit_breaker.record_failure(source_key, str(e))
+            return None
+
+    def get_main_indices(self, region: str = "cn") -> Optional[List[Dict[str, Any]]]:
+        """
+        获取主要指数实时行情 (efinance)，仅支持 A 股
+        """
+        if region != "cn":
+            return None
+        import efinance as ef
+
+        indices_map = {
+            '000001': ('上证指数', 'sh000001'),
+            '399001': ('深证成指', 'sz399001'),
+            '399006': ('创业板指', 'sz399006'),
+            '000688': ('科创50', 'sh000688'),
+            '000016': ('上证50', 'sh000016'),
+            '000300': ('沪深300', 'sh000300'),
+        }
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ef.stock.get_realtime_quotes(['沪深系列指数']) 获取指数行情...")
+            import time as _time
+            api_start = _time.time()
+            df = ef.stock.get_realtime_quotes(['沪深系列指数'])
+            api_elapsed = _time.time() - api_start
+
+            if df is None or df.empty:
+                logger.warning(f"[API返回] 指数行情为空, 耗时 {api_elapsed:.2f}s")
+                return None
+
+            logger.info(f"[API返回] 指数行情成功: {len(df)} 条, 耗时 {api_elapsed:.2f}s")
+            code_col = '股票代码' if '股票代码' in df.columns else 'code'
+            code_series = df[code_col].astype(str).str.zfill(6)
+
+            results: List[Dict[str, Any]] = []
+            for code, (name, full_code) in indices_map.items():
+                row = df[code_series == code]
+                if row.empty:
+                    continue
+                item = row.iloc[0]
+
+                price_col = '最新价' if '最新价' in df.columns else 'price'
+                pct_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+                chg_col = '涨跌额' if '涨跌额' in df.columns else 'change'
+                open_col = '开盘' if '开盘' in df.columns else 'open'
+                high_col = '最高' if '最高' in df.columns else 'high'
+                low_col = '最低' if '最低' in df.columns else 'low'
+                vol_col = '成交量' if '成交量' in df.columns else 'volume'
+                amt_col = '成交额' if '成交额' in df.columns else 'amount'
+                amp_col = '振幅' if '振幅' in df.columns else 'amplitude'
+
+                current = safe_float(item.get(price_col, 0))
+                change_amount = safe_float(item.get(chg_col, 0))
+
+                results.append({
+                    'code': full_code,
+                    'name': name,
+                    'current': current,
+                    'change': change_amount,
+                    'change_pct': safe_float(item.get(pct_col, 0)),
+                    'open': safe_float(item.get(open_col, 0)),
+                    'high': safe_float(item.get(high_col, 0)),
+                    'low': safe_float(item.get(low_col, 0)),
+                    'prev_close': current - change_amount if current or change_amount else 0,
+                    'volume': safe_float(item.get(vol_col, 0)),
+                    'amount': safe_float(item.get(amt_col, 0)),
+                    'amplitude': safe_float(item.get(amp_col, 0)),
+                })
+
+            if results:
+                logger.info(f"[efinance] 获取到 {len(results)} 个指数行情")
+            return results if results else None
+        except Exception as e:
+            logger.error(f"[efinance] 获取指数行情失败: {e}")
+            return None
+
+    def get_market_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        获取市场涨跌统计 (efinance)
+        """
+        import efinance as ef
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            current_time = time.time()
+            if (
+                _realtime_cache['data'] is not None and
+                current_time - _realtime_cache['timestamp'] < _realtime_cache['ttl']
+            ):
+                df = _realtime_cache['data']
+            else:
+                logger.info("[API调用] ef.stock.get_realtime_quotes() 获取市场统计...")
+                df = ef.stock.get_realtime_quotes()
+                _realtime_cache['data'] = df
+                _realtime_cache['timestamp'] = current_time
+
+            if df is None or df.empty:
+                logger.warning("[API返回] 市场统计数据为空")
+                return None
+
+            change_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+            amount_col = '成交额' if '成交额' in df.columns else 'amount'
+            if change_col not in df.columns:
+                return None
+
+            df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
+            stats = {
+                'up_count': len(df[df[change_col] > 0]),
+                'down_count': len(df[df[change_col] < 0]),
+                'flat_count': len(df[df[change_col] == 0]),
+                'limit_up_count': len(df[df[change_col] >= 9.9]),
+                'limit_down_count': len(df[df[change_col] <= -9.9]),
+                'total_amount': 0.0,
+            }
+            if amount_col in df.columns:
+                df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce')
+                stats['total_amount'] = df[amount_col].sum() / 1e8
+            return stats
+        except Exception as e:
+            logger.error(f"[efinance] 获取市场统计失败: {e}")
+            return None
+
+    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+        """
+        获取板块涨跌榜 (efinance)
+        """
+        import efinance as ef
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ef.stock.get_realtime_quotes(['行业板块']) 获取板块行情...")
+            df = ef.stock.get_realtime_quotes(['行业板块'])
+            if df is None or df.empty:
+                logger.warning("[efinance] 板块行情数据为空")
+                return None
+
+            change_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+            name_col = '股票名称' if '股票名称' in df.columns else 'name'
+            if change_col not in df.columns or name_col not in df.columns:
+                return None
+
+            df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
+            df = df.dropna(subset=[change_col])
+            top = df.nlargest(n, change_col)
+            bottom = df.nsmallest(n, change_col)
+
+            top_sectors = [
+                {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                for _, row in top.iterrows()
+            ]
+            bottom_sectors = [
+                {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                for _, row in bottom.iterrows()
+            ]
+            return top_sectors, bottom_sectors
+        except Exception as e:
+            logger.error(f"[efinance] 获取板块排行失败: {e}")
             return None
     
     def get_base_info(self, stock_code: str) -> Optional[Dict[str, Any]]:
