@@ -524,7 +524,7 @@ class Config:
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
         bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
 
-        minimax_keys_str = os.getenv('MINIMAX_API_KEY', '')
+        minimax_keys_str = os.getenv('MINIMAX_API_KEYS', '')
         minimax_api_keys = [k.strip() for k in minimax_keys_str.split(',') if k.strip()]
         
         tavily_keys_str = os.getenv('TAVILY_API_KEYS', '')

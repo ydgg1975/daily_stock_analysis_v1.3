@@ -297,7 +297,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 51,
     },
-    "MINIMAX_API_KEY": {
+    "MINIMAX_API_KEYS": {
         "title": "MiniMax API Key",
         "description": "MiniMax API key (search priority: Bocha > MiniMax > Tavily > Brave > SerpAPI).",
         "category": "data_source",
