@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- 🔍 **MiniMax Coding Plan web search provider** — new `MiniMaxSearchProvider` with circuit breaker (3 failures → 300s cooldown), dual time-filtering (query augmentation + client-side date filtering), priority: Bocha > **MiniMax** > Tavily > Brave > SerpAPI; configured via `MINIMAX_API_KEY` env var
+- 🔍 **MiniMax Coding Plan web search provider** — new `MiniMaxSearchProvider` with circuit breaker (3 failures → 300s cooldown), dual time-filtering (query augmentation + client-side date filtering), priority: Bocha > Tavily > Brave > SerpAPI > **MiniMax**; configured via `MINIMAX_API_KEY` env var
 
 ## [3.4.9] - 2026-03-06
 
