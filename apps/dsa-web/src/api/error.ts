@@ -3,6 +3,7 @@ import axios from 'axios';
 export type ApiErrorCategory =
   | 'agent_disabled'
   | 'missing_params'
+  | 'llm_not_configured'
   | 'model_tool_incompatible'
   | 'invalid_tool_call'
   | 'upstream_llm_400'
@@ -303,6 +304,23 @@ export function parseApiError(error: unknown): ParsedApiError {
       rawMessage,
       status,
       category: 'missing_params',
+    });
+  }
+
+  const noConfiguredLlm = (
+    includesAny(matchText, ['all llm models failed']) && includesAny(matchText, ['last error: none'])
+  ) || includesAny(matchText, [
+    'no llm configured',
+    'litellm_model not configured',
+    'ai analysis will be unavailable',
+  ]);
+  if (noConfiguredLlm) {
+    return createParsedApiError({
+      title: '系统没有配置可用的 LLM 模型',
+      message: '请先在系统设置中配置主模型、可用渠道或相关 API Key 后再重试。',
+      rawMessage,
+      status,
+      category: 'llm_not_configured',
     });
   }
 
