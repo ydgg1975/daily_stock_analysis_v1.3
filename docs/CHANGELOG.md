@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- 🐛 **Web UI API error classification** — frontend no longer treats every HTTP 400 as the same “server/network” failure. It now prioritizes backend error text, distinguishes Agent disabled / missing params / model-tool incompatibility / upstream LLM 400 / upstream timeout or egress failure / local connection failure, and only shows local listen-address hints when the browser cannot reach the local service.
+
 ## [3.4.9] - 2026-03-06
 
 ### Added
