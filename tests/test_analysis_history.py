@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock
 
 # Keep this test runnable when optional LLM runtime deps are not installed.
@@ -22,8 +23,15 @@ try:
 except ModuleNotFoundError:
     sys.modules["litellm"] = MagicMock()
 
+try:
+    from fastapi.testclient import TestClient
+    from api.app import create_app
+except ModuleNotFoundError:
+    TestClient = None
+    create_app = None
+
 from src.config import Config
-from src.storage import DatabaseManager, AnalysisHistory
+from src.storage import DatabaseManager, AnalysisHistory, BacktestResult
 from src.analyzer import AnalysisResult
 from src.services.history_service import HistoryService
 
@@ -56,6 +64,25 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             operation_advice="持有",
             analysis_summary="基本面稳健，短期震荡",
         )
+
+    def _save_history(self, query_id: str) -> int:
+        """保存一条测试历史记录并返回主键 ID。"""
+        result = self._build_result()
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id=query_id,
+            report_type="simple",
+            news_content="新闻摘要",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            return row.id
 
     def test_save_analysis_history_with_snapshot(self) -> None:
         """保存历史记录并写入上下文快照"""
@@ -192,6 +219,55 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertIsInstance(detail.get("raw_result"), dict)
         self.assertIsNone(detail.get("model_used"))
+
+    def test_delete_analysis_history_records_also_cleans_backtests(self) -> None:
+        """删除历史记录时应一并清理关联回测结果。"""
+        record_id = self._save_history("query_delete_001")
+
+        with self.db.session_scope() as session:
+            session.add(BacktestResult(
+                analysis_history_id=record_id,
+                code="600519",
+                analysis_date=None,
+                eval_window_days=10,
+                engine_version="v1",
+                eval_status="pending",
+            ))
+
+        deleted = self.db.delete_analysis_history_records([record_id])
+        self.assertEqual(deleted, 1)
+
+        with self.db.get_session() as session:
+            self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id).first())
+            self.assertEqual(
+                session.query(BacktestResult).filter(BacktestResult.analysis_history_id == record_id).count(),
+                0,
+            )
+
+    def test_delete_history_api_deletes_selected_records(self) -> None:
+        """DELETE /api/v1/history should remove only the requested records."""
+        if TestClient is None or create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        record_id_1 = self._save_history("query_delete_api_001")
+        record_id_2 = self._save_history("query_delete_api_002")
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        client = TestClient(create_app(static_dir=static_dir))
+
+        response = client.request(
+            "DELETE",
+            "/api/v1/history",
+            json={"record_ids": [record_id_1]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("deleted"), 1)
+
+        with self.db.get_session() as session:
+            self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_1).first())
+            self.assertIsNotNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_2).first())
 
 
 if __name__ == "__main__":
