@@ -245,6 +245,7 @@ class Config:
     debug: bool = False
     http_proxy: Optional[str] = None  # HTTP 代理 (例如: http://127.0.0.1:10809)
     https_proxy: Optional[str] = None # HTTPS 代理
+    proxy_mode: str = "llm_only"    # 代理模式：llm_only(默认，仅海外服务走代理) / global(所有请求走代理)
     
     # === 定时任务配置 ===
     schedule_enabled: bool = False            # 是否启用定时任务
@@ -361,8 +362,10 @@ class Config:
         setup_env()
 
         # === 智能代理配置 (关键修复) ===
-        # 如果配置了代理，自动设置 NO_PROXY 以排除国内数据源，避免行情获取失败
+        # 默认 llm_only：只让海外 LLM / API 走代理，并自动绕过国内金融数据源。
+        # 可切换为 global：所有 HTTP 请求都走代理，适合境外机器通过回国代理访问东财 / Tushare。
         http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+        proxy_mode = cls._parse_proxy_mode(os.getenv('PROXY_MODE', 'llm_only'))
         if http_proxy:
             # 国内金融数据源域名列表
             domestic_domains = [
@@ -381,15 +384,34 @@ class Config:
 
             # 获取现有的 no_proxy
             current_no_proxy = os.getenv('NO_PROXY') or os.getenv('no_proxy') or ''
-            existing_domains = current_no_proxy.split(',') if current_no_proxy else []
+            existing_domains = [d.strip() for d in current_no_proxy.split(',') if d.strip()]
+            domestic_domain_set = {d.lower() for d in domestic_domains}
 
-            # 合并去重
-            final_domains = list(set(existing_domains + domestic_domains))
-            final_no_proxy = ','.join(filter(None, final_domains))
+            if proxy_mode == 'llm_only':
+                # 默认模式：国内金融数据直连，海外 LLM 等流量走代理
+                final_domains = []
+                seen = set()
+                for domain in existing_domains + domestic_domains:
+                    normalized = domain.strip().lower()
+                    if normalized and normalized not in seen:
+                        seen.add(normalized)
+                        final_domains.append(domain.strip())
+            else:
+                # global 模式：不再自动把国内数据源加入 NO_PROXY，保留用户自定义条目
+                final_domains = [
+                    domain for domain in existing_domains
+                    if domain.strip().lower() not in domestic_domain_set
+                ]
+
+            final_no_proxy = ','.join(final_domains)
 
             # 设置环境变量 (requests/urllib3/aiohttp 都会遵守此设置)
-            os.environ['NO_PROXY'] = final_no_proxy
-            os.environ['no_proxy'] = final_no_proxy
+            if final_no_proxy:
+                os.environ['NO_PROXY'] = final_no_proxy
+                os.environ['no_proxy'] = final_no_proxy
+            else:
+                os.environ.pop('NO_PROXY', None)
+                os.environ.pop('no_proxy', None)
 
             # 确保 HTTP_PROXY 也被正确设置（以防仅在 .env 中定义但未导出）
             os.environ['HTTP_PROXY'] = http_proxy
@@ -656,6 +678,7 @@ class Config:
             config_validate_mode=os.getenv('CONFIG_VALIDATE_MODE', 'warn').lower(),
             http_proxy=os.getenv('HTTP_PROXY'),
             https_proxy=os.getenv('HTTPS_PROXY'),
+            proxy_mode=proxy_mode,
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             schedule_run_immediately=os.getenv('SCHEDULE_RUN_IMMEDIATELY', 'true').lower() == 'true',
@@ -945,6 +968,26 @@ class Config:
             f"MARKET_REVIEW_REGION 配置值 '{value}' 无效，已回退为默认值 'cn'（合法值：cn / us / both）"
         )
         return 'cn'
+
+    @classmethod
+    def _parse_proxy_mode(cls, value: str) -> str:
+        """Parse PROXY_MODE and keep backward-compatible aliases."""
+        import logging
+
+        aliases = {
+            'llm': 'llm_only',
+            'llm-only': 'llm_only',
+            'default': 'llm_only',
+            'all': 'global',
+            'all_traffic': 'global',
+        }
+        v = aliases.get((value or 'llm_only').strip().lower(), (value or 'llm_only').strip().lower())
+        if v in ('llm_only', 'global'):
+            return v
+        logging.getLogger(__name__).warning(
+            f"PROXY_MODE 配置值 '{value}' 无效，已回退为默认值 'llm_only'（合法值：llm_only / global）"
+        )
+        return 'llm_only'
 
     @classmethod
     def _parse_md2img_engine(cls, value: str) -> str:

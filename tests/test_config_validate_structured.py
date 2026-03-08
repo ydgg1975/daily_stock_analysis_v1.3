@@ -8,6 +8,8 @@ Covers:
   legacy keys) via llm_model_list
 - validate() backward-compat: still returns List[str] with the same messages
 """
+import os
+
 import pytest
 from unittest.mock import patch
 
@@ -315,6 +317,48 @@ class TestVisionKeyValidation:
         cfg = _make_config(vision_model="", gemini_api_keys=[])
         issues = cfg.validate_structured()
         assert not any(i.field == "VISION_MODEL" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Proxy mode loading
+# ---------------------------------------------------------------------------
+
+class TestProxyModeLoadFromEnv:
+    @patch("src.config.setup_env")
+    def test_llm_only_mode_adds_domestic_domains_to_no_proxy(self, _mock_setup):
+        with patch.dict(
+            "os.environ",
+            {
+                "HTTP_PROXY": "http://127.0.0.1:10809",
+                "PROXY_MODE": "llm_only",
+                "NO_PROXY": "example.com",
+            },
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
+            assert cfg.proxy_mode == "llm_only"
+            no_proxy = set(filter(None, os.environ.get("NO_PROXY", "").split(",")))
+            assert "example.com" in no_proxy
+            assert "eastmoney.com" in no_proxy
+            assert "tushare.pro" in no_proxy
+
+    @patch("src.config.setup_env")
+    def test_global_mode_keeps_custom_no_proxy_but_removes_auto_domestic_bypass(self, _mock_setup):
+        with patch.dict(
+            "os.environ",
+            {
+                "HTTP_PROXY": "http://127.0.0.1:10809",
+                "PROXY_MODE": "global",
+                "NO_PROXY": "example.com,eastmoney.com,tushare.pro",
+            },
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
+            assert cfg.proxy_mode == "global"
+            no_proxy = set(filter(None, os.environ.get("NO_PROXY", "").split(",")))
+            assert "example.com" in no_proxy
+            assert "eastmoney.com" not in no_proxy
+            assert "tushare.pro" not in no_proxy
 
 
 # ---------------------------------------------------------------------------

@@ -112,6 +112,11 @@
 USE_PROXY=true
 PROXY_HOST=127.0.0.1
 PROXY_PORT=10809
+
+# 可选：代理模式
+# llm_only（默认）：Gemini/OpenAI 等海外服务走代理，东财/Tushare 直连
+# global：所有 HTTP 请求都走代理，适合境外 IP 通过回国代理访问东财/Tushare
+PROXY_MODE=global
 ```
 
 > ⚠️ 注意：代理配置仅对本地运行生效，GitHub Actions 环境无需配置代理。

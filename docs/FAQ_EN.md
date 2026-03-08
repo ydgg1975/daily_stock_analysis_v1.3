@@ -110,6 +110,13 @@ Configure in `.env`:
 USE_PROXY=true
 PROXY_HOST=127.0.0.1
 PROXY_PORT=10809
+
+# Optional: proxy routing mode
+# llm_only (default): Gemini/OpenAI and other overseas services use the proxy,
+# while Eastmoney/Tushare stay direct.
+# global: send all HTTP requests through the proxy, useful when an overseas host
+# needs Eastmoney/Tushare to go through a mainland-return proxy.
+PROXY_MODE=global
 ```
 
 > Note: Proxy configuration only works for local runs, GitHub Actions environment doesn't need proxy.
