@@ -18,21 +18,24 @@ def _handle_analyze_trend(stock_code: str) -> dict:
     """Run technical trend analysis on a stock."""
     from src.stock_analyzer import StockTrendAnalyzer
     from src.storage import get_db
+    from datetime import date, timedelta
+    import pandas as pd
 
     db = get_db()
     analyzer = StockTrendAnalyzer()
 
     # Fetch raw data from DB context
-    context = db.get_analysis_context(stock_code)
-    if context is None or "raw_data" not in context:
-        return {"error": f"No historical data available for trend analysis on {stock_code}"}
-
-    raw_data = context["raw_data"]
-    if not isinstance(raw_data, list) or len(raw_data) < 5:
-        return {"error": f"Insufficient data for trend analysis on {stock_code} (need >= 5 days)"}
-
-    import pandas as pd
-    df = pd.DataFrame(raw_data)
+    # context = db.get_analysis_context(stock_code)
+    end_date = date.today()
+    start_date = end_date - timedelta(days=89)  # ~60 trading days for MA60
+    raw_data = db.get_data_range(stock_code, start_date, end_date)
+    if raw_data:
+        df = pd.DataFrame([bar.to_dict() for bar in raw_data])
+        # # Issue #234: Augment with realtime for intraday MA calculation
+        # if self.config.enable_realtime_quote and realtime_quote:
+        #     df = self._augment_historical_with_realtime(df, realtime_quote, code)
+    
+    # df = pd.DataFrame(raw_data)
 
     result = analyzer.analyze(df, stock_code)
 

@@ -510,6 +510,9 @@ def main() -> int:
     """
     # 解析命令行参数
     args = parse_arguments()
+    
+    # mock 
+    # args.force_run = True
 
     # 加载配置（在设置日志前加载，以获取日志目录）
     config = get_config()

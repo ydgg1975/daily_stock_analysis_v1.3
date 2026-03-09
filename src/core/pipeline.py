@@ -993,6 +993,8 @@ class StockAnalysisPipeline:
         
         results: List[AnalysisResult] = []
         
+        # 测试
+        # self.process_single_stock(stock_codes[0], skip_analysis=dry_run, single_stock_notify=single_stock_notify and send_notification, report_type=report_type, analysis_query_id=uuid.uuid4().hex)
         # 使用线程池并发处理
         # 注意：max_workers 设置较低（默认3）以避免触发反爬
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
