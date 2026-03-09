@@ -185,6 +185,37 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 7,
     },
+    # ------------------------------------------------------------------
+    # AI Model – MiniMax (OpenAI-compatible)
+    # ------------------------------------------------------------------
+    "MINIMAX_API_KEY": {
+        "title": "MiniMax API Key",
+        "description": "MiniMax API key (from https://platform.minimax.io). Supports MiniMax-M2.5 and MiniMax-M2.5-highspeed models via OpenAI-compatible API.",
+        "category": "ai_model",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 8,
+    },
+    "MINIMAX_API_KEYS": {
+        "title": "MiniMax API Keys (Multi)",
+        "description": "Comma-separated MiniMax API keys for load balancing. Takes priority over MINIMAX_API_KEY.",
+        "category": "ai_model",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {"multi_value": True, "delimiter": ","},
+        "display_order": 9,
+    },
     "TUSHARE_TOKEN": {
         "title": "Tushare Token",
         "description": "Token for Tushare Pro API.",

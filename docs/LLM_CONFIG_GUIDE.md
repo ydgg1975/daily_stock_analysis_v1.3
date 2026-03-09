@@ -24,9 +24,10 @@
 |------|----------|------|
 | Gemini | `GEMINI_API_KEY=xxx` | [Google AI Studio](https://aistudio.google.com/) 免费额度，需科学上网 |
 | DeepSeek | `DEEPSEEK_API_KEY=xxx` | [DeepSeek 平台](https://platform.deepseek.com) |
+| MiniMax | `MINIMAX_API_KEY=xxx` | [MiniMax 平台](https://platform.minimax.io)，支持 MiniMax-M2.5 系列模型 |
 | AIHubmix | `AIHUBMIX_KEY=xxx` | [AIHubmix](https://aihubmix.com/?aff=CfMq) 聚合，一 Key 多模型，无需科学上网 |
 
-多 Key 负载均衡：`GEMINI_API_KEYS=key1,key2,key3`、`DEEPSEEK_API_KEYS=key1,key2` 等。
+多 Key 负载均衡：`GEMINI_API_KEYS=key1,key2,key3`、`DEEPSEEK_API_KEYS=key1,key2`、`MINIMAX_API_KEYS=key1,key2` 等。
 
 ### 1.2 验证
 
@@ -75,6 +76,7 @@ LITELLM_CONFIG (YAML)  >  LLM_CHANNELS (env)  >  legacy keys
 - `openai/gpt-4o-mini`
 - `anthropic/claude-3-5-sonnet-20241022`
 - `deepseek/deepseek-chat`
+- `openai/MiniMax-M2.5`
 
 旧格式 `GEMINI_MODEL`（无前缀）仅用于未配置 `LITELLM_MODEL` 时的自动推断。
 
@@ -113,6 +115,7 @@ LLM_{NAME}_MODELS=...        # 逗号分隔
 |----------|--------|----------|------------------------------------------|---------------|
 | aihubmix | AIHubmix | https://aihubmix.com/v1 | gpt-4o-mini, claude-3-5-sonnet, qwen-plus | [aihubmix.com](https://aihubmix.com/?aff=CfMq) |
 | deepseek | DeepSeek | https://api.deepseek.com/v1 | deepseek-chat, deepseek-reasoner | [platform.deepseek.com](https://platform.deepseek.com) |
+| minimax | MiniMax | https://api.minimax.io/v1 | MiniMax-M2.5, MiniMax-M2.5-highspeed | [platform.minimax.io](https://platform.minimax.io) |
 | dashscope | 通义千问 | https://dashscope.aliyuncs.com/compatible-mode/v1 | qwen-plus, qwen-turbo | [dashscope.aliyun.com](https://dashscope.aliyun.com) |
 | zhipu | 智谱 GLM | https://open.bigmodel.cn/api/paas/v4 | glm-4-flash, glm-4-plus | [open.bigmodel.cn](https://open.bigmodel.cn) |
 | moonshot | Moonshot | https://api.moonshot.cn/v1 | moonshot-v1-8k | [platform.moonshot.cn](https://platform.moonshot.cn) |

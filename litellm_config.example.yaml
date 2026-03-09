@@ -51,6 +51,19 @@ model_list:
       model: gemini/gemini-2.5-flash
       api_key: "os.environ/GEMINI_API_KEY_2"
 
+  # --- MiniMax (OpenAI 兼容，支持 MiniMax-M2.5 系列) ---
+  # - model_name: openai/MiniMax-M2.5
+  #   litellm_params:
+  #     model: openai/MiniMax-M2.5
+  #     api_key: "os.environ/MINIMAX_API_KEY"
+  #     api_base: https://api.minimax.io/v1
+
+  # - model_name: openai/MiniMax-M2.5-highspeed
+  #   litellm_params:
+  #     model: openai/MiniMax-M2.5-highspeed
+  #     api_key: "os.environ/MINIMAX_API_KEY"
+  #     api_base: https://api.minimax.io/v1
+
   # --- Anthropic Claude (原生) ---
   # - model_name: anthropic/claude-3-5-sonnet-20241022
   #   litellm_params:

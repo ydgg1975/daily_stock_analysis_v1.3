@@ -37,6 +37,11 @@ const CHANNEL_PRESETS: Record<string, { label: string; baseUrl: string; placehol
     baseUrl: 'https://api.siliconflow.cn/v1',
     placeholder: 'deepseek-ai/DeepSeek-V3',
   },
+  minimax: {
+    label: 'MiniMax',
+    baseUrl: 'https://api.minimax.io/v1',
+    placeholder: 'MiniMax-M2.5,MiniMax-M2.5-highspeed',
+  },
   openrouter: {
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
