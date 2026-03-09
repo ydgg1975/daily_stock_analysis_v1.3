@@ -27,16 +27,6 @@ from src.storage import persist_llm_usage
 logger = logging.getLogger(__name__)
 
 
-def _persist_usage(
-    usage: Dict[str, Any],
-    model: str,
-    call_type: str,
-    stock_code: Optional[str] = None,
-) -> None:
-    """Thin wrapper kept for backward compatibility; delegates to storage helper."""
-    persist_llm_usage(usage, model, call_type=call_type, stock_code=stock_code)
-
-
 # 股票名称映射（常见股票）
 STOCK_NAME_MAP = {
     # === A股 ===
@@ -619,7 +609,7 @@ class GeminiAnalyzer:
         """Check if LiteLLM is properly configured with at least one API key."""
         return self._router is not None or self._litellm_available
 
-    def _call_litellm(self, prompt: str, generation_config: dict) -> Tuple[str, str]:
+    def _call_litellm(self, prompt: str, generation_config: dict) -> Tuple[str, str, Dict[str, Any]]:
         """Call LLM via litellm with fallback across configured models.
 
         When channels/YAML are configured, every model goes through the Router
@@ -632,7 +622,8 @@ class GeminiAnalyzer:
             generation_config: Dict with optional keys: temperature, max_output_tokens, max_tokens.
 
         Returns:
-            Tuple of (response text, model_used). On success model_used is the full model name.
+            Tuple of (response text, model_used, usage). On success model_used is the full model
+            name and usage is a dict with prompt_tokens, completion_tokens, total_tokens.
         """
         config = get_config()
         max_tokens = (
@@ -723,7 +714,7 @@ class GeminiAnalyzer:
             )
             if isinstance(result, tuple):
                 text, model_used, usage = result
-                _persist_usage(usage, model_used, call_type="market_review")
+                persist_llm_usage(usage, model_used, call_type="market_review")
                 return text
             return result
         except Exception as exc:
@@ -830,7 +821,7 @@ class GeminiAnalyzer:
             result.market_snapshot = self._build_market_snapshot(context)
             result.model_used = model_used
 
-            _persist_usage(llm_usage, model_used, call_type="analysis", stock_code=code)
+            persist_llm_usage(llm_usage, model_used, call_type="analysis", stock_code=code)
 
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")
             

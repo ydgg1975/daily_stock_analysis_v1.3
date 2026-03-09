@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- 📊 **LLM cost tracking** — all LLM calls (analysis, agent, market review) are recorded in the `llm_usage` table; new `GET /api/v1/usage/summary?period=today|month|all` endpoint returns aggregated token usage broken down by call type and model
+
 ### Changed
 - 🔎 **Fetcher failure observability** — historical data logs now record fetcher start/success/failure with elapsed time, explicit failover transitions, and clearer final outcomes; Efinance/Eastmoney failures now include upstream endpoint and normalized categories such as `remote_disconnect` and `timeout`; Akshare 新浪/腾讯实时行情日志 now also include upstream endpoint and classified failures for HTTP status, disconnects, and malformed payloads
 ### Added

@@ -446,7 +446,9 @@ class AgentExecutor:
             m = getattr(response, "model", "") or response.provider
             if m and m != "error":
                 models_used.append(m)
-            _persist_usage(response.usage, m or response.provider, call_type="agent")
+            model_for_usage = m or response.provider
+            if model_for_usage and model_for_usage != "error" and response.usage:
+                _persist_usage(response.usage, model_for_usage, call_type="agent")
 
             if response.tool_calls:
                 # LLM wants to call tools
