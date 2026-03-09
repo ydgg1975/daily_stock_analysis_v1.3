@@ -826,6 +826,63 @@ class EfinanceFetcher(BaseFetcher):
             logger.error(f"[efinance] 获取板块排行失败: {e}")
             return None
     
+    def get_financial_indicators(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        获取股票历史财务指标
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            包含历史财务指标的 DataFrame，失败返回 None
+        """
+        import efinance as ef
+        
+        # 美股不支持
+        if _is_us_code(stock_code):
+            return None
+            
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+            
+            # efinance 没有直接返回完整财务指标历史的接口，
+            # 但可以通过 get_base_info 获取当前快照，
+            # 或者通过 get_history_bill 获取资金流向等。
+            # 为了保持接口一致性，这里尝试返回当前基本面的 DataFrame 包装
+            
+            # 实际上，efinance 的 get_base_info 返回的是 Series
+            # 我们可以把它转成单行的 DataFrame
+            
+            info = ef.stock.get_base_info(stock_code)
+            
+            if info is None or info.empty:
+                return None
+                
+            if isinstance(info, pd.Series):
+                df = info.to_frame().T
+            else:
+                df = info
+                
+            # efinance 的字段名通常是中文，例如 '净资产收益率', '毛利率' 等
+            # 这正好符合 StockFundamentalAnalyzer 的需求
+            
+            # 添加日期列（假设是当前）
+            df['end_date'] = datetime.now().strftime('%Y-%m-%d')
+            
+            logger.info(f"[efinance] 成功获取 {stock_code} 财务指标(快照)")
+            return df
+            
+        except Exception as e:
+            logger.warning(f"efinance 获取财务指标失败 {stock_code}: {e}")
+            return None
+
+    def get_chip_distribution(self, stock_code: str):
+        """
+        获取筹码分布数据（efinance 暂不支持）
+        """
+        return None
+
     def get_base_info(self, stock_code: str) -> Optional[Dict[str, Any]]:
         """
         获取股票基本信息

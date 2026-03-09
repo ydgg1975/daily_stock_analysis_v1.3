@@ -1257,6 +1257,23 @@ class GeminiAnalyzer:
     | **BOLL (20,2)** | 中轨:{trend.get('boll_mid', 'N/A'):.2f} | {trend.get('boll_status', 'N/A')} |
     | 布林上下轨 | 上:{trend.get('boll_upper', 'N/A'):.2f}, 下:{trend.get('boll_lower', 'N/A'):.2f} | |
 
+    ### 🏭 基本面深度分析
+    | 指标 | 数值 | 评价 |
+    |------|------|------|
+    | **基本面评分** | **{trend.get('fundamental', {}).get('score', 0)}/100** | {trend.get('fundamental', {}).get('status', '未知')} |
+    | ROE (净资产收益率) | {trend.get('fundamental', {}).get('roe', 0):.2f}% | >15%为优 |
+    | 净利润增长率 | {trend.get('fundamental', {}).get('net_profit_growth', 0):.2f}% | >20%为高成长 |
+    | 销售毛利率 | {trend.get('fundamental', {}).get('gross_margin', 0):.2f}% | |
+    | 资产负债率 | {trend.get('fundamental', {}).get('debt_ratio', 0):.2f}% | <60%为健康 |
+    | 综合评价 | {trend.get('fundamental', {}).get('analysis_summary', '无')} | |
+
+    ### 💡 系统投资建议（分周期）
+    | 周期 | 建议 | 依据 |
+    |------|------|------|
+    | **短期 (3-5天)** | **{trend.get('short_term_advice', '无')}** | KDJ/RSI/MA5 |
+    | **中期 (1-3月)** | **{trend.get('mid_term_advice', '无')}** | MACD/趋势/均线 |
+    | **长期 (6月+)** | **{trend.get('long_term_advice', '无')}** | 基本面/年线 |
+
     ### 🛡️ 风险管理建议
     | 项目 | 建议值 | 说明 |
     |------|------|------|

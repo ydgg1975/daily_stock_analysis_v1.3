@@ -762,6 +762,83 @@ class TushareFetcher(BaseFetcher):
         return None
 
 
+    def get_financial_indicators(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        获取股票历史财务指标
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            包含历史财务指标的 DataFrame，失败返回 None
+        """
+        if self._api is None:
+            return None
+            
+        # 美股不支持
+        if _is_us_code(stock_code):
+            return None
+            
+        try:
+            self._check_rate_limit()
+            ts_code = self._convert_stock_code(stock_code)
+            
+            # 使用 fina_indicator_vip 接口 (或 fina_indicator)
+            # 字段映射：
+            # roe -> roe
+            # net_profit_growth -> q_profit_yoy (单季净利同比) 或 profit_dedt_yoy (扣非净利同比)
+            # gross_margin -> gross_margin
+            # debt_ratio -> debt_to_assets
+            
+            # 获取最近 2 年数据
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - pd.Timedelta(days=730)).strftime('%Y%m%d')
+            
+            fields = 'ts_code,ann_date,end_date,roe,q_roe,gross_margin,debt_to_assets,q_profit_yoy,profit_dedt_yoy'
+            
+            df = self._api.fina_indicator(ts_code=ts_code, start_date=start_date, end_date=end_date, fields=fields)
+            
+            if df is not None and not df.empty:
+                # 转换列名以匹配 StockFundamentalAnalyzer
+                # StockFundamentalAnalyzer 期望的列名：
+                # '净资产收益率' / 'ROE'
+                # '销售毛利率' / '毛利率'
+                # '净利润增长率' / '净利润同比'
+                # '资产负债率'
+                
+                # Tushare 返回的数据通常是按 end_date 降序排列
+                # 我们需要转置它，使列是指标，行是日期（或者直接返回带有标准列名的 df）
+                
+                # 由于 StockFundamentalAnalyzer 使用 iloc[0] 取最新，
+                # 我们需要构造一个 DataFrame，其列名包含上述关键词
+                
+                rename_map = {
+                    'roe': '净资产收益率(ROE)',
+                    'gross_margin': '销售毛利率',
+                    'q_profit_yoy': '净利润增长率',
+                    'debt_to_assets': '资产负债率'
+                }
+                
+                df = df.rename(columns=rename_map)
+                
+                # 按报告期降序排列
+                df = df.sort_values('end_date', ascending=False)
+                
+                logger.info(f"[Tushare] 成功获取 {stock_code} 财务指标")
+                return df
+                
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Tushare 获取财务指标失败 {stock_code}: {e}")
+            return None
+
+    def get_chip_distribution(self, stock_code: str):
+        """
+        获取筹码分布数据（Tushare 暂不支持）
+        """
+        return None
+
 if __name__ == "__main__":
     # 测试代码
     logging.basicConfig(level=logging.DEBUG)

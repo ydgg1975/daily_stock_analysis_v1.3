@@ -127,13 +127,7 @@ class BacktestEngine:
         take_profit: Optional[float],
         config: EvaluationConfig,
     ) -> Dict[str, Any]:
-        """Evaluate one historical analysis against forward daily bars.
-
-        Notes:
-        - Daily bars cannot determine intraday ordering. If stop-loss and
-          take-profit are both touched in the same bar, we record
-          first_hit="ambiguous" and assume stop-loss first for simulated exit.
-        """
+        """Evaluate one historical analysis against forward daily bars."""
 
         if start_price is None or start_price <= 0:
             return {
@@ -147,9 +141,11 @@ class BacktestEngine:
         eval_days = int(config.eval_window_days)
         if eval_days <= 0:
             raise ValueError("eval_window_days must be positive")
-
-        if len(forward_bars) < eval_days:
-            return {
+        
+        # 修正：允许 forward_bars 少于 eval_days，只要有数据即可评估
+        # 但如果完全没有数据，则为 insufficient_data
+        if not forward_bars:
+             return {
                 "analysis_date": analysis_date,
                 "operation_advice": operation_advice,
                 "position_recommendation": cls.infer_position_recommendation(operation_advice),
@@ -180,6 +176,7 @@ class BacktestEngine:
             neutral_band_pct=config.neutral_band_pct,
         )
 
+        # ... (rest of the method)
         (
             hit_stop_loss,
             hit_take_profit,

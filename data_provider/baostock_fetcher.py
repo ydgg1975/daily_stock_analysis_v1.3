@@ -257,6 +257,97 @@ class BaostockFetcher(BaseFetcher):
         
         return df
 
+    def get_financial_indicators(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        获取股票历史财务指标
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            包含历史财务指标的 DataFrame，失败返回 None
+        """
+        # 美股不支持
+        if _is_us_code(stock_code):
+            return None
+            
+        try:
+            bs_code = self._convert_stock_code(stock_code)
+            
+            with self._baostock_session() as bs:
+                # Baostock 提供了 query_profit_data (盈利能力), query_operation_data (营运能力), 
+                # query_growth_data (成长能力), query_balance_data (偿债能力)
+                
+                # 我们需要获取最近一期的数据
+                # 获取年份和季度
+                now = datetime.now()
+                year = now.year
+                quarter = (now.month - 1) // 3 + 1
+                
+                # 如果是第一季度，可能数据还没出，往前推一季度
+                if quarter == 1:
+                    year -= 1
+                    quarter = 4
+                else:
+                    quarter -= 1
+                
+                # 获取盈利能力 (ROE, 毛利率, 净利率)
+                profit_rs = bs.query_profit_data(code=bs_code, year=year, quarter=quarter)
+                
+                # 获取成长能力 (净利润增长率)
+                growth_rs = bs.query_growth_data(code=bs_code, year=year, quarter=quarter)
+                
+                # 获取偿债能力 (资产负债率)
+                balance_rs = bs.query_balance_data(code=bs_code, year=year, quarter=quarter)
+                
+                # 合并数据
+                data = {}
+                
+                if profit_rs.error_code == '0':
+                    while profit_rs.next():
+                        # get_row_data() 返回列表，需要根据 fields 映射
+                        row = profit_rs.get_row_data()
+                        # fields: code, pubDate, statDate, roeAvg, npMargin, gpMargin...
+                        # roeAvg: 净资产收益率(平均)
+                        # gpMargin: 销售毛利率
+                        fields = profit_rs.fields
+                        data['净资产收益率'] = float(row[fields.index('roeAvg')]) * 100 if row[fields.index('roeAvg')] else 0
+                        data['销售毛利率'] = float(row[fields.index('gpMargin')]) * 100 if row[fields.index('gpMargin')] else 0
+                
+                if growth_rs.error_code == '0':
+                    while growth_rs.next():
+                        row = growth_rs.get_row_data()
+                        # YOYNI: 净利润同比增长率
+                        fields = growth_rs.fields
+                        data['净利润增长率'] = float(row[fields.index('YOYNI')]) * 100 if row[fields.index('YOYNI')] else 0
+
+                if balance_rs.error_code == '0':
+                    while balance_rs.next():
+                        row = balance_rs.get_row_data()
+                        # assetLiabilityRatio: 资产负债率
+                        fields = balance_rs.fields
+                        data['资产负债率'] = float(row[fields.index('assetLiabilityRatio')]) * 100 if row[fields.index('assetLiabilityRatio')] else 0
+                
+                if not data:
+                    return None
+                    
+                # 构造 DataFrame
+                df = pd.DataFrame([data])
+                df['end_date'] = f"{year}-Q{quarter}"
+                
+                logger.info(f"[Baostock] 成功获取 {stock_code} 财务指标")
+                return df
+                
+        except Exception as e:
+            logger.warning(f"Baostock 获取财务指标失败 {stock_code}: {e}")
+            return None
+
+    def get_chip_distribution(self, stock_code: str):
+        """
+        获取筹码分布数据（Baostock 不支持）
+        """
+        return None
+
     def get_stock_name(self, stock_code: str) -> Optional[str]:
         """
         获取股票名称

@@ -206,6 +206,15 @@ class StockAnalysisPipeline:
                     logger.debug(f"[{code}] 筹码分布获取失败或已禁用")
             except Exception as e:
                 logger.warning(f"[{code}] 获取筹码分布失败: {e}")
+
+            # Step 2.5: 获取基本面财务指标 (New)
+            financial_data = None
+            try:
+                financial_data = self.fetcher_manager.get_financial_indicators(code)
+                if financial_data is not None:
+                    logger.info(f"[{code}] 基本面数据获取成功")
+            except Exception as e:
+                logger.warning(f"[{code}] 获取基本面数据失败: {e}")
             
             # If agent mode is enabled, or specific agent skills are configured, use the Agent analysis pipeline
             use_agent = getattr(self.config, 'agent_mode', False)
@@ -220,7 +229,7 @@ class StockAnalysisPipeline:
                 logger.info(f"[{code}] 启用 Agent 模式进行分析")
                 return self._analyze_with_agent(code, report_type, query_id, stock_name, realtime_quote, chip_data)
             
-            # Step 3: 趋势分析（基于交易理念）
+            # Step 3: 趋势分析（基于交易理念 + 基本面）
             trend_result: Optional[TrendAnalysisResult] = None
             try:
                 import pandas as pd
@@ -229,7 +238,8 @@ class StockAnalysisPipeline:
                 historical_bars = self.db.get_data_range(code, start_date, end_date)
                 if historical_bars:
                     df = pd.DataFrame([bar.to_dict() for bar in historical_bars])
-                    trend_result = self.trend_analyzer.analyze(df, code)
+                    # 传入 financial_data
+                    trend_result = self.trend_analyzer.analyze(df, code, financial_data)
                     logger.info(f"[{code}] 趋势分析: {trend_result.trend_status.value}, "
                               f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
             except Exception as e:
@@ -422,6 +432,10 @@ class StockAnalysisPipeline:
                 'take_profit': trend_result.take_profit,
                 'position_size': trend_result.position_size,
                 'risk_reward_ratio': trend_result.risk_reward_ratio,
+                'fundamental': trend_result.fundamental.to_dict(),
+                'short_term_advice': trend_result.short_term_advice,
+                'mid_term_advice': trend_result.mid_term_advice,
+                'long_term_advice': trend_result.long_term_advice,
             }
 
         # ETF/index flag for analyzer prompt (Fixes #274)

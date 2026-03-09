@@ -769,6 +769,31 @@ class DataFetcherManager:
                     filled.append(f)
         return filled
 
+    def get_financial_indicators(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        获取股票历史财务指标（自动切换数据源）
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            包含历史财务指标的 DataFrame，失败返回 None
+        """
+        stock_code = normalize_stock_code(stock_code)
+        
+        for fetcher in self._fetchers:
+            if hasattr(fetcher, 'get_financial_indicators'):
+                try:
+                    df = fetcher.get_financial_indicators(stock_code)
+                    if df is not None and not df.empty:
+                        logger.info(f"[{fetcher.name}] 成功获取 {stock_code} 财务指标")
+                        return df
+                except Exception as e:
+                    logger.warning(f"[{fetcher.name}] 获取财务指标失败: {e}")
+                    continue
+        
+        return None
+
     def get_chip_distribution(self, stock_code: str):
         """
         获取筹码分布数据（带熔断和多数据源降级）

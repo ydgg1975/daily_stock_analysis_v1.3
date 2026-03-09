@@ -80,9 +80,44 @@ class RSIStatus(Enum):
 
 
 @dataclass
+class FundamentalAnalysisResult:
+    """基本面分析结果"""
+    roe: float = 0.0                # 净资产收益率
+    net_profit_growth: float = 0.0  # 净利润增长率
+    gross_margin: float = 0.0       # 毛利率
+    debt_ratio: float = 0.0         # 资产负债率
+    pe_ttm: float = 0.0             # 市盈率(TTM)
+    pb: float = 0.0                 # 市净率
+    score: int = 0                  # 基本面评分 0-100
+    status: str = "未知"             # 优质/良好/一般/风险
+    analysis_summary: str = ""       # 分析摘要
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'roe': self.roe,
+            'net_profit_growth': self.net_profit_growth,
+            'gross_margin': self.gross_margin,
+            'debt_ratio': self.debt_ratio,
+            'pe_ttm': self.pe_ttm,
+            'pb': self.pb,
+            'score': self.score,
+            'status': self.status,
+            'analysis_summary': self.analysis_summary,
+        }
+
+
+@dataclass
 class TrendAnalysisResult:
-    """趋势分析结果"""
+    """综合分析结果 (技术面 + 基本面)"""
     code: str
+    
+    # 基本面分析 (New)
+    fundamental: FundamentalAnalysisResult = field(default_factory=FundamentalAnalysisResult)
+    
+    # 投资建议 (New)
+    short_term_advice: str = ""     # 短期建议 (基于 KDJ/RSI/MA5)
+    mid_term_advice: str = ""       # 中期建议 (基于 MACD/MA20/趋势)
+    long_term_advice: str = ""      # 长期建议 (基于 基本面/年线)
     
     # 趋势判断
     trend_status: TrendStatus = TrendStatus.CONSOLIDATION
@@ -153,6 +188,10 @@ class TrendAnalysisResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             'code': self.code,
+            'fundamental': self.fundamental.to_dict(),
+            'short_term_advice': self.short_term_advice,
+            'mid_term_advice': self.mid_term_advice,
+            'long_term_advice': self.long_term_advice,
             'trend_status': self.trend_status.value,
             'ma_alignment': self.ma_alignment,
             'trend_strength': self.trend_strength,
@@ -198,6 +237,84 @@ class TrendAnalysisResult:
         }
 
 
+class StockFundamentalAnalyzer:
+    """基本面分析器"""
+    
+    def analyze(self, df: pd.DataFrame) -> FundamentalAnalysisResult:
+        """
+        分析基本面数据
+        
+        Args:
+            df: 包含财务指标的 DataFrame (ak.stock_financial_analysis_indicator)
+            
+        Returns:
+            FundamentalAnalysisResult
+        """
+        result = FundamentalAnalysisResult()
+        
+        if df is None or df.empty:
+            result.status = "数据缺失"
+            return result
+            
+        try:
+            # 取最近一期财报
+            latest = df.iloc[0] # Akshare通常按日期降序排列? 需确认，假设第一行是最新的
+            
+            # 字段映射 (根据 Akshare 返回的常见列名)
+            # 注意：实际列名可能略有不同，需做容错处理
+            def get_val(col_keywords, default=0.0):
+                for col in df.columns:
+                    if any(k in col for k in col_keywords):
+                        try:
+                            val = float(latest[col])
+                            return val if not np.isnan(val) else default
+                        except:
+                            pass
+                return default
+
+            result.roe = get_val(['净资产收益率', 'ROE'])
+            result.gross_margin = get_val(['销售毛利率', '毛利率'])
+            result.net_profit_growth = get_val(['净利润增长率', '净利润同比'])
+            result.debt_ratio = get_val(['资产负债率'])
+            
+            # 简单的评分逻辑 (总分 100)
+            score = 0
+            summary = []
+            
+            # 1. 盈利能力 (40分)
+            if result.roe >= 20: score += 20; summary.append("ROE优秀(>20%)")
+            elif result.roe >= 15: score += 15; summary.append("ROE良好(>15%)")
+            elif result.roe >= 10: score += 10; summary.append("ROE一般(>10%)")
+            
+            if result.gross_margin >= 40: score += 20; summary.append("毛利率高(>40%)")
+            elif result.gross_margin >= 20: score += 10; summary.append("毛利率良好(>20%)")
+            
+            # 2. 成长能力 (30分)
+            if result.net_profit_growth >= 30: score += 30; summary.append("高成长(>30%)")
+            elif result.net_profit_growth >= 15: score += 20; summary.append("稳健增长(>15%)")
+            elif result.net_profit_growth > 0: score += 10
+            else: summary.append("业绩下滑")
+            
+            # 3. 财务健康 (30分)
+            if result.debt_ratio < 40: score += 30; summary.append("负债率低(<40%)")
+            elif result.debt_ratio < 60: score += 20; summary.append("负债率合理(<60%)")
+            else: summary.append("负债率较高(>60%)")
+            
+            result.score = score
+            result.analysis_summary = "、".join(summary)
+            
+            if score >= 80: result.status = "优质"
+            elif score >= 60: result.status = "良好"
+            elif score >= 40: result.status = "一般"
+            else: result.status = "风险"
+            
+        except Exception as e:
+            logger.error(f"基本面分析出错: {e}")
+            result.status = "分析错误"
+            
+        return result
+
+
 class StockTrendAnalyzer:
     """
     股票趋势分析器
@@ -232,13 +349,14 @@ class StockTrendAnalyzer:
         """初始化分析器"""
         pass
     
-    def analyze(self, df: pd.DataFrame, code: str) -> TrendAnalysisResult:
+    def analyze(self, df: pd.DataFrame, code: str, fundamental_data: pd.DataFrame = None) -> TrendAnalysisResult:
         """
         分析股票趋势
         
         Args:
             df: 包含 OHLCV 数据的 DataFrame
             code: 股票代码
+            fundamental_data: 包含财务指标的 DataFrame (可选)
             
         Returns:
             TrendAnalysisResult 分析结果
@@ -294,9 +412,17 @@ class StockTrendAnalyzer:
 
         # 9. 计算 ATR 和风险管理
         self._calculate_risk_management(df, result)
+        
+        # 10. 基本面分析 (New)
+        if fundamental_data is not None:
+             fund_analyzer = StockFundamentalAnalyzer()
+             result.fundamental = fund_analyzer.analyze(fundamental_data)
 
-        # 10. 生成买入信号
+        # 11. 生成买入信号
         self._generate_signal(result)
+        
+        # 12. 生成分周期建议 (New)
+        self._generate_advice(result)
 
         return result
     
@@ -691,6 +817,60 @@ class StockTrendAnalyzer:
         # 假设账户 1% 风险，单笔亏损不超过 ATR 2倍
         result.position_size = "20%" if result.trend_status == TrendStatus.STRONG_BULL else "10%"
 
+    def _generate_advice(self, result: TrendAnalysisResult) -> None:
+        """生成分周期投资建议"""
+        
+        # 1. 短期建议 (3-5天)
+        # 关注 KDJ, RSI(6), MA5, MA20
+        # 优化逻辑：增加趋势过滤，避免逆势操作
+        
+        # 强势趋势中的回调买点
+        if result.trend_status in [TrendStatus.STRONG_BULL, TrendStatus.BULL] and result.bias_ma5 < 0 and result.bias_ma5 > -5:
+             result.short_term_advice = "买入 (强势回调)"
+        # 超跌反弹 (仅在非极度弱势下)
+        elif result.kdj_signal == "KDJ 金叉" and result.rsi_6 < 40 and result.trend_status != TrendStatus.STRONG_BEAR:
+            result.short_term_advice = "买入 (超跌反弹)"
+        # 逃顶信号
+        elif (result.kdj_signal == "KDJ 死叉" and result.rsi_6 > 70) or result.bias_ma5 > 6:
+            result.short_term_advice = "卖出 (短线见顶)"
+        # 持有信号
+        elif result.ma5 > result.ma10 and result.current_price > result.ma20:
+            result.short_term_advice = "持有 (短线趋势向上)"
+        # 观望信号
+        else:
+            result.short_term_advice = "观望"
+            
+        # 2. 中期建议 (1-3个月)
+        # 关注 MACD, MA20, 趋势状态
+        # 优化逻辑：更严格的趋势确认
+        if result.trend_status in [TrendStatus.STRONG_BULL, TrendStatus.BULL] and result.ma20 > result.ma60:
+            result.mid_term_advice = "增持 (趋势向上)"
+        elif result.trend_status == TrendStatus.WEAK_BULL and result.current_price > result.ma60:
+            result.mid_term_advice = "持有 (趋势转弱但多头尚存)"
+        elif result.trend_status in [TrendStatus.BEAR, TrendStatus.STRONG_BEAR] or result.current_price < result.ma60:
+             # 跌破60日线视为中期转折
+            result.mid_term_advice = "清仓 (趋势向下/破位)"
+        elif result.macd_status == MACDStatus.GOLDEN_CROSS_ZERO:
+            result.mid_term_advice = "买入 (主升浪启动)"
+        else:
+            result.mid_term_advice = "观望 (震荡整理)"
+            
+        # 3. 长期建议 (6个月+)
+        # 关注 基本面, 年线(这里暂用MA60代替)
+        fund_score = result.fundamental.score
+        if fund_score >= 80:
+            if result.current_price > result.ma60:
+                result.long_term_advice = "战略持有 (优质资产+趋势向上)"
+            else:
+                result.long_term_advice = "左侧布局 (优质资产被低估)"
+        elif fund_score >= 60:
+             if result.current_price > result.ma60:
+                result.long_term_advice = "持有 (基本面尚可)"
+             else:
+                result.long_term_advice = "观望 (等待趋势扭转)"
+        else:
+            result.long_term_advice = "回避 (基本面一般/较差)"
+
     def _generate_signal(self, result: TrendAnalysisResult) -> None:
         """
         生成买入信号
@@ -871,6 +1051,16 @@ class StockTrendAnalyzer:
             f"   均线排列: {result.ma_alignment}",
             f"   趋势强度: {result.trend_strength}/100",
             f"",
+            f"🏭 基本面分析: {result.fundamental.status} ({result.fundamental.score}分)",
+            f"   ROE: {result.fundamental.roe:.2f}%  毛利率: {result.fundamental.gross_margin:.2f}%",
+            f"   净利增长: {result.fundamental.net_profit_growth:.2f}%  负债率: {result.fundamental.debt_ratio:.2f}%",
+            f"   评价: {result.fundamental.analysis_summary}",
+            f"",
+            f"💡 投资建议:",
+            f"   短期(3-5天): {result.short_term_advice}",
+            f"   中期(1-3月): {result.mid_term_advice}",
+            f"   长期(6月+):  {result.long_term_advice}",
+            f"",
             f"📈 均线数据:",
             f"   现价: {result.current_price:.2f}",
             f"   MA5:  {result.ma5:.2f} (乖离 {result.bias_ma5:+.2f}%)",
@@ -926,19 +1116,20 @@ class StockTrendAnalyzer:
         return "\n".join(lines)
 
 
-def analyze_stock(df: pd.DataFrame, code: str) -> TrendAnalysisResult:
+def analyze_stock(df: pd.DataFrame, code: str, fundamental_data: pd.DataFrame = None) -> TrendAnalysisResult:
     """
     便捷函数：分析单只股票
     
     Args:
         df: 包含 OHLCV 数据的 DataFrame
         code: 股票代码
+        fundamental_data: 包含财务指标的 DataFrame (可选)
         
     Returns:
         TrendAnalysisResult 分析结果
     """
     analyzer = StockTrendAnalyzer()
-    return analyzer.analyze(df, code)
+    return analyzer.analyze(df, code, fundamental_data)
 
 
 if __name__ == "__main__":

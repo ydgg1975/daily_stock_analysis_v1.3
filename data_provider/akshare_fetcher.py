@@ -69,21 +69,20 @@ USER_AGENTS = [
 
 
 # 缓存实时行情数据（避免重复请求）
-# TTL 设为 20 分钟 (1200秒)：
-# - 批量分析场景：通常 30 只股票在 5 分钟内分析完，20 分钟足够覆盖
-# - 实时性要求：股票分析不需要秒级实时数据，20 分钟延迟可接受
-# - 防封禁：减少 API 调用频率
+# TTL 设为 3 秒 (解决数据滞后问题)：
+# - 实时性要求：股票分析需要秒级实时数据
+# - 防封禁：Akshare 接口本身有重试机制，短时间缓存可避免瞬时并发
 _realtime_cache: Dict[str, Any] = {
     'data': None,
     'timestamp': 0,
-    'ttl': 1200  # 20分钟缓存有效期
+    'ttl': 3  # 3秒缓存有效期
 }
 
 # ETF 实时行情缓存
 _etf_realtime_cache: Dict[str, Any] = {
     'data': None,
     'timestamp': 0,
-    'ttl': 1200  # 20分钟缓存有效期
+    'ttl': 3  # 3秒缓存有效期
 }
 
 
@@ -1270,6 +1269,61 @@ class AkshareFetcher(BaseFetcher):
             
         except Exception as e:
             logger.error(f"[API错误] 获取 {stock_code} 筹码分布失败: {e}")
+            return None
+    
+    def get_financial_indicators(self, stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        获取股票历史财务指标
+        
+        API: ak.stock_financial_analysis_indicator
+        包含：ROE、净利率、毛利率、资产负债率等
+        
+        Args:
+            stock_code: 股票代码
+            
+        Returns:
+            包含历史财务指标的 DataFrame，获取失败返回 None
+        """
+        import akshare as ak
+        
+        # 美股/港股/ETF 不支持此接口
+        if _is_us_code(stock_code) or _is_hk_code(stock_code) or _is_etf_code(stock_code):
+            return None
+            
+        try:
+            # 防封禁策略
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+            
+            logger.info(f"[API调用] ak.stock_financial_abstract(symbol={stock_code}) 获取财务指标...")
+            import time as _time
+            api_start = _time.time()
+            
+            # 使用财务摘要接口 (相比 stock_financial_analysis_indicator 更稳定)
+            df = ak.stock_financial_abstract(symbol=stock_code)
+            
+            api_elapsed = _time.time() - api_start
+            
+            if df is not None and not df.empty:
+                # 数据转换：转置为 (日期, 指标) 格式，以便分析器处理
+                # 原始格式：行是指标，列是日期
+                if '选项' in df.columns:
+                    df = df.drop(columns=['选项'])
+                
+                if '指标' in df.columns:
+                    # 将指标设为索引并转置
+                    df = df.set_index('指标').T
+                    # 转置后：索引是日期(字符串)，列是指标名称
+                    # Akshare 返回的列名通常是降序排列的日期，所以转置后第一行就是最新数据
+                
+                logger.info(f"[API返回] ak.stock_financial_abstract 成功: 返回 {len(df)} 期数据, 耗时 {api_elapsed:.2f}s")
+                return df
+            else:
+                logger.warning(f"[API返回] ak.stock_financial_abstract 返回空数据")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[API错误] 获取 {stock_code} 财务指标失败: {e}")
             return None
     
     def get_enhanced_data(self, stock_code: str, days: int = 60) -> Dict[str, Any]:
