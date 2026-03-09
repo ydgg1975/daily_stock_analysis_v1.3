@@ -462,6 +462,15 @@ class DataFetcherManager:
             yfinance,
         ]
 
+        # QVeris: optional US stock data provider (only when QVERIS_API_KEY is set)
+        try:
+            from .qveris_fetcher import QVerisFetcher
+            qveris = QVerisFetcher()
+            if qveris._client.enabled:
+                self._fetchers.append(qveris)
+        except ImportError:
+            pass
+
         # 按优先级排序（Tushare 如果配置了 Token 且初始化成功，优先级为 0）
         self._fetchers.sort(key=lambda f: f.priority)
 
@@ -512,38 +521,39 @@ class DataFetcherManager:
         total_fetchers = len(self._fetchers)
         request_start = time.time()
 
-        # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher
+        # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher，失败后 fallback 到 QVerisFetcher
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
-            for attempt, fetcher in enumerate(self._fetchers, start=1):
-                if fetcher.name == "YfinanceFetcher":
-                    try:
+            for name in ("YfinanceFetcher", "QVerisFetcher"):
+                fetcher = next((f for f in self._fetchers if f.name == name), None)
+                if fetcher is None:
+                    continue
+                try:
+                    label = "直接路由" if name == "YfinanceFetcher" else "QVeris fallback"
+                    logger.info(
+                        f"[数据源尝试] [{name}] "
+                        f"美股/美股指数 {stock_code} {label}..."
+                    )
+                    df = fetcher.get_daily_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days,
+                    )
+                    if df is not None and not df.empty:
+                        elapsed = time.time() - request_start
                         logger.info(
-                            f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] "
-                            f"美股/美股指数 {stock_code} 直接路由..."
+                            f"[数据源完成] {stock_code} 使用 [{name}] 获取成功: "
+                            f"rows={len(df)}, elapsed={elapsed:.2f}s"
                         )
-                        df = fetcher.get_daily_data(
-                            stock_code=stock_code,
-                            start_date=start_date,
-                            end_date=end_date,
-                            days=days,
-                        )
-                        if df is not None and not df.empty:
-                            elapsed = time.time() - request_start
-                            logger.info(
-                                f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
-                                f"rows={len(df)}, elapsed={elapsed:.2f}s"
-                            )
-                            return df, fetcher.name
-                    except Exception as e:
-                        error_type, error_reason = summarize_exception(e)
-                        error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
-                        logger.warning(
-                            f"[数据源失败 {attempt}/{total_fetchers}] [{fetcher.name}] {stock_code}: "
-                            f"error_type={error_type}, reason={error_reason}"
-                        )
-                        errors.append(error_msg)
-                    break
-            # YfinanceFetcher failed or not found
+                        return df, name
+                except Exception as e:
+                    error_type, error_reason = summarize_exception(e)
+                    error_msg = f"[{name}] ({error_type}) {error_reason}"
+                    logger.warning(
+                        f"[数据源失败] [{name}] {stock_code}: "
+                        f"error_type={error_type}, reason={error_reason}"
+                    )
+                    errors.append(error_msg)
             error_summary = f"美股/美股指数 {stock_code} 获取失败:\n" + "\n".join(errors)
             elapsed = time.time() - request_start
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
@@ -706,35 +716,19 @@ class DataFetcherManager:
             logger.debug(f"[实时行情] 功能已禁用，跳过 {stock_code}")
             return None
 
-        # 美股指数由 YfinanceFetcher 处理（在美股股票检查之前）
-        if is_us_index_code(stock_code):
-            for fetcher in self._fetchers:
-                if fetcher.name == "YfinanceFetcher":
-                    if hasattr(fetcher, 'get_realtime_quote'):
-                        try:
-                            quote = fetcher.get_realtime_quote(stock_code)
-                            if quote is not None:
-                                logger.info(f"[实时行情] 美股指数 {stock_code} 成功获取 (来源: yfinance)")
-                                return quote
-                        except Exception as e:
-                            logger.warning(f"[实时行情] 美股指数 {stock_code} 获取失败: {e}")
-                    break
-            logger.warning(f"[实时行情] 美股指数 {stock_code} 无可用数据源")
-            return None
-
-        # 美股单独处理，使用 YfinanceFetcher
-        if _is_us_code(stock_code):
-            for fetcher in self._fetchers:
-                if fetcher.name == "YfinanceFetcher":
-                    if hasattr(fetcher, 'get_realtime_quote'):
-                        try:
-                            quote = fetcher.get_realtime_quote(stock_code)
-                            if quote is not None:
-                                logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: yfinance)")
-                                return quote
-                        except Exception as e:
-                            logger.warning(f"[实时行情] 美股 {stock_code} 获取失败: {e}")
-                    break
+        # 美股指数/美股: YfinanceFetcher → QVerisFetcher fallback
+        if is_us_index_code(stock_code) or _is_us_code(stock_code):
+            for name in ("YfinanceFetcher", "QVerisFetcher"):
+                fetcher = next((f for f in self._fetchers if f.name == name), None)
+                if fetcher is None or not hasattr(fetcher, 'get_realtime_quote'):
+                    continue
+                try:
+                    quote = fetcher.get_realtime_quote(stock_code)
+                    if quote is not None:
+                        logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: {name})")
+                        return quote
+                except Exception as e:
+                    logger.warning(f"[实时行情] 美股 {stock_code} [{name}] 失败: {e}")
             logger.warning(f"[实时行情] 美股 {stock_code} 无可用数据源")
             return None
         

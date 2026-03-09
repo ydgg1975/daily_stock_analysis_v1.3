@@ -62,8 +62,14 @@ def get_tool_registry():
     from src.agent.tools.search_tools import ALL_SEARCH_TOOLS
     from src.agent.tools.market_tools import ALL_MARKET_TOOLS
 
+    # QVeris tools: optional, only available when QVERIS_API_KEY is configured
+    try:
+        from src.agent.tools.qveris_tools import ALL_QVERIS_TOOLS
+    except ImportError:
+        ALL_QVERIS_TOOLS = []
+
     registry = ToolRegistry()
-    for tool_fn in ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS:
+    for tool_fn in ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS + ALL_QVERIS_TOOLS:
         registry.register(tool_fn)
 
     _TOOL_REGISTRY = registry

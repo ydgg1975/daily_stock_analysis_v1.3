@@ -46,10 +46,10 @@
 | 类型 | 支持 |
 |------|------|
 | AI 模型 | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡）|
-| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance |
+| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance、[QVeris](https://qveris.ai)（美股增强） |
 | 新闻搜索 | Tavily、SerpAPI、Bocha、Brave |
 
-> 注：美股历史数据与实时行情统一使用 YFinance，确保复权一致性
+> 注：美股历史数据与实时行情默认使用 YFinance；配置 `QVERIS_API_KEY` 后可启用 QVeris 作为备用数据源，聚合 Alpha Vantage / FMP / Finnhub 等多家供应商
 
 ### 内置交易纪律
 
@@ -140,6 +140,7 @@
 | `BOCHA_API_KEYS` | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔） | 可选 |
 | `BRAVE_API_KEYS` | [Brave Search](https://brave.com/search/api/) API（隐私优先，美股优化，多个key用逗号分隔） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
+| `QVERIS_API_KEY` | [QVeris](https://qveris.ai) API Key（美股增强数据源，聚合多家供应商） | 可选 |
 | `PREFETCH_REALTIME_QUOTES` | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`） | 可选 |
 | `WECHAT_MSG_TYPE` | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本 | 可选 |
 | `NEWS_MAX_AGE_DAYS` | 新闻最大时效（天），默认 3，避免使用过时信息 | 可选 |
