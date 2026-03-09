@@ -22,8 +22,19 @@ from litellm import Router
 
 from src.agent.llm_adapter import get_thinking_extra_body
 from src.config import Config, get_config, get_api_keys_for_model, extra_litellm_params
+from src.storage import persist_llm_usage
 
 logger = logging.getLogger(__name__)
+
+
+def _persist_usage(
+    usage: Dict[str, Any],
+    model: str,
+    call_type: str,
+    stock_code: Optional[str] = None,
+) -> None:
+    """Thin wrapper kept for backward compatibility; delegates to storage helper."""
+    persist_llm_usage(usage, model, call_type=call_type, stock_code=stock_code)
 
 
 # 股票名称映射（常见股票）
@@ -668,7 +679,14 @@ class GeminiAnalyzer:
                     response = litellm.completion(**call_kwargs)
 
                 if response and response.choices and response.choices[0].message.content:
-                    return (response.choices[0].message.content, model)
+                    usage: Dict[str, Any] = {}
+                    if response.usage:
+                        usage = {
+                            "prompt_tokens": response.usage.prompt_tokens or 0,
+                            "completion_tokens": response.usage.completion_tokens or 0,
+                            "total_tokens": response.usage.total_tokens or 0,
+                        }
+                    return (response.choices[0].message.content, model, usage)
                 raise ValueError("LLM returned empty response")
 
             except Exception as e:
@@ -703,7 +721,11 @@ class GeminiAnalyzer:
                 prompt,
                 generation_config={"max_tokens": max_tokens, "temperature": temperature},
             )
-            return result[0] if isinstance(result, tuple) else result
+            if isinstance(result, tuple):
+                text, model_used, usage = result
+                _persist_usage(usage, model_used, call_type="market_review")
+                return text
+            return result
         except Exception as exc:
             logger.error("[generate_text] LLM call failed: %s", exc)
             return None
@@ -790,7 +812,7 @@ class GeminiAnalyzer:
 
             # 使用 litellm 调用
             start_time = time.time()
-            response_text, model_used = self._call_litellm(prompt, generation_config)
+            response_text, model_used, llm_usage = self._call_litellm(prompt, generation_config)
             elapsed = time.time() - start_time
 
             # 记录响应信息
@@ -807,6 +829,8 @@ class GeminiAnalyzer:
             result.search_performed = bool(news_context)
             result.market_snapshot = self._build_market_snapshot(context)
             result.model_used = model_used
+
+            _persist_usage(llm_usage, model_used, call_type="analysis", stock_code=code)
 
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")
             

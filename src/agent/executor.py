@@ -22,6 +22,7 @@ from json_repair import repair_json
 
 from src.agent.llm_adapter import LLMToolAdapter
 from src.agent.tools.registry import ToolRegistry
+from src.storage import persist_llm_usage as _persist_usage
 
 logger = logging.getLogger(__name__)
 
@@ -445,6 +446,7 @@ class AgentExecutor:
             m = getattr(response, "model", "") or response.provider
             if m and m != "error":
                 models_used.append(m)
+            _persist_usage(response.usage, m or response.provider, call_type="agent")
 
             if response.tool_calls:
                 # LLM wants to call tools
