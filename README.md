@@ -276,6 +276,8 @@ python main.py
 
 **API**：`POST /api/v1/stocks/extract-from-image`（图片）、`POST /api/v1/stocks/parse-import`（文件/粘贴）。详见 [完整指南](docs/full-guide.md)。
 
+**LLM 用量查询**：`GET /api/v1/usage/summary?period=today|month|all`，返回按调用类型和模型分组的 token 消耗汇总（`total_calls`、`total_tokens`、`by_call_type`、`by_model`）。
+
 ### 🤖 Agent 策略问股
 
 在 `.env` 中设置 `AGENT_MODE=true` 后启动服务，访问 `/chat` 页面即可开始多轮策略问答。
@@ -284,6 +286,8 @@ python main.py
 - **自然语言提问**：如「用缠论分析 600519」，Agent 自动调用实时行情、K线、技术指标、新闻等工具
 - **流式进度反馈**：实时展示 AI 思考路径（行情获取 → 技术分析 → 新闻搜索 → 生成结论）
 - **多轮对话**：支持追问上下文，会话历史持久化保存
+- **导出与发送**：可将会话导出为 .md 文件，或发送到已配置的通知渠道
+- **后台执行**：切换页面不中断分析，完成时 Dock 问股图标显示角标
 - **Bot 支持**：`/ask <code> [strategy]` 命令触发策略分析
 - **自定义策略**：在 `strategies/` 目录下新建 YAML 文件即可添加策略，无需写代码
 

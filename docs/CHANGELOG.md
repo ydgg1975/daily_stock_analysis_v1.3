@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- 📊 **LLM cost tracking** — all LLM calls (analysis, agent, market review) are recorded in the `llm_usage` table; new `GET /api/v1/usage/summary?period=today|month|all` endpoint returns aggregated token usage broken down by call type and model
 ### Fixed
 - 🐛 **历史报告狙击点位显示原始文本** (#452) — 历史详情页现优先展示 `raw_result.dashboard.battle_plan.sniper_points` 中的原始字符串，避免 `analysis_history` 数值列把区间、说明文字或复杂点位压缩成单个数字；保留原有数值列作为回退
 
 ### Added
 - 📈 **QVeris 美股备选数据源** — 新增 [QVeris](https://qveris.ai) 作为美股可选 fallback 数据源（`QVERIS_API_KEY`）；YFinance 失败时自动降级到 QVeris（Alpha Vantage/FMP/EODHD/Finnhub）；US fallback 顺序按 `QVERIS_PRIORITY` 动态排序；新增 2 个 Agent 工具（财务报表 + 分析师评级）
+- **Agent 问股导出与发送** (#495) — 问股页面新增「导出会话」按钮，将会话保存为本地 .md 文件；新增「发送」按钮，将会话发送到已配置的通知渠道（企业微信/飞书/邮件等）；新增 `POST /api/v1/agent/chat/send` 接口
+- **Agent 问股后台执行** (#495) — 问股分析在切换页面后继续执行，不中断；完成时在 Dock 问股图标显示角标提示；切换会话或新建会话时自动取消进行中的流式请求
 - **Report Engine P0** — Pydantic schema validation for LLM JSON output; Jinja2 templates (`report_markdown.j2`, `report_wechat.j2`, `report_brief.j2`) with fallback to legacy string concatenation; content integrity checks with conditional retry and placeholder fill; brief mode (`REPORT_TYPE=brief`) for 3-5 sentence summaries; history comparison service for signal changes across recent analyses
 - **Report config** — `REPORT_TEMPLATES_DIR`, `REPORT_RENDERER_ENABLED`, `REPORT_INTEGRITY_ENABLED`, `REPORT_INTEGRITY_RETRY`, `REPORT_HISTORY_COMPARE_N`; `REPORT_TYPE` now supports `brief`
 - **智能导入 (P1)** — 支持图片、CSV/Excel、剪贴板多源导入；Vision LLM 同时提取代码+名称+置信度；名称→代码解析引擎（本地映射+拼音+AkShare fallback）；置信度分层确认（高自动勾选、中/低需人工确认）；统一预览与合并流程
@@ -27,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **parse-import 错误信息细化** — Excel 解析失败时增加可操作提示（格式、工作表、损坏）；CSV 解析失败（如引号未闭合、列数不一致）时返回具体原因；`docs/full-guide.md` 补充列名说明与常见解析失败场景。
 - **parse_import 日志优化** — 文件读取失败、JSON 解析失败、parse 失败时记录文件类型、大小、错误摘要，便于排查。
 - **AkShare 缓存说明** — `docs/full-guide.md` 补充名称解析 AkShare fallback 的 1h TTL 缓存说明。
+
+### Fixed
+- **问股取消与切换** (#495) — 用户取消流式请求时不再误报为失败；快速切换会话时不再覆盖新 stream 状态
 
 ## [3.4.10] - 2026-03-07
 
