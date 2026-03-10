@@ -123,6 +123,17 @@ class BacktestRepository:
             ).scalars().all()
             return list(rows), int(total)
 
+    def get_failed_results(self, limit: int = 10) -> List[BacktestResult]:
+        """Get recent failed backtest results (outcome='loss')."""
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(BacktestResult)
+                .where(BacktestResult.outcome == 'loss')
+                .order_by(desc(BacktestResult.evaluated_at))
+                .limit(limit)
+            ).scalars().all()
+            return list(rows)
+
     def upsert_summary(self, summary: BacktestSummary) -> None:
         """Insert or replace summary row by unique key."""
         with self.db.get_session() as session:

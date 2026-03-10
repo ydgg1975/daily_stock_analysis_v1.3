@@ -14,7 +14,10 @@ A股自选股智能分析系统 - 核心分析流水线
 import logging
 import time
 import uuid
+import os
+import sys
 from collections import defaultdict
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional, Tuple
@@ -844,6 +847,35 @@ class StockAnalysisPipeline:
         
         logger.info("===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
+        
+        # 本地调试：生成 Markdown 文件并自动打开
+        if results and os.getenv("GITHUB_ACTIONS") != "true":
+            try:
+                # 生成完整报告
+                report_content = self.notifier.generate_dashboard_report(results)
+                
+                # 保存到 reports 目录
+                report_dir = "reports"
+                if not os.path.exists(report_dir):
+                    os.makedirs(report_dir)
+                
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{report_dir}/analysis_report_{timestamp}.md"
+                abs_filepath = os.path.abspath(filename)
+                
+                with open(abs_filepath, "w", encoding="utf-8") as f:
+                    f.write(report_content)
+                
+                logger.info(f"本地分析报告已生成: {abs_filepath}")
+                
+                # 自动打开文件 (macOS 使用 open 命令)
+                if sys.platform == "darwin":
+                    import subprocess
+                    subprocess.run(["open", abs_filepath])
+                    logger.info("已自动打开报告文件")
+                    
+            except Exception as e:
+                logger.warning(f"本地报告生成或打开失败: {e}")
         
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:

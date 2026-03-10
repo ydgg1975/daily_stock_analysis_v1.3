@@ -205,6 +205,12 @@ def parse_arguments() -> argparse.Namespace:
         help='强制回测（即使已有回测结果也重新计算）'
     )
 
+    parser.add_argument(
+        '--review',
+        action='store_true',
+        help='运行复盘优化分析（分析失败案例并提供改进建议）'
+    )
+
     return parser.parse_args()
 
 
@@ -514,6 +520,23 @@ def main() -> int:
                 f"回测完成: processed={stats.get('processed')} saved={stats.get('saved')} "
                 f"completed={stats.get('completed')} insufficient={stats.get('insufficient')} errors={stats.get('errors')}"
             )
+            return 0
+
+        # 模式1.5: 复盘优化分析
+        if args.review:
+            logger.info("模式: 复盘优化分析")
+            from src.core.optimization import OptimizationAdvisor
+            
+            advisor = OptimizationAdvisor()
+            report = advisor.analyze_failures()
+            
+            # Save report
+            report_path = Path("reports") / f"optimization_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(report, encoding='utf-8')
+            
+            logger.info(f"优化报告已生成: {report_path}")
+            print(report)
             return 0
 
         # 模式1: 仅大盘复盘

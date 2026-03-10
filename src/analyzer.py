@@ -527,7 +527,15 @@ class GeminiAnalyzer:
             api_key: Gemini API Key（可选，默认从配置读取）
         """
         config = get_config()
-        self._api_key = api_key or config.gemini_api_key
+        # 初始化 API Key 列表和索引
+        self._api_keys = config.gemini_api_keys or ([config.gemini_api_key] if config.gemini_api_key else [])
+        # 确保传入的 key 也在列表中（如果是临时指定的）
+        if api_key and api_key not in self._api_keys:
+            self._api_keys.insert(0, api_key)
+        
+        self._current_key_index = 0
+        self._api_key = self._api_keys[0] if self._api_keys else None
+        
         self._model = None
         self._current_model_name = None  # 当前使用的模型名称
         self._using_fallback = False  # 是否正在使用备选模型
@@ -537,14 +545,28 @@ class GeminiAnalyzer:
         self._anthropic_client = None  # Anthropic 客户端
 
         # 检查 Gemini API Key 是否有效（过滤占位符）
-        gemini_key_valid = self._api_key and not self._api_key.startswith('your_') and len(self._api_key) > 10
+        if not self._api_key:
+            logger.info("Gemini API Key 未配置，将尝试备选模型")
+            gemini_key_valid = False
+        elif self._api_key.startswith('your_'):
+            logger.warning(f"Gemini API Key 无效: 包含默认前缀 'your_' ({self._api_key[:10]}...)")
+            gemini_key_valid = False
+        elif len(self._api_key) <= 10:
+            logger.warning(f"Gemini API Key 无效: 长度过短 ({len(self._api_key)} <= 10)")
+            gemini_key_valid = False
+        else:
+            gemini_key_valid = True
+            masked_key = f"{self._api_key[:4]}...{self._api_key[-4:]}" if len(self._api_key) > 8 else "***"
+            logger.info(f"Gemini API Key 已加载: {masked_key}")
 
         # 优先级：Gemini > Anthropic > OpenAI
         if gemini_key_valid:
             try:
                 self._init_model()
+                if self._model:
+                    logger.info(f"Gemini 分析器初始化成功，主模型: {config.gemini_model}")
             except Exception as e:
-                logger.warning(f"Gemini init failed: {e}, trying Anthropic then OpenAI")
+                logger.warning(f"Gemini 初始化失败: {e}, 正在尝试 Anthropic 或 OpenAI")
                 self._try_anthropic_then_openai()
         else:
             logger.info("Gemini API Key not configured, trying Anthropic then OpenAI")
@@ -869,6 +891,38 @@ class GeminiAnalyzer:
         
         raise Exception("OpenAI API 调用失败，已达最大重试次数")
     
+    def _rotate_api_key(self) -> bool:
+        """
+        切换到下一个可用的 Gemini API Key
+        
+        Returns:
+            是否切换成功（还有可用的 key）
+        """
+        if not self._api_keys or len(self._api_keys) <= 1:
+            return False
+            
+        self._current_key_index = (self._current_key_index + 1) % len(self._api_keys)
+        new_key = self._api_keys[self._current_key_index]
+        self._api_key = new_key
+        
+        import google.generativeai as genai
+        genai.configure(api_key=new_key)
+        
+        # 重新初始化模型以应用新 Key
+        try:
+            config = get_config()
+            model_name = self._current_model_name or config.gemini_model
+            self._model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=self.SYSTEM_PROMPT,
+            )
+            masked_key = f"{new_key[:4]}...{new_key[-4:]}"
+            logger.info(f"[Gemini] 触发 Key 轮询，切换到 Key [{self._current_key_index + 1}/{len(self._api_keys)}]: {masked_key}")
+            return True
+        except Exception as e:
+            logger.error(f"[Gemini] 切换 Key 后重新初始化模型失败: {e}")
+            return False
+
     def _call_api_with_retry(self, prompt: str, generation_config: dict) -> str:
         """
         调用 AI API，带有重试和模型切换机制
@@ -939,6 +993,12 @@ class GeminiAnalyzer:
                 
                 if is_rate_limit:
                     logger.warning(f"[Gemini] API 限流 (429)，第 {attempt + 1}/{max_retries} 次尝试: {error_str[:100]}")
+                    
+                    # 尝试切换 Key (如果有多个 Key)
+                    if self._rotate_api_key():
+                        logger.info(f"[Gemini] 429 限流，已切换 Key 并立即重试")
+                        time.sleep(1) # 短暂停顿
+                        continue # 立即重试，不增加 attempt 计数（或者增加也没事，反正换了key）
                     
                     # 如果已经重试了一半次数且还没切换过备选模型，尝试切换
                     if attempt >= max_retries // 2 and not tried_fallback:

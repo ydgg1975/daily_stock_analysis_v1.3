@@ -30,6 +30,7 @@ from email.mime.image import MIMEImage
 from email.header import Header
 from email.utils import formataddr
 from enum import Enum
+from tabulate import tabulate
 
 import requests
 try:
@@ -670,6 +671,51 @@ class NotificationService:
         else:
             return ('观望', '⚪', '观望')
     
+    def generate_console_table(self, results: List[AnalysisResult]) -> str:
+        """
+        生成控制台表格报告 (使用 tabulate)
+        """
+        if not results:
+            return "无分析结果"
+
+        headers = ["代码", "名称", "现价", "涨跌幅", "建议", "评分", "趋势", "风报比"]
+        table_data = []
+
+        for r in results:
+            # 获取价格信息
+            price = "-"
+            if hasattr(r, 'current_price') and r.current_price is not None:
+                price = f"{r.current_price:.2f}"
+            
+            # 获取涨跌幅
+            change_pct = "-"
+            if hasattr(r, 'change_pct') and r.change_pct is not None:
+                change_pct = f"{r.change_pct:+.2f}%"
+            
+            # 趋势简写
+            trend = r.trend_prediction
+            if "看涨" in trend: trend = "↑看涨"
+            elif "看跌" in trend: trend = "↓看跌"
+            elif "震荡" in trend: trend = "~震荡"
+            
+            # 风报比
+            risk_reward = "-"
+            if hasattr(r, 'risk_reward_ratio') and r.risk_reward_ratio:
+                 risk_reward = str(r.risk_reward_ratio)
+
+            table_data.append([
+                r.code,
+                r.name,
+                price,
+                change_pct,
+                r.operation_advice,
+                r.sentiment_score,
+                trend,
+                risk_reward
+            ])
+
+        return tabulate(table_data, headers=headers, tablefmt="grid", stralign="center")
+
     def generate_dashboard_report(
         self,
         results: List[AnalysisResult],

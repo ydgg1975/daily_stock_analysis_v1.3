@@ -18,23 +18,43 @@ from dotenv import load_dotenv, dotenv_values
 from dataclasses import dataclass, field
 
 
-def setup_env(override: bool = False):
+def setup_env(override: bool = True):
     """
     Initialize environment variables from .env file.
 
     Args:
         override: If True, overwrite existing environment variables with values
                   from .env file. Set to True when reloading config after updates.
-                  Default is False to preserve behavior on initial load where
-                  system environment variables take precedence.
+                  Default is True to ensure .env file takes precedence over
+                  potentially empty system environment variables in local dev.
     """
-    # src/config.py -> src/ -> root
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Priority 1: ENV_FILE environment variable
     env_file = os.getenv("ENV_FILE")
     if env_file:
-        env_path = Path(env_file)
+        env_path = Path(env_file).resolve()
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=override)
+            logger.debug(f"Loaded config from ENV_FILE: {env_path}")
+            return
+
+    # Priority 2: Current working directory
+    cwd_env = Path.cwd() / '.env'
+    if cwd_env.exists():
+        load_dotenv(dotenv_path=cwd_env, override=override)
+        logger.debug(f"Loaded config from CWD: {cwd_env}")
+        return
+
+    # Priority 3: Project root (relative to this file)
+    # src/config.py -> src/ -> root
+    root_env = Path(__file__).parent.parent / '.env'
+    if root_env.exists():
+        load_dotenv(dotenv_path=root_env, override=override)
+        logger.debug(f"Loaded config from project root: {root_env}")
     else:
-        env_path = Path(__file__).parent.parent / '.env'
-    load_dotenv(dotenv_path=env_path, override=override)
+        logger.debug("No .env file found in standard locations.")
 
 
 @dataclass
@@ -61,12 +81,13 @@ class Config:
     
     # === AI 分析配置 ===
     gemini_api_key: Optional[str] = None
+    gemini_api_keys: List[str] = field(default_factory=list)  # 支持多个 Key 轮询 (Issue #429)
     gemini_model: str = "gemini-3-flash-preview"  # 主模型
     gemini_model_fallback: str = "gemini-2.5-flash"  # 备选模型
     gemini_temperature: float = 0.7  # 温度参数（0.0-2.0，控制输出随机性，默认0.7）
 
     # Gemini API 请求配置（防止 429 限流）
-    gemini_request_delay: float = 2.0  # 请求间隔（秒）
+    gemini_request_delay: float = 4.0  # 请求间隔（秒），免费版建议 4.0s 以上
     gemini_max_retries: int = 5  # 最大重试次数
     gemini_retry_delay: float = 5.0  # 重试基础延时（秒）
 
@@ -302,6 +323,15 @@ class Config:
         # 确保环境变量已加载
         setup_env()
 
+        # Debug logging for GitHub Actions environment
+        if os.getenv('GITHUB_ACTIONS') == 'true':
+            gemini_key = os.getenv('GEMINI_API_KEY')
+            if not gemini_key:
+                print("::warning::GEMINI_API_KEY is not set in GitHub Actions environment!")
+            else:
+                masked_key = f"{gemini_key[:4]}...{gemini_key[-4:]}" if len(gemini_key) > 8 else "***"
+                print(f"::notice::GEMINI_API_KEY detected: {masked_key}")
+
         # === 智能代理配置 (关键修复) ===
         # 如果配置了代理，自动设置 NO_PROXY 以排除国内数据源，避免行情获取失败
         http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
@@ -369,6 +399,12 @@ class Config:
         brave_keys_str = os.getenv('BRAVE_API_KEYS', '')
         brave_api_keys = [k.strip() for k in brave_keys_str.split(',') if k.strip()]
 
+        # 解析 Gemini API Keys（支持多个 key，逗号分隔）
+        gemini_keys_str = os.getenv('GEMINI_API_KEYS', os.getenv('GEMINI_API_KEY', os.getenv('GOOGLE_API_KEY', '')))
+        gemini_api_keys = [k.strip() for k in gemini_keys_str.split(',') if k.strip()]
+        # 主 key 使用列表中的第一个
+        gemini_api_key = gemini_api_keys[0] if gemini_api_keys else None
+        
         # 企微消息类型与最大字节数逻辑
         wechat_msg_type = os.getenv('WECHAT_MSG_TYPE', 'markdown')
         wechat_msg_type_lower = wechat_msg_type.lower()
@@ -381,23 +417,24 @@ class Config:
         
         return cls(
             stock_list=stock_list,
-            feishu_app_id=os.getenv('FEISHU_APP_ID'),
-            feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
-            feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
-            tushare_token=os.getenv('TUSHARE_TOKEN'),
-            gemini_api_key=os.getenv('GEMINI_API_KEY'),
+            feishu_app_id=(os.getenv('FEISHU_APP_ID') or '').strip() or None,
+            feishu_app_secret=(os.getenv('FEISHU_APP_SECRET') or '').strip() or None,
+            feishu_folder_token=(os.getenv('FEISHU_FOLDER_TOKEN') or '').strip() or None,
+            tushare_token=(os.getenv('TUSHARE_TOKEN') or '').strip() or None,
+            gemini_api_key=gemini_api_key,
+            gemini_api_keys=gemini_api_keys,
             gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview'),
             gemini_model_fallback=os.getenv('GEMINI_MODEL_FALLBACK', 'gemini-2.5-flash'),
             gemini_temperature=float(os.getenv('GEMINI_TEMPERATURE', '0.7')),
-            gemini_request_delay=float(os.getenv('GEMINI_REQUEST_DELAY', '2.0')),
+            gemini_request_delay=float(os.getenv('GEMINI_REQUEST_DELAY', '4.0')),
             gemini_max_retries=int(os.getenv('GEMINI_MAX_RETRIES', '5')),
             gemini_retry_delay=float(os.getenv('GEMINI_RETRY_DELAY', '5.0')),
-            anthropic_api_key=os.getenv('ANTHROPIC_API_KEY'),
+            anthropic_api_key=(os.getenv('ANTHROPIC_API_KEY') or '').strip() or None,
             anthropic_model=os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022'),
             anthropic_temperature=float(os.getenv('ANTHROPIC_TEMPERATURE', '0.7')),
             anthropic_max_tokens=int(os.getenv('ANTHROPIC_MAX_TOKENS', '8192')),
-            openai_api_key=os.getenv('OPENAI_API_KEY'),
-            openai_base_url=os.getenv('OPENAI_BASE_URL'),
+            openai_api_key=(os.getenv('OPENAI_API_KEY') or '').strip() or None,
+            openai_base_url=(os.getenv('OPENAI_BASE_URL') or '').strip() or None,
             openai_model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
             openai_vision_model=os.getenv('OPENAI_VISION_MODEL') or None,
             openai_temperature=float(os.getenv('OPENAI_TEMPERATURE', '0.7')),
