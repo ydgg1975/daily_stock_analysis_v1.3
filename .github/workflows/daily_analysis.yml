@@ -1,10 +1,11 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
+  # 定时触发 - Every Wednesday at 12:30 PM Amsterdam time (CET/CEST)
   schedule:
-    - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
-  
+    # CRON format: minute hour day-of-week
+    - cron: '30 11 * * 3'
+
   # 手动触发
   workflow_dispatch:
     inputs:
