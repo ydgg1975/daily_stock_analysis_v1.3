@@ -67,6 +67,7 @@ def get_tool_registry():
         from src.agent.tools.qveris_tools import ALL_QVERIS_TOOLS
     except ImportError:
         ALL_QVERIS_TOOLS = []
+        logger.info("[AgentFactory] QVeris Agent tools unavailable (missing dependency or QVERIS_API_KEY not set)")
 
     registry = ToolRegistry()
     for tool_fn in ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS + ALL_QVERIS_TOOLS:

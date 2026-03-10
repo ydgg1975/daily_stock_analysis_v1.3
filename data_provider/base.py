@@ -522,12 +522,15 @@ class DataFetcherManager:
         request_start = time.time()
 
         # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher，失败后 fallback 到 QVerisFetcher
+        # 按 fetcher.priority 排序，尊重 QVERIS_PRIORITY 配置
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
-            for name in ("YfinanceFetcher", "QVerisFetcher"):
-                fetcher = next((f for f in self._fetchers if f.name == name), None)
-                if fetcher is None:
-                    continue
+            us_fetchers = sorted(
+                [f for f in self._fetchers if f.name in ("YfinanceFetcher", "QVerisFetcher")],
+                key=lambda f: getattr(f, "priority", 99),
+            )
+            for fetcher in us_fetchers:
                 try:
+                    name = fetcher.name
                     label = "直接路由" if name == "YfinanceFetcher" else "QVeris fallback"
                     logger.info(
                         f"[数据源尝试] [{name}] "

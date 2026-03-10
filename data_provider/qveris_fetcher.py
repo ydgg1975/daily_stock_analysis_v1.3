@@ -7,7 +7,7 @@ Scope: US stocks only.  Priority: env QVERIS_PRIORITY (default 3).
 import logging, os
 from typing import Any, Dict, List, Optional
 import pandas as pd
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource, safe_float, safe_int
 from .us_index_mapping import is_us_stock_code
@@ -64,7 +64,8 @@ class QVerisFetcher(BaseFetcher):
 
     # -- Historical data ---------------------------------------------------
 
-    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=5))
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=5),
+           retry=retry_if_not_exception_type(DataFetchError))
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         code = self._guard(stock_code)
         from src.qveris_client import QVerisError
@@ -107,6 +108,10 @@ class QVerisFetcher(BaseFetcher):
         df = df.rename(columns=col_map)
         if "date" not in df.columns:
             df = df.reset_index().rename(columns={"index": "date"})
+        # Sort by date ascending before computing pct_chg (QVeris may return reverse-chronological)
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.sort_values("date", ascending=True).reset_index(drop=True)
         if "pct_chg" not in df.columns and "close" in df.columns:
             df["close"] = pd.to_numeric(df["close"], errors="coerce")
             df["pct_chg"] = (df["close"].pct_change() * 100).fillna(0).round(2)
