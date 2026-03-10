@@ -17,7 +17,7 @@ PytdxFetcher - 通达信数据源 (Priority 2)
 import logging
 import re
 from contextlib import contextmanager
-from typing import Optional, Generator, List, Tuple
+from typing import Optional, Generator, List, Tuple, Dict, Any
 
 import pandas as pd
 from tenacity import (
@@ -418,6 +418,45 @@ class PytdxFetcher(BaseFetcher):
             logger.warning(f"Pytdx 获取实时行情失败 {stock_code}: {e}")
         
         return None
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息。
+        """
+        if is_bse_code(stock_code):
+            logger.warning(f"PytdxFetcher 不支持北交所 {stock_code} 公司信息")
+            return {}
+
+        try:
+            market, code = self._get_market_code(stock_code)
+            with self._pytdx_session() as api:
+                finance_info = api.get_finance_info(market, code) or {}
+                company_info = self._sanitize_info_dict(finance_info)
+                name = self.get_stock_name(stock_code)
+                if name and 'name' not in company_info:
+                    company_info['name'] = name
+
+                industry = self._extract_first_value(company_info, ['industry', 'hy', '行业'])
+                concepts = [str(industry)] if industry else []
+                market_name = 'SH' if market == 1 else 'SZ'
+
+                return {
+                    'code': stock_code,
+                    'name': name or self._extract_first_value(company_info, ['name']),
+                    'company_name': name or self._extract_first_value(company_info, ['name']),
+                    'industry': industry,
+                    'area': self._extract_first_value(company_info, ['area', '地区']),
+                    'market': market_name,
+                    'list_date': self._extract_first_value(company_info, ['上市日期', 'list_date']),
+                    'main_business': self._extract_first_value(company_info, ['主营业务', '经营范围']),
+                    'concepts': concepts,
+                    'boards': [{'name': concept, 'type': 'industry'} for concept in concepts],
+                    'company_info': company_info,
+                    'source': self.name,
+                }
+        except Exception as e:
+            logger.warning(f"Pytdx 获取公司信息失败 {stock_code}: {e}")
+            return {}
 
 
 if __name__ == "__main__":

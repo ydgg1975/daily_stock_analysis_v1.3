@@ -351,6 +351,72 @@ class BaseFetcher(ABC):
         logger.debug(f"随机休眠 {sleep_time:.2f} 秒...")
         time.sleep(sleep_time)
 
+    @staticmethod
+    def _sanitize_info_value(value: Any) -> Any:
+        """
+        Sanitize provider payload values for JSON-friendly output.
+        """
+        if isinstance(value, dict):
+            clean_dict = {}
+            for key, item in value.items():
+                clean_item = BaseFetcher._sanitize_info_value(item)
+                if clean_item not in (None, "", [], {}):
+                    clean_dict[str(key)] = clean_item
+            return clean_dict
+
+        if isinstance(value, (list, tuple, set)):
+            clean_list = []
+            for item in value:
+                clean_item = BaseFetcher._sanitize_info_value(item)
+                if clean_item not in (None, "", [], {}):
+                    clean_list.append(clean_item)
+            return clean_list
+
+        if isinstance(value, (datetime, pd.Timestamp)):
+            return value.isoformat()
+
+        if isinstance(value, np.generic):
+            return value.item()
+
+        try:
+            if pd.isna(value):
+                return None
+        except Exception:
+            pass
+
+        return value
+
+    @classmethod
+    def _sanitize_info_dict(cls, data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Remove empty / non-serialisable values from provider dictionaries.
+        """
+        if not isinstance(data, dict):
+            return {}
+        cleaned = cls._sanitize_info_value(data)
+        return cleaned if isinstance(cleaned, dict) else {}
+
+    @staticmethod
+    def _extract_first_value(data: Dict[str, Any], keys: List[str]) -> Optional[Any]:
+        """
+        Return the first non-empty value from a list of candidate keys.
+        """
+        for key in keys:
+            if key not in data:
+                continue
+            value = data.get(key)
+            if isinstance(value, str):
+                value = value.strip()
+            if value not in (None, "", [], {}):
+                return value
+        return None
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息
+        """
+        return {}
+
 
 class DataFetcherManager:
     """
@@ -1042,3 +1108,93 @@ class DataFetcherManager:
                 logger.warning(f"[{fetcher.name}] 获取板块排行失败: {e}")
                 continue
         return [], []
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """获取公司基本信息与相关概念（自动聚合多个数据源）"""
+        stock_code = normalize_stock_code(stock_code)
+
+        def _has_value(value: Any) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, str):
+                return bool(value.strip())
+            if isinstance(value, (list, tuple, set, dict)):
+                return len(value) > 0
+            return True
+
+        merged: Dict[str, Any] = {
+            'code': stock_code,
+            'name': None,
+            'company_name': None,
+            'industry': None,
+            'area': None,
+            'market': None,
+            'list_date': None,
+            'main_business': None,
+            'concepts': [],
+            'boards': [],
+            'company_info': {},
+            'source': None,
+            'sources': [],
+        }
+
+        board_keys = set()
+        concept_keys = set()
+
+        for fetcher in self._fetchers:
+            try:
+                info = fetcher.get_company_info(stock_code)
+                if not info:
+                    continue
+
+                logger.info(f"[{fetcher.name}] 获取公司信息成功")
+                merged['sources'].append(fetcher.name)
+                if merged['source'] is None:
+                    merged['source'] = fetcher.name
+
+                for key in ['name', 'company_name', 'industry', 'area', 'market', 'list_date', 'main_business']:
+                    if _has_value(info.get(key)) and not _has_value(merged.get(key)):
+                        merged[key] = info.get(key)
+
+                if isinstance(info.get('company_info'), dict):
+                    for key, value in info['company_info'].items():
+                        if _has_value(value) and key not in merged['company_info']:
+                            merged['company_info'][key] = value
+
+                for concept in info.get('concepts', []):
+                    concept_name = concept.strip() if isinstance(concept, str) else concept
+                    if not _has_value(concept_name):
+                        continue
+                    if concept_name not in concept_keys:
+                        concept_keys.add(concept_name)
+                        merged['concepts'].append(concept_name)
+
+                for board in info.get('boards', []):
+                    if not isinstance(board, dict):
+                        continue
+                    board_name = board.get('name')
+                    board_code = board.get('code')
+                    board_type = board.get('type')
+                    board_identity = (board_name, board_code, board_type)
+                    if board_name and board_identity not in board_keys:
+                        board_keys.add(board_identity)
+                        merged['boards'].append(board)
+
+                has_core_info = any(
+                    _has_value(merged.get(key))
+                    for key in ['name', 'company_name', 'industry', 'company_info']
+                )
+                has_relation_info = _has_value(merged['concepts']) or _has_value(merged['boards'])
+                if has_core_info and has_relation_info:
+                    break
+
+            except Exception as e:
+                logger.warning(f"[{fetcher.name}] 获取公司信息失败: {e}")
+                continue
+
+        has_meaningful_content = any(
+            _has_value(merged.get(key))
+            for key in ['name', 'company_name', 'industry', 'area', 'market', 'list_date', 'main_business']
+        ) or _has_value(merged['concepts']) or _has_value(merged['boards']) or _has_value(merged['company_info'])
+
+        return merged if has_meaningful_content else {}

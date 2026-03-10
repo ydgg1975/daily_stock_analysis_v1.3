@@ -908,6 +908,60 @@ class EfinanceFetcher(BaseFetcher):
         except Exception as e:
             logger.error(f"[API错误] 获取 {stock_code} 所属板块失败: {e}")
             return None
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息与相关板块概念。
+        """
+        base_info = self.get_base_info(stock_code)
+        board_df = self.get_belong_board(stock_code)
+
+        if not base_info and (board_df is None or board_df.empty):
+            return {}
+
+        clean_base_info = self._sanitize_info_dict(base_info or {})
+        boards: List[Dict[str, Any]] = []
+        concepts: List[str] = []
+
+        if board_df is not None and not board_df.empty:
+            for _, row in board_df.iterrows():
+                board_info = self._sanitize_info_dict(row.to_dict())
+                board_name = self._extract_first_value(board_info, ['板块名称', '名称', '板块', 'name'])
+                if not board_name:
+                    continue
+
+                board_code = self._extract_first_value(board_info, ['板块代码', '代码', 'code'])
+                board_type = self._extract_first_value(board_info, ['板块类型', '类型', 'category'])
+                change_pct = self._extract_first_value(board_info, ['涨跌幅', 'change_pct'])
+
+                if not board_type:
+                    board_type = 'board'
+
+                board_record = {
+                    'name': board_name,
+                    'code': board_code,
+                    'type': board_type,
+                }
+                if change_pct is not None:
+                    board_record['change_pct'] = change_pct
+
+                boards.append(board_record)
+                concepts.append(board_name)
+
+        return {
+            'code': stock_code,
+            'name': self._extract_first_value(clean_base_info, ['股票名称', '股票简称', '名称', 'name']),
+            'company_name': self._extract_first_value(clean_base_info, ['公司名称', '股票名称', '股票简称', '名称']),
+            'industry': self._extract_first_value(clean_base_info, ['所处行业', '所属行业', '行业', 'industry']),
+            'area': self._extract_first_value(clean_base_info, ['地区', '所属地域', '地域', 'area']),
+            'market': self._extract_first_value(clean_base_info, ['市场', '上市市场', 'market']),
+            'list_date': self._extract_first_value(clean_base_info, ['上市时间', '上市日期', 'list_date']),
+            'main_business': self._extract_first_value(clean_base_info, ['主营业务', '经营范围', '公司简介']),
+            'concepts': list(dict.fromkeys(concepts)),
+            'boards': boards,
+            'company_info': clean_base_info,
+            'source': self.name,
+        }
     
     def get_enhanced_data(self, stock_code: str, days: int = 60) -> Dict[str, Any]:
         """

@@ -26,6 +26,7 @@ AkshareFetcher - 主数据源 (Priority 1)
 import logging
 import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -1540,68 +1541,144 @@ class AkshareFetcher(BaseFetcher):
             logger.error(f"[Akshare] 新浪接口获取板块排行也失败: {e}")
             return None
 
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息，优先整合东财个股资料与实时估值信息。
+        """
+        import akshare as ak
+
+        company_info: Dict[str, Any] = {}
+        concepts: List[str] = []
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+            info_df = ak.stock_individual_info_em(symbol=stock_code)
+            if info_df is not None and not info_df.empty:
+                item_col = next((col for col in ['item', '项目', '指标'] if col in info_df.columns), info_df.columns[0])
+                value_col = next((col for col in ['value', '值', '内容'] if col in info_df.columns), info_df.columns[-1])
+                company_info = self._sanitize_info_dict(
+                    dict(zip(info_df[item_col].astype(str), info_df[value_col]))
+                )
+        except Exception as e:
+            logger.warning(f"[Akshare] 获取 {stock_code} 个股资料失败: {e}")
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+            business_df = ak.stock_zyjs_ths(symbol=stock_code)
+            if business_df is not None and not business_df.empty:
+                business_info = self._sanitize_info_dict(business_df.iloc[0].to_dict())
+                for key, value in business_info.items():
+                    if key not in company_info:
+                        company_info[key] = value
+
+                concept_value = self._extract_first_value(
+                    business_info,
+                    ['所属概念', '概念题材', '概念', '题材概念']
+                )
+                if isinstance(concept_value, str):
+                    for item in re.split(r'[,，;；/、\s]+', concept_value):
+                        item = item.strip()
+                        if item:
+                            concepts.append(item)
+        except Exception as e:
+            logger.debug(f"[Akshare] 获取 {stock_code} 主营介绍失败: {e}")
+
+        industry = self._extract_first_value(company_info, ['行业', '所属行业', '所处行业'])
+        if industry:
+            concepts.append(str(industry))
+
+        name = self._extract_first_value(company_info, ['股票简称', '股票名称', '名称'])
+
+        market = self._extract_first_value(company_info, ['市场', '上市市场'])
+        if not market:
+            if stock_code.startswith(('60', '68', '51', '52', '56', '58')):
+                market = 'SH'
+            elif stock_code.startswith(('00', '30', '15', '16', '18')):
+                market = 'SZ'
+            elif is_bse_code(stock_code):
+                market = 'BJ'
+
+        return {
+            'code': stock_code,
+            'name': name,
+            'company_name': self._extract_first_value(company_info, ['公司名称', '股票名称', '股票简称', '名称']),
+            'industry': industry,
+            'area': self._extract_first_value(company_info, ['地区', '所属地域', '地域']),
+            'market': market,
+            'list_date': self._extract_first_value(company_info, ['上市时间', '上市日期']),
+            'main_business': self._extract_first_value(company_info, ['主营业务', '经营范围', '公司简介']),
+            'concepts': list(dict.fromkeys(concepts)),
+            'boards': [{'name': concept, 'type': 'concept'} for concept in list(dict.fromkeys(concepts))],
+            'company_info': company_info,
+            'source': self.name,
+        }
+
 
 if __name__ == "__main__":
     # 测试代码
     logging.basicConfig(level=logging.DEBUG)
     
     fetcher = AkshareFetcher()
+    df = fetcher.get_company_info('600519')  # 茅台
+    print(df)
     
-    # 测试普通股票
-    print("=" * 50)
-    print("测试普通股票数据获取")
-    print("=" * 50)
-    try:
-        df = fetcher.get_daily_data('600519')  # 茅台
-        print(f"[股票] 获取成功，共 {len(df)} 条数据")
-        print(df.tail())
-    except Exception as e:
-        print(f"[股票] 获取失败: {e}")
+    # # 测试普通股票
+    # print("=" * 50)
+    # print("测试普通股票数据获取")
+    # print("=" * 50)
+    # try:
+    #     df = fetcher.get_company_info('600519')  # 茅台
+    #     print(f"[股票] 获取成功，共 {len(df)} 条数据")
+    #     print(df.tail())
+    # except Exception as e:
+    #     print(f"[股票] 获取失败: {e}")
     
-    # 测试 ETF 基金
-    print("\n" + "=" * 50)
-    print("测试 ETF 基金数据获取")
-    print("=" * 50)
-    try:
-        df = fetcher.get_daily_data('512400')  # 有色龙头ETF
-        print(f"[ETF] 获取成功，共 {len(df)} 条数据")
-        print(df.tail())
-    except Exception as e:
-        print(f"[ETF] 获取失败: {e}")
+    # # 测试 ETF 基金
+    # print("\n" + "=" * 50)
+    # print("测试 ETF 基金数据获取")
+    # print("=" * 50)
+    # try:
+    #     df = fetcher.get_daily_data('512400')  # 有色龙头ETF
+    #     print(f"[ETF] 获取成功，共 {len(df)} 条数据")
+    #     print(df.tail())
+    # except Exception as e:
+    #     print(f"[ETF] 获取失败: {e}")
     
-    # 测试 ETF 实时行情
-    print("\n" + "=" * 50)
-    print("测试 ETF 实时行情获取")
-    print("=" * 50)
-    try:
-        quote = fetcher.get_realtime_quote('512880')  # 证券ETF
-        if quote:
-            print(f"[ETF实时] {quote.name}: 价格={quote.price}, 涨跌幅={quote.change_pct}%")
-        else:
-            print("[ETF实时] 未获取到数据")
-    except Exception as e:
-        print(f"[ETF实时] 获取失败: {e}")
+    # # 测试 ETF 实时行情
+    # print("\n" + "=" * 50)
+    # print("测试 ETF 实时行情获取")
+    # print("=" * 50)
+    # try:
+    #     quote = fetcher.get_realtime_quote('512880')  # 证券ETF
+    #     if quote:
+    #         print(f"[ETF实时] {quote.name}: 价格={quote.price}, 涨跌幅={quote.change_pct}%")
+    #     else:
+    #         print("[ETF实时] 未获取到数据")
+    # except Exception as e:
+    #     print(f"[ETF实时] 获取失败: {e}")
     
-    # 测试港股历史数据
-    print("\n" + "=" * 50)
-    print("测试港股历史数据获取")
-    print("=" * 50)
-    try:
-        df = fetcher.get_daily_data('00700')  # 腾讯控股
-        print(f"[港股] 获取成功，共 {len(df)} 条数据")
-        print(df.tail())
-    except Exception as e:
-        print(f"[港股] 获取失败: {e}")
+    # # 测试港股历史数据
+    # print("\n" + "=" * 50)
+    # print("测试港股历史数据获取")
+    # print("=" * 50)
+    # try:
+    #     df = fetcher.get_daily_data('00700')  # 腾讯控股
+    #     print(f"[港股] 获取成功，共 {len(df)} 条数据")
+    #     print(df.tail())
+    # except Exception as e:
+    #     print(f"[港股] 获取失败: {e}")
     
-    # 测试港股实时行情
-    print("\n" + "=" * 50)
-    print("测试港股实时行情获取")
-    print("=" * 50)
-    try:
-        quote = fetcher.get_realtime_quote('00700')  # 腾讯控股
-        if quote:
-            print(f"[港股实时] {quote.name}: 价格={quote.price}, 涨跌幅={quote.change_pct}%")
-        else:
-            print("[港股实时] 未获取到数据")
-    except Exception as e:
-        print(f"[港股实时] 获取失败: {e}")
+    # # 测试港股实时行情
+    # print("\n" + "=" * 50)
+    # print("测试港股实时行情获取")
+    # print("=" * 50)
+    # try:
+    #     quote = fetcher.get_realtime_quote('00700')  # 腾讯控股
+    #     if quote:
+    #         print(f"[港股实时] {quote.name}: 价格={quote.price}, 涨跌幅={quote.change_pct}%")
+    #     else:
+    #         print("[港股实时] 未获取到数据")
+    # except Exception as e:
+    #     print(f"[港股实时] 获取失败: {e}")

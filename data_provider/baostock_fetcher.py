@@ -18,7 +18,7 @@ import logging
 import re
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional, Generator
+from typing import Optional, Generator, Dict, Any, List
 
 import pandas as pd
 from tenacity import (
@@ -349,6 +349,73 @@ class BaostockFetcher(BaseFetcher):
             logger.warning(f"Baostock 获取股票列表失败: {e}")
         
         return None
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息。
+        """
+        company_info: Dict[str, Any] = {}
+        concepts: List[str] = []
+
+        try:
+            bs_code = self._convert_stock_code(stock_code)
+
+            with self._baostock_session() as bs:
+                rs = bs.query_stock_basic(code=bs_code)
+                if rs.error_code == '0':
+                    rows = []
+                    while rs.next():
+                        rows.append(rs.get_row_data())
+
+                    if rows:
+                        company_info = self._sanitize_info_dict(
+                            dict(zip(rs.fields, rows[0]))
+                        )
+
+                try:
+                    industry_rs = bs.query_stock_industry()
+                    if industry_rs.error_code == '0':
+                        industry_rows = []
+                        while industry_rs.next():
+                            industry_rows.append(industry_rs.get_row_data())
+
+                        if industry_rows:
+                            industry_df = pd.DataFrame(industry_rows, columns=industry_rs.fields)
+                            match_df = industry_df[industry_df['code'] == bs_code] if 'code' in industry_df.columns else pd.DataFrame()
+                            if not match_df.empty:
+                                industry_info = self._sanitize_info_dict(match_df.iloc[0].to_dict())
+                                for key, value in industry_info.items():
+                                    if key not in company_info:
+                                        company_info[key] = value
+
+                                industry_name = self._extract_first_value(industry_info, ['industry', '行业'])
+                                if industry_name:
+                                    concepts.append(str(industry_name))
+                except Exception as e:
+                    logger.debug(f"Baostock 获取 {stock_code} 行业信息失败: {e}")
+
+        except Exception as e:
+            logger.warning(f"Baostock 获取 {stock_code} 公司信息失败: {e}")
+            return {}
+
+        market = 'SH' if stock_code.startswith(('60', '68', '51', '52', '56', '58')) else 'SZ'
+        if is_bse_code(stock_code):
+            market = 'BJ'
+
+        return {
+            'code': stock_code,
+            'name': self._extract_first_value(company_info, ['code_name', 'name']),
+            'company_name': self._extract_first_value(company_info, ['code_name', 'name']),
+            'industry': self._extract_first_value(company_info, ['industry', '行业']),
+            'area': self._extract_first_value(company_info, ['area', '地区']),
+            'market': market,
+            'list_date': self._extract_first_value(company_info, ['ipoDate', '上市日期']),
+            'main_business': self._extract_first_value(company_info, ['主营业务', '经营范围']),
+            'concepts': list(dict.fromkeys(concepts)),
+            'boards': [{'name': concept, 'type': 'industry'} for concept in list(dict.fromkeys(concepts))],
+            'company_info': company_info,
+            'source': self.name,
+        }
 
 
 if __name__ == "__main__":

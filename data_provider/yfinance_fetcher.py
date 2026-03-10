@@ -562,6 +562,40 @@ class YfinanceFetcher(BaseFetcher):
             logger.warning(f"[Yfinance] 获取美股 {stock_code} 实时行情失败: {e}")
             return None
 
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息。
+        """
+        import yfinance as yf
+
+        try:
+            symbol = self._convert_stock_code(stock_code)
+            ticker = yf.Ticker(symbol)
+            raw_info = ticker.info or {}
+            company_info = self._sanitize_info_dict(raw_info)
+
+            sector = self._extract_first_value(company_info, ['sector', 'category'])
+            industry = self._extract_first_value(company_info, ['industry'])
+            concepts = [item for item in [sector, industry] if item]
+
+            return {
+                'code': stock_code.strip().upper(),
+                'name': self._extract_first_value(company_info, ['shortName', 'longName', 'displayName']),
+                'company_name': self._extract_first_value(company_info, ['longName', 'shortName', 'displayName']),
+                'industry': industry,
+                'area': self._extract_first_value(company_info, ['city', 'state', 'country']),
+                'market': self._extract_first_value(company_info, ['exchange', 'market']),
+                'list_date': self._extract_first_value(company_info, ['firstTradeDateEpochUtc']),
+                'main_business': self._extract_first_value(company_info, ['longBusinessSummary', 'description']),
+                'concepts': concepts,
+                'boards': [{'name': concept, 'type': 'industry'} for concept in concepts],
+                'company_info': company_info,
+                'source': self.name,
+            }
+        except Exception as e:
+            logger.warning(f"[Yfinance] 获取公司信息失败 {stock_code}: {e}")
+            return {}
+
 
 if __name__ == "__main__":
     # 测试代码

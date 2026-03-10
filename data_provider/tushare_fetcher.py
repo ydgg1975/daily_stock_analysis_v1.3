@@ -500,6 +500,57 @@ class TushareFetcher(BaseFetcher):
             logger.warning(f"Tushare 获取股票列表失败: {e}")
         
         return None
+
+    def get_company_info(self, stock_code: str) -> Dict[str, Any]:
+        """
+        获取公司基本信息。
+        """
+        if self._api is None:
+            logger.warning("Tushare API 未初始化，无法获取公司信息")
+            return {}
+
+        try:
+            self._check_rate_limit()
+            ts_code = self._convert_stock_code(stock_code)
+
+            if _is_etf_code(stock_code):
+                df = self._api.fund_basic(
+                    ts_code=ts_code,
+                    market='E',
+                    fields='ts_code,name,management,custodian,fund_type,invest_type,benchmark,issue_date,list_date'
+                )
+            else:
+                df = self._api.stock_basic(
+                    ts_code=ts_code,
+                    fields='ts_code,symbol,name,area,industry,market,list_date,fullname,enname,cnspell,exchange'
+                )
+
+            if df is None or df.empty:
+                return {}
+
+            company_info = self._sanitize_info_dict(df.iloc[0].to_dict())
+            concepts: List[str] = []
+            industry = self._extract_first_value(company_info, ['industry', 'fund_type', 'invest_type'])
+            if industry:
+                concepts.append(str(industry))
+
+            return {
+                'code': stock_code,
+                'name': self._extract_first_value(company_info, ['name']),
+                'company_name': self._extract_first_value(company_info, ['fullname', 'name', 'management']),
+                'industry': industry,
+                'area': self._extract_first_value(company_info, ['area']),
+                'market': self._extract_first_value(company_info, ['market', 'exchange']),
+                'list_date': self._extract_first_value(company_info, ['list_date', 'issue_date']),
+                'main_business': self._extract_first_value(company_info, ['benchmark', 'invest_type', 'fund_type']),
+                'concepts': concepts,
+                'boards': [{'name': concept, 'type': 'industry'} for concept in concepts],
+                'company_info': company_info,
+                'source': self.name,
+            }
+        except Exception as e:
+            logger.warning(f"Tushare 获取公司信息失败 {stock_code}: {e}")
+            return {}
     
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
         """

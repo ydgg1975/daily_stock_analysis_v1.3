@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Unified company info across data providers** — `DataFetcherManager.get_company_info()` now aggregates stock/company profile data from Efinance, Akshare, Tushare, Pytdx, Baostock, and YFinance, including basic info plus related boards/concepts when available
+
 ## [3.4.10] - 2026-03-07
 
 ### Fixed
