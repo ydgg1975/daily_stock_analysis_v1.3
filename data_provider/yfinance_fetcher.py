@@ -35,7 +35,19 @@ from tenacity import (
 from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource
 from .us_index_mapping import get_us_index_yf_symbol, is_us_index_code, is_us_stock_code
-from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
+
+# 可选导入本地股票映射补丁，若缺失则使用空字典兜底
+try:
+    from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
+except (ImportError, ModuleNotFoundError):
+    STOCK_NAME_MAP = {}
+    def is_meaningful_stock_name(name: str | None, stock_code: str) -> bool:
+        """简单的名称有效性校验兜底"""
+        if not name:
+            return False
+        n = str(name).strip()
+        return bool(n and n.upper() != str(stock_code).strip().upper())
+
 import os
 
 logger = logging.getLogger(__name__)
