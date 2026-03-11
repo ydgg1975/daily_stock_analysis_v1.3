@@ -101,7 +101,7 @@ LITELLM_FALLBACK_MODELS=openai/gpt-4o-mini,anthropic/claude-3-5-sonnet
    ```env
    LITELLM_CONFIG=./litellm_config.yaml
    ```
-3. 在项目根目录创建一个 `litellm_config.yaml`（可以参考自带的 `litellm_config.example.yaml`）。
+2. 在项目根目录创建一个 `litellm_config.yaml`（可以参考自带的 `litellm_config.example.yaml`）。
 
 示例 `litellm_config.yaml`：
 ```yaml
@@ -117,13 +117,13 @@ model_list:
 
 1. `Settings` → `Secrets and variables` → `Actions` → `Secret`标签页下的`New repository secret` 或者 `Variables`标签页下的`New repository variable`
 
-按下表配置，只有全部必填配置正确配置，YAML 高级配置模式才可以生效，YAML配置文件的写法，可以参考自带的 `litellm_config.example.yaml`
+2. 按下表配置，只有全部必填配置正确配置，YAML 高级配置模式才可以生效，YAML配置文件的写法，可以参考自带的 `litellm_config.example.yaml`
 
 | Secret 名称 | 说明 | 必填 |
 |------------|------|:----:|
 | `LITELLM_CONFIG` | 配置文件路径，通常配置`./litellm_config.yaml` | 必填 |
+| `LITELLM_MODEL` | 模型名称 | 必填 |
 | `LITELLM_CONFIG_YAML` | 存放YAML配置文件，可以不用在存储库中提交文件 | 可选 |
-| `LITELLM_MODEL` | 模型名称 | 可选 |
 | `LITELLM_API_KEY` | 用于存储API Key，可在配置文件中引用（环境变量引用方式）。由于GitHub Actions必须要指定导入的环境变量，因此你不能像本地运行模式那样自由命名环境变量 | 可选，必须配置到repository secret中 |
 | `ANTHROPIC_API_KEY` | 如果要多个API Key，这个变量名称也能拿来用 | 可选，必须配置到repository secret中 |
 | `OPENAI_API_KEY` | 同上，可以用来存储API Key | 可选，必须配置到repository secret中 |
