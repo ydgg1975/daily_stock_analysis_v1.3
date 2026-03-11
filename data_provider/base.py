@@ -986,6 +986,10 @@ class DataFetcherManager:
                 logger.info(f"[股票名称] 从实时行情获取: {stock_code} -> {name}")
                 return name
 
+        if is_meaningful_stock_name(static_name, stock_code):
+            self._stock_name_cache[stock_code] = static_name
+            return static_name
+
         # 3. 依次尝试各个数据源
         for fetcher in self._fetchers:
             if hasattr(fetcher, 'get_stock_name'):
@@ -998,10 +1002,6 @@ class DataFetcherManager:
                 except Exception as e:
                     logger.debug(f"[股票名称] {fetcher.name} 获取失败: {e}")
                     continue
-
-        if is_meaningful_stock_name(static_name, stock_code):
-            self._stock_name_cache[stock_code] = static_name
-            return static_name
 
         # 4. 所有数据源都失败
         logger.warning(f"[股票名称] 所有数据源都无法获取 {stock_code} 的名称")
