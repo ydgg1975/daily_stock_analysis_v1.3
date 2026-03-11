@@ -30,7 +30,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from src.data.stock_mapping import STOCK_NAME_MAP
+from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -967,8 +967,7 @@ class DataFetcherManager:
         """
         # Normalize code (strip SH/SZ prefix etc.)
         stock_code = normalize_stock_code(stock_code)
-        if stock_code in STOCK_NAME_MAP:
-            return STOCK_NAME_MAP[stock_code]
+        static_name = STOCK_NAME_MAP.get(stock_code)
 
         # 1. 先检查缓存
         if hasattr(self, '_stock_name_cache') and stock_code in self._stock_name_cache:
@@ -981,7 +980,7 @@ class DataFetcherManager:
         # 2. 尝试从实时行情中获取（最快，可按需禁用）
         if allow_realtime:
             quote = self.get_realtime_quote(stock_code)
-            if quote and hasattr(quote, 'name') and quote.name:
+            if quote and hasattr(quote, 'name') and is_meaningful_stock_name(getattr(quote, 'name', ''), stock_code):
                 name = quote.name
                 self._stock_name_cache[stock_code] = name
                 logger.info(f"[股票名称] 从实时行情获取: {stock_code} -> {name}")
@@ -992,14 +991,18 @@ class DataFetcherManager:
             if hasattr(fetcher, 'get_stock_name'):
                 try:
                     name = fetcher.get_stock_name(stock_code)
-                    if name:
+                    if is_meaningful_stock_name(name, stock_code):
                         self._stock_name_cache[stock_code] = name
                         logger.info(f"[股票名称] 从 {fetcher.name} 获取: {stock_code} -> {name}")
                         return name
                 except Exception as e:
                     logger.debug(f"[股票名称] {fetcher.name} 获取失败: {e}")
                     continue
-        
+
+        if is_meaningful_stock_name(static_name, stock_code):
+            self._stock_name_cache[stock_code] = static_name
+            return static_name
+
         # 4. 所有数据源都失败
         logger.warning(f"[股票名称] 所有数据源都无法获取 {stock_code} 的名称")
         return ""
