@@ -12,6 +12,7 @@ _PLACEHOLDER_TO_PROVIDER = {
     "__legacy_openai__": "openai",
     "__legacy_deepseek__": "deepseek",
 }
+_MANAGED_LEGACY_PROVIDERS = set(_PLACEHOLDER_TO_PROVIDER.values())
 
 
 def _get_models_source(config) -> str:
@@ -83,7 +84,12 @@ def _build_legacy_deployments(config) -> List[Dict[str, Any]]:
         provider = _get_model_provider(model_name)
         deployment_count = placeholder_counts.get(provider, 0)
         if deployment_count <= 0:
-            continue
+            # Legacy runtime still supports direct litellm calls for providers
+            # whose credentials/base are resolved from environment variables
+            # instead of managed placeholder deployments.
+            if provider in _MANAGED_LEGACY_PROVIDERS:
+                continue
+            deployment_count = 1
 
         api_base = getattr(config, "openai_base_url", None) if provider == "openai" else None
         # Legacy runtime only load-balances the primary model via Router.

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 🐛 **筹码结构 LLM 未填写时兜底补全** (#589) — DeepSeek 等模型未正确填写 `chip_structure` 时，自动用数据源已获取的筹码数据补全，保证各模型展示一致；普通分析与 Agent 模式均生效
 - 🐛 **历史报告狙击点位显示原始文本** (#452) — 历史详情页现优先展示 `raw_result.dashboard.battle_plan.sniper_points` 中的原始字符串，避免 `analysis_history` 数值列把区间、说明文字或复杂点位压缩成单个数字；保留原有数值列作为回退
 - 🐛 **`.env` 设置保存保留注释与空行** — Web 设置页更新配置时不再破坏原有 `.env` 注释、空白分隔和未知行格式，降低手工维护配置文件的冲突风险
+- 🐛 **Agent legacy model discovery now includes direct LiteLLM env providers** — `/api/v1/agent/models` 在 `legacy_env` 模式下不再漏掉 `cohere/...` 等通过环境变量直连的 LiteLLM-native provider；配置校验也与运行时保持一致，不再把这类模型误报为“未配置任何 LLM”
 - 🐛 **Agent model source/provider detection aligned with runtime** — `/api/v1/agent/models` 现使用 `Config` 内部记录的实际生效配置来源标注 `source`；legacy 模式下无前缀 OpenAI 模型名（如 `gpt-4o-mini`）不再被误判为 `unknown`，避免模型列表错误为空
 - 🐛 **Agent legacy fallback deployments now match runtime reachability** — `/api/v1/agent/models` 在 legacy 多 Key 模式下不再为 fallback 模型按每个 key 展开 deployment；仅主模型保留多 deployment 暴露，避免 Web UI 展示无法实际命中的 fallback 选项
 

@@ -131,6 +131,41 @@ class AgentModelsApiTestCase(unittest.TestCase):
         self.assertEqual(fallback[0]["deployment_id"], "legacy:openai:0:openai/gpt-4o-mini")
         self.assertEqual(fallback[0]["deployment_name"], "legacy_openai_1")
 
+    def test_models_endpoint_keeps_direct_env_primary_provider_in_legacy_mode(self) -> None:
+        config = _build_config(
+            litellm_model="cohere/command-r-plus",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+        )
+
+        deployments = list_agent_model_deployments(config)
+
+        self.assertEqual(len(deployments), 1)
+        self.assertEqual(deployments[0]["model"], "cohere/command-r-plus")
+        self.assertEqual(deployments[0]["provider"], "cohere")
+        self.assertEqual(deployments[0]["source"], "legacy_env")
+        self.assertTrue(deployments[0]["is_primary"])
+        self.assertFalse(deployments[0]["is_fallback"])
+
+    def test_models_endpoint_keeps_direct_env_fallback_provider_in_legacy_mode(self) -> None:
+        config = _build_config(
+            litellm_fallback_models=["cohere/command-r-plus"],
+            llm_model_list=[
+                {"model_name": "__legacy_gemini__", "litellm_params": {"model": "__legacy_gemini__", "api_key": "g-12345678"}},
+                {"model_name": "__legacy_gemini__", "litellm_params": {"model": "__legacy_gemini__", "api_key": "g-87654321"}},
+            ],
+        )
+
+        deployments = list_agent_model_deployments(config)
+
+        self.assertEqual(len(deployments), 3)
+        fallback = [item for item in deployments if item["is_fallback"]]
+        self.assertEqual(len(fallback), 1)
+        self.assertEqual(fallback[0]["model"], "cohere/command-r-plus")
+        self.assertEqual(fallback[0]["provider"], "cohere")
+        self.assertEqual(fallback[0]["deployment_id"], "legacy:cohere:0:cohere/command-r-plus")
+        self.assertEqual(fallback[0]["deployment_name"], "legacy_cohere_1")
+
     def test_models_endpoint_returns_empty_list_when_no_model_is_configured(self) -> None:
         config = _build_config(
             litellm_model="",
