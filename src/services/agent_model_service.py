@@ -86,7 +86,15 @@ def _build_legacy_deployments(config) -> List[Dict[str, Any]]:
             continue
 
         api_base = getattr(config, "openai_base_url", None) if provider == "openai" else None
-        for index in range(deployment_count):
+        # Legacy runtime only load-balances the primary model via Router.
+        # Fallback models call litellm directly with the first configured key,
+        # so they expose at most one reachable deployment per model.
+        if model_name == primary_model:
+            deployment_indexes = range(deployment_count)
+        else:
+            deployment_indexes = range(1)
+
+        for index in deployment_indexes:
             deployments.append(
                 {
                     "deployment_id": f"legacy:{provider}:{index}:{model_name}",

@@ -109,6 +109,28 @@ class AgentModelsApiTestCase(unittest.TestCase):
         self.assertEqual(deployments[0]["source"], "legacy_env")
         self.assertEqual(deployments[0]["api_base"], "https://openai.example.com/v1")
 
+    def test_models_endpoint_collapses_legacy_fallbacks_to_single_runtime_deployment(self) -> None:
+        config = _build_config(
+            llm_model_list=[
+                {"model_name": "__legacy_gemini__", "litellm_params": {"model": "__legacy_gemini__", "api_key": "g-12345678"}},
+                {"model_name": "__legacy_gemini__", "litellm_params": {"model": "__legacy_gemini__", "api_key": "g-87654321"}},
+                {"model_name": "__legacy_openai__", "litellm_params": {"model": "__legacy_openai__", "api_key": "o-12345678"}},
+                {"model_name": "__legacy_openai__", "litellm_params": {"model": "__legacy_openai__", "api_key": "o-87654321"}},
+            ],
+        )
+
+        deployments = list_agent_model_deployments(config)
+
+        self.assertEqual(len(deployments), 3)
+        primary = [item for item in deployments if item["is_primary"]]
+        fallback = [item for item in deployments if item["is_fallback"]]
+
+        self.assertEqual(len(primary), 2)
+        self.assertEqual(len(fallback), 1)
+        self.assertEqual(fallback[0]["model"], "openai/gpt-4o-mini")
+        self.assertEqual(fallback[0]["deployment_id"], "legacy:openai:0:openai/gpt-4o-mini")
+        self.assertEqual(fallback[0]["deployment_name"], "legacy_openai_1")
+
     def test_models_endpoint_returns_empty_list_when_no_model_is_configured(self) -> None:
         config = _build_config(
             litellm_model="",
