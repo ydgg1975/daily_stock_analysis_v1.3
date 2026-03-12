@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - feat(search): add SearXNG support as quota-free fallback (Fixes #550)
 - 📊 **LLM cost tracking** — all LLM calls (analysis, agent, market review) are recorded in the `llm_usage` table; new `GET /api/v1/usage/summary?period=today|month|all` endpoint returns aggregated token usage broken down by call type and model
 - ⚙️ **GitHub Actions LiteLLM 配置支持** — 工作流新增 `LITELLM_CONFIG`、`LITELLM_API_KEY`、`LITELLM_MODEL`、`LITELLM_CONFIG_YAML` 环境变量，支持使用提交 `litellm_config.yaml` 文件方式，或将 `litellm_config.yaml` 配置写入 GitHub Actions Variables 或 Secret 的方式，以实现灵活配置所有 AI 提供商（包括 siliconflow、AIHubMix 等），与本地环境保持一致；配置诊断步骤新增 LiteLLM 状态检查；`litellm_config.example.yaml` 新增 siliconflow 提供商配置示例
+- 🎨 **Web UI design system foundation** — `apps/dsa-web` 新增语义化 design tokens、升级 `components/common` 原子组件库，并补齐 `Input`、`EmptyState`、`PageHeader`、`StatCard`、`Toolbar` 等公共组件，为后续 Shell 和页面级重构提供统一 UI 底座
 ### Fixed
 - 🐛 **筹码结构 LLM 未填写时兜底补全** (#589) — DeepSeek 等模型未正确填写 `chip_structure` 时，自动用数据源已获取的筹码数据补全，保证各模型展示一致；普通分析与 Agent 模式均生效
 - 🐛 **历史报告狙击点位显示原始文本** (#452) — 历史详情页现优先展示 `raw_result.dashboard.battle_plan.sniper_points` 中的原始字符串，避免 `analysis_history` 数值列把区间、说明文字或复杂点位压缩成单个数字；保留原有数值列作为回退
+- 🐛 **Stooq 美股兜底昨收价语义修正** — 不再将开盘价误作为昨收价；当 yfinance 被限流或失败时，兜底行情会尝试从 Stooq 日线历史获取上一交易日收盘价，缺失时不展示涨跌幅/振幅等衍生指标，避免误导
+- 🐛 **股票名称轻量预取回归修复** — `get_stock_name(..., allow_realtime=False)` 现会在远程名称查询前优先返回本地 `STOCK_NAME_MAP` 映射，避免已知代码在预取阶段仍遍历各数据源，降低延迟与上游限流风险（当前处于基础功能验证阶段）
 
 ### Changed
 - 🔎 **Fetcher failure observability** — historical data logs now record fetcher start/success/failure with elapsed time, explicit failover transitions, and clearer final outcomes; Efinance/Eastmoney failures now include upstream endpoint and normalized categories such as `remote_disconnect` and `timeout`; Akshare 新浪/腾讯实时行情日志 now also include upstream endpoint and classified failures for HTTP status, disconnects, and malformed payloads
