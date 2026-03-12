@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { getSentimentLabel } from '../../types/analysis';
+import { cn } from '../../utils/cn';
 
 interface ScoreGaugeProps {
   score: number;
@@ -87,8 +88,7 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
   const glowColor = `${strokeColor}66`;
 
   return (
-    <div className={`flex flex-col items-center ${className}`}>
-      {/* 标题 */}
+    <div className={cn('flex flex-col items-center', className)}>
       {showLabel && (
         <span className="label-uppercase mb-3 text-secondary">
           恐惧贪婪指数
@@ -163,12 +163,7 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
 
         {/* 中心数值 */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span
-            className={`font-bold ${fontSize} text-white`}
-            style={{ 
-              textShadow: `0 0 30px ${glowColor}`,
-            }}
-          >
+          <span className={cn('font-bold text-white', fontSize)} style={{ textShadow: `0 0 30px ${glowColor}` }}>
             {displayScore}
           </span>
           {showLabel && (
