@@ -15,17 +15,18 @@ _PLACEHOLDER_TO_PROVIDER = {
 
 
 def _get_models_source(config) -> str:
-    if getattr(config, "litellm_config_path", None):
-        return "litellm_config"
-    if getattr(config, "llm_channels", None):
-        return "llm_channels"
+    source = getattr(config, "llm_models_source", "")
+    if source in {"litellm_config", "llm_channels", "legacy_env"}:
+        return source
     return "legacy_env"
 
 
 def _get_model_provider(model_name: str) -> str:
+    if not model_name:
+        return "unknown"
     if "/" in model_name:
         return model_name.split("/", 1)[0]
-    return "unknown"
+    return "openai"
 
 
 def _build_non_legacy_deployments(config) -> List[Dict[str, Any]]:
