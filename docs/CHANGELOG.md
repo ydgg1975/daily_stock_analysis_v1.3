@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 🐛 **Agent legacy model discovery now includes direct LiteLLM env providers** — `/api/v1/agent/models` 在 `legacy_env` 模式下不再漏掉 `cohere/...` 等通过环境变量直连的 LiteLLM-native provider；配置校验也与运行时保持一致，不再把这类模型误报为“未配置任何 LLM”
 - 🐛 **Agent model source/provider detection aligned with runtime** — `/api/v1/agent/models` 现使用 `Config` 内部记录的实际生效配置来源标注 `source`；legacy 模式下无前缀 OpenAI 模型名（如 `gpt-4o-mini`）不再被误判为 `unknown`，避免模型列表错误为空
 - 🐛 **Agent legacy fallback deployments now match runtime reachability** — `/api/v1/agent/models` 在 legacy 多 Key 模式下不再为 fallback 模型按每个 key 展开 deployment；仅主模型保留多 deployment 暴露，避免 Web UI 展示无法实际命中的 fallback 选项
+- 🐛 **Stooq 美股兜底昨收价语义修正** — 不再将开盘价误作为昨收价；当 yfinance 被限流或失败时，兜底行情会尝试从 Stooq 日线历史获取上一交易日收盘价，缺失时不展示涨跌幅/振幅等衍生指标，避免误导
+- 🐛 **股票名称轻量预取回归修复** — `get_stock_name(..., allow_realtime=False)` 现会在远程名称查询前优先返回本地 `STOCK_NAME_MAP` 映射，避免已知代码在预取阶段仍遍历各数据源，降低延迟与上游限流风险（当前处于基础功能验证阶段）
 
 ### Changed
 - 🔎 **Fetcher failure observability** — historical data logs now record fetcher start/success/failure with elapsed time, explicit failover transitions, and clearer final outcomes; Efinance/Eastmoney failures now include upstream endpoint and normalized categories such as `remote_disconnect` and `timeout`; Akshare 新浪/腾讯实时行情日志 now also include upstream endpoint and classified failures for HTTP status, disconnects, and malformed payloads
