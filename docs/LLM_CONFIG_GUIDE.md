@@ -34,14 +34,22 @@ OPENAI_BASE_URL=https://api.siliconflow.cn/v1
 LITELLM_MODEL=openai/deepseek-ai/DeepSeek-V3 
 ```
 
-### 示例 2：使用 DeepSeek 官方接口
+### 示例 2：使用 MiniMax 海螺 AI（兼容 OpenAI 格式，204K 超长上下文）
+```env
+OPENAI_API_KEY=your_minimax_api_key
+OPENAI_BASE_URL=https://api.minimax.io/v1
+LITELLM_MODEL=openai/MiniMax-M2.5
+```
+*提示：MiniMax 的 API 兼容 OpenAI 格式，按上方填写即可。注意 MiniMax 的 temperature 需要大于 0（不能设为 0）。*
+
+### 示例 3：使用 DeepSeek 官方接口
 ```env
 # 填入你在 DeepSeek 官方平台申请的 API Key
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 ```
 *提示：仅需这一行，系统会自动识别并默认使用 DeepSeek 模型。*
 
-### 示例 3：使用 Gemini 免费 API
+### 示例 4：使用 Gemini 免费 API
 ```env
 # 填入你获取的 Google Gemini Key
 GEMINI_API_KEY=AIzac...

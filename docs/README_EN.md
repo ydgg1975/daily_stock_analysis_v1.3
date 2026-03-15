@@ -47,7 +47,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 
 | Type | Supported |
 |------|----------|
-| LLMs | Gemini (free), OpenAI-compatible, DeepSeek, Qwen, Claude, Ollama |
+| LLMs | Gemini (free), OpenAI-compatible, DeepSeek, Qwen, Claude, [MiniMax](https://platform.minimaxi.com/), Ollama |
 | Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 

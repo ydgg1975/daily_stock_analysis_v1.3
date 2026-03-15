@@ -47,7 +47,7 @@
 
 | 類型 | 支援 |
 |------|------|
-| AI 模型 | Gemini（免費）、OpenAI 兼容、DeepSeek、通義千問、Claude、Ollama |
+| AI 模型 | Gemini（免費）、OpenAI 兼容、DeepSeek、通義千問、Claude、[MiniMax](https://platform.minimaxi.com/)、Ollama |
 | 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 

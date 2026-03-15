@@ -45,6 +45,12 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     baseUrl: 'https://api.moonshot.cn/v1',
     placeholder: 'moonshot-v1-8k',
   },
+  minimax: {
+    label: 'MiniMax（海螺 AI）',
+    protocol: 'openai',
+    baseUrl: 'https://api.minimax.io/v1',
+    placeholder: 'MiniMax-M2.5,MiniMax-M2.5-highspeed',
+  },
   siliconflow: {
     label: '硅基流动（SiliconFlow）',
     protocol: 'openai',
