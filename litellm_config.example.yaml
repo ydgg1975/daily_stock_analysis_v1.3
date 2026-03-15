@@ -63,6 +63,12 @@ model_list:
       model: gemini/gemini-2.5-flash
       api_key: "os.environ/GEMINI_API_KEY_2"
 
+  # --- MiniMax (原生，支持 M1/M2.5 等系列模型) ---
+  # - model_name: minimax/MiniMax-M1
+  #   litellm_params:
+  #     model: minimax/MiniMax-M1
+  #     api_key: "os.environ/MINIMAX_API_KEY"
+
   # --- Anthropic Claude (原生) ---
   # - model_name: anthropic/claude-3-5-sonnet-20241022
   #   litellm_params:

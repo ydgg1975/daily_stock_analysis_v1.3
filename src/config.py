@@ -47,8 +47,8 @@ class ConfigIssue:
         return self.message
 
 
-_MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek"}
-SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama")
+_MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek", "minimax"}
+SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama", "minimax")
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
 NEWS_STRATEGY_WINDOWS: Dict[str, int] = {
     "ultra_short": 1,
@@ -902,6 +902,14 @@ class Config:
             if _single_deepseek:
                 deepseek_api_keys = [_single_deepseek]
 
+        # MINIMAX_API_KEYS > MINIMAX_API_KEY (used for both LLM and search)
+        _minimax_keys_raw = os.getenv('MINIMAX_API_KEYS', '')
+        minimax_api_keys = [k.strip() for k in _minimax_keys_raw.split(',') if k.strip()]
+        if not minimax_api_keys:
+            _single_minimax = os.getenv('MINIMAX_API_KEY', '').strip()
+            if _single_minimax:
+                minimax_api_keys = [_single_minimax]
+
         # LITELLM_MODEL: explicit config takes precedence; else infer from available keys
         litellm_model = os.getenv('LITELLM_MODEL', '').strip()
         if not litellm_model:
@@ -914,6 +922,8 @@ class Config:
                 litellm_model = f'anthropic/{_anthropic_model_name}'
             elif deepseek_api_keys:
                 litellm_model = 'deepseek/deepseek-chat'
+            elif minimax_api_keys:
+                litellm_model = 'minimax/MiniMax-M1'
             elif openai_api_keys:
                 # For openai-compatible models, add prefix only if not already prefixed
                 if '/' not in _openai_model_name:
@@ -963,6 +973,7 @@ class Config:
                     'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
                 ),
                 deepseek_api_keys,
+                minimax_api_keys,
             )
             if llm_model_list:
                 llm_models_source = "legacy_env"
@@ -994,9 +1005,8 @@ class Config:
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
         bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
 
-        minimax_keys_str = os.getenv('MINIMAX_API_KEYS', '')
-        minimax_api_keys = [k.strip() for k in minimax_keys_str.split(',') if k.strip()]
-        
+        # minimax_api_keys already parsed above (LLM provider section)
+
         tavily_keys_str = os.getenv('TAVILY_API_KEYS', '')
         tavily_api_keys = [k.strip() for k in tavily_keys_str.split(',') if k.strip()]
         
@@ -1519,6 +1529,7 @@ class Config:
         openai_keys: List[str],
         openai_base_url: Optional[str],
         deepseek_keys: Optional[List[str]] = None,
+        minimax_keys: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Build Router model_list from legacy per-provider keys (backward compat).
 
@@ -1565,6 +1576,17 @@ class Config:
                     'model_name': '__legacy_deepseek__',
                     'litellm_params': {
                         'model': '__legacy_deepseek__',
+                        'api_key': k,
+                    },
+                })
+
+        # MiniMax keys (native litellm provider — auto-resolves api_base)
+        for k in (minimax_keys or []):
+            if k and len(k) >= 8:
+                model_list.append({
+                    'model_name': '__legacy_minimax__',
+                    'litellm_params': {
+                        'model': '__legacy_minimax__',
                         'api_key': k,
                     },
                 })
@@ -2029,6 +2051,7 @@ class Config:
                 "anthropic": self.anthropic_api_keys,
                 "openai": self.openai_api_keys,
                 "deepseek": self.deepseek_api_keys,
+                "minimax": self.minimax_api_keys,
             }
             # Derive the primary model's provider prefix so that its key is also
             # checked even when the provider is absent from VISION_PROVIDER_PRIORITY.
@@ -2111,6 +2134,8 @@ def get_api_keys_for_model(model: str, config: Config) -> List[str]:
         return [k for k in config.anthropic_api_keys if k and len(k) >= 8]
     if provider == "deepseek":
         return [k for k in config.deepseek_api_keys if k and len(k) >= 8]
+    if provider == "minimax":
+        return [k for k in config.minimax_api_keys if k and len(k) >= 8]
     if provider == "openai":
         return [k for k in config.openai_api_keys if k and len(k) >= 8]
     # Other LiteLLM-native providers – API key resolved from env vars
@@ -2124,8 +2149,8 @@ def extra_litellm_params(model: str, config: Config) -> Dict[str, Any]:
     and headers per-deployment, so this is not called.
     """
     params: Dict[str, Any] = {}
-    # deepseek/ provider: litellm auto-resolves api_base, no manual override needed
-    if model.startswith("deepseek/"):
+    # deepseek/ and minimax/ providers: litellm auto-resolves api_base, no manual override needed
+    if model.startswith("deepseek/") or model.startswith("minimax/"):
         return params
     if model.startswith("openai/") or "/" not in model:
         if config.openai_base_url:

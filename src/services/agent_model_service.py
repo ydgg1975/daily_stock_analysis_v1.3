@@ -13,6 +13,7 @@ _PLACEHOLDER_TO_PROVIDER = {
     "__legacy_anthropic__": "anthropic",
     "__legacy_openai__": "openai",
     "__legacy_deepseek__": "deepseek",
+    "__legacy_minimax__": "minimax",
 }
 _MANAGED_LEGACY_PROVIDERS = set(_PLACEHOLDER_TO_PROVIDER.values())
 

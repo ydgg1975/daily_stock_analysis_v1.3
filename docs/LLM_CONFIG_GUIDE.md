@@ -57,6 +57,13 @@ LITELLM_MODEL=ollama/qwen3:8b
 
 > **重要**：Ollama 必须使用 `OLLAMA_API_BASE` 配置，**不要**使用 `OPENAI_BASE_URL`，否则会触发 LiteLLM 的 URL 拼接错误（如 404、`api/generate/api/show`）。远程 Ollama 时，将 `OLLAMA_API_BASE` 设为实际地址（如 `http://192.168.1.100:11434`）。需 LiteLLM ≥1.80.10（与 requirements.txt 一致）。
 
+### 示例 5：使用 MiniMax 官方接口
+```env
+# 填入你在 MiniMax 平台申请的 API Key（https://platform.minimaxi.com）
+MINIMAX_API_KEY=eyJhbGci...
+```
+*提示：仅需这一行，系统会自动识别并默认使用 MiniMax-M1 模型。同一个 Key 也可以同时用于新闻搜索。*
+
 > **恭喜！小白读到这里就可以去运行程序了！**
 > 想测测看通没通？在主目录打开命令行输入：`python test_env.py --llm`
 

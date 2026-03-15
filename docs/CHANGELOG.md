@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Native MiniMax LLM provider support (`MINIMAX_API_KEY` auto-detection, M2.7 default model)
+- MiniMax configuration examples in `.env.example` and `litellm_config.example.yaml`
+- MiniMax setup guide in `docs/LLM_CONFIG_GUIDE.md`
+
 ## [3.11.0] - 2026-03-27
 
 ### 发布亮点
