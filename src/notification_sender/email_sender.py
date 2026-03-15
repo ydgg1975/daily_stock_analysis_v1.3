@@ -138,7 +138,7 @@ class EmailSender:
             
             # 构建邮件
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = Header(subject, 'utf-8')
+            msg['Subject'] = Header(subject, 'utf-8').encode()
             msg['From'] = formataddr((self._email_config.get('sender_name', '股票分析助手'), sender))
             msg['To'] = ', '.join(receivers)
             
