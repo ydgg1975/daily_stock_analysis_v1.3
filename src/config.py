@@ -292,7 +292,7 @@ class Config:
 
     # Legacy single-key fields (kept for backward compatibility; gemini_api_keys[0] when set)
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-3-flash-preview"  # 主模型
+    gemini_model: str = "gemini-3.1-pro-preview"  # 主模型
     gemini_model_fallback: str = "gemini-2.5-flash"  # 备选模型
     gemini_temperature: float = 0.7  # 温度参数（0.0-2.0，控制输出随机性，默认0.7）
 
@@ -303,14 +303,14 @@ class Config:
 
     # Anthropic Claude API（备选，当 Gemini 不可用时使用）
     anthropic_api_key: Optional[str] = None
-    anthropic_model: str = "claude-3-5-sonnet-20241022"  # Claude model name
+    anthropic_model: str = "claude-4-6"  # Claude model name
     anthropic_temperature: float = 0.7  # Anthropic temperature (0.0-1.0, default 0.7)
     anthropic_max_tokens: int = 8192  # Max tokens for Anthropic responses
 
     # OpenAI 兼容 API（备选，当 Gemini/Anthropic 不可用时使用）
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None  # 如: https://api.openai.com/v1
-    openai_model: str = "gpt-4o-mini"  # OpenAI 兼容模型名称
+    openai_model: str = "gpt-5.4"  # OpenAI 兼容模型名称
     openai_vision_model: Optional[str] = None  # Deprecated: use VISION_MODEL instead
     openai_temperature: float = 0.7  # OpenAI 温度参数（0.0-2.0，默认0.7）
 
@@ -707,7 +707,7 @@ class Config:
         if not litellm_model:
             _gemini_model_name = os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview').strip()
             _anthropic_model_name = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022').strip()
-            _openai_model_name = os.getenv('OPENAI_MODEL', 'gpt-4o-mini').strip()
+            _openai_model_name = os.getenv('OPENAI_MODEL', 'gpt-5.4').strip()
             if gemini_api_keys:
                 litellm_model = f'gemini/{_gemini_model_name}'
             elif anthropic_api_keys:
@@ -865,7 +865,7 @@ class Config:
             openai_base_url=os.getenv('OPENAI_BASE_URL') or (
                 'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
             ),  # noqa: E501
-            openai_model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+            openai_model=os.getenv('OPENAI_MODEL', 'gpt-5.4'),
             openai_vision_model=os.getenv('OPENAI_VISION_MODEL') or None,
             openai_temperature=float(os.getenv('OPENAI_TEMPERATURE', '0.7')),
             # Vision model: VISION_MODEL > OPENAI_VISION_MODEL (alias) > default
@@ -1078,7 +1078,7 @@ class Config:
             LLM_AIHUBMIX_PROTOCOL=openai
             LLM_AIHUBMIX_BASE_URL=https://aihubmix.com/v1
             LLM_AIHUBMIX_API_KEY=sk-xxx           (or LLM_AIHUBMIX_API_KEYS=k1,k2)
-            LLM_AIHUBMIX_MODELS=gpt-4o-mini,claude-3-5-sonnet
+            LLM_AIHUBMIX_MODELS=gpt-5.4,claude-3-5-sonnet
             LLM_AIHUBMIX_ENABLED=true
         """
         import logging

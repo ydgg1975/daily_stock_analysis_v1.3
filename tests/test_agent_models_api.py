@@ -14,7 +14,7 @@ from src.services.agent_model_service import list_agent_model_deployments
 def _build_config(**overrides):
     config = Config(
         litellm_model="gemini/gemini-2.5-flash",
-        litellm_fallback_models=["openai/gpt-4o-mini"],
+        litellm_fallback_models=["openai/gpt-5.4"],
         llm_model_list=[],
         llm_channels=[],
         litellm_config_path=None,
@@ -38,7 +38,7 @@ class AgentModelsApiTestCase(unittest.TestCase):
                 },
                 {
                     "model_name": "openai-fallback",
-                    "litellm_params": {"model": "openai/gpt-4o-mini", "api_key": "secret-2"},
+                    "litellm_params": {"model": "openai/gpt-5.4", "api_key": "secret-2"},
                 },
             ],
         )
@@ -56,9 +56,9 @@ class AgentModelsApiTestCase(unittest.TestCase):
             llm_models_source="llm_channels",
             llm_model_list=[
                 {
-                    "model_name": "openai/gpt-4o-mini",
+                    "model_name": "openai/gpt-5.4",
                     "litellm_params": {
-                        "model": "openai/gpt-4o-mini",
+                        "model": "openai/gpt-5.4",
                         "api_key": "secret-1",
                         "api_base": "https://api.example.com/v1",
                     },
@@ -86,14 +86,14 @@ class AgentModelsApiTestCase(unittest.TestCase):
         self.assertEqual(len(deployments), 3)
         self.assertEqual(deployments[0]["model"], "gemini/gemini-2.5-flash")
         self.assertEqual(deployments[1]["model"], "gemini/gemini-2.5-flash")
-        self.assertEqual(deployments[2]["model"], "openai/gpt-4o-mini")
+        self.assertEqual(deployments[2]["model"], "openai/gpt-5.4")
         self.assertEqual(deployments[2]["api_base"], "https://openai.example.com/v1")
         self.assertEqual(deployments[2]["source"], "legacy_env")
         self.assertTrue(all(not item["deployment_name"].startswith("__legacy_") for item in deployments))
 
     def test_models_endpoint_resolves_unprefixed_legacy_openai_model_names(self) -> None:
         config = _build_config(
-            litellm_model="gpt-4o-mini",
+            litellm_model="gpt-5.4",
             litellm_fallback_models=[],
             llm_model_list=[
                 {"model_name": "__legacy_openai__", "litellm_params": {"model": "__legacy_openai__", "api_key": "o-1"}},
@@ -104,7 +104,7 @@ class AgentModelsApiTestCase(unittest.TestCase):
         deployments = list_agent_model_deployments(config)
 
         self.assertEqual(len(deployments), 1)
-        self.assertEqual(deployments[0]["model"], "gpt-4o-mini")
+        self.assertEqual(deployments[0]["model"], "gpt-5.4")
         self.assertEqual(deployments[0]["provider"], "openai")
         self.assertEqual(deployments[0]["source"], "legacy_env")
         self.assertEqual(deployments[0]["api_base"], "https://openai.example.com/v1")
@@ -127,8 +127,8 @@ class AgentModelsApiTestCase(unittest.TestCase):
 
         self.assertEqual(len(primary), 2)
         self.assertEqual(len(fallback), 1)
-        self.assertEqual(fallback[0]["model"], "openai/gpt-4o-mini")
-        self.assertEqual(fallback[0]["deployment_id"], "legacy:openai:0:openai/gpt-4o-mini")
+        self.assertEqual(fallback[0]["model"], "openai/gpt-5.4")
+        self.assertEqual(fallback[0]["deployment_id"], "legacy:openai:0:openai/gpt-5.4")
         self.assertEqual(fallback[0]["deployment_name"], "legacy_openai_1")
 
     def test_models_endpoint_keeps_direct_env_primary_provider_in_legacy_mode(self) -> None:
@@ -182,9 +182,9 @@ class AgentModelsEndpointTestCase(unittest.TestCase):
             llm_channels=[{"name": "primary"}, {"name": "secondary"}],
             llm_model_list=[
                 {
-                    "model_name": "openai/gpt-4o-mini",
+                    "model_name": "openai/gpt-5.4",
                     "litellm_params": {
-                        "model": "openai/gpt-4o-mini",
+                        "model": "openai/gpt-5.4",
                         "api_key": "secret-openai",
                         "api_base": "https://api.openai.example/v1",
                     },
@@ -205,7 +205,7 @@ class AgentModelsEndpointTestCase(unittest.TestCase):
         self.assertEqual(len(payload["models"]), 2)
         self.assertEqual(payload["models"][0]["model"], "gemini/gemini-2.5-flash")
         self.assertTrue(payload["models"][0]["is_primary"])
-        self.assertEqual(payload["models"][1]["model"], "openai/gpt-4o-mini")
+        self.assertEqual(payload["models"][1]["model"], "openai/gpt-5.4")
         self.assertTrue(payload["models"][1]["is_fallback"])
         self.assertNotIn("api_key", str(payload))
 
@@ -222,7 +222,7 @@ class AgentModelsSourceDetectionTestCase(unittest.TestCase):
             "LITELLM_CONFIG": "config/missing.yaml",
             "LLM_CHANNELS": "primary",
             "LLM_PRIMARY_API_KEY": "channel-secret-key",
-            "LLM_PRIMARY_MODELS": "openai/gpt-4o-mini",
+            "LLM_PRIMARY_MODELS": "openai/gpt-5.4",
             "OPENAI_API_KEY": "",
             "AIHUBMIX_KEY": "",
             "GEMINI_API_KEY": "",
@@ -234,7 +234,7 @@ class AgentModelsSourceDetectionTestCase(unittest.TestCase):
             config = Config._load_from_env()
 
         self.assertEqual(config.llm_models_source, "llm_channels")
-        self.assertEqual(config.llm_model_list[0]["litellm_params"]["model"], "openai/gpt-4o-mini")
+        self.assertEqual(config.llm_model_list[0]["litellm_params"]["model"], "openai/gpt-5.4")
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
@@ -247,7 +247,7 @@ class AgentModelsSourceDetectionTestCase(unittest.TestCase):
             "LITELLM_CONFIG": "config/missing.yaml",
             "LLM_CHANNELS": "",
             "OPENAI_API_KEY": "legacy-openai-key",
-            "LITELLM_MODEL": "gpt-4o-mini",
+            "LITELLM_MODEL": "gpt-5.4",
             "AIHUBMIX_KEY": "",
             "GEMINI_API_KEY": "",
             "ANTHROPIC_API_KEY": "",

@@ -133,7 +133,7 @@ class SystemConfigApiTestCase(unittest.TestCase):
                 "message": "LLM channel test succeeded",
                 "error": None,
                 "resolved_protocol": "openai",
-                "resolved_model": "openai/gpt-4o-mini",
+                "resolved_model": "openai/gpt-5.4",
                 "latency_ms": 123,
             },
         ) as mock_test:
@@ -143,13 +143,13 @@ class SystemConfigApiTestCase(unittest.TestCase):
                     protocol="openai",
                     base_url="https://api.example.com/v1",
                     api_key="sk-test",
-                    models=["gpt-4o-mini"],
+                    models=["gpt-5.4"],
                 ),
                 service=self.service,
             ).model_dump()
 
         self.assertTrue(payload["success"])
-        self.assertEqual(payload["resolved_model"], "openai/gpt-4o-mini")
+        self.assertEqual(payload["resolved_model"], "openai/gpt-5.4")
         mock_test.assert_called_once()
 
 

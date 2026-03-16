@@ -29,9 +29,9 @@ model_list:
           enable_thinking: true
 
   # --- AIHubmix (OpenAI 兼容，一个 Key 使用多种模型) ---
-  - model_name: openai/gpt-4o-mini
+  - model_name: openai/gpt-5.4
     litellm_params:
-      model: openai/gpt-4o-mini
+      model: openai/gpt-5.4
       api_key: "os.environ/AIHUBMIX_KEY"
       api_base: https://aihubmix.com/v1
 

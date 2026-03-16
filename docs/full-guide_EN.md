@@ -550,7 +550,7 @@ LITELLM_MODEL=gemini/gemini-3-flash-preview
 
 # Cross-model fallback: when all primary keys fail, try Claude → GPT
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY
-LITELLM_FALLBACK_MODELS=anthropic/claude-3-5-sonnet-20241022,openai/gpt-4o-mini
+LITELLM_FALLBACK_MODELS=anthropic/claude-3-5-sonnet-20241022,openai/gpt-5.4
 ```
 
 > ⚠️ `LITELLM_MODEL` must include provider prefix (e.g. `gemini/`, `anthropic/`, `openai/`). Legacy `GEMINI_MODEL` (no prefix) is only used when `LITELLM_MODEL` is not set.

@@ -76,13 +76,13 @@ LLM_DEEPSEEK_MODELS=deepseek-chat,deepseek-reasoner
 # 3. Channel 2: Configure a common relay/proxy API
 LLM_AIHUBMIX_BASE_URL=https://api.aihubmix.com/v1
 LLM_AIHUBMIX_API_KEY=sk-2222222222222
-LLM_AIHUBMIX_MODELS=gpt-4o-mini,claude-3-5-sonnet
+LLM_AIHUBMIX_MODELS=gpt-5.4,claude-3-5-sonnet
 
 # 4. [Key Step] Specify the primary model and fallback list
 # Set your primary model:
 LITELLM_MODEL=deepseek/deepseek-chat
 # If the primary model crashes, try these fallbacks sequentially:
-LITELLM_FALLBACK_MODELS=openai/gpt-4o-mini,anthropic/claude-3-5-sonnet
+LITELLM_FALLBACK_MODELS=openai/gpt-5.4,anthropic/claude-3-5-sonnet
 ```
 
 > **Critical Warning**: If you enable `LLM_CHANNELS`, any standard `DEEPSEEK_API_KEY` or `OPENAI_API_KEY` declared independently will be **completely ignored**. **Use only one mode** to prevent configuration conflicts.
@@ -145,7 +145,7 @@ Afraid you got the config wrong? Type the following commands in your terminal to
 
 | Weird Error You Got? | Likely Culprit | How to Fix It? |
 |----------------------|----------------|----------------|
-| **"LLM_MODEL is not configured" pops up** | The system doesn't know which brand's model you want to use. | Add a clear instruction in `.env`: `LITELLM_MODEL=provider/your_model_name`. Example: `openai/gpt-4o-mini`. |
+| **"LLM_MODEL is not configured" pops up** | The system doesn't know which brand's model you want to use. | Add a clear instruction in `.env`: `LITELLM_MODEL=provider/your_model_name`. Example: `openai/gpt-5.4`. |
 | **I added multiple provider Keys, why is only one working?** | You mixed the **Simple Mode** and **Channels Mode**! | Choose one path. For simple setups, delete anything starting with `LLM_CHANNELS`. To use multi-model fallbacks, migrate all your Keys into the `LLM_CHANNELS` setup. |
 | **Returns 400, 401, or Invalid API Key** | The API Key is wrong, copied incompletely, account lacks credits, or you mistyped the model name (extremely common). | 1. Ensure there are no spaces at the start/end of your Key.<br> 2. Ensure your Base URL ends with `/v1`.<br> 3. Check if you forgot the `openai/` prefix on the model name! |
 | **Spins endlessly, eventually hits Timeout/ConnectionRefused** | You are using restricted APIs (like Google/OpenAI) in a blocked region without a proxy, or your cloud server lacks external internet access. | Highly recommend using **official regional APIs** (like DeepSeek) or **OpenAI-compatible relay platforms**. Third-party platforms bypass these network constraints. |
