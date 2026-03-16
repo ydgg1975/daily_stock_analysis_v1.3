@@ -71,7 +71,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
             "LLM_PRIMARY_PROTOCOL": "openai",
             "LLM_PRIMARY_ENABLED": "false",
             "LLM_PRIMARY_API_KEY": "sk-test-value",
-            "LLM_PRIMARY_MODELS": "gpt-5.4",
+            "LLM_PRIMARY_MODELS": "gpt-5.2",
         }
 
         with patch.dict(os.environ, env, clear=True):

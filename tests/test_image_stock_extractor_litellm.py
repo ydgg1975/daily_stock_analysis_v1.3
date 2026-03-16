@@ -61,7 +61,7 @@ def _cfg(**kwargs) -> Config:
         anthropic_api_keys=[],
         anthropic_model="claude-3-5-sonnet-20241022",
         openai_api_keys=[],
-        openai_model="gpt-5.4",
+        openai_model="gpt-5.2",
         openai_base_url=None,
         openai_vision_model=None,
         deepseek_api_keys=[],
@@ -141,7 +141,7 @@ class TestGetApiKeysForModel:
 
     def test_returns_openai_keys_for_openai_model(self):
         cfg = _cfg(openai_api_keys=[_OPENAI_KEY], gemini_api_keys=[_GEMINI_KEY])
-        keys = _get_api_keys_for_model("openai/gpt-5.4", cfg)
+        keys = _get_api_keys_for_model("openai/gpt-5.2", cfg)
         assert _OPENAI_KEY in keys
 
     def test_filters_out_short_keys(self):
@@ -179,7 +179,7 @@ class TestCallLitellmVision:
 
     def test_openai_model_uses_api_base_and_aihubmix_headers(self):
         cfg = _cfg(
-            openai_vision_model="openai/gpt-5.4",
+            openai_vision_model="openai/gpt-5.2",
             openai_api_keys=[_OPENAI_KEY],
             openai_base_url="https://aihubmix.com/v1",
         )
@@ -198,7 +198,7 @@ class TestCallLitellmVision:
                 _call_litellm_vision("b64", "image/jpeg")
 
     def test_raises_when_no_key_for_model(self):
-        cfg = _cfg(openai_vision_model="openai/gpt-5.4", openai_api_keys=[])
+        cfg = _cfg(openai_vision_model="openai/gpt-5.2", openai_api_keys=[])
         with patch("src.services.image_stock_extractor.get_config", return_value=cfg):
             with pytest.raises(ValueError, match="No API key found"):
                 _call_litellm_vision("b64", "image/jpeg")

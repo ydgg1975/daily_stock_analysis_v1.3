@@ -210,7 +210,7 @@ def _resolve_vision_model() -> str:
         elif cfg.anthropic_api_keys:
             model = f"anthropic/{cfg.anthropic_model or 'claude-3-5-sonnet-20241022'}"
         elif cfg.openai_api_keys:
-            model = f"openai/{cfg.openai_model or 'gpt-5.4'}"
+            model = f"openai/{cfg.openai_model or 'gpt-5.2'}"
         else:
             return ""
     # Gemini 3 does not support vision; downgrade to gemini-2.0-flash

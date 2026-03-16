@@ -284,7 +284,7 @@ class TestAgentExecutor(unittest.TestCase):
             tool_calls=[],
             usage={"total_tokens": 10},
             provider="openai",
-            model="openai/gpt-5.4",
+            model="openai/gpt-5.2",
         )
         adapter.call_with_tools.side_effect = [step1, step2, step3]
 
@@ -292,7 +292,7 @@ class TestAgentExecutor(unittest.TestCase):
         result = executor.run("Analyze 600519")
 
         self.assertTrue(result.success)
-        self.assertEqual(result.model, "gemini/gemini-2.0-flash, openai/gpt-5.4")
+        self.assertEqual(result.model, "gemini/gemini-2.0-flash, openai/gpt-5.2")
 
     def test_model_trace_skips_error_provider(self):
         """Error provider placeholder should not appear in model trace."""

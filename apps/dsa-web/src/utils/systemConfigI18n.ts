@@ -96,7 +96,7 @@ const fieldDescriptionMap: Record<string, string> = {
   GEMINI_TEMPERATURE: '控制模型输出随机性，范围通常为 0.0 到 2.0。',
   OPENAI_API_KEY: '用于 OpenAI 兼容服务调用的密钥。',
   OPENAI_BASE_URL: 'OpenAI 兼容 API 地址，例如 https://api.deepseek.com/v1。',
-  OPENAI_MODEL: 'OpenAI 兼容模型名称，例如 gpt-5.4、deepseek-chat。',
+  OPENAI_MODEL: 'OpenAI 兼容模型名称，例如 gpt-5.2、deepseek-chat。',
   WECHAT_WEBHOOK_URL: '企业微信机器人 Webhook 地址。',
   DINGTALK_APP_KEY: '钉钉应用模式 App Key。',
   DINGTALK_APP_SECRET: '钉钉应用模式 App Secret。',

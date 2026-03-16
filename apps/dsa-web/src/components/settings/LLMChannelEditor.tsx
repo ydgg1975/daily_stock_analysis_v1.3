@@ -19,7 +19,7 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     label: 'AIHubmix（聚合平台）',
     protocol: 'openai',
     baseUrl: 'https://aihubmix.com/v1',
-    placeholder: 'gpt-5.4,claude-4-6,gemini-3.1-pro-preview',
+    placeholder: 'gpt-5.2,claude-4-6,gemini-3.1-pro-preview',
   },
   deepseek: {
     label: 'DeepSeek 官方',
@@ -55,7 +55,7 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     label: 'OpenRouter',
     protocol: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
-    placeholder: 'openai/gpt-5.4,anthropic/claude-3-5-sonnet',
+    placeholder: 'openai/gpt-5.2,anthropic/claude-3-5-sonnet',
   },
   gemini: {
     label: 'Gemini 官方',
@@ -73,7 +73,7 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     label: 'OpenAI 官方',
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
-    placeholder: 'gpt-5.4',
+    placeholder: 'gpt-5.2',
   },
   ollama: {
     label: 'Ollama（本地）',
@@ -99,7 +99,7 @@ const PROTOCOL_OPTIONS: Array<{ value: ChannelProtocol; label: string }> = [
 ];
 
 const MODEL_PLACEHOLDERS: Record<ChannelProtocol, string> = {
-  openai: 'gpt-5.4,deepseek-chat,qwen-plus',
+  openai: 'gpt-5.2,deepseek-chat,qwen-plus',
   deepseek: 'deepseek-chat,deepseek-reasoner',
   gemini: 'gemini-3.1-pro-preview',
   anthropic: 'claude-4-6',

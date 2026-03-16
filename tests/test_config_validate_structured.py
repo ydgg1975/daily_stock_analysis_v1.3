@@ -142,11 +142,11 @@ class TestValidateStructuredLLM:
         LLM_CHANNELS (no legacy *_API_KEY) should not see 'AI 功能不可用'.
         """
         channel_model_list = [
-            {"model_name": "openai/gpt-5.4", "litellm_params": {"api_key": "sk-chan", "api_base": "https://aihubmix.com/v1"}},
+            {"model_name": "openai/gpt-5.2", "litellm_params": {"api_key": "sk-chan", "api_base": "https://aihubmix.com/v1"}},
         ]
         cfg = _make_config(
             llm_model_list=channel_model_list,
-            litellm_model="openai/gpt-5.4",
+            litellm_model="openai/gpt-5.2",
             gemini_api_keys=[],
             anthropic_api_keys=[],
             openai_api_keys=[],
@@ -215,7 +215,7 @@ class TestValidateStructuredLLM:
     def test_configured_primary_model_missing_from_channels_is_error(self):
         cfg = _make_config(
             llm_model_list=[
-                {"model_name": "openai/gpt-5.4", "litellm_params": {"model": "openai/gpt-5.4", "api_key": "sk-test"}},
+                {"model_name": "openai/gpt-5.2", "litellm_params": {"model": "openai/gpt-5.2", "api_key": "sk-test"}},
             ],
             litellm_model="openai/gpt-4o",
         )
@@ -225,7 +225,7 @@ class TestValidateStructuredLLM:
     def test_configured_vision_model_missing_from_channels_is_warning(self):
         cfg = _make_config(
             llm_model_list=[
-                {"model_name": "openai/gpt-5.4", "litellm_params": {"model": "openai/gpt-5.4", "api_key": "sk-test"}},
+                {"model_name": "openai/gpt-5.2", "litellm_params": {"model": "openai/gpt-5.2", "api_key": "sk-test"}},
             ],
             vision_model="openai/gpt-4o",
         )

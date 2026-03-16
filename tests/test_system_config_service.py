@@ -88,7 +88,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             items=[
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": ""},
             ]
         )
@@ -102,7 +102,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LITELLM_MODEL", "value": "openai/gpt-4o"},
             ]
         )
@@ -121,7 +121,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LITELLM_CONFIG", "value": "/tmp/litellm.yaml"},
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": ""},
                 {"key": "LITELLM_MODEL", "value": "gemini/gemini-2.5-flash"},
             ]
@@ -153,7 +153,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         validation = self.service.validate(
             items=[
                 {"key": "LITELLM_CONFIG", "value": "/tmp/litellm.yaml"},
-                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.4"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.2"},
             ]
         )
 
@@ -167,7 +167,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LITELLM_CONFIG", "value": "/tmp/litellm.yaml"},
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": ""},
             ]
         )
@@ -181,9 +181,9 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LLM_PRIMARY_ENABLED", "value": "false"},
-                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.4"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.2"},
             ]
         )
 
@@ -196,10 +196,10 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LLM_CHANNELS", "value": "primary"},
                 {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
                 {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
-                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                 {"key": "LLM_PRIMARY_ENABLED", "value": "false"},
                 {"key": "OPENAI_API_KEY", "value": "sk-legacy-value"},
-                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.4"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-5.2"},
             ]
         )
 
@@ -256,7 +256,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                     items=[
                         {"key": "LLM_CHANNELS", "value": "primary"},
                         {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
-                        {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                        {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                         {"key": "LLM_PRIMARY_API_KEY", "value": bad_key},
                     ]
                 )
@@ -278,7 +278,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                     items=[
                         {"key": "LLM_CHANNELS", "value": "primary"},
                         {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
-                        {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.4"},
+                        {"key": "LLM_PRIMARY_MODELS", "value": "gpt-5.2"},
                         {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test"},
                         {"key": "LLM_PRIMARY_BASE_URL", "value": bad_url},
                     ]
