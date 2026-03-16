@@ -229,7 +229,7 @@ def set_initial_password(password: str) -> Optional[str]:
         tmp_path = cred_path.with_suffix(".tmp")
         tmp_path.write_text(content)
         tmp_path.chmod(0o600)
-        tmp_path.rename(cred_path)
+        tmp_path.replace(cred_path)
         return None
     except OSError as e:
         logger.error("Failed to write credential file: %s", e)
@@ -279,7 +279,7 @@ def change_password(current: str, new: str) -> Optional[str]:
         tmp_path = cred_path.with_suffix(".tmp")
         tmp_path.write_text(content)
         tmp_path.chmod(0o600)
-        tmp_path.rename(cred_path)
+        tmp_path.replace(cred_path)
         # Reload into memory so subsequent verify_password uses new hash
         _load_credential_from_file()
         return None
@@ -404,7 +404,7 @@ def overwrite_password(new_password: str) -> Optional[str]:
         tmp_path = cred_path.with_suffix(".tmp")
         tmp_path.write_text(content)
         tmp_path.chmod(0o600)
-        tmp_path.rename(cred_path)
+        tmp_path.replace(cred_path)
         _load_credential_from_file()
         return None
     except OSError as e:

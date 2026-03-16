@@ -23,6 +23,22 @@ A股自选股智能分析系统 - 主调度程序
 """
 import os
 from src.config import setup_env
+import argparse
+import logging
+import sys
+import time
+import uuid
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from data_provider.base import canonical_stock_code
+from src.core.pipeline import StockAnalysisPipeline
+from src.core.market_review import run_market_review
+from src.webui_frontend import prepare_webui_frontend_assets
+from src.config import get_config, Config
+from src.logging_config import setup_logging
+
 setup_env()
 
 # 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
@@ -35,23 +51,20 @@ if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").low
     os.environ["http_proxy"] = proxy_url
     os.environ["https_proxy"] = proxy_url
 
-import argparse
-import logging
-import sys
-import time
-import uuid
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Tuple
 
-from data_provider.base import canonical_stock_code
-from src.core.pipeline import StockAnalysisPipeline
-from src.core.market_review import run_market_review
-from src.webui_frontend import prepare_webui_frontend_assets
-from src.config import get_config, Config
-from src.logging_config import setup_logging
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_RUNTIME_OBJECTS = [
+    "portfolio_state",
+    "trade_execution_log",
+    "daily_pnl_log",
+    "holding_review_packet",
+    "capital_allocation_gate",
+    "candidate_pool",
+    "stock_research_packet",
+    "noon_monitor_packet",
+]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -215,6 +228,33 @@ def parse_arguments() -> argparse.Namespace:
         '--backtest-force',
         action='store_true',
         help='强制回测（即使已有回测结果也重新计算）'
+    )
+
+    parser.add_argument(
+        '--export-runtime',
+        action='store_true',
+        help='导出 shared_runtime JSON 对象'
+    )
+
+    parser.add_argument(
+        '--runtime-objects',
+        type=str,
+        default='all',
+        help='导出的对象名，逗号分隔；默认 all'
+    )
+
+    parser.add_argument(
+        '--runtime-portfolio-id',
+        type=str,
+        default='default',
+        help='导出运行时对象时使用的组合 ID'
+    )
+
+    parser.add_argument(
+        '--runtime-date',
+        type=str,
+        default=None,
+        help='导出运行时对象的日期，格式 YYYY-MM-DD'
     )
 
     return parser.parse_args()
@@ -465,6 +505,39 @@ def run_screening_workflow(config: Config, args: argparse.Namespace) -> None:
     )
 
 
+def run_runtime_export(config: Config, args: argparse.Namespace) -> None:
+    """Build and export shared runtime objects."""
+    from src.services.runtime_object_builder import RUNTIME_SCHEMA_VERSIONS, RuntimeObjectBuilder
+    from src.services.shared_runtime_service import SharedRuntimeService
+
+    as_of_date = None
+    if args.runtime_date:
+        as_of_date = datetime.strptime(args.runtime_date, "%Y-%m-%d").date()
+
+    requested = [
+        name.strip()
+        for name in (args.runtime_objects or "").split(",")
+        if name.strip()
+    ]
+    object_names = DEFAULT_RUNTIME_OBJECTS if not requested or requested == ["all"] else requested
+
+    builder = RuntimeObjectBuilder()
+    exporter = SharedRuntimeService(output_dir=Path(config.shared_runtime_dir))
+
+    for object_name in object_names:
+        payload = builder.build_object(
+            object_name,
+            portfolio_id=args.runtime_portfolio_id,
+            as_of_date=as_of_date,
+        )
+        path = exporter.export_object(
+            object_name=object_name,
+            schema_version=RUNTIME_SCHEMA_VERSIONS[object_name],
+            data=payload,
+        )
+        logger.info("已导出运行时对象: %s -> %s", object_name, path)
+
+
 def start_api_server(host: str, port: int, config: Config) -> None:
     """
     在后台线程启动 FastAPI 服务
@@ -610,6 +683,11 @@ def main() -> int:
         return 0
 
     try:
+        if getattr(args, 'export_runtime', False):
+            logger.info("模式: 导出 shared runtime 对象")
+            run_runtime_export(config, args)
+            return 0
+
         # 模式0: 回测
         if getattr(args, 'backtest', False):
             logger.info("模式: 回测")

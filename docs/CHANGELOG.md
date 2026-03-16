@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - 🐳 **Docker build stability** — runtime image no longer hard-requires `wkhtmltopdf` during build; markdown-to-image remains optional and falls back to text when the binary is absent, avoiding transient Debian mirror failures that blocked `docker-compose up` for the Web service
 - 🩹 **Market screening ingest resilience** — low-volume `empty_data` / `not_found` / `fetch_failed` symbols no longer fail the whole screening run immediately; they are downgraded to skip, persisted in `failed_symbols` / `warnings`, and only trip the run when the ingest failure ratio exceeds `SCREENING_INGEST_FAILURE_THRESHOLD`; failed reruns now also pre-skip previously confirmed bad symbols to avoid repeated ingest stalls
+- 🪟 **Windows baseline test compatibility** — auth password rotation/reset now uses overwrite-safe file replacement for credential persistence, and the market analyzer static guard test now reads source files with explicit UTF-8 encoding so the offline suite passes reliably on Windows locales
 
 ### Changed
 - 🔎 **Fetcher failure observability** — historical data logs now record fetcher start/success/failure with elapsed time, explicit failover transitions, and clearer final outcomes; Efinance/Eastmoney failures now include upstream endpoint and normalized categories such as `remote_disconnect` and `timeout`; Akshare 新浪/腾讯实时行情日志 now also include upstream endpoint and classified failures for HTTP status, disconnects, and malformed payloads
@@ -25,8 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 📣 **Market screening notification delivery** — added a dedicated screening notification service and `POST /api/v1/screening/runs/{run_id}/notify` endpoint so completed runs can generate and push final recommendation lists through the existing notification stack while also saving a local markdown report artifact
 - ⏰ **Market screening CLI and schedule entry** — added a dedicated screening schedule service plus `python main.py --screening` / `python main.py --screening --schedule` entrypoints so the existing scheduler can trigger full-market screening runs with trading-day guards, while manual CLI execution reuses the same workflow
 - 📊 **Market screening observability logging** — screening orchestration now emits structured logs carrying `screening_run_id`, per-stage `duration_ms`, sync health summaries, funnel counts (`selected_count` / `rejected_count`), and explicit failed-stage context so operators can quickly locate where a run degraded or stopped
+- 🧱 **Portfolio runtime data layer** — introduced append-only `trade_execution_events`, persisted `daily_pnl_snapshots`, a dedicated `PortfolioRepository`, and derived portfolio-state / pnl services so portfolio runtime data no longer needs to expand `DatabaseManager` business methods
+- 🗂️ **Shared runtime object assembly** — added a runtime object builder plus CLI export flow for `portfolio_state`, `trade_execution_log`, `daily_pnl_log`, `holding_review_packet`, `capital_allocation_gate`, `candidate_pool`, `stock_research_packet`, and `noon_monitor_packet`, with stable JSON envelopes written to `runtime/shared_runtime/`
+- 🌐 **Runtime read-only API** — added `/api/v1/runtime/objects` and `/api/v1/runtime/{object_name}` so callers can query supported shared runtime objects directly over FastAPI without depending on exported files
 ### Added
 - 📖 **LLM 配置指南** — 新增 [docs/LLM_CONFIG_GUIDE.md](LLM_CONFIG_GUIDE.md)，系统讲解三层配置、快速上手、Vision/Agent/Web UI/校验排错；同步更新 README、full-guide、.env.example、FAQ、英文版指南
+- 🧪 **TDD coverage for runtime objects** — added focused storage/service/object-builder tests covering portfolio execution ingestion, state derivation, daily pnl snapshots, and shared runtime packet assembly
+- 🧪 **TDD coverage for runtime services/API** — added dedicated tests for `holding_review_service`, `capital_allocation_service`, `candidate_pool_service`, `stock_research_service`, `noon_monitor_service`, and the runtime read-only API
 
 ## [3.4.10] - 2026-03-07
 

@@ -367,6 +367,93 @@ class BacktestSummary(Base):
     )
 
 
+class TradeExecutionEvent(Base):
+    """Append-only execution log for portfolio activity."""
+
+    __tablename__ = "trade_execution_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String(32), nullable=False, default="default", index=True)
+    executed_at = Column(DateTime, nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    side = Column(String(16), nullable=False, index=True)
+    code = Column(String(16), nullable=True, index=True)
+    quantity = Column(Float, nullable=False, default=0.0)
+    price = Column(Float, nullable=False, default=0.0)
+    amount = Column(Float, nullable=False, default=0.0)
+    fees = Column(Float, nullable=False, default=0.0)
+    note = Column(Text)
+    plan_id = Column(String(64), index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    __table_args__ = (
+        Index("ix_execution_portfolio_time", "portfolio_id", "executed_at"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "portfolio_id": self.portfolio_id,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "trade_date": self.trade_date.isoformat() if self.trade_date else None,
+            "side": self.side,
+            "code": self.code,
+            "quantity": float(self.quantity or 0.0),
+            "price": float(self.price or 0.0),
+            "amount": float(self.amount or 0.0),
+            "fees": float(self.fees or 0.0),
+            "note": self.note,
+            "plan_id": self.plan_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DailyPnlSnapshot(Base):
+    """Daily portfolio PnL snapshot."""
+
+    __tablename__ = "daily_pnl_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String(32), nullable=False, default="default", index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    cash = Column(Float, nullable=False, default=0.0)
+    market_value = Column(Float, nullable=False, default=0.0)
+    total_equity = Column(Float, nullable=False, default=0.0)
+    realized_pnl = Column(Float, nullable=False, default=0.0)
+    unrealized_pnl = Column(Float, nullable=False, default=0.0)
+    total_pnl = Column(Float, nullable=False, default=0.0)
+    position_ratio = Column(Float, nullable=False, default=0.0)
+    win_trade_count = Column(Integer, nullable=False, default=0)
+    loss_trade_count = Column(Integer, nullable=False, default=0)
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "trade_date", name="uix_daily_pnl_portfolio_trade_date"),
+        Index("ix_daily_pnl_portfolio_trade_date", "portfolio_id", "trade_date"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "portfolio_id": self.portfolio_id,
+            "trade_date": self.trade_date.isoformat() if self.trade_date else None,
+            "cash": float(self.cash or 0.0),
+            "market_value": float(self.market_value or 0.0),
+            "total_equity": float(self.total_equity or 0.0),
+            "realized_pnl": float(self.realized_pnl or 0.0),
+            "unrealized_pnl": float(self.unrealized_pnl or 0.0),
+            "total_pnl": float(self.total_pnl or 0.0),
+            "position_ratio": float(self.position_ratio or 0.0),
+            "win_trade_count": int(self.win_trade_count or 0),
+            "loss_trade_count": int(self.loss_trade_count or 0),
+            "note": self.note,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ConversationMessage(Base):
     """
     Agent 对话历史记录表
@@ -968,7 +1055,12 @@ class DatabaseManager:
 
             return list(results)
 
-    def get_news_intel_by_query_id(self, query_id: str, limit: int = 20) -> List[NewsIntel]:
+    def get_news_intel_by_query_id(
+        self,
+        query_id: str,
+        limit: int = 20,
+        as_of_date: Optional[date] = None,
+    ) -> List[NewsIntel]:
         """
         根据 query_id 获取新闻情报列表
 
@@ -982,14 +1074,15 @@ class DatabaseManager:
         from sqlalchemy import func
 
         with self.get_session() as session:
+            stmt = select(NewsIntel).where(NewsIntel.query_id == query_id)
+            if as_of_date is not None:
+                cutoff = datetime.combine(as_of_date, datetime.max.time())
+                stmt = stmt.where(func.coalesce(NewsIntel.published_date, NewsIntel.fetched_at) <= cutoff)
             results = session.execute(
-                select(NewsIntel)
-                .where(NewsIntel.query_id == query_id)
-                .order_by(
+                stmt.order_by(
                     desc(func.coalesce(NewsIntel.published_date, NewsIntel.fetched_at)),
                     desc(NewsIntel.fetched_at)
-                )
-                .limit(limit)
+                ).limit(limit)
             ).scalars().all()
 
             return list(results)
@@ -1515,6 +1608,7 @@ class DatabaseManager:
         run_id: str,
         limit: int = 100,
         with_ai_only: bool = False,
+        as_of_date: Optional[date] = None,
     ) -> List[Dict[str, Any]]:
         """查询某次筛选任务的候选结果。"""
         with self.get_session() as session:
@@ -1526,7 +1620,7 @@ class DatabaseManager:
             if with_ai_only:
                 stmt = stmt.where(ScreeningCandidate.selected_for_ai.is_(True))
             rows = session.execute(stmt).scalars().all()
-            return self._enrich_screening_candidates([row.to_dict() for row in rows])[:limit]
+            return self._enrich_screening_candidates([row.to_dict() for row in rows], as_of_date=as_of_date)[:limit]
 
     def get_screening_candidate_detail(self, run_id: str, code: str) -> Optional[Dict[str, Any]]:
         """查询某次筛选任务下单只候选的完整详情。"""
@@ -1550,13 +1644,17 @@ class DatabaseManager:
         )
         return item
 
-    def _enrich_screening_candidates(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _enrich_screening_candidates(
+        self,
+        items: List[Dict[str, Any]],
+        as_of_date: Optional[date] = None,
+    ) -> List[Dict[str, Any]]:
         enriched: List[Dict[str, Any]] = []
         for item in items:
             news_records = []
             ai_query_id = item.get("ai_query_id")
             if ai_query_id:
-                news_records = self.get_news_intel_by_query_id(ai_query_id, limit=3)
+                news_records = self.get_news_intel_by_query_id(ai_query_id, limit=3, as_of_date=as_of_date)
 
             news_titles = [record.title for record in news_records if getattr(record, "title", None)]
             news_count = len(news_records)
@@ -1649,17 +1747,22 @@ class DatabaseManager:
             ).scalars().first()
             return result
 
-    def get_latest_analysis_by_query_id_and_code(self, query_id: str, code: str) -> Optional[AnalysisHistory]:
+    def get_latest_analysis_by_query_id_and_code(
+        self,
+        query_id: str,
+        code: str,
+        as_of_date: Optional[date] = None,
+    ) -> Optional[AnalysisHistory]:
         """根据 query_id 和股票代码查询最新分析历史记录。"""
         with self.get_session() as session:
+            stmt = select(AnalysisHistory).where(
+                AnalysisHistory.query_id == query_id,
+                AnalysisHistory.code == code,
+            )
+            if as_of_date is not None:
+                stmt = stmt.where(AnalysisHistory.created_at <= datetime.combine(as_of_date, datetime.max.time()))
             result = session.execute(
-                select(AnalysisHistory)
-                .where(
-                    AnalysisHistory.query_id == query_id,
-                    AnalysisHistory.code == code,
-                )
-                .order_by(desc(AnalysisHistory.created_at))
-                .limit(1)
+                stmt.order_by(desc(AnalysisHistory.created_at)).limit(1)
             ).scalars().first()
             return result
     

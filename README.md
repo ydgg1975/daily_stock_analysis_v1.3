@@ -39,6 +39,7 @@
 | 回测 | AI 回测验证 | 自动评估历史分析准确率，方向胜率、止盈止损命中率 |
 | **Agent 问股** | **策略对话** | **多轮策略问答，支持均线金叉/缠论/波浪等 11 种内置策略，Web/Bot/API 全链路** |
 | 筛选 | 全市场批量选股（开发中） | 已落地后端主链路：`instrument_master`、日线同步、因子快照、规则首筛、候选 AI 二筛、`screening` API；当前额外支持同步健康报告、同日同模式幂等、失败任务按阶段补跑、AI 降级完成、带新闻补充的最终推荐字段、单候选详情中的 `analysis_history` 关联信息、手动触发推荐名单通知、`python main.py --screening` / `python main.py --screening --schedule` 的手动与定时执行入口，以及带 `screening_run_id` / 阶段耗时 / 漏斗统计的数据链路观测日志 |
+| Runtime | shared runtime 导出 | 新增 `portfolio_state`、`trade_execution_log`、`daily_pnl_log`、`holding_review_packet`、`capital_allocation_gate`、`candidate_pool`、`stock_research_packet`、`noon_monitor_packet` 八类 JSON 对象，可通过 CLI 导出到 `runtime/shared_runtime/`，供上游编排器或外部服务直接消费 |
 | 推送 | 多渠道通知 | 企业微信、飞书、Telegram、钉钉、邮件、Pushover |
 | 自动化 | 定时运行 | GitHub Actions 定时执行，无需服务器 |
 
@@ -305,6 +306,25 @@ python main.py
 访问 `http://127.0.0.1:8000` 即可使用。
 
 > 也可以使用 `python main.py --serve` (等效命令)
+
+### 导出 shared runtime
+
+当你希望把本项目作为 `StockClaw` 或其他调度器的数据服务层使用时，可以直接导出运行时对象：
+
+```bash
+python main.py --export-runtime
+python main.py --export-runtime --runtime-objects portfolio_state,holding_review_packet
+python main.py --export-runtime --runtime-portfolio-id default --runtime-date 2026-03-16
+```
+
+默认输出目录为 `runtime/shared_runtime/`，可通过 `SHARED_RUNTIME_DIR` 覆盖。
+
+如需本地只读查询，也可以通过 API 读取：
+
+```bash
+GET /api/v1/runtime/objects
+GET /api/v1/runtime/portfolio_state?portfolio_id=default&as_of_date=2026-03-16
+```
 
 ## 🗺️ Roadmap
 
