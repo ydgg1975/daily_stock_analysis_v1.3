@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 新功能
+
+- 📱 **Social Sentiment Intelligence (US stocks)** — 新增 Reddit / X (Twitter) / Polymarket 社交媒体情绪数据源，为美股分析提供实时社交舆情情报。数据来自 api.adanos.org，包含 Buzz Score、情绪评分、提及量等指标。完全可选（需配置 `SOCIAL_SENTIMENT_API_KEY`），仅对美股生效，A 股 / 港股不受影响。
+
 ### 修复
 
 - 🐛 **港股 Agent 实时行情去重与快速路由** — 统一 `HK01810` / `1810.HK` / `01810` 等港股代码归一规则；港股实时行情改为直接走单次 `akshare_hk` 路径，避免按 A 股 source priority 重复触发同一失败接口；Agent 运行期对显式 `retriable=false` 的工具失败增加短路缓存，减少同轮分析中的重复失败调用。
