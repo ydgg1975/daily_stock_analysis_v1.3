@@ -29,9 +29,11 @@ from src.analyzer import GeminiAnalyzer, AnalysisResult, fill_chip_structure_if_
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.notification import NotificationService, NotificationChannel
 from src.search_service import SearchService
+from src.services.social_sentiment_service import SocialSentimentService
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
+from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
 
 
@@ -89,6 +91,7 @@ class StockAnalysisPipeline:
             serpapi_keys=self.config.serpapi_keys,
             minimax_keys=self.config.minimax_api_keys,
             news_max_age_days=self.config.news_max_age_days,
+            news_strategy_profile=getattr(self.config, "news_strategy_profile", "short"),
         )
         
         logger.info(f"调度器初始化完成，最大并发数: {self.max_workers}")
@@ -106,6 +109,14 @@ class StockAnalysisPipeline:
             logger.info("搜索服务已启用 (Tavily/SerpAPI)")
         else:
             logger.warning("搜索服务未启用（未配置 API Key）")
+
+        # 初始化社交舆情服务（仅美股）
+        self.social_sentiment_service = SocialSentimentService(
+            api_key=self.config.social_sentiment_api_key,
+            api_url=self.config.social_sentiment_api_url,
+        )
+        if self.social_sentiment_service.is_available:
+            logger.info("Social sentiment service enabled (Reddit/X/Polymarket, US stocks only)")
 
     def fetch_and_save_stock_data(
         self, 
@@ -327,6 +338,19 @@ class StockAnalysisPipeline:
             else:
                 logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
 
+            # Step 4.5: Social sentiment intelligence (US stocks only)
+            if self.social_sentiment_service.is_available and is_us_stock_code(code):
+                try:
+                    social_context = self.social_sentiment_service.get_social_context(code)
+                    if social_context:
+                        logger.info(f"{stock_name}({code}) Social sentiment data retrieved")
+                        if news_context:
+                            news_context = news_context + "\n\n" + social_context
+                        else:
+                            news_context = social_context
+                except Exception as e:
+                    logger.warning(f"{stock_name}({code}) Social sentiment fetch failed: {e}")
+
             # Step 5: 获取分析上下文（技术面数据）
             context = self.db.get_analysis_context(code)
 
@@ -427,6 +451,9 @@ class StockAnalysisPipeline:
             enhanced['stock_name'] = stock_name
         elif realtime_quote and getattr(realtime_quote, 'name', None):
             enhanced['stock_name'] = realtime_quote.name
+
+        # 将运行时搜索窗口透传给 analyzer，避免与全局配置重新读取产生窗口不一致
+        enhanced['news_window_days'] = getattr(self.search_service, "news_window_days", 3)
         
         # 添加实时行情（兼容不同数据源的字段差异）
         if realtime_quote:
@@ -591,6 +618,22 @@ class StockAnalysisPipeline:
             if trend_result:
                 initial_context["trend_result"] = self._safe_to_dict(trend_result)
 
+            # Agent path: inject social sentiment as news_context so both
+            # executor (_build_user_message) and orchestrator (ctx.set_data)
+            # can consume it through the existing news_context channel
+            if self.social_sentiment_service.is_available and is_us_stock_code(code):
+                try:
+                    social_context = self.social_sentiment_service.get_social_context(code)
+                    if social_context:
+                        existing = initial_context.get("news_context")
+                        if existing:
+                            initial_context["news_context"] = existing + "\n\n" + social_context
+                        else:
+                            initial_context["news_context"] = social_context
+                        logger.info(f"[{code}] Agent mode: social sentiment data injected into news_context")
+                except Exception as e:
+                    logger.warning(f"[{code}] Agent mode: social sentiment fetch failed: {e}")
+
             # 运行 Agent
             message = f"请分析股票 {code} ({stock_name})，并生成决策仪表盘报告。"
             agent_result = executor.run(message, context=initial_context)
@@ -690,7 +733,20 @@ class StockAnalysisPipeline:
                 result.name = ai_stock_name
             result.sentiment_score = self._safe_int(dash.get("sentiment_score"), 50)
             result.trend_prediction = dash.get("trend_prediction", "未知")
-            result.operation_advice = dash.get("operation_advice", "观望")
+            raw_advice = dash.get("operation_advice", "观望")
+            if isinstance(raw_advice, dict):
+                # LLM may return {"no_position": "...", "has_position": "..."}
+                # Derive a short string from decision_type for the scalar field
+                _signal_to_advice = {
+                    "buy": "买入", "sell": "卖出", "hold": "持有",
+                    "strong_buy": "强烈买入", "strong_sell": "强烈卖出",
+                }
+                # Normalize decision_type (strip/lower) before lookup so
+                # variants like "BUY" or " Buy " map correctly.
+                raw_dt = str(dash.get("decision_type") or "hold").strip().lower()
+                result.operation_advice = _signal_to_advice.get(raw_dt, "观望")
+            else:
+                result.operation_advice = str(raw_advice) if raw_advice else "观望"
             from src.agent.protocols import normalize_decision_signal
 
             result.decision_type = normalize_decision_signal(
@@ -1146,6 +1202,10 @@ class StockAnalysisPipeline:
         logger.info("===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
         
+        # 保存报告到本地文件（无论是否推送通知都保存）
+        if results and not dry_run:
+            self._save_local_report(results, report_type)
+
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:
             if single_stock_notify:
@@ -1161,6 +1221,19 @@ class StockAnalysisPipeline:
         
         return results
     
+    def _save_local_report(
+        self,
+        results: List[AnalysisResult],
+        report_type: ReportType = ReportType.SIMPLE,
+    ) -> None:
+        """保存分析报告到本地文件（与通知推送解耦）"""
+        try:
+            report = self._generate_aggregate_report(results, report_type)
+            filepath = self.notifier.save_report_to_file(report)
+            logger.info(f"决策仪表盘日报已保存: {filepath}")
+        except Exception as e:
+            logger.error(f"保存本地报告失败: {e}")
+
     def _send_notifications(
         self,
         results: List[AnalysisResult],
@@ -1180,11 +1253,7 @@ class StockAnalysisPipeline:
             logger.info("生成决策仪表盘日报...")
             report = self._generate_aggregate_report(results, report_type)
             
-            # 保存到本地
-            filepath = self.notifier.save_report_to_file(report)
-            logger.info(f"决策仪表盘日报已保存: {filepath}")
-            
-            # 跳过推送（单股推送模式）
+            # 跳过推送（单股推送模式 / 合并模式：报告已由 _save_local_report 保存）
             if skip_push:
                 return
             

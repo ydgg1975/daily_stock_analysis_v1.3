@@ -22,7 +22,14 @@ from json_repair import repair_json
 from litellm import Router
 
 from src.agent.llm_adapter import get_thinking_extra_body
-from src.config import Config, get_config, get_api_keys_for_model, extra_litellm_params, get_configured_llm_models
+from src.config import (
+    Config,
+    extra_litellm_params,
+    get_api_keys_for_model,
+    get_config,
+    get_configured_llm_models,
+    resolve_news_window_days,
+)
 from src.storage import persist_llm_usage
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.schemas.report_schema import AnalysisReportSchema
@@ -38,20 +45,26 @@ def check_content_integrity(result: "AnalysisResult") -> Tuple[bool, List[str]]:
     missing: List[str] = []
     if result.sentiment_score is None:
         missing.append("sentiment_score")
-    if not (result.operation_advice or "").strip():
+    advice = result.operation_advice
+    if not advice or not isinstance(advice, str) or not advice.strip():
         missing.append("operation_advice")
-    if not (result.analysis_summary or "").strip():
+    summary = result.analysis_summary
+    if not summary or not isinstance(summary, str) or not summary.strip():
         missing.append("analysis_summary")
-    dash = result.dashboard or {}
-    core = dash.get("core_conclusion") or {}
+    dash = result.dashboard if isinstance(result.dashboard, dict) else {}
+    core = dash.get("core_conclusion")
+    core = core if isinstance(core, dict) else {}
     if not (core.get("one_sentence") or "").strip():
         missing.append("dashboard.core_conclusion.one_sentence")
     intel = dash.get("intelligence")
+    intel = intel if isinstance(intel, dict) else None
     if intel is None or "risk_alerts" not in intel:
         missing.append("dashboard.intelligence.risk_alerts")
     if result.decision_type in ("buy", "hold"):
-        battle = dash.get("battle_plan") or {}
-        sp = battle.get("sniper_points") or {}
+        battle = dash.get("battle_plan")
+        battle = battle if isinstance(battle, dict) else {}
+        sp = battle.get("sniper_points")
+        sp = sp if isinstance(sp, dict) else {}
         stop_loss = sp.get("stop_loss")
         if stop_loss is None or (isinstance(stop_loss, str) and not stop_loss.strip()):
             missing.append("dashboard.battle_plan.sniper_points.stop_loss")
@@ -1155,6 +1168,22 @@ class GeminiAnalyzer:
 """
         
         # 添加新闻搜索结果（重点区域）
+        news_window_days: Optional[int] = None
+        context_window = context.get("news_window_days")
+        try:
+            if context_window is not None:
+                parsed_window = int(context_window)
+                if parsed_window > 0:
+                    news_window_days = parsed_window
+        except (TypeError, ValueError):
+            news_window_days = None
+
+        if news_window_days is None:
+            prompt_config = get_config()
+            news_window_days = resolve_news_window_days(
+                news_max_age_days=getattr(prompt_config, "news_max_age_days", 3),
+                news_strategy_profile=getattr(prompt_config, "news_strategy_profile", "short"),
+            )
         prompt += """
 ---
 
@@ -1162,10 +1191,14 @@ class GeminiAnalyzer:
 """
         if news_context:
             prompt += f"""
-以下是 **{stock_name}({code})** 近7日的新闻搜索结果，请重点提取：
+以下是 **{stock_name}({code})** 近{news_window_days}日的新闻搜索结果，请重点提取：
 1. 🚨 **风险警报**：减持、处罚、利空
 2. 🎯 **利好催化**：业绩、合同、政策
 3. 📊 **业绩预期**：年报预告、业绩快报
+4. 🕒 **时间规则（强制）**：
+   - 输出到 `risk_alerts` / `positive_catalysts` / `latest_news` 的每一条都必须带具体日期（YYYY-MM-DD）
+   - 超出近{news_window_days}日窗口的新闻一律忽略
+   - 时间未知、无法确定发布日期的新闻一律忽略
 
 ```
 {news_context}
@@ -1220,6 +1253,7 @@ class GeminiAnalyzer:
 - **持仓分类建议**：空仓者怎么做 vs 持仓者怎么做
 - **具体狙击点位**：买入价、止损价、目标价（精确到分）
 - **检查清单**：每项用 ✅/⚠️/❌ 标记
+- **消息面时间合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得包含超出近{news_window_days}日或时间未知的信息
 
 请输出完整的 JSON 格式决策仪表盘。"""
         
