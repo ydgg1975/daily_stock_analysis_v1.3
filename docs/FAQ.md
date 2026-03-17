@@ -118,6 +118,24 @@ PROXY_PORT=10809
 
 ---
 
+### LLM 配置常见问题
+
+> 完整说明见 [LLM 配置指南](LLM_CONFIG_GUIDE.md)。
+
+**Q: 配置了 GEMINI_API_KEY 和 LLM_CHANNELS，为什么只用渠道？**
+
+系统按优先级只取一种：`LITELLM_CONFIG` (YAML) > `LLM_CHANNELS` > legacy keys。一旦配置了渠道或 YAML，legacy 区域（`GEMINI_API_KEY` 等）不参与解析。
+
+**Q: test_env 输出 ✗ 未配置任何 LLM 怎么办？**
+
+配置 `LITELLM_CONFIG` / `LLM_CHANNELS` 或至少一个 `*_API_KEY`（如 `GEMINI_API_KEY`、`DEEPSEEK_API_KEY`、`AIHUBMIX_KEY`）。运行 `python test_env.py --config` 校验配置，`python test_env.py --llm` 实际调用 API 测试。
+
+**Q: 如何同时使用多个模型（如 AIHubmix + DeepSeek + Gemini）？**
+
+使用渠道模式：设置 `LLM_CHANNELS=aihubmix,deepseek,gemini`，并配置各渠道的 `LLM_{NAME}_BASE_URL`、`LLM_{NAME}_API_KEY`、`LLM_{NAME}_MODELS`。也可在 Web 设置页 → AI 模型 → 渠道编辑器中可视化配置。
+
+---
+
 ## 📱 推送相关
 
 ### Q8: 机器人推送失败，提示消息过长？
@@ -271,6 +289,25 @@ python main.py --market-only
 
 ---
 
+### Q17: 为什么周末在 GitHub Actions 手动触发仍显示“非交易日跳过”？
+
+**现象**：已经配置了 `TRADING_DAY_CHECK_ENABLED` 或希望手动运行，但日志仍提示“今日所有相关市场均为非交易日，跳过执行”。
+
+**解决方案**：
+1. 打开 `Actions → 每日股票分析 → Run workflow`
+2. 手动触发时将 `force_run` 设为 `true`（单次强制运行）
+3. 如果希望长期关闭交易日检查，在 `Settings → Secrets and variables → Actions` 中设置：
+   ```bash
+   TRADING_DAY_CHECK_ENABLED=false
+   ```
+
+**规则说明**：
+- `TRADING_DAY_CHECK_ENABLED=true` 且 `force_run=false`：非交易日跳过（默认）
+- `force_run=true`：本次即使非交易日也执行
+- `TRADING_DAY_CHECK_ENABLED=false`：定时和手动都不做交易日检查
+
+---
+
 ## 💬 还有问题？
 
 如果以上内容没有解决你的问题，欢迎：
@@ -280,4 +317,4 @@ python main.py --market-only
 
 ---
 
-*最后更新：2026-02-23*
+*最后更新：2026-02-28*
