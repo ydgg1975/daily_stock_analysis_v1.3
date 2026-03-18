@@ -76,6 +76,9 @@ daily_stock_analysis/
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL（[创建方法](https://support.discord.com/hc/en-us/articles/228383668)） | 可选 |
 | `DISCORD_BOT_TOKEN` | Discord Bot Token（与 Webhook 二选一） | 可选 |
 | `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID（使用 Bot 时需要） | 可选 |
+| `SLACK_BOT_TOKEN` | Slack Bot Token（推荐，支持图片上传；同时配置时优先于 Webhook） | 可选 |
+| `SLACK_CHANNEL_ID` | Slack Channel ID（使用 Bot 时需要） | 可选 |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL（仅文本，不支持图片） | 可选 |
 | `EMAIL_SENDER` | 发件人邮箱（如 `xxx@qq.com`） | 可选 |
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（多个用逗号分隔，留空则发给自己） | 可选 |
@@ -193,6 +196,9 @@ daily_stock_analysis/
 | `DISCORD_BOT_TOKEN` | Discord Bot Token（与 Webhook 二选一） | 可选 |
 | `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID（使用 Bot 时需要） | 可选 |
 | `DISCORD_MAX_WORDS` | Discord 最大字数限制（默认 免费服务器限制2000） | 可选 |
+| `SLACK_BOT_TOKEN` | Slack Bot Token（推荐，支持图片上传；同时配置时优先于 Webhook） | 可选 |
+| `SLACK_CHANNEL_ID` | Slack Channel ID（使用 Bot 时需要） | 可选 |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL（仅文本，不支持图片） | 可选 |
 | `EMAIL_SENDER` | 发件人邮箱 | 可选 |
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（逗号分隔，留空发给自己） | 可选 |
@@ -597,6 +603,33 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxx/yyy
 ```bash
 DISCORD_BOT_TOKEN=your_bot_token
 DISCORD_MAIN_CHANNEL_ID=your_channel_id
+```
+
+### Slack
+
+Slack 支持两种方式推送，同时配置时优先使用 Bot API，确保文本与图片发送到同一频道：
+
+**方式一：Bot API（推荐，支持图片上传）**
+
+1. 创建 Slack App：https://api.slack.com/apps → Create New App
+2. 添加 Bot Token Scopes：`chat:write`、`files:write`
+3. 安装到工作区并获取 Bot Token (xoxb-...)
+4. 获取频道 ID：频道详情 → 底部复制频道 ID
+5. 配置环境变量：
+
+```bash
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C01234567
+```
+
+**方式二：Incoming Webhook（配置简单，仅文本）**
+
+1. 在 Slack App 管理页面创建 Incoming Webhook
+2. 复制 Webhook URL
+3. 配置环境变量：
+
+```bash
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
 ```
 
 ### Pushover（iOS/Android 推送）
