@@ -35,6 +35,7 @@ class TestSlackFieldsRegistered(unittest.TestCase):
     def test_webhook_url_is_sensitive(self):
         field = get_field_definition("SLACK_WEBHOOK_URL")
         self.assertTrue(field["is_sensitive"])
+        self.assertEqual(field["ui_control"], "password")
 
     def test_channel_id_not_sensitive(self):
         field = get_field_definition("SLACK_CHANNEL_ID")
@@ -60,6 +61,21 @@ class TestSlackFieldsRegistered(unittest.TestCase):
                                f"{key} should appear after Discord")
             self.assertLess(order, pushover["display_order"],
                             f"{key} should appear before Pushover")
+
+
+class TestSensitiveFieldsUsePasswordControl(unittest.TestCase):
+    """Every is_sensitive field must use ui_control='password' to avoid
+    leaking secrets in the Web settings page."""
+
+    def test_all_sensitive_fields_use_password(self):
+        schema = build_schema_response()
+        violations = []
+        for cat in schema["categories"]:
+            for field in cat["fields"]:
+                if field.get("is_sensitive") and field.get("ui_control") != "password":
+                    violations.append(field["key"])
+        self.assertEqual(violations, [],
+                         f"Sensitive fields with non-password ui_control: {violations}")
 
 
 if __name__ == "__main__":

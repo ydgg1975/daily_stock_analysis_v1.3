@@ -1022,7 +1022,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "description": "Slack Incoming Webhook URL (text only, no image support).",
         "category": "notification",
         "data_type": "string",
-        "ui_control": "text",
+        "ui_control": "password",
         "is_sensitive": True,
         "is_required": False,
         "is_editable": True,
