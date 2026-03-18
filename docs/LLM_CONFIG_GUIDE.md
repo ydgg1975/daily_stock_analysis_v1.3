@@ -38,9 +38,9 @@ LITELLM_MODEL=openai/deepseek-ai/DeepSeek-V3
 ```env
 OPENAI_API_KEY=your_minimax_api_key
 OPENAI_BASE_URL=https://api.minimax.io/v1
-LITELLM_MODEL=openai/MiniMax-M2.5
+LITELLM_MODEL=openai/MiniMax-M2.7
 ```
-*提示：MiniMax 的 API 兼容 OpenAI 格式，按上方填写即可。注意 MiniMax 的 temperature 需要大于 0（不能设为 0）。*
+*提示：MiniMax 的 API 兼容 OpenAI 格式，按上方填写即可。MiniMax-M2.7 是最新旗舰模型，推理和编码能力显著增强。也可使用 `MiniMax-M2.7-highspeed` 以获得更低延迟。*
 
 ### 示例 3：使用 DeepSeek 官方接口
 ```env

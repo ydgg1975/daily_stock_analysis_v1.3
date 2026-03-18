@@ -49,7 +49,7 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     label: 'MiniMax（海螺 AI）',
     protocol: 'openai',
     baseUrl: 'https://api.minimax.io/v1',
-    placeholder: 'MiniMax-M2.5,MiniMax-M2.5-highspeed',
+    placeholder: 'MiniMax-M2.7,MiniMax-M2.7-highspeed,MiniMax-M2.5',
   },
   siliconflow: {
     label: '硅基流动（SiliconFlow）',
