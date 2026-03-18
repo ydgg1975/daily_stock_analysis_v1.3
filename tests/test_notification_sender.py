@@ -467,12 +467,19 @@ class TestSlackSender(unittest.TestCase):
 
     @mock.patch("src.notification_sender.slack_sender.requests.post")
     def test_send_image_bot_success(self, mock_post):
-        mock_post.return_value = _response(200, {"ok": True})
+        # Mock three sequential calls: getUploadURLExternal, PUT upload, completeUploadExternal
+        mock_post.side_effect = [
+            _response(200, {"ok": True, "upload_url": "https://files.slack.com/upload/v1/test", "file_id": "F123"}),
+            _response(200, {}),
+            _response(200, {"ok": True}),
+        ]
         cfg = _config(slack_bot_token="xoxb-test", slack_channel_id="C123")
         sender = SlackSender(cfg)
         result = sender._send_slack_image(b"PNG_BYTES")
         self.assertTrue(result)
-        self.assertIn("files.uploadV2", mock_post.call_args[0][0])
+        self.assertEqual(mock_post.call_count, 3)
+        self.assertIn("getUploadURLExternal", mock_post.call_args_list[0][0][0])
+        self.assertIn("completeUploadExternal", mock_post.call_args_list[2][0][0])
 
     @mock.patch("src.notification_sender.slack_sender.requests.post")
     def test_send_image_fallback_to_text_when_no_bot(self, mock_post):
