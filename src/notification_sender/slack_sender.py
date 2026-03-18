@@ -160,7 +160,8 @@ class SlackSender:
         """
         发送图片到 Slack
 
-        Bot 模式下使用 files.upload v2 接口；Webhook 模式下回退为文本。
+        Bot 模式下使用 files.getUploadURLExternal + files.completeUploadExternal
+        (Slack 新版文件上传 API)；Webhook 模式下回退为文本。
 
         Args:
             image_bytes: PNG 图片字节
@@ -169,27 +170,55 @@ class SlackSender:
         Returns:
             是否发送成功
         """
-        # Bot 模式：使用 files.upload
+        # Bot 模式：使用新版文件上传 API
         if self._slack_bot_token and self._slack_channel_id:
+            headers = {'Authorization': f'Bearer {self._slack_bot_token}'}
             try:
-                response = requests.post(
-                    'https://slack.com/api/files.uploadV2',
-                    headers={'Authorization': f'Bearer {self._slack_bot_token}'},
+                # Step 1: 获取上传 URL
+                resp1 = requests.post(
+                    'https://slack.com/api/files.getUploadURLExternal',
+                    headers=headers,
                     data={
-                        'channel_id': self._slack_channel_id,
-                        'title': '股票分析报告',
                         'filename': 'report.png',
+                        'length': len(image_bytes),
                     },
+                    timeout=30,
+                )
+                result1 = resp1.json()
+                if not result1.get("ok"):
+                    logger.error("Slack 获取上传 URL 失败: %s", result1.get('error', 'unknown'))
+                    raise RuntimeError(result1.get('error', 'unknown'))
+
+                upload_url = result1['upload_url']
+                file_id = result1['file_id']
+
+                # Step 2: 上传文件内容
+                resp2 = requests.post(
+                    upload_url,
                     files={'file': ('report.png', image_bytes, 'image/png')},
                     timeout=30,
                 )
-                result = response.json()
-                if result.get("ok"):
+                if resp2.status_code != 200:
+                    logger.error("Slack 文件上传失败: HTTP %s", resp2.status_code)
+                    raise RuntimeError(f"HTTP {resp2.status_code}")
+
+                # Step 3: 完成上传并分享到频道
+                resp3 = requests.post(
+                    'https://slack.com/api/files.completeUploadExternal',
+                    headers={**headers, 'Content-Type': 'application/json'},
+                    json={
+                        'files': [{'id': file_id, 'title': '股票分析报告'}],
+                        'channel_id': self._slack_channel_id,
+                    },
+                    timeout=30,
+                )
+                result3 = resp3.json()
+                if result3.get("ok"):
                     logger.info("Slack Bot 图片发送成功")
                     return True
-                logger.error(f"Slack Bot 图片发送失败: {result.get('error', 'unknown')}")
+                logger.error("Slack 完成上传失败: %s", result3.get('error', 'unknown'))
             except Exception as e:
-                logger.error(f"Slack Bot 图片发送异常: {e}")
+                logger.error("Slack Bot 图片发送异常: %s", e)
 
         # Webhook 模式或 Bot 上传失败：回退为文本
         if fallback_content:
