@@ -127,9 +127,9 @@
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL | 可选 |
 | `DISCORD_BOT_TOKEN` | Discord Bot Token（与 Webhook 二选一） | 可选 |
 | `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID（使用 Bot 时需要） | 可选 |
-| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL | 可选 |
-| `SLACK_BOT_TOKEN` | Slack Bot Token（与 Webhook 二选一，支持图片上传） | 可选 |
+| `SLACK_BOT_TOKEN` | Slack Bot Token（推荐，支持图片上传；同时配置时优先于 Webhook） | 可选 |
 | `SLACK_CHANNEL_ID` | Slack Channel ID（使用 Bot 时需要） | 可选 |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL（仅文本，不支持图片） | 可选 |
 | `EMAIL_SENDER` | 发件人邮箱（如 `xxx@qq.com`） | 可选 |
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（多个用逗号分隔，留空则发给自己） | 可选 |

@@ -3,7 +3,8 @@
 Slack 发送提醒服务
 
 职责：
-1. 通过 Incoming Webhook 或 Slack Bot API 发送 Slack 消息
+1. 通过 Slack Bot API 或 Incoming Webhook 发送 Slack 消息
+   （同时配置时优先使用 Bot API，确保文本与图片发送到同一频道）
 """
 import logging
 import json

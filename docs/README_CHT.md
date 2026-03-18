@@ -101,9 +101,9 @@
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL | 可選 |
 | `DISCORD_BOT_TOKEN` | Discord Bot Token（與 Webhook 二選一） | 可選 |
 | `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID（使用 Bot 時需要） | 可選 |
-| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL | 可選 |
-| `SLACK_BOT_TOKEN` | Slack Bot Token（與 Webhook 二選一，支援圖片上傳） | 可選 |
+| `SLACK_BOT_TOKEN` | Slack Bot Token（推薦，支援圖片上傳；同時配置時優先於 Webhook） | 可選 |
 | `SLACK_CHANNEL_ID` | Slack Channel ID（使用 Bot 時需要） | 可選 |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL（僅文字，不支援圖片） | 可選 |
 | `EMAIL_SENDER` | 發件人郵箱（如 `xxx@qq.com`） | 可選 |
 | `EMAIL_PASSWORD` | 郵箱授權碼（非登錄密碼） | 可選 |
 | `EMAIL_RECEIVERS` | 收件人郵箱（多個用逗號分隔，留空則發給自己） | 可選 |

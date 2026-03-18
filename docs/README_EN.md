@@ -104,9 +104,9 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `DISCORD_WEBHOOK_URL` | Discord Webhook URL | Optional |
 | `DISCORD_BOT_TOKEN` | Discord Bot Token (choose one with Webhook) | Optional |
 | `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID (required when using Bot) | Optional |
-| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL | Optional |
-| `SLACK_BOT_TOKEN` | Slack Bot Token (choose one with Webhook, supports image upload) | Optional |
+| `SLACK_BOT_TOKEN` | Slack Bot Token (recommended, supports image upload; takes priority over Webhook when both set) | Optional |
 | `SLACK_CHANNEL_ID` | Slack Channel ID (required when using Bot) | Optional |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL (text only, no image support) | Optional |
 | `EMAIL_SENDER` | Sender email (e.g., `xxx@qq.com`) | Optional |
 | `EMAIL_PASSWORD` | Email authorization code (not login password) | Optional |
 | `EMAIL_RECEIVERS` | Receiver emails (comma-separated, leave empty to send to yourself) | Optional |
@@ -272,15 +272,15 @@ DISCORD_MAIN_CHANNEL_ID=your_channel_id
 
 ### 3. Slack
 
-Webhook:
-```bash
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
-```
-
-Bot (supports image upload):
+Bot (recommended, supports image upload; takes priority when both set):
 ```bash
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_CHANNEL_ID=C01234567
+```
+
+Webhook (text only):
+```bash
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
 ```
 
 ### 4. Email
