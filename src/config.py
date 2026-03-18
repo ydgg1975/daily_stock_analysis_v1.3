@@ -415,6 +415,11 @@ class Config:
     discord_main_channel_id: Optional[str] = None  # Discord 主频道 ID
     discord_webhook_url: Optional[str] = None  # Discord Webhook URL
 
+    # Slack 通知配置
+    slack_webhook_url: Optional[str] = None  # Slack Incoming Webhook URL
+    slack_bot_token: Optional[str] = None  # Slack Bot Token (xoxb-...)
+    slack_channel_id: Optional[str] = None  # Slack 频道 ID (Bot 模式必填)
+
     # AstrBot 通知配置
     astrbot_token: Optional[str] = None
     astrbot_url: Optional[str] = None
@@ -978,6 +983,9 @@ class Config:
                 or os.getenv('DISCORD_CHANNEL_ID')
             ),
             discord_webhook_url=os.getenv('DISCORD_WEBHOOK_URL'),
+            slack_webhook_url=os.getenv('SLACK_WEBHOOK_URL'),
+            slack_bot_token=os.getenv('SLACK_BOT_TOKEN'),
+            slack_channel_id=os.getenv('SLACK_CHANNEL_ID'),
             astrbot_url=os.getenv('ASTRBOT_URL'),
             astrbot_token=os.getenv('ASTRBOT_TOKEN'),
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
@@ -1617,6 +1625,8 @@ class Config:
             or self.custom_webhook_urls
             or (self.discord_bot_token and self.discord_main_channel_id)
             or self.discord_webhook_url
+            or self.slack_webhook_url
+            or (self.slack_bot_token and self.slack_channel_id)
         )
 
         if not has_notification:
