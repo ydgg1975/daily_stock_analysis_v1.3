@@ -1411,7 +1411,10 @@ class StockAnalysisPipeline:
                     elif channel == NotificationChannel.ASTRBOT:
                         non_wechat_success = self.notifier.send_to_astrbot(report) or non_wechat_success
                     elif channel == NotificationChannel.SLACK:
-                        if image_bytes and self.notifier._slack_bot_token and self.notifier._slack_channel_id:
+                        use_image = self.notifier._should_use_image_for_channel(
+                            channel, image_bytes
+                        )
+                        if use_image and self.notifier._slack_bot_token and self.notifier._slack_channel_id:
                             result = self.notifier._send_slack_image(
                                 image_bytes, fallback_content=report
                             )
