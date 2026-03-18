@@ -34,15 +34,21 @@ class SlackSender:
         self._slack_channel_id = getattr(config, 'slack_channel_id', None)
         self._webhook_verify_ssl = getattr(config, 'webhook_verify_ssl', True)
 
+    @property
+    def _use_bot(self) -> bool:
+        """Bot 配置完整时优先走 Bot API，保证文本和图片使用同一传输通道。"""
+        return bool(self._slack_bot_token and self._slack_channel_id)
+
     def _is_slack_configured(self) -> bool:
         """检查 Slack 配置是否完整（支持 Webhook 或 Bot API）"""
-        webhook_ok = bool(self._slack_webhook_url)
-        bot_ok = bool(self._slack_bot_token and self._slack_channel_id)
-        return webhook_ok or bot_ok
+        return self._use_bot or bool(self._slack_webhook_url)
 
     def send_to_slack(self, content: str) -> bool:
         """
         推送消息到 Slack（支持 Webhook 和 Bot API）
+
+        传输优先级与 _send_slack_image() 保持一致：Bot > Webhook，
+        避免文本走 Webhook、图片走 Bot 导致消息落入不同频道。
 
         Args:
             content: Markdown 格式的消息内容
@@ -57,13 +63,13 @@ class SlackSender:
             logger.error(f"分割 Slack 消息失败: {e}, 尝试整段发送。")
             chunks = [content]
 
-        # 优先使用 Webhook（配置简单）
+        # 优先使用 Bot API（与 _send_slack_image 保持一致）
+        if self._use_bot:
+            return all(self._send_slack_bot(chunk) for chunk in chunks)
+
+        # 其次使用 Webhook
         if self._slack_webhook_url:
             return all(self._send_slack_webhook(chunk) for chunk in chunks)
-
-        # 其次使用 Bot API
-        if self._slack_bot_token and self._slack_channel_id:
-            return all(self._send_slack_bot(chunk) for chunk in chunks)
 
         logger.warning("Slack 配置不完整，跳过推送")
         return False
@@ -171,7 +177,7 @@ class SlackSender:
             是否发送成功
         """
         # Bot 模式：使用新版文件上传 API
-        if self._slack_bot_token and self._slack_channel_id:
+        if self._use_bot:
             headers = {'Authorization': f'Bearer {self._slack_bot_token}'}
             try:
                 # Step 1: 获取上传 URL
@@ -192,10 +198,11 @@ class SlackSender:
                 upload_url = result1['upload_url']
                 file_id = result1['file_id']
 
-                # Step 2: 上传文件内容
+                # Step 2: 上传文件内容（raw body，不能用 multipart）
                 resp2 = requests.post(
                     upload_url,
-                    files={'file': ('report.png', image_bytes, 'image/png')},
+                    data=image_bytes,
+                    headers={'Content-Type': 'application/octet-stream'},
                     timeout=30,
                 )
                 if resp2.status_code != 200:

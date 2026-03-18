@@ -466,6 +466,21 @@ class TestSlackSender(unittest.TestCase):
         self.assertEqual(blocks[0]["text"]["type"], "mrkdwn")
 
     @mock.patch("src.notification_sender.slack_sender.requests.post")
+    def test_send_text_prefers_bot_when_both_configured(self, mock_post):
+        """When both webhook and bot are configured, text must go via bot
+        so it lands in the same channel as images."""
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(
+            slack_webhook_url="https://hooks.slack.com/services/T/B/xxx",
+            slack_bot_token="xoxb-test",
+            slack_channel_id="C123",
+        )
+        sender = SlackSender(cfg)
+        result = sender.send_to_slack("hello")
+        self.assertTrue(result)
+        self.assertIn("chat.postMessage", mock_post.call_args[0][0])
+
+    @mock.patch("src.notification_sender.slack_sender.requests.post")
     def test_send_image_bot_success(self, mock_post):
         # Mock three sequential calls: getUploadURLExternal, PUT upload, completeUploadExternal
         mock_post.side_effect = [
@@ -479,6 +494,10 @@ class TestSlackSender(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(mock_post.call_count, 3)
         self.assertIn("getUploadURLExternal", mock_post.call_args_list[0][0][0])
+        # Step 2: upload must send raw bytes (not multipart) to match declared length
+        upload_call_kwargs = mock_post.call_args_list[1][1]
+        self.assertEqual(upload_call_kwargs.get("data"), b"PNG_BYTES")
+        self.assertNotIn("files", upload_call_kwargs)
         self.assertIn("completeUploadExternal", mock_post.call_args_list[2][0][0])
 
     @mock.patch("src.notification_sender.slack_sender.requests.post")
