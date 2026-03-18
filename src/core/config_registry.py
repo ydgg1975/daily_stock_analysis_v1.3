@@ -987,6 +987,51 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "display_order": 35,
     },
     # ------------------------------------------------------------------
+    # Notification – Slack  (Bot > Webhook when both configured)
+    # ------------------------------------------------------------------
+    "SLACK_BOT_TOKEN": {
+        "title": "Slack Bot Token",
+        "description": "Slack Bot Token (xoxb-...). Recommended; supports image upload. Takes priority over Webhook when both are configured.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 36,
+    },
+    "SLACK_CHANNEL_ID": {
+        "title": "Slack Channel ID",
+        "description": "Slack channel ID (required when using Bot Token).",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 37,
+    },
+    "SLACK_WEBHOOK_URL": {
+        "title": "Slack Incoming Webhook URL",
+        "description": "Slack Incoming Webhook URL (text only, no image support).",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 38,
+    },
+    # ------------------------------------------------------------------
     # Notification – Pushover
     # ------------------------------------------------------------------
     "PUSHOVER_USER_KEY": {
@@ -1785,6 +1830,7 @@ def _infer_category(key: str) -> str:
         "SERVERCHAN",
         "DINGTALK",
         "DISCORD",
+        "SLACK",
         "CUSTOM_WEBHOOK",
         "WECOM",
         "ASTRBOT",
