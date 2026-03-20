@@ -79,7 +79,6 @@ class Scheduler:
         
         self.schedule_time = schedule_time
         self.shutdown_handler = GracefulShutdown()
-        self._task_callback: Optional[Callable] = None
         self._running = False
         
     def set_daily_task(self, task: Callable, run_immediately: bool = True):
@@ -90,19 +89,29 @@ class Scheduler:
             task: 要执行的任务函数（无参数）
             run_immediately: 是否在设置后立即执行一次
         """
-        self._task_callback = task
-        
         # 设置每日定时任务
-        self.schedule.every().day.at(self.schedule_time).do(self._safe_run_task)
+        self.schedule.every().day.at(self.schedule_time).do(self._safe_run_task, task)
         logger.info(f"已设置每日定时任务，执行时间: {self.schedule_time}")
         
         if run_immediately:
             logger.info("立即执行一次任务...")
-            self._safe_run_task()
-    
-    def _safe_run_task(self):
+            self._safe_run_task(task)
+
+    def set_interval_task(self, task: Callable, interval_seconds: int, run_immediately: bool = True):
+        """设置固定间隔任务。"""
+        if interval_seconds < 1:
+            raise ValueError("interval_seconds must be >= 1")
+
+        self.schedule.every(interval_seconds).seconds.do(self._safe_run_task, task)
+        logger.info(f"已设置间隔任务，执行间隔: {interval_seconds} 秒")
+
+        if run_immediately:
+            logger.info("立即执行一次间隔任务...")
+            self._safe_run_task(task)
+
+    def _safe_run_task(self, task: Optional[Callable] = None):
         """安全执行任务（带异常捕获）"""
-        if self._task_callback is None:
+        if task is None:
             return
         
         try:
@@ -110,7 +119,7 @@ class Scheduler:
             logger.info(f"定时任务开始执行 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             logger.info("=" * 50)
             
-            self._task_callback()
+            task()
             
             logger.info(f"定时任务执行完成 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
@@ -129,7 +138,7 @@ class Scheduler:
         
         while self._running and not self.shutdown_handler.should_shutdown:
             self.schedule.run_pending()
-            time.sleep(30)  # 每30秒检查一次
+            time.sleep(1)  # 保持对间隔任务的响应性
             
             # 每小时打印一次心跳
             if datetime.now().minute == 0 and datetime.now().second < 30:

@@ -620,6 +620,78 @@ class LLMUsage(Base):
     called_at = Column(DateTime, default=datetime.now, index=True)
 
 
+class CryptoLaunch(Base):
+    """Canonical crypto launch record keyed by chain and pair address."""
+
+    __tablename__ = 'crypto_launches'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    chain_id = Column(String(32), nullable=False, index=True)
+    dex_id = Column(String(64))
+    pair_address = Column(String(128), nullable=False)
+    pair_url = Column(String(1000))
+    pair_created_at = Column(DateTime, index=True)
+
+    base_token_address = Column(String(128), index=True)
+    base_token_symbol = Column(String(64))
+    base_token_name = Column(String(255))
+    quote_token_address = Column(String(128))
+    quote_token_symbol = Column(String(64))
+    quote_token_name = Column(String(255))
+
+    liquidity_usd = Column(Float)
+    volume_usd_24h = Column(Float)
+    buys_24h = Column(Integer)
+    sells_24h = Column(Integer)
+    price_usd = Column(Float)
+    price_change_pct_24h = Column(Float)
+    fdv_usd = Column(Float)
+    market_cap_usd = Column(Float)
+
+    dexscreener_url = Column(String(1000))
+    website_url = Column(String(1000))
+    socials_json = Column(Text)
+    labels_json = Column(Text)
+    raw_payload = Column(Text)
+    data_complete = Column(Boolean, nullable=False, default=False)
+
+    first_seen_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    last_seen_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint('chain_id', 'pair_address', name='uix_crypto_launch_chain_pair'),
+        Index('ix_crypto_launch_chain_created', 'chain_id', 'pair_created_at'),
+        Index('ix_crypto_launch_chain_base_token', 'chain_id', 'base_token_address'),
+    )
+
+
+class CryptoLaunchSnapshot(Base):
+    """Historical snapshot of one launch at a point in time."""
+
+    __tablename__ = 'crypto_launch_snapshots'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    snapshot_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    liquidity_usd = Column(Float)
+    volume_usd_24h = Column(Float)
+    buys_24h = Column(Integer)
+    sells_24h = Column(Integer)
+    price_usd = Column(Float)
+    price_change_pct_24h = Column(Float)
+    fdv_usd = Column(Float)
+    market_cap_usd = Column(Float)
+    data_complete = Column(Boolean, nullable=False, default=False)
+    raw_payload = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint('launch_id', 'snapshot_at', name='uix_crypto_launch_snapshot_launch_time'),
+        Index('ix_crypto_launch_snapshot_launch_time', 'launch_id', 'snapshot_at'),
+    )
+
+
 class DatabaseManager:
     """
     数据库管理器 - 单例模式

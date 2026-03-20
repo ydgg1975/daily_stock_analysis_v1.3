@@ -49,6 +49,7 @@ NEWS_STRATEGY_WINDOWS: Dict[str, int] = {
     "medium": 7,
     "long": 30,
 }
+DEFAULT_CRYPTO_CHAINS = ["bsc", "solana", "base"]
 
 
 def parse_env_bool(value: Optional[str], default: bool = False) -> bool:
@@ -65,6 +66,31 @@ def normalize_news_strategy_profile(value: Optional[str]) -> str:
     """Normalize news strategy profile to known values."""
     candidate = (value or "short").strip().lower()
     return candidate if candidate in NEWS_STRATEGY_WINDOWS else "short"
+
+
+def normalize_crypto_chain_ids(value: Optional[Any]) -> List[str]:
+    """Normalize crypto chain ids to lowercase unique strings.
+
+    Accepts comma-separated strings or iterable values. Empty input falls back to
+    the default seed chains.
+    """
+    if value is None:
+        raw_values = DEFAULT_CRYPTO_CHAINS
+    elif isinstance(value, str):
+        raw_values = value.split(",")
+    else:
+        raw_values = list(value)
+
+    normalized: List[str] = []
+    seen = set()
+    for item in raw_values:
+        candidate = str(item or "").strip().lower()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized.append(candidate)
+
+    return normalized or list(DEFAULT_CRYPTO_CHAINS)
 
 
 def resolve_news_window_days(news_max_age_days: int, news_strategy_profile: Optional[str]) -> int:
@@ -553,6 +579,24 @@ class Config:
     # 交易日检查：默认启用，非交易日跳过执行；设为 false 或 --force-run 可强制执行（Issue #373）
     trading_day_check_enabled: bool = True
 
+    # === Crypto scanner 配置 ===
+    crypto_enabled: bool = False
+    crypto_refresh_interval_sec: int = 60
+    crypto_chains: List[str] = field(default_factory=lambda: list(DEFAULT_CRYPTO_CHAINS))
+    crypto_default_sort: str = "newest"
+    crypto_max_age_minutes: int = 1440
+    crypto_min_liquidity_usd: float = 0.0
+    crypto_min_volume_usd: float = 0.0
+    crypto_discovery_provider: str = "geckoterminal"
+    crypto_enrichment_provider: str = "dexscreener"
+    crypto_discovery_timeout_sec: int = 5
+    crypto_enrichment_timeout_sec: int = 5
+    crypto_max_retries: int = 3
+    crypto_initial_backoff_sec: int = 1
+    crypto_backoff_multiplier: float = 2.0
+    crypto_discovery_cache_sec: int = 60
+    crypto_enrichment_cache_sec: int = 30
+
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
     enable_realtime_quote: bool = True
@@ -673,6 +717,13 @@ class Config:
                 self.agent_strategy_routing, self._VALID_STRATEGY_ROUTING,
             )
             object.__setattr__(self, "agent_strategy_routing", "auto")
+        object.__setattr__(self, "crypto_chains", normalize_crypto_chain_ids(self.crypto_chains))
+        if self.crypto_refresh_interval_sec < 1:
+            _log.warning(
+                "Invalid CRYPTO_REFRESH_INTERVAL_SEC=%r, falling back to 60.",
+                self.crypto_refresh_interval_sec,
+            )
+            object.__setattr__(self, "crypto_refresh_interval_sec", 60)
 
     # 单例实例存储
     _instance: Optional['Config'] = None
@@ -1094,6 +1145,22 @@ class Config:
                 os.getenv('MARKET_REVIEW_REGION', 'cn')
             ),
             trading_day_check_enabled=os.getenv('TRADING_DAY_CHECK_ENABLED', 'true').lower() != 'false',
+            crypto_enabled=parse_env_bool(os.getenv('CRYPTO_ENABLED'), False),
+            crypto_refresh_interval_sec=int(os.getenv('CRYPTO_REFRESH_INTERVAL_SEC', '60')),
+            crypto_chains=normalize_crypto_chain_ids(os.getenv('CRYPTO_CHAINS')),
+            crypto_default_sort=os.getenv('CRYPTO_DEFAULT_SORT', 'newest').strip().lower() or 'newest',
+            crypto_max_age_minutes=int(os.getenv('CRYPTO_MAX_AGE_MINUTES', '1440')),
+            crypto_min_liquidity_usd=float(os.getenv('CRYPTO_MIN_LIQUIDITY_USD', '0')),
+            crypto_min_volume_usd=float(os.getenv('CRYPTO_MIN_VOLUME_USD', '0')),
+            crypto_discovery_provider=os.getenv('CRYPTO_DISCOVERY_PROVIDER', 'geckoterminal').strip().lower() or 'geckoterminal',
+            crypto_enrichment_provider=os.getenv('CRYPTO_ENRICHMENT_PROVIDER', 'dexscreener').strip().lower() or 'dexscreener',
+            crypto_discovery_timeout_sec=int(os.getenv('CRYPTO_DISCOVERY_TIMEOUT_SEC', '5')),
+            crypto_enrichment_timeout_sec=int(os.getenv('CRYPTO_ENRICHMENT_TIMEOUT_SEC', '5')),
+            crypto_max_retries=int(os.getenv('CRYPTO_MAX_RETRIES', '3')),
+            crypto_initial_backoff_sec=int(os.getenv('CRYPTO_INITIAL_BACKOFF_SEC', '1')),
+            crypto_backoff_multiplier=float(os.getenv('CRYPTO_BACKOFF_MULTIPLIER', '2.0')),
+            crypto_discovery_cache_sec=int(os.getenv('CRYPTO_DISCOVERY_CACHE_SEC', '60')),
+            crypto_enrichment_cache_sec=int(os.getenv('CRYPTO_ENRICHMENT_CACHE_SEC', '30')),
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),
