@@ -106,7 +106,7 @@ Phase 0 locks this as a web-first, end-to-end slice rather than a backend-only m
 - saved settings endpoints
 - selective AI analyze endpoint
 - desktop-specific polish
-- replay/backfill automation beyond basic placeholders
+- replay/backfill automation beyond minimal manual support
 
 ## Schema Decisions To Lock Early
 
