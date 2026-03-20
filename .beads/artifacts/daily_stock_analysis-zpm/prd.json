@@ -1,0 +1,156 @@
+{
+	"beadId": "daily_stock_analysis-zpm",
+	"prdName": "phase-0",
+	"tasks": [
+		{
+			"id": "planning-1",
+			"title": "Lock product direction and architecture guardrails",
+			"category": "planning",
+			"description": "The startup checklist, start plan, and main crypto PRD agree on backbone, additive-module, deterministic-loop, and AI-boundary decisions.",
+			"steps": [
+				"Manual review confirms the same backbone/additive/AI-boundary rules appear across the three planning docs",
+				"`rg \"product backbone|additive|deterministic|TradingAgents|AI\" .docs/startup-checklist.md .docs/project-start-plan.md .opencode/memory/project/prd-crypto-new-launch-scanner.md`"
+			],
+			"passes": true,
+			"metadata": {
+				"depends_on": [],
+				"parallel": false,
+				"conflicts_with": [],
+				"files": [
+					".docs/startup-checklist.md",
+					".docs/project-start-plan.md",
+					".opencode/memory/project/prd-crypto-new-launch-scanner.md"
+				]
+			}
+		},
+		{
+			"id": "design-1",
+			"title": "Lock Phase 1 schema boundary",
+			"category": "design",
+			"description": "The schema docs clearly define canonical launch identity, launch-versus-snapshot separation, and which tables are deferred beyond the first implementation bead.",
+			"steps": [
+				"Manual review confirms `chain_id + pair_address`, launch/snapshot separation, and deferred security/AI tables are explicit",
+				"`rg \"chain_id|pair_address|CryptoLaunchSnapshot|CryptoLaunchSecurityScan|CryptoLaunchAiSummary|Minimum MVP Schema\" .docs/database-schema.md .docs/startup-checklist.md`"
+			],
+			"passes": true,
+			"metadata": {
+				"depends_on": ["Lock product direction and architecture guardrails"],
+				"parallel": false,
+				"conflicts_with": [],
+				"files": [
+					".docs/database-schema.md",
+					".docs/startup-checklist.md",
+					".opencode/memory/project/prd-crypto-new-launch-scanner.md"
+				]
+			}
+		},
+		{
+			"id": "design-2",
+			"title": "Lock crypto API contract and sequencing boundary",
+			"category": "design",
+			"description": "The planning docs clearly state the dedicated crypto API namespace, live-feed semantics, and where the first implementation slice stops versus later phases.",
+			"steps": [
+				"Manual review confirms `/api/v1/crypto/*`, cursor pagination, freshness metadata, partial-data behavior, and the first-slice boundary are explicit",
+				"`rg \"/api/v1/crypto|cursor|freshness|partial|settings|Phase 1 Scope|Phase 2\" .docs/api-contracts.md .docs/project-start-plan.md .docs/startup-checklist.md`"
+			],
+			"passes": true,
+			"metadata": {
+				"depends_on": ["Lock Phase 1 schema boundary"],
+				"parallel": false,
+				"conflicts_with": [],
+				"files": [
+					".docs/api-contracts.md",
+					".docs/project-start-plan.md",
+					".docs/startup-checklist.md",
+					".opencode/memory/project/prd-crypto-new-launch-scanner.md"
+				]
+			}
+		},
+		{
+			"id": "ops-1",
+			"title": "Lock source budgets and deterministic test policy",
+			"category": "ops",
+			"description": "The project docs clearly define provider roles, retry/cache behavior, and offline-first validation rules for the first implementation bead.",
+			"steps": [
+				"Manual review confirms provider budgets, retry codes, cache TTLs, fixture usage, and no-network defaults are explicit and compatible with the first implementation slice",
+				"`rg '30 requests per minute|300 requests per minute|max_retries|timeout_seconds|python3 -m pytest -m \"not network\"|npm run lint && npm run build && npm run test' .docs/security-and-rate-limits.md .docs/testing-strategy.md .docs/startup-checklist.md`"
+			],
+			"passes": true,
+			"metadata": {
+				"depends_on": ["Lock crypto API contract and sequencing boundary"],
+				"parallel": false,
+				"conflicts_with": [],
+				"files": [
+					".docs/security-and-rate-limits.md",
+					".docs/testing-strategy.md",
+					".docs/startup-checklist.md"
+				]
+			}
+		},
+		{
+			"id": "docs-1",
+			"title": "Publish Phase 1 go/no-go handoff",
+			"category": "docs",
+			"description": "The planning package explicitly states whether implementation can begin next and which unresolved items are blocking versus deferred.",
+			"steps": [
+				"Manual review confirms every go/no-go item is either resolved, marked blocking, or explicitly deferred",
+				"`python3 scripts/check_ai_assets.py` if governance or planning docs are modified while executing this bead"
+			],
+			"passes": true,
+			"metadata": {
+				"depends_on": [
+					"Lock Phase 1 schema boundary",
+					"Lock crypto API contract and sequencing boundary",
+					"Lock source budgets and deterministic test policy"
+				],
+				"parallel": false,
+				"conflicts_with": [],
+				"files": [
+					".docs/startup-checklist.md",
+					".docs/project-start-plan.md",
+					".docs/README.md",
+					".opencode/memory/project/prd-crypto-new-launch-scanner.md"
+				]
+			}
+		}
+	],
+	"context": {
+		"patterns": [
+			"Pattern 1: `src/scheduler.py:56` - Existing scheduling patterns are the reference for the future 60-second crypto loop, but Phase 0 should only lock rules around its use.",
+			"Pattern 2: `src/storage.py:64` - Existing SQLAlchemy market-row conventions are the persistence reference for crypto schema planning.",
+			"Pattern 3: `src/storage.py:623` - Existing `DatabaseManager` access patterns show how crypto repository design should align with the current storage layer.",
+			"Pattern 4: `api/v1/router.py:17` - Existing route registration is the reference point for a dedicated crypto namespace.",
+			"Pattern 5: `src/services/system_config_service.py:55` - Existing settings persistence is the reference for future scanner settings endpoints.",
+			"Pattern 6: `apps/dsa-web/src/stores/stockPoolStore.ts:25` - Existing frontend store shape is the pattern reference for future crypto scanner state.",
+			"Pattern 7: `src/core/trading_calendar.py:33` - This file is relevant because Phase 0 must explicitly keep crypto work out of stock trading-calendar assumptions.",
+			"Pattern 8: `data_provider/base.py:65` - Stock normalization helpers are relevant because they are a documented do-not-reuse boundary for crypto identifiers.",
+			"Pattern 9: `src/analyzer.py:34` - Stock-oriented AI analysis boundaries are relevant because Phase 0 must keep AI out of the deterministic scanner loop."
+		],
+		"keyFiles": [
+			"`.docs/startup-checklist.md` - Defines the pre-coding checklist and go/no-go conditions Phase 0 is meant to lock.",
+			"`.docs/project-start-plan.md` - Defines the workstreams and delivery order that Phase 0 must interpret consistently.",
+			"`.docs/database-schema.md` - Defines the proposed launch, snapshot, security, and AI schema split for crypto.",
+			"`.docs/api-contracts.md` - Defines the dedicated `/api/v1/crypto/*` contract and feed/detail/settings semantics.",
+			"`.docs/security-and-rate-limits.md` - Defines provider roles, rate budgets, retry/backoff rules, and cache policy.",
+			"`.docs/testing-strategy.md` - Defines fixture-driven offline validation and non-regression expectations.",
+			"`.opencode/memory/project/prd-crypto-new-launch-scanner.md` - Holds the current authoritative feature PRD that Phase 0 must refine into executable Phase 1 boundaries.",
+			"`src/scheduler.py` - Future implementation reference for scanner cadence decisions.",
+			"`src/storage.py` - Future implementation reference for schema placement decisions.",
+			"`api/v1/router.py` - Future implementation reference for route registration decisions."
+		],
+		"nonGoals": [
+			"Writing any crypto scanner implementation code.",
+			"Adding database tables, API routes, frontend pages, or config keys in production code.",
+			"Finalizing later-phase alerting, security-provider fanout, or AI review implementation.",
+			"Replacing or restructuring the stock-analysis product backbone.",
+			"Changing runtime behavior in `main.py`, `src/storage.py`, `api/v1/router.py`, or the web app during this bead."
+		]
+	},
+	"beadMetadata": {
+		"depends_on": [],
+		"parallel": true,
+		"conflicts_with": [],
+		"blocks": [],
+		"estimated_hours": 3
+	}
+}
