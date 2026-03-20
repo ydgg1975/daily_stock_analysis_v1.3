@@ -689,7 +689,31 @@ def main() -> int:
             )
             return 0
 
-        # 模式3: 正常单次运行
+        # ------------------------------------------------------------------
+        # Crypto scanner: runs alongside stock analysis when enabled
+        # ------------------------------------------------------------------
+        crypto_scheduler = None
+        if config.crypto_enabled:
+            logger.info("Crypto scanner enabled — starting %.0fs interval loop", config.crypto_refresh_interval_sec)
+            from src.services.crypto_launch_service import CryptoLaunchService
+            from src.scheduler import Scheduler
+
+            crypto_service = CryptoLaunchService(config=config)
+            crypto_scheduler = Scheduler()
+            crypto_scheduler.set_interval_task(
+                crypto_service.scan_once,
+                interval_seconds=config.crypto_refresh_interval_sec,
+                run_immediately=True,
+            )
+            import threading
+            crypto_thread = threading.Thread(
+                target=crypto_scheduler.run,
+                name="crypto-scanner",
+                daemon=True,
+            )
+            crypto_thread.start()
+            logger.info("Crypto scanner thread started")
+
         if config.run_immediately:
             run_full_analysis(config, args, stock_codes)
         else:
@@ -699,6 +723,9 @@ def main() -> int:
 
         # 如果启用了服务且是非定时任务模式，保持程序运行
         keep_running = start_serve and not (args.schedule or config.schedule_enabled)
+        # Also keep running if crypto scanner is active (daemon thread needs main alive)
+        if config.crypto_enabled and not keep_running:
+            keep_running = True
         if keep_running:
             logger.info("API 服务运行中 (按 Ctrl+C 退出)...")
             try:
