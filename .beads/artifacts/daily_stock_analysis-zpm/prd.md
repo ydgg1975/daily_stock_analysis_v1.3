@@ -2,7 +2,7 @@
 
 **Bead:** daily_stock_analysis-zpm  
 **Created:** 2026-03-20  
-**Status:** Draft
+**Status:** Closed - Phase 0 shipped
 
 ## Bead Metadata
 
@@ -138,15 +138,15 @@ Phase 0 must end with a clear statement of whether Phase 1 can begin and what re
 
 ## Success Criteria
 
-- [ ] Product-direction guardrails are explicitly aligned across the startup checklist, start plan, and crypto PRD.
+- [x] Product-direction guardrails are explicitly aligned across the startup checklist, start plan, and crypto PRD.
   - Verify: manual review of `.docs/startup-checklist.md`, `.docs/project-start-plan.md`, and `.opencode/memory/project/prd-crypto-new-launch-scanner.md`
-- [ ] Phase 1 schema decisions are locked with a clear MVP boundary and deferred tables documented separately.
+- [x] Phase 1 schema decisions are locked with a clear MVP boundary and deferred tables documented separately.
   - Verify: manual review of `.docs/database-schema.md` and `.docs/startup-checklist.md`
-- [ ] Phase 1 API contract decisions are locked with dedicated namespace, live-feed pagination, freshness metadata, and partial-data semantics.
+- [x] Phase 1 API contract decisions are locked with dedicated namespace, live-feed pagination, freshness metadata, and partial-data semantics.
   - Verify: manual review of `.docs/api-contracts.md` and `.docs/startup-checklist.md`
-- [ ] Source budgets, retry/cache rules, and deterministic test strategy are locked for the first implementation slice.
+- [x] Source budgets, retry/cache rules, and deterministic test strategy are locked for the first implementation slice.
   - Verify: manual review of `.docs/security-and-rate-limits.md` and `.docs/testing-strategy.md`
-- [ ] A Phase 1 go/no-go package exists and any planning-doc edits remain governance-clean.
+- [x] A Phase 1 go/no-go package exists and any planning-doc edits remain governance-clean.
   - Verify: `python3 scripts/check_ai_assets.py` if governance or planning docs are changed while executing this bead
 
 ---
@@ -206,14 +206,14 @@ files:
 
 ---
 
-## Open Questions
+## Open Questions Resolved In Phase 0
 
-| Question                                                                                                                                                                       | Owner        | Due Date | Status |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | -------- | ------ |
-| Should the first implementation bead follow the narrow roadmap Phase 1 (discovery and persistence only) or the wider first shippable slice that includes API and scanner page? | Product/User | TBD      | Open   |
-| Should `CryptoLaunchSnapshot` be mandatory in the first implementation bead, or can the team start with only `CryptoLaunch` if execution pressure is high?                     | Engineering  | TBD      | Open   |
-| Should saved settings endpoints be treated as part of the first release boundary or deferred until the main scanner feed is stable?                                            | Product/User | TBD      | Open   |
-| Should the first release be explicitly web-first, with Electron treated as passive reuse only?                                                                                 | Product/User | TBD      | Open   |
+| Question                                                                                                                                                                       | Owner        | Resolved On | Status   | Outcome                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | ----------- | -------- | -------------------------------------------------------------------- |
+| Should the first implementation bead follow the narrow roadmap Phase 1 (discovery and persistence only) or the wider first shippable slice that includes API and scanner page? | Product/User | 2026-03-20  | Resolved | Wider first shippable slice                                          |
+| Should `CryptoLaunchSnapshot` be mandatory in the first implementation bead, or can the team start with only `CryptoLaunch` if execution pressure is high?                     | Engineering  | 2026-03-20  | Resolved | Include `CryptoLaunchSnapshot` in the first implementation bead      |
+| Should saved settings endpoints be treated as part of the first release boundary or deferred until the main scanner feed is stable?                                            | Product/User | 2026-03-20  | Resolved | Defer settings endpoints until after the core scanner feed is stable |
+| Should the first release be explicitly web-first, with Electron treated as passive reuse only?                                                                                 | Product/User | 2026-03-20  | Resolved | Web-first; Electron remains passive reuse only                       |
 
 ---
 
