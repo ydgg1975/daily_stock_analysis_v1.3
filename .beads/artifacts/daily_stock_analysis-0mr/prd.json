@@ -1,0 +1,154 @@
+{
+  "beadId": "daily_stock_analysis-0mr",
+  "tasks": [
+    {
+      "id": "backend-1",
+      "title": "Build crypto discovery, config, scheduling, and persistence foundation",
+      "category": "backend",
+      "description": "The backend has the config, interval scheduling, fetcher, and ORM model foundation required to scan enabled chains every 60 seconds and store canonical launch state.",
+      "steps": [
+        "python3 -m pytest -m \"not network\""
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [],
+        "parallel": true,
+        "conflicts_with": [],
+        "files": [
+          "data_provider/crypto_launch_fetcher.py",
+          "src/config.py",
+          "src/scheduler.py",
+          "src/storage.py"
+        ]
+      }
+    },
+    {
+      "id": "backend-2",
+      "title": "Add crypto repository, service orchestration, and runtime wiring",
+      "category": "backend",
+      "description": "The backend can run scan cycles, tolerate per-chain failure, persist launches and snapshots, and expose scanner runtime state without affecting stock scheduling.",
+      "steps": [
+        "python3 -m pytest -m \"not network\""
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "Build crypto discovery, config, scheduling, and persistence foundation"
+        ],
+        "parallel": false,
+        "conflicts_with": [],
+        "files": [
+          "src/repositories/crypto_launch_repo.py",
+          "src/services/crypto_launch_service.py",
+          "main.py"
+        ]
+      }
+    },
+    {
+      "id": "api-1",
+      "title": "Add crypto API contracts and endpoints",
+      "category": "api",
+      "description": "FastAPI exposes dedicated list, detail, refresh, and status endpoints for the crypto scanner using explicit partial-data semantics.",
+      "steps": [
+        "python3 -m pytest -m \"not network\""
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "Add crypto repository, service orchestration, and runtime wiring"
+        ],
+        "parallel": false,
+        "conflicts_with": [],
+        "files": [
+          "api/v1/schemas/crypto.py",
+          "api/v1/endpoints/crypto.py",
+          "api/v1/router.py"
+        ]
+      }
+    },
+    {
+      "id": "frontend-1",
+      "title": "Build the web scanner route, store, and detail experience",
+      "category": "frontend",
+      "description": "The web app exposes `/crypto-scanner` with launch feed rendering, filtering, sorting, auto-refresh, detail inspection, and shell navigation.",
+      "steps": [
+        "cd apps/dsa-web && npm ci && npm run lint && npm run build && npm run test"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "Add crypto API contracts and endpoints"
+        ],
+        "parallel": false,
+        "conflicts_with": [],
+        "files": [
+          "apps/dsa-web/src/api/crypto.ts",
+          "apps/dsa-web/src/types/crypto.ts",
+          "apps/dsa-web/src/stores/cryptoLaunchStore.ts",
+          "apps/dsa-web/src/pages/CryptoScannerPage.tsx",
+          "apps/dsa-web/src/components/crypto/*",
+          "apps/dsa-web/src/components/layout/SidebarNav.tsx",
+          "apps/dsa-web/src/App.tsx",
+          "apps/dsa-web/src/hooks/useDashboardLifecycle.ts"
+        ]
+      }
+    },
+    {
+      "id": "verification-1",
+      "title": "Validate non-regression, partial-data behavior, and doc alignment",
+      "category": "verification",
+      "description": "The bead ships with verification coverage for partial-data handling and confirmation that the stock lane and app shell still behave correctly.",
+      "steps": [
+        "python3 -m pytest -m \"not network\"",
+        "cd apps/dsa-web && npm ci && npm run lint && npm run build && npm run test"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "\"Build the web scanner route, store, and detail experience\""
+        ],
+        "parallel": false,
+        "conflicts_with": [],
+        "files": [
+          "tests/**",
+          "apps/dsa-web/src/**/__tests__/*",
+          "README.md",
+          "docs/full-guide.md"
+        ]
+      }
+    }
+  ],
+  "context": {
+    "patterns": [
+      "Pattern 1: `api/v1/endpoints/analysis.py` - Existing async request, status, and acceptance-response patterns are the closest backend model for crypto refresh and status endpoints.",
+      "Pattern 2: `src/repositories/stock_repo.py` - Existing repository structure is the nearest persistence pattern to mirror for crypto launch queries and upserts.",
+      "Pattern 3: `apps/dsa-web/src/hooks/useDashboardLifecycle.ts` - Existing polling plus visibility-refresh lifecycle is the right base pattern for a 60-second scanner page.",
+      "Pattern 4: `apps/dsa-web/src/stores/stockPoolStore.ts` - Existing Zustand store request sequencing and UI-state coordination are reusable for the crypto launch store."
+    ],
+    "keyFiles": [
+      "`src/config.py` - Adds crypto config keys, enabled-chain normalization, and provider settings.",
+      "`src/scheduler.py` - Extends daily-only scheduling to support a 60-second interval scanner.",
+      "`src/storage.py` - Adds `CryptoLaunch` and `CryptoLaunchSnapshot` ORM models.",
+      "`main.py` - Wires scanner startup without depending on stock trading-day logic.",
+      "`api/v1/router.py` - Registers the new crypto API router.",
+      "`apps/dsa-web/src/App.tsx` - Adds the `/crypto-scanner` route.",
+      "`apps/dsa-web/src/components/layout/SidebarNav.tsx` - Adds scanner navigation entry in the existing shell.",
+      "`data_provider/base.py` - Boundary reference showing stock-specific normalization that must not be reused for crypto identifiers."
+    ],
+    "nonGoals": [
+      "Replacing or deleting any existing stock-analysis workflow.",
+      "Persisted settings endpoints or UI for saved scanner defaults.",
+      "Alerts, watchlists, or notification delivery for launches.",
+      "AI review or per-minute LLM enrichment in the scanner loop.",
+      "Desktop-specific UX beyond existing web reuse in Electron.",
+      "Direct on-chain subscriptions or custom indexing infrastructure."
+    ]
+  },
+  "beadMetadata": {
+    "depends_on": [],
+    "parallel": true,
+    "conflicts_with": [],
+    "blocks": [],
+    "estimated_hours": 6
+  }
+}
