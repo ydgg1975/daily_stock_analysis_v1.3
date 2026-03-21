@@ -596,6 +596,16 @@ class Config:
     crypto_backoff_multiplier: float = 2.0
     crypto_discovery_cache_sec: int = 60
     crypto_enrichment_cache_sec: int = 30
+    # === Crypto Phase 2: Risk, Watchlist, Alerts ===
+    crypto_risk_enabled: bool = True
+    crypto_risk_min_liquidity_usd: float = 1000.0
+    crypto_risk_cache_ttl_sec: int = 300
+    crypto_watchlist_enabled: bool = True
+    crypto_alerts_enabled: bool = False
+    crypto_alert_liquidity_drop_pct: float = 30.0
+    crypto_alert_volume_spike_multiplier: float = 5.0
+    crypto_snapshot_retention_days: int = 7
+    crypto_security_provider: str = "auto"
 
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
@@ -724,6 +734,25 @@ class Config:
                 self.crypto_refresh_interval_sec,
             )
             object.__setattr__(self, "crypto_refresh_interval_sec", 60)
+        if self.crypto_snapshot_retention_days < 1:
+            _log.warning(
+                "Invalid CRYPTO_SNAPSHOT_RETENTION_DAYS=%r, falling back to 7.",
+                self.crypto_snapshot_retention_days,
+            )
+            object.__setattr__(self, "crypto_snapshot_retention_days", 7)
+        if self.crypto_risk_cache_ttl_sec < 0:
+            _log.warning(
+                "Invalid CRYPTO_RISK_CACHE_TTL_SEC=%r, falling back to 300.",
+                self.crypto_risk_cache_ttl_sec,
+            )
+            object.__setattr__(self, "crypto_risk_cache_ttl_sec", 300)
+        valid_providers = ("auto", "goplus", "rugcheck")
+        if self.crypto_security_provider not in valid_providers:
+            _log.warning(
+                "Invalid CRYPTO_SECURITY_PROVIDER=%r, falling back to 'auto'.",
+                self.crypto_security_provider,
+            )
+            object.__setattr__(self, "crypto_security_provider", "auto")
 
     # 单例实例存储
     _instance: Optional['Config'] = None
@@ -1161,6 +1190,15 @@ class Config:
             crypto_backoff_multiplier=float(os.getenv('CRYPTO_BACKOFF_MULTIPLIER', '2.0')),
             crypto_discovery_cache_sec=int(os.getenv('CRYPTO_DISCOVERY_CACHE_SEC', '60')),
             crypto_enrichment_cache_sec=int(os.getenv('CRYPTO_ENRICHMENT_CACHE_SEC', '30')),
+            crypto_risk_enabled=parse_env_bool(os.getenv('CRYPTO_RISK_ENABLED'), True),
+            crypto_risk_min_liquidity_usd=float(os.getenv('CRYPTO_RISK_MIN_LIQUIDITY_USD', '1000')),
+            crypto_risk_cache_ttl_sec=int(os.getenv('CRYPTO_RISK_CACHE_TTL_SEC', '300')),
+            crypto_watchlist_enabled=parse_env_bool(os.getenv('CRYPTO_WATCHLIST_ENABLED'), True),
+            crypto_alerts_enabled=parse_env_bool(os.getenv('CRYPTO_ALERTS_ENABLED'), False),
+            crypto_alert_liquidity_drop_pct=float(os.getenv('CRYPTO_ALERT_LIQUIDITY_DROP_PCT', '30')),
+            crypto_alert_volume_spike_multiplier=float(os.getenv('CRYPTO_ALERT_VOLUME_SPIKE_MULTIPLIER', '5')),
+            crypto_snapshot_retention_days=int(os.getenv('CRYPTO_SNAPSHOT_RETENTION_DAYS', '7')),
+            crypto_security_provider=os.getenv('CRYPTO_SECURITY_PROVIDER', 'auto').strip().lower() or 'auto',
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),
