@@ -126,6 +126,8 @@ class ValidateSystemConfigResponse(BaseModel):
 class TestLLMChannelRequest(BaseModel):
     """Request payload for testing one LLM channel."""
 
+    __test__ = False  # Prevent pytest from collecting this as a test class
+
     name: str = "channel"
     protocol: str = "openai"
     base_url: str = ""
