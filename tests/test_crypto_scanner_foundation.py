@@ -4,6 +4,8 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import inspect
@@ -78,6 +80,130 @@ class CryptoFetcherValidationTestCase(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             fetcher.validate_enabled_chains(["bsc", "unsupported-chain"])
+
+
+class CryptoUpsertTestCase(unittest.TestCase):
+    """Tests for upsert_launch returning (id, is_new) tuple."""
+
+    def setUp(self) -> None:
+        from src.repositories.crypto_launch_repo import CryptoLaunchRepository
+        from src.storage import DatabaseManager
+
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager("sqlite:///:memory:")
+        self.repo = CryptoLaunchRepository(self.db)
+
+    def tearDown(self) -> None:
+        from src.storage import DatabaseManager
+
+        DatabaseManager.reset_instance()
+
+    def test_upsert_returns_tuple_with_is_new_true_on_insert(self) -> None:
+        data = {
+            "chain_id": "bsc",
+            "pair_address": "0xtest123",
+            "base_token_symbol": "TEST",
+            "base_token_name": "Test Token",
+            "base_token_address": "0xtoken123",
+        }
+
+        result = self.repo.upsert_launch(data)
+
+        self.assertIsNotNone(result)
+        launch_id, is_new = result
+        self.assertIsInstance(launch_id, int)
+        self.assertTrue(is_new)
+
+    def test_upsert_returns_tuple_with_is_new_false_on_update(self) -> None:
+        data = {
+            "chain_id": "bsc",
+            "pair_address": "0xtest123",
+            "base_token_symbol": "TEST",
+            "base_token_name": "Test Token",
+            "base_token_address": "0xtoken123",
+        }
+
+        result1 = self.repo.upsert_launch(data)
+        result2 = self.repo.upsert_launch(data)
+
+        self.assertIsNotNone(result1)
+        self.assertIsNotNone(result2)
+        launch_id, is_new = result2
+        self.assertIsInstance(launch_id, int)
+        self.assertFalse(is_new)
+
+
+class CryptoLaunchServiceScanTestCase(unittest.TestCase):
+    """Tests for scan_once new/updated counters and retention cleanup."""
+
+    def tearDown(self) -> None:
+        Config.reset_instance()
+
+    def test_scan_once_tracks_new_and_updated_counts(self) -> None:
+        from data_provider.crypto_launch_fetcher import NormalizedLaunch
+        from src.services.crypto_launch_service import CryptoLaunchService
+
+        config = SimpleNamespace(
+            crypto_chains=["bsc"],
+            crypto_discovery_timeout_sec=5,
+            crypto_enrichment_timeout_sec=5,
+            crypto_refresh_interval_sec=60,
+            crypto_enabled=True,
+            crypto_snapshot_retention_days=7,
+        )
+
+        first_launch = NormalizedLaunch(
+            chain_id="bsc",
+            pair_address="0xnew",
+            base_token_symbol="NEW",
+            base_token_name="New Token",
+            base_token_address="0xbase1",
+            pair_created_at=datetime.now(),
+        )
+        second_launch = NormalizedLaunch(
+            chain_id="bsc",
+            pair_address="0xexisting",
+            base_token_symbol="OLD",
+            base_token_name="Old Token",
+            base_token_address="0xbase2",
+            pair_created_at=datetime.now(),
+        )
+
+        class FakeFetcher:
+            def validate_enabled_chains(self, chains):
+                return chains
+
+            def discover_and_enrich(self, *args, **kwargs):
+                return {"bsc": [first_launch, second_launch]}, []
+
+        class FakeRepo:
+            def __init__(self):
+                self.appended = []
+                self.cleanup_arg = None
+
+            def upsert_launch(self, data):
+                if data["pair_address"] == "0xnew":
+                    return (101, True)
+                return (102, False)
+
+            def append_snapshot(self, launch_id, data):
+                self.appended.append((launch_id, data))
+                return True
+
+            def cleanup_old_snapshots(self, retention_days=7):
+                self.cleanup_arg = retention_days
+                return 0
+
+        repo = FakeRepo()
+        service = CryptoLaunchService(config=config, fetcher=FakeFetcher(), repo=repo)
+
+        result = service.scan_once()
+
+        self.assertEqual(result["new"], 1)
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["failed_chains"], [])
+        self.assertEqual(len(repo.appended), 2)
+        self.assertEqual(repo.cleanup_arg, 7)
 
 
 if __name__ == "__main__":

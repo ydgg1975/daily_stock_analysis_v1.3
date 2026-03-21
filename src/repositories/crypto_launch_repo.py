@@ -12,7 +12,7 @@ Responsibilities:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, desc, select, update
 
@@ -31,10 +31,10 @@ class CryptoLaunchRepository:
     # Upsert
     # ------------------------------------------------------------------
 
-    def upsert_launch(self, data: Dict[str, Any]) -> Optional[int]:
+    def upsert_launch(self, data: Dict[str, Any]) -> Optional[Tuple[int, bool]]:
         """Insert or update a launch record keyed by (chain_id, pair_address).
 
-        Returns the launch id on success, None on failure.
+        Returns (launch_id, is_new) on success, None on failure.
         """
         chain_id = data.get("chain_id")
         pair_address = data.get("pair_address")
@@ -71,7 +71,7 @@ class CryptoLaunchRepository:
                     existing.last_seen_at = now
                     existing.updated_at = now
                     session.flush()
-                    return existing.id
+                    return (existing.id, False)
                 else:
                     launch = CryptoLaunch(
                         chain_id=chain_id,
@@ -106,7 +106,7 @@ class CryptoLaunchRepository:
                     )
                     session.add(launch)
                     session.flush()
-                    return launch.id
+                    return (launch.id, True)
         except Exception:
             logger.exception("upsert_launch failed for %s/%s", chain_id, pair_address)
             return None
@@ -119,25 +119,60 @@ class CryptoLaunchRepository:
         """Append a snapshot for the given launch. Returns True on success."""
         try:
             with self.db.get_session() as session:
+                minute_floor = datetime.now().replace(second=0, microsecond=0)
+                next_minute = minute_floor + timedelta(minutes=1)
+                existing = (
+                    session.query(CryptoLaunchSnapshot)
+                    .filter_by(launch_id=launch_id)
+                    .filter(
+                        CryptoLaunchSnapshot.snapshot_at >= minute_floor,
+                        CryptoLaunchSnapshot.snapshot_at < next_minute,
+                    )
+                    .first()
+                )
+
+                fields = {
+                    "liquidity_usd": data.get("liquidity_usd"),
+                    "volume_usd_24h": data.get("volume_usd_24h"),
+                    "buys_24h": data.get("buys_24h"),
+                    "sells_24h": data.get("sells_24h"),
+                    "price_usd": data.get("price_usd"),
+                    "price_change_pct_24h": data.get("price_change_pct_24h"),
+                    "fdv_usd": data.get("fdv_usd"),
+                    "market_cap_usd": data.get("market_cap_usd"),
+                    "data_complete": data.get("data_complete", False),
+                    "raw_payload": data.get("raw_payload"),
+                }
+
+                if existing:
+                    for key, value in fields.items():
+                        setattr(existing, key, value)
+                    existing.snapshot_at = minute_floor
+                    return True
+
                 snapshot = CryptoLaunchSnapshot(
                     launch_id=launch_id,
-                    snapshot_at=data.get("snapshot_at", datetime.now()),
-                    liquidity_usd=data.get("liquidity_usd"),
-                    volume_usd_24h=data.get("volume_usd_24h"),
-                    buys_24h=data.get("buys_24h"),
-                    sells_24h=data.get("sells_24h"),
-                    price_usd=data.get("price_usd"),
-                    price_change_pct_24h=data.get("price_change_pct_24h"),
-                    fdv_usd=data.get("fdv_usd"),
-                    market_cap_usd=data.get("market_cap_usd"),
-                    data_complete=data.get("data_complete", False),
-                    raw_payload=data.get("raw_payload"),
+                    snapshot_at=minute_floor,
+                    **fields,
                 )
                 session.add(snapshot)
                 return True
         except Exception:
             logger.exception("append_snapshot failed for launch_id=%s", launch_id)
             return False
+
+    def cleanup_old_snapshots(self, retention_days: int = 7) -> int:
+        """Delete snapshots older than retention_days. Returns count deleted."""
+        try:
+            with self.db.get_session() as session:
+                cutoff = datetime.now() - timedelta(days=retention_days)
+                result = session.query(CryptoLaunchSnapshot).filter(
+                    CryptoLaunchSnapshot.snapshot_at < cutoff
+                ).delete(synchronize_session="fetch")
+                return result
+        except Exception:
+            logger.exception("cleanup_old_snapshots failed")
+            return 0
 
     # ------------------------------------------------------------------
     # List queries

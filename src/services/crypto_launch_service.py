@@ -95,14 +95,16 @@ class CryptoLaunchService:
             for chain_id, launches in results.items():
                 for launch in launches:
                     launch_dict = self._launch_to_dict(launch)
-                    launch_id = self._repo.upsert_launch(launch_dict)
-                    if launch_id is not None:
-                        # Determine if new or updated based on first_seen vs last_seen proximity
-                        new_count += 1  # Simplified — repo handles upsert logic
+                    result = self._repo.upsert_launch(launch_dict)
+                    if result is not None:
+                        launch_id, is_new = result
+                        if is_new:
+                            new_count += 1
+                        else:
+                            updated_count += 1
 
                         # Append snapshot
                         snapshot_data = {
-                            "snapshot_at": datetime.now(),
                             "liquidity_usd": launch.liquidity_usd,
                             "volume_usd_24h": launch.volume_usd_24h,
                             "buys_24h": launch.buys_24h,
@@ -115,6 +117,15 @@ class CryptoLaunchService:
                             "raw_payload": launch.raw_payload,
                         }
                         self._repo.append_snapshot(launch_id, snapshot_data)
+
+            try:
+                deleted = self._repo.cleanup_old_snapshots(
+                    config.crypto_snapshot_retention_days
+                )
+                if deleted > 0:
+                    logger.info("Cleaned up %d old snapshots", deleted)
+            except Exception:
+                logger.exception("Snapshot cleanup failed")
 
             duration = time.monotonic() - start_time
 
