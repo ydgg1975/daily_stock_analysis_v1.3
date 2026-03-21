@@ -89,6 +89,7 @@ class CryptoSnapshotRetentionTestCase(unittest.TestCase):
                 liquidity_usd=100.0,
             )
             session.add(old_snap)
+            session.commit()
 
         self.repo.append_snapshot(self.launch_id, {"liquidity_usd": 200.0})
 
