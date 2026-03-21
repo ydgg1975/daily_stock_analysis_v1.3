@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from data_provider.base import DataFetcherManager
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
@@ -31,6 +34,7 @@ from api.v1.schemas.portfolio import (
     PortfolioTradeListResponse,
     PortfolioTradeCreateRequest,
 )
+from src.data.stock_mapping import STOCK_NAME_MAP
 from src.services.portfolio_import_service import PortfolioImportService
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import (
@@ -43,6 +47,44 @@ from src.services.portfolio_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+_name_resolver: Optional["DataFetcherManager"] = None
+
+
+def _get_name_resolver() -> "DataFetcherManager":
+    global _name_resolver
+    if _name_resolver is None:
+        from data_provider.base import DataFetcherManager
+        _name_resolver = DataFetcherManager()
+    return _name_resolver
+
+
+def _resolve_position_names(data: dict) -> dict:
+    """Resolve stock names via DataFetcherManager with static fallback.
+
+    Uses get_stock_name(allow_realtime=False) per symbol to avoid heavy
+    realtime quote calls. The DataFetcherManager is a module-level singleton
+    so fetcher caches persist across requests.
+    """
+    symbols: set = set()
+    for acct in data.get("accounts", []):
+        for pos in acct.get("positions", []):
+            symbols.add(pos["symbol"])
+    if not symbols:
+        return {}
+
+    result: dict = {}
+    try:
+        resolver = _get_name_resolver()
+        for sym in symbols:
+            name = resolver.get_stock_name(sym, allow_realtime=False)
+            result[sym] = name or STOCK_NAME_MAP.get(sym, "")
+    except Exception:
+        logger.debug("DataFetcherManager name resolution failed, using static map")
+        for sym in symbols:
+            result[sym] = STOCK_NAME_MAP.get(sym, "")
+    return result
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -448,6 +490,11 @@ def get_snapshot(
             as_of=as_of,
             cost_method=cost_method,
         )
+        # Resolve stock names for each position (lightweight, no network)
+        name_map = _resolve_position_names(data)
+        for acct in data.get("accounts", []):
+            for pos in acct.get("positions", []):
+                pos["name"] = name_map.get(pos["symbol"], "")
         return PortfolioSnapshotResponse(**data)
     except ValueError as exc:
         raise _bad_request(exc)
