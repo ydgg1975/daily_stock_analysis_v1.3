@@ -8,6 +8,7 @@ import {
 	getLaunchAge,
 } from "../../types/crypto";
 import { cn } from "../../utils/cn";
+import { CryptoRiskBadge } from "./CryptoRiskBadge";
 
 type CryptoLaunchTableProps = {
 	launches: CryptoLaunchRow[];
@@ -55,6 +56,7 @@ export const CryptoLaunchTable: React.FC<CryptoLaunchTableProps> = ({
 						<th className="w-10 px-2 py-2" aria-label="Watch" />
 						<th className="whitespace-nowrap px-3 py-2 font-medium">Token</th>
 						<th className="whitespace-nowrap px-3 py-2 font-medium">Chain</th>
+						<th className="whitespace-nowrap px-3 py-2 font-medium">Risk</th>
 						<th className="whitespace-nowrap px-3 py-2 font-medium">Age</th>
 						<th className="whitespace-nowrap px-3 py-2 text-right font-medium">
 							Price
@@ -129,6 +131,12 @@ export const CryptoLaunchTable: React.FC<CryptoLaunchTableProps> = ({
 									<span className="rounded-full border border-border/50 px-2 py-0.5 text-xs text-secondary-text">
 										{formatChainLabel(launch.chainId)}
 									</span>
+								</td>
+								<td className="whitespace-nowrap px-3 py-2.5">
+									<CryptoRiskBadge
+										riskScore={launch.riskScore}
+										riskLevel={launch.riskLevel}
+									/>
 								</td>
 								<td className="whitespace-nowrap px-3 py-2.5 text-xs text-secondary-text">
 									{getLaunchAge(launch.pairCreatedAt)}

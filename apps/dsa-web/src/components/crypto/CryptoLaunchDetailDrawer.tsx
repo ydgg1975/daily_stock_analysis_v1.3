@@ -8,6 +8,7 @@ import {
 	getLaunchAge,
 } from "../../types/crypto";
 import { Drawer } from "../common/Drawer";
+import { CryptoRiskBadge } from "./CryptoRiskBadge";
 
 type CryptoLaunchDetailDrawerProps = {
 	isOpen: boolean;
@@ -40,7 +41,12 @@ export const CryptoLaunchDetailDrawer: React.FC<
 	};
 
 	return (
-		<Drawer isOpen={isOpen} onClose={onClose} title="Launch Detail" width="max-w-lg">
+		<Drawer
+			isOpen={isOpen}
+			onClose={onClose}
+			title="Launch Detail"
+			width="max-w-lg"
+		>
 			{isLoading && (
 				<div className="flex items-center justify-center py-16">
 					<div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan/20 border-t-cyan" />
@@ -137,6 +143,48 @@ export const CryptoLaunchDetailDrawer: React.FC<
 						/>
 						<MetricRow label="Age" value={getLaunchAge(launch.pairCreatedAt)} />
 						<MetricRow label="Quote" value={launch.quoteTokenSymbol || "-"} />
+					</div>
+
+					<div>
+						<h4 className="mb-2 text-xs font-medium text-secondary-text">
+							Security
+						</h4>
+						<div className="rounded-lg border border-border/30 bg-surface px-3 py-3">
+							<div className="flex items-start justify-between gap-3">
+								<div>
+									<CryptoRiskBadge
+										riskScore={launch.riskScore}
+										riskLevel={launch.riskLevel}
+										size="md"
+									/>
+								</div>
+							</div>
+
+							{launch.riskScore != null ? (
+								<div className="mt-3 grid gap-2 sm:grid-cols-2">
+									<div className="rounded-lg border border-border/30 bg-card px-3 py-2">
+										<p className="text-[11px] text-secondary-text">
+											Risk Score
+										</p>
+										<p className="mt-1 text-sm font-medium text-foreground">
+											{launch.riskScore}
+										</p>
+									</div>
+									<div className="rounded-lg border border-border/30 bg-card px-3 py-2">
+										<p className="text-[11px] text-secondary-text">
+											Risk Level
+										</p>
+										<p className="mt-1 text-sm font-medium capitalize text-foreground">
+											{launch.riskLevel || "-"}
+										</p>
+									</div>
+								</div>
+							) : (
+								<p className="mt-3 text-xs text-secondary-text">
+									No security scan available
+								</p>
+							)}
+						</div>
 					</div>
 
 					{/* External links */}

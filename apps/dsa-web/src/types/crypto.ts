@@ -40,6 +40,8 @@ export interface CryptoLaunchRow {
 	lastSeenAt?: string | null;
 	createdAt?: string | null;
 	updatedAt?: string | null;
+	riskScore?: number | null;
+	riskLevel?: string | null;
 }
 
 /** A snapshot entry for the detail view */
