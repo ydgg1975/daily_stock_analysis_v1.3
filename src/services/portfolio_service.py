@@ -989,6 +989,8 @@ class PortfolioService:
 
             last_price = self.repo.get_latest_close(symbol=symbol, as_of=as_of_date)
             if last_price is None or last_price <= 0:
+                last_price = self._fetch_realtime_price(symbol)
+            if last_price is None or last_price <= 0:
                 last_price = avg_cost
 
             local_market_value = qty * float(last_price)
@@ -1026,6 +1028,28 @@ class PortfolioService:
             total_cost_base += cost_base
 
         return position_rows, lot_rows, market_value_base, total_cost_base, fx_stale
+
+    _fetcher_manager = None
+
+    @classmethod
+    def _get_fetcher_manager(cls):
+        if cls._fetcher_manager is None:
+            from data_provider.base import DataFetcherManager
+            cls._fetcher_manager = DataFetcherManager()
+        return cls._fetcher_manager
+
+    @classmethod
+    def _fetch_realtime_price(cls, symbol: str) -> Optional[float]:
+        """Fetch realtime price via data provider as fallback for missing StockDaily data."""
+        try:
+            fm = cls._get_fetcher_manager()
+            quote = fm.get_realtime_quote(symbol)
+            if quote and quote.price and quote.price > 0:
+                logger.info(f"[持仓] 从实时行情获取 {symbol} 现价: {quote.price}")
+                return float(quote.price)
+        except Exception as e:
+            logger.warning(f"[持仓] 获取 {symbol} 实时行情失败: {e}")
+        return None
 
     @staticmethod
     def _consume_fifo_lots(
