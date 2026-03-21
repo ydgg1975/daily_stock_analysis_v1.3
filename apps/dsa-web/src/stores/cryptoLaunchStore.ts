@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { cryptoApi } from "../api/crypto";
+import { cryptoWatchlistApi } from "../api/cryptoWatchlist";
 import type {
 	CryptoFilters,
 	CryptoLaunchDetailResponse,
@@ -22,6 +23,8 @@ export interface CryptoLaunchState {
 
 	// Filters
 	filters: CryptoFilters;
+	watchedLaunchIds: Set<number>;
+	showWatchedOnly: boolean;
 
 	// Detail
 	selectedLaunch: CryptoLaunchDetailResponse | null;
@@ -43,6 +46,9 @@ export interface CryptoLaunchState {
 	setMinLiquidity: (value: number) => void;
 	setMinVolume: (value: number) => void;
 	setMaxAge: (value: number) => void;
+	loadWatchedIds: () => Promise<void>;
+	toggleWatch: (launchId: number) => Promise<void>;
+	setShowWatchedOnly: (value: boolean) => void;
 	selectLaunch: (launchId: number) => Promise<void>;
 	closeDetail: () => void;
 	triggerRefresh: () => Promise<void>;
@@ -66,6 +72,8 @@ const initialState = {
 	isLoadingFeed: false,
 	feedError: null as string | null,
 	filters: { ...defaultFilters },
+	watchedLaunchIds: new Set<number>(),
+	showWatchedOnly: false,
 	selectedLaunch: null as CryptoLaunchDetailResponse | null,
 	isLoadingDetail: false,
 	detailDrawerOpen: false,
@@ -81,7 +89,7 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 
 	loadLaunches: async (reset = true) => {
 		const seq = ++feedRequestSeq;
-		const { filters } = get();
+		const { filters, watchedLaunchIds, showWatchedOnly } = get();
 
 		if (reset) {
 			set({ isLoadingFeed: true, feedError: null });
@@ -99,12 +107,18 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 
 			if (seq !== feedRequestSeq) return; // Stale request
 
+			const items = showWatchedOnly
+				? response.items.filter((item) => watchedLaunchIds.has(item.id))
+				: response.items;
+
 			set({
-				launches: response.items,
+				launches: items,
 				meta: response.meta,
 				isLoadingFeed: false,
 				feedError: null,
 			});
+
+			void get().loadWatchedIds();
 		} catch (err) {
 			if (seq !== feedRequestSeq) return;
 			set({
@@ -116,7 +130,8 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 	},
 
 	loadMore: async () => {
-		const { meta, filters, launches } = get();
+		const { meta, filters, launches, watchedLaunchIds, showWatchedOnly } =
+			get();
 		if (!meta?.nextCursor) return;
 
 		const seq = ++feedRequestSeq;
@@ -134,8 +149,12 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 
 			if (seq !== feedRequestSeq) return;
 
+			const items = showWatchedOnly
+				? response.items.filter((item) => watchedLaunchIds.has(item.id))
+				: response.items;
+
 			set({
-				launches: [...launches, ...response.items],
+				launches: [...launches, ...items],
 				meta: response.meta,
 			});
 		} catch {
@@ -165,6 +184,54 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 
 	setMaxAge: (value: number) => {
 		set((state) => ({ filters: { ...state.filters, maxAgeMinutes: value } }));
+		void get().loadLaunches();
+	},
+
+	loadWatchedIds: async () => {
+		try {
+			const response = await cryptoWatchlistApi.getWatchedIds();
+			set({ watchedLaunchIds: new Set(response.launchIds) });
+		} catch {
+			// Silent fail for watchlist hydration
+		}
+	},
+
+	toggleWatch: async (launchId: number) => {
+		const { watchedLaunchIds, showWatchedOnly, launches } = get();
+		const isWatched = watchedLaunchIds.has(launchId);
+		const nextWatchedIds = new Set(watchedLaunchIds);
+		let nextLaunches = launches;
+
+		if (isWatched) {
+			nextWatchedIds.delete(launchId);
+			if (showWatchedOnly) {
+				nextLaunches = launches.filter((launch) => launch.id !== launchId);
+			}
+		} else {
+			nextWatchedIds.add(launchId);
+		}
+
+		set({ watchedLaunchIds: nextWatchedIds, launches: nextLaunches });
+
+		try {
+			if (isWatched) {
+				await cryptoWatchlistApi.removeWatch(launchId);
+			} else {
+				await cryptoWatchlistApi.addWatch(launchId);
+			}
+		} catch {
+			set({ watchedLaunchIds, launches });
+		}
+	},
+
+	setShowWatchedOnly: (value: boolean) => {
+		set({ showWatchedOnly: value });
+		if (value) {
+			void get()
+				.loadWatchedIds()
+				.finally(() => get().loadLaunches());
+			return;
+		}
 		void get().loadLaunches();
 	},
 

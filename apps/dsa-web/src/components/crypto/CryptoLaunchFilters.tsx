@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import type React from "react";
 import type { CryptoSortMode } from "../../types/crypto";
 import { formatChainLabel } from "../../types/crypto";
@@ -35,18 +36,22 @@ type CryptoLaunchFiltersProps = {
 	chains: string[];
 	sort: CryptoSortMode;
 	maxAgeMinutes: number;
+	showWatchedOnly?: boolean;
 	onChainChange: (chains: string[]) => void;
 	onSortChange: (sort: CryptoSortMode) => void;
 	onMaxAgeChange: (minutes: number) => void;
+	onShowWatchedOnlyChange?: (value: boolean) => void;
 };
 
 export const CryptoLaunchFilters: React.FC<CryptoLaunchFiltersProps> = ({
 	chains,
 	sort,
 	maxAgeMinutes,
+	showWatchedOnly = false,
 	onChainChange,
 	onSortChange,
 	onMaxAgeChange,
+	onShowWatchedOnlyChange,
 }) => {
 	const toggleChain = (chain: string) => {
 		if (chains.includes(chain)) {
@@ -112,6 +117,25 @@ export const CryptoLaunchFilters: React.FC<CryptoLaunchFiltersProps> = ({
 					</button>
 				))}
 			</div>
+
+			{/* Divider */}
+			<div className="h-6 w-px bg-border/50" />
+
+			<button
+				type="button"
+				onClick={() => onShowWatchedOnlyChange?.(!showWatchedOnly)}
+				className={cn(
+					"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+					showWatchedOnly
+						? "border-amber-400/40 bg-amber-400/10 text-amber-400"
+						: "border-border/50 bg-surface text-secondary-text hover:border-border hover:text-foreground",
+				)}
+			>
+				<Star
+					className={cn("h-3.5 w-3.5", showWatchedOnly && "fill-amber-400")}
+				/>
+				Watched
+			</button>
 		</div>
 	);
 };

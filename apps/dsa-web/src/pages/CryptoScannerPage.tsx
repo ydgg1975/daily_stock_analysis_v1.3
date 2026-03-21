@@ -1,10 +1,12 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { CryptoLaunchDetailDrawer } from "../components/crypto/CryptoLaunchDetailDrawer";
 import { CryptoLaunchFilters } from "../components/crypto/CryptoLaunchFilters";
 import { CryptoLaunchTable } from "../components/crypto/CryptoLaunchTable";
+import { CryptoSettingsPanel } from "../components/crypto/CryptoSettingsPanel";
 import { useCryptoLaunchStore } from "../stores/cryptoLaunchStore";
+import { useCryptoSettingsStore } from "../stores/cryptoSettingsStore";
 import { cn } from "../utils/cn";
 
 const POLL_INTERVAL_MS = 60_000;
@@ -16,6 +18,8 @@ const CryptoScannerPage: React.FC = () => {
 		isLoadingFeed,
 		feedError,
 		filters,
+		watchedLaunchIds,
+		showWatchedOnly,
 		selectedLaunch,
 		isLoadingDetail,
 		detailDrawerOpen,
@@ -26,11 +30,14 @@ const CryptoScannerPage: React.FC = () => {
 		setSort,
 		setChainFilter,
 		setMaxAge,
+		toggleWatch,
+		setShowWatchedOnly,
 		selectLaunch,
 		closeDetail,
 		triggerRefresh,
 		loadStatus,
 	} = useCryptoLaunchStore();
+	const { openPanel, isOpen: isSettingsOpen } = useCryptoSettingsStore();
 
 	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -109,6 +116,16 @@ const CryptoScannerPage: React.FC = () => {
 
 					<button
 						type="button"
+						onClick={openPanel}
+						aria-expanded={isSettingsOpen}
+						className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
+					>
+						<Settings className="h-3.5 w-3.5" />
+						Settings
+					</button>
+
+					<button
+						type="button"
 						onClick={() => void triggerRefresh()}
 						disabled={isRefreshing}
 						className={cn(
@@ -128,9 +145,11 @@ const CryptoScannerPage: React.FC = () => {
 				chains={filters.chains}
 				sort={filters.sort}
 				maxAgeMinutes={filters.maxAgeMinutes}
+				showWatchedOnly={showWatchedOnly}
 				onChainChange={setChainFilter}
 				onSortChange={setSort}
 				onMaxAgeChange={setMaxAge}
+				onShowWatchedOnlyChange={setShowWatchedOnly}
 			/>
 
 			{/* Error */}
@@ -144,7 +163,9 @@ const CryptoScannerPage: React.FC = () => {
 			<CryptoLaunchTable
 				launches={launches}
 				isLoading={isLoadingFeed}
+				watchedIds={watchedLaunchIds}
 				onSelect={(id) => void selectLaunch(id)}
+				onToggleWatch={(id) => void toggleWatch(id)}
 				onLoadMore={() => void loadMore()}
 				hasMore={!!meta?.nextCursor}
 			/>
@@ -156,6 +177,7 @@ const CryptoScannerPage: React.FC = () => {
 				isLoading={isLoadingDetail}
 				onClose={closeDetail}
 			/>
+			<CryptoSettingsPanel />
 		</div>
 	);
 };

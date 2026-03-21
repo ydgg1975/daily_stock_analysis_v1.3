@@ -129,6 +129,12 @@ export interface CryptoFilters {
 	sort: CryptoSortMode;
 }
 
+// ============ Watchlist Types ============
+
+export interface WatchedIdsResponse {
+	launchIds: number[];
+}
+
 // ============ Helpers ============
 
 /** Format a chain ID for display (capitalize first letter) */
