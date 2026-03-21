@@ -220,7 +220,7 @@ class CryptoSecurityService:
             "buy_tax_pct": 0.0,
             "sell_tax_pct": 0.0,
             "lp_locked_pct": 0.0,
-            "top10_holder_rate_pct": round(self._to_float(raw_data.get("top10_holder_rate")), 4),
+            "top10_holder_rate_pct": round(self._compute_top10_rate(raw_data), 4),
             "auto_fail_reasons": auto_fail_reasons,
         }
 
@@ -341,6 +341,19 @@ class CryptoSecurityService:
         if score <= 75.0:
             return "high"
         return "critical"
+
+    def _compute_top10_rate(self, raw_data: Dict[str, Any]) -> float:
+        """Extract top10 holder rate from raw data.
+
+        Prefers the pre-computed ``top10_holder_rate`` key (set by
+        ``fetch_rugcheck``/``fetch_goplus``).  Falls back to summing
+        ``topHolders[].pct`` when the key is absent (e.g. raw fixture data).
+        """
+        rate = self._to_float(raw_data.get("top10_holder_rate"))
+        if rate:
+            return rate
+        top_holders = raw_data.get("topHolders") or []
+        return sum(self._to_float(item.get("pct")) for item in top_holders[:10])
 
     @staticmethod
     def _to_bool_flag(value: Any) -> bool:

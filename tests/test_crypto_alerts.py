@@ -114,7 +114,8 @@ class TestCryptoAlertService:
             "warning",
         )
         mock_logger.warning.assert_called_once()
-        assert "FORMATTED ALERT" in mock_logger.warning.call_args[0][0]
+        assert mock_logger.warning.call_args[0][0] == "Crypto alert dispatch prepared: %s"
+        assert mock_logger.warning.call_args[0][1] == "FORMATTED ALERT"
 
     def test_evaluate_alerts_skips_none_and_zero_baselines(self):
         alerts = self.service.evaluate_alerts(

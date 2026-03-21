@@ -70,7 +70,7 @@ class CryptoLaunchRepository:
                             setattr(existing, key, data[key])
                     existing.last_seen_at = now
                     existing.updated_at = now
-                    session.flush()
+                    session.commit()
                     return (existing.id, False)
                 else:
                     launch = CryptoLaunch(
@@ -106,6 +106,7 @@ class CryptoLaunchRepository:
                     )
                     session.add(launch)
                     session.flush()
+                    session.commit()
                     return (launch.id, True)
         except Exception:
             logger.exception("upsert_launch failed for %s/%s", chain_id, pair_address)
@@ -148,6 +149,7 @@ class CryptoLaunchRepository:
                     for key, value in fields.items():
                         setattr(existing, key, value)
                     existing.snapshot_at = minute_floor
+                    session.commit()
                     return True
 
                 snapshot = CryptoLaunchSnapshot(
@@ -156,6 +158,7 @@ class CryptoLaunchRepository:
                     **fields,
                 )
                 session.add(snapshot)
+                session.commit()
                 return True
         except Exception:
             logger.exception("append_snapshot failed for launch_id=%s", launch_id)
@@ -169,6 +172,7 @@ class CryptoLaunchRepository:
                 result = session.query(CryptoLaunchSnapshot).filter(
                     CryptoLaunchSnapshot.snapshot_at < cutoff
                 ).delete(synchronize_session="fetch")
+                session.commit()
                 return result
         except Exception:
             logger.exception("cleanup_old_snapshots failed")
