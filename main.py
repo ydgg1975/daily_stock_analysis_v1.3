@@ -699,6 +699,11 @@ def main() -> int:
             from src.scheduler import Scheduler
 
             crypto_service = CryptoLaunchService(config=config)
+            if getattr(config, 'crypto_alerts_enabled', False):
+                from src.services.crypto_alert_service import CryptoAlertService
+
+                crypto_alert_service = CryptoAlertService(config=config)
+                logger.info("Crypto alert service initialized")
             crypto_scheduler = Scheduler()
             crypto_scheduler.set_interval_task(
                 crypto_service.scan_once,
