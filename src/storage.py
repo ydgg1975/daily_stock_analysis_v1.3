@@ -692,6 +692,52 @@ class CryptoLaunchSnapshot(Base):
     )
 
 
+class CryptoLaunchSecurityScan(Base):
+    """Security scan results from GoPlus / RugCheck for a crypto launch."""
+
+    __tablename__ = 'crypto_launch_security_scans'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    provider = Column(String(32), nullable=False)
+    risk_score = Column(Float)
+    risk_level = Column(String(16))
+    is_honeypot = Column(Boolean)
+    is_mintable = Column(Boolean)
+    buy_tax_pct = Column(Float)
+    sell_tax_pct = Column(Float)
+    lp_locked_pct = Column(Float)
+    top10_holder_rate_pct = Column(Float)
+    raw_payload_json = Column(Text)
+    scanned_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index('ix_crypto_security_launch_provider', 'launch_id', 'provider'),
+        UniqueConstraint(
+            'launch_id',
+            'provider',
+            'scanned_at',
+            name='uix_crypto_security_launch_provider_time',
+        ),
+    )
+
+
+class CryptoWatchlist(Base):
+    """User watchlist entries for crypto launches."""
+
+    __tablename__ = 'crypto_watchlist'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    watched_at = Column(DateTime, default=datetime.now, nullable=False)
+    note = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint('launch_id', name='uix_crypto_watchlist_launch'),
+    )
+
+
 class DatabaseManager:
     """
     数据库管理器 - 单例模式
