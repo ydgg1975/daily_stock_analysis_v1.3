@@ -47,6 +47,8 @@ class CryptoLaunchRow(BaseModel):
     last_seen_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    risk_score: Optional[float] = None
+    risk_level: Optional[str] = None
 
 
 class CryptoSnapshotRow(BaseModel):

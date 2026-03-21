@@ -12,12 +12,13 @@ import logging
 import time
 from dataclasses import asdict
 from datetime import datetime
-from threading import Lock
-from typing import Any, Dict, List, Optional
+from threading import Lock, Thread
+from typing import Any, Dict, List, Optional, Tuple
 
 from data_provider.crypto_launch_fetcher import CryptoLaunchFetcher, NormalizedLaunch
 from src.config import Config
 from src.repositories.crypto_launch_repo import CryptoLaunchRepository
+from src.services.crypto_security_service import CryptoSecurityService
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ class CryptoLaunchService:
         self._config = config or Config.get_instance()
         self._fetcher = fetcher or CryptoLaunchFetcher()
         self._repo = repo or CryptoLaunchRepository()
+        self._security_service = CryptoSecurityService(
+            config=self._config,
+            db_manager=getattr(self._repo, "db", None),
+        )
 
         # Status tracking
         self._status_lock = Lock()
@@ -57,6 +62,8 @@ class CryptoLaunchService:
         """
         config = self._config
         chains = list(config.crypto_chains) if config.crypto_chains else []
+        risk_enabled = getattr(config, "crypto_risk_enabled", True)
+        risk_min_liquidity = getattr(config, "crypto_risk_min_liquidity_usd", 1000.0)
 
         if not chains:
             logger.warning("No crypto chains configured; skipping scan")
@@ -91,6 +98,7 @@ class CryptoLaunchService:
 
             new_count = 0
             updated_count = 0
+            security_candidates: List[Tuple[int, str, str]] = []
 
             for chain_id, launches in results.items():
                 for launch in launches:
@@ -118,6 +126,15 @@ class CryptoLaunchService:
                         }
                         self._repo.append_snapshot(launch_id, snapshot_data)
 
+                        token_address = (launch.base_token_address or "").strip()
+                        liquidity = launch.liquidity_usd or 0.0
+                        if (
+                            risk_enabled
+                            and token_address
+                            and liquidity >= risk_min_liquidity
+                        ):
+                            security_candidates.append((launch_id, token_address, chain_id))
+
             try:
                 deleted = self._repo.cleanup_old_snapshots(
                     config.crypto_snapshot_retention_days
@@ -126,6 +143,9 @@ class CryptoLaunchService:
                     logger.info("Cleaned up %d old snapshots", deleted)
             except Exception:
                 logger.exception("Snapshot cleanup failed")
+
+            if risk_enabled:
+                self._enqueue_security_scans(security_candidates)
 
             duration = time.monotonic() - start_time
 
@@ -226,3 +246,45 @@ class CryptoLaunchService:
             "raw_payload": launch.raw_payload,
             "data_complete": launch.data_complete,
         }
+
+    def _enqueue_security_scans(self, candidates: List[Tuple[int, str, str]]) -> None:
+        """Queue eligible launches for background security scanning."""
+        if not candidates:
+            return
+
+        def worker(scan_candidates: List[Tuple[int, str, str]]) -> None:
+            for launch_id, token_address, chain_id in scan_candidates:
+                try:
+                    summary = self._security_service.scan_token(launch_id, token_address, chain_id)
+                    if summary is None:
+                        logger.info(
+                            "Security scan skipped or returned no data for launch_id=%s chain=%s",
+                            launch_id,
+                            chain_id,
+                        )
+                        continue
+
+                    logger.info(
+                        "Security scan completed for launch_id=%s chain=%s risk_score=%s risk_level=%s",
+                        launch_id,
+                        chain_id,
+                        summary.get("risk_score"),
+                        summary.get("risk_level"),
+                    )
+                except Exception:
+                    logger.exception(
+                        "Background security scan failed for launch_id=%s chain=%s",
+                        launch_id,
+                        chain_id,
+                    )
+
+        try:
+            Thread(
+                target=worker,
+                args=(list(candidates),),
+                name="crypto-security-enrichment",
+                daemon=True,
+            ).start()
+            logger.info("Queued %d crypto security scans", len(candidates))
+        except Exception:
+            logger.exception("Failed to enqueue crypto security scans")

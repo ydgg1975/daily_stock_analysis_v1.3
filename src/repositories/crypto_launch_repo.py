@@ -14,9 +14,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, desc, select, update
+from sqlalchemy import and_, desc, func, select, update
 
-from src.storage import CryptoLaunch, CryptoLaunchSnapshot, DatabaseManager
+from src.storage import CryptoLaunch, CryptoLaunchSecurityScan, CryptoLaunchSnapshot, DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -237,8 +237,10 @@ class CryptoLaunchRepository:
 
                 next_cursor = items[-1].id if has_more and items else None
 
+                scan_map = self._latest_scan_map(session, [item.id for item in items])
+
                 return {
-                    "items": [self._launch_to_dict(r) for r in items],
+                    "items": [self._launch_to_dict(r, scan_map.get(r.id)) for r in items],
                     "next_cursor": next_cursor,
                     "total": total,
                 }
@@ -269,7 +271,10 @@ class CryptoLaunchRepository:
                     .limit(20)
                 ).scalars().all()
 
-                result = self._launch_to_dict(launch)
+                result = self._launch_to_dict(
+                    launch,
+                    self._latest_scan_map(session, [launch_id]).get(launch_id),
+                )
                 result["snapshots"] = [self._snapshot_to_dict(s) for s in snapshots]
                 return result
         except Exception:
@@ -281,8 +286,11 @@ class CryptoLaunchRepository:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _launch_to_dict(launch: CryptoLaunch) -> Dict[str, Any]:
-        return {
+    def _launch_to_dict(
+        launch: CryptoLaunch,
+        latest_scan: Optional[CryptoLaunchSecurityScan] = None,
+    ) -> Dict[str, Any]:
+        result = {
             "id": launch.id,
             "chain_id": launch.chain_id,
             "dex_id": launch.dex_id,
@@ -313,6 +321,44 @@ class CryptoLaunchRepository:
             "created_at": launch.created_at.isoformat() if launch.created_at else None,
             "updated_at": launch.updated_at.isoformat() if launch.updated_at else None,
         }
+        if latest_scan is not None:
+            result["risk_score"] = latest_scan.risk_score
+            result["risk_level"] = latest_scan.risk_level
+        else:
+            result["risk_score"] = None
+            result["risk_level"] = None
+        return result
+
+    @staticmethod
+    def _latest_scan_map(
+        session,
+        launch_ids: List[int],
+    ) -> Dict[int, CryptoLaunchSecurityScan]:
+        if not launch_ids:
+            return {}
+
+        latest_scanned_at = (
+            select(
+                CryptoLaunchSecurityScan.launch_id.label("launch_id"),
+                func.max(CryptoLaunchSecurityScan.scanned_at).label("max_scanned_at"),
+            )
+            .where(CryptoLaunchSecurityScan.launch_id.in_(launch_ids))
+            .group_by(CryptoLaunchSecurityScan.launch_id)
+            .subquery()
+        )
+
+        rows = session.execute(
+            select(CryptoLaunchSecurityScan)
+            .join(
+                latest_scanned_at,
+                and_(
+                    CryptoLaunchSecurityScan.launch_id == latest_scanned_at.c.launch_id,
+                    CryptoLaunchSecurityScan.scanned_at == latest_scanned_at.c.max_scanned_at,
+                ),
+            )
+        ).scalars().all()
+
+        return {row.launch_id: row for row in rows}
 
     @staticmethod
     def _snapshot_to_dict(snapshot: CryptoLaunchSnapshot) -> Dict[str, Any]:
