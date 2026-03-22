@@ -137,6 +137,24 @@ export interface WatchedIdsResponse {
 	launchIds: number[];
 }
 
+// ============ AI Summary Types ============
+
+/** Response for POST /api/v1/crypto/launches/{id}/analyze */
+export interface CryptoAiSummary {
+	launchId: number;
+	verdict?: string | null; // BUY, HOLD, AVOID
+	confidence?: number | null; // 0.0 - 1.0
+	bullCase?: string | null;
+	bearCase?: string | null;
+	risks?: string[] | null;
+	recommendedAction?: string | null;
+	modelUsed?: string | null;
+	promptVersion: string;
+	analyzedAt?: string | null;
+	error?: string | null;
+	cached: boolean;
+}
+
 // ============ Helpers ============
 
 /** Format a chain ID for display (capitalize first letter) */
