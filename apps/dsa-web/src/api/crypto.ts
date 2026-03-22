@@ -1,4 +1,5 @@
 import type {
+	CryptoAiSummary,
 	CryptoLaunchDetailResponse,
 	CryptoLaunchFeedResponse,
 	CryptoRefreshResponse,
@@ -74,5 +75,15 @@ export const cryptoApi = {
 			"/api/v1/crypto/status",
 		);
 		return toCamelCase<CryptoScannerStatusResponse>(response.data);
+	},
+
+	/**
+	 * Trigger AI analysis for a specific launch.
+	 */
+	analyzeLaunch: async (launchId: number): Promise<CryptoAiSummary> => {
+		const response = await apiClient.post<Record<string, unknown>>(
+			`/api/v1/crypto/launches/${launchId}/analyze`,
+		);
+		return toCamelCase<CryptoAiSummary>(response.data);
 	},
 };

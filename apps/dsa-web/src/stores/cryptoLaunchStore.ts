@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { cryptoApi } from "../api/crypto";
 import { cryptoWatchlistApi } from "../api/cryptoWatchlist";
 import type {
+	CryptoAiSummary,
 	CryptoFilters,
 	CryptoLaunchDetailResponse,
 	CryptoLaunchRow,
@@ -38,6 +39,11 @@ export interface CryptoLaunchState {
 	// Status
 	scannerStatus: CryptoScannerStatusResponse | null;
 
+	// AI Analysis
+	aiSummary: CryptoAiSummary | null;
+	isAnalyzing: boolean;
+	analyzeError: string | null;
+
 	// Actions
 	loadLaunches: (reset?: boolean) => Promise<void>;
 	loadMore: () => Promise<void>;
@@ -53,6 +59,8 @@ export interface CryptoLaunchState {
 	closeDetail: () => void;
 	triggerRefresh: () => Promise<void>;
 	loadStatus: () => Promise<void>;
+	analyzeToken: (launchId: number) => Promise<void>;
+	clearAiSummary: () => void;
 	resetState: () => void;
 }
 
@@ -80,6 +88,9 @@ const initialState = {
 	isRefreshing: false,
 	refreshError: null as string | null,
 	scannerStatus: null as CryptoScannerStatusResponse | null,
+	aiSummary: null as CryptoAiSummary | null,
+	isAnalyzing: false,
+	analyzeError: null as string | null,
 };
 
 // ============ Store ============
@@ -273,6 +284,24 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 		} catch {
 			// Silent fail for status
 		}
+	},
+
+	analyzeToken: async (launchId: number) => {
+		set({ isAnalyzing: true, analyzeError: null });
+
+		try {
+			const summary = await cryptoApi.analyzeLaunch(launchId);
+			set({ aiSummary: summary, isAnalyzing: false });
+		} catch (err) {
+			set({
+				isAnalyzing: false,
+				analyzeError: err instanceof Error ? err.message : "AI analysis failed",
+			});
+		}
+	},
+
+	clearAiSummary: () => {
+		set({ aiSummary: null, isAnalyzing: false, analyzeError: null });
 	},
 
 	resetState: () => {

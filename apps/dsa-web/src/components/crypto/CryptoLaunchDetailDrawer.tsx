@@ -1,5 +1,6 @@
 import { Copy, ExternalLink, X } from "lucide-react";
 import type React from "react";
+import { useCryptoLaunchStore } from "../../stores/cryptoLaunchStore";
 import type { CryptoLaunchDetailResponse } from "../../types/crypto";
 import {
 	formatChainLabel,
@@ -8,6 +9,7 @@ import {
 	getLaunchAge,
 } from "../../types/crypto";
 import { Drawer } from "../common/Drawer";
+import { CryptoAiSummary } from "./CryptoAiSummary";
 import { CryptoRiskBadge } from "./CryptoRiskBadge";
 
 type CryptoLaunchDetailDrawerProps = {
@@ -34,7 +36,14 @@ export const CryptoLaunchDetailDrawer: React.FC<
 	CryptoLaunchDetailDrawerProps
 > = ({ isOpen, detail, isLoading, onClose }) => {
 	const launch = detail?.launch;
+	const { aiSummary, isAnalyzing, analyzeError, analyzeToken, clearAiSummary } =
+		useCryptoLaunchStore();
 	const snapshots = detail?.snapshots ?? [];
+
+	const handleClose = () => {
+		clearAiSummary();
+		onClose();
+	};
 
 	const copyAddress = (address: string) => {
 		void navigator.clipboard.writeText(address);
@@ -43,7 +52,7 @@ export const CryptoLaunchDetailDrawer: React.FC<
 	return (
 		<Drawer
 			isOpen={isOpen}
-			onClose={onClose}
+			onClose={handleClose}
 			title="Launch Detail"
 			width="max-w-lg"
 		>
@@ -83,7 +92,7 @@ export const CryptoLaunchDetailDrawer: React.FC<
 						</div>
 						<button
 							type="button"
-							onClick={onClose}
+							onClick={handleClose}
 							className="p-1 text-secondary-text hover:text-foreground"
 						>
 							<X className="h-4 w-4" />
@@ -186,6 +195,14 @@ export const CryptoLaunchDetailDrawer: React.FC<
 							)}
 						</div>
 					</div>
+
+					{/* AI Analysis */}
+					<CryptoAiSummary
+						summary={aiSummary}
+						isAnalyzing={isAnalyzing}
+						analyzeError={analyzeError}
+						onAnalyze={() => analyzeToken(launch.id)}
+					/>
 
 					{/* External links */}
 					<div className="flex flex-wrap gap-2">
