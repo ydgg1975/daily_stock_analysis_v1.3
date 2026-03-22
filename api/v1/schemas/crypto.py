@@ -142,3 +142,24 @@ class CryptoScannerStatusResponse(BaseModel):
     last_scan_new_launches: int = 0
     last_scan_updated_launches: int = 0
     total_scans: int = 0
+
+
+# ---------------------------------------------------------------------------
+# AI Summary
+# ---------------------------------------------------------------------------
+
+class CryptoAiSummaryResponse(BaseModel):
+    """Response for POST /api/v1/crypto/launches/{id}/analyze."""
+
+    launch_id: int
+    verdict: Optional[str] = None  # BUY, HOLD, AVOID
+    confidence: Optional[float] = None  # 0.0 - 1.0
+    bull_case: Optional[str] = None
+    bear_case: Optional[str] = None
+    risks: Optional[List[str]] = None
+    recommended_action: Optional[str] = None
+    model_used: Optional[str] = None
+    prompt_version: str = "v1"
+    analyzed_at: Optional[str] = None
+    error: Optional[str] = None
+    cached: bool = False
