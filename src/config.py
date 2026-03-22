@@ -607,6 +607,12 @@ class Config:
     crypto_snapshot_retention_days: int = 7
     crypto_security_provider: str = "auto"
 
+    # --- Crypto AI enrichment ---
+    crypto_ai_enrichment_enabled: bool = False
+    crypto_ai_quick_model: str = ""
+    crypto_ai_deep_model: str = ""
+    crypto_ai_cache_ttl_sec: int = 21600  # 6 hours
+
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
     enable_realtime_quote: bool = True
