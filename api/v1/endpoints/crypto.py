@@ -10,6 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from api.v1.schemas.crypto import (
+    CryptoAiSummaryResponse,
     CryptoLaunchDetailResponse,
     CryptoLaunchFeedResponse,
     CryptoLaunchRow,
@@ -96,6 +97,34 @@ async def get_launch_detail(launch_id: int):
     snapshots = [CryptoSnapshotRow(**s) for s in snapshots_raw]
 
     return CryptoLaunchDetailResponse(launch=launch, snapshots=snapshots)
+
+
+# ---------------------------------------------------------------------------
+# POST /launches/{launch_id}/analyze
+# ---------------------------------------------------------------------------
+
+@router.post("/launches/{launch_id}/analyze", response_model=CryptoAiSummaryResponse)
+async def analyze_launch(launch_id: int):
+    """Trigger AI analysis for a specific launch. Returns the AI summary."""
+    from src.config import Config
+    from src.services.crypto_ai_service import CryptoAiService
+
+    config = Config.get_instance()
+
+    if not config.crypto_ai_enrichment_enabled:
+        raise HTTPException(status_code=403, detail="AI enrichment is disabled")
+
+    detail = _get_service().get_launch_detail(launch_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Launch not found")
+
+    try:
+        ai_service = CryptoAiService(config=config)
+        result = await ai_service.analyze(launch_id)
+        return CryptoAiSummaryResponse(**result)
+    except Exception as e:
+        logger.error(f"AI analysis failed for launch {launch_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"AI analysis failed: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
