@@ -738,6 +738,37 @@ class CryptoWatchlist(Base):
     )
 
 
+class CryptoLaunchAiSummary(Base):
+    """AI-generated analysis summary for a crypto launch."""
+
+    __tablename__ = 'crypto_launch_ai_summaries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    snapshot_id = Column(Integer, ForeignKey('crypto_launch_snapshots.id'), nullable=True, index=True)
+    prompt_version = Column(String(16), nullable=False, default='v1')
+    model_used = Column(String(128))
+    verdict = Column(String(16))  # BUY, HOLD, AVOID
+    confidence = Column(Float)  # 0.0 - 1.0
+    bull_case = Column(Text)
+    bear_case = Column(Text)
+    risks = Column(Text)  # JSON array as string
+    recommended_action = Column(Text)
+    raw_response = Column(Text)  # Full LLM response for debugging
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    analysis_duration_sec = Column(Float)
+    error = Column(Text)  # Non-null if pipeline failed partially
+    analyzed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index('ix_crypto_ai_summary_launch_snapshot', 'launch_id', 'snapshot_id'),
+        Index('ix_crypto_ai_summary_launch_version', 'launch_id', 'prompt_version'),
+    )
+
+
 class DatabaseManager:
     """
     数据库管理器 - 单例模式
