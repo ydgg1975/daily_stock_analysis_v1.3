@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -31,16 +32,24 @@ from src.storage import (
 logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "v1"
+_DEFAULT_RISK_THRESHOLD = 80
+_MAX_LOCK_CACHE = 1000
 
 # In-memory locks to prevent duplicate concurrent analyses for the same launch
-_analyze_locks: Dict[int, asyncio.Lock] = {}
+_analyze_locks: OrderedDict[int, asyncio.Lock] = OrderedDict()
 
 
 def _get_lock(launch_id: int) -> asyncio.Lock:
     """Return (or create) the per-launch asyncio lock."""
-    if launch_id not in _analyze_locks:
-        _analyze_locks[launch_id] = asyncio.Lock()
-    return _analyze_locks[launch_id]
+    if launch_id in _analyze_locks:
+        _analyze_locks.move_to_end(launch_id)
+        return _analyze_locks[launch_id]
+
+    lock = asyncio.Lock()
+    _analyze_locks[launch_id] = lock
+    if len(_analyze_locks) > _MAX_LOCK_CACHE:
+        _analyze_locks.popitem(last=False)
+    return lock
 
 
 # ---------------------------------------------------------------------------
@@ -251,8 +260,10 @@ class CryptoAiService:
                 "sell_tax_pct": float(security.sell_tax_pct or 0) if security else 0,
                 "lp_locked_pct": float(security.lp_locked_pct or 0) if security else 0,
                 "top10_holder_rate_pct": float(security.top10_holder_rate_pct or 0) if security else 0,
-                # Snapshot history for technical analysis
-                "snapshot_history": [
+            }
+
+            if snapshots:
+                data["snapshot_history"] = [
                     {
                         "time": str(s.snapshot_at),
                         "price": s.price_usd,
@@ -260,8 +271,9 @@ class CryptoAiService:
                         "volume": s.volume_usd_24h,
                     }
                     for s in snapshots
-                ],
-            }
+                ]
+            else:
+                data["snapshot_history"] = "No snapshot history available."
 
             # Compute age
             if launch.pair_created_at:
@@ -406,9 +418,11 @@ class CryptoAiService:
                 elif signal in ("bearish", "danger", "weak", "suspicious"):
                     bear_parts.append(f"{name}: {assessment}")
             return {
-                "bull_case": " | ".join(bull_parts) or "No strong bullish signals.",
-                "bear_case": " | ".join(bear_parts) or "No strong bearish signals.",
-                "key_tension": "Unable to synthesize — debate stage failed.",
+                "bull_case": "Synthesized from analyst signals: "
+                + (" | ".join(bull_parts) or "No strong bullish signals."),
+                "bear_case": "Synthesized from analyst signals: "
+                + (" | ".join(bear_parts) or "No strong bearish signals."),
+                "key_tension": "Debate stage failed — synthesized from individual analyst outputs.",
             }
 
     # ------------------------------------------------------------------
@@ -468,12 +482,14 @@ class CryptoAiService:
             recommended_action = "Do not trade. Honeypot contract detected."
 
         # Hard cutoff: extreme risk score
+        threshold = int(getattr(self._config, "crypto_ai_risk_threshold", _DEFAULT_RISK_THRESHOLD) or 0)
         risk_score = data.get("risk_score")
-        if risk_score is not None and risk_score >= 80:
-            if verdict == "BUY":
+        if risk_score is not None and risk_score >= threshold:
+            if verdict in ("BUY", "HOLD"):
                 verdict = "AVOID"
                 risks.insert(0, f"Critical risk score ({risk_score}/100) — overridden to AVOID")
-                recommended_action = f"Risk score {risk_score}/100 is too high. Avoid this token."
+                confidence = max(0.1, confidence - 0.3)
+                recommended_action = f"Risk score {risk_score}/100 meets or exceeds threshold {threshold}/100. Avoid this token."
 
         return {
             "verdict": verdict,
@@ -504,6 +520,7 @@ class CryptoAiService:
             temperature=0.3,
             max_tokens=1024,
             response_format={"type": "json_object"},
+            timeout=60,
         )
 
         # Track usage
@@ -514,10 +531,13 @@ class CryptoAiService:
                 "completion_tokens": getattr(response.usage, "completion_tokens", 0),
                 "total_tokens": getattr(response.usage, "total_tokens", 0),
             }
-        persist_llm_usage(usage=usage, model=model, call_type="crypto_ai")
+        await asyncio.to_thread(persist_llm_usage, usage=usage, model=model, call_type="crypto_ai")
 
         # Parse response
-        content = response.choices[0].message.content or ""
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            raise ValueError(f"Empty choices from LLM model={model}")
+        content = choices[0].message.content or ""
         try:
             return json.loads(content)
         except json.JSONDecodeError:
@@ -572,6 +592,7 @@ class CryptoAiService:
                 session.refresh(row)
         except Exception as exc:
             logger.exception("Failed to persist AI summary for launch_id=%s: %s", launch_id, exc)
+            error = f"Failed to persist: {type(exc).__name__}"
 
         return {
             "launch_id": launch_id,

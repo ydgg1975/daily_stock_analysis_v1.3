@@ -744,8 +744,8 @@ class CryptoLaunchAiSummary(Base):
     __tablename__ = 'crypto_launch_ai_summaries'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
-    snapshot_id = Column(Integer, ForeignKey('crypto_launch_snapshots.id'), nullable=True, index=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id', ondelete='CASCADE'), nullable=False, index=True)
+    snapshot_id = Column(Integer, ForeignKey('crypto_launch_snapshots.id', ondelete='SET NULL'), nullable=True, index=True)
     prompt_version = Column(String(16), nullable=False, default='v1')
     model_used = Column(String(128))
     verdict = Column(String(16))  # BUY, HOLD, AVOID
@@ -764,6 +764,12 @@ class CryptoLaunchAiSummary(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
+        UniqueConstraint(
+            'launch_id',
+            'snapshot_id',
+            'prompt_version',
+            name='uq_crypto_ai_summary_launch_snapshot_version',
+        ),
         Index('ix_crypto_ai_summary_launch_snapshot', 'launch_id', 'snapshot_id'),
         Index('ix_crypto_ai_summary_launch_version', 'launch_id', 'prompt_version'),
     )

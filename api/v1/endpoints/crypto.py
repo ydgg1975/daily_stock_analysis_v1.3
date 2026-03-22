@@ -103,6 +103,7 @@ async def get_launch_detail(launch_id: int):
 # POST /launches/{launch_id}/analyze
 # ---------------------------------------------------------------------------
 
+# TODO: Add per-user rate limiting (e.g., 5 analyses/minute) — currently unprotected
 @router.post("/launches/{launch_id}/analyze", response_model=CryptoAiSummaryResponse)
 async def analyze_launch(launch_id: int):
     """Trigger AI analysis for a specific launch. Returns the AI summary."""
@@ -114,17 +115,19 @@ async def analyze_launch(launch_id: int):
     if not config.crypto_ai_enrichment_enabled:
         raise HTTPException(status_code=403, detail="AI enrichment is disabled")
 
-    detail = _get_service().get_launch_detail(launch_id)
-    if not detail:
-        raise HTTPException(status_code=404, detail="Launch not found")
-
     try:
         ai_service = CryptoAiService(config=config)
         result = await ai_service.analyze(launch_id)
+        if result.get("error") and "not found" in result["error"].lower():
+            raise HTTPException(status_code=404, detail="Launch not found")
+        if result.get("error"):
+            raise HTTPException(status_code=502, detail="AI analysis failed. Please try again later.")
         return CryptoAiSummaryResponse(**result)
-    except Exception as e:
-        logger.error(f"AI analysis failed for launch {launch_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"AI analysis failed: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("AI analysis failed for launch_id=%s", launch_id)
+        raise HTTPException(status_code=502, detail="AI analysis failed. Please try again later.")
 
 
 # ---------------------------------------------------------------------------

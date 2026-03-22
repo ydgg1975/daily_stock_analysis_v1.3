@@ -152,8 +152,8 @@ class CryptoAiSummaryResponse(BaseModel):
     """Response for POST /api/v1/crypto/launches/{id}/analyze."""
 
     launch_id: int
-    verdict: Optional[str] = None  # BUY, HOLD, AVOID
-    confidence: Optional[float] = None  # 0.0 - 1.0
+    verdict: Optional[str] = Field(None, pattern=r'^(BUY|HOLD|AVOID)$')
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
     bull_case: Optional[str] = None
     bear_case: Optional[str] = None
     risks: Optional[List[str]] = None

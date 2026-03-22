@@ -24,7 +24,12 @@ export const CryptoAiSummary: React.FC<CryptoAiSummaryProps> = ({
 	// Loading state
 	if (isAnalyzing) {
 		return (
-			<div className="rounded-lg border border-border/30 bg-surface px-3 py-4">
+			<div
+				role="status"
+				aria-busy="true"
+				aria-label="Analyzing token with AI"
+				className="rounded-lg border border-border/30 bg-surface px-3 py-4"
+			>
 				<div className="flex items-center gap-2">
 					<div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan/20 border-t-cyan" />
 					<span className="text-xs text-secondary-text">
@@ -43,7 +48,10 @@ export const CryptoAiSummary: React.FC<CryptoAiSummaryProps> = ({
 	// Error state
 	if (analyzeError) {
 		return (
-			<div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-3">
+			<div
+				role="alert"
+				className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-3"
+			>
 				<div className="flex items-center gap-2">
 					<AlertTriangle className="h-4 w-4 text-red-500" />
 					<span className="text-xs text-red-500">Analysis failed</span>

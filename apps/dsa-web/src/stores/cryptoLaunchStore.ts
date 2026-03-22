@@ -247,7 +247,13 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 	},
 
 	selectLaunch: async (launchId: number) => {
-		set({ isLoadingDetail: true, detailDrawerOpen: true });
+		set({
+			isLoadingDetail: true,
+			detailDrawerOpen: true,
+			aiSummary: null,
+			isAnalyzing: false,
+			analyzeError: null,
+		});
 
 		try {
 			const detail = await cryptoApi.getLaunchDetail(launchId);
@@ -258,7 +264,13 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 	},
 
 	closeDetail: () => {
-		set({ detailDrawerOpen: false, selectedLaunch: null });
+		set({
+			detailDrawerOpen: false,
+			selectedLaunch: null,
+			aiSummary: null,
+			isAnalyzing: false,
+			analyzeError: null,
+		});
 	},
 
 	triggerRefresh: async () => {
@@ -287,6 +299,7 @@ export const useCryptoLaunchStore = create<CryptoLaunchState>((set, get) => ({
 	},
 
 	analyzeToken: async (launchId: number) => {
+		if (get().isAnalyzing) return;
 		set({ isAnalyzing: true, analyzeError: null });
 
 		try {

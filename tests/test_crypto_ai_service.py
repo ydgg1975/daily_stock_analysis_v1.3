@@ -328,6 +328,90 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["recommended_action"], "Risk score 80/100 is too high. Avoid this token.")
         self.assertIn("Critical risk score (80/100)", result["risks"][0])
 
+    async def test_apply_risk_gate_overrides_hold_when_risk_score_is_extreme(self):
+        data = self.service._gather_launch_data(self.launch_id)
+        data["risk_score"] = 85
+        manager = {
+            "verdict": "HOLD",
+            "confidence": 0.65,
+            "recommended_action": "Wait for confirmation.",
+            "risks": ["Concentrated holders"],
+        }
+        debate = {"bull_case": "Some momentum", "bear_case": "High risk", "key_tension": "risk"}
+
+        result = self.service._apply_risk_gate(data, manager, debate)
+
+        self.assertEqual(result["verdict"], "AVOID")
+        self.assertIn("Critical risk score (85/100)", result["risks"][0])
+        self.assertLess(result["confidence"], 0.65)
+
+    async def test_apply_risk_gate_preserves_avoid_verdict_at_extreme_risk(self):
+        data = self.service._gather_launch_data(self.launch_id)
+        data["risk_score"] = 90
+        manager = {
+            "verdict": "AVOID",
+            "confidence": 0.95,
+            "recommended_action": "Do not buy.",
+            "risks": ["Very risky"],
+        }
+        debate = {"bull_case": "None", "bear_case": "Extreme risk", "key_tension": "risk"}
+
+        result = self.service._apply_risk_gate(data, manager, debate)
+
+        self.assertEqual(result["verdict"], "AVOID")
+        self.assertNotIn("Critical risk score", result["risks"][0] if result["risks"] else "")
+
+    async def test_analyze_returns_error_for_nonexistent_launch(self):
+        result = await self.service.analyze(99999)
+
+        self.assertEqual(result["error"], "Launch not found")
+        self.assertEqual(result["launch_id"], 99999)
+
+    async def test_run_debate_fallback_on_llm_failure(self):
+        data = self.service._gather_launch_data(self.launch_id)
+        analysts = {
+            "market": {"assessment": "Strong liquidity", "signal": "bullish", "confidence": 0.9},
+            "security": {"assessment": "Moderate risk", "signal": "safe", "confidence": 0.8},
+            "social": {"assessment": "Growing attention", "signal": "strong", "confidence": 0.7},
+            "technical": {"assessment": "Uptrend", "signal": "bullish", "confidence": 0.75},
+        }
+
+        with patch.object(self.service, "_call_llm", new=AsyncMock(side_effect=RuntimeError("debate LLM down"))):
+            result = await self.service._run_debate(data, analysts, "test-model")
+
+        self.assertIn("bull_case", result)
+        self.assertIn("bear_case", result)
+        self.assertIn("key_tension", result)
+        self.assertIn("Synthesized from analyst signals", result["bull_case"])
+        self.assertIn("Debate stage failed", result["key_tension"])
+
+    async def test_run_research_manager_fallback_on_llm_failure(self):
+        data = self.service._gather_launch_data(self.launch_id)
+        debate = {"bull_case": "Good momentum", "bear_case": "Some risk", "key_tension": "momentum vs risk"}
+
+        with patch.object(self.service, "_call_llm", new=AsyncMock(side_effect=RuntimeError("manager LLM down"))):
+            result = await self.service._run_research_manager(data, debate, "test-model")
+
+        self.assertEqual(result["verdict"], "HOLD")
+        self.assertLessEqual(result["confidence"], 0.4)
+        self.assertIn("risks", result)
+
+    async def test_resolve_model_falls_back_to_litellm_model_when_tier_empty(self):
+        empty_config = SimpleNamespace(
+            crypto_ai_enrichment_enabled=True,
+            crypto_ai_quick_model="",
+            crypto_ai_deep_model="",
+            crypto_ai_cache_ttl_sec=21600,
+            litellm_model="global-fallback-model",
+        )
+        service = CryptoAiService(config=empty_config, db_manager=self.db)
+
+        quick_model = service._resolve_model("quick")
+        deep_model = service._resolve_model("deep")
+
+        self.assertEqual(quick_model, "global-fallback-model")
+        self.assertEqual(deep_model, "global-fallback-model")
+
 
 if __name__ == "__main__":
     unittest.main()

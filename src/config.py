@@ -611,6 +611,7 @@ class Config:
     crypto_ai_enrichment_enabled: bool = False
     crypto_ai_quick_model: str = ""
     crypto_ai_deep_model: str = ""
+    crypto_ai_risk_threshold: int = 80
     crypto_ai_cache_ttl_sec: int = 21600  # 6 hours
 
     # === 实时行情增强数据配置 ===
@@ -746,6 +747,15 @@ class Config:
                 self.crypto_snapshot_retention_days,
             )
             object.__setattr__(self, "crypto_snapshot_retention_days", 7)
+        if (
+            self.crypto_ai_enrichment_enabled
+            and not self.crypto_ai_quick_model
+            and not self.crypto_ai_deep_model
+        ):
+            _log.warning(
+                "crypto_ai_enrichment_enabled=True but no tier-specific models configured; "
+                "will fall back to global litellm_model"
+            )
         if self.crypto_risk_cache_ttl_sec < 0:
             _log.warning(
                 "Invalid CRYPTO_RISK_CACHE_TTL_SEC=%r, falling back to 300.",
@@ -1205,6 +1215,11 @@ class Config:
             crypto_alert_volume_spike_multiplier=float(os.getenv('CRYPTO_ALERT_VOLUME_SPIKE_MULTIPLIER', '5')),
             crypto_snapshot_retention_days=int(os.getenv('CRYPTO_SNAPSHOT_RETENTION_DAYS', '7')),
             crypto_security_provider=os.getenv('CRYPTO_SECURITY_PROVIDER', 'auto').strip().lower() or 'auto',
+            crypto_ai_enrichment_enabled=parse_env_bool(os.getenv('CRYPTO_AI_ENRICHMENT_ENABLED'), False),
+            crypto_ai_quick_model=os.getenv('CRYPTO_AI_QUICK_MODEL', '').strip(),
+            crypto_ai_deep_model=os.getenv('CRYPTO_AI_DEEP_MODEL', '').strip(),
+            crypto_ai_risk_threshold=int(os.getenv('CRYPTO_AI_RISK_THRESHOLD', '80')),
+            crypto_ai_cache_ttl_sec=int(os.getenv('CRYPTO_AI_CACHE_TTL_SEC', '21600')),
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),
