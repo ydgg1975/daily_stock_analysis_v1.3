@@ -295,5 +295,63 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         )
 
 
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_novita_api_key_sets_model_and_api_base(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """NOVITA_API_KEY should populate novita_api_keys, set litellm_model, and embed api_base."""
+        env = {
+            "NOVITA_API_KEY": "nv-test-key-1234",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.novita_api_keys, ["nv-test-key-1234"])
+        self.assertEqual(config.litellm_model, "openai/moonshotai/kimi-k2.5")
+        params = config.llm_model_list[0]["litellm_params"]
+        self.assertEqual(params["api_key"], "nv-test-key-1234")
+        self.assertEqual(params["api_base"], "https://api.novita.ai/openai")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_novita_api_keys_multi_creates_multiple_deployments(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """NOVITA_API_KEYS (comma-separated) should create one Router deployment per key."""
+        env = {
+            "NOVITA_API_KEYS": "nv-key-one,nv-key-two",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.novita_api_keys, ["nv-key-one", "nv-key-two"])
+        novita_entries = [
+            e for e in config.llm_model_list
+            if e.get("model_name") == "__legacy_novita__"
+        ]
+        self.assertEqual(len(novita_entries), 2)
+        for entry in novita_entries:
+            self.assertEqual(entry["litellm_params"]["api_base"], "https://api.novita.ai/openai")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_novita_channel_via_llm_channels(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """Novita configured as a named LLM_CHANNELS entry should resolve to openai protocol."""
+        env = {
+            "LLM_CHANNELS": "novita",
+            "LLM_NOVITA_BASE_URL": "https://api.novita.ai/openai",
+            "LLM_NOVITA_API_KEY": "nv-channel-key",
+            "LLM_NOVITA_MODELS": "moonshotai/kimi-k2.5",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.llm_models_source, "llm_channels")
+        params = config.llm_model_list[0]["litellm_params"]
+        self.assertEqual(params["api_key"], "nv-channel-key")
+        self.assertEqual(params["api_base"], "https://api.novita.ai/openai")
+        self.assertIn("moonshotai/kimi-k2.5", params["model"])
+
+
 if __name__ == "__main__":
     unittest.main()

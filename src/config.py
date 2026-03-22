@@ -460,6 +460,7 @@ class Config:
     anthropic_api_keys: List[str] = field(default_factory=list)
     openai_api_keys: List[str] = field(default_factory=list)
     deepseek_api_keys: List[str] = field(default_factory=list)
+    novita_api_keys: List[str] = field(default_factory=list)
 
     # Legacy single-key fields (kept for backward compatibility; gemini_api_keys[0] when set)
     gemini_api_key: Optional[str] = None
@@ -902,6 +903,14 @@ class Config:
             if _single_deepseek:
                 deepseek_api_keys = [_single_deepseek]
 
+        # NOVITA_API_KEYS > NOVITA_API_KEY (OpenAI-compatible endpoint: https://api.novita.ai/openai)
+        _novita_keys_raw = os.getenv('NOVITA_API_KEYS', '')
+        novita_api_keys = [k.strip() for k in _novita_keys_raw.split(',') if k.strip()]
+        if not novita_api_keys:
+            _single_novita = os.getenv('NOVITA_API_KEY', '').strip()
+            if _single_novita:
+                novita_api_keys = [_single_novita]
+
         # LITELLM_MODEL: explicit config takes precedence; else infer from available keys
         litellm_model = os.getenv('LITELLM_MODEL', '').strip()
         if not litellm_model:
@@ -914,6 +923,8 @@ class Config:
                 litellm_model = f'anthropic/{_anthropic_model_name}'
             elif deepseek_api_keys:
                 litellm_model = 'deepseek/deepseek-chat'
+            elif novita_api_keys:
+                litellm_model = 'openai/moonshotai/kimi-k2.5'
             elif openai_api_keys:
                 # For openai-compatible models, add prefix only if not already prefixed
                 if '/' not in _openai_model_name:
@@ -963,6 +974,7 @@ class Config:
                     'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
                 ),
                 deepseek_api_keys,
+                novita_api_keys,
             )
             if llm_model_list:
                 llm_models_source = "legacy_env"
@@ -1078,6 +1090,7 @@ class Config:
             anthropic_api_keys=anthropic_api_keys,
             openai_api_keys=openai_api_keys,
             deepseek_api_keys=deepseek_api_keys,
+            novita_api_keys=novita_api_keys,
             gemini_api_key=os.getenv('GEMINI_API_KEY'),
             gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview'),
             gemini_model_fallback=os.getenv('GEMINI_MODEL_FALLBACK', 'gemini-2.5-flash'),
@@ -1519,6 +1532,7 @@ class Config:
         openai_keys: List[str],
         openai_base_url: Optional[str],
         deepseek_keys: Optional[List[str]] = None,
+        novita_keys: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Build Router model_list from legacy per-provider keys (backward compat).
 
@@ -1566,6 +1580,18 @@ class Config:
                     'litellm_params': {
                         'model': '__legacy_deepseek__',
                         'api_key': k,
+                    },
+                })
+
+        # Novita AI keys (OpenAI-compatible endpoint)
+        for k in (novita_keys or []):
+            if k and len(k) >= 8:
+                model_list.append({
+                    'model_name': '__legacy_novita__',
+                    'litellm_params': {
+                        'model': '__legacy_novita__',
+                        'api_key': k,
+                        'api_base': 'https://api.novita.ai/openai',
                     },
                 })
 
