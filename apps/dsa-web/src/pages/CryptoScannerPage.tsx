@@ -5,6 +5,7 @@ import { CryptoLaunchDetailDrawer } from "../components/crypto/CryptoLaunchDetai
 import { CryptoLaunchFilters } from "../components/crypto/CryptoLaunchFilters";
 import { CryptoLaunchTable } from "../components/crypto/CryptoLaunchTable";
 import { CryptoSettingsPanel } from "../components/crypto/CryptoSettingsPanel";
+import { ObservabilityDashboard } from "../components/crypto/ObservabilityDashboard";
 import { ScannerHealthWidget } from "../components/crypto/ScannerHealthWidget";
 import { useCryptoLaunchStore } from "../stores/cryptoLaunchStore";
 import { useCryptoSettingsStore } from "../stores/cryptoSettingsStore";
@@ -147,6 +148,9 @@ const CryptoScannerPage: React.FC = () => {
 
 			{/* Scanner health panel (collapsible) */}
 			{showHealth && <ScannerHealthWidget status={scannerStatus} />}
+
+			{/* Observability dashboard (collapsible, below health) */}
+			{showHealth && <ObservabilityDashboard />}
 
 			{/* Filters */}
 			<CryptoLaunchFilters

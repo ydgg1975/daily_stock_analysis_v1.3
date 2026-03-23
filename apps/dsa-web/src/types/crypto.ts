@@ -183,6 +183,65 @@ export interface CryptoAiSummary {
 	cached: boolean;
 }
 
+// ============ Observability Types ============
+
+/** Per-chain aggregated scan stats */
+export interface ProviderMetricRow {
+	chainId: string;
+	totalScans: number;
+	totalFailures: number;
+	totalDurationMs: number;
+	totalPoolsDiscovered: number;
+	avgDurationMs: number;
+	errorRate: number;
+}
+
+/** Response for GET /api/v1/crypto/metrics/providers */
+export interface ProviderMetricsResponse {
+	chains: ProviderMetricRow[];
+}
+
+/** Response for GET /api/v1/crypto/metrics/slo */
+export interface ScanSloResponse {
+	windowHours: number;
+	totalScans: number;
+	successes: number;
+	failures: number;
+	successRate: number;
+}
+
+/** Per-model token breakdown */
+export interface AiCostModelRow {
+	model: string;
+	calls: number;
+	totalTokens: number;
+}
+
+/** Response for GET /api/v1/crypto/ai/cost */
+export interface AiCostResponse {
+	windowDays: number;
+	totalCalls: number;
+	promptTokens: number;
+	completionTokens: number;
+	totalTokens: number;
+	byModel: AiCostModelRow[];
+}
+
+/** Per-prompt-version aggregated stats */
+export interface PromptComparisonRow {
+	promptVersion: string;
+	analyses: number;
+	avgConfidence?: number | null;
+	totalTokens: number;
+	avgDurationSec?: number | null;
+	verdictDistribution: Record<string, number>;
+}
+
+/** Response for GET /api/v1/crypto/ai/prompt-comparison */
+export interface PromptComparisonResponse {
+	versions: PromptComparisonRow[];
+}
+
 // ============ Helpers ============
 
 /** Format a chain ID for display (capitalize first letter) */

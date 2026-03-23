@@ -5,6 +5,10 @@ import type {
 	CryptoRefreshResponse,
 	CryptoScannerStatusResponse,
 	CryptoSortMode,
+	AiCostResponse,
+	PromptComparisonResponse,
+	ProviderMetricsResponse,
+	ScanSloResponse,
 } from "../types/crypto";
 import apiClient from "./index";
 import { toCamelCase } from "./utils";
@@ -85,5 +89,52 @@ export const cryptoApi = {
 			`/api/v1/crypto/launches/${launchId}/analyze`,
 		);
 		return toCamelCase<CryptoAiSummary>(response.data);
+	},
+
+	// ============ Observability ============
+
+	/**
+	 * Get per-chain provider metrics.
+	 */
+	getProviderMetrics: async (): Promise<ProviderMetricsResponse> => {
+		const response = await apiClient.get<Record<string, unknown>>(
+			"/api/v1/crypto/metrics/providers",
+		);
+		return toCamelCase<ProviderMetricsResponse>(response.data);
+	},
+
+	/**
+	 * Get scan SLO (success rate) over a rolling window.
+	 */
+	getScanSlo: async (windowHours = 24): Promise<ScanSloResponse> => {
+		const response = await apiClient.get<Record<string, unknown>>(
+			"/api/v1/crypto/metrics/slo",
+			{ params: { window_hours: windowHours } },
+		);
+		return toCamelCase<ScanSloResponse>(response.data);
+	},
+
+	/**
+	 * Get crypto AI token cost breakdown.
+	 */
+	getAiCost: async (windowDays = 7): Promise<AiCostResponse> => {
+		const response = await apiClient.get<Record<string, unknown>>(
+			"/api/v1/crypto/ai/cost",
+			{ params: { window_days: windowDays } },
+		);
+		return toCamelCase<AiCostResponse>(response.data);
+	},
+
+	/**
+	 * Compare analysis stats across prompt versions.
+	 */
+	getPromptComparison: async (
+		versions: string[],
+	): Promise<PromptComparisonResponse> => {
+		const response = await apiClient.get<Record<string, unknown>>(
+			"/api/v1/crypto/ai/prompt-comparison",
+			{ params: { versions: versions.join(",") } },
+		);
+		return toCamelCase<PromptComparisonResponse>(response.data);
 	},
 };
