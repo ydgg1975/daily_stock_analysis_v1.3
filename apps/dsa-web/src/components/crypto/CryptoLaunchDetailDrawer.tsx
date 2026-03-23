@@ -1,8 +1,10 @@
 import { Copy, ExternalLink, X } from "lucide-react";
 import type React from "react";
 import { useCryptoLaunchStore } from "../../stores/cryptoLaunchStore";
-import type { CryptoLaunchDetailResponse } from "../../types/crypto";
 import {
+	type CryptoLaunchDetailResponse,
+	type CryptoLaunchLabel,
+	type CryptoSocialLink,
 	formatChainLabel,
 	formatPctChange,
 	formatUsd,
@@ -32,6 +34,114 @@ const MetricRow: React.FC<{
 	</div>
 );
 
+type SocialLinkItem = {
+	key: string;
+	label: string;
+	url: string;
+};
+
+const safeParseArray = (raw: string | null | undefined): unknown[] => {
+	if (!raw) return [];
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+};
+
+const normalizeUrl = (value: string | null | undefined): string | null => {
+	if (!value) return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+	if (trimmed.startsWith("//")) return `https:${trimmed}`;
+	if (/\s/.test(trimmed)) return null;
+	if (!trimmed.includes(".") && !trimmed.includes("/")) return null;
+	return `https://${trimmed}`;
+};
+
+const inferSocialLabel = (
+	label: string | null | undefined,
+	url: string,
+): string => {
+	const normalizedLabel = label?.trim().toLowerCase();
+	const normalizedUrl = url.toLowerCase();
+
+	if (normalizedLabel) {
+		if (normalizedLabel.includes("twitter") || normalizedLabel === "x")
+			return "Twitter";
+		if (normalizedLabel.includes("telegram")) return "Telegram";
+		if (normalizedLabel.includes("discord")) return "Discord";
+		if (
+			normalizedLabel.includes("website") ||
+			normalizedLabel.includes("site")
+		) {
+			return "Website";
+		}
+		return label?.trim() || "Social";
+	}
+
+	if (
+		normalizedUrl.includes("twitter.com") ||
+		normalizedUrl.includes("x.com")
+	) {
+		return "Twitter";
+	}
+	if (normalizedUrl.includes("t.me") || normalizedUrl.includes("telegram")) {
+		return "Telegram";
+	}
+	if (normalizedUrl.includes("discord.")) return "Discord";
+	if (normalizedUrl.includes("medium.com")) return "Medium";
+	if (normalizedUrl.includes("github.com")) return "GitHub";
+	return "Website";
+};
+
+const parseSocialLinks = (
+	socialsJson: string | null | undefined,
+): SocialLinkItem[] => {
+	const items = safeParseArray(socialsJson);
+	return items
+		.map((entry, index): SocialLinkItem | null => {
+			if (typeof entry === "string") {
+				const url = normalizeUrl(entry);
+				if (!url) return null;
+				return {
+					key: `${url}-${index}`,
+					label: inferSocialLabel(null, url),
+					url,
+				};
+			}
+
+			if (!entry || typeof entry !== "object") return null;
+			const item = entry as CryptoSocialLink;
+			const url = normalizeUrl(item.url ?? item.href ?? item.link);
+			if (!url) return null;
+
+			const rawLabel = item.type ?? item.platform ?? item.label ?? item.name;
+			return {
+				key: `${url}-${index}`,
+				label: inferSocialLabel(rawLabel, url),
+				url,
+			};
+		})
+		.filter((item): item is SocialLinkItem => item !== null);
+};
+
+const parseLabels = (labelsJson: string | null | undefined): string[] => {
+	const items = safeParseArray(labelsJson);
+	return items
+		.map((entry): string | null => {
+			if (typeof entry === "string") return entry.trim() || null;
+			if (!entry || typeof entry !== "object") return null;
+			const item = entry as CryptoLaunchLabel;
+			const value =
+				item.label ?? item.name ?? item.value ?? item.title ?? item.text;
+			return value?.trim() || null;
+		})
+		.filter((item): item is string => item !== null);
+};
+
 export const CryptoLaunchDetailDrawer: React.FC<
 	CryptoLaunchDetailDrawerProps
 > = ({ isOpen, detail, isLoading, onClose }) => {
@@ -39,6 +149,8 @@ export const CryptoLaunchDetailDrawer: React.FC<
 	const { aiSummary, isAnalyzing, analyzeError, analyzeToken, clearAiSummary } =
 		useCryptoLaunchStore();
 	const snapshots = detail?.snapshots ?? [];
+	const socialLinks = parseSocialLinks(launch?.socialsJson);
+	const labels = parseLabels(launch?.labelsJson);
 
 	const handleClose = () => {
 		clearAiSummary();
@@ -241,6 +353,47 @@ export const CryptoLaunchDetailDrawer: React.FC<
 							</a>
 						)}
 					</div>
+
+					{/* Social links */}
+					{socialLinks.length > 0 && (
+						<div>
+							<h4 className="mb-2 text-xs font-medium text-secondary-text">
+								Socials
+							</h4>
+							<div className="flex flex-wrap gap-2">
+								{socialLinks.map((item) => (
+									<a
+										key={item.key}
+										href={item.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
+									>
+										{item.label} <ExternalLink className="h-3 w-3" />
+									</a>
+								))}
+							</div>
+						</div>
+					)}
+
+					{/* Labels */}
+					{labels.length > 0 && (
+						<div>
+							<h4 className="mb-2 text-xs font-medium text-secondary-text">
+								Labels
+							</h4>
+							<div className="flex flex-wrap gap-2">
+								{labels.map((label, index) => (
+									<span
+										key={`${label}-${index}`}
+										className="rounded-full border border-border/50 bg-surface px-2 py-0.5 text-xs text-secondary-text"
+									>
+										{label}
+									</span>
+								))}
+							</div>
+						</div>
+					)}
 
 					{/* Snapshot History */}
 					{snapshots.length > 0 && (

@@ -44,6 +44,26 @@ export interface CryptoLaunchRow {
 	riskLevel?: string | null;
 }
 
+/** A social link entry encoded in socialsJson */
+export interface CryptoSocialLink {
+	url?: string | null;
+	href?: string | null;
+	link?: string | null;
+	type?: string | null;
+	platform?: string | null;
+	label?: string | null;
+	name?: string | null;
+}
+
+/** A label entry encoded in labelsJson */
+export interface CryptoLaunchLabel {
+	label?: string | null;
+	name?: string | null;
+	value?: string | null;
+	title?: string | null;
+	text?: string | null;
+}
+
 /** A snapshot entry for the detail view */
 export interface CryptoSnapshotRow {
 	id: number;
