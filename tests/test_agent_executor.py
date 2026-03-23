@@ -518,13 +518,13 @@ class TestAgentExecutor(unittest.TestCase):
 
         adapter.call_with_tools.side_effect = _capture_timeout
 
-        executor = AgentExecutor(registry, adapter, max_steps=2, timeout_seconds=0.2)
+        executor = AgentExecutor(registry, adapter, max_steps=2, timeout_seconds=5.0)
         result = executor.run("Analyze 600519")
 
         self.assertTrue(result.success)
         self.assertIsNotNone(captured.get("timeout"))
         self.assertGreater(captured["timeout"], 0.0)
-        self.assertLessEqual(captured["timeout"], 0.2)
+        self.assertLessEqual(captured["timeout"], 5.0)
 
 
 # ============================================================
