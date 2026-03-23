@@ -61,6 +61,12 @@ class CryptoLaunchService:
         self._gap_duration_sec: float = 0.0
         self._detect_gap()
 
+        # Circuit breaker / ops alerts
+        self._consecutive_failures: int = 0
+        self._circuit_open: bool = False
+        self._circuit_open_since: Optional[datetime] = None
+        self._last_success_at: Optional[datetime] = None
+
     # ------------------------------------------------------------------
     # Scan
     # ------------------------------------------------------------------
@@ -71,7 +77,27 @@ class CryptoLaunchService:
         Returns a summary dict with ``new``, ``updated``, ``failed_chains``.
         Emits a structured ``crypto_scan_complete`` log event and persists
         a ``CryptoScanMetric`` row for observability.
+
+        If the circuit breaker is open, the scan is skipped and an early
+        result is returned with ``circuit_open=True``.
         """
+        # --- Circuit breaker gate ---
+        if self._circuit_open:
+            logger.warning(
+                "scan_once skipped: circuit breaker is open since %s — call resume_scanner() to reset",
+                self._circuit_open_since,
+            )
+            return {
+                "new": 0,
+                "updated": 0,
+                "failed_chains": [],
+                "total_chains": 0,
+                "circuit_open": True,
+            }
+
+        # --- Staleness page-alert check ---
+        self._check_staleness_alert()
+
         config = self._config
         chains = list(config.crypto_chains) if config.crypto_chains else []
         risk_enabled = getattr(config, "crypto_risk_enabled", True)
@@ -82,7 +108,6 @@ class CryptoLaunchService:
         if not chains:
             logger.warning("No crypto chains configured; skipping scan")
             return {"new": 0, "updated": 0, "failed_chains": [], "total_chains": 0}
-
         # Validate chains — unsupported ones are logged and skipped
         valid_chains: List[str] = []
         skipped: List[str] = []
@@ -218,6 +243,14 @@ class CryptoLaunchService:
             self._gap_detected = False
             self._gap_duration_sec = 0.0
 
+            # Reset circuit breaker on success
+            self._consecutive_failures = 0
+            self._last_success_at = scan_finished
+            if self._circuit_open:
+                self._circuit_open = False
+                self._circuit_open_since = None
+                logger.info("Circuit breaker reset after successful scan")
+
             return {
                 "new": new_count,
                 "updated": updated_count,
@@ -245,6 +278,21 @@ class CryptoLaunchService:
                 per_chain={},
                 success=False,
             )
+
+            # Escalate consecutive failures
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= 5 and not self._circuit_open:
+                self._circuit_open = True
+                self._circuit_open_since = datetime.now()
+                logger.critical(
+                    "circuit_breaker_open: scanner paused after %d consecutive failures",
+                    self._consecutive_failures,
+                )
+            elif self._consecutive_failures >= 3:
+                logger.warning(
+                    "ticket_alert: %d consecutive scan failures",
+                    self._consecutive_failures,
+                )
 
             return {"new": 0, "updated": 0, "failed_chains": chains, "total_chains": len(chains)}
 
@@ -292,7 +340,36 @@ class CryptoLaunchService:
                 "gap_duration_sec": round(self._gap_duration_sec, 1),
                 "per_chain_timing": dict(per_chain),
                 "recent_scans": recent_metrics,
+                # Circuit breaker
+                "circuit_open": self._circuit_open,
+                "circuit_open_since": self._circuit_open_since.isoformat() if self._circuit_open_since else None,
+                "consecutive_failures": self._consecutive_failures,
             }
+
+    # ------------------------------------------------------------------
+    # Circuit breaker / ops alerts
+    # ------------------------------------------------------------------
+
+    def resume_scanner(self) -> None:
+        """Manually reset the circuit breaker so scanning can resume."""
+        with self._status_lock:
+            self._circuit_open = False
+            self._circuit_open_since = None
+            self._consecutive_failures = 0
+        logger.info("Scanner resumed: circuit breaker reset manually")
+
+    def _check_staleness_alert(self) -> None:
+        """Emit a page_alert if no successful scan within 3x refresh interval."""
+        if self._last_success_at is None:
+            return
+        threshold_sec = self._config.crypto_refresh_interval_sec * 3
+        age = (datetime.now() - self._last_success_at).total_seconds()
+        if age > threshold_sec:
+            logger.critical(
+                "page_alert: no successful scan in %.0fs (threshold %.0fs)",
+                age,
+                threshold_sec,
+            )
 
     # ------------------------------------------------------------------
     # Helpers
