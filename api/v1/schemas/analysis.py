@@ -52,18 +52,18 @@ class AnalyzeRequest(BaseModel):
     stock_name: Optional[str] = Field(
         None,
         description="用户选中的股票名称（自动补全时提供）",
-        example="贵州茅台"
+        json_schema_extra={"example": "贵州茅台"}
     )
     original_query: Optional[str] = Field(
         None,
         description="用户原始输入（如茅台、gzmt、600519）",
-        example="茅台"
+        json_schema_extra={"example": "茅台"}
     )
     selection_source: Optional[str] = Field(
         None,
         description="股票选择来源：manual(手动输入) | autocomplete(自动补全) | import(导入) | image(图片识别)",
         pattern=SELECTION_SOURCE_PATTERN,
-        example="autocomplete"
+        json_schema_extra={"example": "autocomplete"}
     )
     
     model_config = ConfigDict(json_schema_extra={
