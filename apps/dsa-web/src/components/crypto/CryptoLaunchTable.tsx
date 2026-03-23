@@ -83,6 +83,17 @@ export const CryptoLaunchTable: React.FC<CryptoLaunchTableProps> = ({
 							<tr
 								key={launch.id}
 								onClick={() => onSelect(launch.id)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										if (e.key === " ") {
+											e.preventDefault();
+										}
+										onSelect(launch.id);
+									}
+								}}
+								tabIndex={0}
+								role="button"
+								aria-label={`View launch ${launch.baseTokenSymbol || launch.baseTokenName || launch.pairAddress.slice(0, 8)}`}
 								className={cn(
 									"cursor-pointer border-b border-border/30 transition-colors hover:bg-hover",
 									isWatched && "bg-amber-500/[0.03]",
