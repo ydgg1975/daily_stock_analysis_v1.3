@@ -184,3 +184,83 @@ class CryptoAiSummaryResponse(BaseModel):
     analyzed_at: Optional[str] = None
     error: Optional[str] = None
     cached: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Provider Metrics
+# ---------------------------------------------------------------------------
+
+class ProviderMetricRow(BaseModel):
+    """Per-chain aggregated scan stats."""
+
+    chain_id: str
+    total_scans: int = 0
+    total_failures: int = 0
+    total_duration_ms: int = 0
+    total_pools_discovered: int = 0
+    avg_duration_ms: int = 0
+    error_rate: float = 0.0
+
+
+class ProviderMetricsResponse(BaseModel):
+    """Response for GET /api/v1/crypto/metrics/providers."""
+
+    chains: List[ProviderMetricRow] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# SLO
+# ---------------------------------------------------------------------------
+
+class ScanSloResponse(BaseModel):
+    """Response for GET /api/v1/crypto/metrics/slo."""
+
+    window_hours: int = 24
+    total_scans: int = 0
+    successes: int = 0
+    failures: int = 0
+    success_rate: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# AI Cost
+# ---------------------------------------------------------------------------
+
+class AiCostModelRow(BaseModel):
+    """Per-model token breakdown."""
+
+    model: str
+    calls: int = 0
+    total_tokens: int = 0
+
+
+class AiCostResponse(BaseModel):
+    """Response for GET /api/v1/crypto/ai/cost."""
+
+    window_days: int = 7
+    total_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    by_model: List[AiCostModelRow] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Prompt Comparison
+# ---------------------------------------------------------------------------
+
+class PromptComparisonRow(BaseModel):
+    """Per-prompt-version aggregated stats."""
+
+    prompt_version: str
+    analyses: int = 0
+    avg_confidence: Optional[float] = None
+    total_tokens: int = 0
+    avg_duration_sec: Optional[float] = None
+    verdict_distribution: Dict[str, int] = Field(default_factory=dict)
+
+
+class PromptComparisonResponse(BaseModel):
+    """Response for GET /api/v1/crypto/ai/prompt-comparison."""
+
+    versions: List[PromptComparisonRow] = Field(default_factory=list)

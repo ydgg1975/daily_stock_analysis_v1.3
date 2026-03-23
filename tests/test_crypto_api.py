@@ -17,7 +17,9 @@ for optional_module in ("litellm", "json_repair"):
         sys.modules[optional_module] = MagicMock()
 
 if "pandas" not in sys.modules:
-    sys.modules["pandas"] = ModuleType("pandas")
+    _pd = ModuleType("pandas")
+    _pd.DataFrame = type("DataFrame", (), {})  # type: ignore[attr-defined]
+    sys.modules["pandas"] = _pd
 
 from fastapi import HTTPException
 
@@ -120,3 +122,95 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.not_network
+class CryptoMetricsEndpointTestCase(unittest.IsolatedAsyncioTestCase):
+    """Tests for the provider-metrics, SLO, AI-cost, and prompt-comparison endpoints."""
+
+    def _mock_db(self):
+        """Return a MagicMock DatabaseManager with sensible defaults."""
+        db = MagicMock()
+        db.get_provider_metrics.return_value = [
+            {
+                "chain_id": "solana",
+                "total_scans": 10,
+                "total_failures": 1,
+                "total_duration_ms": 5000,
+                "total_pools_discovered": 40,
+                "avg_duration_ms": 500,
+                "error_rate": 0.1,
+            },
+        ]
+        db.get_scan_slo.return_value = {
+            "window_hours": 24,
+            "total_scans": 100,
+            "successes": 95,
+            "failures": 5,
+            "success_rate": 0.95,
+        }
+        db.get_crypto_ai_cost.return_value = {
+            "window_days": 7,
+            "total_calls": 12,
+            "prompt_tokens": 3000,
+            "completion_tokens": 1500,
+            "total_tokens": 4500,
+            "by_model": [
+                {"model": "gpt-4o-mini", "calls": 12, "total_tokens": 4500},
+            ],
+        }
+        db.get_prompt_comparison.return_value = [
+            {
+                "prompt_version": "v1",
+                "analyses": 5,
+                "avg_confidence": 0.72,
+                "total_tokens": 2500,
+                "avg_duration_sec": 3.14,
+                "verdict_distribution": {"BUY": 2, "HOLD": 2, "AVOID": 1},
+            },
+        ]
+        return db
+
+    async def test_provider_metrics_returns_200(self):
+        db = self._mock_db()
+        with patch("src.storage.DatabaseManager.get_instance", return_value=db):
+            response = await crypto_endpoint.get_provider_metrics()
+
+        self.assertEqual(len(response.chains), 1)
+        self.assertEqual(response.chains[0].chain_id, "solana")
+        db.get_provider_metrics.assert_called_once()
+
+    async def test_scan_slo_returns_200(self):
+        db = self._mock_db()
+        with patch("src.storage.DatabaseManager.get_instance", return_value=db):
+            response = await crypto_endpoint.get_scan_slo(window_hours=24)
+
+        self.assertEqual(response.total_scans, 100)
+        self.assertAlmostEqual(response.success_rate, 0.95)
+        db.get_scan_slo.assert_called_once_with(window_hours=24)
+
+    async def test_ai_cost_returns_200(self):
+        db = self._mock_db()
+        with patch("src.storage.DatabaseManager.get_instance", return_value=db):
+            response = await crypto_endpoint.get_ai_cost(window_days=7)
+
+        self.assertEqual(response.total_calls, 12)
+        self.assertEqual(response.total_tokens, 4500)
+        self.assertEqual(len(response.by_model), 1)
+        db.get_crypto_ai_cost.assert_called_once_with(window_days=7)
+
+    async def test_prompt_comparison_returns_200(self):
+        db = self._mock_db()
+        with patch("src.storage.DatabaseManager.get_instance", return_value=db):
+            response = await crypto_endpoint.get_prompt_comparison(versions="v1")
+
+        self.assertEqual(len(response.versions), 1)
+        self.assertEqual(response.versions[0].prompt_version, "v1")
+        self.assertEqual(response.versions[0].analyses, 5)
+        db.get_prompt_comparison.assert_called_once_with(["v1"])
+
+    async def test_prompt_comparison_rejects_empty_versions(self):
+        with self.assertRaises(HTTPException) as ctx:
+            await crypto_endpoint.get_prompt_comparison(versions="")
+
+        self.assertEqual(ctx.exception.status_code, 400)

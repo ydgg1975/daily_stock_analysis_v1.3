@@ -614,6 +614,7 @@ class LLMUsage(Base):
     call_type = Column(String(32), nullable=False, index=True)
     model = Column(String(128), nullable=False)
     stock_code = Column(String(16), nullable=True)
+    analysis_id = Column(String(36), nullable=True, index=True)  # correlation to CryptoLaunchAiSummary
     prompt_tokens = Column(Integer, nullable=False, default=0)
     completion_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
@@ -2031,12 +2032,14 @@ class DatabaseManager:
         completion_tokens: int,
         total_tokens: int,
         stock_code: Optional[str] = None,
+        analysis_id: Optional[str] = None,
     ) -> None:
         """Append one LLM call record to llm_usage."""
         row = LLMUsage(
             call_type=call_type,
             model=model or "unknown",
             stock_code=stock_code,
+            analysis_id=analysis_id,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
@@ -2136,6 +2139,144 @@ class DatabaseManager:
                 for r in rows
             ]
 
+    def get_provider_metrics(self, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """Aggregate per-chain scan stats from CryptoScanMetric.per_chain_json."""
+        metrics = self.get_scan_metrics(since=since, limit=500)
+        chain_stats: Dict[str, Dict[str, Any]] = {}
+        for m in metrics:
+            raw = m.get("per_chain_json")
+            if not raw:
+                continue
+            try:
+                per_chain = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for chain_id, info in per_chain.items():
+                if chain_id not in chain_stats:
+                    chain_stats[chain_id] = {
+                        "chain_id": chain_id,
+                        "total_scans": 0,
+                        "total_failures": 0,
+                        "total_duration_ms": 0,
+                        "total_pools_discovered": 0,
+                    }
+                s = chain_stats[chain_id]
+                s["total_scans"] += 1
+                status = info.get("status", "")
+                if status == "failed":
+                    s["total_failures"] += 1
+                s["total_duration_ms"] += info.get("duration_ms", 0)
+                s["total_pools_discovered"] += info.get("pools_discovered", 0)
+
+        result = []
+        for s in chain_stats.values():
+            total = s["total_scans"] or 1
+            s["avg_duration_ms"] = round(s["total_duration_ms"] / total)
+            s["error_rate"] = round(s["total_failures"] / total, 3)
+            result.append(s)
+        return sorted(result, key=lambda x: x["chain_id"])
+
+    def get_scan_slo(self, window_hours: int = 24) -> Dict[str, Any]:
+        """Compute scan success ratio over a time window."""
+        since = datetime.now() - timedelta(hours=window_hours)
+        metrics = self.get_scan_metrics(since=since, limit=1000)
+        total = len(metrics)
+        successes = sum(1 for m in metrics if m.get("success"))
+        failures = total - successes
+        return {
+            "window_hours": window_hours,
+            "total_scans": total,
+            "successes": successes,
+            "failures": failures,
+            "success_rate": round(successes / total, 4) if total else 0.0,
+        }
+
+    def get_crypto_ai_cost(
+        self, window_days: int = 7,
+    ) -> Dict[str, Any]:
+        """Aggregate crypto AI token spend from LLMUsage filtered by call_type='crypto_ai'."""
+        since = datetime.now() - timedelta(days=window_days)
+        with self.session_scope() as session:
+            base_filter = and_(
+                LLMUsage.call_type == "crypto_ai",
+                LLMUsage.called_at >= since,
+            )
+            totals = session.execute(
+                select(
+                    func.count(LLMUsage.id).label("calls"),
+                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label("prompt_tokens"),
+                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("total_tokens"),
+                ).where(base_filter)
+            ).one()
+
+            by_model_rows = session.execute(
+                select(
+                    LLMUsage.model,
+                    func.count(LLMUsage.id).label("calls"),
+                    func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("tokens"),
+                )
+                .where(base_filter)
+                .group_by(LLMUsage.model)
+                .order_by(desc(func.sum(LLMUsage.total_tokens)))
+            ).all()
+
+        return {
+            "window_days": window_days,
+            "total_calls": totals.calls,
+            "prompt_tokens": totals.prompt_tokens,
+            "completion_tokens": totals.completion_tokens,
+            "total_tokens": totals.total_tokens,
+            "by_model": [
+                {"model": r.model, "calls": r.calls, "total_tokens": r.tokens}
+                for r in by_model_rows
+            ],
+        }
+
+    def get_prompt_comparison(self, versions: List[str]) -> List[Dict[str, Any]]:
+        """Group CryptoLaunchAiSummary by prompt_version for comparison."""
+        with self.session_scope() as session:
+            rows = session.execute(
+                select(
+                    CryptoLaunchAiSummary.prompt_version,
+                    func.count(CryptoLaunchAiSummary.id).label("analyses"),
+                    func.avg(CryptoLaunchAiSummary.confidence).label("avg_confidence"),
+                    func.coalesce(func.sum(CryptoLaunchAiSummary.total_tokens), 0).label("total_tokens"),
+                    func.avg(CryptoLaunchAiSummary.analysis_duration_sec).label("avg_duration_sec"),
+                )
+                .where(CryptoLaunchAiSummary.prompt_version.in_(versions))
+                .group_by(CryptoLaunchAiSummary.prompt_version)
+            ).all()
+
+            result = []
+            for r in rows:
+                # Count verdicts for this version
+                verdict_rows = session.execute(
+                    select(
+                        CryptoLaunchAiSummary.verdict,
+                        func.count(CryptoLaunchAiSummary.id).label("count"),
+                    )
+                    .where(
+                        and_(
+                            CryptoLaunchAiSummary.prompt_version == r.prompt_version,
+                            CryptoLaunchAiSummary.verdict.isnot(None),
+                        )
+                    )
+                    .group_by(CryptoLaunchAiSummary.verdict)
+                ).all()
+
+                result.append({
+                    "prompt_version": r.prompt_version,
+                    "analyses": r.analyses,
+                    "avg_confidence": round(float(r.avg_confidence), 3) if r.avg_confidence else None,
+                    "total_tokens": r.total_tokens,
+                    "avg_duration_sec": round(float(r.avg_duration_sec), 2) if r.avg_duration_sec else None,
+                    "verdict_distribution": {
+                        v.verdict: v.count for v in verdict_rows
+                    },
+                })
+            return result
+
 
 # 便捷函数
 def get_db() -> DatabaseManager:
@@ -2148,6 +2289,7 @@ def persist_llm_usage(
     model: str,
     call_type: str,
     stock_code: Optional[str] = None,
+    analysis_id: Optional[str] = None,
 ) -> None:
     """Fire-and-forget: write one LLM call record to llm_usage. Never raises."""
     try:
@@ -2159,6 +2301,7 @@ def persist_llm_usage(
             completion_tokens=usage.get("completion_tokens", 0) or 0,
             total_tokens=usage.get("total_tokens", 0) or 0,
             stock_code=stock_code,
+            analysis_id=analysis_id,
         )
     except Exception as exc:
         logging.getLogger(__name__).warning("[LLM usage] failed to persist usage record: %s", exc)

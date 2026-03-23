@@ -10,6 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from api.v1.schemas.crypto import (
+    AiCostResponse,
     CryptoAiSummaryResponse,
     CryptoLaunchDetailResponse,
     CryptoLaunchFeedResponse,
@@ -19,6 +20,9 @@ from api.v1.schemas.crypto import (
     CryptoScannerStatusResponse,
     CryptoSnapshotRow,
     FeedMeta,
+    PromptComparisonResponse,
+    ProviderMetricsResponse,
+    ScanSloResponse,
 )
 from src.services.crypto_launch_service import CryptoLaunchService
 
@@ -158,3 +162,69 @@ async def get_scanner_status():
     """Return current scanner runtime status."""
     status = _get_service().get_status()
     return CryptoScannerStatusResponse(**status)
+
+
+# ---------------------------------------------------------------------------
+# GET /metrics/providers
+# ---------------------------------------------------------------------------
+
+@router.get("/metrics/providers", response_model=ProviderMetricsResponse)
+async def get_provider_metrics():
+    """Per-chain scan stats aggregated from recent scan metrics."""
+    from src.storage import DatabaseManager
+
+    db = DatabaseManager.get_instance()
+    chain_rows = db.get_provider_metrics()
+    return ProviderMetricsResponse(chains=chain_rows)
+
+
+# ---------------------------------------------------------------------------
+# GET /metrics/slo
+# ---------------------------------------------------------------------------
+
+@router.get("/metrics/slo", response_model=ScanSloResponse)
+async def get_scan_slo(
+    window_hours: int = Query(24, ge=1, le=720),
+):
+    """Scan success ratio over a rolling window."""
+    from src.storage import DatabaseManager
+
+    db = DatabaseManager.get_instance()
+    slo = db.get_scan_slo(window_hours=window_hours)
+    return ScanSloResponse(**slo)
+
+
+# ---------------------------------------------------------------------------
+# GET /ai/cost
+# ---------------------------------------------------------------------------
+
+@router.get("/ai/cost", response_model=AiCostResponse)
+async def get_ai_cost(
+    window_days: int = Query(7, ge=1, le=90),
+):
+    """Crypto AI token spend aggregated from LLM usage records."""
+    from src.storage import DatabaseManager
+
+    db = DatabaseManager.get_instance()
+    cost = db.get_crypto_ai_cost(window_days=window_days)
+    return AiCostResponse(**cost)
+
+
+# ---------------------------------------------------------------------------
+# GET /ai/prompt-comparison
+# ---------------------------------------------------------------------------
+
+@router.get("/ai/prompt-comparison", response_model=PromptComparisonResponse)
+async def get_prompt_comparison(
+    versions: str = Query(..., description="Comma-separated prompt versions, e.g. v1,v2"),
+):
+    """Compare analysis stats across prompt versions."""
+    from src.storage import DatabaseManager
+
+    version_list = [v.strip() for v in versions.split(",") if v.strip()]
+    if not version_list:
+        raise HTTPException(status_code=400, detail="At least one version is required")
+
+    db = DatabaseManager.get_instance()
+    rows = db.get_prompt_comparison(version_list)
+    return PromptComparisonResponse(versions=rows)
