@@ -324,8 +324,94 @@ class GapDetectionTestCase(unittest.TestCase):
         time.sleep(1.1)
         service.scan_once()
 
+
         # Both calls should fetch
         self.assertEqual(self.fetcher.discover_and_enrich.call_count, 2)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Extended get_status() with observability
+# ---------------------------------------------------------------------------
+
+@pytest.mark.not_network
+class StatusObservabilityTestCase(unittest.TestCase):
+    """Verify get_status() exposes gap, per-chain timing, and recent scans."""
+
+    def setUp(self):
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager("sqlite:///:memory:")
+        self.config = _make_config()
+        self.fetcher = MagicMock()
+        self.repo = MagicMock()
+        self.repo.db = self.db
+
+        self.fetcher.validate_enabled_chains = MagicMock(side_effect=lambda c: c)
+        bsc_launch = _make_launch("bsc", "0xbsc-pair")
+        self.fetcher.discover_and_enrich.return_value = ({"bsc": [bsc_launch]}, [])
+        self.fetcher.last_chain_timings = {
+            "bsc": {"duration_ms": 100, "pools_discovered": 1, "status": "ok"},
+        }
+        self.repo.upsert_launch.return_value = (1, True)
+        self.repo.append_snapshot.return_value = None
+        self.repo.cleanup_old_snapshots.return_value = 0
+
+    def tearDown(self):
+        DatabaseManager.reset_instance()
+
+    def _create_service(self, **config_overrides):
+        cfg = _make_config(**config_overrides)
+        from src.services.crypto_launch_service import CryptoLaunchService
+        return CryptoLaunchService(config=cfg, fetcher=self.fetcher, repo=self.repo)
+
+    def test_status_includes_gap_fields(self):
+        """get_status() should include gap_detected and gap_duration_sec."""
+        stale_time = datetime.now() - timedelta(minutes=5)
+        self.db.save_scan_metric(
+            scan_id="stale001",
+            started_at=stale_time - timedelta(seconds=2),
+            finished_at=stale_time,
+            duration_ms=2000,
+            chains_total=1,
+            chains_failed=0,
+            launches_new=0,
+            launches_updated=0,
+            success=True,
+        )
+
+        service = self._create_service(crypto_refresh_interval_sec=60)
+        status = service.get_status()
+
+        self.assertIn("gap_detected", status)
+        self.assertTrue(status["gap_detected"])
+        self.assertGreater(status["gap_duration_sec"], 0)
+
+    def test_status_includes_per_chain_timing(self):
+        """get_status() should include per_chain_timing from fetcher."""
+        service = self._create_service(crypto_chains=["bsc"])
+        service.scan_once()
+        status = service.get_status()
+
+        self.assertIn("per_chain_timing", status)
+        self.assertIn("bsc", status["per_chain_timing"])
+        self.assertEqual(status["per_chain_timing"]["bsc"]["duration_ms"], 100)
+
+    def test_status_includes_recent_scans(self):
+        """get_status() should return recent_scans from metric history."""
+        service = self._create_service(crypto_chains=["bsc"])
+        service.scan_once()
+        status = service.get_status()
+
+        self.assertIn("recent_scans", status)
+        self.assertGreaterEqual(len(status["recent_scans"]), 1)
+        self.assertIn("scan_id", status["recent_scans"][0])
+
+    def test_status_gap_false_when_no_gap(self):
+        """get_status() gap_detected should be False when no gap exists."""
+        service = self._create_service(crypto_refresh_interval_sec=60)
+        status = service.get_status()
+
+        self.assertFalse(status["gap_detected"])
+        self.assertEqual(status["gap_duration_sec"], 0)
 
 
 if __name__ == "__main__":

@@ -265,7 +265,15 @@ class CryptoLaunchService:
     # ------------------------------------------------------------------
 
     def get_status(self) -> Dict[str, Any]:
-        """Return scanner runtime status metadata."""
+        """Return scanner runtime status metadata including observability."""
+        # Fetch recent scan metrics for history
+        try:
+            recent_metrics = self._repo.db.get_scan_metrics(limit=10)
+        except Exception:
+            recent_metrics = []
+
+        per_chain = getattr(self._fetcher, "last_chain_timings", {})
+
         with self._status_lock:
             return {
                 "enabled": self._config.crypto_enabled,
@@ -279,6 +287,11 @@ class CryptoLaunchService:
                 "last_scan_new_launches": self._last_scan_new_launches,
                 "last_scan_updated_launches": self._last_scan_updated_launches,
                 "total_scans": self._total_scans,
+                # Observability extensions
+                "gap_detected": self._gap_detected,
+                "gap_duration_sec": round(self._gap_duration_sec, 1),
+                "per_chain_timing": dict(per_chain),
+                "recent_scans": recent_metrics,
             }
 
     # ------------------------------------------------------------------

@@ -1,10 +1,11 @@
 import { RefreshCw, Settings } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CryptoLaunchDetailDrawer } from "../components/crypto/CryptoLaunchDetailDrawer";
 import { CryptoLaunchFilters } from "../components/crypto/CryptoLaunchFilters";
 import { CryptoLaunchTable } from "../components/crypto/CryptoLaunchTable";
 import { CryptoSettingsPanel } from "../components/crypto/CryptoSettingsPanel";
+import { ScannerHealthWidget } from "../components/crypto/ScannerHealthWidget";
 import { useCryptoLaunchStore } from "../stores/cryptoLaunchStore";
 import { useCryptoSettingsStore } from "../stores/cryptoSettingsStore";
 import { cn } from "../utils/cn";
@@ -38,6 +39,7 @@ const CryptoScannerPage: React.FC = () => {
 		loadStatus,
 	} = useCryptoLaunchStore();
 	const { openPanel, isOpen: isSettingsOpen } = useCryptoSettingsStore();
+	const [showHealth, setShowHealth] = useState(false);
 
 	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -97,21 +99,24 @@ const CryptoScannerPage: React.FC = () => {
 
 				<div className="flex items-center gap-2">
 					{scannerStatus && (
-						<span
-							className={cn(
-								"h-2 w-2 rounded-full",
-								scannerStatus.enabled && scannerStatus.isScanning
-									? "bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500/40)]"
-									: "bg-secondary-text/30",
-							)}
-							title={
-								scannerStatus.enabled
-									? scannerStatus.isScanning
-										? "Scanner active"
-										: "Scanner idle"
-									: "Scanner disabled"
-							}
-						/>
+						<button
+							type="button"
+							onClick={() => setShowHealth((v) => !v)}
+							className="flex items-center gap-1.5 rounded-lg border border-border/50 px-2 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
+							title="Toggle scanner health panel"
+						>
+							<span
+								className={cn(
+									"h-2 w-2 rounded-full",
+									scannerStatus.enabled && scannerStatus.isScanning
+										? "bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500/40)]"
+										: scannerStatus.gapDetected
+											? "bg-amber-500 shadow-[0_0_6px_theme(colors.amber.500/40)]"
+											: "bg-secondary-text/30",
+								)}
+							/>
+							<span className="hidden sm:inline">Health</span>
+						</button>
 					)}
 
 					<button
@@ -139,6 +144,9 @@ const CryptoScannerPage: React.FC = () => {
 					</button>
 				</div>
 			</div>
+
+			{/* Scanner health panel (collapsible) */}
+			{showHealth && <ScannerHealthWidget status={scannerStatus} />}
 
 			{/* Filters */}
 			<CryptoLaunchFilters

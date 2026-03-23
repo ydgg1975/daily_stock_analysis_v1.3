@@ -128,6 +128,21 @@ class CryptoRefreshResponse(BaseModel):
 # Status
 # ---------------------------------------------------------------------------
 
+class ScanMetricRow(BaseModel):
+    """A single scan-cycle metric for the recent history."""
+
+    scan_id: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    duration_ms: int = 0
+    chains_total: int = 0
+    chains_failed: int = 0
+    launches_new: int = 0
+    launches_updated: int = 0
+    per_chain_json: Optional[str] = None
+    success: bool = True
+
+
 class CryptoScannerStatusResponse(BaseModel):
     """Response for GET /api/v1/crypto/status."""
 
@@ -142,6 +157,12 @@ class CryptoScannerStatusResponse(BaseModel):
     last_scan_new_launches: int = 0
     last_scan_updated_launches: int = 0
     total_scans: int = 0
+
+    # Observability extensions
+    gap_detected: bool = False
+    gap_duration_sec: float = 0.0
+    per_chain_timing: Dict[str, Any] = Field(default_factory=dict)
+    recent_scans: List[ScanMetricRow] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

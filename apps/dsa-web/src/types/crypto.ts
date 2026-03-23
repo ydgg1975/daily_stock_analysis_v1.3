@@ -104,6 +104,28 @@ export interface CryptoRefreshResponse {
 
 // ============ Status Types ============
 
+/** A single scan-cycle metric row from the backend */
+export interface ScanMetricRow {
+	scanId: string;
+	startedAt?: string | null;
+	finishedAt?: string | null;
+	durationMs: number;
+	chainsTotal: number;
+	chainsFailed: number;
+	launchesNew: number;
+	launchesUpdated: number;
+	perChainJson?: string | null;
+	success: boolean;
+}
+
+/** Per-chain timing from the latest scan */
+export interface ChainTiming {
+	durationMs: number;
+	poolsDiscovered: number;
+	status: string;
+	retryCount?: number;
+}
+
 /** Response for GET /api/v1/crypto/status */
 export interface CryptoScannerStatusResponse {
 	enabled: boolean;
@@ -117,6 +139,12 @@ export interface CryptoScannerStatusResponse {
 	lastScanNewLaunches: number;
 	lastScanUpdatedLaunches: number;
 	totalScans: number;
+
+	// Observability extensions
+	gapDetected: boolean;
+	gapDurationSec: number;
+	perChainTiming: Record<string, ChainTiming>;
+	recentScans: ScanMetricRow[];
 }
 
 // ============ Filter Types ============
