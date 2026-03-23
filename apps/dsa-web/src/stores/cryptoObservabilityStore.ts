@@ -45,6 +45,9 @@ const initialState = {
 	pollIntervalMs: 60_000,
 };
 
+const getErrorMessage = (error: unknown, fallback: string): string =>
+	error instanceof Error ? error.message : fallback;
+
 // ============ Store ============
 
 export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
@@ -64,10 +67,7 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 			} catch (err) {
 				set({
 					isLoading: false,
-					error:
-						err instanceof Error
-							? err.message
-							: "Failed to load observability data",
+					error: getErrorMessage(err, "Failed to load observability data"),
 				});
 			}
 		},
@@ -75,36 +75,40 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 		loadProviderMetrics: async () => {
 			try {
 				const data = await cryptoApi.getProviderMetrics();
-				set({ providerMetrics: data });
-			} catch {
-				// Silent fail for individual metrics
+				set({ providerMetrics: data, error: null });
+			} catch (err) {
+				set({
+					error: getErrorMessage(err, "Failed to load provider metrics"),
+				});
 			}
 		},
 
 		loadScanSlo: async (windowHours = 24) => {
 			try {
 				const data = await cryptoApi.getScanSlo(windowHours);
-				set({ scanSlo: data });
-			} catch {
-				// Silent fail
+				set({ scanSlo: data, error: null });
+			} catch (err) {
+				set({ error: getErrorMessage(err, "Failed to load scan SLO") });
 			}
 		},
 
 		loadAiCost: async (windowDays = 7) => {
 			try {
 				const data = await cryptoApi.getAiCost(windowDays);
-				set({ aiCost: data });
-			} catch {
-				// Silent fail
+				set({ aiCost: data, error: null });
+			} catch (err) {
+				set({ error: getErrorMessage(err, "Failed to load AI cost data") });
 			}
 		},
 
 		loadPromptComparison: async (versions = ["v1"]) => {
 			try {
 				const data = await cryptoApi.getPromptComparison(versions);
-				set({ promptComparison: data });
-			} catch {
-				// Silent fail
+				set({ promptComparison: data, error: null });
+			} catch (err) {
+				set({
+					error: getErrorMessage(err, "Failed to load prompt comparison"),
+				});
 			}
 		},
 

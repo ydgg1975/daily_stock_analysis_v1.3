@@ -308,6 +308,7 @@ export const ObservabilityDashboard: React.FC<ObservabilityDashboardProps> = ({
 		aiCost,
 		promptComparison,
 		isLoading,
+		error,
 		loadAll,
 		pollIntervalMs,
 	} = useCryptoObservabilityStore();
@@ -379,6 +380,19 @@ export const ObservabilityDashboard: React.FC<ObservabilityDashboardProps> = ({
 					))}
 				</div>
 			</div>
+
+			{error && (
+				<div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">
+					<span className="truncate">{error}</span>
+					<button
+						type="button"
+						onClick={() => void loadAll()}
+						className="shrink-0 rounded border border-red-500/40 px-2 py-1 text-[10px] font-medium text-red-300 transition-colors hover:bg-red-500/15"
+					>
+						Retry
+					</button>
+				</div>
+			)}
 
 			{/* Tab content */}
 			{activeTab === "slo" && scanSlo && <SloGauge slo={scanSlo} />}
