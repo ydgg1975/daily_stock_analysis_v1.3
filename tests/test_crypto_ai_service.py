@@ -18,7 +18,9 @@ for optional_module in ("litellm", "json_repair"):
         sys.modules[optional_module] = MagicMock()
 
 if "pandas" not in sys.modules:
-    sys.modules["pandas"] = ModuleType("pandas")
+    _pd = ModuleType("pandas")
+    _pd.DataFrame = MagicMock()  # type: ignore[attr-defined]
+    sys.modules["pandas"] = _pd
 
 from src.services.crypto_ai_service import (
     CryptoAiService,
@@ -133,6 +135,7 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
             crypto_ai_quick_model="test-quick-model",
             crypto_ai_deep_model="test-deep-model",
             crypto_ai_cache_ttl_sec=21600,
+            crypto_ai_prompt_version="v1",
             litellm_model="fallback-model",
         )
         self.service = CryptoAiService(config=self.config, db_manager=self.db)
@@ -166,9 +169,12 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch("src.services.crypto_ai_service.litellm.acompletion", new=AsyncMock(return_value=response)):
-            result = await self.service._call_llm("test prompt", "test-model")
+            result, usage = await self.service._call_llm("test prompt", "test-model")
 
         self.assertEqual(result, {"verdict": "BUY", "confidence": 0.77})
+        self.assertEqual(usage["prompt_tokens"], 11)
+        self.assertEqual(usage["completion_tokens"], 7)
+        self.assertEqual(usage["total_tokens"], 18)
 
     async def test_call_llm_returns_raw_text_for_malformed_json(self):
         response = SimpleNamespace(
@@ -177,21 +183,23 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch("src.services.crypto_ai_service.litellm.acompletion", new=AsyncMock(return_value=response)):
-            result = await self.service._call_llm("bad prompt", "test-model")
+            result, usage = await self.service._call_llm("bad prompt", "test-model")
 
         self.assertEqual(result, {"raw_text": "not-json at all"})
+        self.assertEqual(usage["prompt_tokens"], 5)
 
     async def test_run_analysts_handles_partial_failure(self):
         data = self.service._gather_launch_data(self.launch_id)
+        _zero_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         side_effects = [
-            {"assessment": "Market strong", "signal": "bullish", "confidence": 0.9},
+            ({"assessment": "Market strong", "signal": "bullish", "confidence": 0.9}, _zero_usage),
             RuntimeError("security timeout"),
-            {"assessment": "Community active", "signal": "strong", "confidence": 0.8},
-            {"assessment": "Trend intact", "signal": "bullish", "confidence": 0.75},
+            ({"assessment": "Community active", "signal": "strong", "confidence": 0.8}, _zero_usage),
+            ({"assessment": "Trend intact", "signal": "bullish", "confidence": 0.75}, _zero_usage),
         ]
 
         with patch.object(self.service, "_call_llm", new=AsyncMock(side_effect=side_effects)) as mock_call:
-            result = await self.service._run_analysts(data, "test-quick-model")
+            result, usage = await self.service._run_analysts(data, "test-quick-model")
 
         self.assertEqual(mock_call.await_count, 4)
         self.assertEqual(result["market"]["signal"], "bullish")
@@ -220,9 +228,11 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
             "risks": ["Mintable contract"],
         }
 
-        with patch.object(self.service, "_run_analysts", new=AsyncMock(return_value=analyst_result)), patch.object(
-            self.service, "_run_debate", new=AsyncMock(return_value=debate_result)
-        ), patch.object(self.service, "_run_research_manager", new=AsyncMock(return_value=manager_result)):
+        _zero_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        with patch.object(self.service, "_run_analysts", new=AsyncMock(return_value=(analyst_result, _zero_usage))), patch.object(
+            self.service, "_run_debate", new=AsyncMock(return_value=(debate_result, _zero_usage))
+        ), patch.object(self.service, "_run_research_manager", new=AsyncMock(return_value=(manager_result, _zero_usage))):
             result = await self.service.analyze(self.launch_id)
 
         self.assertEqual(result["launch_id"], self.launch_id)
@@ -259,9 +269,11 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
             "risks": ["Mintable contract"],
         }
 
-        with patch.object(self.service, "_run_analysts", new=AsyncMock(return_value=analyst_result)) as mock_analysts, patch.object(
-            self.service, "_run_debate", new=AsyncMock(return_value=debate_result)
-        ), patch.object(self.service, "_run_research_manager", new=AsyncMock(return_value=manager_result)):
+        _zero_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        with patch.object(self.service, "_run_analysts", new=AsyncMock(return_value=(analyst_result, _zero_usage))) as mock_analysts, patch.object(
+            self.service, "_run_debate", new=AsyncMock(return_value=(debate_result, _zero_usage))
+        ), patch.object(self.service, "_run_research_manager", new=AsyncMock(return_value=(manager_result, _zero_usage))):
             first = await self.service.analyze(self.launch_id)
             second = await self.service.analyze(self.launch_id)
 
@@ -284,9 +296,10 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         with patch("src.services.crypto_ai_service.litellm.acompletion", new=AsyncMock(return_value=response)), patch(
             "src.services.crypto_ai_service.persist_llm_usage"
         ) as mock_persist:
-            result = await self.service._call_llm("usage test", "tracked-model")
+            result, usage = await self.service._call_llm("usage test", "tracked-model")
 
         self.assertEqual(result, {"signal": "bullish"})
+        self.assertEqual(usage, {"prompt_tokens": 21, "completion_tokens": 8, "total_tokens": 29})
         mock_persist.assert_called_once_with(
             usage={"prompt_tokens": 21, "completion_tokens": 8, "total_tokens": 29},
             model="tracked-model",
@@ -325,7 +338,7 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         result = self.service._apply_risk_gate(data, manager, debate)
 
         self.assertEqual(result["verdict"], "AVOID")
-        self.assertEqual(result["recommended_action"], "Risk score 80/100 is too high. Avoid this token.")
+        self.assertEqual(result["recommended_action"], "Risk score 80/100 meets or exceeds threshold 80/100. Avoid this token.")
         self.assertIn("Critical risk score (80/100)", result["risks"][0])
 
     async def test_apply_risk_gate_overrides_hold_when_risk_score_is_extreme(self):
@@ -377,24 +390,28 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
         }
 
         with patch.object(self.service, "_call_llm", new=AsyncMock(side_effect=RuntimeError("debate LLM down"))):
-            result = await self.service._run_debate(data, analysts, "test-model")
+            result, usage = await self.service._run_debate(data, analysts, "test-model")
 
         self.assertIn("bull_case", result)
         self.assertIn("bear_case", result)
         self.assertIn("key_tension", result)
         self.assertIn("Synthesized from analyst signals", result["bull_case"])
         self.assertIn("Debate stage failed", result["key_tension"])
+        self.assertEqual(usage["prompt_tokens"], 0)
+        self.assertEqual(usage["total_tokens"], 0)
 
     async def test_run_research_manager_fallback_on_llm_failure(self):
         data = self.service._gather_launch_data(self.launch_id)
         debate = {"bull_case": "Good momentum", "bear_case": "Some risk", "key_tension": "momentum vs risk"}
 
         with patch.object(self.service, "_call_llm", new=AsyncMock(side_effect=RuntimeError("manager LLM down"))):
-            result = await self.service._run_research_manager(data, debate, "test-model")
+            result, usage = await self.service._run_research_manager(data, debate, "test-model")
 
         self.assertEqual(result["verdict"], "HOLD")
         self.assertLessEqual(result["confidence"], 0.4)
         self.assertIn("risks", result)
+        self.assertEqual(usage["prompt_tokens"], 0)
+        self.assertEqual(usage["total_tokens"], 0)
 
     async def test_resolve_model_falls_back_to_litellm_model_when_tier_empty(self):
         empty_config = SimpleNamespace(
@@ -411,6 +428,90 @@ class CryptoAiServiceTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(quick_model, "global-fallback-model")
         self.assertEqual(deep_model, "global-fallback-model")
+
+
+    async def test_persisted_summary_has_aggregated_token_fields(self):
+        """Task 3: token fields on CryptoLaunchAiSummary reflect totals."""
+        analyst_result = {
+            "market": {"assessment": "ok", "signal": "bullish", "confidence": 0.8},
+            "security": {"assessment": "ok", "signal": "safe", "confidence": 0.7},
+            "social": {"assessment": "ok", "signal": "strong", "confidence": 0.6},
+            "technical": {"assessment": "ok", "signal": "bullish", "confidence": 0.7},
+        }
+        debate_result = {
+            "bull_case": "Strong.",
+            "bear_case": "Risky.",
+            "key_tension": "momentum vs risk.",
+        }
+        manager_result = {
+            "verdict": "BUY",
+            "confidence": 0.75,
+            "recommended_action": "Enter now.",
+            "risks": ["Contract risk"],
+        }
+
+        analyst_usage = {"prompt_tokens": 100, "completion_tokens": 40, "total_tokens": 140}
+        debate_usage = {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}
+        manager_usage = {"prompt_tokens": 30, "completion_tokens": 15, "total_tokens": 45}
+
+        with patch.object(self.service, "_run_analysts", new=AsyncMock(return_value=(analyst_result, analyst_usage))), \
+             patch.object(self.service, "_run_debate", new=AsyncMock(return_value=(debate_result, debate_usage))), \
+             patch.object(self.service, "_run_research_manager", new=AsyncMock(return_value=(manager_result, manager_usage))):
+            result = await self.service.analyze(self.launch_id)
+
+        self.assertFalse(result["cached"])
+        self.assertEqual(result["verdict"], "BUY")
+
+        with self.db.get_session() as session:
+            row = session.query(CryptoLaunchAiSummary).filter_by(launch_id=self.launch_id).one()
+
+        self.assertEqual(row.prompt_tokens, 180)    # 100 + 50 + 30
+        self.assertEqual(row.completion_tokens, 75)  # 40 + 20 + 15
+        self.assertEqual(row.total_tokens, 255)      # 140 + 70 + 45
+
+    async def test_prompt_version_from_config_v2(self):
+        """Task 3: prompt_version stored in DB matches config value."""
+        v2_config = SimpleNamespace(
+            crypto_ai_enrichment_enabled=True,
+            crypto_ai_quick_model="test-quick-model",
+            crypto_ai_deep_model="test-deep-model",
+            crypto_ai_cache_ttl_sec=21600,
+            crypto_ai_prompt_version="v2",
+            litellm_model="fallback-model",
+        )
+        service = CryptoAiService(config=v2_config, db_manager=self.db)
+
+        analyst_result = {
+            "market": {"assessment": "ok", "signal": "bullish", "confidence": 0.8},
+            "security": {"assessment": "ok", "signal": "safe", "confidence": 0.7},
+            "social": {"assessment": "ok", "signal": "strong", "confidence": 0.6},
+            "technical": {"assessment": "ok", "signal": "bullish", "confidence": 0.7},
+        }
+        debate_result = {
+            "bull_case": "Strong.",
+            "bear_case": "Risky.",
+            "key_tension": "momentum vs risk.",
+        }
+        manager_result = {
+            "verdict": "HOLD",
+            "confidence": 0.55,
+            "recommended_action": "Wait.",
+            "risks": ["Uncertain"],
+        }
+
+        _zero_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        with patch.object(service, "_run_analysts", new=AsyncMock(return_value=(analyst_result, _zero_usage))), \
+             patch.object(service, "_run_debate", new=AsyncMock(return_value=(debate_result, _zero_usage))), \
+             patch.object(service, "_run_research_manager", new=AsyncMock(return_value=(manager_result, _zero_usage))):
+            result = await service.analyze(self.launch_id)
+
+        self.assertEqual(result["prompt_version"], "v2")
+
+        with self.db.get_session() as session:
+            row = session.query(CryptoLaunchAiSummary).filter_by(launch_id=self.launch_id).one()
+
+        self.assertEqual(row.prompt_version, "v2")
 
 
 if __name__ == "__main__":

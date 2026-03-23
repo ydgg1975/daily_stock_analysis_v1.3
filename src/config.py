@@ -613,6 +613,7 @@ class Config:
     crypto_ai_deep_model: str = ""
     crypto_ai_risk_threshold: int = 80
     crypto_ai_cache_ttl_sec: int = 21600  # 6 hours
+    crypto_ai_prompt_version: str = "v1"
 
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
@@ -1220,6 +1221,7 @@ class Config:
             crypto_ai_deep_model=os.getenv('CRYPTO_AI_DEEP_MODEL', '').strip(),
             crypto_ai_risk_threshold=int(os.getenv('CRYPTO_AI_RISK_THRESHOLD', '80')),
             crypto_ai_cache_ttl_sec=int(os.getenv('CRYPTO_AI_CACHE_TTL_SEC', '21600')),
+            crypto_ai_prompt_version=os.getenv('CRYPTO_AI_PROMPT_VERSION', 'v1').strip(),
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),

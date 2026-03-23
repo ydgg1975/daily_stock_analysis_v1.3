@@ -15,7 +15,7 @@ import logging
 import time
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import litellm
 
@@ -142,6 +142,7 @@ class CryptoAiService:
     def __init__(self, config: Optional[Config] = None, db_manager: Optional[DatabaseManager] = None):
         self._config = config or Config.get_instance()
         self._db = db_manager or DatabaseManager.get_instance()
+        self._prompt_version = getattr(self._config, 'crypto_ai_prompt_version', PROMPT_VERSION)
 
     # ------------------------------------------------------------------
     # Public API
@@ -181,13 +182,20 @@ class CryptoAiService:
         deep_model = self._resolve_model("deep")
 
         # 4. Run analyst prompts concurrently
-        analyst_results = await self._run_analysts(launch_data, quick_model)
+        total_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        analyst_results, analyst_usage = await self._run_analysts(launch_data, quick_model)
+        for k in total_usage:
+            total_usage[k] += analyst_usage.get(k, 0)
 
         # 5. Run debate
-        debate_result = await self._run_debate(launch_data, analyst_results, quick_model)
+        debate_result, debate_usage = await self._run_debate(launch_data, analyst_results, quick_model)
+        for k in total_usage:
+            total_usage[k] += debate_usage.get(k, 0)
 
         # 6. Run research manager
-        manager_result = await self._run_research_manager(launch_data, debate_result, deep_model)
+        manager_result, manager_usage = await self._run_research_manager(launch_data, debate_result, deep_model)
+        for k in total_usage:
+            total_usage[k] += manager_usage.get(k, 0)
 
         # 7. Apply deterministic risk gate
         final = self._apply_risk_gate(launch_data, manager_result, debate_result)
@@ -195,7 +203,7 @@ class CryptoAiService:
         duration = time.monotonic() - start_time
 
         # 8. Persist
-        summary_dict = self._persist_summary(launch_id, launch_data, final, duration)
+        summary_dict = self._persist_summary(launch_id, launch_data, final, duration, total_usage)
 
         return summary_dict
 
@@ -296,7 +304,7 @@ class CryptoAiService:
             query = (
                 session.query(CryptoLaunchAiSummary)
                 .filter(CryptoLaunchAiSummary.launch_id == launch_id)
-                .filter(CryptoLaunchAiSummary.prompt_version == PROMPT_VERSION)
+                .filter(CryptoLaunchAiSummary.prompt_version == self._prompt_version)
                 .filter(CryptoLaunchAiSummary.analyzed_at >= cutoff)
             )
             # If we have a snapshot_id, match it exactly (new snapshot invalidates cache)
@@ -355,14 +363,14 @@ class CryptoAiService:
     # Analyst stage
     # ------------------------------------------------------------------
 
-    async def _run_analysts(self, data: Dict[str, Any], model: str) -> Dict[str, Any]:
-        """Run 4 analyst prompts concurrently."""
+    async def _run_analysts(self, data: Dict[str, Any], model: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
+        """Run 4 analyst prompts concurrently. Returns (results_dict, accumulated_usage)."""
         prompts = {
             "market": _MARKET_ANALYST_PROMPT.format(**data),
             "security": _SECURITY_ANALYST_PROMPT.format(**data),
             "social": _SOCIAL_ANALYST_PROMPT.format(**data),
             "technical": _TECHNICAL_ANALYST_PROMPT.format(
-                **data,
+                **{k: v for k, v in data.items() if k != "snapshot_history"},
                 snapshot_history=json.dumps(data.get("snapshot_history", []), indent=2),
             ),
         }
@@ -373,6 +381,7 @@ class CryptoAiService:
         }
 
         results = {}
+        total_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         gathered = await asyncio.gather(
             *[tasks[name] for name in ["market", "security", "social", "technical"]],
             return_exceptions=True,
@@ -383,16 +392,19 @@ class CryptoAiService:
                 logger.warning("Analyst %s failed: %s", name, result)
                 results[name] = {"assessment": f"Analysis failed: {result}", "signal": "neutral", "confidence": 0.0}
             else:
-                results[name] = result
+                parsed, usage = result
+                results[name] = parsed
+                for k in total_usage:
+                    total_usage[k] += usage.get(k, 0)
 
-        return results
+        return results, total_usage
 
     # ------------------------------------------------------------------
     # Debate stage
     # ------------------------------------------------------------------
 
-    async def _run_debate(self, data: Dict[str, Any], analysts: Dict[str, Any], model: str) -> Dict[str, Any]:
-        """Run bull/bear debate from analyst outputs."""
+    async def _run_debate(self, data: Dict[str, Any], analysts: Dict[str, Any], model: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
+        """Run bull/bear debate from analyst outputs. Returns (result, usage)."""
         prompt = _DEBATE_PROMPT.format(
             symbol=data["symbol"],
             chain=data["chain"],
@@ -403,8 +415,8 @@ class CryptoAiService:
         )
 
         try:
-            result = await self._call_llm(prompt, model)
-            return result
+            result, usage = await self._call_llm(prompt, model)
+            return result, usage
         except Exception as exc:
             logger.warning("Debate stage failed: %s", exc)
             # Synthesize from analyst signals
@@ -422,8 +434,8 @@ class CryptoAiService:
                 + (" | ".join(bull_parts) or "No strong bullish signals."),
                 "bear_case": "Synthesized from analyst signals: "
                 + (" | ".join(bear_parts) or "No strong bearish signals."),
-                "key_tension": "Debate stage failed — synthesized from individual analyst outputs.",
-            }
+                "key_tension": "Debate stage failed \u2014 synthesized from individual analyst outputs.",
+            }, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     # ------------------------------------------------------------------
     # Research manager stage
@@ -431,8 +443,8 @@ class CryptoAiService:
 
     async def _run_research_manager(
         self, data: Dict[str, Any], debate: Dict[str, Any], model: str
-    ) -> Dict[str, Any]:
-        """Run research manager prompt to compile final verdict."""
+    ) -> Tuple[Dict[str, Any], Dict[str, int]]:
+        """Run research manager prompt to compile final verdict. Returns (result, usage)."""
         prompt = _RESEARCH_MANAGER_PROMPT.format(
             symbol=data["symbol"],
             chain=data["chain"],
@@ -445,16 +457,16 @@ class CryptoAiService:
         )
 
         try:
-            result = await self._call_llm(prompt, model)
-            return result
+            result, usage = await self._call_llm(prompt, model)
+            return result, usage
         except Exception as exc:
             logger.warning("Research manager failed: %s", exc)
             return {
                 "verdict": "HOLD",
                 "confidence": 0.3,
-                "recommended_action": "Analysis incomplete — manual review recommended.",
+                "recommended_action": "Analysis incomplete \u2014 manual review recommended.",
                 "risks": ["AI pipeline partially failed"],
-            }
+            }, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     # ------------------------------------------------------------------
     # Deterministic risk gate
@@ -504,9 +516,11 @@ class CryptoAiService:
     # LLM call helper
     # ------------------------------------------------------------------
 
-    async def _call_llm(self, prompt: str, model: str) -> Dict[str, Any]:
+    async def _call_llm(self, prompt: str, model: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
         """Call LLM via litellm.acompletion and parse JSON response.
 
+        Returns (parsed_result, usage_dict) where usage_dict has
+        prompt_tokens, completion_tokens, total_tokens.
         Tracks usage via persist_llm_usage(call_type="crypto_ai").
         """
         messages = [
@@ -539,17 +553,17 @@ class CryptoAiService:
             raise ValueError(f"Empty choices from LLM model={model}")
         content = choices[0].message.content or ""
         try:
-            return json.loads(content)
+            return json.loads(content), usage
         except json.JSONDecodeError:
             # Try to extract JSON from markdown code blocks
             if "```json" in content:
                 json_str = content.split("```json")[1].split("```")[0].strip()
-                return json.loads(json_str)
+                return json.loads(json_str), usage
             if "```" in content:
                 json_str = content.split("```")[1].split("```")[0].strip()
-                return json.loads(json_str)
+                return json.loads(json_str), usage
             logger.warning("Failed to parse LLM response as JSON: %s", content[:200])
-            return {"raw_text": content}
+            return {"raw_text": content}, usage
 
     # ------------------------------------------------------------------
     # Persistence
@@ -561,6 +575,7 @@ class CryptoAiService:
         data: Dict[str, Any],
         final: Dict[str, Any],
         duration: float,
+        total_usage: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         """Persist analysis result and return summary dict."""
         model_used = self._resolve_model("deep")
@@ -570,7 +585,7 @@ class CryptoAiService:
         row = CryptoLaunchAiSummary(
             launch_id=launch_id,
             snapshot_id=data.get("latest_snapshot_id"),
-            prompt_version=PROMPT_VERSION,
+            prompt_version=self._prompt_version,
             model_used=model_used,
             verdict=final.get("verdict"),
             confidence=final.get("confidence"),
@@ -582,6 +597,9 @@ class CryptoAiService:
             analysis_duration_sec=round(duration, 2),
             error=error,
             analyzed_at=datetime.now(),
+            prompt_tokens=total_usage.get("prompt_tokens", 0) if total_usage else 0,
+            completion_tokens=total_usage.get("completion_tokens", 0) if total_usage else 0,
+            total_tokens=total_usage.get("total_tokens", 0) if total_usage else 0,
         )
 
         try:
@@ -603,7 +621,7 @@ class CryptoAiService:
             "risks": risks,
             "recommended_action": final.get("recommended_action"),
             "model_used": model_used,
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": self._prompt_version,
             "analyzed_at": row.analyzed_at.isoformat() if row.analyzed_at else None,
             "error": error,
             "cached": False,
