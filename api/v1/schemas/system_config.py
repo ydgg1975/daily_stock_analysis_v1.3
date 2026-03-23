@@ -21,13 +21,13 @@ class SystemConfigFieldSchema(BaseModel):
     key: str = Field(..., description="Configuration key name")
     title: Optional[str] = Field(None, description="Display title")
     description: Optional[str] = Field(None, description="Field description")
-    category: Literal["base", "data_source", "ai_model", "notification", "system", "agent", "backtest", "uncategorized"]
+    category: Literal["base", "data_source", "ai_model", "notification", "system", "agent", "backtest", "crypto", "uncategorized"]
     data_type: Literal["string", "integer", "number", "boolean", "array", "json", "time"]
-    ui_control: Literal["text", "password", "number", "select", "textarea", "switch", "time"]
+    ui_control: Literal["text", "password", "number", "select", "textarea", "switch", "toggle", "time"]
     is_sensitive: bool
     is_required: bool
     is_editable: bool
-    default_value: Optional[str] = None
+    default_value: Optional[Any] = None
     options: List[str | SystemConfigOption] = Field(default_factory=list)
     validation: Dict[str, Any] = Field(default_factory=dict)
     display_order: int
@@ -141,6 +141,8 @@ class ValidateSystemConfigResponse(BaseModel):
 
 class TestLLMChannelRequest(BaseModel):
     """Request payload for testing one LLM channel."""
+
+    __test__ = False  # Prevent pytest from collecting this as a test class
 
     name: str = "channel"
     protocol: str = "openai"

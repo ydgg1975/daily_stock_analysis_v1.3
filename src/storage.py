@@ -614,10 +614,184 @@ class LLMUsage(Base):
     call_type = Column(String(32), nullable=False, index=True)
     model = Column(String(128), nullable=False)
     stock_code = Column(String(16), nullable=True)
+    analysis_id = Column(String(36), nullable=True, index=True)  # correlation to CryptoLaunchAiSummary
     prompt_tokens = Column(Integer, nullable=False, default=0)
     completion_tokens = Column(Integer, nullable=False, default=0)
     total_tokens = Column(Integer, nullable=False, default=0)
     called_at = Column(DateTime, default=datetime.now, index=True)
+
+
+class CryptoLaunch(Base):
+    """Canonical crypto launch record keyed by chain and pair address."""
+
+    __tablename__ = 'crypto_launches'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    chain_id = Column(String(32), nullable=False, index=True)
+    dex_id = Column(String(64))
+    pair_address = Column(String(128), nullable=False)
+    pair_url = Column(String(1000))
+    pair_created_at = Column(DateTime, index=True)
+
+    base_token_address = Column(String(128), index=True)
+    base_token_symbol = Column(String(64))
+    base_token_name = Column(String(255))
+    quote_token_address = Column(String(128))
+    quote_token_symbol = Column(String(64))
+    quote_token_name = Column(String(255))
+
+    liquidity_usd = Column(Float)
+    volume_usd_24h = Column(Float)
+    buys_24h = Column(Integer)
+    sells_24h = Column(Integer)
+    price_usd = Column(Float)
+    price_change_pct_24h = Column(Float)
+    fdv_usd = Column(Float)
+    market_cap_usd = Column(Float)
+
+    dexscreener_url = Column(String(1000))
+    website_url = Column(String(1000))
+    socials_json = Column(Text)
+    labels_json = Column(Text)
+    raw_payload = Column(Text)
+    data_complete = Column(Boolean, nullable=False, default=False)
+
+    first_seen_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    last_seen_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint('chain_id', 'pair_address', name='uix_crypto_launch_chain_pair'),
+        Index('ix_crypto_launch_chain_created', 'chain_id', 'pair_created_at'),
+        Index('ix_crypto_launch_chain_base_token', 'chain_id', 'base_token_address'),
+    )
+
+
+class CryptoLaunchSnapshot(Base):
+    """Historical snapshot of one launch at a point in time."""
+
+    __tablename__ = 'crypto_launch_snapshots'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    snapshot_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    liquidity_usd = Column(Float)
+    volume_usd_24h = Column(Float)
+    buys_24h = Column(Integer)
+    sells_24h = Column(Integer)
+    price_usd = Column(Float)
+    price_change_pct_24h = Column(Float)
+    fdv_usd = Column(Float)
+    market_cap_usd = Column(Float)
+    data_complete = Column(Boolean, nullable=False, default=False)
+    raw_payload = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint('launch_id', 'snapshot_at', name='uix_crypto_launch_snapshot_launch_time'),
+        Index('ix_crypto_launch_snapshot_launch_time', 'launch_id', 'snapshot_at'),
+    )
+
+
+class CryptoLaunchSecurityScan(Base):
+    """Security scan results from GoPlus / RugCheck for a crypto launch."""
+
+    __tablename__ = 'crypto_launch_security_scans'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    provider = Column(String(32), nullable=False)
+    risk_score = Column(Float)
+    risk_level = Column(String(16))
+    is_honeypot = Column(Boolean)
+    is_mintable = Column(Boolean)
+    buy_tax_pct = Column(Float)
+    sell_tax_pct = Column(Float)
+    lp_locked_pct = Column(Float)
+    top10_holder_rate_pct = Column(Float)
+    raw_payload_json = Column(Text)
+    scanned_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index('ix_crypto_security_launch_provider', 'launch_id', 'provider'),
+        UniqueConstraint(
+            'launch_id',
+            'provider',
+            'scanned_at',
+            name='uix_crypto_security_launch_provider_time',
+        ),
+    )
+
+
+class CryptoWatchlist(Base):
+    """User watchlist entries for crypto launches."""
+
+    __tablename__ = 'crypto_watchlist'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id'), nullable=False, index=True)
+    watched_at = Column(DateTime, default=datetime.now, nullable=False)
+    note = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint('launch_id', name='uix_crypto_watchlist_launch'),
+    )
+
+
+class CryptoLaunchAiSummary(Base):
+    """AI-generated analysis summary for a crypto launch."""
+
+    __tablename__ = 'crypto_launch_ai_summaries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    launch_id = Column(Integer, ForeignKey('crypto_launches.id', ondelete='CASCADE'), nullable=False, index=True)
+    snapshot_id = Column(Integer, ForeignKey('crypto_launch_snapshots.id', ondelete='SET NULL'), nullable=True, index=True)
+    prompt_version = Column(String(16), nullable=False, default='v1')
+    model_used = Column(String(128))
+    verdict = Column(String(16))  # BUY, HOLD, AVOID
+    confidence = Column(Float)  # 0.0 - 1.0
+    bull_case = Column(Text)
+    bear_case = Column(Text)
+    risks = Column(Text)  # JSON array as string
+    recommended_action = Column(Text)
+    raw_response = Column(Text)  # Full LLM response for debugging
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    analysis_duration_sec = Column(Float)
+    error = Column(Text)  # Non-null if pipeline failed partially
+    analyzed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'launch_id',
+            'snapshot_id',
+            'prompt_version',
+            name='uq_crypto_ai_summary_launch_snapshot_version',
+        ),
+        Index('ix_crypto_ai_summary_launch_snapshot', 'launch_id', 'snapshot_id'),
+        Index('ix_crypto_ai_summary_launch_version', 'launch_id', 'prompt_version'),
+    )
+
+
+class CryptoScanMetric(Base):
+    """Per-scan-cycle metrics for observability and SLO tracking."""
+
+    __tablename__ = "crypto_scan_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(String(8), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime, nullable=False)
+    duration_ms = Column(Integer, nullable=False)
+    chains_total = Column(Integer, nullable=False, default=0)
+    chains_failed = Column(Integer, nullable=False, default=0)
+    launches_new = Column(Integer, nullable=False, default=0)
+    launches_updated = Column(Integer, nullable=False, default=0)
+    per_chain_json = Column(Text)
+    success = Column(Boolean, nullable=False, default=True)
 
 
 class DatabaseManager:
@@ -1858,12 +2032,14 @@ class DatabaseManager:
         completion_tokens: int,
         total_tokens: int,
         stock_code: Optional[str] = None,
+        analysis_id: Optional[str] = None,
     ) -> None:
         """Append one LLM call record to llm_usage."""
         row = LLMUsage(
             call_type=call_type,
             model=model or "unknown",
             stock_code=stock_code,
+            analysis_id=analysis_id,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
@@ -1934,6 +2110,173 @@ class DatabaseManager:
             ],
         }
 
+    def save_scan_metric(self, **kwargs) -> None:
+        """Persist a single scan-cycle metric row."""
+        row = CryptoScanMetric(**kwargs)
+        with self.session_scope() as session:
+            session.add(row)
+
+    def get_scan_metrics(self, since: Optional[datetime] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Return recent scan metrics, newest first."""
+        with self.session_scope() as session:
+            q = session.query(CryptoScanMetric).order_by(CryptoScanMetric.finished_at.desc())
+            if since:
+                q = q.filter(CryptoScanMetric.finished_at >= since)
+            rows = q.limit(limit).all()
+            return [
+                {
+                    "scan_id": r.scan_id,
+                    "started_at": r.started_at.isoformat() if r.started_at else None,
+                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                    "duration_ms": r.duration_ms,
+                    "chains_total": r.chains_total,
+                    "chains_failed": r.chains_failed,
+                    "launches_new": r.launches_new,
+                    "launches_updated": r.launches_updated,
+                    "per_chain_json": r.per_chain_json,
+                    "success": r.success,
+                }
+                for r in rows
+            ]
+
+    def get_provider_metrics(self, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """Aggregate per-chain scan stats from CryptoScanMetric.per_chain_json."""
+        metrics = self.get_scan_metrics(since=since, limit=500)
+        chain_stats: Dict[str, Dict[str, Any]] = {}
+        for m in metrics:
+            raw = m.get("per_chain_json")
+            if not raw:
+                continue
+            try:
+                per_chain = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for chain_id, info in per_chain.items():
+                if chain_id not in chain_stats:
+                    chain_stats[chain_id] = {
+                        "chain_id": chain_id,
+                        "total_scans": 0,
+                        "total_failures": 0,
+                        "total_duration_ms": 0,
+                        "total_pools_discovered": 0,
+                    }
+                s = chain_stats[chain_id]
+                s["total_scans"] += 1
+                status = info.get("status", "")
+                if status == "failed":
+                    s["total_failures"] += 1
+                s["total_duration_ms"] += info.get("duration_ms", 0)
+                s["total_pools_discovered"] += info.get("pools_discovered", 0)
+
+        result = []
+        for s in chain_stats.values():
+            total = s["total_scans"] or 1
+            s["avg_duration_ms"] = round(s["total_duration_ms"] / total)
+            s["error_rate"] = round(s["total_failures"] / total, 3)
+            result.append(s)
+        return sorted(result, key=lambda x: x["chain_id"])
+
+    def get_scan_slo(self, window_hours: int = 24) -> Dict[str, Any]:
+        """Compute scan success ratio over a time window."""
+        since = datetime.now() - timedelta(hours=window_hours)
+        metrics = self.get_scan_metrics(since=since, limit=1000)
+        total = len(metrics)
+        successes = sum(1 for m in metrics if m.get("success"))
+        failures = total - successes
+        return {
+            "window_hours": window_hours,
+            "total_scans": total,
+            "successes": successes,
+            "failures": failures,
+            "success_rate": round(successes / total, 4) if total else 0.0,
+        }
+
+    def get_crypto_ai_cost(
+        self, window_days: int = 7,
+    ) -> Dict[str, Any]:
+        """Aggregate crypto AI token spend from LLMUsage filtered by call_type='crypto_ai'."""
+        since = datetime.now() - timedelta(days=window_days)
+        with self.session_scope() as session:
+            base_filter = and_(
+                LLMUsage.call_type == "crypto_ai",
+                LLMUsage.called_at >= since,
+            )
+            totals = session.execute(
+                select(
+                    func.count(LLMUsage.id).label("calls"),
+                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label("prompt_tokens"),
+                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("total_tokens"),
+                ).where(base_filter)
+            ).one()
+
+            by_model_rows = session.execute(
+                select(
+                    LLMUsage.model,
+                    func.count(LLMUsage.id).label("calls"),
+                    func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("tokens"),
+                )
+                .where(base_filter)
+                .group_by(LLMUsage.model)
+                .order_by(desc(func.sum(LLMUsage.total_tokens)))
+            ).all()
+
+        return {
+            "window_days": window_days,
+            "total_calls": totals.calls,
+            "prompt_tokens": totals.prompt_tokens,
+            "completion_tokens": totals.completion_tokens,
+            "total_tokens": totals.total_tokens,
+            "by_model": [
+                {"model": r.model, "calls": r.calls, "total_tokens": r.tokens}
+                for r in by_model_rows
+            ],
+        }
+
+    def get_prompt_comparison(self, versions: List[str]) -> List[Dict[str, Any]]:
+        """Group CryptoLaunchAiSummary by prompt_version for comparison."""
+        with self.session_scope() as session:
+            rows = session.execute(
+                select(
+                    CryptoLaunchAiSummary.prompt_version,
+                    func.count(CryptoLaunchAiSummary.id).label("analyses"),
+                    func.avg(CryptoLaunchAiSummary.confidence).label("avg_confidence"),
+                    func.coalesce(func.sum(CryptoLaunchAiSummary.total_tokens), 0).label("total_tokens"),
+                    func.avg(CryptoLaunchAiSummary.analysis_duration_sec).label("avg_duration_sec"),
+                )
+                .where(CryptoLaunchAiSummary.prompt_version.in_(versions))
+                .group_by(CryptoLaunchAiSummary.prompt_version)
+            ).all()
+
+            result = []
+            for r in rows:
+                # Count verdicts for this version
+                verdict_rows = session.execute(
+                    select(
+                        CryptoLaunchAiSummary.verdict,
+                        func.count(CryptoLaunchAiSummary.id).label("count"),
+                    )
+                    .where(
+                        and_(
+                            CryptoLaunchAiSummary.prompt_version == r.prompt_version,
+                            CryptoLaunchAiSummary.verdict.isnot(None),
+                        )
+                    )
+                    .group_by(CryptoLaunchAiSummary.verdict)
+                ).all()
+
+                result.append({
+                    "prompt_version": r.prompt_version,
+                    "analyses": r.analyses,
+                    "avg_confidence": round(float(r.avg_confidence), 3) if r.avg_confidence else None,
+                    "total_tokens": r.total_tokens,
+                    "avg_duration_sec": round(float(r.avg_duration_sec), 2) if r.avg_duration_sec else None,
+                    "verdict_distribution": {
+                        v.verdict: v.count for v in verdict_rows
+                    },
+                })
+            return result
+
 
 # 便捷函数
 def get_db() -> DatabaseManager:
@@ -1946,6 +2289,7 @@ def persist_llm_usage(
     model: str,
     call_type: str,
     stock_code: Optional[str] = None,
+    analysis_id: Optional[str] = None,
 ) -> None:
     """Fire-and-forget: write one LLM call record to llm_usage. Never raises."""
     try:
@@ -1957,6 +2301,7 @@ def persist_llm_usage(
             completion_tokens=usage.get("completion_tokens", 0) or 0,
             total_tokens=usage.get("total_tokens", 0) or 0,
             stock_code=stock_code,
+            analysis_id=analysis_id,
         )
     except Exception as exc:
         logging.getLogger(__name__).warning("[LLM usage] failed to persist usage record: %s", exc)

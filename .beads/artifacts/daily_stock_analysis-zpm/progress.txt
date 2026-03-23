@@ -1,0 +1,35 @@
+# Progress Log
+
+Bead: daily_stock_analysis-zpm
+Started: 2026-03-20
+
+## Codebase Patterns
+
+<!-- Consolidate reusable patterns here -->
+
+---
+
+<!-- Task logs below - APPEND ONLY -->
+
+## Task Logs
+
+- [2026-03-20] `planning-1` PASS
+  - Locked product direction, delivery order, and Phase 0 gate language across `.docs/startup-checklist.md`, `.docs/project-start-plan.md`, and `.opencode/memory/project/prd-crypto-new-launch-scanner.md`
+  - Verified with manual review and keyword checks for backbone/additive/deterministic/web-first alignment
+
+- [2026-03-20] `design-1` PASS
+  - Locked `CryptoLaunch` + `CryptoLaunchSnapshot` as the Phase 1 schema boundary in `.docs/database-schema.md` and aligned supporting docs
+  - Verified canonical `chain_id + pair_address` identity and deferred security/AI tables explicitly
+
+- [2026-03-20] `design-2` PASS
+  - Locked the Phase 1 API boundary to list/detail/refresh/status and deferred settings + AI endpoints
+  - Clarified the Phase 1 detail response by marking `security` and `ai_summary` as `null` until later phases
+
+- [2026-03-20] `ops-1` PASS
+  - Locked provider budgets, non-blocking failure behavior, and Phase 1 deterministic test expectations
+  - Clarified that Phase 1 config tests target feature flags/scheduler defaults, not deferred settings endpoints
+
+- [2026-03-20] `docs-1` PASS
+  - Published the go/no-go handoff, checked all startup checklist gates, and aligned README/PRD status language
+  - `python3 scripts/check_ai_assets.py` PASS
+  - Review pass completed; major ambiguities around deferred tasks, `risk_badges`, and detail response shape were fixed inline

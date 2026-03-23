@@ -1,0 +1,31 @@
+{
+	"score": 650,
+	"tokenMeta": {
+		"name": "Test Token",
+		"symbol": "TEST",
+		"mint": "TestMint123abc"
+	},
+	"risks": [
+		{
+			"name": "Low Liquidity",
+			"level": "warn",
+			"description": "Pool has less than $5000 liquidity"
+		},
+		{
+			"name": "Mutable Metadata",
+			"level": "info",
+			"description": "Token metadata can be changed"
+		}
+	],
+	"topHolders": [
+		{ "address": "holder1", "pct": 15.5 },
+		{ "address": "holder2", "pct": 10.2 }
+	],
+	"markets": [
+		{
+			"marketType": "raydium",
+			"mintA": "TestMint123abc",
+			"mintB": "So11111111111111111111111111111111111111112"
+		}
+	]
+}
