@@ -310,8 +310,14 @@ class TestWatchlistToAlertRoundtrip:
             "src.services.crypto_alert_service.NotificationBuilder.build_simple_alert",
             return_value="FORMATTED CRYPTO ALERT",
         ) as mock_build_alert:
-            with patch("src.services.crypto_alert_service.logger") as mock_logger:
-                dispatched = self.service.dispatch_alert(alerts[0])
+            mock_notifier = MagicMock()
+            mock_notifier.send.return_value = True
+            with patch(
+                "src.services.crypto_alert_service.NotificationService",
+                return_value=mock_notifier,
+            ):
+                with patch("src.services.crypto_alert_service.logger") as mock_logger:
+                    dispatched = self.service.dispatch_alert(alerts[0])
 
         assert dispatched is True
         mock_build_alert.assert_called_once_with(
@@ -319,6 +325,7 @@ class TestWatchlistToAlertRoundtrip:
             alerts[0]["message"],
             alerts[0]["severity"],
         )
+        mock_notifier.send.assert_called_once_with("FORMATTED CRYPTO ALERT")
         mock_logger.warning.assert_called_once()
-        assert mock_logger.warning.call_args[0][0] == "Crypto alert dispatch prepared: %s"
+        assert mock_logger.warning.call_args[0][0] == "Crypto alert dispatch: %s"
         assert mock_logger.warning.call_args[0][1] == "FORMATTED CRYPTO ALERT"
