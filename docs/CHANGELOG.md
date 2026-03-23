@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 新功能
+
+- 🔗 **Crypto 新币扫描器** — 支持多链（Solana/Ethereum/Base 等）新币发现、快照追踪与风险分析
+  - Phase 1: 自动发现与数据采集（GeckoTerminal/DexScreener 双源适配）
+  - Phase 2: 风险评估、观察列表与阈值告警（流动性骤降/成交量暴涨/风险等级恶化）
+  - Phase 3: AI 多分析师管线（市场/安全/社交/技术四维分析 + 牛熊辩论 + 确定性风险门控）
+  - Phase 4: 可观测性仪表盘（扫描 SLO、供应商指标、AI 成本追踪、Prompt 版本对比）
+  - 完整 REST API（`/api/v1/crypto/`）与 Web UI 前端
+  - 配置参考：`docs/crypto-scanner.md`
+
 ### 改进
 
 - 🖥️ **Dashboard 面板统一化（PR7-2）** — 新增 `DashboardPanelHeader` 和 `DashboardStateBlock` 作为历史、报告、资讯、任务和透明度等面板的通用组件；统一了各面板标题层级、加载/空态/错误态和 CSS 变量 token。
