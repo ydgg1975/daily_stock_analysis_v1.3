@@ -11,6 +11,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.auth import get_client_ip
+
 from api.v1.schemas.crypto import (
     AiCostResponse,
     CryptoAiSummaryResponse,
@@ -152,7 +154,7 @@ async def analyze_launch(launch_id: int, request: Request):
     if not config.crypto_ai_enrichment_enabled:
         raise HTTPException(status_code=403, detail="AI enrichment is disabled")
 
-    _check_rate_limit(request.client.host if request.client else "unknown")
+    _check_rate_limit(get_client_ip(request))
 
     try:
         ai_service = _get_ai_service()

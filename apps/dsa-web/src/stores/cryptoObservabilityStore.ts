@@ -55,27 +55,45 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 		...initialState,
 
 		loadAll: async () => {
-			set({ isLoading: true, error: null });
-			try {
-				await Promise.all([
-					get().loadProviderMetrics(),
-					get().loadScanSlo(),
-					get().loadAiCost(),
-					get().loadPromptComparison(),
-				]);
-				set({ isLoading: false });
-			} catch (err) {
-				set({
-					isLoading: false,
-					error: getErrorMessage(err, "Failed to load observability data"),
-				});
+			set({ isLoading: true });
+			const results = await Promise.allSettled([
+				get().loadProviderMetrics(),
+				get().loadScanSlo(),
+				get().loadAiCost(),
+				get().loadPromptComparison(),
+			]);
+
+			const rejectedErrors = results
+				.filter(
+					(result): result is PromiseRejectedResult =>
+						result.status === "rejected",
+				)
+				.map((result) =>
+					getErrorMessage(result.reason, "Failed to load observability data"),
+				);
+
+			const stateError = get().error;
+			const hasFailure = rejectedErrors.length > 0 || Boolean(stateError);
+
+			if (!hasFailure) {
+				set({ isLoading: false, error: null });
+				return;
 			}
+
+			const aggregatedErrors = Array.from(
+				new Set([...(stateError ? [stateError] : []), ...rejectedErrors]),
+			).join("; ");
+
+			set({
+				isLoading: false,
+				error: aggregatedErrors || "Failed to load observability data",
+			});
 		},
 
 		loadProviderMetrics: async () => {
 			try {
 				const data = await cryptoApi.getProviderMetrics();
-				set({ providerMetrics: data, error: null });
+				set({ providerMetrics: data });
 			} catch (err) {
 				set({
 					error: getErrorMessage(err, "Failed to load provider metrics"),
@@ -86,7 +104,7 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 		loadScanSlo: async (windowHours = 24) => {
 			try {
 				const data = await cryptoApi.getScanSlo(windowHours);
-				set({ scanSlo: data, error: null });
+				set({ scanSlo: data });
 			} catch (err) {
 				set({ error: getErrorMessage(err, "Failed to load scan SLO") });
 			}
@@ -95,7 +113,7 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 		loadAiCost: async (windowDays = 7) => {
 			try {
 				const data = await cryptoApi.getAiCost(windowDays);
-				set({ aiCost: data, error: null });
+				set({ aiCost: data });
 			} catch (err) {
 				set({ error: getErrorMessage(err, "Failed to load AI cost data") });
 			}
@@ -104,7 +122,7 @@ export const useCryptoObservabilityStore = create<CryptoObservabilityState>(
 		loadPromptComparison: async (versions = ["v1"]) => {
 			try {
 				const data = await cryptoApi.getPromptComparison(versions);
-				set({ promptComparison: data, error: null });
+				set({ promptComparison: data });
 			} catch (err) {
 				set({
 					error: getErrorMessage(err, "Failed to load prompt comparison"),

@@ -50,15 +50,30 @@ const safeParseArray = (raw: string | null | undefined): unknown[] => {
 	}
 };
 
+const isSafeUrl = (url: string): boolean => {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === "http:" || parsed.protocol === "https:";
+	} catch {
+		return false;
+	}
+};
+
 const normalizeUrl = (value: string | null | undefined): string | null => {
 	if (!value) return null;
 	const trimmed = value.trim();
 	if (!trimmed) return null;
-	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
-	if (trimmed.startsWith("//")) return `https:${trimmed}`;
+	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+		return isSafeUrl(trimmed) ? trimmed : null;
+	}
+	if (trimmed.startsWith("//")) {
+		const url = `https:${trimmed}`;
+		return isSafeUrl(url) ? url : null;
+	}
 	if (/\s/.test(trimmed)) return null;
 	if (!trimmed.includes(".") && !trimmed.includes("/")) return null;
-	return `https://${trimmed}`;
+	const url = `https://${trimmed}`;
+	return isSafeUrl(url) ? url : null;
 };
 
 const inferSocialLabel = (
@@ -149,6 +164,9 @@ export const CryptoLaunchDetailDrawer: React.FC<
 	const { aiSummary, isAnalyzing, analyzeError, analyzeToken, clearAiSummary } =
 		useCryptoLaunchStore();
 	const snapshots = detail?.snapshots ?? [];
+	const dexscreenerUrl = normalizeUrl(launch?.dexscreenerUrl);
+	const pairUrl = normalizeUrl(launch?.pairUrl);
+	const websiteUrl = normalizeUrl(launch?.websiteUrl);
 	const socialLinks = parseSocialLinks(launch?.socialsJson);
 	const labels = parseLabels(launch?.labelsJson);
 
@@ -322,9 +340,9 @@ export const CryptoLaunchDetailDrawer: React.FC<
 
 					{/* External links */}
 					<div className="flex flex-wrap gap-2">
-						{launch.dexscreenerUrl && (
+						{dexscreenerUrl && (
 							<a
-								href={launch.dexscreenerUrl}
+								href={dexscreenerUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
@@ -332,9 +350,9 @@ export const CryptoLaunchDetailDrawer: React.FC<
 								DexScreener <ExternalLink className="h-3 w-3" />
 							</a>
 						)}
-						{launch.pairUrl && (
+						{pairUrl && (
 							<a
-								href={launch.pairUrl}
+								href={pairUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
@@ -342,9 +360,9 @@ export const CryptoLaunchDetailDrawer: React.FC<
 								GeckoTerminal <ExternalLink className="h-3 w-3" />
 							</a>
 						)}
-						{launch.websiteUrl && (
+						{websiteUrl && (
 							<a
-								href={launch.websiteUrl}
+								href={websiteUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-border hover:text-foreground"
