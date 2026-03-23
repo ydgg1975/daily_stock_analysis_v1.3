@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import type React from "react";
+import { useCryptoLaunchStore } from "../../stores/cryptoLaunchStore";
 import type { CryptoSortMode } from "../../types/crypto";
 import { formatChainLabel } from "../../types/crypto";
 import { cn } from "../../utils/cn";
@@ -53,12 +54,24 @@ export const CryptoLaunchFilters: React.FC<CryptoLaunchFiltersProps> = ({
 	onMaxAgeChange,
 	onShowWatchedOnlyChange,
 }) => {
+	const { filters, setMinLiquidity, setMinVolume } = useCryptoLaunchStore();
+
 	const toggleChain = (chain: string) => {
 		if (chains.includes(chain)) {
 			onChainChange(chains.filter((c) => c !== chain));
 		} else {
 			onChainChange([...chains, chain]);
 		}
+	};
+
+	const handleMinLiquidityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = Number(e.target.value);
+		setMinLiquidity(Number.isFinite(value) ? Math.max(0, value) : 0);
+	};
+
+	const handleMinVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = Number(e.target.value);
+		setMinVolume(Number.isFinite(value) ? Math.max(0, value) : 0);
 	};
 
 	return (
@@ -116,6 +129,49 @@ export const CryptoLaunchFilters: React.FC<CryptoLaunchFiltersProps> = ({
 						{opt.label}
 					</button>
 				))}
+			</div>
+
+			{/* Divider */}
+			<div className="h-6 w-px bg-border/50" />
+
+			<div className="flex items-center gap-2">
+				<label
+					htmlFor="min-liquidity"
+					className="text-xs font-medium text-secondary-text"
+				>
+					Min Liquidity
+				</label>
+				<input
+					id="min-liquidity"
+					type="number"
+					min={0}
+					step="1000"
+					inputMode="numeric"
+					value={filters.minLiquidityUsd || ""}
+					onChange={handleMinLiquidityChange}
+					placeholder="USD"
+					className="w-28 rounded-lg border border-border/50 bg-surface px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/40"
+				/>
+			</div>
+
+			<div className="flex items-center gap-2">
+				<label
+					htmlFor="min-volume"
+					className="text-xs font-medium text-secondary-text"
+				>
+					Min Volume
+				</label>
+				<input
+					id="min-volume"
+					type="number"
+					min={0}
+					step="1000"
+					inputMode="numeric"
+					value={filters.minVolumeUsd || ""}
+					onChange={handleMinVolumeChange}
+					placeholder="USD"
+					className="w-28 rounded-lg border border-border/50 bg-surface px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/40"
+				/>
 			</div>
 
 			{/* Divider */}
