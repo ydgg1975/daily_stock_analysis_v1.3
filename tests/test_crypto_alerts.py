@@ -90,7 +90,7 @@ class TestCryptoAlertService:
         assert len(alerts) == 1
         assert alerts[0]["launch_id"] == 202
 
-    def test_dispatch_alert_logs_formatted_message(self):
+    def test_dispatch_alert_sends_via_notification_service(self):
         alert = {
             "launch_id": 101,
             "alert_type": "liquidity_drop",
@@ -104,7 +104,10 @@ class TestCryptoAlertService:
             "src.services.crypto_alert_service.NotificationBuilder.build_simple_alert",
             return_value="FORMATTED ALERT",
         ) as mock_build_alert:
-            with patch("src.services.crypto_alert_service.logger") as mock_logger:
+            with patch(
+                "src.services.crypto_alert_service.NotificationService"
+            ) as mock_notifier_cls:
+                mock_notifier_cls.return_value.send.return_value = True
                 sent = self.service.dispatch_alert(alert)
 
         assert sent is True
@@ -113,11 +116,45 @@ class TestCryptoAlertService:
             "Liquidity dropped sharply",
             "warning",
         )
-        mock_logger.warning.assert_called_once()
-        assert mock_logger.warning.call_args[0][0] == "Crypto alert dispatch prepared: %s"
-        assert mock_logger.warning.call_args[0][1] == "FORMATTED ALERT"
+        mock_notifier_cls.return_value.send.assert_called_once_with("FORMATTED ALERT")
 
-    def test_evaluate_alerts_skips_none_and_zero_baselines(self):
+    def test_dispatch_alert_returns_false_on_send_failure(self):
+        alert = {
+            "launch_id": 102,
+            "alert_type": "volume_spike",
+            "title": "Volume spiked",
+            "message": "Volume spiked sharply",
+            "severity": "info",
+            "details": {},
+        }
+
+        with patch(
+            "src.services.crypto_alert_service.NotificationBuilder.build_simple_alert",
+            return_value="FORMATTED",
+        ):
+            with patch(
+                "src.services.crypto_alert_service.NotificationService"
+            ) as mock_notifier_cls:
+                mock_notifier_cls.return_value.send.side_effect = Exception("Connection error")
+                sent = self.service.dispatch_alert(alert)
+
+        assert sent is False
+
+    def test_evaluate_alerts_handles_zero_old_liquidity(self):
+        """When old_liquidity is 0.0, the truthiness-fixed code should still
+        enter the comparison block (0.0 is not None) but not divide by zero
+        since 0.0 * (1 - threshold/100) == 0.0 and new_liquidity >= 0."""
+        alerts = self.service.evaluate_alerts(
+            101,
+            {"liquidity_usd": 0.0, "volume_usd_24h": None, "risk_level": None},
+            {"liquidity_usd": 10.0, "volume_usd_24h": 1000.0, "risk_level": "medium"},
+        )
+        # 0.0 old_liquidity: threshold = 0.0 * (1 - 0.3) = 0.0
+        # new_liquidity 10.0 >= 0.0, so no liquidity_drop alert.
+        # volume: old is None so no volume alert. risk: old is None so no risk alert.
+        assert alerts == []
+
+    def test_evaluate_alerts_skips_none_baselines(self):
         alerts = self.service.evaluate_alerts(
             101,
             {"liquidity_usd": 0, "volume_usd_24h": None, "risk_level": None},

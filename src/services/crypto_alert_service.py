@@ -5,7 +5,7 @@ import logging
 from typing import Any, Optional
 
 from src.config import Config
-from src.notification import NotificationBuilder
+from src.notification import NotificationBuilder, NotificationService
 from src.repositories.crypto_watchlist_repo import CryptoWatchlistRepository
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class CryptoAlertService:
 
         old_liquidity = self._number(new_value=old_data.get("liquidity_usd"))
         new_liquidity = self._number(new_value=new_data.get("liquidity_usd"))
-        if old_liquidity and new_liquidity is not None:
+        if old_liquidity is not None and new_liquidity is not None:
             threshold_liquidity = old_liquidity * (1 - (liquidity_threshold_pct / 100.0))
             if new_liquidity < threshold_liquidity:
                 drop_pct = ((old_liquidity - new_liquidity) / old_liquidity) * 100.0
@@ -69,7 +69,7 @@ class CryptoAlertService:
 
         old_volume = self._number(new_value=old_data.get("volume_usd_24h"))
         new_volume = self._number(new_value=new_data.get("volume_usd_24h"))
-        if old_volume and new_volume is not None:
+        if old_volume is not None and new_volume is not None:
             threshold_volume = old_volume * volume_spike_multiplier
             if new_volume > threshold_volume:
                 multiplier = new_volume / old_volume
@@ -142,14 +142,24 @@ class CryptoAlertService:
         return alerts
 
     def dispatch_alert(self, alert: dict) -> bool:
-        """Prepare a notification message and log it for now."""
+        """Format and send a crypto alert through notification channels."""
         formatted_message = NotificationBuilder.build_simple_alert(
             alert.get("title", "Crypto Alert"),
             alert.get("message", ""),
             alert.get("severity", "info"),
         )
-        logger.warning("Crypto alert dispatch prepared: %s", formatted_message)
-        return True
+        logger.warning("Crypto alert dispatch: %s", formatted_message)
+        try:
+            notifier = NotificationService()
+            sent = notifier.send(formatted_message)
+            if sent:
+                logger.info("Crypto alert sent successfully for launch %s", alert.get("launch_id"))
+            else:
+                logger.warning("Crypto alert notification returned False for launch %s", alert.get("launch_id"))
+            return sent
+        except Exception:
+            logger.exception("Failed to send crypto alert for launch %s", alert.get("launch_id"))
+            return False
 
     @staticmethod
     def _number(new_value: Any) -> Optional[float]:
