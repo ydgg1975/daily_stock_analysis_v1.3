@@ -775,6 +775,24 @@ class CryptoLaunchAiSummary(Base):
     )
 
 
+class CryptoScanMetric(Base):
+    """Per-scan-cycle metrics for observability and SLO tracking."""
+
+    __tablename__ = "crypto_scan_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scan_id = Column(String(8), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime, nullable=False)
+    duration_ms = Column(Integer, nullable=False)
+    chains_total = Column(Integer, nullable=False, default=0)
+    chains_failed = Column(Integer, nullable=False, default=0)
+    launches_new = Column(Integer, nullable=False, default=0)
+    launches_updated = Column(Integer, nullable=False, default=0)
+    per_chain_json = Column(Text)
+    success = Column(Boolean, nullable=False, default=True)
+
+
 class DatabaseManager:
     """
     数据库管理器 - 单例模式
@@ -2088,6 +2106,35 @@ class DatabaseManager:
                 for r in by_model_rows
             ],
         }
+
+    def save_scan_metric(self, **kwargs) -> None:
+        """Persist a single scan-cycle metric row."""
+        row = CryptoScanMetric(**kwargs)
+        with self.session_scope() as session:
+            session.add(row)
+
+    def get_scan_metrics(self, since: Optional[datetime] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Return recent scan metrics, newest first."""
+        with self.session_scope() as session:
+            q = session.query(CryptoScanMetric).order_by(CryptoScanMetric.finished_at.desc())
+            if since:
+                q = q.filter(CryptoScanMetric.finished_at >= since)
+            rows = q.limit(limit).all()
+            return [
+                {
+                    "scan_id": r.scan_id,
+                    "started_at": r.started_at.isoformat() if r.started_at else None,
+                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                    "duration_ms": r.duration_ms,
+                    "chains_total": r.chains_total,
+                    "chains_failed": r.chains_failed,
+                    "launches_new": r.launches_new,
+                    "launches_updated": r.launches_updated,
+                    "per_chain_json": r.per_chain_json,
+                    "success": r.success,
+                }
+                for r in rows
+            ]
 
 
 # 便捷函数
