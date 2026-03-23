@@ -181,6 +181,9 @@ _DEX_BASE = "https://api.dexscreener.com/latest/dex"
 def _enrich_with_dexscreener(
     launches: List[NormalizedLaunch],
     timeout_sec: int = 5,
+    max_retries: int = 0,
+    initial_backoff_sec: float = 1.0,
+    backoff_multiplier: float = 2.0,
 ) -> List[NormalizedLaunch]:
     """Enrich launches with DexScreener metadata.  Non-blocking: failures
     leave the launch in its current partial state."""
@@ -206,14 +209,34 @@ def _enrich_with_dexscreener(
         for i in range(0, len(addresses), 30):
             batch = addresses[i : i + 30]
             url = f"{_DEX_BASE}/pairs/{mapping.dexscreener}/{','.join(batch)}"
-            try:
-                resp = requests.get(url, timeout=timeout_sec)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as exc:
-                logger.warning(
-                    "DexScreener enrichment failed for %s: %s", chain_id, exc
-                )
+            data = None
+            for attempt in range(max_retries + 1):
+                try:
+                    resp = requests.get(url, timeout=timeout_sec)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+                except (requests.RequestException, requests.HTTPError) as exc:
+                    if attempt < max_retries:
+                        backoff = initial_backoff_sec * (backoff_multiplier ** attempt)
+                        logger.warning(
+                            "retry chain=%s attempt=%d/%d backoff=%.1fs error=%s",
+                            chain_id,
+                            attempt + 1,
+                            max_retries,
+                            backoff,
+                            exc,
+                        )
+                        time.sleep(backoff)
+                    else:
+                        logger.warning(
+                            "DexScreener enrichment failed for %s after %d attempts: %s",
+                            chain_id,
+                            max_retries + 1,
+                            exc,
+                        )
+
+            if data is None:
                 continue
 
             pairs_data = data.get("pairs") or []
@@ -292,6 +315,9 @@ class CryptoLaunchFetcher:
         chains: List[str],
         *,
         timeout_sec: int = 5,
+        max_retries: int = 0,
+        initial_backoff_sec: float = 1.0,
+        backoff_multiplier: float = 2.0,
     ) -> Dict[str, List[NormalizedLaunch]]:
         """Fetch new pools from GeckoTerminal for each chain.
 
@@ -307,14 +333,34 @@ class CryptoLaunchFetcher:
                 continue
 
             url = f"{_GECKO_BASE}/networks/{mapping.geckoterminal}/new_pools"
-            try:
-                resp = requests.get(url, headers=_GECKO_HEADERS, timeout=timeout_sec)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as exc:
-                logger.warning(
-                    "GeckoTerminal discovery failed for %s: %s", chain_id, exc
-                )
+            data = None
+            for attempt in range(max_retries + 1):
+                try:
+                    resp = requests.get(url, headers=_GECKO_HEADERS, timeout=timeout_sec)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+                except (requests.RequestException, requests.HTTPError) as exc:
+                    if attempt < max_retries:
+                        backoff = initial_backoff_sec * (backoff_multiplier ** attempt)
+                        logger.warning(
+                            "retry chain=%s attempt=%d/%d backoff=%.1fs error=%s",
+                            chain_id,
+                            attempt + 1,
+                            max_retries,
+                            backoff,
+                            exc,
+                        )
+                        time.sleep(backoff)
+                    else:
+                        logger.warning(
+                            "failed for %s after %d attempts: %s",
+                            chain_id,
+                            max_retries + 1,
+                            exc,
+                        )
+
+            if data is None:
                 continue
 
             pools = data.get("data", [])
@@ -336,13 +382,22 @@ class CryptoLaunchFetcher:
         launches: List[NormalizedLaunch],
         *,
         timeout_sec: int = 5,
+        max_retries: int = 0,
+        initial_backoff_sec: float = 1.0,
+        backoff_multiplier: float = 2.0,
     ) -> List[NormalizedLaunch]:
         """Enrich launches with DexScreener metadata.
 
         This is non-blocking: any enrichment failure leaves the launch in its
         existing partial state.
         """
-        return _enrich_with_dexscreener(launches, timeout_sec=timeout_sec)
+        return _enrich_with_dexscreener(
+            launches,
+            timeout_sec=timeout_sec,
+            max_retries=max_retries,
+            initial_backoff_sec=initial_backoff_sec,
+            backoff_multiplier=backoff_multiplier,
+        )
 
     def discover_and_enrich(
         self,
@@ -350,13 +405,22 @@ class CryptoLaunchFetcher:
         *,
         discovery_timeout_sec: int = 5,
         enrichment_timeout_sec: int = 5,
+        max_retries: int = 0,
+        initial_backoff_sec: float = 1.0,
+        backoff_multiplier: float = 2.0,
     ) -> Tuple[Dict[str, List[NormalizedLaunch]], List[str]]:
         """Full discovery + enrichment pipeline.
 
         Returns ``(results_by_chain, failed_chains)`` so callers know which
         chains failed without raising.
         """
-        all_results = self.discover(chains, timeout_sec=discovery_timeout_sec)
+        all_results = self.discover(
+            chains,
+            timeout_sec=discovery_timeout_sec,
+            max_retries=max_retries,
+            initial_backoff_sec=initial_backoff_sec,
+            backoff_multiplier=backoff_multiplier,
+        )
 
         # Flatten for enrichment
         all_launches: List[NormalizedLaunch] = []
@@ -364,7 +428,13 @@ class CryptoLaunchFetcher:
             all_launches.extend(chain_launches)
 
         if all_launches:
-            self.enrich(all_launches, timeout_sec=enrichment_timeout_sec)
+            self.enrich(
+                all_launches,
+                timeout_sec=enrichment_timeout_sec,
+                max_retries=max_retries,
+                initial_backoff_sec=initial_backoff_sec,
+                backoff_multiplier=backoff_multiplier,
+            )
 
         failed_chains = [c for c in chains if c not in all_results]
         return all_results, failed_chains
