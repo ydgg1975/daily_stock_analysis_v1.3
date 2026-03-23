@@ -23,6 +23,7 @@
 </div>
 
 ## 💖 赞助商 (Sponsors)
+
 <div align="center">
   <a href="https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis" target="_blank">
     <img src="./sources/serpapi_banner_zh.png" alt="轻松抓取搜索引擎上的实时金融新闻数据 - SerpApi" height="160">
@@ -30,24 +31,23 @@
 </div>
 <br>
 
-
 ## ✨ 功能特性
 
-| 模块 | 功能 | 说明 |
-|------|------|------|
-| AI | 决策仪表盘 | 一句话核心结论 + 精确买卖点位 + 操作检查清单 |
-| 分析 | 多维度分析 | 技术面（盘中实时 MA/多头排列）+ 筹码分布 + 舆情情报 + 实时行情 |
-| 市场 | 全球市场 | 支持 A股、港股、美股及美股指数（SPX、DJI、IXIC 等） |
-| 基本面 | 结构化聚合 | 新增 `fundamental_context`（valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards，其中 `earnings.data` 新增 `financial_report` 与 `dividend`，`boards` 表示板块涨跌榜），主链路 fail-open 降级 |
-| 策略 | 市场策略系统 | 内置 A股「三段式复盘策略」与美股「Regime Strategy」，输出进攻/均衡/防守或 risk-on/neutral/risk-off 计划，并附“仅供参考，不构成投资建议”提示 |
-| 复盘 | 大盘复盘 | 每日市场概览、板块涨跌；支持 cn(A股)/us(美股)/both(两者) 切换 |
-| 补全 | 智能补全 (MVP) | **[测试阶段]** 首页搜索框支持代码/名称/拼音/别名联想；索引已覆盖 A股、港股、美股三个市场，支持通过 Tushare 或 AkShare 数据源更新 |
-| 智能导入 | 多源导入 | 支持图片、CSV/Excel 文件、剪贴板粘贴；Vision LLM 提取代码+名称；置信度分层确认；名称→代码解析（本地+拼音+AkShare） |
-| 历史记录 | 批量管理 | 支持多选、全选及批量删除历史分析记录，优化管理效率与 UI/UX 体验 |
-| 回测 | AI 回测验证 | 自动评估历史分析准确率，方向胜率、止盈止损命中率 |
-| **Agent 问股** | **策略对话** | **多轮策略问答，支持均线金叉/缠论/波浪等 11 种内置策略，Web/Bot/API 全链路** |
-| 推送 | 多渠道通知 | 企业微信、飞书、Telegram、Discord、Slack、钉钉、邮件、Pushover |
-| 自动化 | 定时运行 | GitHub Actions 定时执行，无需服务器 |
+| 模块           | 功能           | 说明                                                                                                                                                                                                             |
+| -------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI             | 决策仪表盘     | 一句话核心结论 + 精确买卖点位 + 操作检查清单                                                                                                                                                                     |
+| 分析           | 多维度分析     | 技术面（盘中实时 MA/多头排列）+ 筹码分布 + 舆情情报 + 实时行情                                                                                                                                                   |
+| 市场           | 全球市场       | 支持 A股、港股、美股及美股指数（SPX、DJI、IXIC 等）                                                                                                                                                              |
+| 基本面         | 结构化聚合     | 新增 `fundamental_context`（valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards，其中 `earnings.data` 新增 `financial_report` 与 `dividend`，`boards` 表示板块涨跌榜），主链路 fail-open 降级 |
+| 策略           | 市场策略系统   | 内置 A股「三段式复盘策略」与美股「Regime Strategy」，输出进攻/均衡/防守或 risk-on/neutral/risk-off 计划，并附“仅供参考，不构成投资建议”提示                                                                      |
+| 复盘           | 大盘复盘       | 每日市场概览、板块涨跌；支持 cn(A股)/us(美股)/both(两者) 切换                                                                                                                                                    |
+| 补全           | 智能补全 (MVP) | **[测试阶段]** 首页搜索框支持代码/名称/拼音/别名联想；索引已覆盖 A股、港股、美股三个市场，支持通过 Tushare 或 AkShare 数据源更新                                                                                 |
+| 智能导入       | 多源导入       | 支持图片、CSV/Excel 文件、剪贴板粘贴；Vision LLM 提取代码+名称；置信度分层确认；名称→代码解析（本地+拼音+AkShare）                                                                                               |
+| 历史记录       | 批量管理       | 支持多选、全选及批量删除历史分析记录，优化管理效率与 UI/UX 体验                                                                                                                                                  |
+| 回测           | AI 回测验证    | 自动评估历史分析准确率，方向胜率、止盈止损命中率                                                                                                                                                                 |
+| **Agent 问股** | **策略对话**   | **多轮策略问答，支持均线金叉/缠论/波浪等 11 种内置策略，Web/Bot/API 全链路**                                                                                                                                     |
+| 推送           | 多渠道通知     | 企业微信、飞书、Telegram、Discord、Slack、钉钉、邮件、Pushover                                                                                                                                                   |
+| 自动化         | 定时运行       | GitHub Actions 定时执行，无需服务器                                                                                                                                                                              |
 
 > 历史报告详情会优先展示 AI 返回的原始「狙击点位」文本，避免区间价、条件说明等复杂内容在历史回看时被压缩成单个数字。
 
@@ -58,31 +58,30 @@
 
 ### 技术栈与数据来源
 
-| 类型 | 支持 |
-|------|------|
-| AI 模型 | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama 本地模型 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡）|
-| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance |
-| 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
-| 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选） |
+| 类型     | 支持                                                                                                                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI 模型  | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama 本地模型 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡） |
+| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance                                                                                                                                                         |
+| 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax                                                                                                                                                              |
+| 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选）                                                                                                         |
 
 > 注：美股历史数据与实时行情统一使用 YFinance，确保复权一致性
 
 ### 内置交易纪律
 
-| 规则 | 说明 |
-|------|------|
+| 规则     | 说明                                                            |
+| -------- | --------------------------------------------------------------- |
 | 严禁追高 | 乖离率超阈值（默认 5%，可配置）自动提示风险；强势趋势股自动放宽 |
-| 趋势交易 | MA5 > MA10 > MA20 多头排列 |
-| 精确点位 | 买入价、止损价、目标价 |
-| 检查清单 | 每项条件以「满足 / 注意 / 不满足」标记 |
-| 新闻时效 | 可配置新闻最大时效（默认 3 天），避免使用过时信息 |
+| 趋势交易 | MA5 > MA10 > MA20 多头排列                                      |
+| 精确点位 | 买入价、止损价、目标价                                          |
+| 检查清单 | 每项条件以「满足 / 注意 / 不满足」标记                          |
+| 新闻时效 | 可配置新闻最大时效（默认 3 天），避免使用过时信息               |
 
 ## 🚀 快速开始
 
 ### 方式一：GitHub Actions（推荐）
 
 > 5 分钟完成部署，零成本，无需服务器。
-
 
 #### 1. Fork 本仓库
 
@@ -100,65 +99,64 @@
 
 > 💡 **推荐 [AIHubMix](https://aihubmix.com/?aff=CfMq)**：一个 Key 即可使用 Gemini、GPT、Claude、DeepSeek 等全球主流模型，无需科学上网，含免费模型（glm-5、gpt-4o-free 等），付费模型高稳定性无限并发。本项目可享 **10% 充值优惠**。
 
-| Secret 名称 | 说明 | 必填 |
-|------------|------|:----:|
-| `AIHUBMIX_KEY` | [AIHubMix](https://aihubmix.com/?aff=CfMq) API Key，一 Key 切换使用全系模型，免费模型可用 | 可选 |
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/) 获取免费 Key（需科学上网） | 可选 |
-| `ANTHROPIC_API_KEY` | [Anthropic Claude](https://console.anthropic.com/) API Key | 可选 |
-| `ANTHROPIC_MODEL` | Claude 模型（如 `claude-3-5-sonnet-20241022`） | 可选 |
-| `OPENAI_API_KEY` | OpenAI 兼容 API Key（支持 DeepSeek、通义千问等） | 可选 |
-| `OPENAI_BASE_URL` | OpenAI 兼容 API 地址（如 `https://api.deepseek.com/v1`） | 可选 |
-| `OPENAI_MODEL` | 模型名称（如 `gemini-3.1-pro-preview`、`gemini-3-flash-preview`、`gpt-5.2`） | 可选 |
-| `OPENAI_VISION_MODEL` | 图片识别专用模型（部分第三方模型不支持图像；不填则用 `OPENAI_MODEL`） | 可选 |
-| `OLLAMA_API_BASE` | Ollama 本地服务地址（如 `http://localhost:11434`），本地/Docker 部署时使用，**不要**用 `OPENAI_BASE_URL` 配置 Ollama，详见 [LLM 配置指南 - Ollama](docs/LLM_CONFIG_GUIDE.md#示例-4使用-ollama-本地模型) | 可选 |
+| Secret 名称           | 说明                                                                                                                                                                                                    | 必填 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--: |
+| `AIHUBMIX_KEY`        | [AIHubMix](https://aihubmix.com/?aff=CfMq) API Key，一 Key 切换使用全系模型，免费模型可用                                                                                                               | 可选 |
+| `GEMINI_API_KEY`      | [Google AI Studio](https://aistudio.google.com/) 获取免费 Key（需科学上网）                                                                                                                             | 可选 |
+| `ANTHROPIC_API_KEY`   | [Anthropic Claude](https://console.anthropic.com/) API Key                                                                                                                                              | 可选 |
+| `ANTHROPIC_MODEL`     | Claude 模型（如 `claude-3-5-sonnet-20241022`）                                                                                                                                                          | 可选 |
+| `OPENAI_API_KEY`      | OpenAI 兼容 API Key（支持 DeepSeek、通义千问等）                                                                                                                                                        | 可选 |
+| `OPENAI_BASE_URL`     | OpenAI 兼容 API 地址（如 `https://api.deepseek.com/v1`）                                                                                                                                                | 可选 |
+| `OPENAI_MODEL`        | 模型名称（如 `gemini-3.1-pro-preview`、`gemini-3-flash-preview`、`gpt-5.2`）                                                                                                                            | 可选 |
+| `OPENAI_VISION_MODEL` | 图片识别专用模型（部分第三方模型不支持图像；不填则用 `OPENAI_MODEL`）                                                                                                                                   | 可选 |
+| `OLLAMA_API_BASE`     | Ollama 本地服务地址（如 `http://localhost:11434`），本地/Docker 部署时使用，**不要**用 `OPENAI_BASE_URL` 配置 Ollama，详见 [LLM 配置指南 - Ollama](docs/LLM_CONFIG_GUIDE.md#示例-4使用-ollama-本地模型) | 可选 |
 
 > 注：AI 优先级 Gemini > Anthropic > OpenAI（含 AIHubmix）> Ollama，至少配置一个。`AIHUBMIX_KEY` 无需配置 `OPENAI_BASE_URL`，系统自动适配。图片识别需 Vision 能力模型。DeepSeek 思考模式（deepseek-reasoner、deepseek-r1、qwq、deepseek-chat）按模型名自动识别，无需额外配置。**Ollama 本地模型**（无需 API Key）必须使用 `OLLAMA_API_BASE`，误用 `OPENAI_BASE_URL` 会导致 404。
 
 <details>
 <summary><b>通知渠道配置</b>（点击展开，至少配置一个）</summary>
 
-
-| Secret 名称 | 说明 | 必填 |
-|------------|------|:----:|
-| `WECHAT_WEBHOOK_URL` | 企业微信 Webhook URL | 可选 |
-| `FEISHU_WEBHOOK_URL` | 飞书 Webhook URL | 可选 |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token（@BotFather 获取） | 可选 |
-| `TELEGRAM_CHAT_ID` | Telegram Chat ID | 可选 |
-| `TELEGRAM_MESSAGE_THREAD_ID` | Telegram Topic ID (用于发送到子话题) | 可选 |
-| `DISCORD_WEBHOOK_URL` | Discord Webhook URL | 可选 |
-| `DISCORD_BOT_TOKEN` | Discord Bot Token（与 Webhook 二选一） | 可选 |
-| `DISCORD_MAIN_CHANNEL_ID` | Discord Channel ID（使用 Bot 时需要） | 可选 |
-| `SLACK_BOT_TOKEN` | Slack Bot Token（推荐，支持图片上传；同时配置时优先于 Webhook） | 可选 |
-| `SLACK_CHANNEL_ID` | Slack Channel ID（使用 Bot 时需要） | 可选 |
-| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL（仅文本，不支持图片） | 可选 |
-| `EMAIL_SENDER` | 发件人邮箱（如 `xxx@qq.com`） | 可选 |
-| `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
-| `EMAIL_RECEIVERS` | 收件人邮箱（多个用逗号分隔，留空则发给自己） | 可选 |
-| `EMAIL_SENDER_NAME` | 邮件发件人显示名称（默认：daily_stock_analysis股票分析助手，支持中文并自动编码邮件头） | 可选 |
-| `STOCK_GROUP_N` / `EMAIL_GROUP_N` | 股票分组发往不同邮箱（如 `STOCK_GROUP_1=600519,300750` `EMAIL_GROUP_1=user1@example.com`） | 可选 |
-| `PUSHPLUS_TOKEN` | PushPlus Token（[获取地址](https://www.pushplus.plus)，国内推送服务） | 可选 |
-| `PUSHPLUS_TOPIC` | PushPlus 群组编码（一对多推送，配置后消息推送给群组所有订阅用户） | 可选 |
-| `SERVERCHAN3_SENDKEY` | Server酱³ Sendkey（[获取地址](https://sc3.ft07.com/)，手机APP推送服务） | 可选 |
-| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（支持钉钉等，多个用逗号分隔） | 可选 |
-| `CUSTOM_WEBHOOK_BEARER_TOKEN` | 自定义 Webhook 的 Bearer Token（用于需要认证的 Webhook） | 可选 |
-| `WEBHOOK_VERIFY_SSL` | Webhook HTTPS 证书校验（默认 true）。设为 false 可支持自签名证书。警告：关闭有严重安全风险，仅限可信内网 | 可选 |
-| `SCHEDULE_RUN_IMMEDIATELY` | 定时模式启动时是否立即执行一次分析 | 可选 |
-| `RUN_IMMEDIATELY` | 非定时模式启动时是否立即执行一次分析 | 可选 |
-| `SINGLE_STOCK_NOTIFY` | 单股推送模式：设为 `true` 则每分析完一只股票立即推送 | 可选 |
-| `REPORT_TYPE` | 报告类型：`simple`(精简)、`full`(完整)、`brief`(3-5句概括)，Docker环境推荐设为 `full` | 可选 |
-| `REPORT_LANGUAGE` | 报告输出语言：`zh`(默认中文) / `en`(英文)；会同步影响 Prompt、Markdown 模板、通知 fallback 与 Web 报告页固定文案 | 可选 |
-| `REPORT_SUMMARY_ONLY` | 仅分析结果摘要：设为 `true` 时只推送汇总，不含个股详情 | 可选 |
-| `REPORT_TEMPLATES_DIR` | Jinja2 模板目录（相对项目根，默认 `templates`） | 可选 |
-| `REPORT_RENDERER_ENABLED` | 启用 Jinja2 模板渲染（默认 `false`，保证零回归） | 可选 |
-| `REPORT_INTEGRITY_ENABLED` | 启用报告完整性校验，缺失必填字段时重试或占位补全（默认 `true`） | 可选 |
-| `REPORT_INTEGRITY_RETRY` | 完整性校验重试次数（默认 `1`，`0` 表示仅占位不重试） | 可选 |
-| `REPORT_HISTORY_COMPARE_N` | 历史信号对比条数，`0` 关闭（默认），`>0` 启用 | 可选 |
-| `ANALYSIS_DELAY` | 个股分析和大盘分析之间的延迟（秒），避免API限流，如 `10` | 可选 |
-| `MAX_WORKERS` | 异步分析任务队列并发线程数（默认 `3`）；保存后队列空闲时自动应用，繁忙时延后生效 | 可选 |
-| `MERGE_EMAIL_NOTIFICATION` | 个股与大盘复盘合并推送（默认 false），减少邮件数量 | 可选 |
-| `MARKDOWN_TO_IMAGE_CHANNELS` | 将 Markdown 转为图片发送的渠道（逗号分隔）：`telegram,wechat,custom,email,slack` | 可选 |
-| `MARKDOWN_TO_IMAGE_MAX_CHARS` | 超过此长度不转图片，避免超大图片（默认 `15000`） | 可选 |
-| `MD2IMG_ENGINE` | 转图引擎：`wkhtmltoimage`（默认）或 `markdown-to-file`（emoji 更好） | 可选 |
+| Secret 名称                       | 说明                                                                                                             | 必填 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- | :--: |
+| `WECHAT_WEBHOOK_URL`              | 企业微信 Webhook URL                                                                                             | 可选 |
+| `FEISHU_WEBHOOK_URL`              | 飞书 Webhook URL                                                                                                 | 可选 |
+| `TELEGRAM_BOT_TOKEN`              | Telegram Bot Token（@BotFather 获取）                                                                            | 可选 |
+| `TELEGRAM_CHAT_ID`                | Telegram Chat ID                                                                                                 | 可选 |
+| `TELEGRAM_MESSAGE_THREAD_ID`      | Telegram Topic ID (用于发送到子话题)                                                                             | 可选 |
+| `DISCORD_WEBHOOK_URL`             | Discord Webhook URL                                                                                              | 可选 |
+| `DISCORD_BOT_TOKEN`               | Discord Bot Token（与 Webhook 二选一）                                                                           | 可选 |
+| `DISCORD_MAIN_CHANNEL_ID`         | Discord Channel ID（使用 Bot 时需要）                                                                            | 可选 |
+| `SLACK_BOT_TOKEN`                 | Slack Bot Token（推荐，支持图片上传；同时配置时优先于 Webhook）                                                  | 可选 |
+| `SLACK_CHANNEL_ID`                | Slack Channel ID（使用 Bot 时需要）                                                                              | 可选 |
+| `SLACK_WEBHOOK_URL`               | Slack Incoming Webhook URL（仅文本，不支持图片）                                                                 | 可选 |
+| `EMAIL_SENDER`                    | 发件人邮箱（如 `xxx@qq.com`）                                                                                    | 可选 |
+| `EMAIL_PASSWORD`                  | 邮箱授权码（非登录密码）                                                                                         | 可选 |
+| `EMAIL_RECEIVERS`                 | 收件人邮箱（多个用逗号分隔，留空则发给自己）                                                                     | 可选 |
+| `EMAIL_SENDER_NAME`               | 邮件发件人显示名称（默认：daily_stock_analysis股票分析助手，支持中文并自动编码邮件头）                           | 可选 |
+| `STOCK_GROUP_N` / `EMAIL_GROUP_N` | 股票分组发往不同邮箱（如 `STOCK_GROUP_1=600519,300750` `EMAIL_GROUP_1=user1@example.com`）                       | 可选 |
+| `PUSHPLUS_TOKEN`                  | PushPlus Token（[获取地址](https://www.pushplus.plus)，国内推送服务）                                            | 可选 |
+| `PUSHPLUS_TOPIC`                  | PushPlus 群组编码（一对多推送，配置后消息推送给群组所有订阅用户）                                                | 可选 |
+| `SERVERCHAN3_SENDKEY`             | Server酱³ Sendkey（[获取地址](https://sc3.ft07.com/)，手机APP推送服务）                                          | 可选 |
+| `CUSTOM_WEBHOOK_URLS`             | 自定义 Webhook（支持钉钉等，多个用逗号分隔）                                                                     | 可选 |
+| `CUSTOM_WEBHOOK_BEARER_TOKEN`     | 自定义 Webhook 的 Bearer Token（用于需要认证的 Webhook）                                                         | 可选 |
+| `WEBHOOK_VERIFY_SSL`              | Webhook HTTPS 证书校验（默认 true）。设为 false 可支持自签名证书。警告：关闭有严重安全风险，仅限可信内网         | 可选 |
+| `SCHEDULE_RUN_IMMEDIATELY`        | 定时模式启动时是否立即执行一次分析                                                                               | 可选 |
+| `RUN_IMMEDIATELY`                 | 非定时模式启动时是否立即执行一次分析                                                                             | 可选 |
+| `SINGLE_STOCK_NOTIFY`             | 单股推送模式：设为 `true` 则每分析完一只股票立即推送                                                             | 可选 |
+| `REPORT_TYPE`                     | 报告类型：`simple`(精简)、`full`(完整)、`brief`(3-5句概括)，Docker环境推荐设为 `full`                            | 可选 |
+| `REPORT_LANGUAGE`                 | 报告输出语言：`zh`(默认中文) / `en`(英文)；会同步影响 Prompt、Markdown 模板、通知 fallback 与 Web 报告页固定文案 | 可选 |
+| `REPORT_SUMMARY_ONLY`             | 仅分析结果摘要：设为 `true` 时只推送汇总，不含个股详情                                                           | 可选 |
+| `REPORT_TEMPLATES_DIR`            | Jinja2 模板目录（相对项目根，默认 `templates`）                                                                  | 可选 |
+| `REPORT_RENDERER_ENABLED`         | 启用 Jinja2 模板渲染（默认 `false`，保证零回归）                                                                 | 可选 |
+| `REPORT_INTEGRITY_ENABLED`        | 启用报告完整性校验，缺失必填字段时重试或占位补全（默认 `true`）                                                  | 可选 |
+| `REPORT_INTEGRITY_RETRY`          | 完整性校验重试次数（默认 `1`，`0` 表示仅占位不重试）                                                             | 可选 |
+| `REPORT_HISTORY_COMPARE_N`        | 历史信号对比条数，`0` 关闭（默认），`>0` 启用                                                                    | 可选 |
+| `ANALYSIS_DELAY`                  | 个股分析和大盘分析之间的延迟（秒），避免API限流，如 `10`                                                         | 可选 |
+| `MAX_WORKERS`                     | 异步分析任务队列并发线程数（默认 `3`）；保存后队列空闲时自动应用，繁忙时延后生效                                 | 可选 |
+| `MERGE_EMAIL_NOTIFICATION`        | 个股与大盘复盘合并推送（默认 false），减少邮件数量                                                               | 可选 |
+| `MARKDOWN_TO_IMAGE_CHANNELS`      | 将 Markdown 转为图片发送的渠道（逗号分隔）：`telegram,wechat,custom,email,slack`                                 | 可选 |
+| `MARKDOWN_TO_IMAGE_MAX_CHARS`     | 超过此长度不转图片，避免超大图片（默认 `15000`）                                                                 | 可选 |
+| `MD2IMG_ENGINE`                   | 转图引擎：`wkhtmltoimage`（默认）或 `markdown-to-file`（emoji 更好）                                             | 可选 |
 
 > 至少配置一个渠道，配置多个则同时推送。图片发送与引擎安装细节请参考 [完整指南](docs/full-guide.md)
 
@@ -166,40 +164,41 @@
 
 **其他配置**
 
-| Secret 名称 | 说明 | 必填 |
-|------------|------|:----:|
-| `STOCK_LIST` | 自选股代码，如 `600519,hk00700,AAPL,TSLA` | ✅ |
-| `TAVILY_API_KEYS` | [Tavily](https://tavily.com/) 搜索 API（新闻搜索） | 推荐 |
-| `MINIMAX_API_KEYS` | [MiniMax](https://platform.minimaxi.com/) Coding Plan Web Search（结构化搜索结果） | 可选 |
-| `SERPAPI_API_KEYS` | [SerpAPI](https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis) 全渠道搜索 | 可选 |
-| `BOCHA_API_KEYS` | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔） | 可选 |
-| `BRAVE_API_KEYS` | [Brave Search](https://brave.com/search/api/) API（隐私优先，美股优化，多个key用逗号分隔） | 可选 |
-| `SEARXNG_BASE_URLS` | SearXNG 自建实例（无配额兜底，需在 settings.yml 启用 format: json）；留空时默认自动发现公共实例 | 可选 |
-| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`） | 可选 |
-| `SOCIAL_SENTIMENT_API_KEY` | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit/X/Polymarket 社交舆情，仅美股） | 可选 |
-| `SOCIAL_SENTIMENT_API_URL` | 自定义社交舆情 API 地址（默认 `https://api.adanos.org`） | 可选 |
-| `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
-| `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API Key（增强 A 股大盘复盘指数；若套餐支持标的池查询，也可增强市场统计） | 可选 |
-| `PREFETCH_REALTIME_QUOTES` | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`） | 可选 |
-| `WECHAT_MSG_TYPE` | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本 | 可选 |
-| `NEWS_STRATEGY_PROFILE` | 新闻策略窗口档位：`ultra_short`(1天) / `short`(3天) / `medium`(7天) / `long`(30天)，默认 `short` | 可选 |
-| `NEWS_MAX_AGE_DAYS` | 新闻最大时效上限（天），默认 3；实际窗口 `effective_days = min(profile_days, NEWS_MAX_AGE_DAYS)`，例如 `ultra_short(1)` + `7` 仍为 `1` 天 | 可选 |
-| `BIAS_THRESHOLD` | 乖离率阈值（%），默认 5.0，超过提示不追高；强势趋势股自动放宽 | 可选 |
-| `AGENT_MODE` | 开启 Agent 策略问股模式（内部统一命名为 skill，`true`/`false`，默认 false） | 可选 |
-| `AGENT_LITELLM_MODEL` | Agent 主模型（可选）；留空继承 `LITELLM_MODEL`，无前缀会按 `openai/<model>` 解析 | 可选 |
-| `AGENT_SKILLS` | 激活的策略技能 id（逗号分隔），`all` 启用全部策略技能；留空时使用主默认策略 skill（内置默认是 `bull_trend`），详见 `.env.example` | 可选 |
-| `AGENT_MAX_STEPS` | Agent 最大推理步数（默认 10） | 可选 |
-| `AGENT_SKILL_DIR` | 自定义策略技能目录（默认沿用内置 `strategies/` 兼容路径） | 可选 |
-| `TRADING_DAY_CHECK_ENABLED` | 交易日检查（默认 `true`）：非交易日跳过执行；设为 `false` 或使用 `--force-run` 强制执行 | 可选 |
-| `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布（Actions 默认 false；需筹码数据时在 Variables 中设为 true，接口可能不稳定） | 可选 |
-| `ENABLE_FUNDAMENTAL_PIPELINE` | 基本面聚合总开关；关闭时保持主流程不变 | 可选 |
-| `FUNDAMENTAL_STAGE_TIMEOUT_SECONDS` | 基本面阶段总预算（秒） | 可选 |
-| `FUNDAMENTAL_FETCH_TIMEOUT_SECONDS` | 单能力源调用超时（秒） | 可选 |
-| `FUNDAMENTAL_RETRY_MAX` | 基本面能力重试次数（包含首次） | 可选 |
-| `FUNDAMENTAL_CACHE_TTL_SECONDS` | 基本面缓存 TTL（秒） | 可选 |
-| `FUNDAMENTAL_CACHE_MAX_ENTRIES` | 基本面缓存最大条目数（避免长时间运行内存增长） | 可选 |
+| Secret 名称                         | 说明                                                                                                                                      | 必填 |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | :--: |
+| `STOCK_LIST`                        | 自选股代码，如 `600519,hk00700,AAPL,TSLA`                                                                                                 |  ✅  |
+| `TAVILY_API_KEYS`                   | [Tavily](https://tavily.com/) 搜索 API（新闻搜索）                                                                                        | 推荐 |
+| `MINIMAX_API_KEYS`                  | [MiniMax](https://platform.minimaxi.com/) Coding Plan Web Search（结构化搜索结果）                                                        | 可选 |
+| `SERPAPI_API_KEYS`                  | [SerpAPI](https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis) 全渠道搜索                                         | 可选 |
+| `BOCHA_API_KEYS`                    | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔）                                          | 可选 |
+| `BRAVE_API_KEYS`                    | [Brave Search](https://brave.com/search/api/) API（隐私优先，美股优化，多个key用逗号分隔）                                                | 可选 |
+| `SEARXNG_BASE_URLS`                 | SearXNG 自建实例（无配额兜底，需在 settings.yml 启用 format: json）；留空时默认自动发现公共实例                                           | 可选 |
+| `SEARXNG_PUBLIC_INSTANCES_ENABLED`  | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`）                                                         | 可选 |
+| `SOCIAL_SENTIMENT_API_KEY`          | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit/X/Polymarket 社交舆情，仅美股）                                                | 可选 |
+| `SOCIAL_SENTIMENT_API_URL`          | 自定义社交舆情 API 地址（默认 `https://api.adanos.org`）                                                                                  | 可选 |
+| `TUSHARE_TOKEN`                     | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638) Token                                                                      | 可选 |
+| `TICKFLOW_API_KEY`                  | [TickFlow](https://tickflow.org) API Key（增强 A 股大盘复盘指数；若套餐支持标的池查询，也可增强市场统计）                                 | 可选 |
+| `PREFETCH_REALTIME_QUOTES`          | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`）                                                                            | 可选 |
+| `WECHAT_MSG_TYPE`                   | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本                                                                     | 可选 |
+| `NEWS_STRATEGY_PROFILE`             | 新闻策略窗口档位：`ultra_short`(1天) / `short`(3天) / `medium`(7天) / `long`(30天)，默认 `short`                                          | 可选 |
+| `NEWS_MAX_AGE_DAYS`                 | 新闻最大时效上限（天），默认 3；实际窗口 `effective_days = min(profile_days, NEWS_MAX_AGE_DAYS)`，例如 `ultra_short(1)` + `7` 仍为 `1` 天 | 可选 |
+| `BIAS_THRESHOLD`                    | 乖离率阈值（%），默认 5.0，超过提示不追高；强势趋势股自动放宽                                                                             | 可选 |
+| `AGENT_MODE`                        | 开启 Agent 策略问股模式（内部统一命名为 skill，`true`/`false`，默认 false）                                                               | 可选 |
+| `AGENT_LITELLM_MODEL`               | Agent 主模型（可选）；留空继承 `LITELLM_MODEL`，无前缀会按 `openai/<model>` 解析                                                          | 可选 |
+| `AGENT_SKILLS`                      | 激活的策略技能 id（逗号分隔），`all` 启用全部策略技能；留空时使用主默认策略 skill（内置默认是 `bull_trend`），详见 `.env.example`         | 可选 |
+| `AGENT_MAX_STEPS`                   | Agent 最大推理步数（默认 10）                                                                                                             | 可选 |
+| `AGENT_SKILL_DIR`                   | 自定义策略技能目录（默认沿用内置 `strategies/` 兼容路径）                                                                                 | 可选 |
+| `TRADING_DAY_CHECK_ENABLED`         | 交易日检查（默认 `true`）：非交易日跳过执行；设为 `false` 或使用 `--force-run` 强制执行                                                   | 可选 |
+| `ENABLE_CHIP_DISTRIBUTION`          | 启用筹码分布（Actions 默认 false；需筹码数据时在 Variables 中设为 true，接口可能不稳定）                                                  | 可选 |
+| `ENABLE_FUNDAMENTAL_PIPELINE`       | 基本面聚合总开关；关闭时保持主流程不变                                                                                                    | 可选 |
+| `FUNDAMENTAL_STAGE_TIMEOUT_SECONDS` | 基本面阶段总预算（秒）                                                                                                                    | 可选 |
+| `FUNDAMENTAL_FETCH_TIMEOUT_SECONDS` | 单能力源调用超时（秒）                                                                                                                    | 可选 |
+| `FUNDAMENTAL_RETRY_MAX`             | 基本面能力重试次数（包含首次）                                                                                                            | 可选 |
+| `FUNDAMENTAL_CACHE_TTL_SECONDS`     | 基本面缓存 TTL（秒）                                                                                                                      | 可选 |
+| `FUNDAMENTAL_CACHE_MAX_ENTRIES`     | 基本面缓存最大条目数（避免长时间运行内存增长）                                                                                            | 可选 |
 
 > 基本面超时语义（P0）：
+>
 > - 当前采用 `best-effort` 软超时（fail-open），超时会立即降级并继续主流程；
 > - 不承诺严格硬中断第三方调用线程，因此 `P95 <= 1.5s` 是阶段目标而非硬 SLA；
 > - 若业务需要硬 SLA，可在后续阶段升级为“子进程隔离 + kill”的硬超时方案。
@@ -274,6 +273,7 @@ LITELLM_MODEL=openai/deepseek-chat
 ## 📱 推送效果
 
 ### 决策仪表盘
+
 ```
 🎯 2026-02-08 决策仪表盘
 共分析3只股票 | 🟢买入:0 🟡观望:2 🔴卖出:1
@@ -304,6 +304,7 @@ LITELLM_MODEL=openai/deepseek-chat
 ```
 
 ### 大盘复盘
+
 ```
 🎯 2026-01-10 大盘复盘
 
@@ -319,11 +320,36 @@ LITELLM_MODEL=openai/deepseek-chat
 领涨: 互联网服务、文化传媒、小金属
 领跌: 保险、航空机场、光伏设备
 ```
+
+## 🔗 Crypto 新币扫描器
+
+系统内置多链加密货币新币扫描器，支持自动发现、风险分析、AI 研判与告警推送。
+
+**快速启用：**
+
+```bash
+# .env 中添加
+CRYPTO_ENABLED=true
+CRYPTO_CHAINS=solana,ethereum,base
+```
+
+**核心能力：**
+
+| 阶段    | 功能                                   | 配置入口                          |
+| ------- | -------------------------------------- | --------------------------------- |
+| Phase 1 | 多链新币发现与快照追踪                 | `CRYPTO_ENABLED`, `CRYPTO_CHAINS` |
+| Phase 2 | 风险评估 + 观察列表 + 阈值告警         | `CRYPTO_ALERTS_ENABLED`           |
+| Phase 3 | AI 多分析师管线（市场/安全/社交/技术） | `CRYPTO_AI_ENRICHMENT_ENABLED`    |
+| Phase 4 | 可观测性仪表盘（SLO/成本/Prompt 对比） | Web UI                            |
+
+**API 端点：** `/api/v1/crypto/launches`, `/api/v1/crypto/status`, `/api/v1/crypto/refresh`
+
+> 详细配置与架构说明见 [docs/crypto-scanner.md](docs/crypto-scanner.md)
+
 ## ⚙️ 配置说明
 
 > 📖 完整环境变量、定时任务配置请参考 [完整配置指南](docs/full-guide.md)
 > 邮件通知当前基于 SMTP 授权码/基础认证；若 Outlook / Exchange 账号或租户强制 OAuth2，当前版本暂不支持。
-
 
 ## 🖥️ Web 界面
 
@@ -344,6 +370,7 @@ LITELLM_MODEL=openai/deepseek-chat
 **预览与合并**：高置信度默认勾选，中/低置信度需手动勾选；支持按代码去重、清空、全选；仅合并已勾选且解析成功的项。
 
 **配置与限制**：
+
 - 图片需配置 Vision API（`GEMINI_API_KEY`、`ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY` 至少一个）
 - 图片：JPG/PNG/WebP/GIF，≤5MB；文件：≤2MB；粘贴文本：≤100KB
 
@@ -420,6 +447,7 @@ LITELLM_MODEL=openai/deepseek-chat
 > 有建议？欢迎 [提交 Issue](https://github.com/ZhuLinsen/daily_stock_analysis/issues)
 
 > ⚠️ **UI 调整提示**：项目当前正在持续进行 Web UI 调整与升级，部分页面在过渡阶段可能仍存在样式、交互或兼容性问题。欢迎通过 [Issue](https://github.com/ZhuLinsen/daily_stock_analysis/issues) 反馈问题，或直接提交 [Pull Request](https://github.com/ZhuLinsen/daily_stock_analysis/pulls) 一起完善。
+
 ---
 
 ## ☕ 支持项目
@@ -427,8 +455,8 @@ LITELLM_MODEL=openai/deepseek-chat
 如果本项目对你有帮助，欢迎支持项目的持续维护与迭代，感谢支持 🙏  
 赞赏可备注联系方式，祝股市长虹
 
-| 支付宝 (Alipay) | 微信支付 (WeChat) | Ko-fi |
-| :---: | :---: | :---: |
+|                      支付宝 (Alipay)                      |                        微信支付 (WeChat)                         |                                                      Ko-fi                                                      |
+| :-------------------------------------------------------: | :--------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------------: |
 | <img src="./sources/alipay.jpg" width="200" alt="Alipay"> | <img src="./sources/wechatpay.jpg" width="200" alt="WeChat Pay"> | <a href="https://ko-fi.com/mumu157" target="_blank"><img src="./sources/ko-fi.png" width="200" alt="Ko-fi"></a> |
 
 ---
@@ -457,6 +485,7 @@ npm run build
 ```
 
 ## 📄 License
+
 [MIT License](LICENSE) © 2026 ZhuLinsen
 
 如果你在项目中使用或基于本项目进行二次开发，
@@ -464,10 +493,12 @@ npm run build
 这将有助于项目的持续维护和社区发展。
 
 ## 📬 联系与合作
+
 - GitHub Issues：[提交 Issue](https://github.com/ZhuLinsen/daily_stock_analysis/issues)
 - 合作邮箱：zhuls345@gmail.com
 
 ## ⭐ Star History
+
 **如果觉得有用，请给个 ⭐ Star 支持一下！**
 
 <a href="https://star-history.com/#ZhuLinsen/daily_stock_analysis&Date">
