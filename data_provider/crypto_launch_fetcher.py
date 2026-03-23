@@ -296,6 +296,10 @@ def _enrich_with_dexscreener(
 class CryptoLaunchFetcher:
     """Discovers new crypto pools and optionally enriches them with DexScreener."""
 
+    def __init__(self):
+        # Per-chain timing from the last discover() call
+        self.last_chain_timings: Dict[str, Dict] = {}
+
     def validate_enabled_chains(self, chains: List[str]) -> List[str]:
         """Validate that all chains are in the supported registry.
 
@@ -325,15 +329,20 @@ class CryptoLaunchFetcher:
         logged and excluded from the result rather than aborting the whole scan.
         """
         results: Dict[str, List[NormalizedLaunch]] = {}
-
+        self.last_chain_timings = {}
         for chain_id in chains:
+            chain_start = time.monotonic()
             mapping = CHAIN_REGISTRY.get(chain_id)
             if not mapping:
                 logger.warning("Skipping unknown chain: %s", chain_id)
+                self.last_chain_timings[chain_id] = {
+                    "duration_ms": 0, "pools_discovered": 0, "status": "unsupported",
+                }
                 continue
 
             url = f"{_GECKO_BASE}/networks/{mapping.geckoterminal}/new_pools"
             data = None
+            retry_count = 0
             for attempt in range(max_retries + 1):
                 try:
                     resp = requests.get(url, headers=_GECKO_HEADERS, timeout=timeout_sec)
@@ -341,6 +350,7 @@ class CryptoLaunchFetcher:
                     data = resp.json()
                     break
                 except (requests.RequestException, requests.HTTPError) as exc:
+                    retry_count = attempt + 1
                     if attempt < max_retries:
                         backoff = initial_backoff_sec * (backoff_multiplier ** attempt)
                         logger.warning(
@@ -361,6 +371,11 @@ class CryptoLaunchFetcher:
                         )
 
             if data is None:
+                chain_dur = int((time.monotonic() - chain_start) * 1000)
+                self.last_chain_timings[chain_id] = {
+                    "duration_ms": chain_dur, "pools_discovered": 0,
+                    "status": "failed", "retry_count": retry_count,
+                }
                 continue
 
             pools = data.get("data", [])
@@ -370,6 +385,11 @@ class CryptoLaunchFetcher:
                 if parsed:
                     launches.append(parsed)
 
+            chain_dur = int((time.monotonic() - chain_start) * 1000)
+            self.last_chain_timings[chain_id] = {
+                "duration_ms": chain_dur, "pools_discovered": len(launches),
+                "status": "ok", "retry_count": retry_count,
+            }
             results[chain_id] = launches
             logger.info(
                 "Discovered %d new pools on %s", len(launches), chain_id

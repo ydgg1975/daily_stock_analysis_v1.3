@@ -8,10 +8,12 @@ Orchestrates the crypto scanner loop: reads config, validates chains,
 runs discovery + enrichment, persists results, and exposes status metadata.
 """
 
+import json
 import logging
 import time
+import uuid
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Lock, Thread
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -51,6 +53,14 @@ class CryptoLaunchService:
         self._total_scans: int = 0
         self._is_scanning: bool = False
 
+        # Discovery cache: {cache_key: (timestamp, results, failed_chains)}
+        self._discovery_cache: Dict[str, Tuple[float, Dict, List]] = {}
+
+        # Gap detection
+        self._gap_detected: bool = False
+        self._gap_duration_sec: float = 0.0
+        self._detect_gap()
+
     # ------------------------------------------------------------------
     # Scan
     # ------------------------------------------------------------------
@@ -59,11 +69,15 @@ class CryptoLaunchService:
         """Run a single scan cycle across all enabled chains.
 
         Returns a summary dict with ``new``, ``updated``, ``failed_chains``.
+        Emits a structured ``crypto_scan_complete`` log event and persists
+        a ``CryptoScanMetric`` row for observability.
         """
         config = self._config
         chains = list(config.crypto_chains) if config.crypto_chains else []
         risk_enabled = getattr(config, "crypto_risk_enabled", True)
         risk_min_liquidity = getattr(config, "crypto_risk_min_liquidity_usd", 1000.0)
+        scan_id = str(uuid.uuid4())[:8]
+        scan_started = datetime.now()
 
         if not chains:
             logger.warning("No crypto chains configured; skipping scan")
@@ -89,11 +103,19 @@ class CryptoLaunchService:
             self._is_scanning = True
 
         try:
-            results, failed_chains = self._fetcher.discover_and_enrich(
-                valid_chains,
-                discovery_timeout_sec=config.crypto_discovery_timeout_sec,
-                enrichment_timeout_sec=config.crypto_enrichment_timeout_sec,
-            )
+            # Check discovery cache
+            cache_key = ",".join(sorted(valid_chains))
+            cache_ttl = getattr(config, "crypto_discovery_cache_sec", 60)
+            cached = self._discovery_cache.get(cache_key)
+            if cached and (time.monotonic() - cached[0]) < cache_ttl:
+                results, failed_chains = cached[1], list(cached[2])
+            else:
+                results, failed_chains = self._fetcher.discover_and_enrich(
+                    valid_chains,
+                    discovery_timeout_sec=config.crypto_discovery_timeout_sec,
+                    enrichment_timeout_sec=config.crypto_enrichment_timeout_sec,
+                )
+                self._discovery_cache[cache_key] = (time.monotonic(), results, failed_chains)
             failed_chains.extend(skipped)
 
             new_count = 0
@@ -148,9 +170,13 @@ class CryptoLaunchService:
                 self._enqueue_security_scans(security_candidates)
 
             duration = time.monotonic() - start_time
+            scan_finished = datetime.now()
+
+            # Collect per-chain timing from fetcher
+            per_chain = getattr(self._fetcher, "last_chain_timings", {})
 
             with self._status_lock:
-                self._last_scan_at = datetime.now()
+                self._last_scan_at = scan_finished
                 self._last_scan_duration_sec = duration
                 self._last_scan_chains = valid_chains
                 self._last_scan_failed_chains = failed_chains
@@ -159,12 +185,38 @@ class CryptoLaunchService:
                 self._total_scans += 1
                 self._is_scanning = False
 
-            logger.info(
-                "Scan complete: %d launches processed, %d chains failed, %.1fs",
-                new_count,
-                len(failed_chains),
-                duration,
+            # Structured log event
+            log_event = {
+                "event": "crypto_scan_complete",
+                "scan_id": scan_id,
+                "started_at": scan_started.isoformat(),
+                "finished_at": scan_finished.isoformat(),
+                "duration_ms": int(duration * 1000),
+                "chains_total": len(valid_chains),
+                "chains_failed": len(failed_chains),
+                "launches_new": new_count,
+                "launches_updated": updated_count,
+                "per_chain": per_chain,
+            }
+            logger.info("scan_cycle %s", json.dumps(log_event))
+
+            # Persist scan metric
+            self._persist_scan_metric(
+                scan_id=scan_id,
+                started_at=scan_started,
+                finished_at=scan_finished,
+                duration_ms=int(duration * 1000),
+                chains_total=len(valid_chains),
+                chains_failed=len(failed_chains),
+                launches_new=new_count,
+                launches_updated=updated_count,
+                per_chain=per_chain,
+                success=True,
             )
+
+            # Clear gap flag after successful scan
+            self._gap_detected = False
+            self._gap_duration_sec = 0.0
 
             return {
                 "new": new_count,
@@ -175,8 +227,25 @@ class CryptoLaunchService:
 
         except Exception:
             logger.exception("scan_once failed")
+            duration = time.monotonic() - start_time
+            scan_finished = datetime.now()
             with self._status_lock:
                 self._is_scanning = False
+
+            # Persist failure metric
+            self._persist_scan_metric(
+                scan_id=scan_id,
+                started_at=scan_started,
+                finished_at=scan_finished,
+                duration_ms=int(duration * 1000),
+                chains_total=len(valid_chains) if valid_chains else len(chains),
+                chains_failed=len(chains),
+                launches_new=0,
+                launches_updated=0,
+                per_chain={},
+                success=False,
+            )
+
             return {"new": 0, "updated": 0, "failed_chains": chains, "total_chains": len(chains)}
 
     # ------------------------------------------------------------------
@@ -288,3 +357,68 @@ class CryptoLaunchService:
             logger.info("Queued %d crypto security scans", len(candidates))
         except Exception:
             logger.exception("Failed to enqueue crypto security scans")
+
+    def _detect_gap(self) -> None:
+        """Check if the scanner has been offline longer than expected.
+
+        Queries the most recent ``CryptoScanMetric`` and flags a gap when
+        ``finished_at`` is older than ``2 * crypto_refresh_interval_sec``.
+        First-ever startup (no metrics) is not treated as a gap.
+        """
+        try:
+            metrics = self._repo.db.get_scan_metrics(limit=1)
+        except Exception:
+            logger.debug("Could not query scan metrics for gap detection")
+            return
+
+        if not metrics:
+            # First startup — nothing to compare against
+            return
+
+        last_finished_str = metrics[0].get("finished_at")
+        if not last_finished_str:
+            return
+
+        last_finished = datetime.fromisoformat(last_finished_str)
+        threshold_sec = self._config.crypto_refresh_interval_sec * 2
+        age = (datetime.now() - last_finished).total_seconds()
+
+        if age > threshold_sec:
+            self._gap_detected = True
+            self._gap_duration_sec = age
+            logger.warning(
+                "Scan gap detected: last scan was %.0fs ago (threshold %.0fs)",
+                age,
+                threshold_sec,
+            )
+
+    def _persist_scan_metric(
+        self,
+        *,
+        scan_id: str,
+        started_at: datetime,
+        finished_at: datetime,
+        duration_ms: int,
+        chains_total: int,
+        chains_failed: int,
+        launches_new: int,
+        launches_updated: int,
+        per_chain: Dict,
+        success: bool,
+    ) -> None:
+        """Persist a scan-cycle metric row."""
+        try:
+            self._repo.db.save_scan_metric(
+                scan_id=scan_id,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=duration_ms,
+                chains_total=chains_total,
+                chains_failed=chains_failed,
+                launches_new=launches_new,
+                launches_updated=launches_updated,
+                per_chain_json=json.dumps(per_chain, default=str),
+                success=success,
+            )
+        except Exception:
+            logger.exception("Failed to persist scan metric scan_id=%s", scan_id)
