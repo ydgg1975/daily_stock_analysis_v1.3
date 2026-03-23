@@ -114,7 +114,36 @@ export const ScannerHealthWidget: React.FC<ScannerHealthWidgetProps> = ({
 	status,
 	className,
 }) => {
-	if (!status) return null;
+	if (!status) {
+		return (
+			<div
+				className={cn(
+					"rounded-xl border border-border/50 bg-card p-4",
+					className,
+				)}
+			>
+				<div className="mb-3 flex items-center gap-2">
+					<Activity className="h-4 w-4 text-secondary-text" />
+					<span className="text-xs font-medium text-foreground">Scanner Health</span>
+				</div>
+				<div className="animate-pulse space-y-3">
+					<div className="grid grid-cols-4 gap-3">
+						{Array.from({ length: 4 }).map((_, index) => (
+							<div key={index} className="space-y-1">
+								<div className="h-2 w-12 rounded bg-secondary-text/20" />
+								<div className="h-4 w-10 rounded bg-secondary-text/30" />
+							</div>
+						))}
+					</div>
+					<div className="space-y-1.5">
+						<div className="h-2 w-24 rounded bg-secondary-text/20" />
+						<div className="h-3 w-full rounded bg-secondary-text/20" />
+						<div className="h-3 w-5/6 rounded bg-secondary-text/20" />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	const chainTimingEntries = Object.entries(status.perChainTiming ?? {});
 	const recentScans = status.recentScans ?? [];
