@@ -699,14 +699,48 @@ def main() -> int:
             from src.scheduler import Scheduler
 
             crypto_service = CryptoLaunchService(config=config)
+            scan_task = crypto_service.scan_once
+
             if getattr(config, 'crypto_alerts_enabled', False):
                 from src.services.crypto_alert_service import CryptoAlertService
 
                 crypto_alert_service = CryptoAlertService(config=config)
                 logger.info("Crypto alert service initialized")
+
+                # Wrap scan_once to also check watched launches for alerts
+                _previous_launches: dict = {}
+
+                def _scan_with_alerts(
+                    _svc=crypto_service,
+                    _alert_svc=crypto_alert_service,
+                    _prev=_previous_launches,
+                ):
+                    result = _svc.scan_once()
+                    try:
+                        watched_ids = set(_alert_svc.watchlist_repo.get_watched_launch_ids())
+                        if watched_ids:
+                            current_launches = []
+                            for lid in watched_ids:
+                                detail = _svc.get_launch_detail(lid)
+                                if detail:
+                                    current_launches.append(detail)
+
+                            alerts = _alert_svc.check_watched_launches(current_launches, _prev)
+                            for alert in alerts:
+                                _alert_svc.dispatch_alert(alert)
+
+                            _prev.clear()
+                            for launch in current_launches:
+                                _prev[launch.get("id")] = launch
+                    except Exception:
+                        logger.exception("Crypto alert check failed after scan")
+                    return result
+
+                scan_task = _scan_with_alerts
+
             crypto_scheduler = Scheduler()
             crypto_scheduler.set_interval_task(
-                crypto_service.scan_once,
+                scan_task,
                 interval_seconds=config.crypto_refresh_interval_sec,
                 run_immediately=True,
             )
