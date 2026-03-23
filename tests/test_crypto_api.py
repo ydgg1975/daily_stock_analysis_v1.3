@@ -36,13 +36,23 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
             crypto_ai_cache_ttl_sec=21600,
             litellm_model="fallback-model",
         )
+        # Reset module-level singletons/state between tests
+        crypto_endpoint._ai_service = None
+        crypto_endpoint._analyze_rate_limit.clear()
+        # Mock request with client IP
+        self._mock_request = MagicMock(spec=["client"])
+        self._mock_request.client = SimpleNamespace(host="127.0.0.1")
+
+    def tearDown(self):
+        crypto_endpoint._ai_service = None
+        crypto_endpoint._analyze_rate_limit.clear()
 
     async def test_analyze_launch_returns_403_when_ai_enrichment_disabled(self):
         disabled_config = SimpleNamespace(**{**self.config.__dict__, "crypto_ai_enrichment_enabled": False})
 
         with patch("src.config.Config.get_instance", return_value=disabled_config):
             with self.assertRaises(HTTPException) as ctx:
-                await crypto_endpoint.analyze_launch(101)
+                await crypto_endpoint.analyze_launch(101, self._mock_request)
 
         self.assertEqual(ctx.exception.status_code, 403)
         self.assertEqual(ctx.exception.detail, "AI enrichment is disabled")
@@ -50,12 +60,11 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_analyze_launch_returns_404_when_launch_does_not_exist(self):
         fake_ai_service = AsyncMock()
         fake_ai_service.analyze.return_value = {"error": "Launch not found", "launch_id": 999}
+        crypto_endpoint._ai_service = fake_ai_service
 
-        with patch("src.config.Config.get_instance", return_value=self.config), patch(
-            "src.services.crypto_ai_service.CryptoAiService", return_value=fake_ai_service
-        ):
+        with patch("src.config.Config.get_instance", return_value=self.config):
             with self.assertRaises(HTTPException) as ctx:
-                await crypto_endpoint.analyze_launch(999)
+                await crypto_endpoint.analyze_launch(999, self._mock_request)
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail, "Launch not found")
@@ -64,12 +73,11 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_analyze_launch_returns_502_when_ai_pipeline_raises(self):
         fake_ai_service = AsyncMock()
         fake_ai_service.analyze.side_effect = RuntimeError("llm boom")
+        crypto_endpoint._ai_service = fake_ai_service
 
-        with patch("src.config.Config.get_instance", return_value=self.config), patch(
-            "src.services.crypto_ai_service.CryptoAiService", return_value=fake_ai_service
-        ):
+        with patch("src.config.Config.get_instance", return_value=self.config):
             with self.assertRaises(HTTPException) as ctx:
-                await crypto_endpoint.analyze_launch(101)
+                await crypto_endpoint.analyze_launch(101, self._mock_request)
 
         self.assertEqual(ctx.exception.status_code, 502)
         self.assertEqual(ctx.exception.detail, "AI analysis failed. Please try again later.")
@@ -92,11 +100,10 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
         }
         fake_ai_service = AsyncMock()
         fake_ai_service.analyze.return_value = ai_result
+        crypto_endpoint._ai_service = fake_ai_service
 
-        with patch("src.config.Config.get_instance", return_value=self.config), patch(
-            "src.services.crypto_ai_service.CryptoAiService", return_value=fake_ai_service
-        ):
-            response = await crypto_endpoint.analyze_launch(101)
+        with patch("src.config.Config.get_instance", return_value=self.config):
+            response = await crypto_endpoint.analyze_launch(101, self._mock_request)
 
         self.assertEqual(response.launch_id, 101)
         self.assertEqual(response.verdict, "HOLD")
@@ -108,12 +115,11 @@ class CryptoApiAnalyzeEndpointTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_analyze_launch_returns_502_when_ai_returns_error(self):
         fake_ai_service = AsyncMock()
         fake_ai_service.analyze.return_value = {"error": "Failed to persist: IntegrityError", "launch_id": 101}
+        crypto_endpoint._ai_service = fake_ai_service
 
-        with patch("src.config.Config.get_instance", return_value=self.config), patch(
-            "src.services.crypto_ai_service.CryptoAiService", return_value=fake_ai_service
-        ):
+        with patch("src.config.Config.get_instance", return_value=self.config):
             with self.assertRaises(HTTPException) as ctx:
-                await crypto_endpoint.analyze_launch(101)
+                await crypto_endpoint.analyze_launch(101, self._mock_request)
 
         self.assertEqual(ctx.exception.status_code, 502)
         self.assertEqual(ctx.exception.detail, "AI analysis failed. Please try again later.")

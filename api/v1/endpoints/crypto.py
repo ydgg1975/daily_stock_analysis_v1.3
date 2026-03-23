@@ -5,9 +5,11 @@ Provides list, detail, refresh, and status routes for the crypto launch scanner.
 """
 
 import logging
+import time
+from collections import defaultdict
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from api.v1.schemas.crypto import (
     AiCostResponse,
@@ -39,6 +41,39 @@ def _get_service() -> CryptoLaunchService:
     if _service is None:
         _service = CryptoLaunchService()
     return _service
+
+
+# Module-level AI service singleton — reuses locks across requests
+_ai_service = None
+
+
+def _get_ai_service():
+    global _ai_service
+    if _ai_service is None:
+        from src.config import Config
+        from src.services.crypto_ai_service import CryptoAiService
+
+        _ai_service = CryptoAiService(config=Config.get_instance())
+    return _ai_service
+
+
+# Simple in-memory rate limiter: client_ip -> list of request timestamps
+_analyze_rate_limit: dict = defaultdict(list)
+_RATE_LIMIT_MAX = 5
+_RATE_LIMIT_WINDOW = 60.0  # seconds
+
+
+def _check_rate_limit(client_ip: str) -> None:
+    """Raise 429 if client exceeds 5 analyses per 60s."""
+    now = time.monotonic()
+    timestamps = _analyze_rate_limit[client_ip]
+    _analyze_rate_limit[client_ip] = [t for t in timestamps if now - t < _RATE_LIMIT_WINDOW]
+    if len(_analyze_rate_limit[client_ip]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded: max {_RATE_LIMIT_MAX} analyses per {int(_RATE_LIMIT_WINDOW)}s",
+        )
+    _analyze_rate_limit[client_ip].append(now)
 
 
 # ---------------------------------------------------------------------------
@@ -107,20 +142,20 @@ async def get_launch_detail(launch_id: int):
 # POST /launches/{launch_id}/analyze
 # ---------------------------------------------------------------------------
 
-# TODO: Add per-user rate limiting (e.g., 5 analyses/minute) — currently unprotected
 @router.post("/launches/{launch_id}/analyze", response_model=CryptoAiSummaryResponse)
-async def analyze_launch(launch_id: int):
+async def analyze_launch(launch_id: int, request: Request):
     """Trigger AI analysis for a specific launch. Returns the AI summary."""
     from src.config import Config
-    from src.services.crypto_ai_service import CryptoAiService
 
     config = Config.get_instance()
 
     if not config.crypto_ai_enrichment_enabled:
         raise HTTPException(status_code=403, detail="AI enrichment is disabled")
 
+    _check_rate_limit(request.client.host if request.client else "unknown")
+
     try:
-        ai_service = CryptoAiService(config=config)
+        ai_service = _get_ai_service()
         result = await ai_service.analyze(launch_id)
         if result.get("error") and "not found" in result["error"].lower():
             raise HTTPException(status_code=404, detail="Launch not found")
