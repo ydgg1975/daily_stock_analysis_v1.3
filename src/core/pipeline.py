@@ -40,6 +40,7 @@ from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
+from data_provider.alphavantage_provider import get_rsi, get_sma
 
 
 logger = logging.getLogger(__name__)
@@ -372,6 +373,20 @@ class StockAnalysisPipeline:
                     'today': {},
                     'yesterday': {}
                 }
+
+            # Step 5.5: 获取 Alpha Vantage 技术指标（失败时降级，不影响主流程）
+            rsi = None
+            sma20 = None
+            sma60 = None
+            try:
+                rsi = get_rsi(code)
+                sma20 = get_sma(code, 20)
+                sma60 = get_sma(code, 60)
+                logger.info(
+                    f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}"
+                )
+            except Exception as e:
+                logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
             
             # Step 6: 增强上下文数据（添加实时行情、筹码、趋势分析结果、股票名称）
             enhanced_context = self._enhance_context(
@@ -382,6 +397,12 @@ class StockAnalysisPipeline:
                 stock_name,  # 传入股票名称
                 fundamental_context,
             )
+            enhanced_context['technical_indicators'] = {
+                'rsi14': rsi if rsi is not None else 'N/A',
+                'sma20': sma20 if sma20 is not None else 'N/A',
+                'sma60': sma60 if sma60 is not None else 'N/A',
+            }
+            
             
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             result = self.analyzer.analyze(enhanced_context, news_context=news_context)

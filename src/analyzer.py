@@ -1067,6 +1067,15 @@ class GeminiAnalyzer:
         today = context.get('today', {})
         unknown_text = get_unknown_text(report_language)
         no_data_text = get_no_data_text(report_language)
+
+        technical_indicators = context.get('technical_indicators', {}) if isinstance(context, dict) else {}
+        alpha_rsi14 = technical_indicators.get('rsi14', 'N/A')
+        alpha_sma20 = technical_indicators.get('sma20', 'N/A')
+        alpha_sma60 = technical_indicators.get('sma60', 'N/A')
+
+        ma20_display = today.get('ma20', 'N/A')
+        if ma20_display in (None, 'N/A') and alpha_sma20 not in (None, 'N/A'):
+            ma20_display = alpha_sma20
         
         # ========== 构建决策仪表盘格式的输入 ==========
         prompt = f"""# 决策仪表盘分析请求
@@ -1098,8 +1107,18 @@ class GeminiAnalyzer:
 |------|------|------|
 | MA5 | {today.get('ma5', 'N/A')} | 短期趋势线 |
 | MA10 | {today.get('ma10', 'N/A')} | 中短期趋势线 |
-| MA20 | {today.get('ma20', 'N/A')} | 中期趋势线 |
+| MA20 | {ma20_display} | 中期趋势线 |
 | 均线形态 | {context.get('ma_status', unknown_text)} | 多头/空头/缠绕 |
+"""
+
+        if technical_indicators:
+            prompt += f"""
+### Alpha Vantage 补充指标
+| 指标 | 数值 | 说明 |
+|------|------|------|
+| RSI14 | {alpha_rsi14} | 动量强弱指标 |
+| SMA20 | {alpha_sma20} | Alpha Vantage 20日均线 |
+| SMA60 | {alpha_sma60} | Alpha Vantage 60日均线 |
 """
         
         # 添加实时行情数据（量比、换手率等）
