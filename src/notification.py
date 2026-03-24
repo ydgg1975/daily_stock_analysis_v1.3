@@ -962,6 +962,18 @@ class NotificationService(
                             f"| {labels['resistance_level_label']} | {price_data.get('resistance_level', 'N/A')} |",
                             "",
                         ])
+                    alpha_data = data_persp.get('alpha_vantage', {}) if data_persp else {}
+                    if alpha_data:
+                        report_lines.extend([
+                            "**Alpha Vantage 补充指标**",
+                            "",
+                            "| 指标 | 数值 |",
+                            "|------|------|",
+                            f"| RSI14 | {alpha_data.get('rsi14', 'N/A')} |",
+                            f"| SMA20 | {alpha_data.get('sma20', 'N/A')} |",
+                            f"| SMA60 | {alpha_data.get('sma60', 'N/A')} |",
+                            "",
+                        ])
                     # 量能分析
                     if vol_data:
                         report_lines.extend([
@@ -1397,6 +1409,18 @@ class NotificationService(
         ]
 
         self._append_market_snapshot(lines, result)
+
+        data_persp = dashboard.get('data_perspective', {}) if dashboard else {}
+        alpha_data = data_persp.get('alpha_vantage', {}) if data_persp else {}
+        if alpha_data:
+            lines.extend([
+                "### 📐 Alpha Vantage 补充指标",
+                "",
+                f"- **RSI14**: {alpha_data.get('rsi14', 'N/A')}",
+                f"- **SMA20**: {alpha_data.get('sma20', 'N/A')}",
+                f"- **SMA60**: {alpha_data.get('sma60', 'N/A')}",
+                "",
+            ])
         
         # 核心决策（一句话）
         one_sentence = core.get('one_sentence', result.analysis_summary) if core else result.analysis_summary

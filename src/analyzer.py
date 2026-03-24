@@ -555,6 +555,11 @@ class GeminiAnalyzer:
                 "avg_cost": 平均成本,
                 "concentration": 筹码集中度,
                 "chip_health": "健康/一般/警惕"
+            },
+            "alpha_vantage": {
+                "rsi14": RSI14数值,
+                "sma20": SMA20数值,
+                "sma60": SMA60数值
             }
         },
 
@@ -983,6 +988,7 @@ class GeminiAnalyzer:
 
                 # 解析响应
                 result = self._parse_response(response_text, code, name)
+                self._fill_alpha_vantage_from_context(result, context)
                 result.raw_response = response_text
                 result.search_performed = bool(news_context)
                 result.market_snapshot = self._build_market_snapshot(context)
@@ -1311,6 +1317,8 @@ class GeminiAnalyzer:
 3. ❓ 量能是否配合（缩量回调/放量突破）？
 4. ❓ 筹码结构是否健康？
 5. ❓ 消息面有无重大利空？（减持、处罚、业绩变脸等）
+6. ❗ 若上文存在 “Alpha Vantage 补充指标”，必须将 `RSI14`、`SMA20`、`SMA60` 原样写入 `dashboard.data_perspective.alpha_vantage`。
+7. ❗ 若 `MA20` 缺失但 `SMA20` 存在，可参考 `SMA20` 完成趋势判断，但必须优先保证 `dashboard.data_perspective.alpha_vantage` 字段完整。
 
 ### 决策仪表盘要求：
 - **股票名称**：必须输出正确的中文全称（如"贵州茅台"而非"股票600519"）
@@ -1497,6 +1505,34 @@ class GeminiAnalyzer:
     def _apply_placeholder_fill(self, result: AnalysisResult, missing_fields: List[str]) -> None:
         """Delegate to module-level apply_placeholder_fill."""
         apply_placeholder_fill(result, missing_fields)
+
+    def _fill_alpha_vantage_from_context(self, result: AnalysisResult, context: Dict[str, Any]) -> None:
+        """Ensure dashboard.data_perspective.alpha_vantage exists when context has technical_indicators."""
+        try:
+            if not isinstance(context, dict):
+                return
+            tech = context.get("technical_indicators", {})
+            if not isinstance(tech, dict) or not tech:
+                return
+            if result.dashboard is None or not isinstance(result.dashboard, dict):
+                result.dashboard = {}
+            data_perspective = result.dashboard.get("data_perspective")
+            if not isinstance(data_perspective, dict):
+                data_perspective = {}
+                result.dashboard["data_perspective"] = data_perspective
+            alpha_vantage = data_perspective.get("alpha_vantage")
+            if not isinstance(alpha_vantage, dict):
+                alpha_vantage = {}
+                data_perspective["alpha_vantage"] = alpha_vantage
+
+            if alpha_vantage.get("rsi14") in (None, "", "N/A"):
+                alpha_vantage["rsi14"] = tech.get("rsi14", "N/A")
+            if alpha_vantage.get("sma20") in (None, "", "N/A"):
+                alpha_vantage["sma20"] = tech.get("sma20", "N/A")
+            if alpha_vantage.get("sma60") in (None, "", "N/A"):
+                alpha_vantage["sma60"] = tech.get("sma60", "N/A")
+        except Exception as e:
+            logger.warning("Fill alpha_vantage from context failed: %s", e)
 
     def _parse_response(
         self, 
