@@ -40,7 +40,7 @@ from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
-from data_provider.alphavantage_provider import get_rsi, get_sma
+from data_provider.alphavantage_provider import get_rsi, get_sma, get_shares_outstanding
 
 
 logger = logging.getLogger(__name__)
@@ -165,9 +165,36 @@ class StockAnalysisPipeline:
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            df = None
+            source_name = ""
+            history_fetch_error = None
+            if is_us_stock_code(code):
+                us_snapshot_df, us_snapshot_source = self._build_us_realtime_snapshot_df(code)
+                if us_snapshot_df is not None and not us_snapshot_df.empty:
+                    df = us_snapshot_df
+                    source_name = us_snapshot_source
+                    logger.info(
+                        f"{stock_name}({code}) 使用美股实时快照入库，跳过 Yahoo 历史拉取 "
+                        f"(来源: {source_name})"
+                    )
+            try:
+                if df is None:
+                    df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            except Exception as e:
+                history_fetch_error = e
+                logger.warning(f"{stock_name}({code}) 历史日线获取失败: {e}")
+                # 美股容错：若历史拉取失败，尝试用已成功的实时行情快照兜底写入
+                if is_us_stock_code(code) and df is None:
+                    df, source_name = self._build_us_realtime_snapshot_df(code)
+                    if df is not None and not df.empty:
+                        logger.warning(
+                            f"{stock_name}({code}) 历史失败但实时成功，使用实时快照入库继续流程 "
+                            f"(来源: {source_name})"
+                        )
 
             if df is None or df.empty:
+                if history_fetch_error is not None:
+                    return False, f"历史日线获取失败且无可用实时快照: {history_fetch_error}"
                 return False, "获取数据为空"
 
             # 保存到数据库
@@ -180,6 +207,41 @@ class StockAnalysisPipeline:
             error_msg = f"获取/保存数据失败: {str(e)}"
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
+
+    def _build_us_realtime_snapshot_df(self, code: str) -> Tuple[Optional[pd.DataFrame], str]:
+        quote = self.fetcher_manager.get_realtime_quote(code)
+        if not quote or not getattr(quote, "has_basic_data", lambda: False)():
+            return None, ""
+
+        today = date.today().isoformat()
+        price = getattr(quote, "price", None)
+        if price is None:
+            return None, ""
+
+        open_price = getattr(quote, "open_price", None) or getattr(quote, "pre_close", None) or price
+        high = getattr(quote, "high", None) or price
+        low = getattr(quote, "low", None) or price
+        volume = getattr(quote, "volume", None)
+        amount = getattr(quote, "amount", None)
+        pct_chg = getattr(quote, "change_pct", None)
+
+        snapshot = pd.DataFrame([{
+            "code": code,
+            "date": today,
+            "open": open_price,
+            "high": high,
+            "low": low,
+            "close": price,
+            "volume": volume,
+            "amount": amount,
+            "pct_chg": pct_chg,
+            "ma5": None,
+            "ma10": None,
+            "ma20": None,
+            "volume_ratio": None,
+        }])
+        source = getattr(getattr(quote, "source", None), "value", "realtime_snapshot")
+        return snapshot, f"{source}_realtime_snapshot"
     
     def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
         """
@@ -230,13 +292,17 @@ class StockAnalysisPipeline:
 
             # Step 2: 获取筹码分布 - 使用统一入口，带熔断保护
             chip_data = None
+            is_us_stock = is_us_stock_code(code)
             try:
-                chip_data = self.fetcher_manager.get_chip_distribution(code)
-                if chip_data:
-                    logger.info(f"{stock_name}({code}) 筹码分布: 获利比例={chip_data.profit_ratio:.1%}, "
-                              f"90%集中度={chip_data.concentration_90:.2%}")
+                if is_us_stock:
+                    logger.debug(f"{stock_name}({code}) 美股暂不支持筹码分布，跳过获取")
                 else:
-                    logger.debug(f"{stock_name}({code}) 筹码分布获取失败或已禁用")
+                    chip_data = self.fetcher_manager.get_chip_distribution(code)
+                    if chip_data:
+                        logger.info(f"{stock_name}({code}) 筹码分布: 获利比例={chip_data.profit_ratio:.1%}, "
+                                  f"90%集中度={chip_data.concentration_90:.2%}")
+                    else:
+                        logger.debug(f"{stock_name}({code}) 筹码分布获取失败或已禁用")
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取筹码分布失败: {e}")
 
@@ -378,12 +444,16 @@ class StockAnalysisPipeline:
             rsi = None
             sma20 = None
             sma60 = None
+            shares_outstanding = None
             try:
                 rsi = get_rsi(code)
                 sma20 = get_sma(code, 20)
                 sma60 = get_sma(code, 60)
+                if is_us_stock:
+                    shares_outstanding = get_shares_outstanding(code)
                 logger.info(
-                    f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}"
+                    f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}, "
+                    f"SharesOutstanding={shares_outstanding}"
                 )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
@@ -396,6 +466,7 @@ class StockAnalysisPipeline:
                 trend_result,
                 stock_name,  # 传入股票名称
                 fundamental_context,
+                shares_outstanding=shares_outstanding,
             )
             enhanced_context['technical_indicators'] = {
                 'rsi14': rsi if rsi is not None else 'N/A',
@@ -456,7 +527,8 @@ class StockAnalysisPipeline:
         chip_data: Optional[ChipDistribution],
         trend_result: Optional[TrendAnalysisResult],
         stock_name: str = "",
-        fundamental_context: Optional[Dict[str, Any]] = None
+        fundamental_context: Optional[Dict[str, Any]] = None,
+        shares_outstanding: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         增强分析上下文
@@ -489,13 +561,34 @@ class StockAnalysisPipeline:
         if realtime_quote:
             # 使用 getattr 安全获取字段，缺失字段返回 None 或默认值
             volume_ratio = getattr(realtime_quote, 'volume_ratio', None)
+            volume_ratio_desc = '无数据'
+            if is_us_stock_code(context.get('code', '')):
+                computed_volume_ratio = self._compute_volume_ratio(context, realtime_quote)
+                if computed_volume_ratio is not None:
+                    volume_ratio = computed_volume_ratio
+                elif volume_ratio is None:
+                    volume_ratio = "数据缺失"
+                computed_turnover_rate = self._compute_turnover_rate(
+                    context=context,
+                    realtime_quote=realtime_quote,
+                    shares_outstanding=shares_outstanding,
+                )
+            else:
+                computed_turnover_rate = None
+            turnover_rate = (
+                computed_turnover_rate
+                if computed_turnover_rate is not None
+                else getattr(realtime_quote, 'turnover_rate', None)
+            )
+            if isinstance(volume_ratio, (int, float)):
+                volume_ratio_desc = self._describe_volume_ratio(float(volume_ratio))
             enhanced['realtime'] = {
                 'name': getattr(realtime_quote, 'name', ''),
                 'price': getattr(realtime_quote, 'price', None),
                 'change_pct': getattr(realtime_quote, 'change_pct', None),
                 'volume_ratio': volume_ratio,
-                'volume_ratio_desc': self._describe_volume_ratio(volume_ratio) if volume_ratio else '无数据',
-                'turnover_rate': getattr(realtime_quote, 'turnover_rate', None),
+                'volume_ratio_desc': volume_ratio_desc,
+                'turnover_rate': turnover_rate,
                 'pe_ratio': getattr(realtime_quote, 'pe_ratio', None),
                 'pb_ratio': getattr(realtime_quote, 'pb_ratio', None),
                 'total_mv': getattr(realtime_quote, 'total_mv', None),
@@ -612,6 +705,69 @@ class StockAnalysisPipeline:
         )
 
         return enhanced
+
+    def _compute_volume_ratio(self, context: Dict[str, Any], realtime_quote: Any) -> Optional[float]:
+        code = context.get("code", "")
+        today_volume = getattr(realtime_quote, "volume", None)
+        if today_volume in (None, 0):
+            today_volume = (context.get("today") or {}).get("volume")
+        try:
+            today_volume = float(today_volume)
+            if today_volume <= 0:
+                return None
+        except (TypeError, ValueError):
+            return None
+
+        bars = self.db.get_latest_data(code, days=8)
+        today_date = context.get("date")
+        historical_volumes = self._collect_recent_volumes_from_bars(
+            bars=bars or [],
+            today_date=today_date,
+            max_count=5,
+        )
+        if len(historical_volumes) < 5:
+            return None
+        avg_volume_5d = sum(historical_volumes) / len(historical_volumes)
+        if avg_volume_5d <= 0:
+            return None
+        return round(today_volume / avg_volume_5d, 2)
+
+    @staticmethod
+    def _collect_recent_volumes_from_bars(
+        bars: List[Any],
+        today_date: Optional[str],
+        max_count: int = 5,
+    ) -> List[float]:
+        volumes: List[float] = []
+        for bar in bars:
+            bar_date = getattr(getattr(bar, "date", None), "isoformat", lambda: None)()
+            if today_date and bar_date == today_date:
+                continue
+            bar_volume = getattr(bar, "volume", None)
+            if bar_volume and bar_volume > 0:
+                volumes.append(float(bar_volume))
+            if len(volumes) >= max_count:
+                break
+        return volumes
+
+    @staticmethod
+    def _compute_turnover_rate(
+        context: Dict[str, Any],
+        realtime_quote: Any,
+        shares_outstanding: Optional[int],
+    ) -> Optional[float]:
+        if not shares_outstanding or shares_outstanding <= 0:
+            return None
+        volume = getattr(realtime_quote, "volume", None)
+        if volume in (None, 0):
+            volume = (context.get("today") or {}).get("volume")
+        try:
+            volume = float(volume)
+            if volume <= 0:
+                return None
+        except (TypeError, ValueError):
+            return None
+        return round(volume / float(shares_outstanding) * 100, 4)
 
     def _analyze_with_agent(
         self, 

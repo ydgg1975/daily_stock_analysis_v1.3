@@ -1130,13 +1130,15 @@ class GeminiAnalyzer:
         # 添加实时行情数据（量比、换手率等）
         if 'realtime' in context:
             rt = context['realtime']
+            turnover_prompt = self._format_turnover_prompt(rt.get('turnover_rate'))
+            volume_ratio_prompt = self._format_volume_ratio_prompt(rt.get('volume_ratio'))
             prompt += f"""
 ### 实时行情增强数据
 | 指标 | 数值 | 解读 |
 |------|------|------|
 | 当前价格 | {rt.get('price', 'N/A')} 元 | |
-| **量比** | **{rt.get('volume_ratio', 'N/A')}** | {rt.get('volume_ratio_desc', '')} |
-| **换手率** | **{rt.get('turnover_rate', 'N/A')}%** | |
+| **量比** | **{volume_ratio_prompt}** | {rt.get('volume_ratio_desc', '')} |
+| **换手率** | **{turnover_prompt}** | |
 | 市盈率(动态) | {rt.get('pe_ratio', 'N/A')} | |
 | 市净率 | {rt.get('pb_ratio', 'N/A')} | |
 | 总市值 | {self._format_amount(rt.get('total_mv'))} | |
@@ -1393,6 +1395,39 @@ class GeminiAnalyzer:
         except (TypeError, ValueError):
             return 'N/A'
 
+    def _format_turnover_display(self, value: Optional[float]) -> str:
+        if value is None:
+            return '数据缺失'
+        if isinstance(value, str):
+            text = value.strip()
+            if not text or text in {'N/A', 'None'}:
+                return '数据缺失'
+            if text.endswith('%'):
+                return text
+            try:
+                return f"{float(text):.2f}%"
+            except (TypeError, ValueError):
+                return '数据缺失'
+        try:
+            return f"{float(value):.2f}%"
+        except (TypeError, ValueError):
+            return '数据缺失'
+
+    def _format_turnover_prompt(self, value: Optional[float]) -> str:
+        return self._format_turnover_display(value)
+
+    @staticmethod
+    def _format_volume_ratio_prompt(value: Any) -> str:
+        if value is None:
+            return "数据缺失"
+        if isinstance(value, str):
+            text = value.strip()
+            return text if text and text not in {"N/A", "None"} else "数据缺失"
+        try:
+            return f"{float(value):.2f}"
+        except (TypeError, ValueError):
+            return "数据缺失"
+
     def _build_market_snapshot(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """构建当日行情快照（展示用）"""
         today = context.get('today', {}) or {}
@@ -1435,7 +1470,7 @@ class GeminiAnalyzer:
             snapshot.update({
                 "price": self._format_price(realtime.get('price')),
                 "volume_ratio": realtime.get('volume_ratio', 'N/A'),
-                "turnover_rate": self._format_percent(realtime.get('turnover_rate')),
+                "turnover_rate": self._format_turnover_display(realtime.get('turnover_rate')),
                 "source": getattr(realtime.get('source'), 'value', realtime.get('source', 'N/A')),
             })
 
