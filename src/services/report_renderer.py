@@ -229,6 +229,7 @@ def render(
         "report_generated_at": report_generated_at,
         "market_timestamp": (extra_context or {}).get("market_timestamp"),
         "market_session_date": (extra_context or {}).get("market_session_date"),
+        "session_type": (extra_context or {}).get("session_type"),
         "news_published_at": (extra_context or {}).get("news_published_at"),
         "to_shanghai_iso": _to_shanghai_iso,
         "results": sorted_results,

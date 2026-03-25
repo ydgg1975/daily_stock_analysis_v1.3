@@ -189,8 +189,8 @@ class TestReportRenderer(unittest.TestCase):
             },
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("N/A（Alpha Vantage SMA20: 138.406）", out)
-        self.assertIn("乖离率(MA5) | 数据缺失", out)
+        self.assertIn("数据缺失（Alpha Vantage SMA20: 138.406）", out)
+        self.assertIn("乖离率(MA5) | 0.00%", out)
         self.assertIn("量比 数据缺失", out)
         self.assertIn("换手率 数据缺失", out)
 
@@ -212,12 +212,14 @@ class TestReportRenderer(unittest.TestCase):
                 "report_generated_at": "2026-03-25T01:00:00+00:00",
                 "market_timestamp": "2026-03-24T21:00:00-04:00",
                 "market_session_date": "2026-03-24",
+                "session_type": "last_completed_session",
                 "news_published_at": "2026-03-24T20:00:00-04:00",
             },
         )
         self.assertIn("2026-03-25T01:00:00+00:00", out)
         self.assertIn("2026-03-24T21:00:00-04:00", out)
         self.assertIn("2026-03-24", out)
+        self.assertIn("last_completed_session", out)
 
     def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
         r = _make_result(
@@ -257,16 +259,58 @@ class TestReportRenderer(unittest.TestCase):
             },
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面（Fundamentals）", out)
+        self.assertIn("基本面摘要（Fundamentals）", out)
         self.assertIn("财报趋势（Earnings）", out)
         self.assertIn("结构化情绪（Sentiment）", out)
         self.assertIn("session_type: intraday_snapshot", out)
+
+    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
+        r = _make_result(
+            code="TEM",
+            name="Tempus AI",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {
+                    "latest_news": "Anthropic faces new regulation inquiry.",
+                    "risk_alerts": ["监管动态"],
+                    "positive_catalysts": ["行业合作扩张"],
+                },
+                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
+                "structured_analysis": {
+                    "sentiment_analysis": {
+                        "relevance_type": "industry_general",
+                        "company_sentiment": "no_reliable_news",
+                        "industry_sentiment": "neutral",
+                        "regulatory_sentiment": "neutral",
+                        "overall_confidence": "low",
+                    }
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("行业背景", out)
+        self.assertNotIn("📢 最新动态", out)
 
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""
         r = _make_result()
         out = render("unknown_platform", [r])
         self.assertIsNone(out)
+
+    def test_render_structured_sections_are_explicit_even_when_missing(self) -> None:
+        r = _make_result(
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "structured_analysis": {},
+            }
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("基本面摘要（Fundamentals）", out)
+        self.assertIn("财报趋势（Earnings）", out)
+        self.assertIn("结构化情绪（Sentiment）", out)
+        self.assertIn("数据质量说明", out)
 
     def test_render_empty_results_returns_content(self) -> None:
         """Empty results still produces header."""
