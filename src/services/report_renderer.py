@@ -10,8 +10,10 @@ Any expensive data preparation should be injected by the caller via extra_contex
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from src.analyzer import AnalysisResult
 from src.config import get_config
@@ -24,8 +26,45 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from data_provider.us_index_mapping import is_us_stock_code
 
 logger = logging.getLogger(__name__)
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _now_shanghai():
+    from datetime import datetime
+
+    return datetime.now(_SHANGHAI_TZ)
+
+
+def _iso_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text
+
+
+def _to_shanghai_iso(value: Any) -> Optional[str]:
+    raw = _iso_or_none(value)
+    if not raw:
+        return None
+    from datetime import datetime
+
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt.astimezone(_SHANGHAI_TZ).isoformat()
 
 
 def _escape_md(text: str) -> str:
@@ -53,6 +92,51 @@ def _clean_sniper_value(val: Any) -> str:
         if s.startswith(prefix):
             return s[len(prefix):]
     return s
+
+
+def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        text = val.strip()
+        if text in {"", "N/A", "None", "null", "nan"}:
+            return True
+        try:
+            parsed = float(text.rstrip("%"))
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+    try:
+        parsed = float(val)
+        if math.isnan(parsed):
+            return True
+        if zero_is_missing and parsed == 0:
+            return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _display_value(val: Any, zero_is_missing: bool = False, missing_text: str = "N/A") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    return str(val)
+
+
+def _display_percent(val: Any, zero_is_missing: bool = False, missing_text: str = "数据缺失") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    text = str(val).strip()
+    if text.endswith("%"):
+        return text
+    try:
+        return f"{float(text):.2f}%"
+    except (TypeError, ValueError):
+        return missing_text
 
 
 def _resolve_templates_dir() -> Path:
@@ -85,8 +169,6 @@ def render(
     Returns:
         Rendered string, or None on error (caller should fallback).
     """
-    from datetime import datetime
-
     try:
         from jinja2 import Environment, FileSystemLoader, select_autoescape
     except ImportError:
@@ -94,7 +176,7 @@ def render(
         return None
 
     if report_date is None:
-        report_date = datetime.now().strftime("%Y-%m-%d")
+        report_date = _now_shanghai().strftime("%Y-%m-%d")
 
     templates_dir = _resolve_templates_dir()
     template_name = f"report_{platform}.j2"
@@ -132,7 +214,11 @@ def render(
     sell_count = sum(1 for r in results if getattr(r, "decision_type", "") == "sell")
     hold_count = sum(1 for r in results if getattr(r, "decision_type", "") in ("hold", ""))
 
-    report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_sh = _now_shanghai()
+    report_generated_at = _iso_or_none(
+        (extra_context or {}).get("report_generated_at")
+    ) or now_sh.isoformat()
+    report_timestamp = now_sh.strftime("%Y-%m-%d %H:%M:%S")
 
     def failed_checks(checklist: List[str]) -> List[str]:
         return [c for c in (checklist or []) if c.startswith("❌") or c.startswith("⚠️")]
@@ -140,6 +226,12 @@ def render(
     context: Dict[str, Any] = {
         "report_date": report_date,
         "report_timestamp": report_timestamp,
+        "report_generated_at": report_generated_at,
+        "market_timestamp": (extra_context or {}).get("market_timestamp"),
+        "market_session_date": (extra_context or {}).get("market_session_date"),
+        "session_type": (extra_context or {}).get("session_type"),
+        "news_published_at": (extra_context or {}).get("news_published_at"),
+        "to_shanghai_iso": _to_shanghai_iso,
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
         "summary_only": summary_only,
@@ -150,11 +242,15 @@ def render(
         "report_language": report_language,
         "escape_md": _escape_md,
         "clean_sniper": _clean_sniper_value,
+        "display_value": _display_value,
+        "display_percent": _display_percent,
+        "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "history_by_code": {},
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,
         "localize_chip_health": localize_chip_health,
+        "is_us_stock_code": is_us_stock_code,
     }
     if extra_context:
         safe_extra_context = dict(extra_context)
