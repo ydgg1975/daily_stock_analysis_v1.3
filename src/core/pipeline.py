@@ -165,9 +165,26 @@ class StockAnalysisPipeline:
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            df = None
+            source_name = ""
+            history_fetch_error = None
+            try:
+                df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            except Exception as e:
+                history_fetch_error = e
+                logger.warning(f"{stock_name}({code}) 历史日线获取失败: {e}")
+                # 美股容错：若历史拉取失败，尝试用已成功的实时行情快照兜底写入
+                if is_us_stock_code(code):
+                    df, source_name = self._build_us_realtime_snapshot_df(code)
+                    if df is not None and not df.empty:
+                        logger.warning(
+                            f"{stock_name}({code}) 历史失败但实时成功，使用实时快照入库继续流程 "
+                            f"(来源: {source_name})"
+                        )
 
             if df is None or df.empty:
+                if history_fetch_error is not None:
+                    return False, f"历史日线获取失败且无可用实时快照: {history_fetch_error}"
                 return False, "获取数据为空"
 
             # 保存到数据库
@@ -180,6 +197,41 @@ class StockAnalysisPipeline:
             error_msg = f"获取/保存数据失败: {str(e)}"
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
+
+    def _build_us_realtime_snapshot_df(self, code: str) -> Tuple[Optional[pd.DataFrame], str]:
+        quote = self.fetcher_manager.get_realtime_quote(code)
+        if not quote or not getattr(quote, "has_basic_data", lambda: False)():
+            return None, ""
+
+        today = date.today().isoformat()
+        price = getattr(quote, "price", None)
+        if price is None:
+            return None, ""
+
+        open_price = getattr(quote, "open_price", None) or getattr(quote, "pre_close", None) or price
+        high = getattr(quote, "high", None) or price
+        low = getattr(quote, "low", None) or price
+        volume = getattr(quote, "volume", None)
+        amount = getattr(quote, "amount", None)
+        pct_chg = getattr(quote, "change_pct", None)
+
+        snapshot = pd.DataFrame([{
+            "code": code,
+            "date": today,
+            "open": open_price,
+            "high": high,
+            "low": low,
+            "close": price,
+            "volume": volume,
+            "amount": amount,
+            "pct_chg": pct_chg,
+            "ma5": None,
+            "ma10": None,
+            "ma20": None,
+            "volume_ratio": None,
+        }])
+        source = getattr(getattr(quote, "source", None), "value", "realtime_snapshot")
+        return snapshot, f"{source}_realtime_snapshot"
     
     def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
         """

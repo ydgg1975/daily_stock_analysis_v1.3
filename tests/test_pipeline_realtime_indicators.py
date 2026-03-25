@@ -272,6 +272,34 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.assertEqual(enhanced["today"]["close"], 15.0)
         self.assertEqual(enhanced["today"]["ma5"], 14.8)
 
+    def test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails(self) -> None:
+        self.pipeline.fetcher_manager.get_stock_name = MagicMock(return_value="Apple")
+        self.pipeline.fetcher_manager.get_daily_data = MagicMock(side_effect=Exception("rate limited"))
+        self.pipeline.fetcher_manager.get_realtime_quote = MagicMock(
+            return_value=UnifiedRealtimeQuote(
+                code="AAPL",
+                name="Apple",
+                source=RealtimeSource.STOOQ,
+                price=251.64,
+                open_price=250.0,
+                high=252.2,
+                low=249.8,
+                volume=123456,
+                change_pct=0.8,
+            )
+        )
+        self.pipeline.db.has_today_data = MagicMock(return_value=False)
+        self.pipeline.db.save_daily_data = MagicMock(return_value=1)
+
+        ok, err = self.pipeline.fetch_and_save_stock_data("AAPL", force_refresh=True)
+
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        args, _ = self.pipeline.db.save_daily_data.call_args
+        self.assertEqual(args[0].iloc[0]["close"], 251.64)
+        self.assertEqual(args[1], "AAPL")
+        self.assertEqual(args[2], "stooq_realtime_snapshot")
+
 
 if __name__ == "__main__":
     unittest.main()
