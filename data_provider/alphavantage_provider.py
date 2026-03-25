@@ -9,6 +9,9 @@ BASE_URL = "https://www.alphavantage.co/query"
 _OVERVIEW_CACHE_TTL_SECONDS = 60 * 60 * 24
 _overview_cache = {}
 _overview_cache_lock = Lock()
+_INCOME_CACHE_TTL_SECONDS = 60 * 60 * 12
+_income_cache = {}
+_income_cache_lock = Lock()
 
 
 def _request(params: dict) -> dict:
@@ -100,3 +103,48 @@ def get_shares_outstanding(symbol: str):
         return value
     except (TypeError, ValueError):
         return None
+
+
+def _to_float(value):
+    if value in (None, "", "None"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_income_statement_quarterly(symbol: str):
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return []
+
+    now = time.time()
+    with _income_cache_lock:
+        cached = _income_cache.get(symbol)
+        if cached and now - cached["ts"] < _INCOME_CACHE_TTL_SECONDS:
+            return cached["data"]
+
+    data = _request({
+        "function": "INCOME_STATEMENT",
+        "symbol": symbol,
+    })
+    quarterly = data.get("quarterlyReports", []) if isinstance(data, dict) else []
+    result = []
+    for item in quarterly[:8]:
+        if not isinstance(item, dict):
+            continue
+        result.append(
+            {
+                "fiscal_date": item.get("fiscalDateEnding"),
+                "reported_currency": item.get("reportedCurrency"),
+                "revenue": _to_float(item.get("totalRevenue")),
+                "gross_profit": _to_float(item.get("grossProfit")),
+                "operating_income": _to_float(item.get("operatingIncome")),
+                "net_income": _to_float(item.get("netIncome")),
+                "eps": _to_float(item.get("reportedEPS")),
+            }
+        )
+    with _income_cache_lock:
+        _income_cache[symbol] = {"ts": now, "data": result}
+    return result

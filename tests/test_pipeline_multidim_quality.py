@@ -147,6 +147,38 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertIn("operatingMargins", block["normalized"])
         self.assertIn("high_growth", block["derived_insights"])
 
+    def test_fundamentals_block_can_use_alpha_overview_source(self) -> None:
+        block = self.pipeline._build_fundamentals_block(
+            fundamental_context=None,
+            alpha_overview={
+                "MarketCapitalization": "123456789",
+                "PERatio": "25.2",
+                "ForwardPE": "21.0",
+                "RevenueTTM": "50000000",
+                "QuarterlyRevenueGrowthYOY": "0.11",
+                "OperatingMarginTTM": "0.19",
+                "ReturnOnEquityTTM": "0.3",
+            },
+        )
+        self.assertEqual(block["normalized"]["marketCap"], "123456789")
+        self.assertEqual(block["normalized"]["forwardPE"], "21.0")
+        self.assertNotIn("valuation_unavailable", block["derived_insights"])
+
+    def test_earnings_block_uses_alpha_quarterly_income(self) -> None:
+        block = self.pipeline._build_earnings_analysis_block(
+            fundamental_context=None,
+            alpha_quarterly_income=[
+                {"fiscal_date": "2025-12-31", "revenue": 120.0, "net_income": 30.0, "gross_profit": 70.0, "operating_income": 35.0, "eps": 1.0},
+                {"fiscal_date": "2025-09-30", "revenue": 110.0, "net_income": 26.0, "gross_profit": 62.0, "operating_income": 31.0, "eps": 0.9},
+                {"fiscal_date": "2024-12-31", "revenue": 95.0, "net_income": 20.0, "gross_profit": 55.0, "operating_income": 27.0, "eps": 0.7},
+                {"fiscal_date": "2024-09-30", "revenue": 90.0, "net_income": 18.0, "gross_profit": 50.0, "operating_income": 24.0, "eps": 0.6},
+            ],
+        )
+        self.assertEqual(block["status"], "ok")
+        self.assertIn("qoq_revenue_growth", block["derived_metrics"])
+        self.assertIn("yoy_net_income_change", block["derived_metrics"])
+        self.assertIn("quarterly_series_available", block["summary_flags"])
+
     def test_realtime_source_enum_is_json_serializable_in_quality_blocks(self) -> None:
         ctx = {"code": "AAPL", "date": "2026-03-25", "today": {}, "yesterday": {}}
         quote = UnifiedRealtimeQuote(
@@ -177,6 +209,17 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertEqual(quality["provider_notes"]["market_data"], "yfinance")
         # should not raise TypeError: Object of type RealtimeSource is not JSON serializable
         json.dumps(quality, ensure_ascii=False)
+
+    def test_sentiment_without_items_still_generates_structured_output_from_text(self) -> None:
+        block = self.pipeline._build_sentiment_analysis_block(
+            news_context="ORCL earnings beat and guidance raised.",
+            news_items=[],
+            stock_code="ORCL",
+            stock_name="Oracle",
+            business_keywords=["cloud", "database"],
+        )
+        self.assertIn("company_sentiment", block)
+        self.assertIn("overall_confidence", block)
 
 
 if __name__ == "__main__":

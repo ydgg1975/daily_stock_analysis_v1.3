@@ -42,7 +42,13 @@ from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
-from data_provider.alphavantage_provider import get_rsi, get_sma, get_shares_outstanding
+from data_provider.alphavantage_provider import (
+    get_rsi,
+    get_sma,
+    get_shares_outstanding,
+    get_company_overview,
+    get_income_statement_quarterly,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -477,17 +483,21 @@ class StockAnalysisPipeline:
             sma20 = None
             sma60 = None
             shares_outstanding = None
+            alpha_overview = None
+            alpha_quarterly_income = []
             alpha_errors: List[str] = []
             try:
                 rsi = get_rsi(code)
                 sma20 = get_sma(code, 20)
                 sma60 = get_sma(code, 60)
                 if is_us_stock:
+                    alpha_overview = get_company_overview(code)
+                    alpha_quarterly_income = get_income_statement_quarterly(code)
                     shares_outstanding = get_shares_outstanding(code)
                 diagnostics["alpha_vantage_status"] = "ok"
                 logger.info(
                     f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}, "
-                    f"SharesOutstanding={shares_outstanding}"
+                    f"SharesOutstanding={shares_outstanding}, income_quarters={len(alpha_quarterly_income)}"
                 )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
@@ -513,6 +523,8 @@ class StockAnalysisPipeline:
                 news_items=news_items,
                 diagnostics=diagnostics,
                 alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
+                alpha_overview=alpha_overview,
+                alpha_quarterly_income=alpha_quarterly_income,
                 alpha_errors=alpha_errors,
             )
             enhanced_context.update(multidim_blocks)
@@ -948,11 +960,16 @@ class StockAnalysisPipeline:
         news_items: Optional[List[Dict[str, Any]]],
         diagnostics: Optional[Dict[str, Any]],
         alpha_indicators: Dict[str, Optional[float]],
+        alpha_overview: Optional[Dict[str, Any]],
+        alpha_quarterly_income: Optional[List[Dict[str, Any]]],
         alpha_errors: List[str],
     ) -> Dict[str, Any]:
         technicals = self._build_technicals_block(code, alpha_indicators)
-        fundamentals = self._build_fundamentals_block(fundamental_context)
-        earnings_analysis = self._build_earnings_analysis_block(fundamental_context)
+        fundamentals = self._build_fundamentals_block(fundamental_context, alpha_overview=alpha_overview)
+        earnings_analysis = self._build_earnings_analysis_block(
+            fundamental_context,
+            alpha_quarterly_income=alpha_quarterly_income,
+        )
         sentiment_analysis = self._build_sentiment_analysis_block(
             news_context=news_context,
             news_items=news_items,
@@ -1075,31 +1092,39 @@ class StockAnalysisPipeline:
         return technicals
 
     @staticmethod
-    def _build_fundamentals_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_fundamentals_block(
+        fundamental_context: Optional[Dict[str, Any]],
+        alpha_overview: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         payload = ((fundamental_context or {}).get("valuation") or {}).get("data", {})
         raw = payload if isinstance(payload, dict) else {}
+        alpha = alpha_overview if isinstance(alpha_overview, dict) else {}
 
         def pick(*keys: str) -> Any:
             for key in keys:
                 val = raw.get(key)
                 if val not in (None, "", "N/A"):
                     return val
+            for key in keys:
+                val = alpha.get(key)
+                if val not in (None, "", "N/A"):
+                    return val
             return None
 
         normalized = {
-            "marketCap": pick("total_market_cap", "market_cap", "marketCap"),
-            "trailingPE": pick("pe_ttm", "pe", "trailingPE"),
-            "forwardPE": pick("forward_pe", "forwardPE"),
-            "totalRevenue": pick("total_revenue", "revenue", "totalRevenue"),
-            "revenueGrowth": pick("revenue_growth", "revenueGrowth"),
-            "grossMargins": pick("gross_margin", "grossMargins"),
-            "operatingMargins": pick("operating_margin", "operatingMargins"),
+            "marketCap": pick("total_market_cap", "market_cap", "marketCap", "MarketCapitalization"),
+            "trailingPE": pick("pe_ttm", "pe", "trailingPE", "PERatio"),
+            "forwardPE": pick("forward_pe", "forwardPE", "ForwardPE"),
+            "totalRevenue": pick("total_revenue", "revenue", "totalRevenue", "RevenueTTM"),
+            "revenueGrowth": pick("revenue_growth", "revenueGrowth", "QuarterlyRevenueGrowthYOY"),
+            "grossMargins": pick("gross_margin", "grossMargins", "GrossProfitTTM"),
+            "operatingMargins": pick("operating_margin", "operatingMargins", "OperatingMarginTTM"),
             "freeCashflow": pick("free_cashflow", "freeCashflow"),
             "operatingCashflow": pick("operating_cashflow", "operatingCashflow"),
             "debtToEquity": pick("debt_to_equity", "debtToEquity"),
             "currentRatio": pick("current_ratio", "currentRatio"),
-            "returnOnEquity": pick("roe", "returnOnEquity"),
-            "returnOnAssets": pick("roa", "returnOnAssets"),
+            "returnOnEquity": pick("roe", "returnOnEquity", "ReturnOnEquityTTM"),
+            "returnOnAssets": pick("roa", "returnOnAssets", "ReturnOnAssetsTTM"),
         }
         missing = [k for k, v in normalized.items() if v in (None, "", "N/A")]
         insights = []
@@ -1144,9 +1169,13 @@ class StockAnalysisPipeline:
         }
 
     @staticmethod
-    def _build_earnings_analysis_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_earnings_analysis_block(
+        fundamental_context: Optional[Dict[str, Any]],
+        alpha_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         earnings_data = ((fundamental_context or {}).get("earnings") or {}).get("data", {})
-        if not isinstance(earnings_data, dict) or not earnings_data:
+        alpha_income = alpha_quarterly_income if isinstance(alpha_quarterly_income, list) else []
+        if not isinstance(earnings_data, dict) and not alpha_income:
             return {
                 "quarterly_series": [],
                 "derived_metrics": {},
@@ -1154,7 +1183,7 @@ class StockAnalysisPipeline:
                 "narrative_insights": ["财报数据不足，无法形成完整趋势判断"],
                 "status": "partial",
             }
-        quarterly = earnings_data.get("quarterly_series", [])
+        quarterly = (earnings_data.get("quarterly_series", []) if isinstance(earnings_data, dict) else []) or alpha_income
         if not isinstance(quarterly, list):
             quarterly = []
         quarterly = quarterly[:4]
@@ -1230,6 +1259,8 @@ class StockAnalysisPipeline:
     ) -> Dict[str, Any]:
         text = (news_context or "").strip()
         items = news_items or []
+        if not items and text:
+            items = [{"title": text[:240], "snippet": text[:400], "url": "", "news_published_at": None}]
         if not text and not items:
             return {
                 "top_positive_items": [],
