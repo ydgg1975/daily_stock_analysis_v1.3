@@ -168,13 +168,23 @@ class StockAnalysisPipeline:
             df = None
             source_name = ""
             history_fetch_error = None
+            if is_us_stock_code(code):
+                us_snapshot_df, us_snapshot_source = self._build_us_realtime_snapshot_df(code)
+                if us_snapshot_df is not None and not us_snapshot_df.empty:
+                    df = us_snapshot_df
+                    source_name = us_snapshot_source
+                    logger.info(
+                        f"{stock_name}({code}) 使用美股实时快照入库，跳过 Yahoo 历史拉取 "
+                        f"(来源: {source_name})"
+                    )
             try:
-                df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+                if df is None:
+                    df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
             except Exception as e:
                 history_fetch_error = e
                 logger.warning(f"{stock_name}({code}) 历史日线获取失败: {e}")
                 # 美股容错：若历史拉取失败，尝试用已成功的实时行情快照兜底写入
-                if is_us_stock_code(code):
+                if is_us_stock_code(code) and df is None:
                     df, source_name = self._build_us_realtime_snapshot_df(code)
                     if df is not None and not df.empty:
                         logger.warning(
@@ -715,21 +725,6 @@ class StockAnalysisPipeline:
             today_date=today_date,
             max_count=5,
         )
-        if len(historical_volumes) < 5:
-            try:
-                hist_df, _ = self.fetcher_manager.get_daily_data(code, days=10)
-                if hist_df is not None and not hist_df.empty:
-                    for _, row in hist_df.sort_values("date", ascending=False).iterrows():
-                        row_date = str(row.get("date", ""))
-                        if today_date and row_date == today_date:
-                            continue
-                        vol = row.get("volume")
-                        if vol and float(vol) > 0:
-                            historical_volumes.append(float(vol))
-                        if len(historical_volumes) >= 5:
-                            break
-            except Exception:
-                pass
         if len(historical_volumes) < 5:
             return None
         avg_volume_5d = sum(historical_volumes) / len(historical_volumes)

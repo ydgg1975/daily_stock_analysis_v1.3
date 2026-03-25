@@ -274,7 +274,7 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
 
     def test_fetch_and_save_us_stock_falls_back_to_realtime_snapshot_when_daily_fails(self) -> None:
         self.pipeline.fetcher_manager.get_stock_name = MagicMock(return_value="Apple")
-        self.pipeline.fetcher_manager.get_daily_data = MagicMock(side_effect=Exception("rate limited"))
+        self.pipeline.fetcher_manager.get_daily_data = MagicMock()
         self.pipeline.fetcher_manager.get_realtime_quote = MagicMock(
             return_value=UnifiedRealtimeQuote(
                 code="AAPL",
@@ -299,8 +299,9 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.assertEqual(args[0].iloc[0]["close"], 251.64)
         self.assertEqual(args[1], "AAPL")
         self.assertEqual(args[2], "stooq_realtime_snapshot")
+        self.pipeline.fetcher_manager.get_daily_data.assert_not_called()
 
-    def test_us_stock_volume_ratio_falls_back_to_fetcher_daily_when_db_insufficient(self) -> None:
+    def test_us_stock_volume_ratio_marks_missing_when_history_insufficient(self) -> None:
         context = {
             "code": "AAPL",
             "date": date.today().isoformat(),
@@ -313,24 +314,10 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
             volume=1000,
         )
         self.pipeline.db.get_latest_data = MagicMock(return_value=[])
-        self.pipeline.fetcher_manager.get_daily_data = MagicMock(
-            return_value=(
-                pd.DataFrame(
-                    [
-                        {"date": date.today() - timedelta(days=1), "volume": 500},
-                        {"date": date.today() - timedelta(days=2), "volume": 500},
-                        {"date": date.today() - timedelta(days=3), "volume": 500},
-                        {"date": date.today() - timedelta(days=4), "volume": 500},
-                        {"date": date.today() - timedelta(days=5), "volume": 500},
-                    ]
-                ),
-                "YfinanceFetcher",
-            )
-        )
         enhanced = self.pipeline._enhance_context(
             context, quote, None, None, "Apple", shares_outstanding=10000
         )
-        self.assertEqual(enhanced["realtime"]["volume_ratio"], 2.0)
+        self.assertEqual(enhanced["realtime"]["volume_ratio"], "数据缺失")
 
 
 if __name__ == "__main__":
