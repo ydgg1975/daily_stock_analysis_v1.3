@@ -363,13 +363,26 @@ def _handle_sync_analysis(
             context_snapshot=context_snapshot,
             fallback_fundamental_payload=fundamental_snapshot,
         )
+        time_contract = {}
+        if isinstance(context_snapshot, dict):
+            enhanced = context_snapshot.get("enhanced_context") or {}
+            time_contract = {
+                "market_timestamp": enhanced.get("market_timestamp"),
+                "market_session_date": enhanced.get("market_session_date"),
+                "news_published_at": enhanced.get("news_published_at"),
+                "report_generated_at": enhanced.get("report_generated_at"),
+            }
 
         return AnalysisResultResponse(
             query_id=query_id,
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
             report=report.model_dump() if report else None,
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().astimezone().isoformat(),
+            market_timestamp=time_contract.get("market_timestamp"),
+            market_session_date=time_contract.get("market_session_date"),
+            news_published_at=time_contract.get("news_published_at"),
+            report_generated_at=time_contract.get("report_generated_at"),
         )
 
     except HTTPException:
@@ -738,7 +751,11 @@ def _build_analysis_report(
         stock_name=localized_stock_name,
         report_type=meta_data.get("report_type", "detailed"),
         report_language=report_language,
-        created_at=meta_data.get("created_at", datetime.now().isoformat()),
+        created_at=meta_data.get("created_at", datetime.now().astimezone().isoformat()),
+        market_timestamp=((context_snapshot or {}).get("enhanced_context") or {}).get("market_timestamp"),
+        market_session_date=((context_snapshot or {}).get("enhanced_context") or {}).get("market_session_date"),
+        news_published_at=((context_snapshot or {}).get("enhanced_context") or {}).get("news_published_at"),
+        report_generated_at=((context_snapshot or {}).get("enhanced_context") or {}).get("report_generated_at"),
         current_price=meta_data.get("current_price"),
         change_pct=meta_data.get("change_pct"),
         model_used=normalize_model_used(meta_data.get("model_used")),
