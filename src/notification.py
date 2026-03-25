@@ -984,6 +984,7 @@ class NotificationService(
                         volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
                         volume_ratio_display = (
                             "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None", 0, 0.0, "0", "0.0") else volume_ratio_raw
+
                         )
                         turnover_display = self._format_turnover_for_report(
                             vol_data.get('turnover_rate', 'N/A')
