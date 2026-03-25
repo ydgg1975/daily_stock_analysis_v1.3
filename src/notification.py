@@ -51,6 +51,22 @@ from src.notification_sender import (
 
 logger = logging.getLogger(__name__)
 
+def _get_report_time_context(self, results):
+    if not results:
+        return {}
+
+    first = results[0]
+    dashboard = getattr(first, "dashboard", None) or {}
+    structured = dashboard.get("structured_analysis", {}) or {}
+    time_ctx = structured.get("time_context", {}) or {}
+
+    return {
+        "market_timestamp": time_ctx.get("market_timestamp"),
+        "market_session_date": time_ctx.get("market_session_date"),
+        "session_type": time_ctx.get("session_type"),
+        "news_published_at": time_ctx.get("news_published_at"),
+        "report_generated_at": time_ctx.get("report_generated_at"),
+    }
 
 class NotificationChannel(Enum):
     """通知渠道类型"""
@@ -825,8 +841,8 @@ class NotificationService(
                 summary_only=self._report_summary_only,
                 extra_context={
                     **self._get_history_compare_context(results),
+                    **self._get_report_time_context(results),
                     "report_language": report_language,
-                    **self._get_time_context_from_results(results),
                 },
             )
             if out:
