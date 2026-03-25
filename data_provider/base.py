@@ -143,6 +143,25 @@ def _is_hk_market(code: str) -> bool:
         return True
     return False
 
+def _is_au_market(code: str) -> bool:
+    """判断是否为澳股代码。Delegates to is_au_stock_code."""
+    return is_au_stock_code(code)
+
+
+def is_au_stock_code(code: str) -> bool:
+    """
+    Public API: determine if a stock code is an Australian stock.
+
+    Args:
+        code: Stock code (e.g. 'BHP.AX', 'CBA.AX')
+
+    Returns:
+        True if AU stock, False otherwise
+    """
+    normalized = (code or "").strip().upper()
+    if normalized.endswith(".AX"):
+        return True
+    return False
 
 def _is_etf_code(code: str) -> bool:
     """判定 A 股 ETF 基金代码（保守规则）。"""
@@ -826,14 +845,14 @@ class DataFetcherManager:
         total_fetchers = len(self._fetchers)
         request_start = time.time()
 
-        # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher
-        if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
+        # 快速路径：美股指数、美股股票、澳股直接路由到 YfinanceFetcher
+        if is_us_index_code(stock_code) or is_us_stock_code(stock_code) or is_au_stock_code(stock_code):
             for attempt, fetcher in enumerate(self._fetchers, start=1):
                 if fetcher.name == "YfinanceFetcher":
                     try:
                         logger.info(
                             f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] "
-                            f"美股/美股指数 {stock_code} 直接路由..."
+                            f"美股/美股指数/澳股 {stock_code} 直接路由..."
                         )
                         df = fetcher.get_daily_data(
                             stock_code=stock_code,
@@ -858,7 +877,7 @@ class DataFetcherManager:
                         errors.append(error_msg)
                     break
             # YfinanceFetcher failed or not found
-            error_summary = f"美股/美股指数 {stock_code} 获取失败:\n" + "\n".join(errors)
+            error_summary = f"美股/美股指数/澳股 {stock_code} 获取失败:\n" + "\n".join(errors)
             elapsed = time.time() - request_start
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
             raise DataFetchError(error_summary)
@@ -1049,6 +1068,25 @@ class DataFetcherManager:
                             logger.warning(f"[实时行情] 美股 {stock_code} 获取失败: {e}")
                     break
             logger.warning(f"[实时行情] 美股 {stock_code} 无可用数据源")
+            return None
+        
+        # 澳股实时行情只走 YfinanceFetcher
+        if _is_au_market(stock_code):
+            for fetcher in self._fetchers:
+                if fetcher.name != "YfinanceFetcher":
+                    continue
+                if not hasattr(fetcher, 'get_realtime_quote'):
+                    break
+                try:
+                    quote = fetcher.get_realtime_quote(stock_code)
+                    if quote is not None and quote.has_basic_data():
+                        logger.info(f"[实时行情] 澳股 {stock_code} 成功获取 (来源: yfinance)")
+                        return quote
+                except Exception as e:
+                    logger.warning(f"[实时行情] 澳股 {stock_code} 获取失败: {e}")
+                    break
+
+            logger.warning(f"[实时行情] 澳股 {stock_code} 无可用数据源")
             return None
 
         # 港股实时行情只走港股专用入口，避免按 A 股 source_priority

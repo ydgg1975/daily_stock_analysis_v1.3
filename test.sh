@@ -1,6 +1,6 @@
 #!/bin/bash
 # ===================================
-# A股/港股/美股 智能分析系统 - 测试脚本
+# A股/港股/美股/澳股 智能分析系统 - 测试脚本
 # ===================================
 #
 # 使用方法：
@@ -119,6 +119,15 @@ test_us_stock() {
     success "美股分析测试完成"
 }
 
+# 测试4.5: 澳股分析
+test_au_stock() {
+    header "测试场景: 澳股分析"
+    info "分析澳股: BHP.AX(必和必拓), CBA.AX(联邦银行)"
+    # 允许透传参数，默认不带 --no-notify
+    python3 main.py --stocks BHP.AX --no-market-review "$@"
+    success "澳股分析测试完成"
+}
+
 # 测试5: 混合市场
 test_mixed() {
     header "测试场景: 混合市场分析"
@@ -168,31 +177,37 @@ test_code_recognition() {
 import sys
 sys.path.insert(0, '.')
 from data_provider.akshare_fetcher import _is_hk_code, _is_us_code
+from data_provider import is_au_stock_code
 
 test_cases = [
-    # (代码, 预期HK, 预期US, 描述)
-    ("AAPL", False, True, "美股-苹果"),
-    ("TSLA", False, True, "美股-特斯拉"),
-    ("BRK.B", False, True, "美股-伯克希尔B"),
-    ("hk00700", True, False, "港股-腾讯"),
-    ("HK09988", True, False, "港股-阿里"),
-    ("600519", False, False, "A股-茅台"),
-    ("000001", False, False, "A股-平安"),
+    # (代码, 预期HK, 预期US, 预期AU, 描述)
+    ("AAPL", False, True, False, "美股-苹果"),
+    ("TSLA", False, True, False, "美股-特斯拉"),
+    ("BRK.B", False, True, False, "美股-伯克希尔B"),
+    ("hk00700", True, False, False, "港股-腾讯"),
+    ("HK09988", True, False, False, "港股-阿里"),
+    ("600519", False, False, False, "A股-茅台"),
+    ("000001", False, False, False, "A股-平安"),
+    # 澳股测试
+    ("BHP.AX", False, False, True, "澳股-必和必拓"),
+    ("CBA.AX", False, False, True, "澳股-联邦银行"),
 ]
 
 print("\n股票代码识别测试:")
-print("-" * 60)
+print("-" * 70)
 all_pass = True
-for code, exp_hk, exp_us, desc in test_cases:
+for code, exp_hk, exp_us, exp_au, desc in test_cases:
     is_hk = _is_hk_code(code)
     is_us = _is_us_code(code)
+    is_au = is_au_stock_code(code)
     hk_ok = is_hk == exp_hk
     us_ok = is_us == exp_us
-    status = "✅" if (hk_ok and us_ok) else "❌"
-    all_pass = all_pass and hk_ok and us_ok
-    print(f"{status} {code:10} | HK:{is_hk:5} US:{is_us:5} | {desc}")
+    au_ok = is_au == exp_au
+    status = "✅" if (hk_ok and us_ok and au_ok) else "❌"
+    all_pass = all_pass and hk_ok and us_ok and au_ok
+    print(f"{status} {code:10} | HK:{is_hk:5} US:{is_us:5} AU:{is_au:5} | {desc}")
 
-print("-" * 60)
+print("-" * 70)
 print(f"{'✅ 所有测试通过!' if all_pass else '❌ 有测试失败!'}")
 sys.exit(0 if all_pass else 1)
 PYTEST
@@ -221,6 +236,10 @@ test_cases = [
     ("600519", "600519.SS", "A股沪市"),
     ("000001", "000001.SZ", "A股深市"),
     ("300750", "300750.SZ", "A股创业板"),
+    # 澳股测试
+    ("BHP.AX", "BHP.AX", "澳股.AX后缀"),
+    ("CBA.AX", "CBA.AX", "澳股联邦银行"),
+    ("bhp.ax", "BHP.AX", "澳股小写"),
 ]
 
 print("\nYFinance 代码转换测试:")
@@ -288,7 +307,7 @@ test_all() {
 # ==================== 主程序 ====================
 
 main() {
-    header "A股/港股/美股 智能分析系统 - 测试"
+    header "A股/港股/美股/澳股 智能分析系统 - 测试"
 
     check_python
     check_deps
@@ -313,6 +332,10 @@ main() {
         us-stock|us_stock|usstock|us)
             shift
             test_us_stock "$@"
+            ;;
+        au-stock|au_stock|austock|au)
+            shift
+            test_au_stock "$@"
             ;;
         mixed|mix)
             shift
@@ -363,6 +386,7 @@ main() {
             echo "  etf         - ETF分析"
             echo "  hk-stock    - 港股分析"
             echo "  us-stock    - 美股分析"
+            echo "  au-stock    - 澳股分析"
             echo "  mixed       - 混合市场分析"
             echo "  single      - 单股推送模式"
             echo "  dry-run     - 仅获取数据"
@@ -376,6 +400,7 @@ main() {
             echo ""
             echo "示例:"
             echo "  $0 quick     # 快速测试"
+            echo "  $0 au-stock  # 测试澳股"
             echo "  $0 us-stock  # 测试美股"
             echo "  $0 code      # 测试代码识别"
             echo "  $0 all       # 运行所有测试"

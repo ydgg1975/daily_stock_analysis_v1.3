@@ -55,6 +55,9 @@ def is_code_like(value: str) -> bool:
         return True
     if _strip_exchange_suffix(text) is not None:
         return True
+    # Support ASX: BHP.AX
+    if text.endswith(".AX"):
+        return True
     if re.match(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$", text):
         return True
     # Support exchange-prefixed codes: SH600519, SZ000001, HK00700
@@ -71,11 +74,15 @@ def normalize_code(raw: str) -> Optional[str]:
     - Suffix format: 600519.SH, 600519.SZ, 00700.HK
     - Prefix format: SH600519, SZ000001, HK00700 (case-insensitive)
     - US ticker symbols: AAPL, TSLA
+    - ASX ticker symbols: BHP.AX
     """
     text = raw.strip().upper()
     if not text:
         return None
     if text.isdigit() and len(text) in (5, 6):
+        return text
+    # ASX: BHP.AX
+    if text.endswith(".AX"):
         return text
     if re.match(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$", text):
         return text

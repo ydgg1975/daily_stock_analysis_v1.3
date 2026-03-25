@@ -30,13 +30,14 @@ except ImportError:
     )
 
 # Market -> exchange code (exchange-calendars)
-MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS"}
+MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS", "au": "ASX"}
 
 # Market -> IANA timezone for "today"
 MARKET_TIMEZONE = {
     "cn": "Asia/Shanghai",
     "hk": "Asia/Hong_Kong",
     "us": "America/New_York",
+    "au": "Australia/Sydney",
 }
 
 
@@ -45,18 +46,20 @@ def get_market_for_stock(code: str) -> Optional[str]:
     Infer market region for a stock code.
 
     Returns:
-        'cn' | 'hk' | 'us' | None (None = unrecognized, fail-open: treat as open)
+        'cn' | 'hk' | 'us' | 'au' | None (None = unrecognized, fail-open: treat as open)
     """
     if not code or not isinstance(code, str):
         return None
     code = (code or "").strip().upper()
 
-    from data_provider import is_us_stock_code, is_us_index_code, is_hk_stock_code
+    from data_provider import is_us_stock_code, is_us_index_code, is_hk_stock_code, is_au_stock_code
 
     if is_us_stock_code(code) or is_us_index_code(code):
         return "us"
     if is_hk_stock_code(code):
         return "hk"
+    if is_au_stock_code(code):
+        return "au"
     # A-share: 6-digit numeric
     if code.isdigit() and len(code) == 6:
         return "cn"
@@ -70,7 +73,7 @@ def is_market_open(market: str, check_date: date) -> bool:
     Fail-open: returns True if exchange-calendars unavailable or date out of range.
 
     Args:
-        market: 'cn' | 'hk' | 'us'
+        market: 'cn' | 'hk' | 'us' | 'au'
         check_date: Date to check
 
     Returns:
@@ -98,7 +101,7 @@ def get_open_markets_today() -> Set[str]:
         Set of market keys ('cn', 'hk', 'us') that are trading today
     """
     if not _XCALS_AVAILABLE:
-        return {"cn", "hk", "us"}
+        return {"cn", "hk", "us", "au"}
     result: Set[str] = set()
     from zoneinfo import ZoneInfo
     for mkt, tz_name in MARKET_TIMEZONE.items():

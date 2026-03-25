@@ -31,7 +31,7 @@ from tenacity import (
     before_sleep_log,
 )
 
-from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code
+from .base import BaseFetcher, DataFetchError, STANDARD_COLUMNS, is_bse_code, is_au_stock_code
 from .realtime_types import UnifiedRealtimeQuote, RealtimeSource
 from .us_index_mapping import get_us_index_yf_symbol, is_us_stock_code
 
@@ -123,9 +123,8 @@ class YfinanceFetcher(BaseFetcher):
             return f"{hk_code}.HK"
 
         # 已经包含后缀的情况
-        if '.SS' in code or '.SZ' in code or '.HK' in code or '.BJ' in code:
+        if '.SS' in code or '.SZ' in code or '.HK' in code or '.BJ' in code or '.AX' in code:
             return code
-
         # 去除可能的 .SH 后缀
         code = code.replace('.SH', '')
 
@@ -639,14 +638,15 @@ class YfinanceFetcher(BaseFetcher):
                 index_name=index_name,
             )
 
-        # 仅处理美股股票
-        if not self._is_us_stock(stock_code):
-            logger.debug(f"[Yfinance] {stock_code} 不是美股，跳过")
+        # 仅处理美股和澳股股票
+        if not self._is_us_stock(stock_code) and not is_au_stock_code(stock_code):
+            logger.debug(f"[Yfinance] {stock_code} 不是美股/澳股，跳过")
             return None
 
         try:
             symbol = stock_code.strip().upper()
-            logger.debug(f"[Yfinance] 获取美股 {symbol} 实时行情")
+            market = "澳股" if is_au_stock_code(stock_code) else "美股"
+            logger.debug(f"[Yfinance] 获取{market} {symbol} 实时行情")
 
             ticker = yf.Ticker(symbol)
 
@@ -730,6 +730,25 @@ class YfinanceFetcher(BaseFetcher):
         except Exception as e:
             logger.warning(f"[Yfinance] 获取美股 {stock_code} 实时行情失败: {e}，尝试 Stooq 兜底")
             return self._get_us_stock_quote_from_stooq(stock_code)
+
+    def get_stock_name(self, stock_code: str) -> Optional[str]:
+        """
+        获取股票名称（仅支持澳股）
+        YfinanceFetcher 实现了 get_realtime_quote，可以从中提取名称
+        """
+        # 仅处理澳股
+        if not is_au_stock_code(stock_code):
+            return None
+
+        try:
+            # 复用 get_realtime_quote 获取名称
+            quote = self.get_realtime_quote(stock_code)
+            if quote and hasattr(quote, 'name') and is_meaningful_stock_name(quote.name, stock_code):
+                return quote.name
+        except Exception as e:
+            logger.debug(f"[Yfinance] 获取澳股 {stock_code} 名称失败: {e}")
+
+        return None
 
 
 if __name__ == "__main__":

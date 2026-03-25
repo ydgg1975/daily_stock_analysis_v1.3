@@ -17,12 +17,16 @@ def detect_market(stock_code: Optional[str]) -> str:
     """Detect market from stock code.
 
     Returns:
-        One of 'cn', 'hk', 'us', or 'cn' as fallback.
+        One of 'cn', 'hk', 'us', 'au', or 'cn' as fallback.
     """
     if not stock_code:
         return "cn"
 
     code = stock_code.strip().upper()
+
+    # AU stocks: .AX suffix (e.g., BHP.AX, CBA.AX)
+    if code.endswith(".AX"):
+        return "au"
 
     # HK stocks: HK00700, 00700.HK, or 5-digit pure numbers
     if code.startswith("HK") or code.endswith(".HK"):
@@ -58,6 +62,10 @@ _MARKET_ROLES = {
         "zh": "美股",
         "en": "US stock",
     },
+    "au": {
+        "zh": "澳股",
+        "en": "Australian stock (ASX)",
+    },
 }
 
 _MARKET_GUIDELINES = {
@@ -89,6 +97,20 @@ _MARKET_GUIDELINES = {
         "en": (
             "- This analysis covers a **US stock** (listed on NYSE/NASDAQ).\n"
             "- US stocks have no daily price limits (but have circuit breakers), allow T+0 and pre/after-market trading. Consider USD FX, Fed policy, and SEC regulations."
+        ),
+    },
+    "au": {
+        "zh": (
+        "- 本次分析对象为 **澳股**（澳大利亚证券交易所 ASX 上市股票）。\n"
+        "- 澳股无涨跌停限制，采用 T+2 交收制度，交易时间为澳洲东部时间（AEST/AEDT）。\n"
+        "- 需关注澳元（AUD）汇率、大宗商品价格（如铁矿石、煤炭）、以及澳洲联储（RBA）政策。\n"
+        "- 重点留意资源类公司周期性（矿业、能源）及银行股在指数中的高权重特征。"
+        ),
+        "en": (
+            "- This analysis covers an **Australian stock** (listed on the ASX).\n"
+            "- ASX stocks have no daily price limits and follow a T+2 settlement cycle. Trading hours are based on AEST/AEDT.\n"
+            "- Consider AUD exchange rates, commodity prices (e.g., iron ore, coal), and Reserve Bank of Australia (RBA) policy.\n"
+            "- Pay attention to the cyclical nature of resource companies (mining, energy) and the heavy index weighting of banks."
         ),
     },
 }
