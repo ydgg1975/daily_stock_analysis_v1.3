@@ -237,6 +237,29 @@ class NotificationService(
         self._history_compare_cache[cache_key] = history_by_code
         return {"history_by_code": history_by_code}
 
+    @staticmethod
+    def _get_time_context_from_results(results: List[AnalysisResult]) -> Dict[str, Any]:
+        """Extract renderer time fields from first result structured_analysis.time_context."""
+        if not results:
+            return {}
+        dashboard = getattr(results[0], "dashboard", None) or {}
+        if not isinstance(dashboard, dict):
+            return {}
+        structured = dashboard.get("structured_analysis") or {}
+        if not isinstance(structured, dict):
+            return {}
+        time_ctx = structured.get("time_context") or {}
+        if not isinstance(time_ctx, dict):
+            return {}
+        fields = (
+            "market_timestamp",
+            "market_session_date",
+            "session_type",
+            "news_published_at",
+            "report_generated_at",
+        )
+        return {k: time_ctx.get(k) for k in fields if time_ctx.get(k) not in (None, "")}
+
     def generate_aggregate_report(
         self,
         results: List[AnalysisResult],
@@ -803,6 +826,7 @@ class NotificationService(
                 extra_context={
                     **self._get_history_compare_context(results),
                     "report_language": report_language,
+                    **self._get_time_context_from_results(results),
                 },
             )
             if out:
@@ -1117,7 +1141,10 @@ class NotificationService(
                 results=results,
                 report_date=datetime.now().strftime('%Y-%m-%d'),
                 summary_only=self._report_summary_only,
-                extra_context={"report_language": report_language},
+                extra_context={
+                    "report_language": report_language,
+                    **self._get_time_context_from_results(results),
+                },
             )
             if out:
                 return out
@@ -1362,7 +1389,10 @@ class NotificationService(
                 results=results,
                 report_date=report_date,
                 summary_only=False,
-                extra_context={"report_language": report_language},
+                extra_context={
+                    "report_language": report_language,
+                    **self._get_time_context_from_results(results),
+                },
             )
             if out:
                 return out

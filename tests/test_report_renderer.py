@@ -221,6 +221,29 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("2026-03-24", out)
         self.assertIn("last_completed_session", out)
 
+    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
+        r = _make_result(
+            code="TSLA",
+            name="Tesla",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {},
+                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-25T16:00:00-04:00",
+                        "market_session_date": "2026-03-25",
+                        "report_generated_at": "2026-03-26T08:30:00+08:00",
+                        "session_type": "last_completed_session",
+                    }
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=True)
+        self.assertIn("2026-03-25T16:00:00-04:00", out)
+        self.assertIn("2026-03-25", out)
+        self.assertIn("last_completed_session", out)
+
     def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
         r = _make_result(
             code="ORCL",

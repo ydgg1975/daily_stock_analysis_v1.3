@@ -215,9 +215,19 @@ def render(
     hold_count = sum(1 for r in results if getattr(r, "decision_type", "") in ("hold", ""))
 
     now_sh = _now_shanghai()
+    first_time_ctx: Dict[str, Any] = {}
+    if results:
+        first_dashboard = getattr(results[0], "dashboard", None) or {}
+        if isinstance(first_dashboard, dict):
+            structured = first_dashboard.get("structured_analysis") or {}
+            if isinstance(structured, dict):
+                first_time_ctx = structured.get("time_context") or {}
+                if not isinstance(first_time_ctx, dict):
+                    first_time_ctx = {}
+
     report_generated_at = _iso_or_none(
         (extra_context or {}).get("report_generated_at")
-    ) or now_sh.isoformat()
+    ) or _iso_or_none(first_time_ctx.get("report_generated_at")) or now_sh.isoformat()
     report_timestamp = now_sh.strftime("%Y-%m-%d %H:%M:%S")
 
     def failed_checks(checklist: List[str]) -> List[str]:
@@ -227,10 +237,10 @@ def render(
         "report_date": report_date,
         "report_timestamp": report_timestamp,
         "report_generated_at": report_generated_at,
-        "market_timestamp": (extra_context or {}).get("market_timestamp"),
-        "market_session_date": (extra_context or {}).get("market_session_date"),
-        "session_type": (extra_context or {}).get("session_type"),
-        "news_published_at": (extra_context or {}).get("news_published_at"),
+        "market_timestamp": (extra_context or {}).get("market_timestamp") or first_time_ctx.get("market_timestamp"),
+        "market_session_date": (extra_context or {}).get("market_session_date") or first_time_ctx.get("market_session_date"),
+        "session_type": (extra_context or {}).get("session_type") or first_time_ctx.get("session_type"),
+        "news_published_at": (extra_context or {}).get("news_published_at") or first_time_ctx.get("news_published_at"),
         "to_shanghai_iso": _to_shanghai_iso,
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
