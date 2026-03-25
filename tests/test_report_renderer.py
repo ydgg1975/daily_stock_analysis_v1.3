@@ -10,6 +10,8 @@ Tests for Jinja2 report rendering and fallback behavior.
 import sys
 import unittest
 from unittest.mock import MagicMock
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 try:
     import litellm  # noqa: F401
@@ -128,6 +130,137 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIsNotNone(out)
         self.assertIn("Market Snapshot", out)
         self.assertIn("Volume Ratio", out)
+
+    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
+        r = _make_result(
+            code="AAPL",
+            name="Apple",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
+                "data_perspective": {
+                    "volume_analysis": {
+                        "volume_ratio": 0.8,
+                        "volume_status": "正常",
+                        "turnover_rate": "N/A",
+                        "volume_meaning": "量能平稳",
+                    },
+                    "chip_structure": {"profit_ratio": "N/A"},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("筹码", out)
+        self.assertIn("美股暂不支持该指标", out)
+        self.assertIn("换手率 数据缺失", out)
+
+    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
+        r = _make_result(
+            code="MSTR",
+            name="MicroStrategy",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
+                "data_perspective": {
+                    "price_position": {
+                        "current_price": 130.5,
+                        "ma5": 0.0,
+                        "ma10": 0.0,
+                        "ma20": None,
+                        "bias_ma5": 0.0,
+                        "support_level": None,
+                        "resistance_level": None,
+                    },
+                    "volume_analysis": {
+                        "volume_ratio": 0.0,
+                        "turnover_rate": None,
+                        "volume_status": "缺失",
+                    },
+                    "alpha_vantage": {
+                        "rsi14": 47.7279,
+                        "sma20": 138.406,
+                        "sma60": 144.9608,
+                    },
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("N/A（Alpha Vantage SMA20: 138.406）", out)
+        self.assertIn("乖离率(MA5) | 数据缺失", out)
+        self.assertIn("量比 数据缺失", out)
+        self.assertIn("换手率 数据缺失", out)
+
+    def test_render_uses_asia_shanghai_timestamp(self) -> None:
+        r = _make_result()
+        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
+        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
+            out = render("markdown", [r], summary_only=False)
+        self.assertIn("2026-03-25 09:30:15", out)
+        self.assertIn("report_generated_at", out)
+
+    def test_render_prefers_time_contract_fields(self) -> None:
+        r = _make_result(code="AAPL", name="Apple")
+        out = render(
+            "markdown",
+            [r],
+            summary_only=True,
+            extra_context={
+                "report_generated_at": "2026-03-25T01:00:00+00:00",
+                "market_timestamp": "2026-03-24T21:00:00-04:00",
+                "market_session_date": "2026-03-24",
+                "news_published_at": "2026-03-24T20:00:00-04:00",
+            },
+        )
+        self.assertIn("2026-03-25T01:00:00+00:00", out)
+        self.assertIn("2026-03-24T21:00:00-04:00", out)
+        self.assertIn("2026-03-24", out)
+
+    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
+        r = _make_result(
+            code="ORCL",
+            name="Oracle",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-24T21:00:00-04:00",
+                        "market_session_date": "2026-03-24",
+                        "report_generated_at": "2026-03-25T01:00:00+00:00",
+                        "news_published_at": "2026-03-24T20:00:00-04:00",
+                        "session_type": "intraday_snapshot",
+                    },
+                    "fundamentals": {
+                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
+                        "derived_insights": ["valuation_high", "high_growth"],
+                    },
+                    "earnings_analysis": {
+                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
+                        "summary_flags": ["quarterly_series_available"],
+                        "narrative_insights": ["margins improving"],
+                    },
+                    "sentiment_analysis": {
+                        "company_sentiment": "positive",
+                        "industry_sentiment": "background_only",
+                        "regulatory_sentiment": "neutral",
+                        "overall_confidence": "medium",
+                        "relevance_type": "company_specific",
+                        "relevance_score": 0.82,
+                    },
+                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("基本面（Fundamentals）", out)
+        self.assertIn("财报趋势（Earnings）", out)
+        self.assertIn("结构化情绪（Sentiment）", out)
+        self.assertIn("session_type: intraday_snapshot", out)
 
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""

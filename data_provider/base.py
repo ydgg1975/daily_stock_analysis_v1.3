@@ -1027,7 +1027,8 @@ class DataFetcherManager:
                         try:
                             quote = fetcher.get_realtime_quote(stock_code)
                             if quote is not None:
-                                logger.info(f"[实时行情] 美股指数 {stock_code} 成功获取 (来源: yfinance)")
+                                source = getattr(getattr(quote, "source", None), "value", "yfinance")
+                                logger.info(f"[实时行情] 美股指数 {stock_code} 成功获取 (来源: {source})")
                                 return quote
                         except Exception as e:
                             logger.warning(f"[实时行情] 美股指数 {stock_code} 获取失败: {e}")
@@ -1043,7 +1044,8 @@ class DataFetcherManager:
                         try:
                             quote = fetcher.get_realtime_quote(stock_code)
                             if quote is not None:
-                                logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: yfinance)")
+                                source = getattr(getattr(quote, "source", None), "value", "yfinance")
+                                logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: {source})")
                                 return quote
                         except Exception as e:
                             logger.warning(f"[实时行情] 美股 {stock_code} 获取失败: {e}")

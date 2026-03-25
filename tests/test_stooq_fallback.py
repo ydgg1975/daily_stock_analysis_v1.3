@@ -78,6 +78,29 @@ class TestStooqFallback(unittest.TestCase):
             self.assertEqual(quote.price, 900.0)
             mock_stooq.assert_called_once_with("NVDA")
 
+    @unittest.skipUnless(HAS_YFINANCE, "yfinance is required for this test")
+    @patch('yfinance.Ticker')
+    def test_yfinance_quote_marks_yfinance_source(self, mock_ticker_class):
+        mock_ticker = MagicMock()
+        type(mock_ticker).fast_info = PropertyMock(
+            return_value=MagicMock(
+                lastPrice=185.0,
+                previousClose=180.0,
+                open=181.0,
+                dayHigh=186.0,
+                dayLow=179.5,
+                lastVolume=1234567,
+                marketCap=1000000,
+            )
+        )
+        mock_ticker.info = {"shortName": "Apple Inc."}
+        mock_ticker_class.return_value = mock_ticker
+
+        quote = self.fetcher.get_realtime_quote("AAPL")
+
+        self.assertIsNotNone(quote)
+        self.assertEqual(quote.source, RealtimeSource.YFINANCE)
+
 
 if __name__ == '__main__':
     unittest.main()
