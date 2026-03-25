@@ -221,6 +221,39 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("600519", out)
 
     @mock.patch("src.notification.get_config")
+    def test_generate_dashboard_report_passes_time_context_to_renderer(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=True)
+        service = NotificationService()
+        result = AnalysisResult(
+            code="TEM",
+            name="Tempus AI",
+            sentiment_score=60,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="观望",
+            dashboard={
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-25T10:00:00-04:00",
+                        "market_session_date": "2026-03-25",
+                        "session_type": "intraday_snapshot",
+                        "news_published_at": "2026-03-25T09:10:00-04:00",
+                        "report_generated_at": "2026-03-25T22:10:00+08:00",
+                    }
+                }
+            },
+        )
+
+        with mock.patch("src.services.report_renderer.render", return_value="ok") as mock_render:
+            out = service.generate_dashboard_report([result], report_date="2026-03-25")
+
+        self.assertEqual(out, "ok")
+        kwargs = mock_render.call_args.kwargs
+        self.assertEqual(kwargs["extra_context"]["market_timestamp"], "2026-03-25T10:00:00-04:00")
+        self.assertEqual(kwargs["extra_context"]["market_session_date"], "2026-03-25")
+        self.assertEqual(kwargs["extra_context"]["session_type"], "intraday_snapshot")
+
+    @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
         service = NotificationService()

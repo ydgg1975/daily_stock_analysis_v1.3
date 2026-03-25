@@ -31,6 +31,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
 from src.utils.data_processing import normalize_model_used
 from src.notification_sender import (
@@ -235,6 +236,29 @@ class NotificationService(
 
         self._history_compare_cache[cache_key] = history_by_code
         return {"history_by_code": history_by_code}
+
+    @staticmethod
+    def _get_time_context_from_results(results: List[AnalysisResult]) -> Dict[str, Any]:
+        """Extract renderer time fields from first result structured_analysis.time_context."""
+        if not results:
+            return {}
+        dashboard = getattr(results[0], "dashboard", None) or {}
+        if not isinstance(dashboard, dict):
+            return {}
+        structured = dashboard.get("structured_analysis") or {}
+        if not isinstance(structured, dict):
+            return {}
+        time_ctx = structured.get("time_context") or {}
+        if not isinstance(time_ctx, dict):
+            return {}
+        fields = (
+            "market_timestamp",
+            "market_session_date",
+            "session_type",
+            "news_published_at",
+            "report_generated_at",
+        )
+        return {k: time_ctx.get(k) for k in fields if time_ctx.get(k) not in (None, "")}
 
     def generate_aggregate_report(
         self,
@@ -802,6 +826,7 @@ class NotificationService(
                 extra_context={
                     **self._get_history_compare_context(results),
                     "report_language": report_language,
+                    **self._get_time_context_from_results(results),
                 },
             )
             if out:
@@ -950,6 +975,10 @@ class NotificationService(
                     # 价格位置
                     if price_data:
                         bias_status = price_data.get('bias_status', 'N/A')
+                        bias_ma5_display = self._format_percent_for_report(
+                            price_data.get('bias_ma5', 'N/A'),
+                            zero_is_missing=True,
+                        )
                         report_lines.extend([
                             f"| {labels['price_metrics_label']} | {labels['current_price_label']} |",
                             "|---------|------|",
@@ -957,7 +986,7 @@ class NotificationService(
                             f"| {labels['ma5_label']} | {price_data.get('ma5', 'N/A')} |",
                             f"| {labels['ma10_label']} | {price_data.get('ma10', 'N/A')} |",
                             f"| {labels['ma20_label']} | {price_data.get('ma20', 'N/A')} |",
-                            f"| {labels['bias_ma5_label']} | {price_data.get('bias_ma5', 'N/A')}% {bias_status} |",
+                            f"| {labels['bias_ma5_label']} | {bias_ma5_display} {bias_status} |",
                             f"| {labels['support_level_label']} | {price_data.get('support_level', 'N/A')} |",
                             f"| {labels['resistance_level_label']} | {price_data.get('resistance_level', 'N/A')} |",
                             "",
@@ -976,14 +1005,26 @@ class NotificationService(
                         ])
                     # 量能分析
                     if vol_data:
+                        volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
+                        volume_ratio_display = (
+                            "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None", 0, 0.0, "0", "0.0") else volume_ratio_raw
+                        )
+                        turnover_display = self._format_turnover_for_report(
+                            vol_data.get('turnover_rate', 'N/A')
+                        )
                         report_lines.extend([
-                            f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {vol_data.get('volume_ratio', 'N/A')} ({vol_data.get('volume_status', '')}) | "
-                            f"{labels['turnover_rate_label']} {vol_data.get('turnover_rate', 'N/A')}%",
+                            f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {volume_ratio_display} ({vol_data.get('volume_status', '')}) | "
+                            f"{labels['turnover_rate_label']} {turnover_display}",
                             f"💡 *{vol_data.get('volume_meaning', '')}*",
                             "",
                         ])
                     # 筹码结构
-                    if chip_data:
+                    if is_us_stock_code(result.code):
+                        report_lines.extend([
+                            f"**{labels['chip_label']}**: 美股暂不支持该指标",
+                            "",
+                        ])
+                    elif chip_data:
                         chip_health = localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language)
                         report_lines.extend([
                             f"**{labels['chip_label']}**: {chip_data.get('profit_ratio', 'N/A')} | {chip_data.get('avg_cost', 'N/A')} | "
@@ -1100,7 +1141,10 @@ class NotificationService(
                 results=results,
                 report_date=datetime.now().strftime('%Y-%m-%d'),
                 summary_only=self._report_summary_only,
-                extra_context={"report_language": report_language},
+                extra_context={
+                    "report_language": report_language,
+                    **self._get_time_context_from_results(results),
+                },
             )
             if out:
                 return out
@@ -1345,7 +1389,10 @@ class NotificationService(
                 results=results,
                 report_date=report_date,
                 summary_only=False,
-                extra_context={"report_language": report_language},
+                extra_context={
+                    "report_language": report_language,
+                    **self._get_time_context_from_results(results),
+                },
             )
             if out:
                 return out
@@ -1508,6 +1555,7 @@ class NotificationService(
 
     # Display name mapping for realtime data sources
     _SOURCE_DISPLAY_NAMES = {
+        "yfinance": {"zh": "yfinance", "en": "yfinance"},
         "tencent": {"zh": "腾讯财经", "en": "Tencent Finance"},
         "akshare_em": {"zh": "东方财富", "en": "Eastmoney"},
         "akshare_sina": {"zh": "新浪财经", "en": "Sina Finance"},
@@ -1517,6 +1565,28 @@ class NotificationService(
         "sina": {"zh": "新浪财经", "en": "Sina Finance"},
         "fallback": {"zh": "降级兜底", "en": "Fallback"},
     }
+
+    @staticmethod
+    def _format_turnover_for_report(turnover_rate: Any) -> str:
+        if turnover_rate in (None, "", "N/A"):
+            return "数据缺失"
+        text = str(turnover_rate).strip()
+        if not text:
+            return "数据缺失"
+        return text if text.endswith("%") else f"{text}%"
+
+    @staticmethod
+    def _format_percent_for_report(value: Any, zero_is_missing: bool = False) -> str:
+        if value in (None, "", "N/A", "None"):
+            return "数据缺失"
+        try:
+            num = float(str(value).strip().rstrip("%"))
+            if zero_is_missing and num == 0:
+                return "数据缺失"
+            return f"{num:.2f}%"
+        except (TypeError, ValueError):
+            text = str(value).strip()
+            return text if text.endswith("%") else "数据缺失"
 
     def _get_source_display_name(self, source: Any, language: Optional[str]) -> str:
         raw_source = str(source or "N/A")
