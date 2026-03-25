@@ -20,17 +20,20 @@ try:
         trigger_analysis,
         _build_analysis_report,
         _load_sync_fundamental_sources,
+        _format_sse_event,
     )
 except Exception:  # pragma: no cover - optional dependency environments
     create_app = None
     trigger_analysis = None
     _build_analysis_report = None
     _load_sync_fundamental_sources = None
+    _format_sse_event = None
 
 from src.enums import ReportType
 from src.services.analysis_service import AnalysisService
 from src.services.image_stock_extractor import _call_litellm_vision
 from src.services.task_queue import AnalysisTaskQueue
+from data_provider.realtime_types import RealtimeSource
 
 
 class AnalysisApiContractTestCase(unittest.TestCase):
@@ -232,6 +235,13 @@ class AnalysisApiContractTestCase(unittest.TestCase):
                 "#/components/schemas/BatchTaskAcceptedResponse",
             },
         )
+
+    def test_format_sse_event_accepts_enum_payload(self) -> None:
+        if _format_sse_event is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+        payload = {"provider_notes": {"market_data": RealtimeSource.YFINANCE}}
+        event = _format_sse_event("status", payload)
+        self.assertIn('"market_data": "yfinance"', event)
 
     def test_trigger_analysis_rejects_blank_only_stock_inputs(self) -> None:
         if trigger_analysis is None:

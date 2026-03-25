@@ -90,7 +90,7 @@ def safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
     return default
 
 
-class RealtimeSource(Enum):
+class RealtimeSource(str, Enum):
     """实时行情数据源"""
     YFINANCE = "yfinance"         # Yahoo Finance
     EFINANCE = "efinance"           # 东方财富（efinance库）

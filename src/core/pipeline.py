@@ -660,7 +660,7 @@ class StockAnalysisPipeline:
                 'total_mv': getattr(realtime_quote, 'total_mv', None),
                 'circ_mv': getattr(realtime_quote, 'circ_mv', None),
                 'change_60d': getattr(realtime_quote, 'change_60d', None),
-                'source': getattr(realtime_quote, 'source', None),
+                'source': getattr(getattr(realtime_quote, 'source', None), 'value', getattr(realtime_quote, 'source', None)),
                 'snapshot_type': enhanced.get("session_type"),
                 'market_timestamp': enhanced.get("market_timestamp"),
             }
@@ -1251,7 +1251,7 @@ class StockAnalysisPipeline:
             "missing_fields": missing_fields,
             "warnings": warnings,
             "provider_notes": {
-                "market_data": context.get("realtime", {}).get("source", "unknown"),
+                "market_data": getattr(context.get("realtime", {}).get("source", "unknown"), "value", context.get("realtime", {}).get("source", "unknown")),
                 "technicals": "local_from_ohlcv",
                 "fundamentals": fundamentals.get("source", "fundamental_pipeline"),
                 "sentiment": "tavily_filtered",

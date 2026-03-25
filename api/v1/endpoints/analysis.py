@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Optional, Union, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.deps import get_config_dep
@@ -550,7 +551,7 @@ def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
     Returns:
         SSE 格式字符串
     """
-    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+    return f"event: {event_type}\ndata: {json.dumps(jsonable_encoder(data), ensure_ascii=False)}\n\n"
 
 
 # ============================================================

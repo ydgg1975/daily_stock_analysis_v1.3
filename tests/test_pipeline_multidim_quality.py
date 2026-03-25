@@ -5,10 +5,12 @@ import unittest
 from datetime import date, timedelta, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+import json
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.core.pipeline import StockAnalysisPipeline
+from data_provider.realtime_types import UnifiedRealtimeQuote, RealtimeSource
 
 
 def _bars(days: int, start_close: float = 100.0):
@@ -124,6 +126,37 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertNotEqual(sentiment["sentiment_summary"], "no_reliable_news")
         self.assertIn(sentiment["relevance_type"], {"regulatory", "company_specific"})
         self.assertGreaterEqual(sentiment["relevance_score"], 0.65)
+
+    def test_realtime_source_enum_is_json_serializable_in_quality_blocks(self) -> None:
+        ctx = {"code": "AAPL", "date": "2026-03-25", "today": {}, "yesterday": {}}
+        quote = UnifiedRealtimeQuote(
+            code="AAPL",
+            name="Apple",
+            source=RealtimeSource.YFINANCE,
+            price=180.0,
+        )
+        enhanced = self.pipeline._enhance_context(
+            context=ctx,
+            realtime_quote=quote,
+            chip_data=None,
+            trend_result=None,
+            stock_name="Apple",
+            fundamental_context=None,
+        )
+        technicals = self.pipeline._build_technicals_block("AAPL", {"rsi14": None, "sma20": None, "sma60": None})
+        quality = self.pipeline._build_data_quality_block(
+            technicals=technicals,
+            fundamentals=self.pipeline._build_fundamentals_block(None),
+            earnings_analysis=self.pipeline._build_earnings_analysis_block(None),
+            sentiment_analysis=self.pipeline._build_sentiment_analysis_block(""),
+            alpha_errors=[],
+            context=enhanced,
+            diagnostics={"realtime_source": RealtimeSource.YFINANCE, "failure_reasons": []},
+        )
+        self.assertEqual(enhanced["realtime"]["source"], "yfinance")
+        self.assertEqual(quality["provider_notes"]["market_data"], "yfinance")
+        # should not raise TypeError: Object of type RealtimeSource is not JSON serializable
+        json.dumps(quality, ensure_ascii=False)
 
 
 if __name__ == "__main__":

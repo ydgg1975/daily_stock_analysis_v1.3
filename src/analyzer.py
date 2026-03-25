@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
 import litellm
+from fastapi.encoders import jsonable_encoder
 from json_repair import repair_json
 from litellm import Router
 
@@ -1215,18 +1216,18 @@ class GeminiAnalyzer:
             "market_timezone": context.get("market_timezone"),
         }
         prompt += "\n### Time Contract（统一时间语义，ISO 8601）\n"
-        prompt += json.dumps(time_contract, ensure_ascii=False, indent=2) + "\n"
+        prompt += json.dumps(jsonable_encoder(time_contract), ensure_ascii=False, indent=2) + "\n"
         if fundamentals_block:
             prompt += (
                 "\n### Fundamentals（结构化 + derived insights）\n"
-                f"- normalized: {json.dumps(fundamentals_block.get('normalized', {}), ensure_ascii=False)}\n"
+                f"- normalized: {json.dumps(jsonable_encoder(fundamentals_block.get('normalized', {})), ensure_ascii=False)}\n"
                 f"- summary_flags: {fundamentals_block.get('summary_flags', [])}\n"
             )
         if earnings_analysis:
             prompt += (
                 "\n### Earnings Analysis（结构化）\n"
                 f"- summary_flags: {earnings_analysis.get('summary_flags', [])}\n"
-                f"- derived_metrics: {json.dumps(earnings_analysis.get('derived_metrics', {}), ensure_ascii=False)}\n"
+                f"- derived_metrics: {json.dumps(jsonable_encoder(earnings_analysis.get('derived_metrics', {})), ensure_ascii=False)}\n"
             )
         if sentiment_analysis:
             prompt += (
@@ -1238,7 +1239,7 @@ class GeminiAnalyzer:
             )
         if data_quality:
             prompt += "\n### Data Quality（最终结论必须引用）\n"
-            prompt += json.dumps(data_quality, ensure_ascii=False, indent=2) + "\n"
+            prompt += json.dumps(jsonable_encoder(data_quality), ensure_ascii=False, indent=2) + "\n"
             prompt += (
                 "\n> 规则：industry_general 或 low_relevance 新闻不得直接写入个股核心利好/利空结论；"
                 "仅 company_specific 与高相关 regulatory 可进入核心结论。\n"
