@@ -10,8 +10,10 @@ Any expensive data preparation should be injected by the caller via extra_contex
 """
 
 import logging
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from src.analyzer import AnalysisResult
 from src.config import get_config
@@ -27,6 +29,13 @@ from src.report_language import (
 from data_provider.us_index_mapping import is_us_stock_code
 
 logger = logging.getLogger(__name__)
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _now_shanghai():
+    from datetime import datetime
+
+    return datetime.now(_SHANGHAI_TZ)
 
 
 def _escape_md(text: str) -> str:
@@ -54,6 +63,51 @@ def _clean_sniper_value(val: Any) -> str:
         if s.startswith(prefix):
             return s[len(prefix):]
     return s
+
+
+def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        text = val.strip()
+        if text in {"", "N/A", "None", "null", "nan"}:
+            return True
+        try:
+            parsed = float(text.rstrip("%"))
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+    try:
+        parsed = float(val)
+        if math.isnan(parsed):
+            return True
+        if zero_is_missing and parsed == 0:
+            return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _display_value(val: Any, zero_is_missing: bool = False, missing_text: str = "N/A") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    return str(val)
+
+
+def _display_percent(val: Any, zero_is_missing: bool = False, missing_text: str = "数据缺失") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    text = str(val).strip()
+    if text.endswith("%"):
+        return text
+    try:
+        return f"{float(text):.2f}%"
+    except (TypeError, ValueError):
+        return missing_text
 
 
 def _resolve_templates_dir() -> Path:
@@ -86,8 +140,6 @@ def render(
     Returns:
         Rendered string, or None on error (caller should fallback).
     """
-    from datetime import datetime
-
     try:
         from jinja2 import Environment, FileSystemLoader, select_autoescape
     except ImportError:
@@ -95,7 +147,7 @@ def render(
         return None
 
     if report_date is None:
-        report_date = datetime.now().strftime("%Y-%m-%d")
+        report_date = _now_shanghai().strftime("%Y-%m-%d")
 
     templates_dir = _resolve_templates_dir()
     template_name = f"report_{platform}.j2"
@@ -133,7 +185,7 @@ def render(
     sell_count = sum(1 for r in results if getattr(r, "decision_type", "") == "sell")
     hold_count = sum(1 for r in results if getattr(r, "decision_type", "") in ("hold", ""))
 
-    report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    report_timestamp = _now_shanghai().strftime("%Y-%m-%d %H:%M:%S")
 
     def failed_checks(checklist: List[str]) -> List[str]:
         return [c for c in (checklist or []) if c.startswith("❌") or c.startswith("⚠️")]
@@ -151,6 +203,9 @@ def render(
         "report_language": report_language,
         "escape_md": _escape_md,
         "clean_sniper": _clean_sniper_value,
+        "display_value": _display_value,
+        "display_percent": _display_percent,
+        "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "history_by_code": {},
         "localize_operation_advice": localize_operation_advice,

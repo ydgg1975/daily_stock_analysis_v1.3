@@ -10,6 +10,8 @@ Tests for Jinja2 report rendering and fallback behavior.
 import sys
 import unittest
 from unittest.mock import MagicMock
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 try:
     import litellm  # noqa: F401
@@ -153,6 +155,51 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("筹码", out)
         self.assertIn("美股暂不支持该指标", out)
         self.assertIn("换手率 数据缺失", out)
+
+    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
+        r = _make_result(
+            code="MSTR",
+            name="MicroStrategy",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
+                "data_perspective": {
+                    "price_position": {
+                        "current_price": 130.5,
+                        "ma5": 0.0,
+                        "ma10": 0.0,
+                        "ma20": None,
+                        "bias_ma5": 0.0,
+                        "support_level": None,
+                        "resistance_level": None,
+                    },
+                    "volume_analysis": {
+                        "volume_ratio": 0.0,
+                        "turnover_rate": None,
+                        "volume_status": "缺失",
+                    },
+                    "alpha_vantage": {
+                        "rsi14": 47.7279,
+                        "sma20": 138.406,
+                        "sma60": 144.9608,
+                    },
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("N/A（Alpha Vantage SMA20: 138.406）", out)
+        self.assertIn("乖离率(MA5) | 数据缺失", out)
+        self.assertIn("量比 数据缺失", out)
+        self.assertIn("换手率 数据缺失", out)
+
+    def test_render_uses_asia_shanghai_timestamp(self) -> None:
+        r = _make_result()
+        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
+        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
+            out = render("markdown", [r], summary_only=False)
+        self.assertIn("2026-03-25 09:30:15", out)
 
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""

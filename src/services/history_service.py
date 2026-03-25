@@ -699,6 +699,12 @@ class HistoryService:
                 raw_bias_status = price_data.get('bias_status', 'N/A')
                 bias_status = localize_bias_status(raw_bias_status, report_language)
                 bias_emoji = get_bias_status_emoji(raw_bias_status)
+                bias_value = price_data.get('bias_ma5', 'N/A')
+                try:
+                    bias_num = float(str(bias_value).strip().rstrip('%'))
+                    bias_display = "数据缺失" if bias_num == 0 else f"{bias_num:.2f}%"
+                except (TypeError, ValueError):
+                    bias_display = "数据缺失"
                 report_lines.extend([
                     f"| {labels['price_metrics_label']} | {labels['current_price_label']} |",
                     "|---------|------|",
@@ -706,7 +712,7 @@ class HistoryService:
                     f"| {labels['ma5_label']} | {price_data.get('ma5', 'N/A')} |",
                     f"| {labels['ma10_label']} | {price_data.get('ma10', 'N/A')} |",
                     f"| {labels['ma20_label']} | {price_data.get('ma20', 'N/A')} |",
-                    f"| {labels['bias_ma5_label']} | {price_data.get('bias_ma5', 'N/A')}% {bias_emoji}{bias_status} |",
+                    f"| {labels['bias_ma5_label']} | {bias_display} {bias_emoji}{bias_status} |",
                     f"| {labels['support_level_label']} | {price_data.get('support_level', 'N/A')} |",
                     f"| {labels['resistance_level_label']} | {price_data.get('resistance_level', 'N/A')} |",
                     "",
@@ -715,7 +721,7 @@ class HistoryService:
             if vol_data:
                 volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
                 volume_ratio_display = (
-                    "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None") else volume_ratio_raw
+                    "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None", 0, 0.0, "0", "0.0") else volume_ratio_raw
                 )
                 turnover_rate = vol_data.get('turnover_rate', 'N/A')
                 turnover_display = (
