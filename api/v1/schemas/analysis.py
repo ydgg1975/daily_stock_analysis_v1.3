@@ -90,6 +90,10 @@ class AnalysisResultResponse(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称")
     report: Optional[Any] = Field(None, description="分析报告")
     created_at: str = Field(..., description="创建时间")
+    market_timestamp: Optional[str] = Field(None, description="市场行情时间（ISO 8601, aware）")
+    market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
+    news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
+    report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
     
     class Config:
         json_schema_extra = {
