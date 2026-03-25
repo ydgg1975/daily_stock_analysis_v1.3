@@ -42,7 +42,17 @@ from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
 from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
-from data_provider.alphavantage_provider import get_rsi, get_sma, get_shares_outstanding
+from data_provider.alphavantage_provider import (
+    get_rsi,
+    get_sma,
+    get_shares_outstanding,
+    get_company_overview,
+    get_income_statement_quarterly,
+)
+from data_provider.us_fundamentals_provider import (
+    get_yfinance_fundamentals,
+    get_yfinance_quarterly_financials,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -477,17 +487,36 @@ class StockAnalysisPipeline:
             sma20 = None
             sma60 = None
             shares_outstanding = None
+            alpha_overview = None
+            alpha_quarterly_income = []
+            yfinance_fundamentals = {}
+            yfinance_quarterly_income = []
             alpha_errors: List[str] = []
+            yfinance_errors: List[str] = []
+            if is_us_stock:
+                try:
+                    yfinance_fundamentals = get_yfinance_fundamentals(code)
+                    yfinance_quarterly_income = get_yfinance_quarterly_financials(code)
+                    logger.info(
+                        f"{stock_name}({code}) YFinance 基本面: "
+                        f"fundamental_fields={len([v for v in yfinance_fundamentals.values() if v not in (None, '', 'N/A')])}, "
+                        f"income_quarters={len(yfinance_quarterly_income)}"
+                    )
+                except Exception as e:
+                    yfinance_errors.append(str(e))
+                    diagnostics["failure_reasons"].append(f"yfinance_fundamentals_error: {e}")
             try:
                 rsi = get_rsi(code)
                 sma20 = get_sma(code, 20)
                 sma60 = get_sma(code, 60)
                 if is_us_stock:
+                    alpha_overview = get_company_overview(code)
+                    alpha_quarterly_income = get_income_statement_quarterly(code)
                     shares_outstanding = get_shares_outstanding(code)
                 diagnostics["alpha_vantage_status"] = "ok"
                 logger.info(
                     f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}, "
-                    f"SharesOutstanding={shares_outstanding}"
+                    f"SharesOutstanding={shares_outstanding}, income_quarters={len(alpha_quarterly_income)}"
                 )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
@@ -513,7 +542,11 @@ class StockAnalysisPipeline:
                 news_items=news_items,
                 diagnostics=diagnostics,
                 alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
-                alpha_errors=alpha_errors,
+                alpha_overview=alpha_overview,
+                yfinance_fundamentals=yfinance_fundamentals,
+                yfinance_quarterly_income=yfinance_quarterly_income,
+                alpha_quarterly_income=alpha_quarterly_income,
+                alpha_errors=alpha_errors + yfinance_errors,
             )
             enhanced_context.update(multidim_blocks)
             tech = multidim_blocks.get("technicals", {})
@@ -533,6 +566,8 @@ class StockAnalysisPipeline:
             
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             result = self.analyzer.analyze(enhanced_context, news_context=news_context)
+            if result:
+                self._inject_structured_blocks_into_result(result, enhanced_context)
 
             # Step 7.5: 填充分析时的价格信息到 result
             if result:
@@ -575,6 +610,36 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) 分析失败: {e}")
             logger.exception(f"{stock_name}({code}) 详细错误信息:")
             return None
+
+    @staticmethod
+    def _inject_structured_blocks_into_result(result: AnalysisResult, enhanced_context: Dict[str, Any]) -> None:
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        dashboard.setdefault("structured_analysis", {})
+        structured = dashboard["structured_analysis"] if isinstance(dashboard.get("structured_analysis"), dict) else {}
+        structured["time_context"] = {
+            "market_timestamp": enhanced_context.get("market_timestamp"),
+            "market_session_date": enhanced_context.get("market_session_date"),
+            "report_generated_at": enhanced_context.get("report_generated_at"),
+            "news_published_at": enhanced_context.get("news_published_at"),
+            "session_type": enhanced_context.get("session_type"),
+            "market_timezone": enhanced_context.get("market_timezone"),
+        }
+        structured["fundamentals"] = enhanced_context.get("fundamentals", {})
+        structured["earnings_analysis"] = enhanced_context.get("earnings_analysis", {})
+        structured["sentiment_analysis"] = enhanced_context.get("sentiment_analysis", {})
+        structured["data_quality"] = enhanced_context.get("data_quality", {})
+        dashboard["structured_analysis"] = structured
+
+        intel = dashboard.get("intelligence") if isinstance(dashboard.get("intelligence"), dict) else {}
+        sentiment = enhanced_context.get("sentiment_analysis", {})
+        if isinstance(sentiment, dict):
+            intel.setdefault("sentiment_summary", sentiment.get("sentiment_summary"))
+            intel.setdefault("company_sentiment", sentiment.get("company_sentiment"))
+            intel.setdefault("industry_sentiment", sentiment.get("industry_sentiment"))
+            intel.setdefault("regulatory_sentiment", sentiment.get("regulatory_sentiment"))
+            intel.setdefault("overall_confidence", sentiment.get("overall_confidence"))
+        dashboard["intelligence"] = intel
+        result.dashboard = dashboard
     
     def _enhance_context(
         self,
@@ -916,11 +981,23 @@ class StockAnalysisPipeline:
         news_items: Optional[List[Dict[str, Any]]],
         diagnostics: Optional[Dict[str, Any]],
         alpha_indicators: Dict[str, Optional[float]],
+        alpha_overview: Optional[Dict[str, Any]],
+        yfinance_fundamentals: Optional[Dict[str, Any]],
+        yfinance_quarterly_income: Optional[List[Dict[str, Any]]],
+        alpha_quarterly_income: Optional[List[Dict[str, Any]]],
         alpha_errors: List[str],
     ) -> Dict[str, Any]:
         technicals = self._build_technicals_block(code, alpha_indicators)
-        fundamentals = self._build_fundamentals_block(fundamental_context)
-        earnings_analysis = self._build_earnings_analysis_block(fundamental_context)
+        fundamentals = self._build_fundamentals_block(
+            fundamental_context,
+            alpha_overview=alpha_overview,
+            yfinance_fundamentals=yfinance_fundamentals,
+        )
+        earnings_analysis = self._build_earnings_analysis_block(
+            fundamental_context,
+            yfinance_quarterly_income=yfinance_quarterly_income,
+            alpha_quarterly_income=alpha_quarterly_income,
+        )
         sentiment_analysis = self._build_sentiment_analysis_block(
             news_context=news_context,
             news_items=news_items,
@@ -1043,49 +1120,188 @@ class StockAnalysisPipeline:
         return technicals
 
     @staticmethod
-    def _build_fundamentals_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_fundamentals_block(
+        fundamental_context: Optional[Dict[str, Any]],
+        alpha_overview: Optional[Dict[str, Any]] = None,
+        yfinance_fundamentals: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         payload = ((fundamental_context or {}).get("valuation") or {}).get("data", {})
         raw = payload if isinstance(payload, dict) else {}
-        market_cap = raw.get("total_market_cap") or raw.get("market_cap")
-        pe = raw.get("pe_ttm") or raw.get("pe")
-        pb = raw.get("pb")
-        missing = [k for k, v in {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb}.items() if v in (None, "", "N/A")]
-        insights = []
+        alpha = alpha_overview if isinstance(alpha_overview, dict) else {}
+        yf_data = yfinance_fundamentals if isinstance(yfinance_fundamentals, dict) else {}
+        field_sources: Dict[str, str] = {}
+
+        def pick(field_name: str, *keys: str) -> Any:
+            for key in keys:
+                val = yf_data.get(key)
+                if val not in (None, "", "N/A", 0):
+                    field_sources[field_name] = "yfinance"
+                    return val
+            for key in keys:
+                val = raw.get(key)
+                if val not in (None, "", "N/A", 0):
+                    field_sources[field_name] = "fundamental_context"
+                    return val
+            for key in keys:
+                val = alpha.get(key)
+                if val not in (None, "", "N/A", 0):
+                    field_sources[field_name] = "alpha_vantage_overview"
+                    return val
+            return None
+
+        normalized = {
+            "marketCap": pick("marketCap", "marketCap", "total_market_cap", "market_cap", "MarketCapitalization"),
+            "trailingPE": pick("trailingPE", "trailingPE", "pe_ttm", "pe", "PERatio"),
+            "forwardPE": pick("forwardPE", "forwardPE", "forward_pe", "ForwardPE"),
+            "totalRevenue": pick("totalRevenue", "totalRevenue", "total_revenue", "revenue", "RevenueTTM"),
+            "revenueGrowth": pick("revenueGrowth", "revenueGrowth", "revenue_growth", "QuarterlyRevenueGrowthYOY"),
+            "grossMargins": pick("grossMargins", "grossMargins", "gross_margin", "GrossMargin", "GrossProfitTTM"),
+            "operatingMargins": pick("operatingMargins", "operatingMargins", "operating_margin", "OperatingMarginTTM"),
+            "freeCashflow": pick("freeCashflow", "freeCashflow", "free_cashflow"),
+            "operatingCashflow": pick("operatingCashflow", "operatingCashflow", "operating_cashflow"),
+            "debtToEquity": pick("debtToEquity", "debtToEquity", "debt_to_equity"),
+            "currentRatio": pick("currentRatio", "currentRatio", "current_ratio"),
+            "returnOnEquity": pick("returnOnEquity", "returnOnEquity", "roe", "ReturnOnEquityTTM"),
+            "returnOnAssets": pick("returnOnAssets", "returnOnAssets", "roa", "ReturnOnAssetsTTM"),
+        }
+        missing = [k for k, v in normalized.items() if v in (None, "", "N/A")]
+        insights = {}
+        pe = normalized.get("trailingPE")
+        rev_growth = normalized.get("revenueGrowth")
+        op_margin = normalized.get("operatingMargins")
+        gross_margin = normalized.get("grossMargins")
+        fcf = normalized.get("freeCashflow")
+        ocf = normalized.get("operatingCashflow")
+        leverage = normalized.get("debtToEquity")
         if pe in (None, "", "N/A"):
-            insights.append("valuation_unavailable")
-        elif isinstance(pe, (int, float)) and pe > 50:
-            insights.append("valuation_high")
+            insights["valuation_profile"] = "valuation_unavailable"
+        elif isinstance(pe, (int, float)) and pe > 40:
+            insights["valuation_profile"] = "valuation_high"
+        elif isinstance(pe, (int, float)) and pe < 15:
+            insights["valuation_profile"] = "valuation_low"
+        else:
+            insights["valuation_profile"] = "valuation_neutral"
+        if isinstance(rev_growth, (int, float)):
+            if rev_growth > 0.15:
+                insights["growth_profile"] = "high_growth"
+            elif rev_growth < 0:
+                insights["growth_profile"] = "negative_growth"
+            else:
+                insights["growth_profile"] = "stable_growth"
+        else:
+            insights["growth_profile"] = "growth_unavailable"
+        if isinstance(op_margin, (int, float)):
+            insights["profitability_profile"] = "profitable" if op_margin > 0 else "near_breakeven_or_loss"
+        elif isinstance(gross_margin, (int, float)):
+            insights["profitability_profile"] = "gross_margin_positive"
+        else:
+            insights["profitability_profile"] = "profitability_unavailable"
+        if isinstance(fcf, (int, float)) or isinstance(ocf, (int, float)):
+            fcf_val = fcf if isinstance(fcf, (int, float)) else ocf
+            insights["cashflow_profile"] = "cashflow_healthy" if isinstance(fcf_val, (int, float)) and fcf_val > 0 else "cashflow_pressure"
+        else:
+            insights["cashflow_profile"] = "cashflow_unavailable"
+        if isinstance(leverage, (int, float)):
+            insights["leverage_profile"] = "high_leverage" if leverage > 180 else "leverage_controllable"
+        else:
+            insights["leverage_profile"] = "leverage_unavailable"
+        derived_insights = [v for v in insights.values() if v]
         return {
-            "raw": {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb},
-            "normalized": {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb},
-            "derived_insights": insights,
-            "summary_flags": insights,
+            "raw": normalized,
+            "normalized": normalized,
+            "derived_insights": derived_insights,
+            "derived_profiles": insights,
+            "summary_flags": derived_insights,
             "status": "partial" if missing else "ok",
             "missing_fields": missing,
-            "source": "fundamental_pipeline",
+            "field_sources": field_sources,
+            "source": "yfinance_overview_fallback_chain" if field_sources else "fundamental_pipeline",
         }
 
     @staticmethod
-    def _build_earnings_analysis_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_earnings_analysis_block(
+        fundamental_context: Optional[Dict[str, Any]],
+        yfinance_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        alpha_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         earnings_data = ((fundamental_context or {}).get("earnings") or {}).get("data", {})
-        if not isinstance(earnings_data, dict) or not earnings_data:
+        yfinance_income = yfinance_quarterly_income if isinstance(yfinance_quarterly_income, list) else []
+        alpha_income = alpha_quarterly_income if isinstance(alpha_quarterly_income, list) else []
+        if not isinstance(earnings_data, dict) and not yfinance_income and not alpha_income:
             return {
                 "quarterly_series": [],
                 "derived_metrics": {},
                 "summary_flags": ["earnings_data_unavailable"],
                 "narrative_insights": ["财报数据不足，无法形成完整趋势判断"],
+                "field_sources": {},
                 "status": "partial",
             }
+        field_sources: Dict[str, str] = {}
+        quarterly = (earnings_data.get("quarterly_series", []) if isinstance(earnings_data, dict) else [])
+        if quarterly:
+            field_sources["quarterly_series"] = "fundamental_context"
+        elif yfinance_income:
+            quarterly = yfinance_income
+            field_sources["quarterly_series"] = "yfinance"
+        elif alpha_income:
+            quarterly = alpha_income
+            field_sources["quarterly_series"] = "alpha_vantage_income_statement"
+        if not isinstance(quarterly, list):
+            quarterly = []
+        quarterly = quarterly[:4]
+        trend = {}
         flags = []
+        if quarterly:
+            flags.append("quarterly_series_available")
         if earnings_data.get("financial_report"):
             flags.append("financial_report_available")
         if earnings_data.get("dividend"):
             flags.append("dividend_metrics_available")
+
+        def _delta(curr: Any, prev: Any) -> Optional[float]:
+            if not isinstance(curr, (int, float)) or not isinstance(prev, (int, float)) or prev == 0:
+                return None
+            return round((curr - prev) / abs(prev), 4)
+
+        if len(quarterly) >= 2:
+            q0, q1 = quarterly[0], quarterly[1]
+            trend["qoq_revenue_growth"] = _delta(q0.get("revenue"), q1.get("revenue"))
+            trend["qoq_net_income_change"] = _delta(q0.get("net_income"), q1.get("net_income"))
+            trend["loss_status"] = "loss" if isinstance(q0.get("net_income"), (int, float)) and q0.get("net_income") < 0 else "profit"
+            if isinstance(q0.get("revenue"), (int, float)) and isinstance(q0.get("gross_profit"), (int, float)) and q0.get("revenue"):
+                trend["margin_trend"] = round(q0.get("gross_profit") / q0.get("revenue"), 4)
+        if len(quarterly) >= 4:
+            q0, q3 = quarterly[0], quarterly[3]
+            trend["yoy_revenue_growth"] = _delta(q0.get("revenue"), q3.get("revenue"))
+            trend["yoy_net_income_change"] = _delta(q0.get("net_income"), q3.get("net_income"))
+
+        recent_net_income = [x.get("net_income") for x in quarterly if isinstance(x, dict)]
+        if recent_net_income:
+            losses = [x for x in recent_net_income if isinstance(x, (int, float)) and x < 0]
+            if len(losses) >= 2:
+                flags.append("continuous_loss")
+            if len(losses) >= 2 and abs(losses[0]) < abs(losses[1]):
+                flags.append("loss_narrowing")
+        if isinstance(trend.get("yoy_revenue_growth"), (int, float)) and isinstance(trend.get("yoy_net_income_change"), (int, float)):
+            if trend["yoy_revenue_growth"] > 0 and trend["yoy_net_income_change"] <= 0:
+                flags.append("revenue_up_profit_not_following")
+
+        narrative = []
+        if "continuous_loss" in flags:
+            narrative.append("连续亏损，盈利质量偏弱")
+        if "loss_narrowing" in flags:
+            narrative.append("亏损收窄，边际改善")
+        if "revenue_up_profit_not_following" in flags:
+            narrative.append("存在增收不增利迹象")
+        if not narrative:
+            narrative.append("财报趋势中性，建议结合下一季数据确认。")
         return {
-            "quarterly_series": earnings_data.get("quarterly_series", []),
-            "derived_metrics": earnings_data.get("derived_metrics", {}),
+            "quarterly_series": quarterly,
+            "derived_metrics": {**(earnings_data.get("derived_metrics", {}) or {}), **trend},
             "summary_flags": flags or ["earnings_partial"],
-            "narrative_insights": ["基于现有财报块生成，建议结合后续季报更新。"],
+            "earnings_flags": flags or ["earnings_partial"],
+            "narrative_insights": narrative,
+            "field_sources": field_sources,
             "status": "ok" if flags else "partial",
         }
 
@@ -1121,6 +1337,10 @@ class StockAnalysisPipeline:
                 "relevance_type": "low_relevance",
                 "relevance_score": 0.0,
                 "news_published_at": None,
+                "company_sentiment": "no_reliable_news",
+                "industry_sentiment": "background_only",
+                "regulatory_sentiment": "unknown",
+                "overall_confidence": "low",
             }
 
         company_tokens = {
@@ -1180,17 +1400,23 @@ class StockAnalysisPipeline:
             or (x["relevance_type"] == "regulatory" and x["relevance_score"] >= 0.65)
         ]
         if not eligible:
+            fail_reason = "source_empty" if not classified_items else "relevance_too_low"
             return {
                 "top_positive_items": [],
                 "top_negative_items": [],
                 "sentiment_summary": "no_reliable_news",
                 "confidence": "low",
                 "summary_flags": ["no_reliable_news", "industry_noise_filtered"],
+                "failure_reason": fail_reason,
                 "status": "weak",
                 "relevance_type": "low_relevance",
                 "relevance_score": 0.0,
                 "classified_items": classified_items[:5],
                 "news_published_at": classified_items[0]["news_published_at"] if classified_items else None,
+                "company_sentiment": "no_reliable_news",
+                "industry_sentiment": "background_only",
+                "regulatory_sentiment": "unknown",
+                "overall_confidence": "low",
             }
 
         lower = text.lower()
@@ -1214,6 +1440,11 @@ class StockAnalysisPipeline:
             "relevance_score": lead["relevance_score"],
             "classified_items": classified_items[:5],
             "news_published_at": lead.get("news_published_at"),
+            "company_sentiment": summary if lead["relevance_type"] == "company_specific" else "neutral",
+            "industry_sentiment": "background_only",
+            "regulatory_sentiment": summary if lead["relevance_type"] == "regulatory" else "neutral",
+            "overall_confidence": "medium",
+            "failure_reason": None,
         }
 
     @staticmethod
@@ -1254,6 +1485,8 @@ class StockAnalysisPipeline:
                 "market_data": getattr(context.get("realtime", {}).get("source", "unknown"), "value", context.get("realtime", {}).get("source", "unknown")),
                 "technicals": "local_from_ohlcv",
                 "fundamentals": fundamentals.get("source", "fundamental_pipeline"),
+                "fundamental_field_sources": fundamentals.get("field_sources", {}),
+                "earnings_field_sources": earnings_analysis.get("field_sources", {}),
                 "sentiment": "tavily_filtered",
                 "diagnostics": diagnostics or {},
                 "time_contract": {

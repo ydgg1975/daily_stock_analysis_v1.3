@@ -52,6 +52,21 @@ def _iso_or_none(value: Any) -> Optional[str]:
     return text
 
 
+def _to_shanghai_iso(value: Any) -> Optional[str]:
+    raw = _iso_or_none(value)
+    if not raw:
+        return None
+    from datetime import datetime
+
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt.astimezone(_SHANGHAI_TZ).isoformat()
+
+
 def _escape_md(text: str) -> str:
     """Escape markdown special chars (*ST etc)."""
     if not text:
@@ -215,6 +230,7 @@ def render(
         "market_timestamp": (extra_context or {}).get("market_timestamp"),
         "market_session_date": (extra_context or {}).get("market_session_date"),
         "news_published_at": (extra_context or {}).get("news_published_at"),
+        "to_shanghai_iso": _to_shanghai_iso,
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
         "summary_only": summary_only,

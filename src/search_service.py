@@ -2260,10 +2260,13 @@ class SearchService:
         is_index_etf = self.is_index_or_etf(stock_code, stock_name)
 
         if is_foreign:
+            aliases = [stock_name, stock_code, stock_name.replace(",", " ").strip()]
+            alias_query = " OR ".join([a for a in aliases if a])
+            event_bundle = "earnings guidance lawsuit product regulation partnership"
             search_dimensions = [
                 {
                     'name': 'latest_news',
-                    'query': f"{stock_name} {stock_code} latest news events",
+                    'query': f"({alias_query}) latest news events {event_bundle}",
                     'desc': '最新消息',
                     'tavily_topic': 'news',
                     'strict_freshness': True,
@@ -2279,7 +2282,7 @@ class SearchService:
                     'name': 'risk_check',
                     'query': (
                         f"{stock_name} {stock_code} index performance outlook tracking error"
-                        if is_index_etf else f"{stock_name} risk insider selling lawsuit litigation"
+                        if is_index_etf else f"({alias_query}) risk insider selling lawsuit litigation sec investigation regulation"
                     ),
                     'desc': '风险排查',
                     'tavily_topic': None if is_index_etf else 'news',
@@ -2289,7 +2292,7 @@ class SearchService:
                     'name': 'earnings',
                     'query': (
                         f"{stock_name} {stock_code} index performance composition outlook"
-                        if is_index_etf else f"{stock_name} earnings revenue profit growth forecast"
+                        if is_index_etf else f"({alias_query}) earnings revenue profit growth forecast guidance"
                     ),
                     'desc': '业绩预期',
                     'tavily_topic': None,

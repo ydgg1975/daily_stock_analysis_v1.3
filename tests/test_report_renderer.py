@@ -219,6 +219,49 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("2026-03-24T21:00:00-04:00", out)
         self.assertIn("2026-03-24", out)
 
+    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
+        r = _make_result(
+            code="ORCL",
+            name="Oracle",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-24T21:00:00-04:00",
+                        "market_session_date": "2026-03-24",
+                        "report_generated_at": "2026-03-25T01:00:00+00:00",
+                        "news_published_at": "2026-03-24T20:00:00-04:00",
+                        "session_type": "intraday_snapshot",
+                    },
+                    "fundamentals": {
+                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
+                        "derived_insights": ["valuation_high", "high_growth"],
+                    },
+                    "earnings_analysis": {
+                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
+                        "summary_flags": ["quarterly_series_available"],
+                        "narrative_insights": ["margins improving"],
+                    },
+                    "sentiment_analysis": {
+                        "company_sentiment": "positive",
+                        "industry_sentiment": "background_only",
+                        "regulatory_sentiment": "neutral",
+                        "overall_confidence": "medium",
+                        "relevance_type": "company_specific",
+                        "relevance_score": 0.82,
+                    },
+                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("基本面（Fundamentals）", out)
+        self.assertIn("财报趋势（Earnings）", out)
+        self.assertIn("结构化情绪（Sentiment）", out)
+        self.assertIn("session_type: intraday_snapshot", out)
+
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""
         r = _make_result()

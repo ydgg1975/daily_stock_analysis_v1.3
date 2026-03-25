@@ -22,6 +22,7 @@
 {% set core = dashboard.get('core_conclusion') or {} %}
 {% set battle = dashboard.get('battle_plan') or {} %}
 {% set data_persp = dashboard.get('data_perspective') or {} %}
+{% set structured = dashboard.get('structured_analysis') or {} %}
 
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
@@ -73,13 +74,78 @@
 
 {{ market_snapshot(result) }}
 
-{% if data_persp %}
+{% set time_ctx = structured.get('time_context', {}) %}
+{% if time_ctx %}
+### 🕒 时间语义
+- market_timestamp: {{ time_ctx.get('market_timestamp', 'N/A') }}{% if time_ctx.get('market_timestamp') and to_shanghai_iso(time_ctx.get('market_timestamp')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('market_timestamp')) }}）{% endif %}
+- market_session_date: {{ time_ctx.get('market_session_date', 'N/A') }}
+- report_generated_at: {{ time_ctx.get('report_generated_at', report_generated_at) }}{% if time_ctx.get('report_generated_at') and to_shanghai_iso(time_ctx.get('report_generated_at')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('report_generated_at')) }}）{% endif %}
+- news_published_at: {{ time_ctx.get('news_published_at', 'N/A') }}{% if time_ctx.get('news_published_at') and to_shanghai_iso(time_ctx.get('news_published_at')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('news_published_at')) }}）{% endif %}
+- session_type: {{ time_ctx.get('session_type', 'N/A') }}
+{% endif %}
+
+{% if data_persp or structured %}
 ### 📊 {{ labels.data_perspective_heading }}
 
 {% set trend_data = data_persp.get('trend_status', {}) %}
 {% set alpha_data = data_persp.get('alpha_vantage', {}) %}
 {% if trend_data %}
 **{{ labels.ma_alignment_label }}**: {{ trend_data.get('ma_alignment', 'N/A') }} | {{ labels.bullish_alignment_label }}: {{ '✅ ' ~ labels.yes_label if trend_data.get('is_bullish') else '❌ ' ~ labels.no_label }} | {{ labels.trend_strength_label }}: {{ trend_data.get('trend_score', 'N/A') }}/100
+{% endif %}
+
+{% set f = structured.get('fundamentals', {}) %}
+{% if f %}
+### 🧾 基本面（Fundamentals）
+| 指标 | 数值 |
+|------|------|
+| marketCap | {{ display_value(f.get('normalized', {}).get('marketCap'), missing_text='数据缺失') }} |
+| trailingPE | {{ display_value(f.get('normalized', {}).get('trailingPE'), missing_text='数据缺失') }} |
+| forwardPE | {{ display_value(f.get('normalized', {}).get('forwardPE'), missing_text='数据缺失') }} |
+| totalRevenue | {{ display_value(f.get('normalized', {}).get('totalRevenue'), missing_text='数据缺失') }} |
+| revenueGrowth | {{ display_value(f.get('normalized', {}).get('revenueGrowth'), missing_text='数据缺失') }} |
+| grossMargins | {{ display_value(f.get('normalized', {}).get('grossMargins'), missing_text='数据缺失') }} |
+| operatingMargins | {{ display_value(f.get('normalized', {}).get('operatingMargins'), missing_text='数据缺失') }} |
+| freeCashflow | {{ display_value(f.get('normalized', {}).get('freeCashflow'), missing_text='数据缺失') }} |
+| operatingCashflow | {{ display_value(f.get('normalized', {}).get('operatingCashflow'), missing_text='数据缺失') }} |
+| debtToEquity | {{ display_value(f.get('normalized', {}).get('debtToEquity'), missing_text='数据缺失') }} |
+| currentRatio | {{ display_value(f.get('normalized', {}).get('currentRatio'), missing_text='数据缺失') }} |
+| returnOnEquity | {{ display_value(f.get('normalized', {}).get('returnOnEquity'), missing_text='数据缺失') }} |
+| returnOnAssets | {{ display_value(f.get('normalized', {}).get('returnOnAssets'), missing_text='数据缺失') }} |
+
+**基本面结论**: {{ (f.get('derived_insights') or ['数据不足，无法判断']) | join(', ') }}
+{% endif %}
+
+{% set eblock = structured.get('earnings_analysis', {}) %}
+{% if eblock %}
+### 📈 财报趋势（Earnings）
+{% set dm = eblock.get('derived_metrics', {}) %}
+- QoQ revenue growth: {{ display_value(dm.get('qoq_revenue_growth'), missing_text='数据缺失') }}
+- YoY revenue growth: {{ display_value(dm.get('yoy_revenue_growth'), missing_text='数据缺失') }}
+- QoQ net income change: {{ display_value(dm.get('qoq_net_income_change'), missing_text='数据缺失') }}
+- YoY net income change: {{ display_value(dm.get('yoy_net_income_change'), missing_text='数据缺失') }}
+- flags: {{ (eblock.get('summary_flags') or ['earnings_partial']) | join(', ') }}
+- 结论: {{ (eblock.get('narrative_insights') or ['财报数据不足']) | join('；') }}
+{% endif %}
+
+{% set sblock = structured.get('sentiment_analysis', {}) %}
+{% if sblock %}
+### 🧠 结构化情绪（Sentiment）
+- company_sentiment: {{ sblock.get('company_sentiment', 'no_reliable_news') }}
+- industry_sentiment: {{ sblock.get('industry_sentiment', 'background_only') }}
+- regulatory_sentiment: {{ sblock.get('regulatory_sentiment', 'unknown') }}
+- overall_confidence: {{ sblock.get('overall_confidence', sblock.get('confidence', 'low')) }}
+- relevance_type/relevance_score: {{ sblock.get('relevance_type', 'low_relevance') }} / {{ sblock.get('relevance_score', 0.0) }}
+{% endif %}
+
+{% set dq = structured.get('data_quality', {}) %}
+{% if dq %}
+### 🧩 数据质量说明
+- technicals_status: {{ dq.get('technicals_status', 'partial') }}
+- fundamentals_status: {{ dq.get('fundamentals_status', 'partial') }}
+- earnings_status: {{ dq.get('earnings_status', 'partial') }}
+- sentiment_status: {{ dq.get('sentiment_status', 'weak') }}
+- missing_fields: {{ (dq.get('missing_fields') or []) | join(', ') if dq.get('missing_fields') else '无' }}
+- warnings: {{ (dq.get('warnings') or []) | join(', ') if dq.get('warnings') else '无' }}
 {% endif %}
 
 {% set price_data = data_persp.get('price_position', {}) %}

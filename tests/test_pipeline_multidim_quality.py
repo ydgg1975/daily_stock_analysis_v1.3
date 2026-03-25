@@ -127,6 +127,91 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertIn(sentiment["relevance_type"], {"regulatory", "company_specific"})
         self.assertGreaterEqual(sentiment["relevance_score"], 0.65)
 
+    def test_fundamentals_block_contains_extended_metrics(self) -> None:
+        block = self.pipeline._build_fundamentals_block(
+            {
+                "valuation": {
+                    "data": {
+                        "market_cap": 100,
+                        "pe_ttm": 22.5,
+                        "forward_pe": 20.1,
+                        "revenue_growth": 0.2,
+                        "operating_margin": 0.18,
+                        "debt_to_equity": 60,
+                    }
+                }
+            }
+        )
+        self.assertIn("forwardPE", block["normalized"])
+        self.assertIn("revenueGrowth", block["normalized"])
+        self.assertIn("operatingMargins", block["normalized"])
+        self.assertEqual(block["derived_profiles"]["growth_profile"], "high_growth")
+
+    def test_fundamentals_block_can_use_alpha_overview_source(self) -> None:
+        block = self.pipeline._build_fundamentals_block(
+            fundamental_context=None,
+            alpha_overview={
+                "MarketCapitalization": "123456789",
+                "PERatio": "25.2",
+                "ForwardPE": "21.0",
+                "RevenueTTM": "50000000",
+                "QuarterlyRevenueGrowthYOY": "0.11",
+                "OperatingMarginTTM": "0.19",
+                "ReturnOnEquityTTM": "0.3",
+            },
+        )
+        self.assertEqual(block["normalized"]["marketCap"], "123456789")
+        self.assertEqual(block["normalized"]["forwardPE"], "21.0")
+        self.assertEqual(block["field_sources"]["marketCap"], "alpha_vantage_overview")
+        self.assertNotEqual(block["derived_profiles"]["valuation_profile"], "valuation_unavailable")
+
+    def test_fundamentals_block_prefers_yfinance_and_emits_field_sources(self) -> None:
+        block = self.pipeline._build_fundamentals_block(
+            fundamental_context=None,
+            alpha_overview={"MarketCapitalization": "99"},
+            yfinance_fundamentals={
+                "marketCap": 123,
+                "trailingPE": 22.1,
+                "forwardPE": 18.7,
+                "totalRevenue": 4000,
+                "revenueGrowth": 0.2,
+                "operatingMargins": 0.25,
+            },
+        )
+        self.assertEqual(block["normalized"]["marketCap"], 123)
+        self.assertEqual(block["field_sources"]["marketCap"], "yfinance")
+        self.assertEqual(block["status"], "partial")
+        self.assertGreaterEqual(len(block["field_sources"]), 5)
+
+    def test_earnings_block_uses_alpha_quarterly_income(self) -> None:
+        block = self.pipeline._build_earnings_analysis_block(
+            fundamental_context=None,
+            alpha_quarterly_income=[
+                {"fiscal_date": "2025-12-31", "revenue": 120.0, "net_income": 30.0, "gross_profit": 70.0, "operating_income": 35.0, "eps": 1.0},
+                {"fiscal_date": "2025-09-30", "revenue": 110.0, "net_income": 26.0, "gross_profit": 62.0, "operating_income": 31.0, "eps": 0.9},
+                {"fiscal_date": "2024-12-31", "revenue": 95.0, "net_income": 20.0, "gross_profit": 55.0, "operating_income": 27.0, "eps": 0.7},
+                {"fiscal_date": "2024-09-30", "revenue": 90.0, "net_income": 18.0, "gross_profit": 50.0, "operating_income": 24.0, "eps": 0.6},
+            ],
+        )
+        self.assertEqual(block["status"], "ok")
+        self.assertIn("qoq_revenue_growth", block["derived_metrics"])
+        self.assertIn("yoy_net_income_change", block["derived_metrics"])
+        self.assertIn("quarterly_series_available", block["summary_flags"])
+        self.assertEqual(block["field_sources"]["quarterly_series"], "alpha_vantage_income_statement")
+
+    def test_earnings_block_partial_to_usable_with_yfinance_series(self) -> None:
+        block = self.pipeline._build_earnings_analysis_block(
+            fundamental_context=None,
+            yfinance_quarterly_income=[
+                {"fiscal_date": "2025-12-31", "revenue": 140.0, "gross_profit": 75.0, "operating_income": 36.0, "net_income": 28.0, "eps": 1.2},
+                {"fiscal_date": "2025-09-30", "revenue": 130.0, "gross_profit": None, "operating_income": None, "net_income": 24.0, "eps": 1.0},
+            ],
+        )
+        self.assertEqual(block["status"], "ok")
+        self.assertEqual(block["field_sources"]["quarterly_series"], "yfinance")
+        self.assertIn("qoq_revenue_growth", block["derived_metrics"])
+        self.assertIn("loss_status", block["derived_metrics"])
+
     def test_realtime_source_enum_is_json_serializable_in_quality_blocks(self) -> None:
         ctx = {"code": "AAPL", "date": "2026-03-25", "today": {}, "yesterday": {}}
         quote = UnifiedRealtimeQuote(
@@ -157,6 +242,73 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertEqual(quality["provider_notes"]["market_data"], "yfinance")
         # should not raise TypeError: Object of type RealtimeSource is not JSON serializable
         json.dumps(quality, ensure_ascii=False)
+
+    def test_sentiment_without_items_still_generates_structured_output_from_text(self) -> None:
+        block = self.pipeline._build_sentiment_analysis_block(
+            news_context="ORCL earnings beat and guidance raised.",
+            news_items=[],
+            stock_code="ORCL",
+            stock_name="Oracle",
+            business_keywords=["cloud", "database"],
+        )
+        self.assertIn("company_sentiment", block)
+        self.assertIn("overall_confidence", block)
+        self.assertEqual(block["sentiment_summary"], "no_reliable_news")
+        self.assertEqual(block["failure_reason"], "source_empty")
+
+    def test_sentiment_reports_relevance_failure_reason(self) -> None:
+        block = self.pipeline._build_sentiment_analysis_block(
+            news_context="Industry demand update with macro commentary.",
+            news_items=[
+                {
+                    "title": "Semiconductor industry outlook",
+                    "snippet": "General sector update only.",
+                    "url": "https://example.com/sector",
+                }
+            ],
+            stock_code="ORCL",
+            stock_name="Oracle",
+            business_keywords=["cloud"],
+        )
+        self.assertEqual(block["sentiment_summary"], "no_reliable_news")
+        self.assertEqual(block["failure_reason"], "relevance_too_low")
+
+    def test_orcl_multidim_blocks_have_usable_data_with_field_sources(self) -> None:
+        self.pipeline.db.get_latest_data = MagicMock(return_value=_bars(120, 100.0))
+        blocks = self.pipeline._build_multidim_blocks(
+            code="ORCL",
+            context={"stock_name": "Oracle", "realtime": {"source": "yfinance"}},
+            fundamental_context=None,
+            news_context="Oracle earnings beat and SEC disclosure update after cloud partnership launch.",
+            news_items=[
+                {
+                    "title": "Oracle raises guidance after earnings beat",
+                    "snippet": "ORCL reported growth and announced strategic partnership.",
+                    "url": "https://example.com/orcl-earnings",
+                    "news_published_at": "2026-03-25T11:00:00+00:00",
+                }
+            ],
+            diagnostics={"failure_reasons": []},
+            alpha_indicators={"rsi14": 50.0, "sma20": 100.2, "sma60": 98.8},
+            alpha_overview={"PERatio": "25.2", "MarketCapitalization": "100000"},
+            yfinance_fundamentals={
+                "marketCap": 200000,
+                "trailingPE": 22.3,
+                "forwardPE": 19.8,
+                "totalRevenue": 540000,
+                "revenueGrowth": 0.15,
+                "operatingMargins": 0.3,
+            },
+            yfinance_quarterly_income=[
+                {"fiscal_date": "2025-12-31", "revenue": 140.0, "gross_profit": 80.0, "operating_income": 37.0, "net_income": 28.0, "eps": 1.2},
+                {"fiscal_date": "2025-09-30", "revenue": 120.0, "gross_profit": 70.0, "operating_income": 30.0, "net_income": 20.0, "eps": 1.0},
+            ],
+            alpha_quarterly_income=[],
+            alpha_errors=[],
+        )
+        self.assertEqual(blocks["fundamentals"]["field_sources"]["marketCap"], "yfinance")
+        self.assertNotEqual(blocks["earnings_analysis"]["summary_flags"], ["earnings_data_unavailable"])
+        self.assertNotEqual(blocks["sentiment_analysis"]["sentiment_summary"], "no_reliable_news")
 
 
 if __name__ == "__main__":
