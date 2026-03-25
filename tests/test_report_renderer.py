@@ -200,6 +200,24 @@ class TestReportRenderer(unittest.TestCase):
         with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
             out = render("markdown", [r], summary_only=False)
         self.assertIn("2026-03-25 09:30:15", out)
+        self.assertIn("report_generated_at", out)
+
+    def test_render_prefers_time_contract_fields(self) -> None:
+        r = _make_result(code="AAPL", name="Apple")
+        out = render(
+            "markdown",
+            [r],
+            summary_only=True,
+            extra_context={
+                "report_generated_at": "2026-03-25T01:00:00+00:00",
+                "market_timestamp": "2026-03-24T21:00:00-04:00",
+                "market_session_date": "2026-03-24",
+                "news_published_at": "2026-03-24T20:00:00-04:00",
+            },
+        )
+        self.assertIn("2026-03-25T01:00:00+00:00", out)
+        self.assertIn("2026-03-24T21:00:00-04:00", out)
+        self.assertIn("2026-03-24", out)
 
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""

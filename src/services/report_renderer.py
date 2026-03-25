@@ -38,6 +38,20 @@ def _now_shanghai():
     return datetime.now(_SHANGHAI_TZ)
 
 
+def _iso_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text
+
+
 def _escape_md(text: str) -> str:
     """Escape markdown special chars (*ST etc)."""
     if not text:
@@ -185,7 +199,11 @@ def render(
     sell_count = sum(1 for r in results if getattr(r, "decision_type", "") == "sell")
     hold_count = sum(1 for r in results if getattr(r, "decision_type", "") in ("hold", ""))
 
-    report_timestamp = _now_shanghai().strftime("%Y-%m-%d %H:%M:%S")
+    now_sh = _now_shanghai()
+    report_generated_at = _iso_or_none(
+        (extra_context or {}).get("report_generated_at")
+    ) or now_sh.isoformat()
+    report_timestamp = now_sh.strftime("%Y-%m-%d %H:%M:%S")
 
     def failed_checks(checklist: List[str]) -> List[str]:
         return [c for c in (checklist or []) if c.startswith("❌") or c.startswith("⚠️")]
@@ -193,6 +211,10 @@ def render(
     context: Dict[str, Any] = {
         "report_date": report_date,
         "report_timestamp": report_timestamp,
+        "report_generated_at": report_generated_at,
+        "market_timestamp": (extra_context or {}).get("market_timestamp"),
+        "market_session_date": (extra_context or {}).get("market_session_date"),
+        "news_published_at": (extra_context or {}).get("news_published_at"),
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
         "summary_only": summary_only,

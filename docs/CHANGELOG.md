@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🕒 **统一时间字段契约与诊断可观测性补齐** — Pipeline/API/Renderer 统一追加 `market_timestamp`、`market_session_date`、`news_published_at`、`report_generated_at`（均为 ISO 8601 且保留原始市场时区），并新增 `session_type` 标记（`intraday_snapshot` / `last_completed_session`）；`data_quality.provider_notes` 现在持续输出 provider 失败链路与时间契约快照，`diagnostic_mode` 开启时会输出完整诊断块，关闭时保持兼容默认行为。
+- 🧠 **Sentiment 公司相关性过滤升级（规则版）** — 在不引入重模型前提下新增 relevance gating 与分类（`company_specific` / `industry_general` / `regulatory` / `low_relevance`），输出 `relevance_type`/`relevance_score`，并确保 `industry_general` 默认不进入个股核心结论；无高相关信息时统一降级 `no_reliable_news + low confidence`。
+- 🧭 **多维分析数据质量与来源可追溯增强（美股优先）** — 新增技术指标来源追踪（`local_from_ohlcv` / `alpha_vantage_fallback`）、`data_quality` 结构化状态与告警注入（含 provider failure warnings）；当基本面/财报/情绪缺失时，报告与提示词将显式说明 partial/no_reliable_news，避免“隐性默认值”伪完整结论。
 - 🇺🇸 **美股分析链路闭环修复** — 美股实时行情链路改为明确标记 `yfinance`（仅真实降级时显示“降级兜底”），并在 pipeline 统一补算 `volume_ratio`（当日成交量 / 5 日均量）；新增 Alpha Vantage `OVERVIEW` 的 `SharesOutstanding` 缓存读取并据此计算 `turnover_rate`，缺失时不再错误展示 `0%`，统一显示“数据缺失”；通知与 Markdown 报告中美股筹码改为固定文案“美股暂不支持该指标”，不再显示 A 股筹码占位缺失信息。
 - 🧾 **Web 报告透明度区复制按钮层级修复**（#749）— `ReportDetails` 中“原始分析结果 / 分析快照”的复制按钮补齐可点击层级，避免被下方 JSON 内容覆盖后出现按钮可见但无法点击的问题。
 - 🧾 **Web 报告详情复制提示按面板独立** — `ReportDetails` 中“原始分析结果”和“分析快照”的复制提示不再共享同一个 `copied` 状态；当两个面板同时展开时，复制其中一个只会更新对应按钮文案，避免两个按钮同时显示“已复制”的误导反馈。

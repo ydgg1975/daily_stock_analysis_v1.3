@@ -12,12 +12,14 @@ A股自选股智能分析系统 - 核心分析流水线
 """
 
 import logging
+import math
 import time
 import uuid
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -44,6 +46,10 @@ from data_provider.alphavantage_provider import get_rsi, get_sma, get_shares_out
 
 
 logger = logging.getLogger(__name__)
+_MARKET_TZ = {
+    "us": "America/New_York",
+    "cn": "Asia/Shanghai",
+}
 
 
 class StockAnalysisPipeline:
@@ -266,12 +272,27 @@ class StockAnalysisPipeline:
         try:
             # 获取股票名称（优先从实时行情获取真实名称）
             stock_name = self.fetcher_manager.get_stock_name(code)
+            diagnostics: Dict[str, Any] = {
+                "stock_code": code,
+                "history_data_status": "unknown",
+                "realtime_fallback_triggered": False,
+                "realtime_source": None,
+                "alpha_vantage_status": "unknown",
+                "ma20_source": "unknown",
+                "fundamentals_status": "unknown",
+                "earnings_status": "unknown",
+                "sentiment_status": "unknown",
+                "failure_reasons": [],
+            }
 
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
             try:
                 realtime_quote = self.fetcher_manager.get_realtime_quote(code)
                 if realtime_quote:
+                    diagnostics["realtime_source"] = (
+                        realtime_quote.source.value if hasattr(realtime_quote, "source") else "unknown"
+                    )
                     # 使用实时行情返回的真实股票名称
                     if realtime_quote.name:
                         stock_name = realtime_quote.name
@@ -282,8 +303,10 @@ class StockAnalysisPipeline:
                               f"量比={volume_ratio}, 换手率={turnover_rate}% "
                               f"(来源: {realtime_quote.source.value if hasattr(realtime_quote, 'source') else 'unknown'})")
                 else:
+                    diagnostics["failure_reasons"].append("realtime_quote_unavailable")
                     logger.info(f"{stock_name}({code}) 实时行情获取失败或已禁用，将使用历史数据进行分析")
             except Exception as e:
+                diagnostics["failure_reasons"].append(f"realtime_quote_error: {e}")
                 logger.warning(f"{stock_name}({code}) 获取实时行情失败: {e}")
 
             # 如果还是没有名称，使用代码作为名称
@@ -331,6 +354,7 @@ class StockAnalysisPipeline:
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 基本面聚合失败: {e}")
                 fundamental_context = self.fetcher_manager.build_failed_fundamental_context(code, str(e))
+                diagnostics["failure_reasons"].append(f"fundamental_context_error: {e}")
 
             # P0: write-only snapshot, fail-open, no read dependency on this table.
             try:
@@ -376,6 +400,7 @@ class StockAnalysisPipeline:
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
+            news_items: List[Dict[str, Any]] = []
             if self.search_service.is_available:
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
@@ -388,6 +413,7 @@ class StockAnalysisPipeline:
 
                 # 格式化情报报告
                 if intel_results:
+                    news_items = self._collect_news_items_from_intel(intel_results)
                     news_context = self.search_service.format_intel_report(intel_results, stock_name)
                     total_results = sum(
                         len(r.results) for r in intel_results.values() if r.success
@@ -430,6 +456,7 @@ class StockAnalysisPipeline:
             context = self.db.get_analysis_context(code)
 
             if context is None:
+                diagnostics["history_data_status"] = "unavailable"
                 logger.warning(f"{stock_name}({code}) 无法获取历史行情数据，将仅基于新闻和实时行情分析")
                 context = {
                     'code': code,
@@ -439,24 +466,34 @@ class StockAnalysisPipeline:
                     'today': {},
                     'yesterday': {}
                 }
+                if realtime_quote:
+                    diagnostics["realtime_fallback_triggered"] = True
+                    diagnostics["failure_reasons"].append("history_context_missing_realtime_fallback")
+            else:
+                diagnostics["history_data_status"] = "ok"
 
             # Step 5.5: 获取 Alpha Vantage 技术指标（失败时降级，不影响主流程）
             rsi = None
             sma20 = None
             sma60 = None
             shares_outstanding = None
+            alpha_errors: List[str] = []
             try:
                 rsi = get_rsi(code)
                 sma20 = get_sma(code, 20)
                 sma60 = get_sma(code, 60)
                 if is_us_stock:
                     shares_outstanding = get_shares_outstanding(code)
+                diagnostics["alpha_vantage_status"] = "ok"
                 logger.info(
                     f"{stock_name}({code}) AlphaVantage 指标: RSI14={rsi}, SMA20={sma20}, SMA60={sma60}, "
                     f"SharesOutstanding={shares_outstanding}"
                 )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 获取 AlphaVantage 指标失败: {e}")
+                alpha_errors.append(str(e))
+                diagnostics["alpha_vantage_status"] = "unavailable"
+                diagnostics["failure_reasons"].append(f"alpha_vantage_error: {e}")
             
             # Step 6: 增强上下文数据（添加实时行情、筹码、趋势分析结果、股票名称）
             enhanced_context = self._enhance_context(
@@ -468,10 +505,29 @@ class StockAnalysisPipeline:
                 fundamental_context,
                 shares_outstanding=shares_outstanding,
             )
+            multidim_blocks = self._build_multidim_blocks(
+                code=code,
+                context=enhanced_context,
+                fundamental_context=fundamental_context,
+                news_context=news_context,
+                news_items=news_items,
+                diagnostics=diagnostics,
+                alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
+                alpha_errors=alpha_errors,
+            )
+            enhanced_context.update(multidim_blocks)
+            tech = multidim_blocks.get("technicals", {})
+            diagnostics["ma20_source"] = (tech.get("ma20") or {}).get("source", "unknown")
+            diagnostics["fundamentals_status"] = (multidim_blocks.get("fundamentals") or {}).get("status", "unknown")
+            diagnostics["earnings_status"] = (multidim_blocks.get("earnings_analysis") or {}).get("status", "unknown")
+            diagnostics["sentiment_status"] = (multidim_blocks.get("sentiment_analysis") or {}).get("status", "unknown")
+            if getattr(self.config, "diagnostic_mode", False):
+                enhanced_context["diagnostics"] = diagnostics
             enhanced_context['technical_indicators'] = {
-                'rsi14': rsi if rsi is not None else 'N/A',
-                'sma20': sma20 if sma20 is not None else 'N/A',
-                'sma60': sma60 if sma60 is not None else 'N/A',
+                'rsi14': tech.get("rsi14", {}).get("value", 'N/A'),
+                'sma20': tech.get("ma20", {}).get("value", 'N/A'),
+                'sma60': tech.get("ma60", {}).get("value", 'N/A'),
+                'sources': {k: v.get("source") for k, v in tech.items() if isinstance(v, dict)},
             }
             
             
@@ -547,6 +603,16 @@ class StockAnalysisPipeline:
         """
         enhanced = context.copy()
         enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        time_context = self._build_time_context(context=context, realtime_quote=realtime_quote)
+        enhanced.update(time_context)
+        enhanced["time_context"] = {
+            "market_timestamp": enhanced.get("market_timestamp"),
+            "market_session_date": enhanced.get("market_session_date"),
+            "news_published_at": enhanced.get("news_published_at"),
+            "report_generated_at": enhanced.get("report_generated_at"),
+            "market_timezone": enhanced.get("market_timezone"),
+            "session_type": enhanced.get("session_type"),
+        }
         
         # 添加股票名称
         if stock_name:
@@ -595,6 +661,8 @@ class StockAnalysisPipeline:
                 'circ_mv': getattr(realtime_quote, 'circ_mv', None),
                 'change_60d': getattr(realtime_quote, 'change_60d', None),
                 'source': getattr(realtime_quote, 'source', None),
+                'snapshot_type': enhanced.get("session_type"),
+                'market_timestamp': enhanced.get("market_timestamp"),
             }
             # 移除 None 值以减少上下文大小
             enhanced['realtime'] = {k: v for k, v in enhanced['realtime'].items() if v is not None}
@@ -706,6 +774,76 @@ class StockAnalysisPipeline:
 
         return enhanced
 
+    def _build_time_context(self, context: Dict[str, Any], realtime_quote: Any) -> Dict[str, Any]:
+        code = context.get("code", "")
+        market_tz_name = self._get_market_timezone_name(code)
+        market_tz = ZoneInfo(market_tz_name)
+        market_now = datetime.now(market_tz)
+        report_generated_at = datetime.now(timezone.utc).isoformat()
+        market_session_date = context.get("date") or market_now.date().isoformat()
+        has_realtime_price = (
+            realtime_quote is not None
+            and getattr(realtime_quote, "price", None) is not None
+        )
+        market = get_market_for_stock(code)
+        is_open = is_market_open(market, market_now.date()) if market else False
+        session_type = "intraday_snapshot" if (has_realtime_price and is_open) else "last_completed_session"
+        return {
+            "market_timezone": market_tz_name,
+            "market_timestamp": market_now.isoformat(),
+            "market_session_date": market_session_date,
+            "news_published_at": None,
+            "report_generated_at": report_generated_at,
+            "session_type": session_type,
+        }
+
+    @staticmethod
+    def _get_market_timezone_name(code: str) -> str:
+        market = get_market_for_stock(code)
+        return _MARKET_TZ.get(market, "UTC")
+
+    @staticmethod
+    def _parse_published_at_iso(value: Any) -> Optional[str]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            raw = str(value).strip()
+            if not raw:
+                return None
+            try:
+                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                for fmt in ("%Y-%m-%d", "%b %d, %Y", "%Y/%m/%d"):
+                    try:
+                        dt = datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+    def _collect_news_items_from_intel(self, intel_results: Dict[str, Any]) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        for dimension, response in (intel_results or {}).items():
+            results = getattr(response, "results", None) or []
+            for result in results:
+                item = {
+                    "title": getattr(result, "title", "") or "",
+                    "snippet": getattr(result, "snippet", "") or "",
+                    "url": getattr(result, "url", "") or "",
+                    "dimension": dimension,
+                }
+                published_at = self._parse_published_at_iso(getattr(result, "published_date", None))
+                if published_at:
+                    item["news_published_at"] = published_at
+                items.append(item)
+        return items
+
     def _compute_volume_ratio(self, context: Dict[str, Any], realtime_quote: Any) -> Optional[float]:
         code = context.get("code", "")
         today_volume = getattr(realtime_quote, "volume", None)
@@ -768,6 +906,366 @@ class StockAnalysisPipeline:
         except (TypeError, ValueError):
             return None
         return round(volume / float(shares_outstanding) * 100, 4)
+
+    def _build_multidim_blocks(
+        self,
+        code: str,
+        context: Dict[str, Any],
+        fundamental_context: Optional[Dict[str, Any]],
+        news_context: Optional[str],
+        news_items: Optional[List[Dict[str, Any]]],
+        diagnostics: Optional[Dict[str, Any]],
+        alpha_indicators: Dict[str, Optional[float]],
+        alpha_errors: List[str],
+    ) -> Dict[str, Any]:
+        technicals = self._build_technicals_block(code, alpha_indicators)
+        fundamentals = self._build_fundamentals_block(fundamental_context)
+        earnings_analysis = self._build_earnings_analysis_block(fundamental_context)
+        sentiment_analysis = self._build_sentiment_analysis_block(
+            news_context=news_context,
+            news_items=news_items,
+            stock_code=code,
+            stock_name=context.get("stock_name", ""),
+            business_keywords=self._extract_business_keywords(fundamental_context),
+        )
+        if not context.get("news_published_at"):
+            context["news_published_at"] = sentiment_analysis.get("news_published_at")
+        data_quality = self._build_data_quality_block(
+            technicals=technicals,
+            fundamentals=fundamentals,
+            earnings_analysis=earnings_analysis,
+            sentiment_analysis=sentiment_analysis,
+            alpha_errors=alpha_errors,
+            context=context,
+            diagnostics=diagnostics,
+        )
+        return {
+            "technicals": technicals,
+            "fundamentals": fundamentals,
+            "earnings_analysis": earnings_analysis,
+            "sentiment_analysis": sentiment_analysis,
+            "data_quality": data_quality,
+        }
+
+    def _build_technicals_block(
+        self,
+        code: str,
+        alpha_indicators: Dict[str, Optional[float]],
+    ) -> Dict[str, Dict[str, Any]]:
+        bars = self.db.get_latest_data(code, days=300) or []
+        if not bars:
+            return {
+                k: {"value": None, "status": "data_unavailable", "source": "local_from_ohlcv"}
+                for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist")
+            }
+
+        rows: List[Dict[str, Any]] = []
+        for bar in reversed(bars):
+            rows.append(
+                {
+                    "date": getattr(bar, "date", None),
+                    "close": getattr(bar, "close", None),
+                    "volume": getattr(bar, "volume", None),
+                }
+            )
+        df = pd.DataFrame(rows)
+        df["close"] = pd.to_numeric(df["close"], errors="coerce")
+        df = df.dropna(subset=["close"]).copy()
+        if df.empty:
+            return {
+                k: {"value": None, "status": "data_unavailable", "source": "local_from_ohlcv"}
+                for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist")
+            }
+
+        close = df["close"]
+        ma5 = close.rolling(window=5).mean()
+        ma10 = close.rolling(window=10).mean()
+        ma20 = close.rolling(window=20).mean()
+        ma60 = close.rolling(window=60).mean()
+        diff = close.diff()
+        gain = diff.clip(lower=0)
+        loss = -diff.clip(upper=0)
+        avg_gain = gain.rolling(14).mean()
+        avg_loss = loss.rolling(14).mean()
+        rs = avg_gain / avg_loss.replace(0, pd.NA)
+        rsi14 = 100 - (100 / (1 + rs))
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd = ema12 - ema26
+        macd_signal = macd.ewm(span=9, adjust=False).mean()
+        macd_hist = macd - macd_signal
+
+        def _latest(series: pd.Series, min_len: int) -> Tuple[Optional[float], str]:
+            if len(close) < min_len:
+                return None, "insufficient_history"
+            val = series.iloc[-1]
+            if pd.isna(val):
+                return None, "data_unavailable"
+            return round(float(val), 4), "ok"
+
+        technicals: Dict[str, Dict[str, Any]] = {}
+        series_map = {
+            "ma5": (ma5, 5),
+            "ma10": (ma10, 10),
+            "ma20": (ma20, 20),
+            "ma60": (ma60, 60),
+            "rsi14": (rsi14, 15),
+            "macd": (macd, 35),
+            "macd_signal": (macd_signal, 35),
+            "macd_hist": (macd_hist, 35),
+        }
+        for name, (series, min_len) in series_map.items():
+            value, status = _latest(series, min_len)
+            technicals[name] = {
+                "value": value,
+                "status": status,
+                "source": "local_from_ohlcv",
+            }
+
+        if technicals["ma20"]["status"] != "ok" and alpha_indicators.get("sma20") is not None:
+            technicals["ma20"] = {
+                "value": round(float(alpha_indicators["sma20"]), 4),
+                "status": "ok",
+                "source": "alpha_vantage_fallback",
+            }
+        if technicals["ma60"]["status"] != "ok" and alpha_indicators.get("sma60") is not None:
+            technicals["ma60"] = {
+                "value": round(float(alpha_indicators["sma60"]), 4),
+                "status": "ok",
+                "source": "alpha_vantage_fallback",
+            }
+        if technicals["rsi14"]["status"] != "ok" and alpha_indicators.get("rsi14") is not None:
+            technicals["rsi14"] = {
+                "value": round(float(alpha_indicators["rsi14"]), 4),
+                "status": "ok",
+                "source": "alpha_vantage_fallback",
+            }
+        return technicals
+
+    @staticmethod
+    def _build_fundamentals_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        payload = ((fundamental_context or {}).get("valuation") or {}).get("data", {})
+        raw = payload if isinstance(payload, dict) else {}
+        market_cap = raw.get("total_market_cap") or raw.get("market_cap")
+        pe = raw.get("pe_ttm") or raw.get("pe")
+        pb = raw.get("pb")
+        missing = [k for k, v in {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb}.items() if v in (None, "", "N/A")]
+        insights = []
+        if pe in (None, "", "N/A"):
+            insights.append("valuation_unavailable")
+        elif isinstance(pe, (int, float)) and pe > 50:
+            insights.append("valuation_high")
+        return {
+            "raw": {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb},
+            "normalized": {"marketCap": market_cap, "trailingPE": pe, "priceToBook": pb},
+            "derived_insights": insights,
+            "summary_flags": insights,
+            "status": "partial" if missing else "ok",
+            "missing_fields": missing,
+            "source": "fundamental_pipeline",
+        }
+
+    @staticmethod
+    def _build_earnings_analysis_block(fundamental_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        earnings_data = ((fundamental_context or {}).get("earnings") or {}).get("data", {})
+        if not isinstance(earnings_data, dict) or not earnings_data:
+            return {
+                "quarterly_series": [],
+                "derived_metrics": {},
+                "summary_flags": ["earnings_data_unavailable"],
+                "narrative_insights": ["财报数据不足，无法形成完整趋势判断"],
+                "status": "partial",
+            }
+        flags = []
+        if earnings_data.get("financial_report"):
+            flags.append("financial_report_available")
+        if earnings_data.get("dividend"):
+            flags.append("dividend_metrics_available")
+        return {
+            "quarterly_series": earnings_data.get("quarterly_series", []),
+            "derived_metrics": earnings_data.get("derived_metrics", {}),
+            "summary_flags": flags or ["earnings_partial"],
+            "narrative_insights": ["基于现有财报块生成，建议结合后续季报更新。"],
+            "status": "ok" if flags else "partial",
+        }
+
+    @staticmethod
+    def _extract_business_keywords(fundamental_context: Optional[Dict[str, Any]]) -> List[str]:
+        keywords: List[str] = []
+        profile = ((fundamental_context or {}).get("profile") or {}).get("data", {})
+        if isinstance(profile, dict):
+            for k in ("industry", "sector", "main_business", "company_intro"):
+                val = profile.get(k)
+                if isinstance(val, str):
+                    keywords.extend([x.strip().lower() for x in val.replace("/", " ").split() if x.strip()])
+        return list(dict.fromkeys([x for x in keywords if len(x) > 2]))[:20]
+
+    @staticmethod
+    def _build_sentiment_analysis_block(
+        news_context: Optional[str],
+        news_items: Optional[List[Dict[str, Any]]] = None,
+        stock_code: str = "",
+        stock_name: str = "",
+        business_keywords: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        text = (news_context or "").strip()
+        items = news_items or []
+        if not text and not items:
+            return {
+                "top_positive_items": [],
+                "top_negative_items": [],
+                "sentiment_summary": "no_reliable_news",
+                "confidence": "low",
+                "summary_flags": ["no_reliable_news"],
+                "status": "weak",
+                "relevance_type": "low_relevance",
+                "relevance_score": 0.0,
+                "news_published_at": None,
+            }
+
+        company_tokens = {
+            stock_code.lower(),
+            stock_name.lower(),
+            stock_name.replace(" ", "").lower(),
+        }
+        company_tokens = {t for t in company_tokens if t and t != "股票"}
+        event_words = ("earnings", "guidance", "lawsuit", "regulation", "partnership", "product")
+        regulatory_words = ("sec", "investigation", "antitrust", "regulator", "compliance", "regulation")
+        industry_words = ("industry", "sector", "market", "macro", "peer", "supply chain")
+        business_words = tuple((business_keywords or [])[:20])
+
+        classified_items: List[Dict[str, Any]] = []
+        for item in items:
+            title = str(item.get("title", "")).lower()
+            snippet = str(item.get("snippet", "")).lower()
+            content = f"{title} {snippet}".strip()
+            token_hit = any(tok in content for tok in company_tokens)
+            business_hit = any(k and k in content for k in business_words)
+            event_hit = any(w in content for w in event_words)
+            reg_hit = any(w in content for w in regulatory_words)
+            industry_hit = any(w in content for w in industry_words)
+            score = 0.15
+            rel_type = "low_relevance"
+            if token_hit:
+                score += 0.45
+            if business_hit:
+                score += 0.2
+            if event_hit:
+                score += 0.15
+            if reg_hit:
+                score += 0.15
+
+            if token_hit and reg_hit:
+                rel_type = "regulatory"
+            elif token_hit or (business_hit and event_hit):
+                rel_type = "company_specific"
+            elif reg_hit:
+                rel_type = "regulatory"
+            elif industry_hit:
+                rel_type = "industry_general"
+            score = round(min(score, 1.0), 2)
+            classified_items.append(
+                {
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "news_published_at": item.get("news_published_at"),
+                    "relevance_type": rel_type,
+                    "relevance_score": score,
+                }
+            )
+
+        eligible = [
+            x for x in classified_items
+            if x["relevance_type"] == "company_specific"
+            or (x["relevance_type"] == "regulatory" and x["relevance_score"] >= 0.65)
+        ]
+        if not eligible:
+            return {
+                "top_positive_items": [],
+                "top_negative_items": [],
+                "sentiment_summary": "no_reliable_news",
+                "confidence": "low",
+                "summary_flags": ["no_reliable_news", "industry_noise_filtered"],
+                "status": "weak",
+                "relevance_type": "low_relevance",
+                "relevance_score": 0.0,
+                "classified_items": classified_items[:5],
+                "news_published_at": classified_items[0]["news_published_at"] if classified_items else None,
+            }
+
+        lower = text.lower()
+        pos = sum(lower.count(w) for w in ("beat", "upgrade", "growth", "record", "bullish"))
+        neg = sum(lower.count(w) for w in ("downgrade", "lawsuit", "risk", "miss", "bearish"))
+        score = pos - neg
+        summary = "neutral"
+        if score > 1:
+            summary = "positive"
+        elif score < -1:
+            summary = "negative"
+        lead = max(eligible, key=lambda x: x["relevance_score"])
+        return {
+            "top_positive_items": [],
+            "top_negative_items": [],
+            "sentiment_summary": summary,
+            "confidence": "medium",
+            "summary_flags": [f"score_{score}", f"eligible_items_{len(eligible)}"],
+            "status": "ok",
+            "relevance_type": lead["relevance_type"],
+            "relevance_score": lead["relevance_score"],
+            "classified_items": classified_items[:5],
+            "news_published_at": lead.get("news_published_at"),
+        }
+
+    @staticmethod
+    def _build_data_quality_block(
+        technicals: Dict[str, Dict[str, Any]],
+        fundamentals: Dict[str, Any],
+        earnings_analysis: Dict[str, Any],
+        sentiment_analysis: Dict[str, Any],
+        alpha_errors: List[str],
+        context: Dict[str, Any],
+        diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        missing_fields: List[str] = []
+        for name, node in technicals.items():
+            if not isinstance(node, dict):
+                continue
+            if node.get("status") != "ok":
+                missing_fields.append(f"technicals.{name}")
+        missing_fields.extend([f"fundamentals.{x}" for x in fundamentals.get("missing_fields", [])])
+
+        warnings = []
+        warnings.extend([f"alpha_vantage: {err}" for err in alpha_errors])
+        if context.get("realtime", {}).get("volume_ratio") in (None, "数据缺失"):
+            warnings.append("volume_ratio_unavailable")
+        if context.get("realtime", {}).get("turnover_rate") in (None, "数据缺失"):
+            warnings.append("turnover_rate_unavailable")
+        for reason in (diagnostics or {}).get("failure_reasons", []):
+            warnings.append(f"provider_failure: {reason}")
+        return {
+            "price_history_status": "ok" if "technicals.ma20" not in missing_fields else "partial",
+            "technicals_status": "ok" if all(v.get("status") == "ok" for v in technicals.values()) else "partial",
+            "fundamentals_status": fundamentals.get("status", "partial"),
+            "earnings_status": earnings_analysis.get("status", "partial"),
+            "sentiment_status": sentiment_analysis.get("status", "weak"),
+            "missing_fields": missing_fields,
+            "warnings": warnings,
+            "provider_notes": {
+                "market_data": context.get("realtime", {}).get("source", "unknown"),
+                "technicals": "local_from_ohlcv",
+                "fundamentals": fundamentals.get("source", "fundamental_pipeline"),
+                "sentiment": "tavily_filtered",
+                "diagnostics": diagnostics or {},
+                "time_contract": {
+                    "market_timestamp": context.get("market_timestamp"),
+                    "market_session_date": context.get("market_session_date"),
+                    "news_published_at": context.get("news_published_at"),
+                    "report_generated_at": context.get("report_generated_at"),
+                    "session_type": context.get("session_type"),
+                    "market_timezone": context.get("market_timezone"),
+                },
+            },
+        }
 
     def _analyze_with_agent(
         self, 

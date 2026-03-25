@@ -1126,6 +1126,17 @@ class GeminiAnalyzer:
 | SMA20 | {alpha_sma20} | Alpha Vantage 20日均线 |
 | SMA60 | {alpha_sma60} | Alpha Vantage 60日均线 |
 """
+
+        structured_technicals = context.get("technicals", {})
+        if isinstance(structured_technicals, dict) and structured_technicals:
+            prompt += "\n### 技术指标来源追踪（不可混淆来源）\n"
+            for key in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist"):
+                item = structured_technicals.get(key, {}) if isinstance(structured_technicals, dict) else {}
+                prompt += (
+                    f"- {key}: value={item.get('value', 'N/A')} | "
+                    f"status={item.get('status', 'data_unavailable')} | "
+                    f"source={item.get('source', 'unknown')}\n"
+                )
         
         # 添加实时行情数据（量比、换手率等）
         if 'realtime' in context:
@@ -1190,6 +1201,48 @@ class GeminiAnalyzer:
 
 > 若上述字段为 N/A 或缺失，请明确写“数据缺失，无法判断”，禁止编造。
 """
+
+        fundamentals_block = context.get("fundamentals", {})
+        earnings_analysis = context.get("earnings_analysis", {})
+        sentiment_analysis = context.get("sentiment_analysis", {})
+        data_quality = context.get("data_quality", {})
+        time_contract = {
+            "market_timestamp": context.get("market_timestamp"),
+            "market_session_date": context.get("market_session_date"),
+            "news_published_at": context.get("news_published_at"),
+            "report_generated_at": context.get("report_generated_at"),
+            "session_type": context.get("session_type"),
+            "market_timezone": context.get("market_timezone"),
+        }
+        prompt += "\n### Time Contract（统一时间语义，ISO 8601）\n"
+        prompt += json.dumps(time_contract, ensure_ascii=False, indent=2) + "\n"
+        if fundamentals_block:
+            prompt += (
+                "\n### Fundamentals（结构化 + derived insights）\n"
+                f"- normalized: {json.dumps(fundamentals_block.get('normalized', {}), ensure_ascii=False)}\n"
+                f"- summary_flags: {fundamentals_block.get('summary_flags', [])}\n"
+            )
+        if earnings_analysis:
+            prompt += (
+                "\n### Earnings Analysis（结构化）\n"
+                f"- summary_flags: {earnings_analysis.get('summary_flags', [])}\n"
+                f"- derived_metrics: {json.dumps(earnings_analysis.get('derived_metrics', {}), ensure_ascii=False)}\n"
+            )
+        if sentiment_analysis:
+            prompt += (
+                "\n### Sentiment Analysis（过滤后）\n"
+                f"- sentiment_summary: {sentiment_analysis.get('sentiment_summary', 'no_reliable_news')}\n"
+                f"- summary_flags: {sentiment_analysis.get('summary_flags', [])}\n"
+                f"- relevance_type: {sentiment_analysis.get('relevance_type', 'low_relevance')}\n"
+                f"- relevance_score: {sentiment_analysis.get('relevance_score', 0.0)}\n"
+            )
+        if data_quality:
+            prompt += "\n### Data Quality（最终结论必须引用）\n"
+            prompt += json.dumps(data_quality, ensure_ascii=False, indent=2) + "\n"
+            prompt += (
+                "\n> 规则：industry_general 或 low_relevance 新闻不得直接写入个股核心利好/利空结论；"
+                "仅 company_specific 与高相关 regulatory 可进入核心结论。\n"
+            )
 
         # 添加筹码分布数据
         if 'chip' in context:

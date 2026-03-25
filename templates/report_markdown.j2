@@ -2,6 +2,10 @@
 # 🎯 {{ report_date }} {{ labels.dashboard_title }}
 
 > {{ labels.analyzed_prefix }} **{{ results|length }}** {{ labels.stock_unit }} | 🟢{{ labels.buy_label }}:{{ buy_count }} 🟡{{ labels.watch_label }}:{{ hold_count }} 🔴{{ labels.sell_label }}:{{ sell_count }}
+> report_generated_at: `{{ report_generated_at }}`
+{% if market_timestamp %}> market_timestamp: `{{ market_timestamp }}`{% endif %}
+{% if market_session_date %}> market_session_date: `{{ market_session_date }}`{% endif %}
+{% if news_published_at %}> news_published_at: `{{ news_published_at }}`{% endif %}
 
 ## 📊 {{ labels.summary_heading }}
 
