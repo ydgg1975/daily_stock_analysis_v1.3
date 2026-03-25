@@ -1,8 +1,14 @@
 import os
+import time
+from threading import Lock
+
 import requests
 
 API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 BASE_URL = "https://www.alphavantage.co/query"
+_OVERVIEW_CACHE_TTL_SECONDS = 60 * 60 * 24
+_overview_cache = {}
+_overview_cache_lock = Lock()
 
 
 def _request(params: dict) -> dict:
@@ -54,3 +60,43 @@ def get_sma(symbol: str, period: int = 20, interval: str = "daily"):
 
     latest_key = sorted(values.keys(), reverse=True)[0]
     return float(values[latest_key]["SMA"])
+
+
+def get_company_overview(symbol: str) -> dict:
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return {}
+
+    now = time.time()
+    with _overview_cache_lock:
+        cached = _overview_cache.get(symbol)
+        if cached and now - cached["ts"] < _OVERVIEW_CACHE_TTL_SECONDS:
+            return cached["data"]
+
+    data = _request({
+        "function": "OVERVIEW",
+        "symbol": symbol,
+    })
+
+    with _overview_cache_lock:
+        _overview_cache[symbol] = {"ts": now, "data": data}
+    return data
+
+
+def get_shares_outstanding(symbol: str):
+    try:
+        overview = get_company_overview(symbol)
+    except Exception:
+        return None
+
+    raw_val = overview.get("SharesOutstanding")
+    if raw_val in (None, "", "None"):
+        return None
+
+    try:
+        value = int(float(raw_val))
+        if value <= 0:
+            return None
+        return value
+    except (TypeError, ValueError):
+        return None

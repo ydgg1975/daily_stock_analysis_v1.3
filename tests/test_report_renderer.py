@@ -129,6 +129,31 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("Market Snapshot", out)
         self.assertIn("Volume Ratio", out)
 
+    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
+        r = _make_result(
+            code="AAPL",
+            name="Apple",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
+                "data_perspective": {
+                    "volume_analysis": {
+                        "volume_ratio": 0.8,
+                        "volume_status": "正常",
+                        "turnover_rate": "N/A",
+                        "volume_meaning": "量能平稳",
+                    },
+                    "chip_structure": {"profit_ratio": "N/A"},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("筹码", out)
+        self.assertIn("美股暂不支持该指标", out)
+        self.assertIn("换手率 数据缺失", out)
+
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""
         r = _make_result()

@@ -1136,7 +1136,7 @@ class GeminiAnalyzer:
 |------|------|------|
 | 当前价格 | {rt.get('price', 'N/A')} 元 | |
 | **量比** | **{rt.get('volume_ratio', 'N/A')}** | {rt.get('volume_ratio_desc', '')} |
-| **换手率** | **{rt.get('turnover_rate', 'N/A')}%** | |
+| **换手率** | **{rt.get('turnover_rate', 'N/A')}** | |
 | 市盈率(动态) | {rt.get('pe_ratio', 'N/A')} | |
 | 市净率 | {rt.get('pb_ratio', 'N/A')} | |
 | 总市值 | {self._format_amount(rt.get('total_mv'))} | |
@@ -1393,6 +1393,14 @@ class GeminiAnalyzer:
         except (TypeError, ValueError):
             return 'N/A'
 
+    def _format_turnover_display(self, value: Optional[float]) -> str:
+        if value is None:
+            return '数据缺失'
+        try:
+            return f"{float(value):.2f}%"
+        except (TypeError, ValueError):
+            return '数据缺失'
+
     def _build_market_snapshot(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """构建当日行情快照（展示用）"""
         today = context.get('today', {}) or {}
@@ -1435,7 +1443,7 @@ class GeminiAnalyzer:
             snapshot.update({
                 "price": self._format_price(realtime.get('price')),
                 "volume_ratio": realtime.get('volume_ratio', 'N/A'),
-                "turnover_rate": self._format_percent(realtime.get('turnover_rate')),
+                "turnover_rate": self._format_turnover_display(realtime.get('turnover_rate')),
                 "source": getattr(realtime.get('source'), 'value', realtime.get('source', 'N/A')),
             })
 

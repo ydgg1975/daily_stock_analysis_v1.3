@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🇺🇸 **美股分析链路闭环修复** — 美股实时行情链路改为明确标记 `yfinance`（仅真实降级时显示“降级兜底”），并在 pipeline 统一补算 `volume_ratio`（当日成交量 / 5 日均量）；新增 Alpha Vantage `OVERVIEW` 的 `SharesOutstanding` 缓存读取并据此计算 `turnover_rate`，缺失时不再错误展示 `0%`，统一显示“数据缺失”；通知与 Markdown 报告中美股筹码改为固定文案“美股暂不支持该指标”，不再显示 A 股筹码占位缺失信息。
 - 🧾 **Web 报告透明度区复制按钮层级修复**（#749）— `ReportDetails` 中“原始分析结果 / 分析快照”的复制按钮补齐可点击层级，避免被下方 JSON 内容覆盖后出现按钮可见但无法点击的问题。
 - 🧾 **Web 报告详情复制提示按面板独立** — `ReportDetails` 中“原始分析结果”和“分析快照”的复制提示不再共享同一个 `copied` 状态；当两个面板同时展开时，复制其中一个只会更新对应按钮文案，避免两个按钮同时显示“已复制”的误导反馈。
 - 📊 **Agent backtest tool semantics** — `get_skill_backtest_summary` 现在要求显式传入 `skill_id`，缺失时会返回明确的校验提示；当仓库尚未持久化真实 skill 级汇总时会返回明确的 unsupported/info 响应，而不再复用 overall 指标。成功返回路径会同时保留 normalized 指标和 `*_pct` 兼容字段，相关工具错误返回也改为稳定通用文案，避免向 agent 或用户暴露底层异常细节。

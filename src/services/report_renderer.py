@@ -24,6 +24,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from data_provider.us_index_mapping import is_us_stock_code
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,7 @@ def render(
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,
         "localize_chip_health": localize_chip_health,
+        "is_us_stock_code": is_us_stock_code,
     }
     if extra_context:
         safe_extra_context = dict(extra_context)

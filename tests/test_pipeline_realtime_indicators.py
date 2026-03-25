@@ -223,6 +223,44 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         )
         self.assertEqual(enhanced["today"]["close"], 15.0)
 
+    def test_us_stock_computes_volume_ratio_and_turnover(self) -> None:
+        context = {
+            "code": "AAPL",
+            "date": date.today().isoformat(),
+            "today": {"volume": 1200, "close": 180.0},
+            "yesterday": {"volume": 900},
+        }
+        quote = UnifiedRealtimeQuote(
+            code="AAPL",
+            name="Apple",
+            source=RealtimeSource.YFINANCE,
+            price=181.0,
+            volume=1200,
+        )
+        bars = [MagicMock(date=date.today() - timedelta(days=i), volume=v) for i, v in enumerate([1200, 1000, 1100, 900, 1000, 1000])]
+        self.pipeline.db.get_latest_data = MagicMock(return_value=bars)
+
+        enhanced = self.pipeline._enhance_context(
+            context, quote, None, None, "Apple", shares_outstanding=10000
+        )
+
+        self.assertEqual(enhanced["realtime"]["volume_ratio"], 1.2)
+        self.assertAlmostEqual(enhanced["realtime"]["turnover_rate"], 12.0, places=4)
+
+    def test_us_stock_missing_shares_keeps_turnover_missing(self) -> None:
+        context = {"code": "AAPL", "today": {"volume": 1200}}
+        quote = UnifiedRealtimeQuote(
+            code="AAPL",
+            source=RealtimeSource.YFINANCE,
+            price=181.0,
+            volume=1200,
+        )
+        self.pipeline.db.get_latest_data = MagicMock(return_value=[])
+        enhanced = self.pipeline._enhance_context(
+            context, quote, None, None, "Apple", shares_outstanding=None
+        )
+        self.assertNotIn("turnover_rate", enhanced["realtime"])
+
     def test_today_not_overridden_when_trend_ma_zero(self) -> None:
         """When StockTrendAnalyzer returns early (data insufficient), ma5=0.0. Must not override."""
         context = {"code": "600519", "today": {"close": 15.0, "ma5": 14.8}}

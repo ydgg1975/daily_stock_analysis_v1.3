@@ -92,12 +92,22 @@
 
 {% set vol_data = data_persp.get('volume_analysis', {}) %}
 {% if vol_data %}
-**{{ labels.volume_label }}**: {{ labels.volume_ratio_label }} {{ vol_data.get('volume_ratio', 'N/A') }} ({{ vol_data.get('volume_status', '') }}) | {{ labels.turnover_rate_label }} {{ vol_data.get('turnover_rate', 'N/A') }}%
+{% set tr = vol_data.get('turnover_rate', 'N/A') %}
+{% if tr in [None, '', 'N/A'] %}
+{% set tr_display = '数据缺失' %}
+{% elif (tr|string)[-1:] == '%' %}
+{% set tr_display = tr %}
+{% else %}
+{% set tr_display = tr ~ '%' %}
+{% endif %}
+**{{ labels.volume_label }}**: {{ labels.volume_ratio_label }} {{ vol_data.get('volume_ratio', 'N/A') }} ({{ vol_data.get('volume_status', '') }}) | {{ labels.turnover_rate_label }} {{ tr_display }}
 💡 *{{ vol_data.get('volume_meaning', '') }}*
 {% endif %}
 
 {% set chip_data = data_persp.get('chip_structure', {}) %}
-{% if chip_data %}
+{% if is_us_stock_code(result.code) %}
+**{{ labels.chip_label }}**: 美股暂不支持该指标
+{% elif chip_data %}
 **{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', 'N/A') }} | {{ chip_data.get('avg_cost', 'N/A') }} | {{ chip_data.get('concentration', 'N/A') }} {{ localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language) }}
 {% endif %}
 {% endif %}
