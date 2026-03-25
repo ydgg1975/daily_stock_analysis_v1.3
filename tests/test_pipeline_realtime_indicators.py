@@ -300,6 +300,38 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.assertEqual(args[1], "AAPL")
         self.assertEqual(args[2], "stooq_realtime_snapshot")
 
+    def test_us_stock_volume_ratio_falls_back_to_fetcher_daily_when_db_insufficient(self) -> None:
+        context = {
+            "code": "AAPL",
+            "date": date.today().isoformat(),
+            "today": {"volume": 1000},
+        }
+        quote = UnifiedRealtimeQuote(
+            code="AAPL",
+            source=RealtimeSource.STOOQ,
+            price=200.0,
+            volume=1000,
+        )
+        self.pipeline.db.get_latest_data = MagicMock(return_value=[])
+        self.pipeline.fetcher_manager.get_daily_data = MagicMock(
+            return_value=(
+                pd.DataFrame(
+                    [
+                        {"date": date.today() - timedelta(days=1), "volume": 500},
+                        {"date": date.today() - timedelta(days=2), "volume": 500},
+                        {"date": date.today() - timedelta(days=3), "volume": 500},
+                        {"date": date.today() - timedelta(days=4), "volume": 500},
+                        {"date": date.today() - timedelta(days=5), "volume": 500},
+                    ]
+                ),
+                "YfinanceFetcher",
+            )
+        )
+        enhanced = self.pipeline._enhance_context(
+            context, quote, None, None, "Apple", shares_outstanding=10000
+        )
+        self.assertEqual(enhanced["realtime"]["volume_ratio"], 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

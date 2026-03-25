@@ -713,6 +713,10 @@ class HistoryService:
                 ])
             # 量能分析
             if vol_data:
+                volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
+                volume_ratio_display = (
+                    "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None") else volume_ratio_raw
+                )
                 turnover_rate = vol_data.get('turnover_rate', 'N/A')
                 turnover_display = (
                     "数据缺失"
@@ -724,7 +728,7 @@ class HistoryService:
                     )
                 )
                 report_lines.extend([
-                    f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {vol_data.get('volume_ratio', 'N/A')} "
+                    f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {volume_ratio_display} "
                     f"({vol_data.get('volume_status', '')}) | {labels['turnover_rate_label']} {turnover_display}",
                     f"💡 *{vol_data.get('volume_meaning', '')}*",
                     "",

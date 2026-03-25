@@ -977,11 +977,15 @@ class NotificationService(
                         ])
                     # 量能分析
                     if vol_data:
+                        volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
+                        volume_ratio_display = (
+                            "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None") else volume_ratio_raw
+                        )
                         turnover_display = self._format_turnover_for_report(
                             vol_data.get('turnover_rate', 'N/A')
                         )
                         report_lines.extend([
-                            f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {vol_data.get('volume_ratio', 'N/A')} ({vol_data.get('volume_status', '')}) | "
+                            f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {volume_ratio_display} ({vol_data.get('volume_status', '')}) | "
                             f"{labels['turnover_rate_label']} {turnover_display}",
                             f"💡 *{vol_data.get('volume_meaning', '')}*",
                             "",

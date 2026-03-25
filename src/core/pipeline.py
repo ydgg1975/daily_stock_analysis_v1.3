@@ -551,10 +551,13 @@ class StockAnalysisPipeline:
         if realtime_quote:
             # 使用 getattr 安全获取字段，缺失字段返回 None 或默认值
             volume_ratio = getattr(realtime_quote, 'volume_ratio', None)
+            volume_ratio_desc = '无数据'
             if is_us_stock_code(context.get('code', '')):
                 computed_volume_ratio = self._compute_volume_ratio(context, realtime_quote)
                 if computed_volume_ratio is not None:
                     volume_ratio = computed_volume_ratio
+                elif volume_ratio is None:
+                    volume_ratio = "数据缺失"
                 computed_turnover_rate = self._compute_turnover_rate(
                     context=context,
                     realtime_quote=realtime_quote,
@@ -567,12 +570,14 @@ class StockAnalysisPipeline:
                 if computed_turnover_rate is not None
                 else getattr(realtime_quote, 'turnover_rate', None)
             )
+            if isinstance(volume_ratio, (int, float)):
+                volume_ratio_desc = self._describe_volume_ratio(float(volume_ratio))
             enhanced['realtime'] = {
                 'name': getattr(realtime_quote, 'name', ''),
                 'price': getattr(realtime_quote, 'price', None),
                 'change_pct': getattr(realtime_quote, 'change_pct', None),
                 'volume_ratio': volume_ratio,
-                'volume_ratio_desc': self._describe_volume_ratio(volume_ratio) if volume_ratio is not None else '无数据',
+                'volume_ratio_desc': volume_ratio_desc,
                 'turnover_rate': turnover_rate,
                 'pe_ratio': getattr(realtime_quote, 'pe_ratio', None),
                 'pb_ratio': getattr(realtime_quote, 'pb_ratio', None),
@@ -704,25 +709,51 @@ class StockAnalysisPipeline:
             return None
 
         bars = self.db.get_latest_data(code, days=8)
-        if not bars:
-            return None
         today_date = context.get("date")
-        historical_volumes = []
-        for bar in bars:
-            bar_date = getattr(getattr(bar, "date", None), "isoformat", lambda: None)()
-            if today_date and bar_date == today_date:
-                continue
-            bar_volume = getattr(bar, "volume", None)
-            if bar_volume and bar_volume > 0:
-                historical_volumes.append(float(bar_volume))
-            if len(historical_volumes) >= 5:
-                break
+        historical_volumes = self._collect_recent_volumes_from_bars(
+            bars=bars or [],
+            today_date=today_date,
+            max_count=5,
+        )
+        if len(historical_volumes) < 5:
+            try:
+                hist_df, _ = self.fetcher_manager.get_daily_data(code, days=10)
+                if hist_df is not None and not hist_df.empty:
+                    for _, row in hist_df.sort_values("date", ascending=False).iterrows():
+                        row_date = str(row.get("date", ""))
+                        if today_date and row_date == today_date:
+                            continue
+                        vol = row.get("volume")
+                        if vol and float(vol) > 0:
+                            historical_volumes.append(float(vol))
+                        if len(historical_volumes) >= 5:
+                            break
+            except Exception:
+                pass
         if len(historical_volumes) < 5:
             return None
         avg_volume_5d = sum(historical_volumes) / len(historical_volumes)
         if avg_volume_5d <= 0:
             return None
         return round(today_volume / avg_volume_5d, 2)
+
+    @staticmethod
+    def _collect_recent_volumes_from_bars(
+        bars: List[Any],
+        today_date: Optional[str],
+        max_count: int = 5,
+    ) -> List[float]:
+        volumes: List[float] = []
+        for bar in bars:
+            bar_date = getattr(getattr(bar, "date", None), "isoformat", lambda: None)()
+            if today_date and bar_date == today_date:
+                continue
+            bar_volume = getattr(bar, "volume", None)
+            if bar_volume and bar_volume > 0:
+                volumes.append(float(bar_volume))
+            if len(volumes) >= max_count:
+                break
+        return volumes
 
     @staticmethod
     def _compute_turnover_rate(
