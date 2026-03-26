@@ -257,6 +257,18 @@ class HistoryService:
         Convert an AnalysisHistory ORM record to a detail response dict.
         """
         raw_result = parse_json_field(record.raw_result)
+        standard_report = None
+        if isinstance(raw_result, dict):
+            rebuilt = self._rebuild_analysis_result(raw_result, record)
+            if rebuilt is not None:
+                report_language = normalize_report_language(
+                    raw_result.get("report_language")
+                    or getattr(rebuilt, "report_language", None)
+                )
+                standard_report = report_renderer.build_standard_report_payload(
+                    rebuilt,
+                    report_language=report_language,
+                )
 
         model_used = (raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None
         model_used = normalize_model_used(model_used)
@@ -289,6 +301,7 @@ class HistoryService:
             "news_content": record.news_content,
             "raw_result": raw_result,
             "context_snapshot": context_snapshot,
+            "standard_report": standard_report,
         }
 
     def delete_history_records(self, record_ids: List[int]) -> int:

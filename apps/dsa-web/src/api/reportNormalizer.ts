@@ -9,6 +9,13 @@ interface ReportMetaFallback extends Partial<ReportMeta> {
 
 const DEFAULT_SENTIMENT_SCORE = 50;
 
+const toRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
+};
+
 const toFiniteNumber = (value: unknown): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -28,6 +35,13 @@ export const normalizeAnalysisReport = (
 ): AnalysisReport => {
   const meta = report.meta || ({} as ReportMeta);
   const summary = report.summary || ({} as ReportSummary);
+  const details = toRecord(report.details);
+  const rawResult = toRecord(details?.rawResult);
+  const dashboard = toRecord(rawResult?.dashboard);
+  const standardReport =
+    toRecord(details?.standardReport) ??
+    toRecord(rawResult?.standard_report) ??
+    toRecord(dashboard?.standard_report);
 
   const sentimentScore = toFiniteNumber(summary.sentimentScore) ?? DEFAULT_SENTIMENT_SCORE;
 
@@ -48,5 +62,11 @@ export const normalizeAnalysisReport = (
       trendPrediction: summary.trendPrediction || '',
       sentimentScore,
     },
+    details: report.details
+      ? {
+          ...report.details,
+          standardReport,
+        }
+      : report.details,
   };
 };

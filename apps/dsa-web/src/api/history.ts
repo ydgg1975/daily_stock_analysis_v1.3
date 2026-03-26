@@ -47,7 +47,7 @@ export const historyApi = {
    * 获取历史报告详情
    * @param recordId 分析历史记录主键 ID（使用 ID 而非 query_id，因为 query_id 在批量分析时可能重复）
    */
-  getDetail: async (recordId: number): Promise<AnalysisReport> => {
+  getDetail: async (recordId: number | string): Promise<AnalysisReport> => {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/${recordId}`);
     return normalizeAnalysisReport(toCamelCase<AnalysisReport>(response.data));
   },
@@ -57,7 +57,7 @@ export const historyApi = {
    * @param recordId 分析历史记录主键 ID
    * @param limit 返回数量限制
    */
-  getNews: async (recordId: number, limit = 20): Promise<NewsIntelResponse> => {
+  getNews: async (recordId: number | string, limit = 20): Promise<NewsIntelResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/${recordId}/news`, {
       params: { limit },
     });
@@ -74,7 +74,7 @@ export const historyApi = {
    * @param recordId 分析历史记录主键 ID
    * @returns Markdown 格式的完整报告内容
    */
-  getMarkdown: async (recordId: number): Promise<string> => {
+  getMarkdown: async (recordId: number | string): Promise<string> => {
     const response = await apiClient.get<{ content: string }>(`/api/v1/history/${recordId}/markdown`);
     return response.data.content;
   },

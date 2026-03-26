@@ -1,20 +1,47 @@
 {# Shared macros for report templates #}
-{% macro market_snapshot(result) %}
+
+{% macro render_field_group(fields) -%}
+{% if fields %}
+{% for item in fields %}
+- **{{ item.label }}**: {{ item.value }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+{%- endmacro %}
+
+{% macro compact_list_section(title, lines) -%}
+### {{ title }}
+{% if lines %}
+{% for line in lines %}
+- {{ line }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+{%- endmacro %}
+
+{% macro market_snapshot(result) -%}
 {% set snapshot = normalize_market_snapshot(result.market_snapshot if result.market_snapshot else {}) %}
 ### 📈 {{ labels.market_snapshot_heading }}
-
-| {{ labels.close_label }} | {{ labels.prev_close_label }} | {{ labels.open_label }} | {{ labels.high_label }} | {{ labels.low_label }} | {{ labels.change_pct_label }} | {{ labels.change_amount_label }} | {{ labels.amplitude_label }} | {{ labels.volume_label }} | {{ labels.amount_label }} |
-|------|------|------|------|------|-------|-------|------|--------|--------|
-| {{ display_value(snapshot.get('close'), missing_text='当前数据源未提供') }} | {{ display_value(snapshot.get('prev_close'), missing_text='当前数据源未提供') }} | {{ display_value(snapshot.get('open'), missing_text='当前数据源未提供') }} | {{ display_value(snapshot.get('high'), missing_text='当前数据源未提供') }} | {{ display_value(snapshot.get('low'), missing_text='当前数据源未提供') }} | {{ display_percent(snapshot.get('pct_chg'), missing_text='接口未返回') }} | {{ display_value(snapshot.get('change_amount'), missing_text='接口未返回') }} | {{ display_percent(snapshot.get('amplitude'), missing_text='接口未返回') }} | {{ display_value(snapshot.get('volume'), missing_text='当前数据源未提供', style='volume') }} | {{ display_value(snapshot.get('amount'), missing_text='当前数据源未提供', style='amount') }} |
-
-| {{ labels.current_price_label }} | {{ labels.volume_ratio_label }} | {{ labels.turnover_rate_label }} | {{ labels.source_label }} |
-|-------|------|--------|----------|
-| {{ display_value(snapshot.get('price'), missing_text='接口未返回') }} | {{ display_value(snapshot.get('volume_ratio'), missing_text='接口未返回') }} | {{ display_percent(snapshot.get('turnover_rate'), missing_text='字段待接入') }} | {{ display_value(snapshot.get('source'), missing_text='上游映射缺失') }} |
-
+- **{{ labels.current_price_label }}**: {{ snapshot.get('price', na('接口未返回')) }}
+- **{{ labels.prev_close_label }}**: {{ snapshot.get('prev_close', na('接口未返回')) }}
+- **{{ labels.open_label }}**: {{ snapshot.get('open', na('接口未返回')) }}
+- **{{ labels.high_label }}**: {{ snapshot.get('high', na('接口未返回')) }}
+- **{{ labels.low_label }}**: {{ snapshot.get('low', na('接口未返回')) }}
+- **{{ labels.change_amount_label }}**: {{ snapshot.get('change_amount', na('接口未返回')) }}
+- **{{ labels.change_pct_label }}**: {{ snapshot.get('pct_chg', na('接口未返回')) }}
+- **{{ labels.amplitude_label }}**: {{ snapshot.get('amplitude', na('接口未返回')) }}
+- **{{ labels.volume_label }}**: {{ snapshot.get('volume', na('当前数据源未提供')) }}
+- **{{ labels.amount_label }}**: {{ snapshot.get('amount', na('当前数据源未提供')) }}
+- **{{ labels.volume_ratio_label }}**: {{ snapshot.get('volume_ratio', na('当前数据源未提供')) }}
+- **{{ labels.turnover_rate_label }}**: {{ snapshot.get('turnover_rate', na('字段待接入')) }}
+- **{{ labels.source_label }}**: {{ snapshot.get('source', na('上游映射缺失')) }}
+- **session 类型**: {{ snapshot.get('session_type', na('接口未返回')) }}
 {% if snapshot.get('consistency_warnings') %}
-**口径校验**:
-{% for w in snapshot.get('consistency_warnings') %}
-- {{ w }}
+- **口径校验**:
+{% for warning in snapshot.get('consistency_warnings') %}
+  - {{ warning }}
 {% endfor %}
 {% endif %}
-{% endmacro %}
+{%- endmacro %}

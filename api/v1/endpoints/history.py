@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
@@ -44,6 +45,29 @@ from src.utils.data_processing import normalize_model_used, extract_fundamental_
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_NUMBER_TOKEN_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _extract_number(value: Optional[object]) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text or text.startswith("NA（"):
+        return None
+    if text.endswith("%"):
+        text = text[:-1]
+    try:
+        return float(text.replace(",", ""))
+    except ValueError:
+        match = _NUMBER_TOKEN_RE.search(text)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
 
 
 @router.get(
@@ -232,7 +256,33 @@ def get_history_detail(
                 realtime_quote_raw = context_snapshot.get("realtime_quote_raw") or {}
                 current_price = realtime_quote_raw.get("price")
                 change_pct = change_pct or realtime_quote_raw.get("change_pct") or realtime_quote_raw.get("pct_chg")
-        
+
+        standard_report = result.get("standard_report")
+        if isinstance(standard_report, dict):
+            market = standard_report.get("market")
+            if isinstance(market, dict):
+                regular_fields = market.get("regular_fields")
+                if isinstance(regular_fields, list):
+                    field_map = {
+                        str(item.get("label")): item.get("value")
+                        for item in regular_fields
+                        if isinstance(item, dict)
+                    }
+                    current_candidate = (
+                        field_map.get("当前价")
+                        or field_map.get("Price")
+                    )
+                    change_pct_candidate = (
+                        field_map.get("涨跌幅")
+                        or field_map.get("Change %")
+                    )
+                    normalized_current = _extract_number(current_candidate)
+                    normalized_change_pct = _extract_number(change_pct_candidate)
+                    if normalized_current is not None:
+                        current_price = normalized_current
+                    if normalized_change_pct is not None:
+                        change_pct = normalized_change_pct
+
         raw_result = result.get("raw_result")
         if not isinstance(raw_result, dict):
             raw_result = {}
@@ -303,6 +353,7 @@ def get_history_detail(
             news_content=result.get("news_content"),
             raw_result=result.get("raw_result"),
             context_snapshot=result.get("context_snapshot"),
+            standard_report=result.get("standard_report"),
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
         )

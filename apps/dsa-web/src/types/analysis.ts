@@ -69,6 +69,7 @@ export interface ReportDetails {
   newsContent?: string;
   rawResult?: Record<string, unknown>;
   contextSnapshot?: Record<string, unknown>;
+  standardReport?: Record<string, unknown>;
   financialReport?: Record<string, unknown>;
   dividendMetrics?: Record<string, unknown>;
 }

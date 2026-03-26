@@ -413,9 +413,9 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         self.assertIsNotNone(markdown)
         self.assertIn("Stock Analysis Report", markdown)
-        self.assertIn("Core Conclusion", markdown)
+        self.assertIn("1. 标题区 / Title", markdown)
         self.assertIn("Unnamed Stock (AAPL)", markdown)
-        self.assertNotIn("核心结论", markdown)
+        self.assertIn("Decision Dashboard", markdown)
 
     def test_history_detail_localizes_english_summary_fields(self) -> None:
         """History detail should localize summary enums for English reports."""
@@ -458,8 +458,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(report.summary.trend_prediction, "Bullish")
         self.assertEqual(report.summary.sentiment_label, "Bullish")
 
-    def test_history_markdown_uses_safe_bias_emoji_for_english_status(self) -> None:
-        """English bias status should keep the correct non-risk emoji in markdown."""
+    def test_history_markdown_includes_bias_value_without_unsafe_emoji(self) -> None:
+        """English markdown should keep bias value display and avoid incorrect risk emoji text."""
         result = AnalysisResult(
             code="AAPL",
             name="股票AAPL",
@@ -505,7 +505,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         markdown = HistoryService(self.db).get_markdown_report(str(record_id))
 
         self.assertIsNotNone(markdown)
-        self.assertIn("✅Safe", markdown)
+        self.assertIn("**乖离率**: 1.33%", markdown)
         self.assertNotIn("🚨Safe", markdown)
 
     def test_delete_analysis_history_records_also_cleans_backtests(self) -> None:

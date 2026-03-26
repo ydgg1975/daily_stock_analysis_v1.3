@@ -1,7 +1,8 @@
-{% from '_macros.j2' import compact_list_section, market_snapshot with context %}
+{% from '_macros.j2' import render_field_group with context %}
 # 🎯 {{ report_date }} {{ labels.dashboard_title }}
 
 > {{ labels.analyzed_prefix }} **{{ results|length }}** {{ labels.stock_unit }} | 🟢{{ labels.buy_label }}:{{ buy_count }} 🟡{{ labels.watch_label }}:{{ hold_count }} 🔴{{ labels.sell_label }}:{{ sell_count }}
+> {{ labels.report_title }}
 > 报告生成时间（北京时间）: `{{ report_generated_at_bjt or na('接口未返回') }}`
 > 市场时间（原始）: `{{ market_timestamp or na('接口未返回') }}`
 > 市场时间（北京时间）: `{{ market_timestamp_bjt or na('接口未返回') }}`
@@ -15,304 +16,61 @@
 {{ e.signal_emoji }} **{{ e.stock_name }}({{ e.result.code }})**: {{ e.localized_operation_advice }} | {{ labels.score_label }} {{ e.result.sentiment_score }} | {{ e.localized_trend_prediction }}
 {% endfor %}
 
----
 {% if not summary_only %}
+
+---
 {% for e in enriched %}
 {% set result = e.result %}
-{% set dashboard = result.dashboard if result.dashboard else {} %}
-{% set intel = grade_intel_block(dashboard.get('intelligence') or {}) %}
-{% set core = dashboard.get('core_conclusion') or {} %}
-{% set battle = dashboard.get('battle_plan') or {} %}
-{% set data_persp = dashboard.get('data_perspective') or {} %}
-{% set structured = dashboard.get('structured_analysis') or {} %}
-{% set sblock = structured.get('sentiment_analysis', {}) %}
-{% set company_news_allowed = sblock.get('relevance_type') == 'company_specific' %}
-
+{% set std = e.standard_report %}
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
-{% if intel %}
-### 📰 {{ labels.info_heading }}
+### 1. 标题区 / Title
+- **股票名 / ticker**: {{ std.title.stock }}
+- **评分**: {{ std.title.score if std.title.score is not none else na('接口未返回') }}
+- **买入 / 观望 / 卖出**: {{ std.title.operation_advice }}
+- **看多 / 看空 / 震荡**: {{ std.title.trend_prediction }}
+- **一句话决策**: {{ std.title.one_sentence }}
+- **时效性**: {{ std.title.time_sensitivity }}
 
-{% if intel.get('sentiment_summary') %}
-**💭 {{ labels.sentiment_summary_label }}**: {{ intel.sentiment_summary }}
-{% endif %}
-{% if intel.get('earnings_outlook') %}
-**📊 {{ labels.earnings_outlook_label }}**: {{ intel.earnings_outlook }}
-{% endif %}
-{% if intel.get('risk_alerts') %}
-{% if company_news_allowed %}
+### 2. 重要信息速览 / Key Updates
+{{ render_field_group(std.info_fields) }}
 
-**🚨 {{ labels.risk_alerts_label }}**:
-{% for alert in intel.risk_alerts %}
-- {{ alert }}
+### 3. 持仓建议 / Position Advice
+- **空仓者建议**: {{ std.position_advice.no_position }}
+- **持仓者建议**: {{ std.position_advice.has_position }}
+
+### 4. 当日行情（常规交易时段） / Market (Regular Session)
+{{ render_field_group(std.market.regular_fields) }}
+
+### 4.1 扩展时段（盘前/盘后） / Extended Session
+{{ render_field_group(std.market.extended_fields) }}
+{% if std.market.consistency_warnings %}
+- **口径校验**: {{ std.market.consistency_warnings | join('；') }}
+{% endif %}
+
+### 5. 技术面 / Technicals
+{{ render_field_group(std.technical_fields) }}
+
+### 6. 基本面 / 财报 / 情绪
+#### 6.1 基本面
+{{ render_field_group(std.fundamental_fields) }}
+
+#### 6.2 财报
+{{ render_field_group(std.earnings_fields) }}
+
+#### 6.3 情绪
+{{ render_field_group(std.sentiment_fields) }}
+
+### 7. 作战计划 / Battle Plan
+{{ render_field_group(std.battle_fields) }}
+{% if std.battle_warnings %}
+- **风险提示**: {{ std.battle_warnings | join('；') }}
+{% endif %}
+
+### 8. 检查清单 / Checklist
+{% for item in std.checklist %}
+- {{ item }}
 {% endfor %}
-{% endif %}
-{% endif %}
-{% if intel.get('positive_catalysts') %}
-{% if company_news_allowed %}
-
-**✨ {{ labels.positive_catalysts_label }}**:
-{% for cat in intel.positive_catalysts %}
-- {{ cat }}
-{% endfor %}
-{% endif %}
-{% endif %}
-{% if intel.get('positive_catalysts_notice') %}
-**✨ {{ labels.positive_catalysts_label }}**: {{ intel.get('positive_catalysts_notice') }}
-{% endif %}
-{% if intel.get('latest_news') %}
-{% if company_news_allowed %}
-
-**📢 {{ labels.latest_news_label }}**: {{ intel.latest_news }}
-{% else %}
-**🏭 行业背景**: {{ intel.latest_news }}
-{% endif %}
-{% endif %}
-{% if intel.get('latest_news_notice') %}
-**📢 {{ labels.latest_news_label }}**: {{ intel.get('latest_news_notice') }}
-{% endif %}
-
-{% endif %}
-
-### 📌 {{ labels.core_conclusion_heading }}
-
-**{{ e.signal_emoji }} {{ e.signal_text }}** | {{ localize_trend_prediction(result.trend_prediction, report_language) }}
-
-> **{{ labels.one_sentence_label }}**: {{ core.get('one_sentence', result.analysis_summary) }}
-
-⏰ **{{ labels.time_sensitivity_label }}**: {{ core.get('time_sensitivity', labels.default_time_sensitivity) }}
-
-{% set pos_advice = core.get('position_advice', {}) %}
-{% set info_lines = [] %}
-{% set _ = info_lines.append('情绪：' ~ summarize_sentiment(sblock)) %}
-{% set fundamental_line = '基本面：' ~ f_summary.get('conclusion') %}
-{% if f_summary.get('metrics') %}
-{% set fundamental_line = fundamental_line ~ ' 关键指标：' ~ f_summary.get('metrics') %}
-{% endif %}
-{% set _ = info_lines.append(fundamental_line) %}
-{% set _ = info_lines.append('财报趋势：' ~ summarize_earnings(eblock)) %}
-{% if intel_highlight %}
-{% set _ = info_lines.append(intel_highlight) %}
-{% endif %}
-{{ compact_list_section('📰 ' ~ labels.info_heading, info_lines) }}
-
-{{ market_snapshot(result) }}
-
-{% set time_ctx = structured.get('time_context', {}) %}
-{% if time_ctx %}
-### 🕒 时间语义
-- market_timestamp: {{ time_ctx.get('market_timestamp', na('接口未返回')) }}{% if time_ctx.get('market_timestamp') and to_shanghai_iso(time_ctx.get('market_timestamp')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('market_timestamp')) }}）{% endif %}
-- market_session_date: {{ time_ctx.get('market_session_date', na('接口未返回')) }}
-- report_generated_at: {{ time_ctx.get('report_generated_at', report_generated_at) }}{% if time_ctx.get('report_generated_at') and to_shanghai_iso(time_ctx.get('report_generated_at')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('report_generated_at')) }}）{% endif %}
-- news_published_at: {{ time_ctx.get('news_published_at', na('接口未返回')) }}{% if time_ctx.get('news_published_at') and to_shanghai_iso(time_ctx.get('news_published_at')) %} （Asia/Shanghai: {{ to_shanghai_iso(time_ctx.get('news_published_at')) }}）{% endif %}
-- session_type: {{ time_ctx.get('session_type', na('接口未返回')) }}
-{% endif %}
-
-{% if true %}
-### 📊 {{ labels.data_perspective_heading }}
-
-{% set trend_data = data_persp.get('trend_status', {}) %}
-{% set alpha_data = data_persp.get('alpha_vantage', {}) %}
-{% if trend_data %}
-**{{ labels.ma_alignment_label }}**: {{ trend_data.get('ma_alignment', na('接口未返回')) }} | {{ labels.bullish_alignment_label }}: {{ '✅ ' ~ labels.yes_label if trend_data.get('is_bullish') else '❌ ' ~ labels.no_label }} | {{ labels.trend_strength_label }}: {{ trend_data.get('trend_score', na('接口未返回')) }}/100
-{% endif %}
-
-{% set f = structured.get('fundamentals', {}) %}
-### 🧾 基本面摘要（Fundamentals）
-{% if f %}
-| 指标 | 数值 |
-|------|------|
-| marketCap | {{ display_value(f.get('normalized', {}).get('marketCap'), missing_text='接口未返回') }} |
-| trailingPE | {{ display_value(f.get('normalized', {}).get('trailingPE'), missing_text='接口未返回') }} |
-| forwardPE | {{ display_value(f.get('normalized', {}).get('forwardPE'), missing_text='接口未返回') }} |
-| totalRevenue | {{ display_value(f.get('normalized', {}).get('totalRevenue'), missing_text='接口未返回') }} |
-| revenueGrowth | {{ display_value(f.get('normalized', {}).get('revenueGrowth'), missing_text='接口未返回') }} |
-| grossMargins | {{ display_value(f.get('normalized', {}).get('grossMargins'), missing_text='接口未返回') }} |
-| operatingMargins | {{ display_value(f.get('normalized', {}).get('operatingMargins'), missing_text='接口未返回') }} |
-| freeCashflow | {{ display_value(f.get('normalized', {}).get('freeCashflow'), missing_text='接口未返回') }} |
-| operatingCashflow | {{ display_value(f.get('normalized', {}).get('operatingCashflow'), missing_text='接口未返回') }} |
-| debtToEquity | {{ display_value(f.get('normalized', {}).get('debtToEquity'), missing_text='接口未返回') }} |
-| currentRatio | {{ display_value(f.get('normalized', {}).get('currentRatio'), missing_text='接口未返回') }} |
-| returnOnEquity | {{ display_value(f.get('normalized', {}).get('returnOnEquity'), missing_text='接口未返回') }} |
-| returnOnAssets | {{ display_value(f.get('normalized', {}).get('returnOnAssets'), missing_text='接口未返回') }} |
-
-**基本面结论**: {{ (f.get('derived_insights') or ['数据不足，无法判断']) | join(', ') }}
-{% else %}
-{{ na('接口未返回') }}
-{% endif %}
-
-{% set eblock = structured.get('earnings_analysis', {}) %}
-### 📈 财报趋势（Earnings）
-{% if eblock %}
-{% set dm = eblock.get('derived_metrics', {}) %}
-- QoQ revenue growth: {{ display_value(dm.get('qoq_revenue_growth'), missing_text='接口未返回') }}
-- YoY revenue growth: {{ display_value(dm.get('yoy_revenue_growth'), missing_text='接口未返回') }}
-- QoQ net income change: {{ display_value(dm.get('qoq_net_income_change'), missing_text='接口未返回') }}
-- YoY net income change: {{ display_value(dm.get('yoy_net_income_change'), missing_text='接口未返回') }}
-- flags: {{ (eblock.get('summary_flags') or ['earnings_partial']) | join(', ') }}
-- 结论: {{ (eblock.get('narrative_insights') or ['财报数据不足']) | join('；') }}
-{% else %}
-{{ na('接口未返回') }}
-{% endif %}
-
-### 🧠 结构化情绪（Sentiment）
-{% if sblock %}
-- company_sentiment: {{ sblock.get('company_sentiment', 'no_reliable_news') }}
-- industry_sentiment: {{ sblock.get('industry_sentiment', 'background_only') }}
-- regulatory_sentiment: {{ sblock.get('regulatory_sentiment', 'unknown') }}
-- overall_confidence: {{ sblock.get('overall_confidence', sblock.get('confidence', 'low')) }}
-- relevance_type/relevance_score: {{ sblock.get('relevance_type', 'low_relevance') }} / {{ sblock.get('relevance_score', 0.0) }}
-{% else %}
-{{ na('接口未返回') }}
-{% endif %}
-
-{% set dq = structured.get('data_quality', {}) %}
-### 🧩 数据质量说明
-{% if dq %}
-- technicals_status: {{ dq.get('technicals_status', 'partial') }}
-- fundamentals_status: {{ dq.get('fundamentals_status', 'partial') }}
-- earnings_status: {{ dq.get('earnings_status', 'partial') }}
-- sentiment_status: {{ dq.get('sentiment_status', 'weak') }}
-- missing_fields: {{ (dq.get('missing_fields') or []) | join(', ') if dq.get('missing_fields') else '无' }}
-- warnings: {{ (dq.get('warnings') or []) | join(', ') if dq.get('warnings') else '无' }}
-{% else %}
-{{ na('接口未返回') }}
-{% endif %}
-
-{% set price_data = data_persp.get('price_position', {}) %}
-{% if price_data %}
-{% set ma5_display = display_value(price_data.get('ma5'), missing_text='接口未返回') %}
-{% set ma10_display = display_value(price_data.get('ma10'), missing_text='接口未返回') %}
-{% set ma20_main = display_value(price_data.get('ma20'), missing_text='接口未返回') %}
-{% set av_sma20_display = display_value(alpha_data.get('sma20')) %}
-{% if ma20_main == na('接口未返回') and av_sma20_display != na('接口未返回') %}
-{% set ma20_display = ma20_main ~ '（Alpha Vantage SMA20: ' ~ av_sma20_display ~ '）' %}
-{% else %}
-{% set ma20_display = ma20_main %}
-{% endif %}
-{% set bias_ma5_display = display_percent(price_data.get('bias_ma5')) %}
-{% set bias_status = price_data.get('bias_status', '') %}
-{% set bias_status_display = '' if is_missing_value(bias_status) else bias_status %}
-{% set support_display = display_value(price_data.get('support_level'), missing_text='接口未返回') %}
-{% set resistance_display = display_value(price_data.get('resistance_level'), missing_text='接口未返回') %}
-| {{ labels.price_metrics_label }} | {{ labels.current_price_label }} |
-|---------|------|
-| {{ labels.current_price_label }} | {{ display_value(price_data.get('current_price')) }} |
-| {{ labels.ma5_label }} | {{ ma5_display }} |
-| {{ labels.ma10_label }} | {{ ma10_display }} |
-| {{ labels.ma20_label }} | {{ ma20_display }} |
-| {{ labels.bias_ma5_label }} | {{ bias_ma5_display }} {{ bias_status_display }} |
-| {{ labels.support_level_label }} | {{ support_display }} |
-| {{ labels.resistance_level_label }} | {{ resistance_display }} |
-{% endif %}
-
-{% set vol_data = data_persp.get('volume_analysis', {}) %}
-{% if vol_data %}
-{% set vr = vol_data.get('volume_ratio', na('接口未返回')) %}
-{% set tr = vol_data.get('turnover_rate', na('接口未返回')) %}
-{% if (vol_data.get('volume_status') in ['缺失', 'missing', 'unavailable']) or is_missing_value(vr) %}
-{% set vr_display = na('接口未返回') %}
-{% else %}
-{% set vr_display = display_value(vr, missing_text='接口未返回') %}
-{% endif %}
-{% if vol_data.get('volume_status') in ['缺失', 'missing', 'unavailable'] and is_missing_value(tr) %}
-{% set tr_display = na('字段待接入') %}
-{% else %}
-{% set tr_display = display_percent(tr, missing_text='字段待接入') %}
-{% endif %}
-**{{ labels.volume_label }}**: {{ labels.volume_ratio_label }} {{ vr_display }} ({{ vol_data.get('volume_status', '') }}) | {{ labels.turnover_rate_label }} {{ tr_display }}
-💡 *{{ vol_data.get('volume_meaning', '') }}*
-{% endif %}
-
-{% if alpha_data %}
-**Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='接口未返回') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='接口未返回') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='接口未返回') }}
-{% endif %}
-
-{% set chip_data = data_persp.get('chip_structure', {}) %}
-{% if is_us_stock_code(result.code) %}
-**{{ labels.chip_label }}**: {{ na('当前市场暂不支持') }}
-{% elif chip_data %}
-**{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', na('接口未返回')) }} | {{ chip_data.get('avg_cost', na('接口未返回')) }} | {{ chip_data.get('concentration', na('接口未返回')) }} {{ localize_chip_health(chip_data.get('chip_health', na('接口未返回')), report_language) }}
-{% endif %}
-{% set _ = technical_lines.append(sr_line) %}
-{% endif %}
-{% if technical.get('ma20_position') %}
-{% set _ = technical_lines.append('位置判断：' ~ technical.get('ma20_position')) %}
-{% endif %}
-{{ compact_list_section(technical_heading, technical_lines) }}
-
-{% if alpha_data %}
-**Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='数据缺失') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='数据缺失') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='数据缺失') }}
-{% endif %}
-
-{% set sniper = battle.get('sniper_points', {}) %}
-{% if sniper %}
-{% set market_price = (result.market_snapshot.get('price') if result.market_snapshot else None) %}
-{% set levels = annotate_trade_levels(result.current_price or market_price, sniper.get('ideal_buy'), sniper.get('secondary_buy'), sniper.get('stop_loss'), result.trend_prediction) %}
-**📍 {{ labels.action_points_heading }}**
-
-| {{ labels.action_points_heading }} | {{ labels.current_price_label }} |
-|---------|------|
-| 🎯 {{ labels.ideal_buy_label }} | {{ clean_sniper(sniper.get('ideal_buy')) }}{% if levels.get('ideal_buy_tag') %}（{{ levels.get('ideal_buy_tag') }}）{% endif %} |
-| 🔵 {{ labels.secondary_buy_label }} | {{ clean_sniper(sniper.get('secondary_buy')) }}{% if levels.get('secondary_buy_tag') %}（{{ levels.get('secondary_buy_tag') }}）{% endif %} |
-| 🛑 {{ labels.stop_loss_label }} | {{ clean_sniper(sniper.get('stop_loss')) }} |
-| 🎊 {{ labels.take_profit_label }} | {{ clean_sniper(sniper.get('take_profit')) }} |
-{% if levels.get('risk_warnings') %}
-{% for warning in levels.get('risk_warnings') %}
-- ⚠️ {{ warning }}
-{% endfor %}
-{% endif %}
-{% endif %}
-
-{% set sniper = battle.get('sniper_points', {}) %}
-{% set position = battle.get('position_strategy', {}) %}
-{% if position %}
-**💰 {{ labels.suggested_position_label }}**: {{ position.get('suggested_position') or na('字段待接入') }}
-- {{ labels.entry_plan_label }}: {{ position.get('entry_plan') or na('字段待接入') }}
-- {{ labels.risk_control_label }}: {{ position.get('risk_control') or na('字段待接入') }}
-{% endif %}
-
-{% if battle %}
-{% set battle_lines = [] %}
-{% if sniper.get('ideal_buy') %}
-{% set _ = battle_lines.append(labels.ideal_buy_label ~ '：' ~ clean_sniper(sniper.get('ideal_buy'))) %}
-{% endif %}
-{% if sniper.get('secondary_buy') %}
-{% set _ = battle_lines.append(labels.secondary_buy_label ~ '：' ~ clean_sniper(sniper.get('secondary_buy'))) %}
-{% endif %}
-{% if sniper.get('stop_loss') %}
-{% set _ = battle_lines.append(labels.stop_loss_label ~ '：' ~ clean_sniper(sniper.get('stop_loss'))) %}
-{% endif %}
-{% if sniper.get('take_profit') %}
-{% set _ = battle_lines.append(labels.take_profit_label ~ '：' ~ clean_sniper(sniper.get('take_profit'))) %}
-{% endif %}
-{% if position.get('suggested_position') %}
-{% set _ = battle_lines.append(labels.suggested_position_label ~ '：' ~ display_percent_or_text(position.get('suggested_position'))) %}
-{% endif %}
-{% if checklist %}
-{% set _ = battle_lines.append(execution_check_label ~ '：' ~ summarize_checklist(checklist)) %}
-{% endif %}
-{{ compact_list_section(labels.battle_plan_heading, battle_lines) }}
-{% endif %}
-
-{% if not dashboard %}
-{% if result.buy_reason %}
-**💡 操作理由**: {{ result.buy_reason }}
-{% endif %}
-{% if result.risk_warning %}
-**⚠️ 风险提示**: {{ result.risk_warning }}
-{% endif %}
-{% endif %}
-
-{% set hist = history_by_code.get(result.code, []) %}
-{% if hist %}
-### 📜 {{ labels.history_compare_heading }}
-| {{ labels.time_label }} | {{ labels.score_label }} | {{ labels.advice_label }} | {{ labels.trend_label }} |
-|------|------|------|------|
-{% for h in hist %}
-| {{ h.created_at[:16] if h.created_at else na('接口未返回') }} | {{ h.sentiment_score or na('接口未返回') }} | {{ localize_operation_advice(h.operation_advice or na('接口未返回'), report_language) }} | {{ localize_trend_prediction(h.trend_prediction or na('接口未返回'), report_language) }} |
-{% endfor %}
-{% endif %}
 
 ---
 {% endfor %}

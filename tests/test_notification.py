@@ -335,6 +335,49 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("### 🧩 数据质量说明", merged)
 
     @mock.patch("src.notification.get_config")
+    @mock.patch("requests.post")
+    def test_notification_renderer_to_discord_uses_standard_sections_without_tables(
+        self, mock_post: mock.MagicMock, mock_get_config: mock.MagicMock
+    ):
+        mock_get_config.return_value = _make_config(
+            report_renderer_enabled=True,
+            report_summary_only=False,
+            discord_bot_token="TOKEN",
+            discord_main_channel_id="123",
+            discord_max_words=400,
+        )
+        mock_post.return_value = _make_response(200)
+
+        service = NotificationService()
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=70,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="等待确认",
+            dashboard={
+                "core_conclusion": {"one_sentence": "等待确认"},
+                "battle_plan": {"sniper_points": {"ideal_buy": "120", "stop_loss": "110", "take_profit": "130"}},
+                "intelligence": {"latest_news": "公司公布财报并上调指引"},
+            },
+            market_snapshot={"price": 125, "prev_close": 123, "close": 124, "session_type": "intraday_snapshot"},
+        )
+
+        content = service.generate_dashboard_report([result], report_date="2026-03-26")
+        ok = service.send(content)
+        self.assertTrue(ok)
+
+        sent_payloads = [call.kwargs.get("json", {}).get("content", "") for call in mock_post.call_args_list]
+        merged = "\n".join(sent_payloads)
+        self.assertIn("1. 标题区", merged)
+        self.assertIn("2. 重要信息速览", merged)
+        self.assertIn("4. 当日行情", merged)
+        self.assertIn("7. 作战计划", merged)
+        self.assertNotIn("|--|", merged)
+        self.assertNotIn("| 字段 |", merged)
+
+    @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
         service = NotificationService()

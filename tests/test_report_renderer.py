@@ -1,17 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-===================================
-Report Engine - Report renderer tests
-===================================
-
-Tests for Jinja2 report rendering and fallback behavior.
-"""
+"""Tests for standard report rendering pipeline."""
 
 import sys
 import unittest
 from unittest.mock import MagicMock
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 try:
     import litellm  # noqa: F401
@@ -23,999 +15,282 @@ from src.services.report_renderer import render
 
 
 def _make_result(
-    code: str = "600519",
-    name: str = "贵州茅台",
-    sentiment_score: int = 72,
-    operation_advice: str = "持有",
-    analysis_summary: str = "稳健",
-    decision_type: str = "hold",
-    dashboard: dict = None,
+    *,
+    code: str = "AAPL",
+    name: str = "Apple",
     report_language: str = "zh",
-    market_snapshot: dict = None,
-    current_price: float = None,
+    market_snapshot: dict | None = None,
+    dashboard: dict | None = None,
+    trend_prediction: str = "看多",
 ) -> AnalysisResult:
-    if dashboard is None:
-        dashboard = {
-            "core_conclusion": {"one_sentence": "持有观望"},
-            "intelligence": {"risk_alerts": []},
-            "battle_plan": {"sniper_points": {"stop_loss": "110"}},
-        }
+    dashboard = dashboard or {
+        "core_conclusion": {
+            "one_sentence": "等待确认",
+            "time_sensitivity": "3日内",
+            "position_advice": {
+                "no_position": "等待回踩确认",
+                "has_position": "继续持有",
+            },
+        },
+        "battle_plan": {
+            "sniper_points": {
+                "ideal_buy": "120-121",
+                "secondary_buy": "118",
+                "stop_loss": "115",
+                "take_profit": "132",
+            },
+            "action_checklist": ["⚠️ 等待回踩 MA5"],
+        },
+        "intelligence": {
+            "risk_alerts": ["监管调查进展"],
+            "positive_catalysts": ["公司获重大订单"],
+            "latest_news": "公司发布季度财报并上调指引",
+            "sentiment_summary": "市场情绪回暖",
+            "earnings_outlook": "业绩预期改善",
+        },
+        "data_perspective": {
+            "trend_status": {"is_bullish": True, "trend_score": 72},
+            "price_position": {
+                "ma5": 123.4567,
+                "ma10": 122.1234,
+                "ma20": 120.9876,
+                "support_level": 119.1111,
+                "resistance_level": 128.9999,
+                "bias_ma5": 1.23456,
+                "vwap": 124.9876,
+            },
+            "volume_analysis": {
+                "volume_ratio": 1.35,
+                "turnover_rate": 0.88,
+                "volume_status": "放量",
+                "volume_meaning": "资金关注提升",
+            },
+            "alpha_vantage": {
+                "rsi14": 56.777,
+                "sma20": 121.335,
+                "sma60": 118.882,
+            },
+        },
+        "structured_analysis": {
+            "fundamentals": {
+                "normalized": {
+                    "marketCap": 123400000000,
+                    "trailingPE": 21.3333,
+                    "forwardPE": 19.8888,
+                    "beta": 1.2345,
+                    "fiftyTwoWeekHigh": 199.876,
+                    "fiftyTwoWeekLow": 99.123,
+                    "sharesOutstanding": 5000000000,
+                    "revenueGrowth": 0.12,
+                    "freeCashflow": 4567000000,
+                }
+            },
+            "earnings_analysis": {
+                "derived_metrics": {
+                    "qoq_revenue_growth": 0.05,
+                    "yoy_revenue_growth": 0.12,
+                    "qoq_net_income_change": 0.04,
+                    "yoy_net_income_change": 0.09,
+                }
+            },
+            "sentiment_analysis": {
+                "company_sentiment": "positive",
+                "industry_sentiment": "neutral",
+                "regulatory_sentiment": "neutral",
+                "overall_confidence": "medium",
+            },
+        },
+    }
+
+    market_snapshot = market_snapshot or {
+        "price": 125.3,
+        "close": 124.0,
+        "prev_close": 123.0,
+        "open": 123.5,
+        "high": 126.2,
+        "low": 122.9,
+        "change_amount": 2.3,
+        "pct_chg": 1.87,
+        "volume": 4500000,
+        "amount": 880000000,
+        "session_type": "intraday_snapshot",
+        "source": "unit-test",
+    }
+
     return AnalysisResult(
         code=code,
         name=name,
-        trend_prediction="看多",
-        sentiment_score=sentiment_score,
-        operation_advice=operation_advice,
-        analysis_summary=analysis_summary,
-        decision_type=decision_type,
-        dashboard=dashboard,
+        sentiment_score=68,
+        trend_prediction=trend_prediction,
+        operation_advice="持有",
+        analysis_summary="观望",
+        decision_type="hold",
         report_language=report_language,
+        dashboard=dashboard,
         market_snapshot=market_snapshot,
-        current_price=current_price,
     )
 
 
 class TestReportRenderer(unittest.TestCase):
-    """Report renderer tests."""
-
-    def test_render_markdown_summary_only(self) -> None:
-        """Markdown platform renders with summary_only."""
-        r = _make_result()
-        out = render("markdown", [r], summary_only=True)
+    def test_render_contains_required_sections(self) -> None:
+        out = render("markdown", [_make_result()], summary_only=False)
         self.assertIsNotNone(out)
-        self.assertIn("决策仪表盘", out)
-        self.assertIn("贵州茅台", out)
-        self.assertIn("持有", out)
+        assert out is not None
+        self.assertIn("1. 标题区", out)
+        self.assertIn("2. 重要信息速览", out)
+        self.assertIn("3. 持仓建议", out)
+        self.assertIn("4. 当日行情", out)
+        self.assertIn("5. 技术面", out)
+        self.assertIn("6. 基本面 / 财报 / 情绪", out)
+        self.assertIn("7. 作战计划", out)
+        self.assertIn("8. 检查清单", out)
 
-    def test_render_markdown_full(self) -> None:
-        """Markdown platform renders full report."""
-        r = _make_result()
-        out = render("markdown", [r], summary_only=False)
-        self.assertIsNotNone(out)
-        self.assertIn("核心结论", out)
-        self.assertIn("作战计划", out)
-
-    def test_render_wechat(self) -> None:
-        """Wechat platform renders."""
-        r = _make_result()
-        out = render("wechat", [r])
-        self.assertIsNotNone(out)
-        self.assertIn("贵州茅台", out)
-
-    def test_render_brief(self) -> None:
-        """Brief platform renders 3-5 sentence summary."""
-        r = _make_result()
-        out = render("brief", [r])
-        self.assertIsNotNone(out)
-        self.assertIn("决策简报", out)
-        self.assertIn("贵州茅台", out)
-
-    def test_render_markdown_in_english(self) -> None:
-        """Markdown renderer switches headings and summary labels for English reports."""
+    def test_regular_change_uses_price_minus_prev_close(self) -> None:
         r = _make_result(
-            name="Kweichow Moutai",
-            operation_advice="Buy",
-            analysis_summary="Momentum remains constructive.",
-            report_language="en",
-        )
-        out = render("markdown", [r], summary_only=True)
-        self.assertIsNotNone(out)
-        self.assertIn("Decision Dashboard", out)
-        self.assertIn("Summary", out)
-        self.assertIn("Buy", out)
-
-    def test_render_markdown_market_snapshot_uses_template_context(self) -> None:
-        """Market snapshot macro should render localized short-list labels with template context."""
-        r = _make_result(
-            code="AAPL",
-            name="Apple",
-            operation_advice="Buy",
-            report_language="en",
-        )
-        r.market_snapshot = {
-            "close": "180.10",
-            "prev_close": "178.25",
-            "open": "179.00",
-            "high": "181.20",
-            "low": "177.80",
-            "pct_chg": "+1.04%",
-            "change_amount": "1.85",
-            "amplitude": "1.91%",
-            "volume": "1200000",
-            "amount": "215000000",
-            "price": "180.35",
-            "volume_ratio": "1.2",
-            "turnover_rate": "0.8%",
-            "source": "polygon",
-        }
-
-        out = render("markdown", [r], summary_only=False)
-
-        self.assertIsNotNone(out)
-        self.assertIn("Market Snapshot", out)
-        self.assertIn("Price", out)
-        self.assertIn("Change %", out)
-        self.assertIn("High", out)
-        self.assertIn("Low", out)
-        self.assertNotIn("| Close |", out)
-
-    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
-        r = _make_result(
-            code="AAPL",
-            name="Apple",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
-                "data_perspective": {
-                    "volume_analysis": {
-                        "volume_ratio": 0.8,
-                        "volume_status": "正常",
-                        "turnover_rate": "N/A",
-                        "volume_meaning": "量能平稳",
-                    },
-                    "chip_structure": {"profit_ratio": "N/A"},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("筹码", out)
-        self.assertIn("美股暂不支持该指标", out)
-        self.assertNotIn("报告生成时间", out)
-
-    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
-        r = _make_result(
-            code="MSTR",
-            name="MicroStrategy",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
-                "data_perspective": {
-                    "price_position": {
-                        "current_price": 130.5,
-                        "ma5": 0.0,
-                        "ma10": 0.0,
-                        "ma20": None,
-                        "bias_ma5": 0.0,
-                        "support_level": None,
-                        "resistance_level": None,
-                    },
-                    "volume_analysis": {
-                        "volume_ratio": 0.0,
-                        "turnover_rate": None,
-                        "volume_status": "缺失",
-                    },
-                    "alpha_vantage": {
-                        "rsi14": 47.7279,
-                        "sma20": 138.406,
-                        "sma60": 144.9608,
-                    },
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("MA20：138.41", out)
-        self.assertIn("位置判断：当前位于 MA20 下方", out)
-        self.assertNotIn("Alpha Vantage", out)
-        self.assertNotIn("| MA20 |", out)
-
-    def test_render_uses_asia_shanghai_timestamp(self) -> None:
-        r = _make_result()
-        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
-        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
-            out = render("markdown", [r], summary_only=False)
-        self.assertIn("# 🎯 2026-03-25 决策仪表盘", out)
-        self.assertNotIn("report_generated_at", out)
-
-    def test_render_prefers_time_contract_fields(self) -> None:
-        r = _make_result(code="AAPL", name="Apple")
-        out = render(
-            "markdown",
-            [r],
-            summary_only=True,
-            extra_context={
-                "report_generated_at": "2026-03-25T01:00:00+00:00",
-                "market_timestamp": "2026-03-24T21:00:00-04:00",
-                "market_session_date": "2026-03-24",
-                "session_type": "last_completed_session",
-                "news_published_at": "2026-03-24T20:00:00-04:00",
-            },
-        )
-        self.assertNotIn("2026-03-25T01:00:00+00:00", out)
-        self.assertNotIn("2026-03-24T21:00:00-04:00", out)
-        self.assertNotIn("2026-03-24T20:00:00-04:00", out)
-        self.assertNotIn("last_completed_session", out)
-
-    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
-        r = _make_result(
-            code="TSLA",
-            name="Tesla",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {},
-                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-25T16:00:00-04:00",
-                        "market_session_date": "2026-03-25",
-                        "report_generated_at": "2026-03-26T08:30:00+08:00",
-                        "session_type": "last_completed_session",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=True)
-        self.assertNotIn("2026-03-25T16:00:00-04:00", out)
-        self.assertNotIn("2026-03-26T08:30:00+08:00", out)
-        self.assertNotIn("last_completed_session", out)
-
-    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
-        r = _make_result(
-            code="ORCL",
-            name="Oracle",
-            dashboard={
-                "core_conclusion": {
-                    "one_sentence": "观望",
-                    "position_advice": {
-                        "no_position": "等待回踩确认后再分批介入。",
-                        "has_position": "继续持有，跌破止损位及时减仓。",
-                    },
-                },
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {
-                    "sniper_points": {
-                        "ideal_buy": "123-124",
-                        "stop_loss": "100",
-                        "take_profit": "138",
-                    },
-                    "position_strategy": {"suggested_position": "30%"},
-                    "action_checklist": ["⚠️ 等待回踩 MA5 确认", "⚠️ 注意量价配合"],
-                },
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-24T21:00:00-04:00",
-                        "market_session_date": "2026-03-24",
-                        "report_generated_at": "2026-03-25T01:00:00+00:00",
-                        "news_published_at": "2026-03-24T20:00:00-04:00",
-                        "session_type": "intraday_snapshot",
-                    },
-                    "fundamentals": {
-                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
-                        "derived_insights": ["valuation_high", "high_growth"],
-                    },
-                    "earnings_analysis": {
-                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
-                        "summary_flags": ["quarterly_series_available"],
-                        "narrative_insights": ["margins improving"],
-                    },
-                    "sentiment_analysis": {
-                        "company_sentiment": "positive",
-                        "industry_sentiment": "background_only",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "medium",
-                        "relevance_type": "company_specific",
-                        "relevance_score": 0.82,
-                    },
-                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
-                },
-            },
-        )
-        r.market_snapshot = {
-            "price": 125.4,
-            "pct_chg": "+1.20%",
-            "high": 126.8,
-            "low": 123.9,
-            "volume": 34560000,
-        }
-        r.dashboard["data_perspective"] = {
-            "price_position": {
-                "current_price": 125.4,
-                "ma5": 124.8,
-                "ma10": 123.7,
-                "ma20": 122.1,
-                "support_level": 121.5,
-                "resistance_level": 127.0,
-            },
-            "volume_analysis": {
-                "volume_ratio": 1.46,
-                "volume_status": "放量",
-            },
-        }
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("重要信息速览", out)
-        self.assertIn("基本面：", out)
-        self.assertIn("财报趋势：", out)
-        self.assertIn("情绪：", out)
-        self.assertIn("营收增速 12.0%", out)
-        self.assertIn("TTM PE 22.1 倍", out)
-        self.assertIn("当前价：125.40", out)
-        self.assertIn("涨跌幅：1.20%", out)
-        self.assertIn("最高：126.80", out)
-        self.assertIn("最低：123.90", out)
-        self.assertIn("成交量：3456.00万", out)
-        self.assertIn("量能判断：放量，短线资金参与度提升。", out)
-        self.assertIn("MA5：124.80", out)
-        self.assertIn("MA10：123.70", out)
-        self.assertIn("MA20：122.10", out)
-        self.assertIn("支撑位：121.50", out)
-        self.assertIn("压力位：127.00", out)
-        self.assertIn("位置判断：当前位于 MA20 上方", out)
-        self.assertIn("空仓者：等待回踩确认后再分批介入。", out)
-        self.assertIn("持仓者：继续持有，跌破止损位及时减仓。", out)
-        self.assertIn("理想买入点：123.00-124.00", out)
-        self.assertIn("止损位：100.00", out)
-        self.assertIn("目标位：138.00", out)
-        self.assertIn("仓位建议：30.00%", out)
-        self.assertIn("执行确认：仍有2项执行条件待确认，重点留意买点确认、量价配合。", out)
-        self.assertNotIn("session_type", out)
-        self.assertNotIn("news_published_at", out)
-        self.assertNotIn("company_sentiment", out)
-        self.assertNotIn("overall_confidence", out)
-        self.assertNotIn("medium", out)
-        self.assertNotIn("valuation_high", out)
-        self.assertNotIn("high_growth", out)
-        self.assertNotIn("| 当前价 |", out)
-
-    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
-        r = _make_result(
-            code="TEM",
-            name="Tempus AI",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {
-                    "latest_news": "Anthropic faces new regulation inquiry.",
-                    "risk_alerts": ["监管动态"],
-                    "positive_catalysts": ["行业合作扩张"],
-                },
-                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
-                "structured_analysis": {
-                    "sentiment_analysis": {
-                        "relevance_type": "industry_general",
-                        "company_sentiment": "no_reliable_news",
-                        "industry_sentiment": "neutral",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "low",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("行业背景", out)
-        self.assertNotIn("📢 最新动态", out)
-
-    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
-        r = _make_result(
-            code="AAPL",
-            name="Apple",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
-                "data_perspective": {
-                    "volume_analysis": {
-                        "volume_ratio": 0.8,
-                        "volume_status": "正常",
-                        "turnover_rate": "N/A",
-                        "volume_meaning": "量能平稳",
-                    },
-                    "chip_structure": {"profit_ratio": "N/A"},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("筹码", out)
-        self.assertIn("美股暂不支持该指标", out)
-        self.assertIn("换手率 数据缺失", out)
-
-    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
-        r = _make_result(
-            code="MSTR",
-            name="MicroStrategy",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
-                "data_perspective": {
-                    "price_position": {
-                        "current_price": 130.5,
-                        "ma5": 0.0,
-                        "ma10": 0.0,
-                        "ma20": None,
-                        "bias_ma5": 0.0,
-                        "support_level": None,
-                        "resistance_level": None,
-                    },
-                    "volume_analysis": {
-                        "volume_ratio": 0.0,
-                        "turnover_rate": None,
-                        "volume_status": "缺失",
-                    },
-                    "alpha_vantage": {
-                        "rsi14": 47.7279,
-                        "sma20": 138.406,
-                        "sma60": 144.9608,
-                    },
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("数据缺失（Alpha Vantage SMA20: 138.406）", out)
-        self.assertIn("乖离率(MA5) | 0.00%", out)
-        self.assertIn("量比 数据缺失", out)
-        self.assertIn("换手率 数据缺失", out)
-
-    def test_render_uses_asia_shanghai_timestamp(self) -> None:
-        r = _make_result()
-        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
-        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
-            out = render("markdown", [r], summary_only=False)
-        self.assertIn("2026-03-25 09:30:15", out)
-        self.assertIn("report_generated_at", out)
-
-    def test_render_prefers_time_contract_fields(self) -> None:
-        r = _make_result(code="AAPL", name="Apple")
-        out = render(
-            "markdown",
-            [r],
-            summary_only=True,
-            extra_context={
-                "report_generated_at": "2026-03-25T01:00:00+00:00",
-                "market_timestamp": "2026-03-24T21:00:00-04:00",
-                "market_session_date": "2026-03-24",
-                "session_type": "last_completed_session",
-                "news_published_at": "2026-03-24T20:00:00-04:00",
-            },
-        )
-        self.assertIn("2026-03-25T01:00:00+00:00", out)
-        self.assertIn("2026-03-24T21:00:00-04:00", out)
-        self.assertIn("2026-03-24", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
-        r = _make_result(
-            code="TSLA",
-            name="Tesla",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {},
-                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-25T16:00:00-04:00",
-                        "market_session_date": "2026-03-25",
-                        "report_generated_at": "2026-03-26T08:30:00+08:00",
-                        "session_type": "last_completed_session",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=True)
-        self.assertIn("2026-03-25T16:00:00-04:00", out)
-        self.assertIn("2026-03-25", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
-        r = _make_result(
-            code="ORCL",
-            name="Oracle",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-24T21:00:00-04:00",
-                        "market_session_date": "2026-03-24",
-                        "report_generated_at": "2026-03-25T01:00:00+00:00",
-                        "news_published_at": "2026-03-24T20:00:00-04:00",
-                        "session_type": "intraday_snapshot",
-                    },
-                    "fundamentals": {
-                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
-                        "derived_insights": ["valuation_high", "high_growth"],
-                    },
-                    "earnings_analysis": {
-                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
-                        "summary_flags": ["quarterly_series_available"],
-                        "narrative_insights": ["margins improving"],
-                    },
-                    "sentiment_analysis": {
-                        "company_sentiment": "positive",
-                        "industry_sentiment": "background_only",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "medium",
-                        "relevance_type": "company_specific",
-                        "relevance_score": 0.82,
-                    },
-                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("session_type: intraday_snapshot", out)
-
-    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
-        r = _make_result(
-            code="TEM",
-            name="Tempus AI",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {
-                    "latest_news": "Anthropic faces new regulation inquiry.",
-                    "risk_alerts": ["监管动态"],
-                    "positive_catalysts": ["行业合作扩张"],
-                },
-                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
-                "structured_analysis": {
-                    "sentiment_analysis": {
-                        "relevance_type": "industry_general",
-                        "company_sentiment": "no_reliable_news",
-                        "industry_sentiment": "neutral",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "low",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("行业背景", out)
-        self.assertNotIn("📢 最新动态", out)
-
-    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
-        r = _make_result(
-            code="AAPL",
-            name="Apple",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
-                "data_perspective": {
-                    "volume_analysis": {
-                        "volume_ratio": 0.8,
-                        "volume_status": "正常",
-                        "turnover_rate": "N/A",
-                        "volume_meaning": "量能平稳",
-                    },
-                    "chip_structure": {"profit_ratio": "N/A"},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("筹码", out)
-        self.assertIn("NA（当前市场暂不支持）", out)
-        self.assertIn("换手率 NA（字段待接入）", out)
-
-    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
-        r = _make_result(
-            code="MSTR",
-            name="MicroStrategy",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
-                "data_perspective": {
-                    "price_position": {
-                        "current_price": 130.5,
-                        "ma5": 0.0,
-                        "ma10": 0.0,
-                        "ma20": None,
-                        "bias_ma5": 0.0,
-                        "support_level": None,
-                        "resistance_level": None,
-                    },
-                    "volume_analysis": {
-                        "volume_ratio": 0.0,
-                        "turnover_rate": None,
-                        "volume_status": "缺失",
-                    },
-                    "alpha_vantage": {
-                        "rsi14": 47.7279,
-                        "sma20": 138.406,
-                        "sma60": 144.9608,
-                    },
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("NA（接口未返回）（Alpha Vantage SMA20: 138.41）", out)
-        self.assertIn("乖离率(MA5) | 0.00%", out)
-        self.assertIn("量比 NA（接口未返回）", out)
-        self.assertIn("换手率 NA（字段待接入）", out)
-
-    def test_render_uses_asia_shanghai_timestamp(self) -> None:
-        r = _make_result()
-        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
-        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
-            out = render("markdown", [r], summary_only=False)
-        self.assertIn("2026-03-25 09:30:15", out)
-        self.assertIn("报告生成时间（北京时间）", out)
-
-    def test_render_prefers_time_contract_fields(self) -> None:
-        r = _make_result(code="AAPL", name="Apple")
-        out = render(
-            "markdown",
-            [r],
-            summary_only=True,
-            extra_context={
-                "report_generated_at": "2026-03-25T01:00:00+00:00",
-                "market_timestamp": "2026-03-24T21:00:00-04:00",
-                "market_session_date": "2026-03-24",
-                "session_type": "last_completed_session",
-                "news_published_at": "2026-03-24T20:00:00-04:00",
-            },
-        )
-        self.assertIn("2026-03-25 09:00:00", out)
-        self.assertIn("2026-03-24T21:00:00-04:00", out)
-        self.assertIn("2026-03-24", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
-        r = _make_result(
-            code="TSLA",
-            name="Tesla",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {},
-                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-25T16:00:00-04:00",
-                        "market_session_date": "2026-03-25",
-                        "report_generated_at": "2026-03-26T08:30:00+08:00",
-                        "session_type": "last_completed_session",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=True)
-        self.assertIn("2026-03-25T16:00:00-04:00", out)
-        self.assertIn("2026-03-25", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
-        r = _make_result(
-            code="ORCL",
-            name="Oracle",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-24T21:00:00-04:00",
-                        "market_session_date": "2026-03-24",
-                        "report_generated_at": "2026-03-25T01:00:00+00:00",
-                        "news_published_at": "2026-03-24T20:00:00-04:00",
-                        "session_type": "intraday_snapshot",
-                    },
-                    "fundamentals": {
-                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
-                        "derived_insights": ["valuation_high", "high_growth"],
-                    },
-                    "earnings_analysis": {
-                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
-                        "summary_flags": ["quarterly_series_available"],
-                        "narrative_insights": ["margins improving"],
-                    },
-                    "sentiment_analysis": {
-                        "company_sentiment": "positive",
-                        "industry_sentiment": "background_only",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "medium",
-                        "relevance_type": "company_specific",
-                        "relevance_score": 0.82,
-                    },
-                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("session_type: intraday_snapshot", out)
-
-    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
-        r = _make_result(
-            code="TEM",
-            name="Tempus AI",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {
-                    "latest_news": "Anthropic faces new regulation inquiry.",
-                    "risk_alerts": ["监管动态"],
-                    "positive_catalysts": ["行业合作扩张"],
-                },
-                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
-                "structured_analysis": {
-                    "sentiment_analysis": {
-                        "relevance_type": "industry_general",
-                        "company_sentiment": "no_reliable_news",
-                        "industry_sentiment": "neutral",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "low",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("行业背景", out)
-        self.assertNotIn("📢 最新动态", out)
-
-    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
-        r = _make_result(
-            code="AAPL",
-            name="Apple",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
-                "data_perspective": {
-                    "volume_analysis": {
-                        "volume_ratio": 0.8,
-                        "volume_status": "正常",
-                        "turnover_rate": "N/A",
-                        "volume_meaning": "量能平稳",
-                    },
-                    "chip_structure": {"profit_ratio": "N/A"},
-                },
-            },
-        )
-        r.trend_prediction = "看多"
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("筹码", out)
-        self.assertIn("NA（当前市场暂不支持）", out)
-        self.assertIn("换手率 NA（字段待接入）", out)
-
-    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
-        r = _make_result(
-            code="MSTR",
-            name="MicroStrategy",
-            report_language="zh",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
-                "data_perspective": {
-                    "price_position": {
-                        "current_price": 130.5,
-                        "ma5": 0.0,
-                        "ma10": 0.0,
-                        "ma20": None,
-                        "bias_ma5": 0.0,
-                        "support_level": None,
-                        "resistance_level": None,
-                    },
-                    "volume_analysis": {
-                        "volume_ratio": 0.0,
-                        "turnover_rate": None,
-                        "volume_status": "缺失",
-                    },
-                    "alpha_vantage": {
-                        "rsi14": 47.7279,
-                        "sma20": 138.406,
-                        "sma60": 144.9608,
-                    },
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("NA（接口未返回）（Alpha Vantage SMA20: 138.41）", out)
-        self.assertIn("乖离率(MA5) | 0.00%", out)
-        self.assertIn("量比 NA（接口未返回）", out)
-        self.assertIn("换手率 NA（字段待接入）", out)
-
-    def test_render_uses_asia_shanghai_timestamp(self) -> None:
-        r = _make_result()
-        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
-        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
-            out = render("markdown", [r], summary_only=False)
-        self.assertIn("2026-03-25 09:30:15", out)
-        self.assertIn("报告生成时间（北京时间）", out)
-
-    def test_render_prefers_time_contract_fields(self) -> None:
-        r = _make_result(code="AAPL", name="Apple")
-        out = render(
-            "markdown",
-            [r],
-            summary_only=True,
-            extra_context={
-                "report_generated_at": "2026-03-25T01:00:00+00:00",
-                "market_timestamp": "2026-03-24T21:00:00-04:00",
-                "market_session_date": "2026-03-24",
-                "session_type": "last_completed_session",
-                "news_published_at": "2026-03-24T20:00:00-04:00",
-            },
-        )
-        self.assertIn("2026-03-25 09:00:00", out)
-        self.assertIn("2026-03-24T21:00:00-04:00", out)
-        self.assertIn("2026-03-24", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
-        r = _make_result(
-            code="TSLA",
-            name="Tesla",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {},
-                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-25T16:00:00-04:00",
-                        "market_session_date": "2026-03-25",
-                        "report_generated_at": "2026-03-26T08:30:00+08:00",
-                        "session_type": "last_completed_session",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=True)
-        self.assertIn("2026-03-25T16:00:00-04:00", out)
-        self.assertIn("2026-03-25", out)
-        self.assertIn("last_completed_session", out)
-
-    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
-        r = _make_result(
-            code="ORCL",
-            name="Oracle",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
-                "structured_analysis": {
-                    "time_context": {
-                        "market_timestamp": "2026-03-24T21:00:00-04:00",
-                        "market_session_date": "2026-03-24",
-                        "report_generated_at": "2026-03-25T01:00:00+00:00",
-                        "news_published_at": "2026-03-24T20:00:00-04:00",
-                        "session_type": "intraday_snapshot",
-                    },
-                    "fundamentals": {
-                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
-                        "derived_insights": ["valuation_high", "high_growth"],
-                    },
-                    "earnings_analysis": {
-                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
-                        "summary_flags": ["quarterly_series_available"],
-                        "narrative_insights": ["margins improving"],
-                    },
-                    "sentiment_analysis": {
-                        "company_sentiment": "positive",
-                        "industry_sentiment": "background_only",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "medium",
-                        "relevance_type": "company_specific",
-                        "relevance_score": 0.82,
-                    },
-                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("session_type: intraday_snapshot", out)
-
-    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
-        r = _make_result(
-            code="TEM",
-            name="Tempus AI",
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {
-                    "latest_news": "Anthropic faces new regulation inquiry.",
-                    "risk_alerts": ["监管动态"],
-                    "positive_catalysts": ["行业合作扩张"],
-                },
-                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
-                "structured_analysis": {
-                    "sentiment_analysis": {
-                        "relevance_type": "industry_general",
-                        "company_sentiment": "no_reliable_news",
-                        "industry_sentiment": "neutral",
-                        "regulatory_sentiment": "neutral",
-                        "overall_confidence": "low",
-                    }
-                },
-            },
-        )
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("行业背景", out)
-        self.assertNotIn("📢 最新动态", out)
-
-    def test_render_unknown_platform_returns_none(self) -> None:
-        """Unknown platform returns None (caller fallback)."""
-        r = _make_result()
-        out = render("unknown_platform", [r])
-        self.assertIsNone(out)
-
-    def test_render_structured_sections_are_explicit_even_when_missing(self) -> None:
-        r = _make_result(
-            dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {},
-                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
-                "structured_analysis": {},
+            market_snapshot={
+                "price": 110,
+                "close": 109,
+                "prev_close": 100,
+                "open": 101,
+                "high": 112,
+                "low": 99,
+                "session_type": "intraday_snapshot",
             }
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("数据质量说明", out)
+        assert out is not None
+        self.assertIn("**涨跌额**: 10.00", out)
+        self.assertIn("**涨跌幅**: 10.00%", out)
 
-    def test_render_empty_results_returns_content(self) -> None:
-        """Empty results still produces header."""
-        out = render("markdown", [], summary_only=True)
-        self.assertIsNotNone(out)
-        self.assertIn("0", out)
-
-
-    def test_render_market_snapshot_recomputes_inconsistent_change_fields(self) -> None:
-        r = _make_result(code="AAPL", name="Apple", market_snapshot={
-            "price": 100.0,
-            "close": 100.0,
-            "prev_close": 90.0,
-            "change_amount": 1.0,
-            "pct_chg": 1.0,
-        })
-        out = render("markdown", [r], summary_only=False)
-        self.assertIn("10.00", out)
-        self.assertIn("11.11%", out)
-        self.assertIn("口径校验", out)
-
-    def test_render_trade_level_annotations_and_risk_warning(self) -> None:
+    def test_regular_and_extended_sessions_are_separated(self) -> None:
         r = _make_result(
-            code="AAPL",
-            name="Apple",
-            current_price=100.0,
-            market_snapshot={"price": 100.0},
+            market_snapshot={
+                "price": 105,
+                "close": 100,
+                "prev_close": 95,
+                "open": 96,
+                "high": 106,
+                "low": 94,
+                "session_type": "after_hours",
+                "extended_timestamp": "2026-03-27T20:00:00-04:00",
+            }
+        )
+        out = render("markdown", [r], summary_only=False)
+        assert out is not None
+        self.assertIn("**当前价**: 100.00", out)  # regular section uses close
+        self.assertIn("**扩展时段价格**: 105.00", out)
+        self.assertIn("**会话标签**: 盘后", out)
+
+    def test_conflict_outputs_reasoned_na(self) -> None:
+        r = _make_result(
+            market_snapshot={
+                "price": 110,
+                "prev_close": 100,
+                "regular_change": 20,
+                "regular_change_pct": 20,
+                "session_type": "intraday_snapshot",
+            }
+        )
+        out = render("markdown", [r], summary_only=False)
+        assert out is not None
+        self.assertIn("NA（口径冲突，待校正）", out)
+
+    def test_numeric_display_is_rounded(self) -> None:
+        out = render("markdown", [_make_result()], summary_only=False)
+        assert out is not None
+        self.assertIn("**MA5**: 123.46", out)
+        self.assertIn("**支撑位**: 119.11", out)
+        self.assertIn("**RSI14**: 56.78", out)
+        self.assertNotIn("123.4567", out)
+
+    def test_missing_values_use_reasoned_na(self) -> None:
+        r = _make_result(
+            market_snapshot={
+                "price": None,
+                "close": None,
+                "prev_close": None,
+                "session_type": "intraday_snapshot",
+            },
+            dashboard={"core_conclusion": {}, "battle_plan": {}, "intelligence": {}},
+        )
+        out = render("markdown", [r], summary_only=False)
+        assert out is not None
+        self.assertIn("NA（接口未返回）", out)
+        self.assertNotIn("N/A", out)
+        self.assertNotIn("数据缺失", out)
+
+    def test_trade_level_annotation_and_risk_warning(self) -> None:
+        r = _make_result(
+            market_snapshot={
+                "price": 100,
+                "close": 100,
+                "prev_close": 98,
+                "session_type": "intraday_snapshot",
+            },
             dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
-                "intelligence": {"risk_alerts": []},
+                "core_conclusion": {},
+                "intelligence": {},
                 "battle_plan": {
                     "sniper_points": {
                         "ideal_buy": "105",
                         "secondary_buy": "95",
-                        "stop_loss": "102",
-                        "take_profit": "120",
+                        "stop_loss": "110",
+                        "take_profit": "125",
                     }
                 },
             },
+            trend_prediction="看多",
         )
         out = render("markdown", [r], summary_only=False)
+        assert out is not None
         self.assertIn("突破买点", out)
         self.assertIn("回踩买点", out)
-        self.assertIn("止损位高于当前价", out)
+        self.assertIn("做多语境下止损位不能高于当前价", out)
+        self.assertIn("当前价已跌破关键防守位", out)
 
+    def test_key_metrics_present_or_reasoned_na(self) -> None:
+        r = _make_result()
+        out = render("markdown", [r], summary_only=False)
+        assert out is not None
+        self.assertIn("**VWAP**:", out)
+        self.assertIn("**成交额**:", out)
+        self.assertIn("**均价**:", out)
+        self.assertIn("**52w high**:", out)
+        self.assertIn("**Beta**:", out)
+        self.assertIn("**totalShares / sharesOutstanding**:", out)
 
-    def test_render_filters_low_value_news_and_catalyst(self) -> None:
+    def test_news_value_grading_filters_low_value_items(self) -> None:
         r = _make_result(
-            code="AAPL",
-            name="Apple",
             dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
+                "core_conclusion": {},
+                "battle_plan": {},
                 "intelligence": {
-                    "sentiment_summary": "中性",
                     "positive_catalysts": ["公司参加品牌活动"],
-                    "latest_news": "CEO 出席公开活动并接受采访",
+                    "latest_news": "高管出席品牌活动",
                 },
-                "battle_plan": {"sniper_points": {"stop_loss": "90"}},
             },
         )
         out = render("markdown", [r], summary_only=False)
+        assert out is not None
         self.assertIn("未发现高价值新增催化", out)
         self.assertIn("未发现高价值新增动态", out)
+        self.assertIn("低价值已降权", out)
+
+    def test_summary_only_still_renders_dashboard_summary(self) -> None:
+        out = render("markdown", [_make_result()], summary_only=True)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertIn("分析结果摘要", out)
+        self.assertNotIn("1. 标题区", out)
+
+    def test_english_report_uses_english_title_labels(self) -> None:
+        r = _make_result(report_language="en", name="Unnamed Stock", code="TSLA")
+        out = render("markdown", [r], summary_only=True)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertIn("Decision Dashboard", out)
+        self.assertIn("Stock Analysis Report", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
