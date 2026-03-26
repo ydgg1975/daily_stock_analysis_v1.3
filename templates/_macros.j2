@@ -6,12 +6,12 @@
 
 | {{ labels.close_label }} | {{ labels.prev_close_label }} | {{ labels.open_label }} | {{ labels.high_label }} | {{ labels.low_label }} | {{ labels.change_pct_label }} | {{ labels.change_amount_label }} | {{ labels.amplitude_label }} | {{ labels.volume_label }} | {{ labels.amount_label }} |
 |------|------|------|------|------|-------|-------|------|--------|--------|
-| {{ display_value(snapshot.get('close'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('prev_close'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('open'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('high'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('low'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('pct_chg'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('change_amount'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('amplitude'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('volume'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('amount'), missing_text='数据缺失') }} |
+| {{ display_price(snapshot.get('close'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('prev_close'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('open'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('high'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('low'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('pct_chg'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('change_amount'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('amplitude'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('volume'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('amount'), missing_text='数据缺失') }} |
 {% if snapshot.get('price') %}
 
 | {{ labels.current_price_label }} | {{ labels.volume_ratio_label }} | {{ labels.turnover_rate_label }} | {{ labels.source_label }} |
 |-------|------|--------|----------|
-| {{ display_value(snapshot.get('price'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('volume_ratio'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('turnover_rate'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('source'), missing_text='数据缺失') }} |
+| {{ display_price(snapshot.get('price'), missing_text='数据缺失') }} | {{ display_number(snapshot.get('volume_ratio'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('turnover_rate'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('source'), missing_text='数据缺失') }} |
 {% endif %}
 
 {% endif %}

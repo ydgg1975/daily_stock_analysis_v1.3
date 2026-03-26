@@ -11,6 +11,7 @@ Any expensive data preparation should be injected by the caller via extra_contex
 
 import logging
 import math
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -26,10 +27,12 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from data_provider.akshare_fetcher import is_hk_stock_code
 from data_provider.us_index_mapping import is_us_stock_code
 
 logger = logging.getLogger(__name__)
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+_NUMERIC_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _now_shanghai():
@@ -79,7 +82,7 @@ def _clean_sniper_value(val: Any) -> str:
     if val is None:
         return "N/A"
     if isinstance(val, (int, float)):
-        return str(val)
+        return f"{float(val):.2f}"
     s = str(val).strip() if val else ""
     if not s or s == "N/A":
         return s or "N/A"
@@ -90,8 +93,30 @@ def _clean_sniper_value(val: Any) -> str:
     ]
     for prefix in prefixes:
         if s.startswith(prefix):
-            return s[len(prefix):]
-    return s
+            s = s[len(prefix):]
+            break
+    return _NUMERIC_TOKEN_RE.sub(lambda m: f"{float(m.group(0)):.2f}", s)
+
+
+def _safe_float(val: Any) -> Optional[float]:
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        try:
+            parsed = float(val)
+        except (TypeError, ValueError):
+            return None
+        return None if math.isnan(parsed) else parsed
+    text = str(val).strip().replace(",", "")
+    if not text or text in {"N/A", "None", "null", "nan", "数据缺失"}:
+        return None
+    if text.endswith("%"):
+        text = text[:-1]
+    try:
+        parsed = float(text)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(parsed) else parsed
 
 
 def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
@@ -127,16 +152,287 @@ def _display_value(val: Any, zero_is_missing: bool = False, missing_text: str = 
     return str(val)
 
 
-def _display_percent(val: Any, zero_is_missing: bool = False, missing_text: str = "数据缺失") -> str:
+def _display_number(
+    val: Any,
+    digits: int = 2,
+    zero_is_missing: bool = False,
+    missing_text: str = "N/A",
+) -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    num = _safe_float(val)
+    if num is None:
+        return str(val)
+    return f"{num:.{digits}f}"
+
+
+def _display_price(val: Any, digits: int = 2, missing_text: str = "数据缺失") -> str:
+    return _display_number(val, digits=digits, missing_text=missing_text)
+
+
+def _display_multiple(val: Any, digits: int = 1, missing_text: str = "数据缺失") -> str:
+    if _is_missing_value(val):
+        return missing_text
+    num = _safe_float(val)
+    if num is None:
+        return str(val)
+    return f"{num:.{digits}f} 倍"
+
+
+def _currency_suffix(stock_code: Optional[str]) -> str:
+    code = str(stock_code or "").strip()
+    if is_us_stock_code(code):
+        return "美元"
+    if is_hk_stock_code(code):
+        return "港元"
+    return "元"
+
+
+def _display_compact_money(
+    val: Any,
+    stock_code: Optional[str] = None,
+    digits: int = 1,
+    missing_text: str = "数据缺失",
+) -> str:
+    if _is_missing_value(val):
+        return missing_text
+    num = _safe_float(val)
+    if num is None:
+        return str(val)
+    suffix = _currency_suffix(stock_code)
+    abs_num = abs(num)
+    if abs_num >= 1_0000_0000_0000:
+        return f"{num / 1_0000_0000_0000:.{digits}f} 万亿{suffix}"
+    if abs_num >= 1_0000_0000:
+        return f"{num / 1_0000_0000:.{digits}f} 亿{suffix}"
+    if abs_num >= 1_0000:
+        return f"{num / 1_0000:.{digits}f} 万{suffix}"
+    return f"{num:.2f} {suffix}"
+
+
+def _display_percent(
+    val: Any,
+    zero_is_missing: bool = False,
+    missing_text: str = "数据缺失",
+    *,
+    ratio: bool = False,
+    digits: int = 2,
+) -> str:
     if _is_missing_value(val, zero_is_missing=zero_is_missing):
         return missing_text
     text = str(val).strip()
     if text.endswith("%"):
-        return text
-    try:
-        return f"{float(text):.2f}%"
-    except (TypeError, ValueError):
+        num = _safe_float(text)
+        return f"{num:.{digits}f}%" if num is not None else missing_text
+    num = _safe_float(text)
+    if num is None:
         return missing_text
+    if ratio:
+        num *= 100
+    return f"{num:.{digits}f}%"
+
+
+def _join_short_clauses(clauses: List[str]) -> str:
+    cleaned = [str(item).strip(" ，。；;") for item in clauses if str(item).strip(" ，。；;")]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return f"{cleaned[0]}。"
+    if len(cleaned) == 2:
+        return f"{cleaned[0]}，{cleaned[1]}。"
+    return f"{'、'.join(cleaned[:-1])}，{cleaned[-1]}。"
+
+
+def _summarize_fundamentals(
+    fundamentals: Optional[Dict[str, Any]],
+    stock_code: Optional[str] = None,
+) -> Dict[str, str]:
+    payload = fundamentals if isinstance(fundamentals, dict) else {}
+    profiles = payload.get("derived_profiles") if isinstance(payload.get("derived_profiles"), dict) else {}
+    derived_insights = payload.get("derived_insights") if isinstance(payload.get("derived_insights"), list) else []
+    normalized = payload.get("normalized") if isinstance(payload.get("normalized"), dict) else {}
+    profile_copy = {
+        "growth_profile": {
+            "high_growth": "增长强劲",
+            "stable_growth": "增长稳健",
+            "negative_growth": "增长承压",
+        },
+        "profitability_profile": {
+            "profitable": "盈利能力优秀",
+            "near_breakeven_or_loss": "盈利能力承压",
+            "gross_margin_positive": "毛利水平尚可",
+        },
+        "valuation_profile": {
+            "valuation_high": "估值偏高",
+            "valuation_low": "估值偏低",
+            "valuation_neutral": "估值合理",
+        },
+        "cashflow_profile": {
+            "cashflow_healthy": "现金流健康",
+            "cashflow_pressure": "现金流承压",
+        },
+        "leverage_profile": {
+            "high_leverage": "杠杆偏高",
+            "leverage_controllable": "杠杆可控",
+        },
+    }
+    clauses: List[str] = []
+    for key in (
+        "growth_profile",
+        "profitability_profile",
+        "valuation_profile",
+        "cashflow_profile",
+        "leverage_profile",
+    ):
+        phrase = profile_copy.get(key, {}).get(profiles.get(key))
+        if phrase:
+            clauses.append(phrase)
+    if not clauses:
+        insight_copy = {
+            "valuation_high": "估值偏高",
+            "valuation_low": "估值偏低",
+            "valuation_neutral": "估值合理",
+            "high_growth": "增长强劲",
+            "stable_growth": "增长稳健",
+            "negative_growth": "增长承压",
+            "profitable": "盈利能力优秀",
+            "near_breakeven_or_loss": "盈利能力承压",
+            "gross_margin_positive": "毛利水平尚可",
+            "cashflow_healthy": "现金流健康",
+            "cashflow_pressure": "现金流承压",
+            "high_leverage": "杠杆偏高",
+            "leverage_controllable": "杠杆可控",
+        }
+        clauses.extend([insight_copy.get(item) for item in derived_insights if insight_copy.get(item)])
+    conclusion = _join_short_clauses(clauses[:4])
+    if not conclusion:
+        conclusion = "基本面信息有限，当前更适合结合技术面信号判断。"
+
+    metrics: List[str] = []
+
+    revenue_growth = normalized.get("revenueGrowth")
+    if not _is_missing_value(revenue_growth):
+        metrics.append(f"营收增速 {_display_percent(revenue_growth, ratio=True, digits=1)}")
+
+    forward_pe = normalized.get("forwardPE")
+    trailing_pe = normalized.get("trailingPE")
+    if not _is_missing_value(forward_pe):
+        metrics.append(f"前瞻PE {_display_multiple(forward_pe, digits=1)}")
+    elif not _is_missing_value(trailing_pe):
+        metrics.append(f"TTM PE {_display_multiple(trailing_pe, digits=1)}")
+
+    free_cashflow = normalized.get("freeCashflow")
+    operating_cashflow = normalized.get("operatingCashflow")
+    if not _is_missing_value(free_cashflow):
+        metrics.append(f"自由现金流 {_display_compact_money(free_cashflow, stock_code=stock_code, digits=1)}")
+    elif not _is_missing_value(operating_cashflow):
+        metrics.append(f"经营现金流 {_display_compact_money(operating_cashflow, stock_code=stock_code, digits=1)}")
+
+    debt_to_equity = normalized.get("debtToEquity")
+    if not _is_missing_value(debt_to_equity):
+        metrics.append(f"负债权益比 {_display_percent(debt_to_equity, digits=1)}")
+
+    return_on_equity = normalized.get("returnOnEquity")
+    if len(metrics) < 2 and not _is_missing_value(return_on_equity):
+        metrics.append(f"ROE {_display_percent(return_on_equity, ratio=True, digits=1)}")
+
+    total_revenue = normalized.get("totalRevenue")
+    if len(metrics) < 2 and not _is_missing_value(total_revenue):
+        metrics.append(f"营收规模 {_display_compact_money(total_revenue, stock_code=stock_code, digits=1)}")
+
+    return {
+        "conclusion": conclusion,
+        "metrics": "、".join(metrics[:4]),
+    }
+
+
+def _summarize_earnings(earnings: Optional[Dict[str, Any]]) -> str:
+    payload = earnings if isinstance(earnings, dict) else {}
+    metrics = payload.get("derived_metrics") if isinstance(payload.get("derived_metrics"), dict) else {}
+    flags = set(payload.get("summary_flags") or payload.get("earnings_flags") or [])
+    narratives = payload.get("narrative_insights") if isinstance(payload.get("narrative_insights"), list) else []
+    yoy_revenue = _safe_float(metrics.get("yoy_revenue_growth"))
+    yoy_profit = _safe_float(metrics.get("yoy_net_income_change"))
+    qoq_revenue = _safe_float(metrics.get("qoq_revenue_growth"))
+    qoq_profit = _safe_float(metrics.get("qoq_net_income_change"))
+    loss_status = metrics.get("loss_status")
+
+    if loss_status == "loss":
+        if "loss_narrowing" in flags:
+            return "仍处亏损阶段，但亏损已有收窄迹象，后续需等待盈利拐点确认。"
+        return "仍处亏损阶段，盈利修复节奏仍需继续观察。"
+    if yoy_revenue is not None and yoy_profit is not None:
+        if yoy_revenue > 0 and yoy_profit > 0:
+            return "营收和利润延续增长，但短线走势仍需等待技术面确认。"
+        if yoy_revenue > 0 and yoy_profit <= 0:
+            return "营收保持增长，但利润释放仍待确认，短线更适合等待技术面配合。"
+        if yoy_revenue <= 0 and yoy_profit <= 0:
+            return "营收和利润动能同步转弱，短线更适合先观察业绩拐点。"
+    if qoq_revenue is not None and qoq_profit is not None:
+        if qoq_revenue > 0 and qoq_profit > 0:
+            return "最新季度营收和利润边际改善，但仍需后续数据确认趋势延续。"
+        if qoq_revenue > 0 and qoq_profit <= 0:
+            return "营收环比回升，但利润改善暂未跟上，需继续关注利润兑现。"
+    if "revenue_up_profit_not_following" in flags:
+        return "营收端仍有韧性，但利润跟进不足，短线更适合等待确认信号。"
+    if "continuous_loss" in flags:
+        return "连续亏损尚未扭转，财报趋势偏弱，需优先关注盈利修复。"
+    narrative_map = {
+        "margins improving": "利润率改善，后续仍需观察趋势延续。",
+        "财报趋势中性，建议结合下一季数据确认。": "财报趋势偏中性，建议继续跟踪后续数据。",
+        "连续亏损，盈利质量偏弱": "连续亏损，盈利质量偏弱，需先观察修复进度。",
+        "亏损收窄，边际改善": "亏损出现收窄，经营边际已有改善。",
+        "存在增收不增利迹象": "营收改善但利润跟进不足，仍需观察兑现质量。",
+    }
+    for item in narratives:
+        text = str(item).strip()
+        if not text:
+            continue
+        mapped = narrative_map.get(text, text if any("\u4e00" <= ch <= "\u9fff" for ch in text) else "")
+        if mapped:
+            return mapped if mapped.endswith("。") else f"{mapped}。"
+    return "财报数据暂不足以形成明确趋势判断，建议继续跟踪后续指引。"
+
+
+def _summarize_sentiment(sentiment: Optional[Dict[str, Any]]) -> str:
+    payload = sentiment if isinstance(sentiment, dict) else {}
+    if not payload:
+        return "市场情绪信息有限，先以技术面和成交验证为主。"
+
+    relevance_type = payload.get("relevance_type")
+    company_sentiment = payload.get("company_sentiment")
+    industry_sentiment = payload.get("industry_sentiment")
+    regulatory_sentiment = payload.get("regulatory_sentiment")
+
+    if regulatory_sentiment == "negative":
+        return "消息面存在监管扰动，市场整体偏谨慎，短线宜控制节奏。"
+    if relevance_type and relevance_type != "company_specific":
+        if industry_sentiment == "positive":
+            return "消息更多反映行业背景，情绪边际回暖，但公司层面催化仍待验证。"
+        if industry_sentiment == "negative":
+            return "消息更多来自行业层面扰动，市场情绪偏谨慎，宜等待更明确催化。"
+        return "缺少高相关度公司新闻，市场情绪以观望为主。"
+
+    if company_sentiment == "positive":
+        return "公司相关消息偏积极，市场情绪整体偏谨慎乐观。"
+    if company_sentiment == "negative":
+        return "公司相关消息偏谨慎，市场情绪仍以防守为主。"
+    if company_sentiment == "neutral":
+        return "消息面暂无明显方向性催化，市场情绪偏观望。"
+    return "缺少高相关度公司新闻，市场情绪以观望为主。"
+
+
+def _summarize_checklist(checklist: List[str]) -> str:
+    items = [str(item).strip() for item in (checklist or []) if str(item).strip()]
+    if not items:
+        return ""
+    fail_count = sum(1 for item in items if item.startswith("❌"))
+    warn_count = sum(1 for item in items if item.startswith("⚠️"))
+    if fail_count:
+        return f"共{len(items)}项，当前有{fail_count}项未满足，执行前请先解决关键风险点。"
+    if warn_count:
+        return f"共{len(items)}项，其中{warn_count}项需留意，操作前重点确认买点、量价配合和止损纪律。"
+    return f"共{len(items)}项，执行前继续确认买点、仓位控制和止损纪律。"
 
 
 def _resolve_templates_dir() -> Path:
@@ -253,9 +549,17 @@ def render(
         "escape_md": _escape_md,
         "clean_sniper": _clean_sniper_value,
         "display_value": _display_value,
+        "display_number": _display_number,
+        "display_price": _display_price,
+        "display_multiple": _display_multiple,
+        "display_compact_money": _display_compact_money,
         "display_percent": _display_percent,
         "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
+        "summarize_fundamentals": _summarize_fundamentals,
+        "summarize_earnings": _summarize_earnings,
+        "summarize_sentiment": _summarize_sentiment,
+        "summarize_checklist": _summarize_checklist,
         "history_by_code": {},
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,

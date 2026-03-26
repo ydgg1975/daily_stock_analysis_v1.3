@@ -174,10 +174,15 @@ class TestDiscordSender(unittest.TestCase):
             "### 🧠 结构化情绪（Sentiment）\n- company_sentiment: positive\n- overall_confidence: high\n"
         )
         compact = sender._compact_discord_markdown(content)
-        self.assertIn("基本面摘要：", compact)
+        self.assertIn("基本面：", compact)
+        self.assertIn("关键指标：", compact)
+        self.assertIn("营收增速 18.0%", compact)
+        self.assertIn("前瞻PE 21.00 倍", compact)
         self.assertIn("财报趋势：", compact)
-        self.assertIn("情绪摘要：", compact)
+        self.assertIn("情绪：", compact)
         self.assertNotIn("company_sentiment", compact)
+        self.assertNotIn("overall_confidence", compact)
+        self.assertNotIn("high", compact)
 
 
 class TestWechatSender(unittest.TestCase):

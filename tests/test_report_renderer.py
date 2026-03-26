@@ -189,18 +189,19 @@ class TestReportRenderer(unittest.TestCase):
             },
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("数据缺失（Alpha Vantage SMA20: 138.406）", out)
+        self.assertIn("| MA20 | 138.41 |", out)
         self.assertIn("乖离率(MA5) | 0.00%", out)
         self.assertIn("量比 数据缺失", out)
         self.assertIn("换手率 数据缺失", out)
+        self.assertNotIn("Alpha Vantage", out)
 
     def test_render_uses_asia_shanghai_timestamp(self) -> None:
         r = _make_result()
         fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
         with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
             out = render("markdown", [r], summary_only=False)
-        self.assertIn("2026-03-25 09:30:15", out)
-        self.assertIn("report_generated_at", out)
+        self.assertIn("# 🎯 2026-03-25 决策仪表盘", out)
+        self.assertNotIn("report_generated_at", out)
 
     def test_render_prefers_time_contract_fields(self) -> None:
         r = _make_result(code="AAPL", name="Apple")
@@ -216,10 +217,10 @@ class TestReportRenderer(unittest.TestCase):
                 "news_published_at": "2026-03-24T20:00:00-04:00",
             },
         )
-        self.assertIn("2026-03-25T01:00:00+00:00", out)
-        self.assertIn("2026-03-24T21:00:00-04:00", out)
-        self.assertIn("2026-03-24", out)
-        self.assertIn("last_completed_session", out)
+        self.assertNotIn("2026-03-25T01:00:00+00:00", out)
+        self.assertNotIn("2026-03-24T21:00:00-04:00", out)
+        self.assertNotIn("2026-03-24T20:00:00-04:00", out)
+        self.assertNotIn("last_completed_session", out)
 
     def test_render_uses_time_context_when_extra_context_missing(self) -> None:
         r = _make_result(
@@ -240,9 +241,9 @@ class TestReportRenderer(unittest.TestCase):
             },
         )
         out = render("markdown", [r], summary_only=True)
-        self.assertIn("2026-03-25T16:00:00-04:00", out)
-        self.assertIn("2026-03-25", out)
-        self.assertIn("last_completed_session", out)
+        self.assertNotIn("2026-03-25T16:00:00-04:00", out)
+        self.assertNotIn("2026-03-26T08:30:00+08:00", out)
+        self.assertNotIn("last_completed_session", out)
 
     def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
         r = _make_result(
@@ -284,8 +285,20 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=False)
         self.assertIn("基本面摘要（Fundamentals）", out)
         self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("session_type: intraday_snapshot", out)
+        self.assertIn("情绪摘要（Sentiment）", out)
+        self.assertIn("**基本面**：", out)
+        self.assertIn("**关键指标**：", out)
+        self.assertIn("**财报趋势**：", out)
+        self.assertIn("**情绪**：", out)
+        self.assertIn("营收增速 12.0%", out)
+        self.assertIn("TTM PE 22.1 倍", out)
+        self.assertNotIn("session_type", out)
+        self.assertNotIn("news_published_at", out)
+        self.assertNotIn("company_sentiment", out)
+        self.assertNotIn("overall_confidence", out)
+        self.assertNotIn("medium", out)
+        self.assertNotIn("valuation_high", out)
+        self.assertNotIn("high_growth", out)
 
     def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
         r = _make_result(
@@ -332,8 +345,9 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=False)
         self.assertIn("基本面摘要（Fundamentals）", out)
         self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("结构化情绪（Sentiment）", out)
-        self.assertIn("数据质量说明", out)
+        self.assertIn("情绪摘要（Sentiment）", out)
+        self.assertNotIn("数据质量说明", out)
+        self.assertNotIn("report_generated_at", out)
 
     def test_render_empty_results_returns_content(self) -> None:
         """Empty results still produces header."""
