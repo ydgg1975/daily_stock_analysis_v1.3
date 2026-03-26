@@ -20,17 +20,20 @@ try:
         trigger_analysis,
         _build_analysis_report,
         _load_sync_fundamental_sources,
+        _format_sse_event,
     )
 except Exception:  # pragma: no cover - optional dependency environments
     create_app = None
     trigger_analysis = None
     _build_analysis_report = None
     _load_sync_fundamental_sources = None
+    _format_sse_event = None
 
 from src.enums import ReportType
 from src.services.analysis_service import AnalysisService
 from src.services.image_stock_extractor import _call_litellm_vision
 from src.services.task_queue import AnalysisTaskQueue
+from data_provider.realtime_types import RealtimeSource
 
 
 class AnalysisApiContractTestCase(unittest.TestCase):
@@ -135,6 +138,31 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(report.details.financial_report["report_date"], "2025-12-31")
         self.assertEqual(report.details.dividend_metrics["ttm_dividend_yield_pct"], 2.5)
 
+    def test_build_analysis_report_extracts_time_contract_from_snapshot(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        report = _build_analysis_report(
+            report_data={"meta": {}, "summary": {}, "strategy": {}, "details": {}},
+            query_id="q1",
+            stock_code="MSTR",
+            stock_name="MicroStrategy",
+            context_snapshot={
+                "enhanced_context": {
+                    "market_timestamp": "2026-03-24T16:00:00-04:00",
+                    "market_session_date": "2026-03-24",
+                    "news_published_at": "2026-03-24T15:10:00-04:00",
+                    "report_generated_at": "2026-03-25T01:10:00+00:00",
+                }
+            },
+            fallback_fundamental_payload=None,
+        )
+
+        self.assertEqual(report.meta.market_timestamp, "2026-03-24T16:00:00-04:00")
+        self.assertEqual(report.meta.market_session_date, "2026-03-24")
+        self.assertEqual(report.meta.news_published_at, "2026-03-24T15:10:00-04:00")
+        self.assertEqual(report.meta.report_generated_at, "2026-03-25T01:10:00+00:00")
+
     def test_build_analysis_report_preserves_report_language(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")
@@ -207,6 +235,13 @@ class AnalysisApiContractTestCase(unittest.TestCase):
                 "#/components/schemas/BatchTaskAcceptedResponse",
             },
         )
+
+    def test_format_sse_event_accepts_enum_payload(self) -> None:
+        if _format_sse_event is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+        payload = {"provider_notes": {"market_data": RealtimeSource.YFINANCE}}
+        event = _format_sse_event("status", payload)
+        self.assertIn('"market_data": "yfinance"', event)
 
     def test_trigger_analysis_rejects_blank_only_stock_inputs(self) -> None:
         if trigger_analysis is None:
