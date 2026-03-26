@@ -210,6 +210,30 @@ def _display_compact_money(
     return f"{num:.2f} {suffix}"
 
 
+def _display_compact_count(
+    val: Any,
+    digits: int = 2,
+    missing_text: str = "数据缺失",
+) -> str:
+    if _is_missing_value(val):
+        return missing_text
+    if isinstance(val, str):
+        text = val.strip()
+        if not text:
+            return missing_text
+        if any(unit in text for unit in ("亿", "万", "K", "M", "B", "手")) and _safe_float(text) is None:
+            return text
+    num = _safe_float(val)
+    if num is None:
+        return str(val)
+    abs_num = abs(num)
+    if abs_num >= 1_0000_0000:
+        return f"{num / 1_0000_0000:.{digits}f}亿"
+    if abs_num >= 1_0000:
+        return f"{num / 1_0000:.{digits}f}万"
+    return f"{num:.0f}"
+
+
 def _display_percent(
     val: Any,
     zero_is_missing: bool = False,
@@ -229,6 +253,23 @@ def _display_percent(
         return missing_text
     if ratio:
         num *= 100
+    return f"{num:.{digits}f}%"
+
+
+def _display_percent_or_text(
+    val: Any,
+    digits: int = 2,
+    missing_text: str = "数据缺失",
+) -> str:
+    if _is_missing_value(val):
+        return missing_text
+    text = str(val).strip()
+    if text.endswith("%"):
+        num = _safe_float(text)
+        return f"{num:.{digits}f}%" if num is not None else text
+    num = _safe_float(text)
+    if num is None:
+        return text
     return f"{num:.{digits}f}%"
 
 
@@ -422,17 +463,141 @@ def _summarize_sentiment(sentiment: Optional[Dict[str, Any]]) -> str:
     return "缺少高相关度公司新闻，市场情绪以观望为主。"
 
 
+def _pick_first_present(*values: Any) -> Any:
+    for value in values:
+        if not _is_missing_value(value):
+            return value
+    return None
+
+
+def _normalize_inline_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip().strip("-")
+
+
+def _summarize_volume_judgment(volume_analysis: Optional[Dict[str, Any]]) -> str:
+    payload = volume_analysis if isinstance(volume_analysis, dict) else {}
+    status_raw = _normalize_inline_text(payload.get("volume_status"))
+    status = status_raw.lower()
+    ratio = _safe_float(payload.get("volume_ratio"))
+    meaning = _normalize_inline_text(payload.get("volume_meaning"))
+
+    if any(token in status for token in ("缺失", "missing", "unavailable")):
+        return ""
+    if "放量" in status or (ratio is not None and ratio >= 1.20):
+        return "放量，短线资金参与度提升。"
+    if "缩量" in status or (ratio is not None and ratio < 0.80):
+        return "缩量，追价意愿偏弱。"
+    if any(token in status for token in ("正常", "平量", "normal")) or ratio is not None:
+        return "平量，资金参与度维持常态。"
+    if meaning:
+        return meaning if meaning.endswith(("。", "！", "？", ".", "!", "?")) else f"{meaning}。"
+    return ""
+
+
+def _build_market_brief(result: AnalysisResult, data_perspective: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    payload = data_perspective if isinstance(data_perspective, dict) else {}
+    snapshot = getattr(result, "market_snapshot", None)
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    price_data = payload.get("price_position") if isinstance(payload.get("price_position"), dict) else {}
+    volume_analysis = payload.get("volume_analysis") if isinstance(payload.get("volume_analysis"), dict) else {}
+
+    current_price = _pick_first_present(snapshot.get("price"), snapshot.get("close"), price_data.get("current_price"))
+    change_pct = _pick_first_present(snapshot.get("pct_chg"), snapshot.get("change_pct"), getattr(result, "change_pct", None))
+    high = _pick_first_present(snapshot.get("high"))
+    low = _pick_first_present(snapshot.get("low"))
+    volume = _pick_first_present(snapshot.get("volume"))
+    volume_judgment = _summarize_volume_judgment(volume_analysis)
+
+    return {
+        "current_price": _display_price(current_price) if current_price is not None else "",
+        "change_pct": _display_percent(change_pct) if change_pct is not None else "",
+        "high": _display_price(high) if high is not None else "",
+        "low": _display_price(low) if low is not None else "",
+        "volume": _display_compact_count(volume) if volume is not None else "",
+        "volume_judgment": volume_judgment,
+    }
+
+
+def _build_technical_brief(data_perspective: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    payload = data_perspective if isinstance(data_perspective, dict) else {}
+    price_data = payload.get("price_position") if isinstance(payload.get("price_position"), dict) else {}
+    alpha_data = payload.get("alpha_vantage") if isinstance(payload.get("alpha_vantage"), dict) else {}
+
+    current_price = _pick_first_present(price_data.get("current_price"))
+    ma5 = _pick_first_present(price_data.get("ma5"))
+    ma10 = _pick_first_present(price_data.get("ma10"))
+    ma20_raw = _pick_first_present(price_data.get("ma20"), alpha_data.get("sma20"))
+    support = _pick_first_present(price_data.get("support_level"))
+    resistance = _pick_first_present(price_data.get("resistance_level"))
+
+    ma20_position = ""
+    current_num = _safe_float(current_price)
+    ma20_num = _safe_float(ma20_raw)
+    if current_num is not None and ma20_num is not None:
+        if current_num >= ma20_num:
+            ma20_position = "当前位于 MA20 上方，短线仍在中期支撑之上。"
+        else:
+            ma20_position = "当前位于 MA20 下方，短线仍需等待趋势修复。"
+
+    return {
+        "ma5": _display_price(ma5) if ma5 is not None else "",
+        "ma10": _display_price(ma10) if ma10 is not None else "",
+        "ma20": _display_price(ma20_raw) if ma20_raw is not None else "",
+        "support": _display_price(support) if support is not None else "",
+        "resistance": _display_price(resistance) if resistance is not None else "",
+        "ma20_position": ma20_position,
+    }
+
+
+def _select_intel_highlight(intelligence: Optional[Dict[str, Any]], company_news_allowed: bool = True) -> str:
+    payload = intelligence if isinstance(intelligence, dict) else {}
+    risk_alerts = payload.get("risk_alerts") if isinstance(payload.get("risk_alerts"), list) else []
+    catalysts = payload.get("positive_catalysts") if isinstance(payload.get("positive_catalysts"), list) else []
+    latest_news = _normalize_inline_text(payload.get("latest_news"))
+
+    if company_news_allowed and risk_alerts:
+        return f"风险：{_normalize_inline_text(risk_alerts[0])}"
+    if company_news_allowed and catalysts:
+        return f"催化：{_normalize_inline_text(catalysts[0])}"
+    if latest_news:
+        return f"{'行业背景' if not company_news_allowed else '最新动态'}：{latest_news}"
+    if risk_alerts:
+        return f"风险：{_normalize_inline_text(risk_alerts[0])}"
+    if catalysts:
+        return f"催化：{_normalize_inline_text(catalysts[0])}"
+    return ""
+
+
 def _summarize_checklist(checklist: List[str]) -> str:
     items = [str(item).strip() for item in (checklist or []) if str(item).strip()]
     if not items:
         return ""
     fail_count = sum(1 for item in items if item.startswith("❌"))
     warn_count = sum(1 for item in items if item.startswith("⚠️"))
+    themes: List[str] = []
+    for item in items:
+        if not item.startswith(("❌", "⚠️")):
+            continue
+        text = item.lower()
+        theme = ""
+        if any(token in text for token in ("ma", "支撑", "压力", "买点", "回踩", "突破")):
+            theme = "买点确认"
+        elif any(token in text for token in ("量", "成交", "volume")):
+            theme = "量价配合"
+        elif any(token in text for token in ("止损", "仓位", "风险", "纪律")):
+            theme = "风控纪律"
+        elif any(token in text for token in ("趋势", "均线")):
+            theme = "趋势确认"
+        if theme and theme not in themes:
+            themes.append(theme)
+    focus = "、".join(themes[:3]) if themes else "买点、量价配合和风控纪律"
     if fail_count:
-        return f"共{len(items)}项，当前有{fail_count}项未满足，执行前请先解决关键风险点。"
+        return f"仍有{fail_count}项关键条件未满足，重点补齐{focus}。"
     if warn_count:
-        return f"共{len(items)}项，其中{warn_count}项需留意，操作前重点确认买点、量价配合和止损纪律。"
-    return f"共{len(items)}项，执行前继续确认买点、仓位控制和止损纪律。"
+        return f"仍有{warn_count}项执行条件待确认，重点留意{focus}。"
+    return "执行条件基本齐备，可按计划分批执行并严守止损纪律。"
 
 
 def _resolve_templates_dir() -> Path:
@@ -553,13 +718,19 @@ def render(
         "display_price": _display_price,
         "display_multiple": _display_multiple,
         "display_compact_money": _display_compact_money,
+        "display_compact_count": _display_compact_count,
         "display_percent": _display_percent,
+        "display_percent_or_text": _display_percent_or_text,
         "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "summarize_fundamentals": _summarize_fundamentals,
         "summarize_earnings": _summarize_earnings,
         "summarize_sentiment": _summarize_sentiment,
+        "summarize_volume_judgment": _summarize_volume_judgment,
         "summarize_checklist": _summarize_checklist,
+        "build_market_brief": _build_market_brief,
+        "build_technical_brief": _build_technical_brief,
+        "select_intel_highlight": _select_intel_highlight,
         "history_by_code": {},
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,

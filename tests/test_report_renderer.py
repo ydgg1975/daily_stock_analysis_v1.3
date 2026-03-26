@@ -101,7 +101,7 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("Buy", out)
 
     def test_render_markdown_market_snapshot_uses_template_context(self) -> None:
-        """Market snapshot macro should render localized labels with template context."""
+        """Market snapshot macro should render localized short-list labels with template context."""
         r = _make_result(
             code="AAPL",
             name="Apple",
@@ -129,7 +129,11 @@ class TestReportRenderer(unittest.TestCase):
 
         self.assertIsNotNone(out)
         self.assertIn("Market Snapshot", out)
-        self.assertIn("Volume Ratio", out)
+        self.assertIn("Price", out)
+        self.assertIn("Change %", out)
+        self.assertIn("High", out)
+        self.assertIn("Low", out)
+        self.assertNotIn("| Close |", out)
 
     def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
         r = _make_result(
@@ -154,7 +158,7 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=False)
         self.assertIn("筹码", out)
         self.assertIn("美股暂不支持该指标", out)
-        self.assertIn("换手率 数据缺失", out)
+        self.assertNotIn("报告生成时间", out)
 
     def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
         r = _make_result(
@@ -189,11 +193,10 @@ class TestReportRenderer(unittest.TestCase):
             },
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("| MA20 | 138.41 |", out)
-        self.assertIn("乖离率(MA5) | 0.00%", out)
-        self.assertIn("量比 数据缺失", out)
-        self.assertIn("换手率 数据缺失", out)
+        self.assertIn("MA20：138.41", out)
+        self.assertIn("位置判断：当前位于 MA20 下方", out)
         self.assertNotIn("Alpha Vantage", out)
+        self.assertNotIn("| MA20 |", out)
 
     def test_render_uses_asia_shanghai_timestamp(self) -> None:
         r = _make_result()
@@ -250,9 +253,23 @@ class TestReportRenderer(unittest.TestCase):
             code="ORCL",
             name="Oracle",
             dashboard={
-                "core_conclusion": {"one_sentence": "观望"},
+                "core_conclusion": {
+                    "one_sentence": "观望",
+                    "position_advice": {
+                        "no_position": "等待回踩确认后再分批介入。",
+                        "has_position": "继续持有，跌破止损位及时减仓。",
+                    },
+                },
                 "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "battle_plan": {
+                    "sniper_points": {
+                        "ideal_buy": "123-124",
+                        "stop_loss": "100",
+                        "take_profit": "138",
+                    },
+                    "position_strategy": {"suggested_position": "30%"},
+                    "action_checklist": ["⚠️ 等待回踩 MA5 确认", "⚠️ 注意量价配合"],
+                },
                 "structured_analysis": {
                     "time_context": {
                         "market_timestamp": "2026-03-24T21:00:00-04:00",
@@ -282,16 +299,53 @@ class TestReportRenderer(unittest.TestCase):
                 },
             },
         )
+        r.market_snapshot = {
+            "price": 125.4,
+            "pct_chg": "+1.20%",
+            "high": 126.8,
+            "low": 123.9,
+            "volume": 34560000,
+        }
+        r.dashboard["data_perspective"] = {
+            "price_position": {
+                "current_price": 125.4,
+                "ma5": 124.8,
+                "ma10": 123.7,
+                "ma20": 122.1,
+                "support_level": 121.5,
+                "resistance_level": 127.0,
+            },
+            "volume_analysis": {
+                "volume_ratio": 1.46,
+                "volume_status": "放量",
+            },
+        }
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("情绪摘要（Sentiment）", out)
-        self.assertIn("**基本面**：", out)
-        self.assertIn("**关键指标**：", out)
-        self.assertIn("**财报趋势**：", out)
-        self.assertIn("**情绪**：", out)
+        self.assertIn("重要信息速览", out)
+        self.assertIn("基本面：", out)
+        self.assertIn("财报趋势：", out)
+        self.assertIn("情绪：", out)
         self.assertIn("营收增速 12.0%", out)
         self.assertIn("TTM PE 22.1 倍", out)
+        self.assertIn("当前价：125.40", out)
+        self.assertIn("涨跌幅：1.20%", out)
+        self.assertIn("最高：126.80", out)
+        self.assertIn("最低：123.90", out)
+        self.assertIn("成交量：3456.00万", out)
+        self.assertIn("量能判断：放量，短线资金参与度提升。", out)
+        self.assertIn("MA5：124.80", out)
+        self.assertIn("MA10：123.70", out)
+        self.assertIn("MA20：122.10", out)
+        self.assertIn("支撑位：121.50", out)
+        self.assertIn("压力位：127.00", out)
+        self.assertIn("位置判断：当前位于 MA20 上方", out)
+        self.assertIn("空仓者：等待回踩确认后再分批介入。", out)
+        self.assertIn("持仓者：继续持有，跌破止损位及时减仓。", out)
+        self.assertIn("理想买入点：123.00-124.00", out)
+        self.assertIn("止损位：100.00", out)
+        self.assertIn("目标位：138.00", out)
+        self.assertIn("仓位建议：30.00%", out)
+        self.assertIn("执行确认：仍有2项执行条件待确认，重点留意买点确认、量价配合。", out)
         self.assertNotIn("session_type", out)
         self.assertNotIn("news_published_at", out)
         self.assertNotIn("company_sentiment", out)
@@ -299,6 +353,7 @@ class TestReportRenderer(unittest.TestCase):
         self.assertNotIn("medium", out)
         self.assertNotIn("valuation_high", out)
         self.assertNotIn("high_growth", out)
+        self.assertNotIn("| 当前价 |", out)
 
     def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
         r = _make_result(
@@ -343,9 +398,10 @@ class TestReportRenderer(unittest.TestCase):
             }
         )
         out = render("markdown", [r], summary_only=False)
-        self.assertIn("基本面摘要（Fundamentals）", out)
-        self.assertIn("财报趋势（Earnings）", out)
-        self.assertIn("情绪摘要（Sentiment）", out)
+        self.assertIn("重要信息速览", out)
+        self.assertIn("基本面：", out)
+        self.assertIn("财报趋势：", out)
+        self.assertIn("情绪：", out)
         self.assertNotIn("数据质量说明", out)
         self.assertNotIn("report_generated_at", out)
 

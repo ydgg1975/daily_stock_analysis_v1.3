@@ -154,14 +154,17 @@ class TestDiscordSender(unittest.TestCase):
             "# TEM\n\n\n\n"
             "## 重要信息速览\n\n- a\n- b\n- c\n- d\n- e\n\n\n"
             "## 核心结论\n\n一句话\n\n"
-            "## 当日行情\n\n|a|b|\n|--|--|\n|1|2|\n"
+            "## 当日行情\n\n|字段|数值|\n|--|--|\n|当前价|125.4|\n|涨跌幅|+1.2%|\n|最高|126.8|\n|最低|123.9|\n|成交量|34560000|\n"
         )
         compact = sender._compact_discord_markdown(content)
         self.assertIn("## 重要信息速览", compact)
         self.assertIn("## 核心结论", compact)
         self.assertIn("## 当日行情", compact)
         self.assertNotIn("\n\n\n", compact)
-        self.assertNotIn("|a|b|", compact)
+        self.assertNotIn("|字段|数值|", compact)
+        self.assertIn("当前价: 125.40", compact)
+        self.assertIn("涨跌幅: 1.20%", compact)
+        self.assertIn("成交量: 3456.00万", compact)
 
     def test_compact_markdown_keeps_summary_for_fundamental_earnings_sentiment(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
@@ -183,6 +186,28 @@ class TestDiscordSender(unittest.TestCase):
         self.assertNotIn("company_sentiment", compact)
         self.assertNotIn("overall_confidence", compact)
         self.assertNotIn("high", compact)
+
+    def test_compact_markdown_keeps_technical_and_plan_details_from_tables(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
+        sender = DiscordSender(cfg)
+        content = (
+            "## 关键技术位\n"
+            "|字段|数值|\n|--|--|\n|MA5|124.8|\n|MA10|123.7|\n|MA20|122.1|\n|支撑位|121.5|\n|压力位|127.0|\n\n"
+            "## 作战计划\n"
+            "|字段|数值|\n|--|--|\n|理想买入点|123-124|\n|止损位|119|\n|目标位|132|\n|建议仓位|30%|\n|空仓建议|回踩分批|\n|持仓建议|继续持有|\n\n"
+            "## 检查清单\n- 条件1\n"
+        )
+        compact = sender._compact_discord_markdown(content)
+        self.assertIn("MA5: 124.80", compact)
+        self.assertIn("MA10: 123.70", compact)
+        self.assertIn("MA20: 122.10", compact)
+        self.assertIn("支撑位: 121.50", compact)
+        self.assertIn("压力位: 127.00", compact)
+        self.assertIn("理想买入点: 123.00-124.00", compact)
+        self.assertIn("止损位: 119.00", compact)
+        self.assertIn("目标位: 132.00", compact)
+        self.assertIn("建议仓位: 30.00%", compact)
+        self.assertIn("执行确认：重点确认买点、量价配合和止损纪律。", compact)
 
 
 class TestWechatSender(unittest.TestCase):

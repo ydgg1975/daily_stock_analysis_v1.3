@@ -6,6 +6,7 @@ Discord 发送提醒服务
 1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
 import logging
+import re
 import time
 import requests
 
@@ -14,6 +15,7 @@ from src.formatters import chunk_content_by_max_words
 
 
 logger = logging.getLogger(__name__)
+_NUMERIC_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 class DiscordSender:
@@ -144,6 +146,23 @@ class DiscordSender:
                 return f"{num / 1_0000:.1f} 万"
             return f"{num:.2f}"
 
+        def _format_count(value):
+            num = _safe_float(value)
+            if num is None:
+                return str(value).strip()
+            abs_num = abs(num)
+            if abs_num >= 1_0000_0000:
+                return f"{num / 1_0000_0000:.2f}亿"
+            if abs_num >= 1_0000:
+                return f"{num / 1_0000:.2f}万"
+            return f"{num:.0f}"
+
+        def _format_numeric_phrase(value):
+            text = str(value).strip()
+            if not text:
+                return text
+            return _NUMERIC_TOKEN_RE.sub(lambda m: f"{float(m.group(0)):.2f}", text)
+
         def _join_short_clauses(parts: list[str]) -> str:
             cleaned = [p.strip(" ，。；;") for p in parts if p and p.strip(" ，。；;")]
             if not cleaned:
@@ -218,8 +237,12 @@ class DiscordSender:
             raw_key = key.strip()
             if any(token in raw_key for token in ("当前价", "最高", "最低", "支撑", "压力", "MA", "ma")):
                 return _format_price(value)
+            if any(token in raw_key for token in ("理想买入", "次优买入", "止损", "目标")):
+                return _format_numeric_phrase(value)
             if any(token in raw_key for token in ("涨跌幅", "乖离", "换手率", "仓位")):
                 return _format_percent(value, digits=2)
+            if "成交量" in raw_key:
+                return _format_count(value)
             return value
 
         def _collect_section_body(start_idx: int) -> tuple[list[str], int]:
@@ -372,7 +395,7 @@ class DiscordSender:
                         idx += 1
                         continue
             if (stripped.startswith("## ") or stripped.startswith("### ")) and "检查清单" in stripped:
-                out.append("检查清单：执行前重点确认买点、量价配合和止损纪律。")
+                out.append("执行确认：重点确认买点、量价配合和止损纪律。")
                 idx += 1
                 continue
             if stripped.startswith("- ") and out and "检查清单" in out[-1]:

@@ -1,18 +1,44 @@
 {# Shared macros for report templates #}
-{% macro market_snapshot(result) %}
-{% set snapshot = result.market_snapshot if result.market_snapshot else {} %}
-{% if snapshot %}
-### 📈 {{ labels.market_snapshot_heading }}
-
-| {{ labels.close_label }} | {{ labels.prev_close_label }} | {{ labels.open_label }} | {{ labels.high_label }} | {{ labels.low_label }} | {{ labels.change_pct_label }} | {{ labels.change_amount_label }} | {{ labels.amplitude_label }} | {{ labels.volume_label }} | {{ labels.amount_label }} |
-|------|------|------|------|------|-------|-------|------|--------|--------|
-| {{ display_price(snapshot.get('close'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('prev_close'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('open'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('high'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('low'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('pct_chg'), missing_text='数据缺失') }} | {{ display_price(snapshot.get('change_amount'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('amplitude'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('volume'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('amount'), missing_text='数据缺失') }} |
-{% if snapshot.get('price') %}
-
-| {{ labels.current_price_label }} | {{ labels.volume_ratio_label }} | {{ labels.turnover_rate_label }} | {{ labels.source_label }} |
-|-------|------|--------|----------|
-| {{ display_price(snapshot.get('price'), missing_text='数据缺失') }} | {{ display_number(snapshot.get('volume_ratio'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('turnover_rate'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('source'), missing_text='数据缺失') }} |
+{% macro compact_list_section(heading, items) %}
+{% if items %}
+### {{ heading }}
+{% for item in items %}
+- {{ item }}
+{% endfor %}
 {% endif %}
+{% endmacro %}
 
+{% macro market_snapshot(market) %}
+{% set lines = [] %}
+{% if market.get('current_price') or market.get('change_pct') %}
+{% set price_line = '' %}
+{% if market.get('current_price') %}
+{% set price_line = labels.current_price_label ~ '：' ~ market.get('current_price', '') %}
 {% endif %}
+{% if market.get('change_pct') %}
+{% set price_line = (price_line ~ ' | ' if price_line else '') ~ labels.change_pct_label ~ '：' ~ market.get('change_pct', '') %}
+{% endif %}
+{% set _ = lines.append(price_line) %}
+{% endif %}
+{% if market.get('high') or market.get('low') %}
+{% set range_line = '' %}
+{% if market.get('high') %}
+{% set range_line = labels.high_label ~ '：' ~ market.get('high', '') %}
+{% endif %}
+{% if market.get('low') %}
+{% set range_line = (range_line ~ ' | ' if range_line else '') ~ labels.low_label ~ '：' ~ market.get('low', '') %}
+{% endif %}
+{% set _ = lines.append(range_line) %}
+{% endif %}
+{% if market.get('volume') or market.get('volume_judgment') %}
+{% set volume_line = '' %}
+{% if market.get('volume') %}
+{% set volume_line = labels.volume_label ~ '：' ~ market.get('volume', '') %}
+{% endif %}
+{% if market.get('volume_judgment') %}
+{% set volume_line = (volume_line ~ ' | ' if volume_line else '') ~ ('量能判断' if report_language == 'zh' else 'Volume' ) ~ '：' ~ market.get('volume_judgment', '') %}
+{% endif %}
+{% set _ = lines.append(volume_line) %}
+{% endif %}
+{{ compact_list_section('📈 ' ~ labels.market_snapshot_heading, lines) }}
 {% endmacro %}
