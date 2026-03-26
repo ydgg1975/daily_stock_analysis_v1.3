@@ -221,6 +221,119 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("600519", out)
 
     @mock.patch("src.notification.get_config")
+    def test_generate_dashboard_report_passes_time_context_to_renderer(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=True)
+        service = NotificationService()
+        result = AnalysisResult(
+            code="TEM",
+            name="Tempus AI",
+            sentiment_score=60,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="观望",
+            dashboard={
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-25T10:00:00-04:00",
+                        "market_session_date": "2026-03-25",
+                        "session_type": "intraday_snapshot",
+                        "news_published_at": "2026-03-25T09:10:00-04:00",
+                        "report_generated_at": "2026-03-25T22:10:00+08:00",
+                    }
+                }
+            },
+        )
+
+        with mock.patch("src.services.report_renderer.render", return_value="ok") as mock_render:
+            out = service.generate_dashboard_report([result], report_date="2026-03-25")
+
+        self.assertEqual(out, "ok")
+        kwargs = mock_render.call_args.kwargs
+        self.assertEqual(kwargs["extra_context"]["market_timestamp"], "2026-03-25T10:00:00-04:00")
+        self.assertEqual(kwargs["extra_context"]["market_session_date"], "2026-03-25")
+        self.assertEqual(kwargs["extra_context"]["session_type"], "intraday_snapshot")
+
+    @mock.patch("src.notification.get_config")
+    def test_generate_dashboard_report_single_stock_forces_full_mode(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=True, report_summary_only=True)
+        service = NotificationService()
+        result = AnalysisResult(
+            code="NVDA",
+            name="NVIDIA",
+            sentiment_score=80,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="观望",
+        )
+        with mock.patch("src.services.report_renderer.render", return_value="ok") as mock_render:
+            out = service.generate_dashboard_report([result], report_date="2026-03-25")
+        self.assertEqual(out, "ok")
+        self.assertFalse(mock_render.call_args.kwargs["summary_only"])
+
+    @mock.patch("src.notification.get_config")
+    @mock.patch("requests.post")
+    def test_notification_renderer_to_discord_keeps_full_sections_after_chunking(
+        self, mock_post: mock.MagicMock, mock_get_config: mock.MagicMock
+    ):
+        mock_get_config.return_value = _make_config(
+            report_renderer_enabled=True,
+            report_summary_only=True,
+            discord_bot_token="TOKEN",
+            discord_main_channel_id="123",
+            discord_max_words=300,
+        )
+        mock_post.return_value = _make_response(200)
+        service = NotificationService()
+        result = AnalysisResult(
+            code="TEM",
+            name="Tempus AI",
+            sentiment_score=66,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="观望",
+        )
+        rendered = (
+            "# TEM\n\n"
+            "## 重要信息速览\n- 新闻1\n- 新闻2\n- 新闻3\n- 新闻4\n- 新闻5\n\n"
+            "## 核心结论\n一句话决策: 观望\n操作建议: 持有\n评分: 66\n\n"
+            "## 当日行情\n|字段|数值|\n|--|--|\n|当前价|125.4|\n|涨跌幅|+1.2%|\n|最高|126.8|\n|最低|123.9|\n|成交量|3456万|\n\n"
+            "## 数据透视\n|价格指标|当前价|\n|--|--|\n|MA5|124.8|\n|MA10|123.7|\n|MA20|122.1|\n|支撑位|121.5|\n|压力位|127.0|\n\n"
+            "## 作战计划\n|操作点位|数值|\n|--|--|\n|理想买入点|123-124|\n|止损位|119|\n|目标位|132|\n|建议仓位|30%|\n|空仓建议|回踩分批|\n|持仓建议|持有并跟踪|\n\n"
+            "## 检查清单\n- x\n- y\n\n"
+            "### 🕒 时间语义\n- market_timestamp: 2026-03-25T16:00:00-04:00\n\n"
+            "report_generated_at: 2026-03-26T08:00:00+08:00\n"
+            "market_timestamp: 2026-03-25T16:00:00-04:00\n"
+            "market_session_date: 2026-03-25\n"
+            "session_type: last_completed_session\n\n"
+            "### 🧾 基本面摘要（Fundamentals）\n"
+            "|指标|数值|\n|--|--|\n|revenueGrowth|0.22|\n|forwardPE|24.1|\n|freeCashflow|1200000|\n|debtToEquity|45|\n"
+            "**基本面结论**: 高增长且估值可接受\n"
+            "### 📈 财报趋势（Earnings）\n- 结论: 营收与利润延续增长，需继续观察指引\n"
+            "### 🧠 结构化情绪（Sentiment）\n- company_sentiment: positive\n- overall_confidence: medium\n"
+            "### 🧩 数据质量说明\n...\n"
+        )
+        with mock.patch("src.services.report_renderer.render", return_value=rendered):
+            content = service.generate_dashboard_report([result], report_date="2026-03-26")
+            ok = service.send(content)
+        self.assertTrue(ok)
+        sent_payloads = [call.kwargs.get("json", {}).get("content", "") for call in mock_post.call_args_list]
+        merged = "\n".join(sent_payloads)
+        self.assertIn("## 重要信息速览", merged)
+        self.assertIn("## 核心结论", merged)
+        self.assertIn("一句话决策", merged)
+        self.assertIn("操作建议", merged)
+        self.assertIn("## 当日行情", merged)
+        self.assertIn("MA5", merged)
+        self.assertIn("理想买入点", merged)
+        self.assertIn("## 检查清单", merged)
+        self.assertIn("|字段|数值|", merged)
+        self.assertIn("market_timestamp", merged)
+        self.assertIn("### 🧾 基本面摘要（Fundamentals）", merged)
+        self.assertIn("### 📈 财报趋势（Earnings）", merged)
+        self.assertIn("### 🧠 结构化情绪（Sentiment）", merged)
+        self.assertIn("### 🧩 数据质量说明", merged)
+
+    @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
         service = NotificationService()

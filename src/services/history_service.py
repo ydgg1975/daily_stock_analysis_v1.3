@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
 from src.config import get_config, resolve_news_window_days
+from src.services import report_renderer
 from src.report_language import (
     get_bias_status_emoji,
     get_localized_stock_name,
@@ -27,6 +28,7 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
+from data_provider.us_index_mapping import is_us_stock_code
 from src.storage import DatabaseManager
 from src.utils.data_processing import normalize_model_used, parse_json_field
 
@@ -486,8 +488,29 @@ class HistoryService:
                 record_id=record_id
             )
 
-        # Generate Markdown report
+        # Generate Markdown report via unified renderer to keep web/notification sections aligned.
         try:
+            time_ctx = {}
+            dashboard = getattr(result, "dashboard", {}) or {}
+            structured = dashboard.get("structured_analysis", {}) if isinstance(dashboard, dict) else {}
+            if isinstance(structured, dict):
+                time_ctx = structured.get("time_context", {}) or {}
+            rendered = report_renderer.render(
+                "markdown",
+                [result],
+                report_date=record.created_at.strftime("%Y-%m-%d") if record.created_at else None,
+                summary_only=False,
+                extra_context={
+                    "report_generated_at": time_ctx.get("report_generated_at") or (record.created_at.isoformat() if record.created_at else None),
+                    "market_timestamp": time_ctx.get("market_timestamp"),
+                    "market_session_date": time_ctx.get("market_session_date"),
+                    "session_type": time_ctx.get("session_type"),
+                    "news_published_at": time_ctx.get("news_published_at"),
+                    "report_language": normalize_report_language(getattr(result, "report_language", None)),
+                },
+            )
+            if rendered:
+                return rendered
             return self._generate_single_stock_markdown(result, record)
         except Exception as e:
             logger.error(f"get_markdown_report: failed to generate markdown for {record_id}: {e}", exc_info=True)
@@ -698,6 +721,12 @@ class HistoryService:
                 raw_bias_status = price_data.get('bias_status', 'N/A')
                 bias_status = localize_bias_status(raw_bias_status, report_language)
                 bias_emoji = get_bias_status_emoji(raw_bias_status)
+                bias_value = price_data.get('bias_ma5', 'N/A')
+                try:
+                    bias_num = float(str(bias_value).strip().rstrip('%'))
+                    bias_display = "数据缺失" if bias_num == 0 else f"{bias_num:.2f}%"
+                except (TypeError, ValueError):
+                    bias_display = "数据缺失"
                 report_lines.extend([
                     f"| {labels['price_metrics_label']} | {labels['current_price_label']} |",
                     "|---------|------|",
@@ -705,21 +734,40 @@ class HistoryService:
                     f"| {labels['ma5_label']} | {price_data.get('ma5', 'N/A')} |",
                     f"| {labels['ma10_label']} | {price_data.get('ma10', 'N/A')} |",
                     f"| {labels['ma20_label']} | {price_data.get('ma20', 'N/A')} |",
-                    f"| {labels['bias_ma5_label']} | {price_data.get('bias_ma5', 'N/A')}% {bias_emoji}{bias_status} |",
+                    f"| {labels['bias_ma5_label']} | {bias_display} {bias_emoji}{bias_status} |",
                     f"| {labels['support_level_label']} | {price_data.get('support_level', 'N/A')} |",
                     f"| {labels['resistance_level_label']} | {price_data.get('resistance_level', 'N/A')} |",
                     "",
                 ])
             # 量能分析
             if vol_data:
+                volume_ratio_raw = vol_data.get('volume_ratio', 'N/A')
+                volume_ratio_display = (
+                    "数据缺失" if volume_ratio_raw in (None, "", "N/A", "None", 0, 0.0, "0", "0.0") else volume_ratio_raw
+                )
+                turnover_rate = vol_data.get('turnover_rate', 'N/A')
+                turnover_display = (
+                    "数据缺失"
+                    if turnover_rate in (None, "", "N/A")
+                    else (
+                        str(turnover_rate)
+                        if str(turnover_rate).endswith('%')
+                        else f"{turnover_rate}%"
+                    )
+                )
                 report_lines.extend([
-                    f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {vol_data.get('volume_ratio', 'N/A')} "
-                    f"({vol_data.get('volume_status', '')}) | {labels['turnover_rate_label']} {vol_data.get('turnover_rate', 'N/A')}%",
+                    f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {volume_ratio_display} "
+                    f"({vol_data.get('volume_status', '')}) | {labels['turnover_rate_label']} {turnover_display}",
                     f"💡 *{vol_data.get('volume_meaning', '')}*",
                     "",
                 ])
             # 筹码结构
-            if chip_data:
+            if is_us_stock_code(result.code):
+                report_lines.extend([
+                    f"**{labels['chip_label']}**: 美股暂不支持该指标",
+                    "",
+                ])
+            elif chip_data:
                 raw_chip_health = chip_data.get('chip_health', 'N/A')
                 chip_health = localize_chip_health(raw_chip_health, report_language)
                 normalized_chip_health = str(raw_chip_health or "").strip().lower()

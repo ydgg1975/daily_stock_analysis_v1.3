@@ -9,6 +9,7 @@ import type {
   TaskStatus,
   TaskListResponse,
 } from '../types/analysis';
+import { normalizeAnalysisReport } from './reportNormalizer';
 
 // ============ API Interfaces ============
 
@@ -39,7 +40,12 @@ export const analysisApi = {
 
     // Ensure the sync analysis report payload is converted recursively.
     if ('report' in result && result.report) {
-      result.report = toCamelCase<AnalysisReport>(result.report);
+      result.report = normalizeAnalysisReport(toCamelCase<AnalysisReport>(result.report), {
+        queryId: result.queryId,
+        stockCode: result.stockCode,
+        stockName: result.stockName,
+        createdAt: result.createdAt,
+      });
     }
 
     return result;
@@ -100,7 +106,12 @@ export const analysisApi = {
     if (data.result) {
       data.result = toCamelCase<AnalysisResult>(data.result);
       if (data.result.report) {
-        data.result.report = toCamelCase<AnalysisReport>(data.result.report);
+        data.result.report = normalizeAnalysisReport(toCamelCase<AnalysisReport>(data.result.report), {
+          queryId: data.result.queryId,
+          stockCode: data.result.stockCode,
+          stockName: data.result.stockName,
+          createdAt: data.result.createdAt,
+        });
       }
     }
 

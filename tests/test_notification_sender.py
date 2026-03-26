@@ -104,9 +104,36 @@ class TestDiscordSender(unittest.TestCase):
         call_kw = mock_post.call_args[1]
         self.assertEqual(call_kw["headers"]["Authorization"], "Bot TOKEN")
 
+    def test_chunking_prefers_markdown_sections(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1", discord_max_words=120)
+        sender = DiscordSender(cfg)
+        content = (
+            "# Title\n\n"
+            "## 重要信息速览\n" + ("A" * 40) + "\n\n"
+            "## 核心结论\n" + ("B" * 40) + "\n\n"
+            "## 数据透视\n" + ("C" * 40)
+        )
+        chunks = sender._chunk_discord_content(content)
+        self.assertGreaterEqual(len(chunks), 2)
+        combined = "\n".join(chunks)
+        self.assertIn("## 重要信息速览", combined)
+        self.assertIn("## 核心结论", combined)
+        self.assertIn("## 数据透视", combined)
 
-class TestWechatSender(unittest.TestCase):
-    """Unit tests for WechatSender."""
+    def test_send_chunks_continues_after_mid_failure(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
+        sender = DiscordSender(cfg)
+        with mock.patch.object(sender, "_chunk_discord_content", return_value=["c1", "c2", "c3"]), \
+                mock.patch.object(sender, "_send_discord_webhook", side_effect=[True, False, True]) as mock_send:
+            ok = sender.send_to_discord("any")
+        self.assertFalse(ok)
+        self.assertEqual(mock_send.call_count, 3)
+
+
+
+
+
+
 
     def test_send_returns_false_when_no_webhook_url(self):
         cfg = _config()
