@@ -6,6 +6,7 @@ Discord 发送提醒服务
 1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
 import logging
+import re
 import time
 import requests
 
