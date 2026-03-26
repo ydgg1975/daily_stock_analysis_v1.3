@@ -42,6 +42,7 @@
 | AI | 決策儀表盤 | 一句話核心結論 + 精確買賣點位 + 操作檢查清單 |
 | 分析 | 多維度分析 | 技術面 + 籌碼分布 + 輿情情報 + 實時行情 |
 | 市場 | 全球市場 | 支援 A股、港股、美股 |
+| 補全 | 智慧補全 (MVP) | **[測試階段]** 首頁搜尋框支援代碼 / 名稱 / 拼音 / 別名聯想；本地索引已覆蓋 A股、港股、美股，並可透過 Tushare 或 AkShare 重新生成 |
 | 復盤 | 大盤復盤 | 每日市場概覽、板塊漲跌、北向資金 |
 | 回測 | AI 回測驗證 | 自動評估歷史分析準確率，方向勝率、止盈止損命中率 |
 | **Agent 問股** | **策略對話** | **多輪策略問答，支援 11 種內建策略（Web/Bot/API）** |
@@ -239,6 +240,18 @@
 
 > 備註：`POST /api/v1/analysis/analyze` 在 `async_mode=false` 時僅支援單一股票；批量 `stock_codes` 需使用 `async_mode=true`。異步 `202` 對單股回傳 `task_id`，對批量回傳 `accepted` / `duplicates` 匯總。
 
+## 🔎 智慧搜尋補全 (MVP)
+
+首頁分析輸入框現已升級為類搜尋引擎的補全框，降低手動記憶股票代碼的負擔。
+
+- **多維匹配**：支援股票代碼、公司名稱、拼音縮寫與別名（例如 `gzmt` -> 貴州茅台、`tencent` -> 騰訊控股、`aapl` -> Apple Inc.）。
+- **多市場覆蓋**：本地索引已覆蓋 **A股、港股、美股** 三個市場；需要時可基於 Tushare 或 AkShare 資料重新生成。
+- **自動降級**：
+  - 若索引尚未更新、缺少新上市標的，或載入失敗，介面會自動退回一般手動輸入模式，不阻斷分析流程。
+  - 若補全未命中，直接按 Enter 仍會送出原始輸入。
+
+> 提示：如需更新索引，可先執行 `python3 scripts/fetch_tushare_stock_list.py` 更新股票列表 CSV，再執行 `python3 scripts/generate_index_from_csv.py` 重新生成靜態索引。
+
 ## 項目結構
 
 ```
@@ -298,15 +311,9 @@ daily_stock_analysis/
 
 ## ☕ 支持項目
 
-<div align="center">
-  <a href="https://ko-fi.com/mumu157" target="_blank">
-    <img src="https://storage.ko-fi.com/cdn/kofi3.png?v=3" alt="Buy Me a Coffee at ko-fi.com" style="height: 40px !important;">
-  </a>
-</div>
-
-| 支付寶 (Alipay) | 微信支付 (WeChat) | Ko-fi |
+| 支付寶 (Alipay) | 微信支付 (WeChat) | 小紅書 |
 | :---: | :---: | :---: |
-| <img src="../sources/alipay.jpg" width="200" alt="Alipay"> | <img src="../sources/wechatpay.jpg" width="200" alt="WeChat Pay"> | <a href="https://ko-fi.com/mumu157" target="_blank"><img src="../sources/ko-fi.png" width="200" alt="Ko-fi"></a> |
+| <img src="../sources/alipay.jpg" width="200" alt="Alipay"> | <img src="../sources/wechatpay.jpg" width="200" alt="WeChat Pay"> | <img src="../sources/xiaohongshu.png" width="200" alt="小紅書"> |
 
 ## 貢獻
 
