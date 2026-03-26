@@ -475,33 +475,23 @@ def get_task_list(
 async def task_stream():
     """
     SSE 任务状态流
-    
-    事件类型：
-    - connected: 连接成功
-    - task_created: 新任务创建
-    - task_started: 任务开始执行
-    - task_completed: 任务完成
-    - task_failed: 任务失败
-    - heartbeat: 心跳（每 30 秒）
-    
-    Returns:
-        StreamingResponse: SSE 事件流
     """
+
     async def event_generator():
         task_queue = get_task_queue()
         event_queue: asyncio.Queue = asyncio.Queue()
-        
+
         # 发送连接成功事件
         yield _format_sse_event("connected", {"message": "Connected to task stream"})
-        
+
         # 发送当前进行中的任务
         pending_tasks = task_queue.list_pending_tasks()
         for task in pending_tasks:
             yield _format_sse_event("task_created", task.to_dict())
-        
+
         # 订阅任务事件
         task_queue.subscribe(event_queue)
-        
+
         try:
             while True:
                 try:
@@ -509,26 +499,28 @@ async def task_stream():
                     event = await asyncio.wait_for(event_queue.get(), timeout=30)
                     yield _format_sse_event(event["type"], event["data"])
                 except asyncio.TimeoutError:
-                    # 心跳
+                    # 心跳保持连接，防止 ddnsto 认为连接超时而关掉它
                     yield _format_sse_event("heartbeat", {
                         "timestamp": datetime.now().isoformat()
                     })
         except asyncio.CancelledError:
-            # 客户端断开连接
             pass
         finally:
             task_queue.unsubscribe(event_queue)
-    
+
+    # 关键修改：增加更多的 Header 兼容性，并强制指定分块传输
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",  # 增加 no-transform 阻止代理修改流
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲
+            "X-Accel-Buffering": "no",  # 显式禁用 Nginx/Varnish 缓冲
+            "Transfer-Encoding": "chunked",  # 强制分块传输，这对内网穿透非常重要
+            "Access-Control-Allow-Origin": "*",  # 确保 SSE 也有跨域权限
         }
     )
-
 
 def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
     """
