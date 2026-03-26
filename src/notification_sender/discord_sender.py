@@ -6,6 +6,7 @@ Discord 发送提醒服务
 1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
 import logging
+import time
 import requests
 
 from src.config import Config
@@ -49,23 +50,122 @@ class DiscordSender:
         Returns:
             是否发送成功
         """
-        # 分割内容，避免单条消息超过 Discord 限制
-        try:
-            chunks = chunk_content_by_max_words(content, self._discord_max_words)
-        except ValueError as e:
-            logger.error(f"分割 Discord 消息失败: {e}, 尝试整段发送。")
-            chunks = [content]
+        discord_ready = self._optimize_markdown_for_discord(content)
+        chunks = self._chunk_discord_content(discord_ready)
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
-            return all(self._send_discord_webhook(chunk) for chunk in chunks)
+            return self._send_chunks_in_order(chunks, self._send_discord_webhook)
 
         # 其次使用 Bot API（权限高，需要 channel_id）
         if self._discord_config['bot_token'] and self._discord_config['channel_id']:
-            return all(self._send_discord_bot(chunk) for chunk in chunks)
+            return self._send_chunks_in_order(chunks, self._send_discord_bot)
 
         logger.warning("Discord 配置不完整，跳过推送")
         return False
+
+    @staticmethod
+    def _optimize_markdown_for_discord(content: str) -> str:
+        """Keep full fields but convert large markdown tables into compact bullet lists for Discord readability."""
+        if not content:
+            return content
+        lines = content.replace("\r\n", "\n").split("\n")
+        out: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            if stripped.startswith("|") and i + 2 < len(lines) and lines[i + 1].strip().startswith("|"):
+                headers = [x.strip() for x in stripped.split("|")[1:-1]]
+                divider = lines[i + 1].strip()
+                if divider.startswith("|") and all(set(seg.strip()) <= set('-:') for seg in divider.split('|')[1:-1]):
+                    i += 2
+                    while i < len(lines) and lines[i].strip().startswith("|"):
+                        cells = [x.strip() for x in lines[i].strip().split("|")[1:-1]]
+                        if len(headers) == 2 and len(cells) >= 2:
+                            out.append(f"- **{cells[0]}**: {cells[1]}")
+                        elif len(headers) == len(cells):
+                            pairs = [f"{h}={v}" for h, v in zip(headers, cells)]
+                            out.append(f"- {' | '.join(pairs)}")
+                        else:
+                            out.append(lines[i])
+                        i += 1
+                    continue
+            out.append(line)
+            i += 1
+        return "\n".join(out)
+
+    def _chunk_discord_content(self, content: str) -> list[str]:
+        """Chunk content by markdown sections first, then fallback to generic word chunking."""
+        if not content:
+            return [""]
+        try:
+            return self._chunk_by_markdown_sections(content)
+        except Exception as e:
+            logger.warning("Discord 章节分块失败，回退普通分块: %s", e)
+            try:
+                return chunk_content_by_max_words(content, self._discord_max_words, add_page_marker=True)
+            except ValueError:
+                return [content]
+
+    def _chunk_by_markdown_sections(self, content: str) -> list[str]:
+        normalized = content.replace("\r\n", "\n")
+        lines = normalized.split("\n")
+        sections: list[str] = []
+        cur: list[str] = []
+        for line in lines:
+            if line.startswith("## ") and cur:
+                sections.append("\n".join(cur))
+                cur = [line]
+            else:
+                cur.append(line)
+        if cur:
+            sections.append("\n".join(cur))
+
+        chunks: list[str] = []
+        current = ""
+        for section in sections:
+            candidate = f"{current}\n\n{section}".strip() if current else section
+            try:
+                parts = chunk_content_by_max_words(candidate, self._discord_max_words)
+            except ValueError:
+                parts = [candidate]
+            if len(parts) == 1:
+                current = candidate
+                continue
+
+            if current:
+                chunks.append(current)
+                current = ""
+            try:
+                section_parts = chunk_content_by_max_words(section, self._discord_max_words)
+            except ValueError:
+                section_parts = [section]
+            chunks.extend(section_parts)
+
+        if current:
+            chunks.append(current)
+        if not chunks:
+            chunks = [normalized]
+
+        total = len(chunks)
+        if total > 1:
+            return [f"{chunk}\n\n(Part {idx+1}/{total})" for idx, chunk in enumerate(chunks)]
+        return chunks
+
+    @staticmethod
+    def _send_chunks_in_order(chunks: list[str], send_func) -> bool:
+        failed_indexes: list[int] = []
+        for idx, chunk in enumerate(chunks, start=1):
+            ok = send_func(chunk)
+            if not ok:
+                failed_indexes.append(idx)
+            if idx < len(chunks):
+                time.sleep(0.3)
+        if failed_indexes:
+            logger.error("Discord 分块发送存在失败块: %s", failed_indexes)
+            return False
+        return True
 
   
     def _send_discord_webhook(self, content: str) -> bool:

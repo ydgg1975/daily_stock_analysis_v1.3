@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 📣 **Discord 完整报告可读性与资讯价值分级修复** — 在不删字段前提下将 Discord 中的大表格转换为紧凑列表展示；重要信息区新增高价值关键词优先与低价值资讯降权，缺少高价值催化/动态时明确提示“未发现高价值新增催化/动态”。
+- 🧮 **报告口径一致性与交易位校验补齐** — 在报告渲染层新增行情口径一致性重算与告警（涨跌额/涨跌幅按当前价与昨收校验），并在作战计划中新增买点类型标注（突破买点/回踩买点）及止损位风险提示，避免 Discord/Web 完整报告出现交易语义自相矛盾。
+- 🧾 **Discord/Web 完整报告语义统一（NA 原因 + 北京时间 + 一致格式化）** — 报告渲染统一走同一模板链路，Discord 不再做内容压缩删减，仅按长度分块；Web 与 Discord 共享字段与 section 语义。缺失字段统一展示为 `NA（原因）`，并补齐“报告生成时间（北京时间）/市场时间（原始+北京时间）/交易日/会话类型”显示；价格与比例统一两位小数，成交量/成交额按可读单位输出。
+- 🧩 **Web 报告链路缺失字段兜底语义收敛** — 前端在解析分析/任务状态/历史详情报告时新增统一归一化：当 `summary` 必填字段缺失时回填安全默认值（含 `sentiment_score=50`），并优先用顶层响应元信息补齐 `meta` 关键字段，避免因后端局部缺字段导致报告渲染异常或语义漂移。
+- 🕒 **统一时间字段契约与诊断可观测性补齐** — Pipeline/API/Renderer 统一追加 `market_timestamp`、`market_session_date`、`news_published_at`、`report_generated_at`（均为 ISO 8601 且保留原始市场时区），并新增 `session_type` 标记（`intraday_snapshot` / `last_completed_session`）；`data_quality.provider_notes` 现在持续输出 provider 失败链路与时间契约快照，`diagnostic_mode` 开启时会输出完整诊断块，关闭时保持兼容默认行为。
+- 🧠 **Sentiment 公司相关性过滤升级（规则版）** — 在不引入重模型前提下新增 relevance gating 与分类（`company_specific` / `industry_general` / `regulatory` / `low_relevance`），输出 `relevance_type`/`relevance_score`，并确保 `industry_general` 默认不进入个股核心结论；无高相关信息时统一降级 `no_reliable_news + low confidence`。
+- 🧭 **多维分析数据质量与来源可追溯增强（美股优先）** — 新增技术指标来源追踪（`local_from_ohlcv` / `alpha_vantage_fallback`）、`data_quality` 结构化状态与告警注入（含 provider failure warnings）；当基本面/财报/情绪缺失时，报告与提示词将显式说明 partial/no_reliable_news，避免“隐性默认值”伪完整结论。
+- 🇺🇸 **美股分析链路闭环修复** — 美股实时行情链路改为明确标记 `yfinance`（仅真实降级时显示“降级兜底”），并在 pipeline 统一补算 `volume_ratio`（当日成交量 / 5 日均量）；新增 Alpha Vantage `OVERVIEW` 的 `SharesOutstanding` 缓存读取并据此计算 `turnover_rate`，缺失时不再错误展示 `0%`，统一显示“数据缺失”；通知与 Markdown 报告中美股筹码改为固定文案“美股暂不支持该指标”，不再显示 A 股筹码占位缺失信息。
 - 🧾 **Web 报告透明度区复制按钮层级修复**（#749）— `ReportDetails` 中“原始分析结果 / 分析快照”的复制按钮补齐可点击层级，避免被下方 JSON 内容覆盖后出现按钮可见但无法点击的问题。
 - 🧾 **Web 报告详情复制提示按面板独立** — `ReportDetails` 中“原始分析结果”和“分析快照”的复制提示不再共享同一个 `copied` 状态；当两个面板同时展开时，复制其中一个只会更新对应按钮文案，避免两个按钮同时显示“已复制”的误导反馈。
 - 📊 **Agent backtest tool semantics** — `get_skill_backtest_summary` 现在要求显式传入 `skill_id`，缺失时会返回明确的校验提示；当仓库尚未持久化真实 skill 级汇总时会返回明确的 unsupported/info 响应，而不再复用 overall 指标。成功返回路径会同时保留 normalized 指标和 `*_pct` 兼容字段，相关工具错误返回也改为稳定通用文案，避免向 agent 或用户暴露底层异常细节。

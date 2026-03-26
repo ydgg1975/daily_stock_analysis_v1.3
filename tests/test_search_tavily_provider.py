@@ -270,6 +270,36 @@ class TestTavilySearchProvider(unittest.TestCase):
         self.assertNotIn("topic", _FakeTavilyClient.search_calls[1])
         self.assertEqual(_FakeTavilyClient.search_calls[2]["topic"], "news")
 
+    def test_search_comprehensive_intel_foreign_query_contains_event_terms(self) -> None:
+        published_dt = datetime.now(timezone.utc).replace(microsecond=0)
+        published_text = published_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        with self._patch_tavily(
+            {
+                "results": [
+                    {
+                        "title": "Oracle update",
+                        "url": "https://example.com/orcl",
+                        "content": "Oracle earnings update",
+                        "published_date": published_text,
+                    }
+                ]
+            }
+        ):
+            service = SearchService(
+                tavily_keys=["dummy_key"],
+                searxng_public_instances_enabled=False,
+                news_max_age_days=3,
+                news_strategy_profile="short",
+            )
+            service.search_comprehensive_intel("ORCL", "Oracle", max_searches=1)
+
+        self.assertGreaterEqual(len(_FakeTavilyClient.search_calls), 1)
+        query_text = _FakeTavilyClient.search_calls[0]["query"].lower()
+        self.assertIn("orcl", query_text)
+        self.assertIn("earnings", query_text)
+        self.assertIn("guidance", query_text)
+
 
 if __name__ == "__main__":
     unittest.main()

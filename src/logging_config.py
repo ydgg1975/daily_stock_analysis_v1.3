@@ -99,6 +99,13 @@ def setup_logging(
         LOG_FORMAT, LOG_DATE_FORMAT, relative_to=project_root
     )
     # Handler 1: 控制台输出
+    # Windows 中文控制台常见 cp936/gbk 编码下，emoji 等字符可能触发 UnicodeEncodeError。
+    # 这里采用 errors=replace，避免日志写入异常影响业务流程。
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="replace")
+        except Exception:
+            pass
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(rel_formatter)

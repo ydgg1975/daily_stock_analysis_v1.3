@@ -12,6 +12,7 @@
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from src.repositories.analysis_repo import AnalysisRepository
@@ -138,6 +139,7 @@ class AnalysisService:
                 "stock_name": stock_name,
                 "report_type": report_type,
                 "report_language": report_language,
+                "report_generated_at": datetime.now(timezone.utc).isoformat(),
                 "current_price": result.current_price,
                 "change_pct": result.change_pct,
                 "model_used": getattr(result, "model_used", None),
