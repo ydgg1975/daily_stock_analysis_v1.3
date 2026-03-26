@@ -129,6 +129,39 @@ class TestDiscordSender(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(mock_send.call_count, 3)
 
+    def test_compact_markdown_hides_low_value_debug_and_quality_sections(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
+        sender = DiscordSender(cfg)
+        content = (
+            "# Title\n\n"
+            "> 报告时间(report_generated_at): `x`\n"
+            "> 市场时间(market_timestamp): `y`\n"
+            "## 核心结论\nA\n\n"
+            "### 🧩 数据质量说明\n- warnings: x\n\n"
+            "### 🧾 基本面摘要（Fundamentals）\n- marketCap: 1\n"
+        )
+        compact = sender._compact_discord_markdown(content)
+        self.assertIn("## 核心结论", compact)
+        self.assertNotIn("report_generated_at", compact)
+        self.assertNotIn("market_timestamp", compact)
+        self.assertNotIn("数据质量说明", compact)
+        self.assertNotIn("基本面摘要", compact)
+
+    def test_compact_markdown_reduces_blank_lines_and_keeps_core_sections(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
+        sender = DiscordSender(cfg)
+        content = (
+            "# TEM\n\n\n\n"
+            "## 重要信息速览\n\n- a\n- b\n- c\n- d\n- e\n\n\n"
+            "## 核心结论\n\n一句话\n\n"
+            "## 当日行情\n\n|a|b|\n|--|--|\n|1|2|\n"
+        )
+        compact = sender._compact_discord_markdown(content)
+        self.assertIn("## 重要信息速览", compact)
+        self.assertIn("## 核心结论", compact)
+        self.assertIn("## 当日行情", compact)
+        self.assertNotIn("\n\n\n", compact)
+
 
 class TestWechatSender(unittest.TestCase):
     """Unit tests for WechatSender."""

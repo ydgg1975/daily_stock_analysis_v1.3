@@ -50,7 +50,8 @@ class DiscordSender:
         Returns:
             是否发送成功
         """
-        chunks = self._chunk_discord_content(content)
+        compact_content = self._compact_discord_markdown(content)
+        chunks = self._chunk_discord_content(compact_content)
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
@@ -62,6 +63,75 @@ class DiscordSender:
 
         logger.warning("Discord 配置不完整，跳过推送")
         return False
+
+    @staticmethod
+    def _compact_discord_markdown(content: str) -> str:
+        """Trim low-value verbose sections for mobile-friendly Discord cards."""
+        if not content:
+            return content
+        lines = content.replace("\r\n", "\n").split("\n")
+
+        hidden_section_titles = (
+            "### 🧩 数据质量说明",
+            "### 🧾 基本面摘要",
+            "### 📈 财报趋势",
+            "### 🧠 结构化情绪",
+        )
+        hidden_inline_prefix = (
+            "> 报告时间(report_generated_at):",
+            "> 市场时间(market_timestamp):",
+            "> 交易日(market_session_date):",
+            "> 会话类型(session_type):",
+            "report_generated_at:",
+            "market_timestamp:",
+            "market_session_date:",
+            "session_type:",
+            "**Alpha Vantage 补充指标**:",
+            "**筹码**: 美股暂不支持该指标",
+        )
+
+        out: list[str] = []
+        in_hidden_section = False
+        in_info_section = False
+        info_kept = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("## "):
+                in_hidden_section = False
+                in_info_section = stripped.startswith("### 📰 重要信息速览") or stripped.startswith("## 📰 重要信息速览")
+            if stripped.startswith("### "):
+                in_hidden_section = any(stripped.startswith(x) for x in hidden_section_titles)
+                in_info_section = stripped.startswith("### 📰 重要信息速览")
+            if in_hidden_section:
+                continue
+            if any(stripped.startswith(x) for x in hidden_inline_prefix):
+                continue
+
+            if in_info_section and stripped and not stripped.startswith("### "):
+                if stripped.startswith("- ") or stripped.startswith("**"):
+                    info_kept += 1
+                    if info_kept > 4:
+                        continue
+            if stripped.startswith("**✅ 检查清单**"):
+                out.append("**检查清单**: 详见完整报告")
+                continue
+            if stripped.startswith("- ") and out and out[-1] == "**检查清单**: 详见完整报告":
+                continue
+
+            out.append(line)
+
+        # collapse excessive blank lines
+        compact: list[str] = []
+        blank_count = 0
+        for line in out:
+            if line.strip() == "":
+                blank_count += 1
+                if blank_count > 1:
+                    continue
+            else:
+                blank_count = 0
+            compact.append(line)
+        return "\n".join(compact).strip()
 
     def _chunk_discord_content(self, content: str) -> list[str]:
         """Chunk content by markdown sections first, then fallback to generic word chunking."""

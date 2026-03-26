@@ -295,7 +295,7 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         rendered = (
             "# TEM\n\n"
             "## 重要信息速览\ntext\n\n"
-            "## 核心结论\ntext\n\n"
+            "## 核心结论\n一句话决策: 观望\n操作建议: 持有\n评分: 66\n\n"
             "## 当日行情\n|a|b|\n|--|--|\n|1|2|\n\n"
             "## 数据透视\ntext\n\n"
             "## 作战计划\ntext\n\n"
@@ -304,7 +304,10 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
             "market_timestamp: 2026-03-25T16:00:00-04:00\n"
             "market_session_date: 2026-03-25\n"
             "session_type: last_completed_session\n\n"
-            "### 基本面摘要\n...\n### 财报趋势\n...\n### 结构化情绪\n...\n### 数据质量说明\n...\n"
+            "### 🧾 基本面摘要（Fundamentals）\n...\n"
+            "### 📈 财报趋势（Earnings）\n...\n"
+            "### 🧠 结构化情绪（Sentiment）\n...\n"
+            "### 🧩 数据质量说明\n...\n"
         )
         with mock.patch("src.services.report_renderer.render", return_value=rendered):
             content = service.generate_dashboard_report([result], report_date="2026-03-26")
@@ -314,9 +317,12 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         merged = "\n".join(sent_payloads)
         self.assertIn("## 重要信息速览", merged)
         self.assertIn("## 核心结论", merged)
-        self.assertIn("market_timestamp", merged)
-        self.assertIn("### 基本面摘要", merged)
-        self.assertIn("### 数据质量说明", merged)
+        self.assertIn("一句话决策", merged)
+        self.assertIn("操作建议", merged)
+        self.assertIn("## 当日行情", merged)
+        self.assertNotIn("market_timestamp", merged)
+        self.assertNotIn("### 🧾 基本面摘要（Fundamentals）", merged)
+        self.assertNotIn("### 🧩 数据质量说明", merged)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):
