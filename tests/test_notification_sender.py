@@ -120,6 +120,13 @@ class TestDiscordSender(unittest.TestCase):
         self.assertIn("## 核心结论", combined)
         self.assertIn("## 数据透视", combined)
 
+
+    def test_optimize_markdown_for_discord_converts_table_to_bullets(self):
+        content = "## 当日行情\n|字段|数值|\n|--|--|\n|当前价|125.4|\n|涨跌幅|+1.2%|"
+        out = DiscordSender._optimize_markdown_for_discord(content)
+        self.assertIn("- **当前价**: 125.4", out)
+        self.assertNotIn("|字段|数值|", out)
+
     def test_send_chunks_continues_after_mid_failure(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
         sender = DiscordSender(cfg)

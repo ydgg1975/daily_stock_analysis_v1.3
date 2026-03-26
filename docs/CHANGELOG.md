@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 📣 **Discord 完整报告可读性与资讯价值分级修复** — 在不删字段前提下将 Discord 中的大表格转换为紧凑列表展示；重要信息区新增高价值关键词优先与低价值资讯降权，缺少高价值催化/动态时明确提示“未发现高价值新增催化/动态”。
+- 🧮 **报告口径一致性与交易位校验补齐** — 在报告渲染层新增行情口径一致性重算与告警（涨跌额/涨跌幅按当前价与昨收校验），并在作战计划中新增买点类型标注（突破买点/回踩买点）及止损位风险提示，避免 Discord/Web 完整报告出现交易语义自相矛盾。
 - 🧾 **Discord/Web 完整报告语义统一（NA 原因 + 北京时间 + 一致格式化）** — 报告渲染统一走同一模板链路，Discord 不再做内容压缩删减，仅按长度分块；Web 与 Discord 共享字段与 section 语义。缺失字段统一展示为 `NA（原因）`，并补齐“报告生成时间（北京时间）/市场时间（原始+北京时间）/交易日/会话类型”显示；价格与比例统一两位小数，成交量/成交额按可读单位输出。
 - 🧩 **Web 报告链路缺失字段兜底语义收敛** — 前端在解析分析/任务状态/历史详情报告时新增统一归一化：当 `summary` 必填字段缺失时回填安全默认值（含 `sentiment_score=50`），并优先用顶层响应元信息补齐 `meta` 关键字段，避免因后端局部缺字段导致报告渲染异常或语义漂移。
 - 🕒 **统一时间字段契约与诊断可观测性补齐** — Pipeline/API/Renderer 统一追加 `market_timestamp`、`market_session_date`、`news_published_at`、`report_generated_at`（均为 ISO 8601 且保留原始市场时区），并新增 `session_type` 标记（`intraday_snapshot` / `last_completed_session`）；`data_quality.provider_notes` 现在持续输出 provider 失败链路与时间契约快照，`diagnostic_mode` 开启时会输出完整诊断块，关闭时保持兼容默认行为。

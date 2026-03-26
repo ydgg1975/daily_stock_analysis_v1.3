@@ -744,6 +744,185 @@ def _display_percent(
         return _normalize_missing_text(missing_text)
 
 
+def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        text = val.strip()
+        if text in {"", "N/A", "None", "null", "nan"}:
+            return True
+        try:
+            parsed = float(text.rstrip("%"))
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+    try:
+        parsed = float(val)
+        if math.isnan(parsed):
+            return True
+        if zero_is_missing and parsed == 0:
+            return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _display_value(
+    val: Any,
+    zero_is_missing: bool = False,
+    missing_text: str = "NA（接口未返回）",
+    style: str = "auto",
+) -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return _normalize_missing_text(missing_text)
+    try:
+        return _format_number(val, style=style)
+    except (TypeError, ValueError):
+        return str(val)
+
+
+def _display_percent(
+    val: Any,
+    zero_is_missing: bool = False,
+    missing_text: str = "NA（接口未返回）",
+) -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return _normalize_missing_text(missing_text)
+    text = str(val).strip()
+    if text.endswith("%"):
+        try:
+            return f"{float(text.rstrip('%')):.2f}%"
+        except (TypeError, ValueError):
+            return text
+    try:
+        return f"{float(text):.2f}%"
+    except (TypeError, ValueError):
+        return _normalize_missing_text(missing_text)
+
+
+
+
+def _to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(str(value).strip().rstrip('%').replace(',', ''))
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_first_number(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value)
+    import re
+    m = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not m:
+        return None
+    try:
+        return float(m.group(0))
+    except ValueError:
+        return None
+
+
+def _normalize_market_snapshot(snapshot: Any) -> Dict[str, Any]:
+    data = snapshot if isinstance(snapshot, dict) else {}
+    normalized = dict(data)
+
+    price = _to_float(data.get('price'))
+    close = _to_float(data.get('close'))
+    current = price if price is not None else close
+    prev_close = _to_float(data.get('prev_close'))
+
+    computed_change = (current - prev_close) if current is not None and prev_close not in (None, 0) else None
+    computed_pct = (computed_change / prev_close * 100.0) if computed_change is not None and prev_close else None
+
+    existing_change = _to_float(data.get('change_amount'))
+    existing_pct = _to_float(data.get('pct_chg'))
+    consistency_warnings: List[str] = []
+
+    if existing_change is None and computed_change is not None:
+        normalized['change_amount'] = computed_change
+    elif existing_change is not None and computed_change is not None and abs(existing_change - computed_change) > 0.05:
+        consistency_warnings.append('涨跌额口径不一致，已按当前价/昨收重算')
+        normalized['change_amount'] = computed_change
+
+    if existing_pct is None and computed_pct is not None:
+        normalized['pct_chg'] = computed_pct
+    elif existing_pct is not None and computed_pct is not None and abs(existing_pct - computed_pct) > 0.05:
+        consistency_warnings.append('涨跌幅口径不一致，已按涨跌额/昨收重算')
+        normalized['pct_chg'] = computed_pct
+
+    if str(data.get('session_type', '')).lower() in {'pre_market', 'post_market', 'after_hours'}:
+        consistency_warnings.append('盘前/盘后价格已标注，避免与常规收盘口径混用')
+
+    normalized['consistency_warnings'] = consistency_warnings
+    return normalized
+
+
+def _annotate_trade_levels(current_price: Any, ideal_buy: Any, secondary_buy: Any, stop_loss: Any, trend_prediction: Any) -> Dict[str, Any]:
+    cp = _extract_first_number(current_price)
+    ib = _extract_first_number(ideal_buy)
+    sb = _extract_first_number(secondary_buy)
+    sl = _extract_first_number(stop_loss)
+    trend = str(trend_prediction or '').lower()
+
+    def _entry_tag(level: Optional[float]) -> Optional[str]:
+        if cp is None or level is None:
+            return None
+        return '突破买点' if level > cp else '回踩买点'
+
+    annotations = {
+        'ideal_buy_tag': _entry_tag(ib),
+        'secondary_buy_tag': _entry_tag(sb),
+        'risk_warnings': [],
+    }
+
+    if cp is not None and sl is not None and ('看多' in trend or 'bull' in trend) and sl > cp:
+        annotations['risk_warnings'].append('做多语境下止损位高于当前价，请检查风控参数')
+    if cp is not None and sl is not None and cp < sl:
+        annotations['risk_warnings'].append('当前价已跌破关键防守位，请立即评估止损执行')
+
+    return annotations
+
+
+
+def _grade_intel_block(intel: Any) -> Dict[str, Any]:
+    block = dict(intel) if isinstance(intel, dict) else {}
+    high_value_keywords = (
+        "财报", "指引", "监管", "诉讼", "出口限制", "合作", "订单", "供应链", "竞争格局",
+        "earnings", "guidance", "regulation", "lawsuit", "export", "partnership", "order", "supply chain",
+    )
+    low_value_keywords = (
+        "发布会", "活动", "亮相", "品牌曝光", "采访", "conference", "event", "appearance", "marketing",
+    )
+
+    def _pick(items: Any, limit: int = 3) -> List[str]:
+        arr = [str(x).strip() for x in (items or []) if str(x).strip()]
+        high = [x for x in arr if any(k.lower() in x.lower() for k in high_value_keywords)]
+        if high:
+            return high[:limit]
+        medium = [x for x in arr if not any(k.lower() in x.lower() for k in low_value_keywords)]
+        return medium[:limit]
+
+    block['risk_alerts'] = _pick(block.get('risk_alerts'))
+    catalysts = _pick(block.get('positive_catalysts'))
+    block['positive_catalysts'] = catalysts
+    if not catalysts:
+        block['positive_catalysts_notice'] = '未发现高价值新增催化'
+
+    latest_news = str(block.get('latest_news') or '').strip()
+    if latest_news and any(k.lower() in latest_news.lower() for k in low_value_keywords):
+        block['latest_news'] = ''
+        block['latest_news_notice'] = '未发现高价值新增动态'
+    return block
+
 def _resolve_templates_dir() -> Path:
     """Resolve template directory relative to project root."""
     config = get_config()
@@ -865,6 +1044,9 @@ def render(
         "display_value": _display_value,
         "display_percent": _display_percent,
         "na": _na,
+        "normalize_market_snapshot": _normalize_market_snapshot,
+        "annotate_trade_levels": _annotate_trade_levels,
+        "grade_intel_block": _grade_intel_block,
         "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "summarize_fundamentals": _summarize_fundamentals,

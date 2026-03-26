@@ -20,7 +20,7 @@
 {% for e in enriched %}
 {% set result = e.result %}
 {% set dashboard = result.dashboard if result.dashboard else {} %}
-{% set intel = dashboard.get('intelligence') or {} %}
+{% set intel = grade_intel_block(dashboard.get('intelligence') or {}) %}
 {% set core = dashboard.get('core_conclusion') or {} %}
 {% set battle = dashboard.get('battle_plan') or {} %}
 {% set data_persp = dashboard.get('data_perspective') or {} %}
@@ -57,6 +57,9 @@
 {% endfor %}
 {% endif %}
 {% endif %}
+{% if intel.get('positive_catalysts_notice') %}
+**✨ {{ labels.positive_catalysts_label }}**: {{ intel.get('positive_catalysts_notice') }}
+{% endif %}
 {% if intel.get('latest_news') %}
 {% if company_news_allowed %}
 
@@ -64,6 +67,9 @@
 {% else %}
 **🏭 行业背景**: {{ intel.latest_news }}
 {% endif %}
+{% endif %}
+{% if intel.get('latest_news_notice') %}
+**📢 {{ labels.latest_news_label }}**: {{ intel.get('latest_news_notice') }}
 {% endif %}
 
 {% endif %}
@@ -173,68 +179,6 @@
 {{ na('接口未返回') }}
 {% endif %}
 
-{% set f = structured.get('fundamentals', {}) %}
-### 🧾 基本面摘要（Fundamentals）
-{% if f %}
-| 指标 | 数值 |
-|------|------|
-| marketCap | {{ display_value(f.get('normalized', {}).get('marketCap'), missing_text='数据缺失') }} |
-| trailingPE | {{ display_value(f.get('normalized', {}).get('trailingPE'), missing_text='数据缺失') }} |
-| forwardPE | {{ display_value(f.get('normalized', {}).get('forwardPE'), missing_text='数据缺失') }} |
-| totalRevenue | {{ display_value(f.get('normalized', {}).get('totalRevenue'), missing_text='数据缺失') }} |
-| revenueGrowth | {{ display_value(f.get('normalized', {}).get('revenueGrowth'), missing_text='数据缺失') }} |
-| grossMargins | {{ display_value(f.get('normalized', {}).get('grossMargins'), missing_text='数据缺失') }} |
-| operatingMargins | {{ display_value(f.get('normalized', {}).get('operatingMargins'), missing_text='数据缺失') }} |
-| freeCashflow | {{ display_value(f.get('normalized', {}).get('freeCashflow'), missing_text='数据缺失') }} |
-| operatingCashflow | {{ display_value(f.get('normalized', {}).get('operatingCashflow'), missing_text='数据缺失') }} |
-| debtToEquity | {{ display_value(f.get('normalized', {}).get('debtToEquity'), missing_text='数据缺失') }} |
-| currentRatio | {{ display_value(f.get('normalized', {}).get('currentRatio'), missing_text='数据缺失') }} |
-| returnOnEquity | {{ display_value(f.get('normalized', {}).get('returnOnEquity'), missing_text='数据缺失') }} |
-| returnOnAssets | {{ display_value(f.get('normalized', {}).get('returnOnAssets'), missing_text='数据缺失') }} |
-
-**基本面结论**: {{ (f.get('derived_insights') or ['数据不足，无法判断']) | join(', ') }}
-{% else %}
-数据缺失
-{% endif %}
-
-{% set eblock = structured.get('earnings_analysis', {}) %}
-### 📈 财报趋势（Earnings）
-{% if eblock %}
-{% set dm = eblock.get('derived_metrics', {}) %}
-- QoQ revenue growth: {{ display_value(dm.get('qoq_revenue_growth'), missing_text='数据缺失') }}
-- YoY revenue growth: {{ display_value(dm.get('yoy_revenue_growth'), missing_text='数据缺失') }}
-- QoQ net income change: {{ display_value(dm.get('qoq_net_income_change'), missing_text='数据缺失') }}
-- YoY net income change: {{ display_value(dm.get('yoy_net_income_change'), missing_text='数据缺失') }}
-- flags: {{ (eblock.get('summary_flags') or ['earnings_partial']) | join(', ') }}
-- 结论: {{ (eblock.get('narrative_insights') or ['财报数据不足']) | join('；') }}
-{% else %}
-数据缺失
-{% endif %}
-
-### 🧠 结构化情绪（Sentiment）
-{% if sblock %}
-- company_sentiment: {{ sblock.get('company_sentiment', 'no_reliable_news') }}
-- industry_sentiment: {{ sblock.get('industry_sentiment', 'background_only') }}
-- regulatory_sentiment: {{ sblock.get('regulatory_sentiment', 'unknown') }}
-- overall_confidence: {{ sblock.get('overall_confidence', sblock.get('confidence', 'low')) }}
-- relevance_type/relevance_score: {{ sblock.get('relevance_type', 'low_relevance') }} / {{ sblock.get('relevance_score', 0.0) }}
-{% else %}
-数据缺失
-{% endif %}
-
-{% set dq = structured.get('data_quality', {}) %}
-### 🧩 数据质量说明
-{% if dq %}
-- technicals_status: {{ dq.get('technicals_status', 'partial') }}
-- fundamentals_status: {{ dq.get('fundamentals_status', 'partial') }}
-- earnings_status: {{ dq.get('earnings_status', 'partial') }}
-- sentiment_status: {{ dq.get('sentiment_status', 'weak') }}
-- missing_fields: {{ (dq.get('missing_fields') or []) | join(', ') if dq.get('missing_fields') else '无' }}
-- warnings: {{ (dq.get('warnings') or []) | join(', ') if dq.get('warnings') else '无' }}
-{% else %}
-数据缺失
-{% endif %}
-
 {% set price_data = data_persp.get('price_position', {}) %}
 {% if price_data %}
 {% set ma5_display = display_value(price_data.get('ma5'), missing_text='接口未返回') %}
@@ -279,13 +223,16 @@
 **{{ labels.volume_label }}**: {{ labels.volume_ratio_label }} {{ vr_display }} ({{ vol_data.get('volume_status', '') }}) | {{ labels.turnover_rate_label }} {{ tr_display }}
 💡 *{{ vol_data.get('volume_meaning', '') }}*
 {% endif %}
-{% if technical.get('support') or technical.get('resistance') %}
-{% set sr_line = '' %}
-{% if technical.get('support') %}
-{% set sr_line = labels.support_level_label ~ '：' ~ technical.get('support', '') %}
+
+{% if alpha_data %}
+**Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='接口未返回') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='接口未返回') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='接口未返回') }}
 {% endif %}
-{% if technical.get('resistance') %}
-{% set sr_line = (sr_line ~ ' | ' if sr_line else '') ~ labels.resistance_level_label ~ '：' ~ technical.get('resistance', '') %}
+
+{% set chip_data = data_persp.get('chip_structure', {}) %}
+{% if is_us_stock_code(result.code) %}
+**{{ labels.chip_label }}**: {{ na('当前市场暂不支持') }}
+{% elif chip_data %}
+**{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', na('接口未返回')) }} | {{ chip_data.get('avg_cost', na('接口未返回')) }} | {{ chip_data.get('concentration', na('接口未返回')) }} {{ localize_chip_health(chip_data.get('chip_health', na('接口未返回')), report_language) }}
 {% endif %}
 {% set _ = technical_lines.append(sr_line) %}
 {% endif %}
@@ -298,15 +245,22 @@
 **Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='数据缺失') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='数据缺失') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='数据缺失') }}
 {% endif %}
 
-{% if alpha_data %}
-**Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='接口未返回') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='接口未返回') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='接口未返回') }}
-{% endif %}
+{% set sniper = battle.get('sniper_points', {}) %}
+{% if sniper %}
+{% set market_price = (result.market_snapshot.get('price') if result.market_snapshot else None) %}
+{% set levels = annotate_trade_levels(result.current_price or market_price, sniper.get('ideal_buy'), sniper.get('secondary_buy'), sniper.get('stop_loss'), result.trend_prediction) %}
+**📍 {{ labels.action_points_heading }}**
 
-{% set chip_data = data_persp.get('chip_structure', {}) %}
-{% if is_us_stock_code(result.code) %}
-**{{ labels.chip_label }}**: {{ na('当前市场暂不支持') }}
-{% elif chip_data %}
-**{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', na('接口未返回')) }} | {{ chip_data.get('avg_cost', na('接口未返回')) }} | {{ chip_data.get('concentration', na('接口未返回')) }} {{ localize_chip_health(chip_data.get('chip_health', na('接口未返回')), report_language) }}
+| {{ labels.action_points_heading }} | {{ labels.current_price_label }} |
+|---------|------|
+| 🎯 {{ labels.ideal_buy_label }} | {{ clean_sniper(sniper.get('ideal_buy')) }}{% if levels.get('ideal_buy_tag') %}（{{ levels.get('ideal_buy_tag') }}）{% endif %} |
+| 🔵 {{ labels.secondary_buy_label }} | {{ clean_sniper(sniper.get('secondary_buy')) }}{% if levels.get('secondary_buy_tag') %}（{{ levels.get('secondary_buy_tag') }}）{% endif %} |
+| 🛑 {{ labels.stop_loss_label }} | {{ clean_sniper(sniper.get('stop_loss')) }} |
+| 🎊 {{ labels.take_profit_label }} | {{ clean_sniper(sniper.get('take_profit')) }} |
+{% if levels.get('risk_warnings') %}
+{% for warning in levels.get('risk_warnings') %}
+- ⚠️ {{ warning }}
+{% endfor %}
 {% endif %}
 {% endif %}
 

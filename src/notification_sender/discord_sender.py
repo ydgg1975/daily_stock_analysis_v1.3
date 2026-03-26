@@ -6,7 +6,6 @@ Discord 发送提醒服务
 1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
 import logging
-import re
 import time
 import requests
 
@@ -52,7 +51,8 @@ class DiscordSender:
         Returns:
             是否发送成功
         """
-        chunks = self._chunk_discord_content(content)
+        discord_ready = self._optimize_markdown_for_discord(content)
+        chunks = self._chunk_discord_content(discord_ready)
 
         # 优先使用 Webhook（配置简单，权限低）
         if self._discord_config['webhook_url']:
@@ -64,6 +64,37 @@ class DiscordSender:
 
         logger.warning("Discord 配置不完整，跳过推送")
         return False
+
+    @staticmethod
+    def _optimize_markdown_for_discord(content: str) -> str:
+        """Keep full fields but convert large markdown tables into compact bullet lists for Discord readability."""
+        if not content:
+            return content
+        lines = content.replace("\r\n", "\n").split("\n")
+        out: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            if stripped.startswith("|") and i + 2 < len(lines) and lines[i + 1].strip().startswith("|"):
+                headers = [x.strip() for x in stripped.split("|")[1:-1]]
+                divider = lines[i + 1].strip()
+                if divider.startswith("|") and all(set(seg.strip()) <= set('-:') for seg in divider.split('|')[1:-1]):
+                    i += 2
+                    while i < len(lines) and lines[i].strip().startswith("|"):
+                        cells = [x.strip() for x in lines[i].strip().split("|")[1:-1]]
+                        if len(headers) == 2 and len(cells) >= 2:
+                            out.append(f"- **{cells[0]}**: {cells[1]}")
+                        elif len(headers) == len(cells):
+                            pairs = [f"{h}={v}" for h, v in zip(headers, cells)]
+                            out.append(f"- {' | '.join(pairs)}")
+                        else:
+                            out.append(lines[i])
+                        i += 1
+                    continue
+            out.append(line)
+            i += 1
+        return "\n".join(out)
 
     def _chunk_discord_content(self, content: str) -> list[str]:
         """Chunk content by markdown sections first, then fallback to generic word chunking."""
