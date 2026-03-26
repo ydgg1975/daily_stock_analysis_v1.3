@@ -816,17 +816,20 @@ class NotificationService(
         ma_label = "Moving Averages" if report_language == "en" else "均线"
         volume_analysis_label = "Volume" if report_language == "en" else "量能"
         news_heading = "News Flow" if report_language == "en" else "消息面"
+        # 单股通知默认完整报告，避免 summary_only 误触发导致 Discord 丢失章节
+        render_summary_only = self._report_summary_only and len(results) > 1
         if getattr(config, 'report_renderer_enabled', False) and results:
             from src.services.report_renderer import render
             out = render(
                 platform='markdown',
                 results=results,
                 report_date=report_date,
-                summary_only=self._report_summary_only,
+                summary_only=render_summary_only,
                 extra_context={
                     **self._get_history_compare_context(results),
                     **self._get_time_context_from_results(results),
                     "report_language": report_language,
+                    **self._get_time_context_from_results(results),
                 },
             )
             if out:
@@ -873,7 +876,7 @@ class NotificationService(
             ])
 
         # 逐个股票的决策仪表盘（Issue #262: summary_only 时跳过详情）
-        if not self._report_summary_only:
+        if not render_summary_only:
             for result in sorted_results:
                 signal_text, signal_emoji, signal_tag = self._get_signal_level(result)
                 dashboard = result.dashboard if hasattr(result, 'dashboard') and result.dashboard else {}
