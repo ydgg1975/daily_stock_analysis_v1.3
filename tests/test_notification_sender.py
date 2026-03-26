@@ -161,6 +161,7 @@ class TestDiscordSender(unittest.TestCase):
         self.assertIn("## 核心结论", compact)
         self.assertIn("## 当日行情", compact)
         self.assertNotIn("\n\n\n", compact)
+        self.assertNotIn("|a|b|", compact)
 
 
 class TestWechatSender(unittest.TestCase):

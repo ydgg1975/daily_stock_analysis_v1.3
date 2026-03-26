@@ -72,6 +72,7 @@ class DiscordSender:
         lines = content.replace("\r\n", "\n").split("\n")
 
         hidden_section_titles = (
+            "### 🕒 时间语义",
             "### 🧩 数据质量说明",
             "### 🧾 基本面摘要",
             "### 📈 财报趋势",
@@ -89,13 +90,37 @@ class DiscordSender:
             "**Alpha Vantage 补充指标**:",
             "**筹码**: 美股暂不支持该指标",
         )
+        key_row_tokens = (
+            "当前价", "涨跌幅", "最高", "最低", "成交量",
+            "ma5", "ma10", "ma20", "支撑", "压力",
+            "理想买入", "止损", "目标", "仓位",
+            "空仓", "持仓",
+        )
 
         out: list[str] = []
         in_hidden_section = False
         in_info_section = False
         info_kept = 0
-        for line in lines:
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx]
             stripped = line.strip()
+            if stripped.startswith("|") and idx + 1 < len(lines) and lines[idx + 1].strip().startswith("|-"):
+                table_rows: list[str] = []
+                j = idx + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    row = [x.strip() for x in lines[j].split("|")[1:-1]]
+                    if len(row) >= 2:
+                        k, v = row[0], row[1]
+                        lk = k.lower()
+                        if any(token in lk for token in key_row_tokens):
+                            if v and v not in {"数据缺失", "N/A", "美股暂不支持该指标"}:
+                                table_rows.append(f"- {k}: {v}")
+                    j += 1
+                out.extend(table_rows)
+                idx = j
+                continue
+
             if stripped.startswith("## "):
                 in_hidden_section = False
                 in_info_section = stripped.startswith("### 📰 重要信息速览") or stripped.startswith("## 📰 重要信息速览")
@@ -103,22 +128,31 @@ class DiscordSender:
                 in_hidden_section = any(stripped.startswith(x) for x in hidden_section_titles)
                 in_info_section = stripped.startswith("### 📰 重要信息速览")
             if in_hidden_section:
+                idx += 1
                 continue
             if any(stripped.startswith(x) for x in hidden_inline_prefix):
+                idx += 1
                 continue
 
+            if any(x in stripped for x in ("数据缺失", "N/A", "美股暂不支持该指标")):
+                idx += 1
+                continue
             if in_info_section and stripped and not stripped.startswith("### "):
                 if stripped.startswith("- ") or stripped.startswith("**"):
                     info_kept += 1
                     if info_kept > 4:
+                        idx += 1
                         continue
-            if stripped.startswith("**✅ 检查清单**"):
-                out.append("**检查清单**: 详见完整报告")
+            if "检查清单" in stripped:
+                out.append("检查清单: 详见完整报告")
+                idx += 1
                 continue
-            if stripped.startswith("- ") and out and out[-1] == "**检查清单**: 详见完整报告":
+            if stripped.startswith("- ") and out and out[-1] == "检查清单: 详见完整报告":
+                idx += 1
                 continue
 
             out.append(line)
+            idx += 1
 
         # collapse excessive blank lines
         compact: list[str] = []

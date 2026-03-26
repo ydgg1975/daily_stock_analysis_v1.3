@@ -294,12 +294,13 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         )
         rendered = (
             "# TEM\n\n"
-            "## 重要信息速览\ntext\n\n"
+            "## 重要信息速览\n- 新闻1\n- 新闻2\n- 新闻3\n- 新闻4\n- 新闻5\n\n"
             "## 核心结论\n一句话决策: 观望\n操作建议: 持有\n评分: 66\n\n"
-            "## 当日行情\n|a|b|\n|--|--|\n|1|2|\n\n"
-            "## 数据透视\ntext\n\n"
-            "## 作战计划\ntext\n\n"
-            "## 检查清单\n- x\n\n"
+            "## 当日行情\n|字段|数值|\n|--|--|\n|当前价|125.4|\n|涨跌幅|+1.2%|\n|最高|126.8|\n|最低|123.9|\n|成交量|3456万|\n\n"
+            "## 数据透视\n|价格指标|当前价|\n|--|--|\n|MA5|124.8|\n|MA10|123.7|\n|MA20|122.1|\n|支撑位|121.5|\n|压力位|127.0|\n\n"
+            "## 作战计划\n|操作点位|数值|\n|--|--|\n|理想买入点|123-124|\n|止损位|119|\n|目标位|132|\n|建议仓位|30%|\n|空仓建议|回踩分批|\n|持仓建议|持有并跟踪|\n\n"
+            "## 检查清单\n- x\n- y\n\n"
+            "### 🕒 时间语义\n- market_timestamp: 2026-03-25T16:00:00-04:00\n\n"
             "report_generated_at: 2026-03-26T08:00:00+08:00\n"
             "market_timestamp: 2026-03-25T16:00:00-04:00\n"
             "market_session_date: 2026-03-25\n"
@@ -320,6 +321,10 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("一句话决策", merged)
         self.assertIn("操作建议", merged)
         self.assertIn("## 当日行情", merged)
+        self.assertIn("MA5", merged)
+        self.assertIn("理想买入点", merged)
+        self.assertIn("检查清单: 详见完整报告", merged)
+        self.assertNotIn("|字段|数值|", merged)
         self.assertNotIn("market_timestamp", merged)
         self.assertNotIn("### 🧾 基本面摘要（Fundamentals）", merged)
         self.assertNotIn("### 🧩 数据质量说明", merged)
