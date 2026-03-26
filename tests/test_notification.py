@@ -305,9 +305,11 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
             "market_timestamp: 2026-03-25T16:00:00-04:00\n"
             "market_session_date: 2026-03-25\n"
             "session_type: last_completed_session\n\n"
-            "### 🧾 基本面摘要（Fundamentals）\n...\n"
-            "### 📈 财报趋势（Earnings）\n...\n"
-            "### 🧠 结构化情绪（Sentiment）\n...\n"
+            "### 🧾 基本面摘要（Fundamentals）\n"
+            "|指标|数值|\n|--|--|\n|revenueGrowth|0.22|\n|forwardPE|24.1|\n|freeCashflow|1200000|\n|debtToEquity|45|\n"
+            "**基本面结论**: 高增长且估值可接受\n"
+            "### 📈 财报趋势（Earnings）\n- 结论: 营收与利润延续增长，需继续观察指引\n"
+            "### 🧠 结构化情绪（Sentiment）\n- company_sentiment: positive\n- overall_confidence: medium\n"
             "### 🧩 数据质量说明\n...\n"
         )
         with mock.patch("src.services.report_renderer.render", return_value=rendered):
@@ -326,8 +328,12 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("检查清单: 详见完整报告", merged)
         self.assertNotIn("|字段|数值|", merged)
         self.assertNotIn("market_timestamp", merged)
+        self.assertIn("基本面摘要：", merged)
+        self.assertIn("财报趋势：", merged)
+        self.assertIn("情绪摘要：", merged)
         self.assertNotIn("### 🧾 基本面摘要（Fundamentals）", merged)
         self.assertNotIn("### 🧩 数据质量说明", merged)
+        self.assertNotIn("qoq_revenue_growth", merged)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):

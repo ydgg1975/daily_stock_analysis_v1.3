@@ -163,6 +163,22 @@ class TestDiscordSender(unittest.TestCase):
         self.assertNotIn("\n\n\n", compact)
         self.assertNotIn("|a|b|", compact)
 
+    def test_compact_markdown_keeps_summary_for_fundamental_earnings_sentiment(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1")
+        sender = DiscordSender(cfg)
+        content = (
+            "### 🧾 基本面摘要（Fundamentals）\n"
+            "|指标|数值|\n|--|--|\n|revenueGrowth|0.18|\n|forwardPE|21|\n"
+            "**基本面结论**: 增长稳健\n"
+            "### 📈 财报趋势（Earnings）\n- 结论: 营收与利润延续增长\n"
+            "### 🧠 结构化情绪（Sentiment）\n- company_sentiment: positive\n- overall_confidence: high\n"
+        )
+        compact = sender._compact_discord_markdown(content)
+        self.assertIn("基本面摘要：", compact)
+        self.assertIn("财报趋势：", compact)
+        self.assertIn("情绪摘要：", compact)
+        self.assertNotIn("company_sentiment", compact)
+
 
 class TestWechatSender(unittest.TestCase):
     """Unit tests for WechatSender."""

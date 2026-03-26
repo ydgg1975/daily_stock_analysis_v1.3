@@ -96,6 +96,65 @@ class DiscordSender:
             "理想买入", "止损", "目标", "仓位",
             "空仓", "持仓",
         )
+        metric_tokens = ("revenueGrowth", "forwardPE", "freeCashflow", "debtToEquity", "totalRevenue")
+
+        def _collect_section_body(start_idx: int) -> tuple[list[str], int]:
+            body: list[str] = []
+            j = start_idx + 1
+            while j < len(lines):
+                nxt = lines[j].strip()
+                if nxt.startswith("### ") or nxt.startswith("## "):
+                    break
+                body.append(lines[j])
+                j += 1
+            return body, j
+
+        def _summarize_fundamentals(body: list[str]) -> str:
+            conclusion = ""
+            metrics: list[str] = []
+            for line in body:
+                s = line.strip()
+                if "基本面结论" in s:
+                    conclusion = s.split(":", 1)[-1].strip()
+                if s.startswith("|"):
+                    row = [x.strip() for x in s.split("|")[1:-1]]
+                    if len(row) >= 2 and any(t in row[0] for t in metric_tokens):
+                        if row[1] and row[1] not in {"数据缺失", "N/A"}:
+                            metrics.append(f"{row[0]}={row[1]}")
+            metrics = metrics[:4]
+            if conclusion and metrics:
+                return f"基本面摘要：{conclusion}；关键指标：{', '.join(metrics)}"
+            if conclusion:
+                return f"基本面摘要：{conclusion}"
+            if metrics:
+                return f"基本面摘要：关键指标 {', '.join(metrics)}"
+            return ""
+
+        def _summarize_earnings(body: list[str]) -> str:
+            for line in body:
+                s = line.strip()
+                if s.startswith("- 结论:"):
+                    return f"财报趋势：{s.replace('- 结论:', '').strip()}"
+            return ""
+
+        def _summarize_sentiment(body: list[str]) -> str:
+            company = confidence = ""
+            for line in body:
+                s = line.strip()
+                if s.startswith("- company_sentiment:"):
+                    company = s.split(":", 1)[-1].strip()
+                if s.startswith("- overall_confidence:"):
+                    confidence = s.split(":", 1)[-1].strip()
+            mapping = {
+                "positive": "偏积极",
+                "negative": "偏谨慎",
+                "neutral": "中性",
+                "no_reliable_news": "信息有限",
+            }
+            if company:
+                tone = mapping.get(company, company)
+                return f"情绪摘要：{tone}{'（置信度' + confidence + '）' if confidence else ''}"
+            return ""
 
         out: list[str] = []
         in_hidden_section = False
@@ -127,6 +186,24 @@ class DiscordSender:
             if stripped.startswith("### "):
                 in_hidden_section = any(stripped.startswith(x) for x in hidden_section_titles)
                 in_info_section = stripped.startswith("### 📰 重要信息速览")
+                if stripped.startswith("### 🧾 基本面摘要"):
+                    body, idx = _collect_section_body(idx)
+                    summary = _summarize_fundamentals(body)
+                    if summary:
+                        out.append(f"- {summary}")
+                    continue
+                if stripped.startswith("### 📈 财报趋势"):
+                    body, idx = _collect_section_body(idx)
+                    summary = _summarize_earnings(body)
+                    if summary:
+                        out.append(f"- {summary}")
+                    continue
+                if stripped.startswith("### 🧠 结构化情绪"):
+                    body, idx = _collect_section_body(idx)
+                    summary = _summarize_sentiment(body)
+                    if summary:
+                        out.append(f"- {summary}")
+                    continue
             if in_hidden_section:
                 idx += 1
                 continue
