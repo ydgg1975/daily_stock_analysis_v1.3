@@ -11,7 +11,6 @@ Any expensive data preparation should be injected by the caller via extra_contex
 
 import logging
 import math
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -27,12 +26,10 @@ from src.report_language import (
     localize_trend_prediction,
     normalize_report_language,
 )
-from data_provider.akshare_fetcher import is_hk_stock_code
 from data_provider.us_index_mapping import is_us_stock_code
 
 logger = logging.getLogger(__name__)
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
-_NUMERIC_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _now_shanghai():
@@ -600,6 +597,51 @@ def _summarize_checklist(checklist: List[str]) -> str:
     return "执行条件基本齐备，可按计划分批执行并严守止损纪律。"
 
 
+def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        text = val.strip()
+        if text in {"", "N/A", "None", "null", "nan"}:
+            return True
+        try:
+            parsed = float(text.rstrip("%"))
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+    try:
+        parsed = float(val)
+        if math.isnan(parsed):
+            return True
+        if zero_is_missing and parsed == 0:
+            return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _display_value(val: Any, zero_is_missing: bool = False, missing_text: str = "N/A") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    return str(val)
+
+
+def _display_percent(val: Any, zero_is_missing: bool = False, missing_text: str = "数据缺失") -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return missing_text
+    text = str(val).strip()
+    if text.endswith("%"):
+        return text
+    try:
+        return f"{float(text):.2f}%"
+    except (TypeError, ValueError):
+        return missing_text
+
+
 def _resolve_templates_dir() -> Path:
     """Resolve template directory relative to project root."""
     config = get_config()
@@ -714,13 +756,7 @@ def render(
         "escape_md": _escape_md,
         "clean_sniper": _clean_sniper_value,
         "display_value": _display_value,
-        "display_number": _display_number,
-        "display_price": _display_price,
-        "display_multiple": _display_multiple,
-        "display_compact_money": _display_compact_money,
-        "display_compact_count": _display_compact_count,
         "display_percent": _display_percent,
-        "display_percent_or_text": _display_percent_or_text,
         "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "summarize_fundamentals": _summarize_fundamentals,

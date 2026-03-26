@@ -6,7 +6,6 @@ Discord 发送提醒服务
 1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
 import logging
-import re
 import time
 import requests
 
@@ -79,21 +78,16 @@ class DiscordSender:
             "### 🧾 基本面摘要",
             "### 📈 财报趋势",
             "### 🧠 结构化情绪",
-            "### 🧠 情绪摘要",
         )
         hidden_inline_prefix = (
             "> 报告时间(report_generated_at):",
             "> 市场时间(market_timestamp):",
             "> 交易日(market_session_date):",
             "> 会话类型(session_type):",
-            "> news_published_at:",
             "report_generated_at:",
             "market_timestamp:",
             "market_session_date:",
             "session_type:",
-            "news_published_at:",
-            "*报告生成时间",
-            "*Generated at",
             "**Alpha Vantage 补充指标**:",
             "**筹码**: 美股暂不支持该指标",
         )
@@ -104,146 +98,6 @@ class DiscordSender:
             "空仓", "持仓",
         )
         metric_tokens = ("revenueGrowth", "forwardPE", "freeCashflow", "debtToEquity", "totalRevenue")
-
-        def _safe_float(value):
-            if value in (None, "", "N/A", "数据缺失"):
-                return None
-            try:
-                text = str(value).strip().replace(",", "")
-                if text.endswith("%"):
-                    text = text[:-1]
-                return float(text)
-            except (TypeError, ValueError):
-                return None
-
-        def _format_price(value):
-            num = _safe_float(value)
-            if num is None:
-                return str(value).strip()
-            return f"{num:.2f}"
-
-        def _format_percent(value, *, ratio: bool = False, digits: int = 1):
-            if value in (None, "", "N/A", "数据缺失"):
-                return ""
-            text = str(value).strip()
-            num = _safe_float(text)
-            if num is None:
-                return text
-            if text.endswith("%"):
-                return f"{num:.{digits}f}%"
-            if ratio:
-                num *= 100
-            return f"{num:.{digits}f}%"
-
-        def _format_money(value):
-            num = _safe_float(value)
-            if num is None:
-                return str(value).strip()
-            abs_num = abs(num)
-            if abs_num >= 1_0000_0000:
-                return f"{num / 1_0000_0000:.1f} 亿"
-            if abs_num >= 1_0000:
-                return f"{num / 1_0000:.1f} 万"
-            return f"{num:.2f}"
-
-        def _format_count(value):
-            num = _safe_float(value)
-            if num is None:
-                return str(value).strip()
-            abs_num = abs(num)
-            if abs_num >= 1_0000_0000:
-                return f"{num / 1_0000_0000:.2f}亿"
-            if abs_num >= 1_0000:
-                return f"{num / 1_0000:.2f}万"
-            return f"{num:.0f}"
-
-        def _format_numeric_phrase(value):
-            text = str(value).strip()
-            if not text:
-                return text
-            return _NUMERIC_TOKEN_RE.sub(lambda m: f"{float(m.group(0)):.2f}", text)
-
-        def _join_short_clauses(parts: list[str]) -> str:
-            cleaned = [p.strip(" ，。；;") for p in parts if p and p.strip(" ，。；;")]
-            if not cleaned:
-                return ""
-            if len(cleaned) == 1:
-                return f"{cleaned[0]}。"
-            if len(cleaned) == 2:
-                return f"{cleaned[0]}，{cleaned[1]}。"
-            return f"{'、'.join(cleaned[:-1])}，{cleaned[-1]}。"
-
-        def _strip_md_label(line: str) -> str:
-            text = line.strip()
-            if text.startswith("- "):
-                text = text[2:].strip()
-            return text.replace("**", "").strip()
-
-        def _extract_labeled_value(body: list[str], labels: tuple[str, ...]) -> str:
-            for raw in body:
-                text = _strip_md_label(raw)
-                for label in labels:
-                    for sep in ("：", ":"):
-                        prefix = f"{label}{sep}"
-                        if text.startswith(prefix):
-                            return text[len(prefix):].strip()
-            return ""
-
-        def _humanize_fundamental_conclusion(text: str) -> str:
-            mapping = {
-                "valuation_high": "估值偏高",
-                "valuation_low": "估值偏低",
-                "valuation_neutral": "估值合理",
-                "high_growth": "增长强劲",
-                "stable_growth": "增长稳健",
-                "negative_growth": "增长承压",
-                "profitable": "盈利能力优秀",
-                "near_breakeven_or_loss": "盈利能力承压",
-                "gross_margin_positive": "毛利水平尚可",
-                "cashflow_healthy": "现金流健康",
-                "cashflow_pressure": "现金流承压",
-                "high_leverage": "杠杆偏高",
-                "leverage_controllable": "杠杆可控",
-            }
-            tokens = [mapping.get(token.strip()) for token in text.replace("；", ",").split(",")]
-            humanized = _join_short_clauses([item for item in tokens if item])
-            if humanized:
-                return humanized
-            cleaned = text.strip(" ：:;；")
-            if cleaned and not cleaned.endswith("。"):
-                cleaned = f"{cleaned}。"
-            return cleaned
-
-        def _humanize_metric(name: str, value: str) -> str:
-            key = name.strip()
-            normalized_key = key.lower()
-            if normalized_key == "revenuegrowth":
-                return f"营收增速 {_format_percent(value, ratio=True, digits=1)}"
-            if normalized_key == "forwardpe":
-                return f"前瞻PE {_format_price(value)} 倍"
-            if normalized_key == "trailingpe":
-                return f"TTM PE {_format_price(value)} 倍"
-            if normalized_key == "freecashflow":
-                return f"自由现金流 {_format_money(value)}"
-            if normalized_key == "operatingcashflow":
-                return f"经营现金流 {_format_money(value)}"
-            if normalized_key == "debtequity" or normalized_key == "debttoequity":
-                return f"负债权益比 {_format_percent(value, digits=1)}"
-            if normalized_key == "totalrevenue":
-                return f"营收规模 {_format_money(value)}"
-            return f"{key}={value}"
-
-        def _humanize_table_value(key: str, value: str) -> str:
-            raw_key = key.strip()
-            if any(token in raw_key for token in ("当前价", "最高", "最低", "支撑", "压力", "MA", "ma")):
-                return _format_price(value)
-            if any(token in raw_key for token in ("理想买入", "次优买入", "止损", "目标")):
-                return _format_numeric_phrase(value)
-            if any(token in raw_key for token in ("涨跌幅", "乖离", "换手率", "仓位")):
-                return _format_percent(value, digits=2)
-            if "成交量" in raw_key:
-                return _format_count(value)
-            return value
 
         def _collect_section_body(start_idx: int) -> tuple[list[str], int]:
             body: list[str] = []
@@ -257,77 +111,50 @@ class DiscordSender:
             return body, j
 
         def _summarize_fundamentals(body: list[str]) -> str:
-            conclusion = _extract_labeled_value(body, ("基本面", "基本面摘要", "基本面结论"))
-            metrics_text = _extract_labeled_value(body, ("关键指标",))
+            conclusion = ""
             metrics: list[str] = []
-            if conclusion:
-                conclusion = _humanize_fundamental_conclusion(conclusion)
-            if metrics_text:
-                metrics_text = metrics_text.strip().rstrip("。")
             for line in body:
                 s = line.strip()
-                if "基本面结论" in s and not conclusion:
-                    conclusion = _humanize_fundamental_conclusion(s.split(":", 1)[-1].strip())
+                if "基本面结论" in s:
+                    conclusion = s.split(":", 1)[-1].strip()
                 if s.startswith("|"):
                     row = [x.strip() for x in s.split("|")[1:-1]]
                     if len(row) >= 2 and any(t in row[0] for t in metric_tokens):
                         if row[1] and row[1] not in {"数据缺失", "N/A"}:
-                            metrics.append(_humanize_metric(row[0], row[1]))
+                            metrics.append(f"{row[0]}={row[1]}")
             metrics = metrics[:4]
-            if not metrics_text and metrics:
-                metrics_text = "、".join(metrics)
-            if conclusion and metrics_text:
-                return f"基本面：{conclusion.rstrip('。')}；关键指标：{metrics_text}"
+            if conclusion and metrics:
+                return f"基本面摘要：{conclusion}；关键指标：{', '.join(metrics)}"
             if conclusion:
-                return f"基本面：{conclusion}"
-            if metrics_text:
-                return f"关键指标：{metrics_text}"
+                return f"基本面摘要：{conclusion}"
+            if metrics:
+                return f"基本面摘要：关键指标 {', '.join(metrics)}"
             return ""
 
         def _summarize_earnings(body: list[str]) -> str:
-            for label in ("财报趋势", "结论"):
-                text = _extract_labeled_value(body, (label,))
-                if text:
-                    cleaned = text.removeprefix("财报趋势：").removeprefix("财报趋势:").strip()
-                    if cleaned and not cleaned.endswith("。"):
-                        cleaned = f"{cleaned}。"
-                    return f"财报趋势：{cleaned}"
             for line in body:
                 s = line.strip()
                 if s.startswith("- 结论:"):
-                    cleaned = s.replace("- 结论:", "").strip()
-                    if cleaned.startswith("财报趋势"):
-                        cleaned = cleaned.split("：", 1)[-1].split(":", 1)[-1].strip()
-                    if cleaned and not cleaned.endswith("。"):
-                        cleaned = f"{cleaned}。"
-                    return f"财报趋势：{cleaned}"
+                    return f"财报趋势：{s.replace('- 结论:', '').strip()}"
             return ""
 
         def _summarize_sentiment(body: list[str]) -> str:
-            text = _extract_labeled_value(body, ("情绪", "情绪摘要"))
-            if text:
-                if not text.endswith("。"):
-                    text = f"{text}。"
-                return f"情绪：{text}"
-            company = industry = regulatory = ""
+            company = confidence = ""
             for line in body:
                 s = line.strip()
                 if s.startswith("- company_sentiment:"):
                     company = s.split(":", 1)[-1].strip()
-                if s.startswith("- industry_sentiment:"):
-                    industry = s.split(":", 1)[-1].strip()
-                if s.startswith("- regulatory_sentiment:"):
-                    regulatory = s.split(":", 1)[-1].strip()
-            if regulatory == "negative":
-                return "情绪：消息面存在监管扰动，市场整体偏谨慎。"
-            if company == "positive":
-                return "情绪：公司相关消息偏积极，市场整体偏谨慎乐观。"
-            if company == "negative":
-                return "情绪：公司相关消息偏谨慎，短线情绪仍以防守为主。"
-            if company == "neutral" or industry == "neutral":
-                return "情绪：消息面暂无明确方向性催化，市场情绪偏观望。"
-            if company == "no_reliable_news":
-                return "情绪：缺少高相关度公司新闻，市场情绪以观望为主。"
+                if s.startswith("- overall_confidence:"):
+                    confidence = s.split(":", 1)[-1].strip()
+            mapping = {
+                "positive": "偏积极",
+                "negative": "偏谨慎",
+                "neutral": "中性",
+                "no_reliable_news": "信息有限",
+            }
+            if company:
+                tone = mapping.get(company, company)
+                return f"情绪摘要：{tone}{'（置信度' + confidence + '）' if confidence else ''}"
             return ""
 
         out: list[str] = []
@@ -348,7 +175,7 @@ class DiscordSender:
                         lk = k.lower()
                         if any(token in lk for token in key_row_tokens):
                             if v and v not in {"数据缺失", "N/A", "美股暂不支持该指标"}:
-                                table_rows.append(f"- {k}: {_humanize_table_value(k, v)}")
+                                table_rows.append(f"- {k}: {v}")
                     j += 1
                 out.extend(table_rows)
                 idx = j
@@ -372,7 +199,7 @@ class DiscordSender:
                     if summary:
                         out.append(f"- {summary}")
                     continue
-                if stripped.startswith("### 🧠 结构化情绪") or stripped.startswith("### 🧠 情绪摘要"):
+                if stripped.startswith("### 🧠 结构化情绪"):
                     body, idx = _collect_section_body(idx)
                     summary = _summarize_sentiment(body)
                     if summary:
@@ -394,11 +221,11 @@ class DiscordSender:
                     if info_kept > 4:
                         idx += 1
                         continue
-            if (stripped.startswith("## ") or stripped.startswith("### ")) and "检查清单" in stripped:
-                out.append("执行确认：重点确认买点、量价配合和止损纪律。")
+            if "检查清单" in stripped:
+                out.append("检查清单: 详见完整报告")
                 idx += 1
                 continue
-            if stripped.startswith("- ") and out and "检查清单" in out[-1]:
+            if stripped.startswith("- ") and out and out[-1] == "检查清单: 详见完整报告":
                 idx += 1
                 continue
 
