@@ -1,4 +1,4 @@
-{% from '_macros.j2' import market_snapshot with context %}
+{% from '_macros.j2' import compact_list_section, market_snapshot with context %}
 # 🎯 {{ report_date }} {{ labels.dashboard_title }}
 
 > {{ labels.analyzed_prefix }} **{{ results|length }}** {{ labels.stock_unit }} | 🟢{{ labels.buy_label }}:{{ buy_count }} 🟡{{ labels.watch_label }}:{{ hold_count }} 🔴{{ labels.sell_label }}:{{ sell_count }}
@@ -83,12 +83,18 @@
 ⏰ **{{ labels.time_sensitivity_label }}**: {{ core.get('time_sensitivity', labels.default_time_sensitivity) }}
 
 {% set pos_advice = core.get('position_advice', {}) %}
-{% if pos_advice %}
-| {{ labels.position_status_label }} | {{ labels.action_advice_label }} |
-|---------|---------|
-| 🆕 **{{ labels.no_position_label }}** | {{ pos_advice.get('no_position', localize_operation_advice(result.operation_advice, report_language)) }} |
-| 💼 **{{ labels.has_position_label }}** | {{ pos_advice.get('has_position', labels.continue_holding) }} |
+{% set info_lines = [] %}
+{% set _ = info_lines.append('情绪：' ~ summarize_sentiment(sblock)) %}
+{% set fundamental_line = '基本面：' ~ f_summary.get('conclusion') %}
+{% if f_summary.get('metrics') %}
+{% set fundamental_line = fundamental_line ~ ' 关键指标：' ~ f_summary.get('metrics') %}
 {% endif %}
+{% set _ = info_lines.append(fundamental_line) %}
+{% set _ = info_lines.append('财报趋势：' ~ summarize_earnings(eblock)) %}
+{% if intel_highlight %}
+{% set _ = info_lines.append(intel_highlight) %}
+{% endif %}
+{{ compact_list_section('📰 ' ~ labels.info_heading, info_lines) }}
 
 {{ market_snapshot(result) }}
 
@@ -228,10 +234,16 @@
 {% elif chip_data %}
 **{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', na('接口未返回')) }} | {{ chip_data.get('avg_cost', na('接口未返回')) }} | {{ chip_data.get('concentration', na('接口未返回')) }} {{ localize_chip_health(chip_data.get('chip_health', na('接口未返回')), report_language) }}
 {% endif %}
+{% set _ = technical_lines.append(sr_line) %}
 {% endif %}
+{% if technical.get('ma20_position') %}
+{% set _ = technical_lines.append('位置判断：' ~ technical.get('ma20_position')) %}
+{% endif %}
+{{ compact_list_section(technical_heading, technical_lines) }}
 
-{% if battle %}
-### 🎯 {{ labels.battle_plan_heading }}
+{% if alpha_data %}
+**Alpha Vantage 补充指标**: RSI14 {{ display_value(alpha_data.get('rsi14'), missing_text='数据缺失') }} | SMA20 {{ display_value(alpha_data.get('sma20'), missing_text='数据缺失') }} | SMA60 {{ display_value(alpha_data.get('sma60'), missing_text='数据缺失') }}
+{% endif %}
 
 {% set sniper = battle.get('sniper_points', {}) %}
 {% if sniper %}
@@ -252,6 +264,7 @@
 {% endif %}
 {% endif %}
 
+{% set sniper = battle.get('sniper_points', {}) %}
 {% set position = battle.get('position_strategy', {}) %}
 {% if position %}
 **💰 {{ labels.suggested_position_label }}**: {{ position.get('suggested_position') or na('字段待接入') }}
@@ -259,13 +272,27 @@
 - {{ labels.risk_control_label }}: {{ position.get('risk_control') or na('字段待接入') }}
 {% endif %}
 
-{% set checklist = battle.get('action_checklist', []) %}
-{% if checklist %}
-**✅ {{ labels.checklist_heading }}**
-{% for item in checklist %}
-- {{ item }}
-{% endfor %}
+{% if battle %}
+{% set battle_lines = [] %}
+{% if sniper.get('ideal_buy') %}
+{% set _ = battle_lines.append(labels.ideal_buy_label ~ '：' ~ clean_sniper(sniper.get('ideal_buy'))) %}
 {% endif %}
+{% if sniper.get('secondary_buy') %}
+{% set _ = battle_lines.append(labels.secondary_buy_label ~ '：' ~ clean_sniper(sniper.get('secondary_buy'))) %}
+{% endif %}
+{% if sniper.get('stop_loss') %}
+{% set _ = battle_lines.append(labels.stop_loss_label ~ '：' ~ clean_sniper(sniper.get('stop_loss'))) %}
+{% endif %}
+{% if sniper.get('take_profit') %}
+{% set _ = battle_lines.append(labels.take_profit_label ~ '：' ~ clean_sniper(sniper.get('take_profit'))) %}
+{% endif %}
+{% if position.get('suggested_position') %}
+{% set _ = battle_lines.append(labels.suggested_position_label ~ '：' ~ display_percent_or_text(position.get('suggested_position'))) %}
+{% endif %}
+{% if checklist %}
+{% set _ = battle_lines.append(execution_check_label ~ '：' ~ summarize_checklist(checklist)) %}
+{% endif %}
+{{ compact_list_section(labels.battle_plan_heading, battle_lines) }}
 {% endif %}
 
 {% if not dashboard %}
@@ -290,5 +317,3 @@
 ---
 {% endfor %}
 {% endif %}
-
-*{{ labels.generated_at_label }}：{{ report_timestamp }}*

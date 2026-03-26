@@ -827,6 +827,7 @@ class NotificationService(
                 summary_only=render_summary_only,
                 extra_context={
                     **self._get_history_compare_context(results),
+                    **self._get_time_context_from_results(results),
                     "report_language": report_language,
                     **self._get_time_context_from_results(results),
                 },
