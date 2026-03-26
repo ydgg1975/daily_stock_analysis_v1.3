@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
 from src.config import get_config, resolve_news_window_days
+from src.services import report_renderer
 from src.report_language import (
     get_bias_status_emoji,
     get_localized_stock_name,
@@ -487,8 +488,29 @@ class HistoryService:
                 record_id=record_id
             )
 
-        # Generate Markdown report
+        # Generate Markdown report via unified renderer to keep web/notification sections aligned.
         try:
+            time_ctx = {}
+            dashboard = getattr(result, "dashboard", {}) or {}
+            structured = dashboard.get("structured_analysis", {}) if isinstance(dashboard, dict) else {}
+            if isinstance(structured, dict):
+                time_ctx = structured.get("time_context", {}) or {}
+            rendered = report_renderer.render(
+                "markdown",
+                [result],
+                report_date=record.created_at.strftime("%Y-%m-%d") if record.created_at else None,
+                summary_only=False,
+                extra_context={
+                    "report_generated_at": time_ctx.get("report_generated_at") or (record.created_at.isoformat() if record.created_at else None),
+                    "market_timestamp": time_ctx.get("market_timestamp"),
+                    "market_session_date": time_ctx.get("market_session_date"),
+                    "session_type": time_ctx.get("session_type"),
+                    "news_published_at": time_ctx.get("news_published_at"),
+                    "report_language": normalize_report_language(getattr(result, "report_language", None)),
+                },
+            )
+            if rendered:
+                return rendered
             return self._generate_single_stock_markdown(result, record)
         except Exception as e:
             logger.error(f"get_markdown_report: failed to generate markdown for {record_id}: {e}", exc_info=True)

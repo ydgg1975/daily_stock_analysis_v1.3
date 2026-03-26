@@ -565,6 +565,189 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("行业背景", out)
         self.assertNotIn("📢 最新动态", out)
 
+    def test_render_markdown_us_stock_chip_not_supported_and_turnover_missing(self) -> None:
+        r = _make_result(
+            code="AAPL",
+            name="Apple",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "170"}},
+                "data_perspective": {
+                    "volume_analysis": {
+                        "volume_ratio": 0.8,
+                        "volume_status": "正常",
+                        "turnover_rate": "N/A",
+                        "volume_meaning": "量能平稳",
+                    },
+                    "chip_structure": {"profit_ratio": "N/A"},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("筹码", out)
+        self.assertIn("NA（当前市场暂不支持）", out)
+        self.assertIn("换手率 NA（字段待接入）", out)
+
+    def test_render_markdown_missing_ma_and_bias_with_alpha_vantage_supplement(self) -> None:
+        r = _make_result(
+            code="MSTR",
+            name="MicroStrategy",
+            report_language="zh",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "120"}},
+                "data_perspective": {
+                    "price_position": {
+                        "current_price": 130.5,
+                        "ma5": 0.0,
+                        "ma10": 0.0,
+                        "ma20": None,
+                        "bias_ma5": 0.0,
+                        "support_level": None,
+                        "resistance_level": None,
+                    },
+                    "volume_analysis": {
+                        "volume_ratio": 0.0,
+                        "turnover_rate": None,
+                        "volume_status": "缺失",
+                    },
+                    "alpha_vantage": {
+                        "rsi14": 47.7279,
+                        "sma20": 138.406,
+                        "sma60": 144.9608,
+                    },
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("NA（接口未返回）（Alpha Vantage SMA20: 138.41）", out)
+        self.assertIn("乖离率(MA5) | 0.00%", out)
+        self.assertIn("量比 NA（接口未返回）", out)
+        self.assertIn("换手率 NA（字段待接入）", out)
+
+    def test_render_uses_asia_shanghai_timestamp(self) -> None:
+        r = _make_result()
+        fixed = datetime(2026, 3, 25, 9, 30, 15, tzinfo=ZoneInfo("Asia/Shanghai"))
+        with unittest.mock.patch("src.services.report_renderer._now_shanghai", return_value=fixed):
+            out = render("markdown", [r], summary_only=False)
+        self.assertIn("2026-03-25 09:30:15", out)
+        self.assertIn("报告生成时间（北京时间）", out)
+
+    def test_render_prefers_time_contract_fields(self) -> None:
+        r = _make_result(code="AAPL", name="Apple")
+        out = render(
+            "markdown",
+            [r],
+            summary_only=True,
+            extra_context={
+                "report_generated_at": "2026-03-25T01:00:00+00:00",
+                "market_timestamp": "2026-03-24T21:00:00-04:00",
+                "market_session_date": "2026-03-24",
+                "session_type": "last_completed_session",
+                "news_published_at": "2026-03-24T20:00:00-04:00",
+            },
+        )
+        self.assertIn("2026-03-25 09:00:00", out)
+        self.assertIn("2026-03-24T21:00:00-04:00", out)
+        self.assertIn("2026-03-24", out)
+        self.assertIn("last_completed_session", out)
+
+    def test_render_uses_time_context_when_extra_context_missing(self) -> None:
+        r = _make_result(
+            code="TSLA",
+            name="Tesla",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {},
+                "battle_plan": {"sniper_points": {"stop_loss": "200"}},
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-25T16:00:00-04:00",
+                        "market_session_date": "2026-03-25",
+                        "report_generated_at": "2026-03-26T08:30:00+08:00",
+                        "session_type": "last_completed_session",
+                    }
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=True)
+        self.assertIn("2026-03-25T16:00:00-04:00", out)
+        self.assertIn("2026-03-25", out)
+        self.assertIn("last_completed_session", out)
+
+    def test_render_structured_blocks_fundamentals_earnings_sentiment(self) -> None:
+        r = _make_result(
+            code="ORCL",
+            name="Oracle",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "structured_analysis": {
+                    "time_context": {
+                        "market_timestamp": "2026-03-24T21:00:00-04:00",
+                        "market_session_date": "2026-03-24",
+                        "report_generated_at": "2026-03-25T01:00:00+00:00",
+                        "news_published_at": "2026-03-24T20:00:00-04:00",
+                        "session_type": "intraday_snapshot",
+                    },
+                    "fundamentals": {
+                        "normalized": {"marketCap": 1000000, "trailingPE": 22.1, "revenueGrowth": 0.12},
+                        "derived_insights": ["valuation_high", "high_growth"],
+                    },
+                    "earnings_analysis": {
+                        "derived_metrics": {"qoq_revenue_growth": 0.05, "yoy_net_income_change": 0.08},
+                        "summary_flags": ["quarterly_series_available"],
+                        "narrative_insights": ["margins improving"],
+                    },
+                    "sentiment_analysis": {
+                        "company_sentiment": "positive",
+                        "industry_sentiment": "background_only",
+                        "regulatory_sentiment": "neutral",
+                        "overall_confidence": "medium",
+                        "relevance_type": "company_specific",
+                        "relevance_score": 0.82,
+                    },
+                    "data_quality": {"fundamentals_status": "ok", "warnings": []},
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("基本面摘要（Fundamentals）", out)
+        self.assertIn("财报趋势（Earnings）", out)
+        self.assertIn("结构化情绪（Sentiment）", out)
+        self.assertIn("session_type: intraday_snapshot", out)
+
+    def test_render_industry_news_not_presented_as_company_latest_news(self) -> None:
+        r = _make_result(
+            code="TEM",
+            name="Tempus AI",
+            dashboard={
+                "core_conclusion": {"one_sentence": "观望"},
+                "intelligence": {
+                    "latest_news": "Anthropic faces new regulation inquiry.",
+                    "risk_alerts": ["监管动态"],
+                    "positive_catalysts": ["行业合作扩张"],
+                },
+                "battle_plan": {"sniper_points": {"stop_loss": "30"}},
+                "structured_analysis": {
+                    "sentiment_analysis": {
+                        "relevance_type": "industry_general",
+                        "company_sentiment": "no_reliable_news",
+                        "industry_sentiment": "neutral",
+                        "regulatory_sentiment": "neutral",
+                        "overall_confidence": "low",
+                    }
+                },
+            },
+        )
+        out = render("markdown", [r], summary_only=False)
+        self.assertIn("行业背景", out)
+        self.assertNotIn("📢 最新动态", out)
+
     def test_render_unknown_platform_returns_none(self) -> None:
         """Unknown platform returns None (caller fallback)."""
         r = _make_result()

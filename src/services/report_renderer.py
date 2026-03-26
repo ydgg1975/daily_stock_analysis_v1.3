@@ -67,6 +67,48 @@ def _to_shanghai_iso(value: Any) -> Optional[str]:
     return dt.astimezone(_SHANGHAI_TZ).isoformat()
 
 
+
+
+def _na(reason: str = "接口未返回") -> str:
+    reason_text = str(reason or "接口未返回").strip()
+    return f"NA（{reason_text}）"
+
+
+def _normalize_missing_text(missing_text: str) -> str:
+    text = (missing_text or "").strip()
+    if not text or text in {"N/A", "NA", "数据缺失"}:
+        return _na("接口未返回")
+    if text.startswith("NA（"):
+        return text
+    return _na(text)
+
+
+def _format_number(val: Any, style: str = "auto") -> str:
+    num = float(val)
+    abs_num = abs(num)
+    if style in {"amount", "volume"}:
+        if abs_num >= 1e8:
+            return f"{num / 1e8:.2f}亿"
+        if abs_num >= 1e4:
+            return f"{num / 1e4:.2f}万"
+    if abs_num >= 1000 and style in {"amount", "auto"}:
+        return f"{num:,.2f}"
+    return f"{num:.2f}"
+
+
+def _format_bjt_datetime(value: Any) -> Optional[str]:
+    raw = _iso_or_none(value)
+    if not raw:
+        return None
+    from datetime import datetime
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_SHANGHAI_TZ)
+    return dt.astimezone(_SHANGHAI_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
 def _escape_md(text: str) -> str:
     """Escape markdown special chars (*ST etc)."""
     if not text:
@@ -77,12 +119,12 @@ def _escape_md(text: str) -> str:
 def _clean_sniper_value(val: Any) -> str:
     """Format sniper point value for display (strip label prefixes)."""
     if val is None:
-        return "N/A"
+        return _na("字段待接入")
     if isinstance(val, (int, float)):
         return f"{float(val):.2f}"
     s = str(val).strip() if val else ""
-    if not s or s == "N/A":
-        return s or "N/A"
+    if not s or s in {"N/A", "NA"}:
+        return _na("字段待接入")
     prefixes = [
         "理想买入点：", "次优买入点：", "止损位：", "目标位：",
         "理想买入点:", "次优买入点:", "止损位:", "目标位:",
@@ -642,6 +684,66 @@ def _display_percent(val: Any, zero_is_missing: bool = False, missing_text: str 
         return missing_text
 
 
+def _is_missing_value(val: Any, zero_is_missing: bool = False) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        text = val.strip()
+        if text in {"", "N/A", "None", "null", "nan"}:
+            return True
+        try:
+            parsed = float(text.rstrip("%"))
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+    try:
+        parsed = float(val)
+        if math.isnan(parsed):
+            return True
+        if zero_is_missing and parsed == 0:
+            return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _display_value(
+    val: Any,
+    zero_is_missing: bool = False,
+    missing_text: str = "NA（接口未返回）",
+    style: str = "auto",
+) -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return _normalize_missing_text(missing_text)
+    try:
+        return _format_number(val, style=style)
+    except (TypeError, ValueError):
+        return str(val)
+
+
+def _display_percent(
+    val: Any,
+    zero_is_missing: bool = False,
+    missing_text: str = "NA（接口未返回）",
+) -> str:
+    if _is_missing_value(val, zero_is_missing=zero_is_missing):
+        return _normalize_missing_text(missing_text)
+    text = str(val).strip()
+    if text.endswith("%"):
+        try:
+            return f"{float(text.rstrip('%')):.2f}%"
+        except (TypeError, ValueError):
+            return text
+    try:
+        return f"{float(text):.2f}%"
+    except (TypeError, ValueError):
+        return _normalize_missing_text(missing_text)
+
+
 def _resolve_templates_dir() -> Path:
     """Resolve template directory relative to project root."""
     config = get_config()
@@ -732,6 +834,8 @@ def render(
         (extra_context or {}).get("report_generated_at")
     ) or _iso_or_none(first_time_ctx.get("report_generated_at")) or now_sh.isoformat()
     report_timestamp = now_sh.strftime("%Y-%m-%d %H:%M:%S")
+    market_timestamp = (extra_context or {}).get("market_timestamp") or first_time_ctx.get("market_timestamp")
+    news_published_at = (extra_context or {}).get("news_published_at") or first_time_ctx.get("news_published_at")
 
     def failed_checks(checklist: List[str]) -> List[str]:
         return [c for c in (checklist or []) if c.startswith("❌") or c.startswith("⚠️")]
@@ -740,10 +844,13 @@ def render(
         "report_date": report_date,
         "report_timestamp": report_timestamp,
         "report_generated_at": report_generated_at,
-        "market_timestamp": (extra_context or {}).get("market_timestamp") or first_time_ctx.get("market_timestamp"),
+        "report_generated_at_bjt": _format_bjt_datetime(report_generated_at) or report_timestamp,
+        "market_timestamp": market_timestamp,
+        "market_timestamp_bjt": _format_bjt_datetime(market_timestamp),
         "market_session_date": (extra_context or {}).get("market_session_date") or first_time_ctx.get("market_session_date"),
         "session_type": (extra_context or {}).get("session_type") or first_time_ctx.get("session_type"),
-        "news_published_at": (extra_context or {}).get("news_published_at") or first_time_ctx.get("news_published_at"),
+        "news_published_at": news_published_at,
+        "news_published_at_bjt": _format_bjt_datetime(news_published_at),
         "to_shanghai_iso": _to_shanghai_iso,
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
@@ -757,6 +864,7 @@ def render(
         "clean_sniper": _clean_sniper_value,
         "display_value": _display_value,
         "display_percent": _display_percent,
+        "na": _na,
         "is_missing_value": _is_missing_value,
         "failed_checks": failed_checks,
         "summarize_fundamentals": _summarize_fundamentals,
