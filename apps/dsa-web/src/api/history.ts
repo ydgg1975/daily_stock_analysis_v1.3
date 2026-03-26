@@ -8,6 +8,7 @@ import type {
   NewsIntelResponse,
   NewsIntelItem,
 } from '../types/analysis';
+import { normalizeAnalysisReport } from './reportNormalizer';
 
 // ============ API 接口 ============
 
@@ -48,7 +49,7 @@ export const historyApi = {
    */
   getDetail: async (recordId: number): Promise<AnalysisReport> => {
     const response = await apiClient.get<Record<string, unknown>>(`/api/v1/history/${recordId}`);
-    return toCamelCase<AnalysisReport>(response.data);
+    return normalizeAnalysisReport(toCamelCase<AnalysisReport>(response.data));
   },
 
   /**
