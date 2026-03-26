@@ -13,6 +13,39 @@
 |-------|------|--------|----------|
 | {{ display_value(snapshot.get('price'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('volume_ratio'), missing_text='数据缺失') }} | {{ display_percent(snapshot.get('turnover_rate'), missing_text='数据缺失') }} | {{ display_value(snapshot.get('source'), missing_text='数据缺失') }} |
 {% endif %}
+{% endmacro %}
 
+{% macro market_snapshot(market) %}
+{% set lines = [] %}
+{% if market.get('current_price') or market.get('change_pct') %}
+{% set price_line = '' %}
+{% if market.get('current_price') %}
+{% set price_line = labels.current_price_label ~ '：' ~ market.get('current_price', '') %}
 {% endif %}
+{% if market.get('change_pct') %}
+{% set price_line = (price_line ~ ' | ' if price_line else '') ~ labels.change_pct_label ~ '：' ~ market.get('change_pct', '') %}
+{% endif %}
+{% set _ = lines.append(price_line) %}
+{% endif %}
+{% if market.get('high') or market.get('low') %}
+{% set range_line = '' %}
+{% if market.get('high') %}
+{% set range_line = labels.high_label ~ '：' ~ market.get('high', '') %}
+{% endif %}
+{% if market.get('low') %}
+{% set range_line = (range_line ~ ' | ' if range_line else '') ~ labels.low_label ~ '：' ~ market.get('low', '') %}
+{% endif %}
+{% set _ = lines.append(range_line) %}
+{% endif %}
+{% if market.get('volume') or market.get('volume_judgment') %}
+{% set volume_line = '' %}
+{% if market.get('volume') %}
+{% set volume_line = labels.volume_label ~ '：' ~ market.get('volume', '') %}
+{% endif %}
+{% if market.get('volume_judgment') %}
+{% set volume_line = (volume_line ~ ' | ' if volume_line else '') ~ ('量能判断' if report_language == 'zh' else 'Volume' ) ~ '：' ~ market.get('volume_judgment', '') %}
+{% endif %}
+{% set _ = lines.append(volume_line) %}
+{% endif %}
+{{ compact_list_section('📈 ' ~ labels.market_snapshot_heading, lines) }}
 {% endmacro %}

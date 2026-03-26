@@ -14,6 +14,7 @@ from src.formatters import chunk_content_by_max_words
 
 
 logger = logging.getLogger(__name__)
+_NUMERIC_TOKEN_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 class DiscordSender:
