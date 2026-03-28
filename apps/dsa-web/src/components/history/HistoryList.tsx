@@ -18,6 +18,7 @@ interface HistoryListProps {
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
   className?: string;
+  embedded?: boolean;
 }
 
 /**
@@ -38,6 +39,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   onToggleSelectAll,
   onDeleteSelected,
   className = '',
+  embedded = false,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
@@ -83,16 +85,20 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     }
   }, [someVisibleSelected]);
 
+  const wrapperClass = embedded
+    ? `flex flex-col overflow-hidden ${className}`
+    : `flex flex-col overflow-hidden rounded-[1rem] border border-white/6 bg-[#050505] shadow-[0_12px_28px_rgba(0,0,0,0.22)] ${className}`;
+
   return (
-    <aside className={`glass-card overflow-hidden flex flex-col ${className}`}>
+    <aside className={wrapperClass}>
       <ScrollArea
         viewportRef={scrollContainerRef}
-        viewportClassName="p-4"
+        viewportClassName={embedded ? 'px-1 pb-1' : 'p-4'}
         testId="home-history-list-scroll"
       >
-        <div className="mb-4 space-y-3">
+        <div className={embedded ? 'mb-3 space-y-3 px-3 pt-3' : 'mb-4 space-y-3'}>
           <div className="flex items-center justify-between gap-2">
-            <h2 className="home-title-accent flex items-center gap-2 text-xs font-semibold uppercase tracking-widest">
+            <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-secondary-text">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -119,7 +125,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   onChange={onToggleSelectAll}
                   disabled={isDeleting}
                   aria-label="全选当前已加载历史记录"
-                  className="h-3.5 w-3.5 cursor-pointer bg-transparent text-[var(--home-accent-text)] focus:ring-[color:var(--home-accent-border-hover)] disabled:opacity-50"
+                  className="h-3.5 w-3.5 cursor-pointer rounded border-white/10 bg-transparent text-cyan focus:ring-cyan/30 disabled:opacity-50"
                 />
                 <span className="text-[11px] text-muted-text select-none">全选当前</span>
               </label>
@@ -142,8 +148,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({
             <div className="home-spinner h-6 w-6 animate-spin border-2" />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-12 space-y-3">
-            <div className="mx-auto w-11 h-11 rounded-full bg-subtle flex items-center justify-center text-muted-text/30">
+          <div className="space-y-3 py-12 text-center">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-subtle text-muted-text/30">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -154,7 +160,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className={embedded ? 'space-y-2 px-3 pb-3' : 'space-y-2'}>
             {items.map((item) => (
               <HistoryListItem
                 key={item.id}

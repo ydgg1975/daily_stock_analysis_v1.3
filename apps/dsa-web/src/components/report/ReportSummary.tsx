@@ -4,6 +4,7 @@ import { ReportOverview } from './ReportOverview';
 import { ReportStrategy } from './ReportStrategy';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
+import { StandardReportPanel } from './StandardReportPanel';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
 interface ReportSummaryProps {
@@ -25,6 +26,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
   const recordId = report.meta.id;
 
   const { meta, summary, strategy, details } = report;
+  const hasStandardReport = Boolean(details?.standardReport);
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
   const modelUsed = (meta.modelUsed || '').trim();
@@ -34,18 +36,26 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
 
   return (
     <div className="space-y-5 pb-8 animate-fade-in">
-      {/* 概览区（首屏） */}
-      <ReportOverview
-        meta={meta}
-        summary={summary}
-        isHistory={isHistory}
-      />
+      {hasStandardReport ? (
+        <StandardReportPanel report={report} />
+      ) : (
+        <>
+          {/* 概览区（首屏） */}
+          <ReportOverview
+            meta={meta}
+            summary={summary}
+            isHistory={isHistory}
+          />
 
-      {/* 策略点位区 */}
-      <ReportStrategy strategy={strategy} language={reportLanguage} />
+          {/* 策略点位区 */}
+          <ReportStrategy strategy={strategy} language={reportLanguage} />
+        </>
+      )}
 
-      {/* 资讯区 */}
-      <ReportNews recordId={recordId} limit={8} language={reportLanguage} />
+      {/* 资讯区：standard report 已内置终端化新闻面板，避免重复渲染旧资讯块 */}
+      {!hasStandardReport ? (
+        <ReportNews recordId={recordId} limit={8} language={reportLanguage} />
+      ) : null}
 
       {/* 透明度与追溯区 */}
       <ReportDetails details={details} recordId={recordId} language={reportLanguage} />

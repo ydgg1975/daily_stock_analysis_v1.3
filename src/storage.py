@@ -19,6 +19,7 @@ import logging
 import re
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import (
@@ -49,6 +50,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.exc import IntegrityError
 
 from src.config import get_config
+from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
 
 logger = logging.getLogger(__name__)
 
@@ -1418,7 +1420,8 @@ class DatabaseManager:
         # 该行为目前保留（按需求不改逻辑）。
         
         # 获取最近2天数据
-        recent_data = self.get_latest_data(code, days=2)
+        recent_data = self.get_latest_data(code, days=5)
+        recent_data = self._filter_future_dated_rows(code, recent_data)[:2]
         
         if not recent_data:
             logger.warning(f"未找到 {code} 的数据")
@@ -1451,6 +1454,19 @@ class DatabaseManager:
             context['ma_status'] = self._analyze_ma_status(today_data)
         
         return context
+
+    @staticmethod
+    def _filter_future_dated_rows(code: str, rows: List[StockDaily]) -> List[StockDaily]:
+        market = get_market_for_stock(code)
+        tz_name = MARKET_TIMEZONE.get(market or "")
+        if not tz_name or not rows:
+            return rows
+        market_today = datetime.now(ZoneInfo(tz_name)).date()
+        filtered = [
+            row for row in rows
+            if getattr(row, "date", None) is not None and row.date <= market_today
+        ]
+        return filtered or rows
     
     def _analyze_ma_status(self, data: StockDaily) -> str:
         """

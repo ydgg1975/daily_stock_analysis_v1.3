@@ -317,6 +317,110 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
     },
 }
 
+_STANDARD_REPORT_FIELD_LABELS: Dict[str, Dict[str, str]] = {
+    "zh": {
+        "average_price": "均价",
+        "vwap": "VWAP",
+        "session_type": "会话类型",
+        "market_cap": "总市值",
+        "float_market_cap": "流通市值",
+        "shares_outstanding": "总股本",
+        "float_shares": "流通股",
+        "trailing_pe": "市盈率(TTM)",
+        "forward_pe": "预期市盈率",
+        "price_to_book": "市净率",
+        "beta": "Beta系数",
+        "fifty_two_week_high": "52周最高",
+        "fifty_two_week_low": "52周最低",
+        "historical_high": "历史最高",
+        "historical_low": "历史最低",
+        "revenue": "营收",
+        "revenue_growth": "营收增速",
+        "net_income": "净利润",
+        "net_income_growth": "净利润增速",
+        "free_cash_flow": "自由现金流",
+        "operating_cash_flow": "经营现金流",
+        "roe": "ROE",
+        "roa": "ROA",
+        "gross_margins": "毛利率",
+        "operating_margins": "营业利润率",
+        "debt_to_equity": "债务权益比",
+        "current_ratio": "流动比率",
+        "sma20": "SMA20",
+        "sma60": "SMA60",
+        "rsi14": "RSI14",
+        "bias_ma5": "乖离率(MA5)",
+        "ma_alignment": "多头/空头排列",
+        "ma20_position": "当前位于 MA20 上下方",
+        "volume_judgment": "量价判断",
+        "earnings_summary": "财报趋势摘要",
+        "revenue_growth_qoq": "营收环比增速",
+        "revenue_growth_yoy": "营收同比增速",
+        "net_income_change_qoq": "净利润环比变化",
+        "net_income_change_yoy": "净利润同比变化",
+        "sentiment_summary": "情绪摘要",
+        "company_sentiment": "公司情绪",
+        "industry_sentiment": "行业情绪",
+        "regulatory_sentiment": "监管情绪",
+        "confidence": "置信度",
+    },
+    "en": {
+        "average_price": "Average Price",
+        "vwap": "VWAP",
+        "session_type": "Session Type",
+        "market_cap": "Market Cap",
+        "float_market_cap": "Float Market Cap",
+        "shares_outstanding": "Shares Outstanding",
+        "float_shares": "Float Shares",
+        "trailing_pe": "Trailing PE",
+        "forward_pe": "Forward PE",
+        "price_to_book": "Price to Book",
+        "beta": "Beta",
+        "fifty_two_week_high": "52W High",
+        "fifty_two_week_low": "52W Low",
+        "historical_high": "Historical High",
+        "historical_low": "Historical Low",
+        "revenue": "Revenue",
+        "revenue_growth": "Revenue Growth",
+        "net_income": "Net Income",
+        "net_income_growth": "Net Income Growth",
+        "free_cash_flow": "Free Cash Flow",
+        "operating_cash_flow": "Operating Cash Flow",
+        "roe": "ROE",
+        "roa": "ROA",
+        "gross_margins": "Gross Margins",
+        "operating_margins": "Operating Margins",
+        "debt_to_equity": "Debt to Equity",
+        "current_ratio": "Current Ratio",
+        "sma20": "SMA20",
+        "sma60": "SMA60",
+        "rsi14": "RSI14",
+        "bias_ma5": "Bias (MA5)",
+        "ma_alignment": "MA Alignment",
+        "ma20_position": "Price vs MA20",
+        "volume_judgment": "Volume/Price Signal",
+        "earnings_summary": "Earnings Summary",
+        "revenue_growth_qoq": "QoQ Revenue Growth",
+        "revenue_growth_yoy": "YoY Revenue Growth",
+        "net_income_change_qoq": "QoQ Net Income Change",
+        "net_income_change_yoy": "YoY Net Income Change",
+        "sentiment_summary": "Sentiment Summary",
+        "company_sentiment": "Company Sentiment",
+        "industry_sentiment": "Industry Sentiment",
+        "regulatory_sentiment": "Regulatory Sentiment",
+        "confidence": "Confidence",
+    },
+}
+
+_SENTIMENT_STATUS_TRANSLATIONS = {
+    "positive": {"zh": "积极", "en": "Positive"},
+    "negative": {"zh": "偏负面", "en": "Negative"},
+    "neutral": {"zh": "中性", "en": "Neutral"},
+    "background_only": {"zh": "行业背景为主", "en": "Background Only"},
+    "no_reliable_news": {"zh": "暂无可靠新闻", "en": "No Reliable News"},
+    "unknown": {"zh": "未知", "en": "Unknown"},
+}
+
 
 def normalize_report_language(value: Optional[str], default: str = "zh") -> str:
     """Normalize report language to a supported short code."""
@@ -339,6 +443,16 @@ def get_report_labels(language: Optional[str]) -> Dict[str, str]:
     """Return UI copy for the selected report language."""
     normalized = normalize_report_language(language)
     return _REPORT_LABELS[normalized]
+
+
+def get_standard_report_field_label(field_key: str, language: Optional[str]) -> str:
+    """Return localized standard-report field labels for all user-visible metric rows."""
+    normalized = normalize_report_language(language)
+    return (
+        _STANDARD_REPORT_FIELD_LABELS.get(normalized, {}).get(field_key)
+        or _STANDARD_REPORT_FIELD_LABELS["zh"].get(field_key)
+        or str(field_key or "").strip()
+    )
 
 
 def get_placeholder_text(language: Optional[str]) -> str:
@@ -465,6 +579,19 @@ def localize_bias_status(value: Any, language: Optional[str]) -> str:
         canonical_map=_BIAS_STATUS_CANONICAL_MAP,
         translations=_BIAS_STATUS_TRANSLATIONS,
     )
+
+
+def localize_sentiment_status(value: Any, language: Optional[str]) -> str:
+    """Translate normalized sentiment pipeline statuses for user-visible display."""
+    normalized_language = normalize_report_language(language)
+    raw_text = str(value or "").strip()
+    if not raw_text:
+        return raw_text
+    normalized_key = raw_text.lower()
+    translated = _SENTIMENT_STATUS_TRANSLATIONS.get(normalized_key)
+    if translated:
+        return translated[normalized_language]
+    return raw_text
 
 
 def get_bias_status_emoji(value: Any) -> str:

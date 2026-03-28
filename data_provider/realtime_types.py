@@ -101,6 +101,8 @@ class RealtimeSource(str, Enum):
     TENCENT = "tencent"             # 腾讯直连
     SINA = "sina"                   # 新浪直连
     STOOQ = "stooq"                 # Stooq 美股兜底
+    FINNHUB = "finnhub"             # Finnhub 美股补数
+    FMP = "fmp"                     # Financial Modeling Prep 美股补数
     FALLBACK = "fallback"           # 降级兜底
 
 
@@ -146,6 +148,7 @@ class UnifiedRealtimeQuote:
     change_60d: Optional[float] = None      # 60日涨跌幅(%)
     high_52w: Optional[float] = None        # 52周最高
     low_52w: Optional[float] = None         # 52周最低
+    market_timestamp: Optional[str] = None  # 行情时间（ISO 8601）
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（过滤 None 值）"""
@@ -160,7 +163,7 @@ class UnifiedRealtimeQuote:
             'volume_ratio', 'turnover_rate', 'amplitude',
             'open_price', 'high', 'low', 'pre_close',
             'pe_ratio', 'pb_ratio', 'total_mv', 'circ_mv',
-            'change_60d', 'high_52w', 'low_52w'
+            'change_60d', 'high_52w', 'low_52w', 'market_timestamp'
         ]
         for f in optional_fields:
             val = getattr(self, f, None)

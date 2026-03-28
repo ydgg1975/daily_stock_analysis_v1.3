@@ -130,6 +130,13 @@ class AnalysisService:
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
         sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
+        try:
+            from src.services.report_renderer import build_standard_report_payload
+
+            standard_report = build_standard_report_payload(result, report_language=report_language)
+        except Exception as exc:
+            logger.warning("构建 standard_report 失败，降级返回基础详情: %s", exc)
+            standard_report = None
         
         # 构建报告结构
         report = {
@@ -162,6 +169,7 @@ class AnalysisService:
                 "technical_analysis": result.technical_analysis,
                 "fundamental_analysis": result.fundamental_analysis,
                 "risk_warning": result.risk_warning,
+                "standard_report": standard_report,
             }
         }
         

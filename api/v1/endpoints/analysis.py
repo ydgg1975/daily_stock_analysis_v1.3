@@ -789,6 +789,7 @@ def _build_analysis_report(
             news_content=details_data.get("news_summary") or details_data.get("news_content"),
             raw_result=details_data,
             context_snapshot=context_snapshot,
+            standard_report=details_data.get("standard_report"),
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
         )

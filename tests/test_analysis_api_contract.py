@@ -106,6 +106,47 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(result["stock_name"], "Unnamed Stock")
         self.assertEqual(result["report"]["meta"]["stock_name"], "Unnamed Stock")
 
+    def test_build_analysis_response_includes_standard_report(self) -> None:
+        service = AnalysisService()
+        response = service._build_analysis_response(
+            SimpleNamespace(
+                code="NVDA",
+                name="NVIDIA",
+                current_price=125.3,
+                change_pct=1.87,
+                model_used="test-model",
+                analysis_summary="等待确认",
+                operation_advice="持有",
+                trend_prediction="看多",
+                sentiment_score=78,
+                news_summary="news",
+                technical_analysis="tech",
+                fundamental_analysis="fundamental",
+                risk_warning="risk",
+                report_language="zh",
+                market_snapshot={
+                    "price": 125.3,
+                    "close": 124.0,
+                    "prev_close": 123.0,
+                    "session_type": "intraday_snapshot",
+                },
+                dashboard={
+                    "core_conclusion": {"one_sentence": "等待确认"},
+                    "battle_plan": {},
+                    "intelligence": {},
+                },
+                get_sniper_points=lambda: {},
+            ),
+            "q-standard-report",
+            report_type="full",
+        )
+
+        self.assertIn("standard_report", response["report"]["details"])
+        self.assertEqual(
+            response["report"]["details"]["standard_report"]["summary_panel"]["ticker"],
+            "NVDA",
+        )
+
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

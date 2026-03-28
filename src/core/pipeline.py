@@ -15,9 +15,10 @@ import logging
 import math
 import time
 import uuid
+import json
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, time as clock_time
 from typing import List, Dict, Any, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -26,13 +27,15 @@ import pandas as pd
 from src.config import get_config, Config
 from src.storage import get_db
 from data_provider import DataFetcherManager
-from data_provider.realtime_types import ChipDistribution
+from data_provider.realtime_types import ChipDistribution, RealtimeSource, UnifiedRealtimeQuote
 from src.analyzer import GeminiAnalyzer, AnalysisResult, fill_chip_structure_if_needed, fill_price_position_if_needed
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.notification import NotificationService, NotificationChannel
 from src.report_language import (
     get_unknown_text,
     localize_confidence_level,
+    localize_operation_advice,
+    localize_trend_prediction,
     normalize_report_language,
 )
 from src.search_service import SearchService
@@ -50,6 +53,13 @@ from data_provider.alphavantage_provider import (
     get_income_statement_quarterly,
 )
 from data_provider.us_fundamentals_provider import (
+    get_finnhub_metrics,
+    get_finnhub_quote,
+    get_fmp_fundamentals,
+    get_fmp_historical_prices,
+    get_fmp_technical_indicators,
+    get_fmp_quarterly_financials,
+    get_fmp_quote,
     get_yfinance_fundamentals,
     get_yfinance_quarterly_financials,
 )
@@ -111,6 +121,8 @@ class StockAnalysisPipeline:
             tavily_keys=self.config.tavily_api_keys,
             brave_keys=self.config.brave_api_keys,
             serpapi_keys=self.config.serpapi_keys,
+            gnews_keys=self.config.gnews_api_keys,
+            finnhub_keys=self.config.finnhub_api_keys,
             minimax_keys=self.config.minimax_api_keys,
             searxng_base_urls=self.config.searxng_base_urls,
             searxng_public_instances_enabled=self.config.searxng_public_instances_enabled,
@@ -168,6 +180,8 @@ class StockAnalysisPipeline:
             stock_name = self.fetcher_manager.get_stock_name(code)
 
             today = date.today()
+            is_us_stock = is_us_stock_code(code)
+            required_history_bars = 60 if is_us_stock else 1
             # 注意：这里用自然日 date.today() 做“断点续传”判断。
             # 若在周末/节假日/非交易日运行，或机器时区不在中国，可能出现：
             # - 数据库已有最新交易日数据但仍会重复拉取（has_today_data 返回 False）
@@ -176,37 +190,44 @@ class StockAnalysisPipeline:
             
             # 断点续传检查：如果今日数据已存在，跳过
             if not force_refresh and self.db.has_today_data(code, today):
-                logger.info(f"{stock_name}({code}) 今日数据已存在，跳过获取（断点续传）")
-                return True, None
+                has_sufficient_history = (
+                    not is_us_stock or self._has_sufficient_local_history(code, min_bars=required_history_bars)
+                )
+                if has_sufficient_history:
+                    logger.info(f"{stock_name}({code}) 今日数据已存在，跳过获取（断点续传）")
+                    return True, None
+                logger.info(
+                    f"{stock_name}({code}) 今日已有快照数据，但本地历史少于 {required_history_bars} 根，继续补拉历史日线"
+                )
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
             df = None
             source_name = ""
             history_fetch_error = None
-            if is_us_stock_code(code):
-                us_snapshot_df, us_snapshot_source = self._build_us_realtime_snapshot_df(code)
-                if us_snapshot_df is not None and not us_snapshot_df.empty:
-                    df = us_snapshot_df
-                    source_name = us_snapshot_source
-                    logger.info(
-                        f"{stock_name}({code}) 使用美股实时快照入库，跳过 Yahoo 历史拉取 "
-                        f"(来源: {source_name})"
-                    )
+            history_days = 180 if is_us_stock else 30
             try:
                 if df is None:
-                    df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+                    df, source_name = self.fetcher_manager.get_daily_data(code, days=history_days)
             except Exception as e:
                 history_fetch_error = e
                 logger.warning(f"{stock_name}({code}) 历史日线获取失败: {e}")
                 # 美股容错：若历史拉取失败，尝试用已成功的实时行情快照兜底写入
-                if is_us_stock_code(code) and df is None:
+                if is_us_stock and df is None:
                     df, source_name = self._build_us_realtime_snapshot_df(code)
                     if df is not None and not df.empty:
                         logger.warning(
                             f"{stock_name}({code}) 历史失败但实时成功，使用实时快照入库继续流程 "
                             f"(来源: {source_name})"
                         )
+
+            if (df is None or df.empty) and is_us_stock:
+                df, source_name = self._build_us_realtime_snapshot_df(code)
+                if df is not None and not df.empty:
+                    logger.warning(
+                        f"{stock_name}({code}) 历史日线为空，回退到实时快照入库 "
+                        f"(来源: {source_name})"
+                    )
 
             if df is None or df.empty:
                 if history_fetch_error is not None:
@@ -224,12 +245,19 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
 
+    def _has_sufficient_local_history(self, code: str, *, min_bars: int) -> bool:
+        try:
+            return len(self.db.get_latest_data(code, days=min_bars) or []) >= min_bars
+        except Exception as exc:
+            logger.debug(f"{code} 本地历史充足性检查失败: {exc}")
+            return False
+
     def _build_us_realtime_snapshot_df(self, code: str) -> Tuple[Optional[pd.DataFrame], str]:
         quote = self.fetcher_manager.get_realtime_quote(code)
         if not quote or not getattr(quote, "has_basic_data", lambda: False)():
             return None, ""
 
-        today = date.today().isoformat()
+        trade_date = self._resolve_market_trade_date(code, quote)
         price = getattr(quote, "price", None)
         if price is None:
             return None, ""
@@ -243,7 +271,7 @@ class StockAnalysisPipeline:
 
         snapshot = pd.DataFrame([{
             "code": code,
-            "date": today,
+            "date": trade_date,
             "open": open_price,
             "high": high,
             "low": low,
@@ -258,6 +286,17 @@ class StockAnalysisPipeline:
         }])
         source = getattr(getattr(quote, "source", None), "value", "realtime_snapshot")
         return snapshot, f"{source}_realtime_snapshot"
+
+    def _resolve_market_trade_date(self, code: str, quote: Any) -> str:
+        market_tz_name = self._get_market_timezone_name(code)
+        market_tz = ZoneInfo(market_tz_name)
+        raw_market_timestamp = getattr(quote, "market_timestamp", None) if quote is not None else None
+        market_timestamp = self._parse_time_contract_datetime(raw_market_timestamp)
+        if market_timestamp is None:
+            return datetime.now(market_tz).date().isoformat()
+        if market_timestamp.tzinfo is None:
+            market_timestamp = market_timestamp.replace(tzinfo=market_tz)
+        return market_timestamp.astimezone(market_tz).date().isoformat()
     
     def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
         """
@@ -491,6 +530,13 @@ class StockAnalysisPipeline:
             alpha_quarterly_income = []
             yfinance_fundamentals = {}
             yfinance_quarterly_income = []
+            finnhub_quote = {}
+            finnhub_fundamentals = {}
+            fmp_quote = {}
+            fmp_fundamentals = {}
+            fmp_quarterly_income: List[Dict[str, Any]] = []
+            external_price_history: List[Dict[str, Any]] = []
+            api_indicators: Dict[str, Dict[str, Any]] = {}
             alpha_errors: List[str] = []
             yfinance_errors: List[str] = []
             if is_us_stock:
@@ -505,6 +551,25 @@ class StockAnalysisPipeline:
                 except Exception as e:
                     yfinance_errors.append(str(e))
                     diagnostics["failure_reasons"].append(f"yfinance_fundamentals_error: {e}")
+                try:
+                    finnhub_quote = get_finnhub_quote(code)
+                    finnhub_fundamentals = get_finnhub_metrics(code)
+                except Exception as e:
+                    diagnostics["failure_reasons"].append(f"finnhub_error: {e}")
+                    logger.warning(f"{stock_name}({code}) 获取 Finnhub 补数失败: {e}")
+                try:
+                    fmp_quote = get_fmp_quote(code)
+                    fmp_fundamentals = get_fmp_fundamentals(code)
+                    fmp_quarterly_income = get_fmp_quarterly_financials(code)
+                except Exception as e:
+                    diagnostics["failure_reasons"].append(f"fmp_error: {e}")
+                    logger.warning(f"{stock_name}({code}) 获取 FMP 补数失败: {e}")
+                try:
+                    external_price_history = get_fmp_historical_prices(code, days=180)
+                    api_indicators = get_fmp_technical_indicators(code)
+                except Exception as e:
+                    diagnostics["failure_reasons"].append(f"fmp_technical_error: {e}")
+                    logger.warning(f"{stock_name}({code}) 获取 FMP 技术指标失败: {e}")
             try:
                 rsi = get_rsi(code)
                 sma20 = get_sma(code, 20)
@@ -523,6 +588,28 @@ class StockAnalysisPipeline:
                 alpha_errors.append(str(e))
                 diagnostics["alpha_vantage_status"] = "unavailable"
                 diagnostics["failure_reasons"].append(f"alpha_vantage_error: {e}")
+
+            if is_us_stock:
+                realtime_quote = self._merge_us_quote_fallbacks(
+                    realtime_quote,
+                    code=code,
+                    stock_name=stock_name,
+                    payloads=[finnhub_quote, fmp_quote],
+                )
+                if realtime_quote:
+                    diagnostics["realtime_source"] = (
+                        realtime_quote.source.value if hasattr(realtime_quote, "source") else diagnostics["realtime_source"]
+                    )
+                shares_outstanding = (
+                    shares_outstanding
+                    or yfinance_fundamentals.get("sharesOutstanding")
+                    or fmp_fundamentals.get("sharesOutstanding")
+                )
+                api_indicators = self._merge_api_indicator_overrides(
+                    api_indicators=api_indicators,
+                    external_price_history=external_price_history,
+                    alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
+                )
             
             # Step 6: 增强上下文数据（添加实时行情、筹码、趋势分析结果、股票名称）
             enhanced_context = self._enhance_context(
@@ -533,6 +620,7 @@ class StockAnalysisPipeline:
                 stock_name,  # 传入股票名称
                 fundamental_context,
                 shares_outstanding=shares_outstanding,
+                fallback_history=external_price_history,
             )
             multidim_blocks = self._build_multidim_blocks(
                 code=code,
@@ -542,9 +630,14 @@ class StockAnalysisPipeline:
                 news_items=news_items,
                 diagnostics=diagnostics,
                 alpha_indicators={"rsi14": rsi, "sma20": sma20, "sma60": sma60},
+                api_indicators=api_indicators,
                 alpha_overview=alpha_overview,
                 yfinance_fundamentals=yfinance_fundamentals,
                 yfinance_quarterly_income=yfinance_quarterly_income,
+                fmp_fundamentals=fmp_fundamentals,
+                fmp_quarterly_income=fmp_quarterly_income,
+                finnhub_fundamentals=finnhub_fundamentals,
+                external_price_history=external_price_history,
                 alpha_quarterly_income=alpha_quarterly_income,
                 alpha_errors=alpha_errors + yfinance_errors,
             )
@@ -583,6 +676,11 @@ class StockAnalysisPipeline:
             # Step 7.7: price_position fallback
             if result:
                 fill_price_position_if_needed(result, trend_result, realtime_quote)
+                result = self._stabilize_analysis_result(
+                    code=code,
+                    query_id=query_id,
+                    result=result,
+                )
 
             # Step 8: 保存分析历史记录
             if result:
@@ -624,10 +722,18 @@ class StockAnalysisPipeline:
             "session_type": enhanced_context.get("session_type"),
             "market_timezone": enhanced_context.get("market_timezone"),
         }
+        structured["technicals"] = enhanced_context.get("technicals", {})
+        structured["trend_analysis"] = enhanced_context.get("trend_analysis", {})
         structured["fundamentals"] = enhanced_context.get("fundamentals", {})
         structured["earnings_analysis"] = enhanced_context.get("earnings_analysis", {})
         structured["sentiment_analysis"] = enhanced_context.get("sentiment_analysis", {})
         structured["data_quality"] = enhanced_context.get("data_quality", {})
+        structured["realtime_context"] = enhanced_context.get("realtime", {})
+        structured["market_context"] = {
+            "today": enhanced_context.get("today", {}),
+            "yesterday": enhanced_context.get("yesterday", {}),
+        }
+        structured["fundamental_context"] = enhanced_context.get("fundamental_context", {})
         dashboard["structured_analysis"] = structured
 
         intel = dashboard.get("intelligence") if isinstance(dashboard.get("intelligence"), dict) else {}
@@ -640,6 +746,772 @@ class StockAnalysisPipeline:
             intel.setdefault("overall_confidence", sentiment.get("overall_confidence"))
         dashboard["intelligence"] = intel
         result.dashboard = dashboard
+
+    @staticmethod
+    def _load_raw_result_payload(raw_result: Any) -> Dict[str, Any]:
+        if isinstance(raw_result, dict):
+            return raw_result
+        if isinstance(raw_result, str):
+            try:
+                parsed = json.loads(raw_result)
+            except Exception:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    @staticmethod
+    def _canonical_operation_advice(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        mapping = {
+            "强烈买入": "strong_buy",
+            "strong buy": "strong_buy",
+            "strong_buy": "strong_buy",
+            "买入": "buy",
+            "buy": "buy",
+            "加仓": "buy",
+            "accumulate": "buy",
+            "add position": "buy",
+            "持有": "hold",
+            "hold": "hold",
+            "观望": "watch",
+            "watch": "watch",
+            "wait": "watch",
+            "wait and see": "watch",
+            "减仓": "reduce",
+            "reduce": "reduce",
+            "trim": "reduce",
+            "卖出": "sell",
+            "sell": "sell",
+            "强烈卖出": "strong_sell",
+            "strong sell": "strong_sell",
+            "strong_sell": "strong_sell",
+        }
+        return mapping.get(text, "watch")
+
+    @staticmethod
+    def _canonical_trend_prediction(value: Any) -> str:
+        text = str(value or "").strip().lower()
+        mapping = {
+            "强烈看多": "strong_bullish",
+            "strong bullish": "strong_bullish",
+            "very bullish": "strong_bullish",
+            "看多": "bullish",
+            "bullish": "bullish",
+            "uptrend": "bullish",
+            "震荡": "sideways",
+            "neutral": "sideways",
+            "sideways": "sideways",
+            "range-bound": "sideways",
+            "看空": "bearish",
+            "bearish": "bearish",
+            "downtrend": "bearish",
+            "强烈看空": "strong_bearish",
+            "strong bearish": "strong_bearish",
+            "very bearish": "strong_bearish",
+        }
+        return mapping.get(text, "sideways")
+
+    @staticmethod
+    def _normalize_signature_text(value: Any, *, limit: int = 120) -> str:
+        text = " ".join(str(value or "").strip().lower().split())
+        if not text:
+            return ""
+        return text[:limit]
+
+    @staticmethod
+    def _signature_number(value: Any, *, digits: int = 2) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(parsed):
+            return None
+        return round(parsed, digits)
+
+    @classmethod
+    def _build_stability_signature(
+        cls,
+        *,
+        dashboard: Dict[str, Any],
+        structured: Dict[str, Any],
+    ) -> str:
+        trend_analysis = structured.get("trend_analysis") if isinstance(structured.get("trend_analysis"), dict) else {}
+        fundamentals = structured.get("fundamentals") if isinstance(structured.get("fundamentals"), dict) else {}
+        sentiment = structured.get("sentiment_analysis") if isinstance(structured.get("sentiment_analysis"), dict) else {}
+        market_ctx = structured.get("market_context") if isinstance(structured.get("market_context"), dict) else {}
+        realtime_ctx = structured.get("realtime_context") if isinstance(structured.get("realtime_context"), dict) else {}
+        technicals = structured.get("technicals") if isinstance(structured.get("technicals"), dict) else {}
+        time_ctx = structured.get("time_context") if isinstance(structured.get("time_context"), dict) else {}
+        intelligence = dashboard.get("intelligence") if isinstance(dashboard.get("intelligence"), dict) else {}
+
+        today = market_ctx.get("today") if isinstance(market_ctx.get("today"), dict) else {}
+        yesterday = market_ctx.get("yesterday") if isinstance(market_ctx.get("yesterday"), dict) else {}
+        normalized_fundamentals = fundamentals.get("normalized") if isinstance(fundamentals.get("normalized"), dict) else {}
+        derived_profiles = fundamentals.get("derived_profiles") if isinstance(fundamentals.get("derived_profiles"), dict) else {}
+        field_sources = fundamentals.get("field_sources") if isinstance(fundamentals.get("field_sources"), dict) else {}
+
+        def _technical_value(name: str, *, zero_is_missing: bool = False) -> Optional[float]:
+            node = technicals.get(name)
+            if not isinstance(node, dict):
+                return None
+            return cls._safe_indicator_number(node.get("value"), zero_is_missing=zero_is_missing)
+
+        latest_news = intelligence.get("latest_news")
+        if isinstance(latest_news, list):
+            latest_news = latest_news[0] if latest_news else ""
+
+        signature_payload = {
+            "market_session_date": str(time_ctx.get("market_session_date") or ""),
+            "session_type": str(time_ctx.get("session_type") or ""),
+            "close": cls._signature_number(today.get("close")),
+            "prev_close": cls._signature_number(yesterday.get("close")),
+            "pct_chg": cls._signature_number(today.get("pct_chg")),
+            "price": cls._signature_number(realtime_ctx.get("price") or today.get("close")),
+            "ma20": cls._signature_number(_technical_value("ma20", zero_is_missing=True) or today.get("ma20")),
+            "ma60": cls._signature_number(_technical_value("ma60", zero_is_missing=True)),
+            "rsi14": cls._signature_number(_technical_value("rsi14"), digits=1),
+            "trend_status": cls._normalize_signature_text(trend_analysis.get("trend_status")),
+            "ma_alignment": cls._normalize_signature_text(trend_analysis.get("ma_alignment")),
+            "volume_status": cls._normalize_signature_text(trend_analysis.get("volume_status")),
+            "growth_profile": str(derived_profiles.get("growth_profile") or ""),
+            "profitability_profile": str(derived_profiles.get("profitability_profile") or ""),
+            "cashflow_profile": str(derived_profiles.get("cashflow_profile") or ""),
+            "leverage_profile": str(derived_profiles.get("leverage_profile") or ""),
+            "roe": cls._signature_number(normalized_fundamentals.get("returnOnEquity"), digits=3),
+            "roa": cls._signature_number(normalized_fundamentals.get("returnOnAssets"), digits=3),
+            "company_sentiment": str(sentiment.get("company_sentiment") or ""),
+            "regulatory_sentiment": str(sentiment.get("regulatory_sentiment") or ""),
+            "sentiment_summary": cls._normalize_signature_text(sentiment.get("sentiment_summary")),
+            "latest_news": cls._normalize_signature_text(latest_news),
+            "positive_count": len(intelligence.get("positive_catalysts") or []) if isinstance(intelligence.get("positive_catalysts"), list) else 0,
+            "risk_count": len(intelligence.get("risk_alerts") or []) if isinstance(intelligence.get("risk_alerts"), list) else 0,
+            "sources": {
+                "ma20": str((technicals.get("ma20") or {}).get("source") or ""),
+                "ma60": str((technicals.get("ma60") or {}).get("source") or ""),
+                "rsi14": str((technicals.get("rsi14") or {}).get("source") or ""),
+                "freeCashflow": str(field_sources.get("freeCashflow") or ""),
+                "operatingCashflow": str(field_sources.get("operatingCashflow") or ""),
+                "returnOnEquity": str(field_sources.get("returnOnEquity") or ""),
+                "returnOnAssets": str(field_sources.get("returnOnAssets") or ""),
+            },
+        }
+        return json.dumps(signature_payload, sort_keys=True, ensure_ascii=False)
+
+    @classmethod
+    def _recent_signal_baseline(
+        cls,
+        records: List[Any],
+        *,
+        exclude_query_id: Optional[str] = None,
+        current_market_session_date: Optional[str] = None,
+        current_session_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        exact_matches: List[Dict[str, Any]] = []
+        fallback_matches: List[Dict[str, Any]] = []
+        for record in records or []:
+            if exclude_query_id and getattr(record, "query_id", None) == exclude_query_id:
+                continue
+            raw_payload = cls._load_raw_result_payload(getattr(record, "raw_result", None))
+            dashboard = raw_payload.get("dashboard") if isinstance(raw_payload.get("dashboard"), dict) else {}
+            structured = dashboard.get("structured_analysis") if isinstance(dashboard.get("structured_analysis"), dict) else {}
+            quality = structured.get("data_quality") if isinstance(structured.get("data_quality"), dict) else {}
+            time_ctx = structured.get("time_context") if isinstance(structured.get("time_context"), dict) else {}
+            decision_ctx = dashboard.get("decision_context") if isinstance(dashboard.get("decision_context"), dict) else {}
+            candidate = {
+                "score": getattr(record, "sentiment_score", None),
+                "operation_advice": getattr(record, "operation_advice", None),
+                "trend_prediction": getattr(record, "trend_prediction", None),
+                "missing_fields": quality.get("missing_fields") if isinstance(quality.get("missing_fields"), list) else [],
+                "market_session_date": time_ctx.get("market_session_date"),
+                "session_type": time_ctx.get("session_type"),
+                "decision_context": decision_ctx,
+                "signature": cls._build_stability_signature(dashboard=dashboard, structured=structured),
+            }
+            if (
+                current_market_session_date
+                and current_session_type
+                and candidate.get("market_session_date") == current_market_session_date
+                and candidate.get("session_type") == current_session_type
+            ):
+                exact_matches.append(candidate)
+            else:
+                fallback_matches.append(candidate)
+        if exact_matches:
+            return exact_matches[0]
+        if fallback_matches:
+            return fallback_matches[0]
+        return None
+
+    def _stabilize_analysis_result(
+        self,
+        *,
+        code: str,
+        query_id: str,
+        result: AnalysisResult,
+    ) -> AnalysisResult:
+        dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+        structured = dashboard.get("structured_analysis") if isinstance(dashboard.get("structured_analysis"), dict) else {}
+        if not structured:
+            return result
+
+        trend_analysis = structured.get("trend_analysis") if isinstance(structured.get("trend_analysis"), dict) else {}
+        fundamentals = structured.get("fundamentals") if isinstance(structured.get("fundamentals"), dict) else {}
+        sentiment = structured.get("sentiment_analysis") if isinstance(structured.get("sentiment_analysis"), dict) else {}
+        quality = structured.get("data_quality") if isinstance(structured.get("data_quality"), dict) else {}
+        market_ctx = structured.get("market_context") if isinstance(structured.get("market_context"), dict) else {}
+        realtime_ctx = structured.get("realtime_context") if isinstance(structured.get("realtime_context"), dict) else {}
+        technicals = structured.get("technicals") if isinstance(structured.get("technicals"), dict) else {}
+        time_ctx = structured.get("time_context") if isinstance(structured.get("time_context"), dict) else {}
+        core = dashboard.get("core_conclusion") if isinstance(dashboard.get("core_conclusion"), dict) else {}
+        position_advice = core.get("position_advice") if isinstance(core.get("position_advice"), dict) else {}
+        intelligence = dashboard.get("intelligence") if isinstance(dashboard.get("intelligence"), dict) else {}
+        battle_plan = dashboard.get("battle_plan") if isinstance(dashboard.get("battle_plan"), dict) else {}
+
+        today = market_ctx.get("today") if isinstance(market_ctx.get("today"), dict) else {}
+        yesterday = market_ctx.get("yesterday") if isinstance(market_ctx.get("yesterday"), dict) else {}
+        normalized_fundamentals = fundamentals.get("normalized") if isinstance(fundamentals.get("normalized"), dict) else {}
+        derived_profiles = fundamentals.get("derived_profiles") if isinstance(fundamentals.get("derived_profiles"), dict) else {}
+        current_missing = {
+            str(item)
+            for item in (quality.get("missing_fields") or [])
+            if isinstance(item, str)
+        }
+
+        current_session_type = str(time_ctx.get("session_type") or "").strip()
+        current_market_session_date = str(time_ctx.get("market_session_date") or "").strip()
+
+        previous_records = self.db.get_analysis_history(
+            code=code,
+            days=60,
+            limit=5,
+            exclude_query_id=query_id,
+        )
+        baseline = self._recent_signal_baseline(
+            previous_records,
+            exclude_query_id=query_id,
+            current_market_session_date=current_market_session_date if current_session_type == "last_completed_session" else None,
+            current_session_type=current_session_type if current_session_type == "last_completed_session" else None,
+        )
+        previous_score = baseline.get("score") if isinstance(baseline, dict) else None
+        previous_missing = {
+            str(item)
+            for item in ((baseline or {}).get("missing_fields") or [])
+            if isinstance(item, str)
+        }
+        same_session_window = bool(
+            current_session_type == "last_completed_session"
+            and isinstance(baseline, dict)
+            and baseline.get("market_session_date") == current_market_session_date
+            and baseline.get("session_type") == current_session_type
+        )
+        newly_completed_metrics = [
+            metric.upper()
+            for metric in ("ma5", "ma10", "ma20", "ma60", "rsi14", "vwap")
+            if f"technicals.{metric}" in previous_missing and f"technicals.{metric}" not in current_missing
+        ]
+
+        def _node_value(name: str) -> Optional[float]:
+            node = technicals.get(name)
+            if not isinstance(node, dict):
+                return None
+            return self._safe_indicator_number(
+                node.get("value"),
+                zero_is_missing=name in {"ma5", "ma10", "ma20", "ma60", "vwap"},
+            )
+
+        def _float_or_none(value: Any) -> Optional[float]:
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError):
+                return None
+            if math.isnan(parsed):
+                return None
+            return parsed
+
+        current_price = _float_or_none(realtime_ctx.get("price"))
+        if current_price is None:
+            current_price = _float_or_none(today.get("close"))
+        prev_close = _float_or_none(yesterday.get("close"))
+        close_price = _float_or_none(today.get("close")) or current_price
+        open_price = _float_or_none(today.get("open"))
+        high_price = _float_or_none(today.get("high"))
+        low_price = _float_or_none(today.get("low"))
+        session_change_pct = _float_or_none(today.get("pct_chg"))
+        if session_change_pct is None and close_price is not None and prev_close not in (None, 0):
+            session_change_pct = ((close_price - prev_close) / prev_close) * 100
+        ma20 = _node_value("ma20") or _float_or_none(today.get("ma20"))
+        ma60 = _node_value("ma60")
+        rsi14 = _node_value("rsi14")
+        trend_strength = _float_or_none(trend_analysis.get("trend_strength"))
+        ma_alignment = str(trend_analysis.get("ma_alignment") or "").strip()
+        trend_status = str(trend_analysis.get("trend_status") or "").strip().lower()
+        volume_status = str(trend_analysis.get("volume_status") or "").strip()
+        negative_signals: List[str] = []
+        positive_signals: List[str] = []
+        def _clamp_score(value: float, low: float, high: float) -> int:
+            return int(round(max(low, min(high, value))))
+
+        market_score = 50.0
+        market_reasons: List[str] = []
+        if session_change_pct is not None:
+            if session_change_pct <= -5:
+                market_score -= 12
+                market_reasons.append("日线跌幅较大")
+            elif session_change_pct <= -3:
+                market_score -= 8
+                market_reasons.append("日线明显走弱")
+            elif session_change_pct <= -1:
+                market_score -= 4
+                market_reasons.append("日线收跌")
+            elif session_change_pct >= 5:
+                market_score += 10
+                market_reasons.append("日线强势收涨")
+            elif session_change_pct >= 3:
+                market_score += 7
+                market_reasons.append("日线明显走强")
+            elif session_change_pct >= 1:
+                market_score += 3
+                market_reasons.append("日线收涨")
+        if close_price is not None and open_price is not None:
+            if close_price < open_price:
+                market_score -= 2
+                market_reasons.append("收盘弱于开盘")
+            elif close_price > open_price:
+                market_score += 2
+                market_reasons.append("收盘强于开盘")
+        if high_price is not None and low_price is not None and prev_close not in (None, 0):
+            amplitude_pct = ((high_price - low_price) / prev_close) * 100
+            if amplitude_pct > 6 and session_change_pct is not None and session_change_pct < 0:
+                market_score -= 2
+                market_reasons.append("振幅偏大且收跌")
+            elif amplitude_pct < 3 and session_change_pct is not None and session_change_pct > 0:
+                market_score += 1
+                market_reasons.append("震荡收敛且走强")
+        market_score = _clamp_score(market_score, 25, 75)
+
+        technical_score = 50.0
+        if "空头" in ma_alignment or "bear" in trend_status:
+            technical_score -= 8
+            negative_signals.append("均线结构偏空")
+        elif "多头" in ma_alignment or "bull" in trend_status:
+            technical_score += 8
+            positive_signals.append("均线结构偏强")
+        if current_price is not None and ma20 is not None:
+            if current_price < ma20:
+                technical_score -= 4
+                negative_signals.append("价格位于 MA20 下方")
+            else:
+                technical_score += 3
+                positive_signals.append("价格位于 MA20 上方")
+        if current_price is not None and ma60 is not None:
+            if current_price < ma60:
+                technical_score -= 4
+                negative_signals.append("价格位于 MA60 下方")
+            else:
+                technical_score += 2
+                positive_signals.append("价格位于 MA60 上方")
+        if volume_status == "放量下跌":
+            technical_score -= 4
+            negative_signals.append("放量下跌")
+        elif volume_status == "放量上涨":
+            technical_score += 3
+            positive_signals.append("放量上涨")
+        elif volume_status == "缩量回调":
+            technical_score += 1
+            positive_signals.append("缩量回调")
+        if rsi14 is not None:
+            if rsi14 < 30:
+                technical_score -= 2
+                negative_signals.append("RSI 接近超卖")
+            elif rsi14 < 40:
+                technical_score -= 1
+                negative_signals.append("RSI 偏弱")
+            elif 45 <= rsi14 <= 65:
+                technical_score += 1
+                positive_signals.append("RSI 位于中强区")
+            elif rsi14 > 75:
+                technical_score -= 1
+                negative_signals.append("RSI 偏热")
+        if trend_strength is not None:
+            if trend_strength <= 25:
+                technical_score -= 4
+            elif trend_strength <= 40:
+                technical_score -= 2
+            elif trend_strength >= 70:
+                technical_score += 4
+            elif trend_strength >= 58:
+                technical_score += 2
+        technical_score = _clamp_score(technical_score, 20, 80)
+
+        fundamental_score = 50.0
+        fundamental_reasons: List[str] = []
+        growth_profile = str(derived_profiles.get("growth_profile") or "")
+        profitability_profile = str(derived_profiles.get("profitability_profile") or "")
+        cashflow_profile = str(derived_profiles.get("cashflow_profile") or "")
+        leverage_profile = str(derived_profiles.get("leverage_profile") or "")
+        if growth_profile == "high_growth":
+            fundamental_score += 7
+            fundamental_reasons.append("增长质量较强")
+        elif growth_profile == "negative_growth":
+            fundamental_score -= 7
+            fundamental_reasons.append("增长承压")
+        if profitability_profile in {"profitable", "gross_margin_positive"}:
+            fundamental_score += 6
+            fundamental_reasons.append("盈利能力良好")
+        elif profitability_profile == "near_breakeven_or_loss":
+            fundamental_score -= 8
+            fundamental_reasons.append("盈利质量承压")
+        if cashflow_profile == "cashflow_healthy":
+            fundamental_score += 6
+            fundamental_reasons.append("现金流健康")
+        elif cashflow_profile == "cashflow_pressure":
+            fundamental_score -= 6
+            fundamental_reasons.append("现金流偏弱")
+        if leverage_profile == "leverage_controllable":
+            fundamental_score += 4
+            fundamental_reasons.append("杠杆可控")
+        elif leverage_profile == "high_leverage":
+            fundamental_score -= 4
+            fundamental_reasons.append("杠杆压力偏高")
+        roe = _float_or_none(normalized_fundamentals.get("returnOnEquity"))
+        if roe is not None:
+            if roe > 0.25:
+                fundamental_score += 6
+                fundamental_reasons.append("ROE 维持高位")
+            elif roe > 0.12:
+                fundamental_score += 4
+            elif roe > 0.05:
+                fundamental_score += 2
+            elif roe < 0:
+                fundamental_score -= 6
+                fundamental_reasons.append("ROE 转负")
+        roa = _float_or_none(normalized_fundamentals.get("returnOnAssets"))
+        if roa is not None:
+            if roa > 0.12:
+                fundamental_score += 5
+                fundamental_reasons.append("ROA 表现优异")
+            elif roa > 0.05:
+                fundamental_score += 3
+            elif roa < 0:
+                fundamental_score -= 4
+                fundamental_reasons.append("ROA 转弱")
+        revenue = _float_or_none(normalized_fundamentals.get("totalRevenue"))
+        net_income = _float_or_none(normalized_fundamentals.get("netIncome"))
+        if revenue is not None and revenue > 0 and net_income is not None and net_income > 0:
+            fundamental_score += 4
+            fundamental_reasons.append("营收与净利润为正")
+        elif net_income is not None and net_income < 0:
+            fundamental_score -= 7
+            fundamental_reasons.append("净利润为负")
+        fundamental_score = _clamp_score(fundamental_score, 25, 85)
+
+        news_score = 50.0
+        news_reasons: List[str] = []
+        company_sentiment = str(sentiment.get("company_sentiment") or "")
+        regulatory_sentiment = str(sentiment.get("regulatory_sentiment") or "")
+        overall_confidence = str(sentiment.get("overall_confidence") or sentiment.get("confidence") or "")
+        positive_catalysts = intelligence.get("positive_catalysts") if isinstance(intelligence.get("positive_catalysts"), list) else []
+        risk_alerts = intelligence.get("risk_alerts") if isinstance(intelligence.get("risk_alerts"), list) else []
+        if company_sentiment == "positive":
+            news_score += 5
+            news_reasons.append("公司情绪偏正面")
+        elif company_sentiment == "negative":
+            news_score -= 6
+            news_reasons.append("公司情绪偏负面")
+        if regulatory_sentiment == "positive":
+            news_score += 2
+            news_reasons.append("监管边际友好")
+        elif regulatory_sentiment == "negative":
+            news_score -= 5
+            news_reasons.append("监管压力偏高")
+        if overall_confidence == "high":
+            news_score += 3
+        elif overall_confidence == "medium":
+            news_score += 1
+        news_score += min(len(positive_catalysts), 3)
+        news_score -= min(len(risk_alerts), 3) * 1.5
+        news_score = _clamp_score(news_score, 30, 75)
+
+        risk_adjustment = 0.0
+        risk_reasons: List[str] = []
+        action_checklist = battle_plan.get("action_checklist") if isinstance(battle_plan.get("action_checklist"), list) else []
+        fail_count = 0
+        warn_count = 0
+        pass_count = 0
+        for item in action_checklist:
+            text = str(item or "").strip()
+            if text.startswith("❌"):
+                fail_count += 1
+            elif text.startswith("⚠"):
+                warn_count += 1
+            elif text.startswith("✅"):
+                pass_count += 1
+        risk_adjustment -= min(fail_count, 3) * 2.0
+        risk_adjustment -= min(warn_count, 3) * 1.0
+        if fail_count:
+            risk_reasons.append(f"{fail_count} 项执行条件未满足")
+        elif warn_count:
+            risk_reasons.append(f"{warn_count} 项条件待确认")
+        elif pass_count and not action_checklist:
+            pass
+        elif pass_count and fail_count == 0 and warn_count == 0:
+            risk_adjustment += 1.5
+            risk_reasons.append("Checklist 通过度较高")
+
+        quality_warnings = quality.get("warnings") if isinstance(quality.get("warnings"), list) else []
+        conflict_penalty = sum(
+            1
+            for warning in quality_warnings
+            if isinstance(warning, str) and ("provider_conflict" in warning or "recomputed" in warning)
+        )
+        if conflict_penalty:
+            risk_adjustment -= min(conflict_penalty, 2) * 1.0
+            risk_reasons.append("行情源口径仍需复核")
+        risk_adjustment = max(-8.0, min(4.0, risk_adjustment))
+
+        strong_fundamentals = fundamental_score >= 65
+        weak_fundamentals = fundamental_score <= 40
+        technical_bearish = technical_score <= 40
+        technical_bullish = technical_score >= 60
+        technical_pressure = round(max(0.0, (50.0 - technical_score) / 8.0), 2)
+
+        raw_composite_score = _clamp_score(
+            market_score * 0.15
+            + technical_score * 0.25
+            + fundamental_score * 0.40
+            + news_score * 0.20
+            + risk_adjustment,
+            0,
+            100,
+        )
+        stabilized_score = raw_composite_score
+        score_adjustment_notes: List[str] = []
+        previous_score_int: Optional[int] = None
+        change_reasons: List[str] = []
+
+        current_signature = self._build_stability_signature(dashboard=dashboard, structured=structured)
+        try:
+            current_signature_payload = json.loads(current_signature)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            current_signature_payload = {}
+        previous_signature = baseline.get("signature") if isinstance(baseline, dict) else None
+        try:
+            previous_signature_payload = json.loads(previous_signature) if previous_signature else {}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            previous_signature_payload = {}
+        same_signature = bool(previous_signature and previous_signature == current_signature)
+
+        current_news_signature = "|".join(
+            filter(
+                None,
+                [
+                    str(current_signature_payload.get("latest_news") or ""),
+                    str(current_signature_payload.get("sentiment_summary") or ""),
+                    str(current_signature_payload.get("positive_count") or ""),
+                    str(current_signature_payload.get("risk_count") or ""),
+                ],
+            )
+        )
+        previous_news_signature = "|".join(
+            filter(
+                None,
+                [
+                    str(previous_signature_payload.get("latest_news") or ""),
+                    str(previous_signature_payload.get("sentiment_summary") or ""),
+                    str(previous_signature_payload.get("positive_count") or ""),
+                    str(previous_signature_payload.get("risk_count") or ""),
+                ],
+            )
+        )
+        current_sources = current_signature_payload.get("sources") if isinstance(current_signature_payload.get("sources"), dict) else {}
+        previous_sources = previous_signature_payload.get("sources") if isinstance(previous_signature_payload.get("sources"), dict) else {}
+        current_provider_signature = json.dumps(current_sources, sort_keys=True, ensure_ascii=False)
+        previous_provider_signature = json.dumps(previous_sources, sort_keys=True, ensure_ascii=False)
+        has_previous_provider_source = any(str(value or "").strip() for value in previous_sources.values())
+        current_technical_state = "|".join(
+            filter(
+                None,
+                [
+                    str(current_signature_payload.get("trend_status") or ""),
+                    str(current_signature_payload.get("ma_alignment") or ""),
+                    str(current_signature_payload.get("volume_status") or ""),
+                ],
+            )
+        )
+        previous_technical_state = "|".join(
+            filter(
+                None,
+                [
+                    str(previous_signature_payload.get("trend_status") or ""),
+                    str(previous_signature_payload.get("ma_alignment") or ""),
+                    str(previous_signature_payload.get("volume_status") or ""),
+                ],
+            )
+        )
+
+        if previous_score is not None:
+            try:
+                previous_score_int = int(previous_score)
+            except (TypeError, ValueError):
+                previous_score_int = None
+            if previous_score_int is not None:
+                clamp_limit = 8
+                if same_session_window and same_signature:
+                    clamp_limit = 3
+                elif same_session_window:
+                    clamp_limit = 5
+                if newly_completed_metrics:
+                    clamp_limit = min(clamp_limit, 5 if same_session_window else 6)
+                    change_reasons.append("技术指标补齐导致")
+                if current_news_signature and previous_news_signature and current_news_signature != previous_news_signature:
+                    clamp_limit = 8 if same_session_window else 10
+                    change_reasons.append("新闻新增导致")
+                if current_provider_signature != previous_provider_signature and has_previous_provider_source:
+                    clamp_limit = min(clamp_limit, 5 if same_session_window else 7)
+                    change_reasons.append("provider改口径导致")
+                if current_technical_state and previous_technical_state and current_technical_state != previous_technical_state:
+                    clamp_limit = max(clamp_limit, 7 if same_session_window else 8)
+                delta = stabilized_score - previous_score_int
+                if same_session_window and same_signature and delta != 0:
+                    change_reasons.append("评分结构重算导致")
+                if delta > clamp_limit:
+                    stabilized_score = previous_score_int + clamp_limit
+                    score_adjustment_notes.append("已限制单次上调幅度，避免同一标的短时间内分数漂移")
+                elif delta < -clamp_limit:
+                    stabilized_score = previous_score_int - clamp_limit
+                    score_adjustment_notes.append("已限制单次下调幅度，避免技术补齐或口径微调引发剧烈跳变")
+
+        if strong_fundamentals and technical_bearish and stabilized_score < 42:
+            stabilized_score = 42
+            score_adjustment_notes.append("短线偏弱但基本面与现金流仍有支撑")
+
+        if technical_score <= 38:
+            trend_key = "bearish"
+        elif technical_score >= 64:
+            trend_key = "bullish"
+        else:
+            trend_key = "sideways"
+
+        if weak_fundamentals and technical_bearish:
+            advice_key = "reduce" if stabilized_score >= 35 else "sell"
+        elif strong_fundamentals and technical_bearish:
+            advice_key = "watch"
+        elif stabilized_score >= 72 and technical_bullish and fundamental_score >= 68:
+            advice_key = "buy"
+        elif stabilized_score >= 60:
+            advice_key = "hold"
+        elif stabilized_score >= 42:
+            advice_key = "watch"
+        elif stabilized_score >= 32:
+            advice_key = "reduce"
+        else:
+            advice_key = "sell"
+
+        language = normalize_report_language(getattr(result, "report_language", "zh"))
+        result.sentiment_score = max(0, min(100, int(stabilized_score)))
+        result.trend_prediction = localize_trend_prediction(trend_key, language)
+        result.operation_advice = localize_operation_advice(advice_key, language)
+        result.decision_type = {
+            "strong_buy": "buy",
+            "buy": "buy",
+            "hold": "hold",
+            "watch": "hold",
+            "reduce": "sell",
+            "sell": "sell",
+            "strong_sell": "sell",
+        }.get(advice_key, result.decision_type or "hold")
+
+        if technical_bearish:
+            signal_text = "、".join(dict.fromkeys(negative_signals[:3])) or "均线与价格结构偏弱"
+            short_term_view = f"短线技术偏弱，{signal_text}。"
+        elif technical_bullish:
+            signal_text = "、".join(dict.fromkeys(positive_signals[:3])) or "均线与价格结构偏强"
+            short_term_view = f"短线技术偏强，{signal_text}。"
+        else:
+            short_term_view = "短线技术仍偏震荡，趋势方向需要继续确认。"
+
+        if strong_fundamentals and technical_bearish:
+            composite_view = f"短线技术承压，但基本面、盈利质量与现金流仍有支撑，综合建议以{result.operation_advice}为主。"
+        elif weak_fundamentals and technical_bearish:
+            composite_view = f"技术面与基本面共振偏弱，综合建议转向{result.operation_advice}，优先防守。"
+        elif strong_fundamentals and technical_bullish:
+            composite_view = f"技术面与基本面相互印证，综合建议以{result.operation_advice}为主。"
+        else:
+            composite_view = f"综合建议为{result.operation_advice}，结合技术、基本面与情绪继续跟踪。"
+
+        score_breakdown = [
+            {
+                "label": "行情/趋势分",
+                "score": market_score,
+                "note": "、".join(dict.fromkeys(market_reasons[:2])) or "日线波动中性",
+                "tone": "danger" if market_score < 45 else "success" if market_score > 55 else "default",
+            },
+            {
+                "label": "技术分",
+                "score": technical_score,
+                "note": "、".join(dict.fromkeys((negative_signals or positive_signals)[:3])) or "关键指标中性",
+                "tone": "danger" if technical_score < 45 else "success" if technical_score > 55 else "warning",
+            },
+            {
+                "label": "基本面分",
+                "score": fundamental_score,
+                "note": "、".join(dict.fromkeys(fundamental_reasons[:3])) or "基本面暂无明显偏离",
+                "tone": "success" if fundamental_score >= 60 else "danger" if fundamental_score <= 40 else "default",
+            },
+            {
+                "label": "新闻/情绪分",
+                "score": news_score,
+                "note": "、".join(dict.fromkeys(news_reasons[:3])) or "暂无新增高价值情绪扰动",
+                "tone": "success" if news_score >= 58 else "danger" if news_score <= 42 else "default",
+            },
+            {
+                "label": "风险修正项",
+                "score": round(risk_adjustment, 1),
+                "note": "、".join(dict.fromkeys(risk_reasons[:2])) or "风险修正中性",
+                "tone": "danger" if risk_adjustment < 0 else "success" if risk_adjustment > 0 else "default",
+            },
+        ]
+
+        adjustment_reasons: List[str] = []
+        if newly_completed_metrics:
+            adjustment_reasons.append(f"{'/'.join(newly_completed_metrics)} 已补齐，短线结构判断更完整")
+        adjustment_reasons.extend(score_adjustment_notes)
+        if strong_fundamentals and technical_bearish:
+            adjustment_reasons.append("已保留基本面缓冲，避免单一技术因子压制综合评分")
+        adjustment_reason = "；".join(dict.fromkeys([text for text in adjustment_reasons if text])) or None
+        change_reason = "；".join(dict.fromkeys([text for text in change_reasons if text])) or None
+
+        one_sentence = core.get("one_sentence") if isinstance(core.get("one_sentence"), str) else ""
+        if strong_fundamentals and technical_bearish:
+            core["one_sentence"] = f"短线技术偏弱，但基本面仍有支撑，综合建议以{result.operation_advice}为主。"
+        elif adjustment_reason and not one_sentence:
+            core["one_sentence"] = composite_view
+
+        if not position_advice:
+            position_advice = {}
+        if strong_fundamentals and technical_bearish:
+            position_advice["no_position"] = position_advice.get("no_position") or f"新仓以{result.operation_advice}为主，等待短线企稳后再评估。"
+            position_advice["has_position"] = position_advice.get("has_position") or "已有仓位以观察为主，不追反弹，跌破风控位再处理。"
+        elif weak_fundamentals and technical_bearish:
+            position_advice["no_position"] = position_advice.get("no_position") or "避免左侧逆势参与，优先等待风险释放。"
+            position_advice["has_position"] = position_advice.get("has_position") or "控制仓位并严守止损，避免弱势放大回撤。"
+        core["position_advice"] = position_advice
+        dashboard["core_conclusion"] = core
+        dashboard["decision_context"] = {
+            "short_term_view": short_term_view,
+            "composite_view": composite_view,
+            "adjustment_reason": adjustment_reason,
+            "change_reason": change_reason,
+            "previous_score": previous_score,
+            "score_change": (result.sentiment_score - previous_score_int) if previous_score_int is not None else None,
+            "technical_pressure": round(technical_pressure, 2),
+            "fundamental_support": round((fundamental_score - 50) / 5, 1),
+            "score_breakdown": score_breakdown,
+        }
+        result.dashboard = dashboard
+        if composite_view and (not result.analysis_summary or result.analysis_summary.strip() in {"观望", "持有", "买入", "减仓", "卖出"}):
+            result.analysis_summary = composite_view
+        return result
     
     def _enhance_context(
         self,
@@ -650,6 +1522,7 @@ class StockAnalysisPipeline:
         stock_name: str = "",
         fundamental_context: Optional[Dict[str, Any]] = None,
         shares_outstanding: Optional[int] = None,
+        fallback_history: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         增强分析上下文
@@ -694,10 +1567,14 @@ class StockAnalysisPipeline:
             volume_ratio = getattr(realtime_quote, 'volume_ratio', None)
             volume_ratio_desc = '无数据'
             if is_us_stock_code(context.get('code', '')):
-                computed_volume_ratio = self._compute_volume_ratio(context, realtime_quote)
+                computed_volume_ratio = self._compute_volume_ratio(
+                    context,
+                    realtime_quote,
+                    fallback_history=fallback_history,
+                )
                 if computed_volume_ratio is not None:
                     volume_ratio = computed_volume_ratio
-                elif volume_ratio is None:
+                elif self._quote_field_missing(volume_ratio, zero_is_missing=True):
                     volume_ratio = "数据缺失"
                 computed_turnover_rate = self._compute_turnover_rate(
                     context=context,
@@ -711,23 +1588,35 @@ class StockAnalysisPipeline:
                 if computed_turnover_rate is not None
                 else getattr(realtime_quote, 'turnover_rate', None)
             )
+            if self._quote_field_missing(turnover_rate, zero_is_missing=True):
+                turnover_rate = "数据缺失"
             if isinstance(volume_ratio, (int, float)):
                 volume_ratio_desc = self._describe_volume_ratio(float(volume_ratio))
             enhanced['realtime'] = {
                 'name': getattr(realtime_quote, 'name', ''),
                 'price': getattr(realtime_quote, 'price', None),
                 'change_pct': getattr(realtime_quote, 'change_pct', None),
+                'change_amount': getattr(realtime_quote, 'change_amount', None),
+                'volume': getattr(realtime_quote, 'volume', None),
+                'amount': getattr(realtime_quote, 'amount', None),
                 'volume_ratio': volume_ratio,
                 'volume_ratio_desc': volume_ratio_desc,
                 'turnover_rate': turnover_rate,
+                'amplitude': getattr(realtime_quote, 'amplitude', None),
+                'open_price': getattr(realtime_quote, 'open_price', None),
+                'high': getattr(realtime_quote, 'high', None),
+                'low': getattr(realtime_quote, 'low', None),
+                'pre_close': getattr(realtime_quote, 'pre_close', None),
                 'pe_ratio': getattr(realtime_quote, 'pe_ratio', None),
                 'pb_ratio': getattr(realtime_quote, 'pb_ratio', None),
                 'total_mv': getattr(realtime_quote, 'total_mv', None),
                 'circ_mv': getattr(realtime_quote, 'circ_mv', None),
                 'change_60d': getattr(realtime_quote, 'change_60d', None),
+                'high_52w': getattr(realtime_quote, 'high_52w', None),
+                'low_52w': getattr(realtime_quote, 'low_52w', None),
                 'source': getattr(getattr(realtime_quote, 'source', None), 'value', getattr(realtime_quote, 'source', None)),
                 'snapshot_type': enhanced.get("session_type"),
-                'market_timestamp': enhanced.get("market_timestamp"),
+                'market_timestamp': getattr(realtime_quote, 'market_timestamp', None) or enhanced.get("market_timestamp"),
             }
             # 移除 None 值以减少上下文大小
             enhanced['realtime'] = {k: v for k, v in enhanced['realtime'].items() if v is not None}
@@ -759,9 +1648,15 @@ class StockAnalysisPipeline:
                 'risk_factors': trend_result.risk_factors,
             }
 
-        # Issue #234: Override today with realtime OHLC + trend MA for intraday analysis
-        # Guard: trend_result.ma5 > 0 ensures MA calculation succeeded (data sufficient)
-        if realtime_quote and trend_result and trend_result.ma5 > 0:
+        # Issue #234: Override today with realtime OHLC + trend MA for intraday analysis only.
+        # For last_completed_session we keep the existing EOD market context to avoid
+        # mixing official close context with realtime snapshot fields.
+        if (
+            realtime_quote
+            and trend_result
+            and trend_result.ma5 > 0
+            and enhanced.get("session_type") == "intraday_snapshot"
+        ):
             price = getattr(realtime_quote, 'price', None)
             if price is not None and price > 0:
                 yesterday_close = None
@@ -781,6 +1676,7 @@ class StockAnalysisPipeline:
                     'open': open_p,
                     'high': high_p,
                     'low': low_p,
+                    'data_source': getattr(getattr(realtime_quote, 'source', None), 'value', getattr(realtime_quote, 'source', None)),
                     'ma5': trend_result.ma5,
                     'ma10': trend_result.ma10,
                     'ma20': trend_result.ma20,
@@ -844,15 +1740,24 @@ class StockAnalysisPipeline:
         market_tz_name = self._get_market_timezone_name(code)
         market_tz = ZoneInfo(market_tz_name)
         market_now = datetime.now(market_tz)
+        raw_market_timestamp = getattr(realtime_quote, "market_timestamp", None) if realtime_quote is not None else None
+        market_timestamp = self._parse_time_contract_datetime(raw_market_timestamp)
+        if market_timestamp is not None:
+            if market_timestamp.tzinfo is None:
+                market_timestamp = market_timestamp.replace(tzinfo=market_tz)
+            market_now = market_timestamp.astimezone(market_tz)
         report_generated_at = datetime.now(timezone.utc).isoformat()
-        market_session_date = context.get("date") or market_now.date().isoformat()
+        market_session_date = market_now.date().isoformat()
+        if market_timestamp is None:
+            market_session_date = context.get("date") or market_session_date
         has_realtime_price = (
             realtime_quote is not None
             and getattr(realtime_quote, "price", None) is not None
         )
         market = get_market_for_stock(code)
-        is_open = is_market_open(market, market_now.date()) if market else False
-        session_type = "intraday_snapshot" if (has_realtime_price and is_open) else "last_completed_session"
+        is_trading_day = is_market_open(market, market_now.date()) if market else False
+        is_regular_hours = self._is_regular_session_clock(market, market_now)
+        session_type = "intraday_snapshot" if (has_realtime_price and is_trading_day and is_regular_hours) else "last_completed_session"
         return {
             "market_timezone": market_tz_name,
             "market_timestamp": market_now.isoformat(),
@@ -861,6 +1766,37 @@ class StockAnalysisPipeline:
             "report_generated_at": report_generated_at,
             "session_type": session_type,
         }
+
+    @staticmethod
+    def _is_regular_session_clock(market: Optional[str], market_dt: datetime) -> bool:
+        current_time = market_dt.timetz().replace(tzinfo=None)
+        if market == "us":
+            return clock_time(9, 30) <= current_time < clock_time(16, 0)
+        if market == "cn":
+            return (
+                clock_time(9, 30) <= current_time < clock_time(11, 30)
+                or clock_time(13, 0) <= current_time < clock_time(15, 0)
+            )
+        if market == "hk":
+            return (
+                clock_time(9, 30) <= current_time < clock_time(12, 0)
+                or clock_time(13, 0) <= current_time < clock_time(16, 0)
+            )
+        return False
+
+    @staticmethod
+    def _parse_time_contract_datetime(value: Any) -> Optional[datetime]:
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value
+        raw = str(value).strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
 
     @staticmethod
     def _get_market_timezone_name(code: str) -> str:
@@ -909,7 +1845,146 @@ class StockAnalysisPipeline:
                 items.append(item)
         return items
 
-    def _compute_volume_ratio(self, context: Dict[str, Any], realtime_quote: Any) -> Optional[float]:
+    @staticmethod
+    def _quote_field_missing(value: Any, *, zero_is_missing: bool = True) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return True
+            if text.lower() in {"n/a", "na", "none", "null", "nan", "数据缺失", "-", "--"}:
+                return True
+            try:
+                parsed = float(text.rstrip("%"))
+            except (TypeError, ValueError):
+                return False
+            if math.isnan(parsed):
+                return True
+            if zero_is_missing and parsed == 0.0:
+                return True
+            return False
+        if isinstance(value, (int, float)):
+            if math.isnan(float(value)):
+                return True
+            if zero_is_missing and float(value) == 0.0:
+                return True
+        return False
+
+    @staticmethod
+    def _realtime_source_from_name(name: str) -> RealtimeSource:
+        normalized = str(name or "").strip().lower()
+        if normalized == "finnhub":
+            return RealtimeSource.FINNHUB
+        if normalized == "fmp":
+            return RealtimeSource.FMP
+        return RealtimeSource.FALLBACK
+
+    def _merge_us_quote_fallbacks(
+        self,
+        realtime_quote: Any,
+        *,
+        code: str,
+        stock_name: str,
+        payloads: List[Dict[str, Any]],
+    ) -> Any:
+        active_payloads = [payload for payload in payloads if isinstance(payload, dict) and payload]
+        if not active_payloads:
+            return realtime_quote
+
+        merged = realtime_quote
+        if merged is None:
+            first_payload = active_payloads[0]
+            merged = UnifiedRealtimeQuote(
+                code=code,
+                name=str(first_payload.get("name") or stock_name or code),
+                source=self._realtime_source_from_name(str(first_payload.get("source") or "fallback")),
+            )
+
+        field_specs = {
+            "price": True,
+            "change_pct": False,
+            "change_amount": False,
+            "volume": True,
+            "amount": True,
+            "volume_ratio": True,
+            "turnover_rate": True,
+            "amplitude": True,
+            "open_price": True,
+            "high": True,
+            "low": True,
+            "pre_close": True,
+            "pe_ratio": True,
+            "pb_ratio": True,
+            "total_mv": True,
+            "circ_mv": True,
+            "change_60d": True,
+            "high_52w": True,
+            "low_52w": True,
+            "market_timestamp": False,
+        }
+        alias_map = {
+            "pre_close": (
+                "pre_close",
+                "previous_close",
+                "previousClose",
+                "regularMarketPreviousClose",
+                "chartPreviousClose",
+            ),
+            "open_price": ("open_price", "open"),
+            "high": ("high",),
+            "low": ("low",),
+            "high_52w": ("high_52w", "fiftyTwoWeekHigh"),
+            "low_52w": ("low_52w", "fiftyTwoWeekLow"),
+            "total_mv": ("total_mv", "marketCap"),
+            "circ_mv": ("circ_mv", "floatMarketCap"),
+            "pb_ratio": ("pb_ratio", "priceToBook"),
+            "market_timestamp": ("market_timestamp", "timestamp", "quote_time"),
+        }
+
+        for payload in active_payloads:
+            if getattr(merged, "source", None) == RealtimeSource.FALLBACK:
+                payload_source = self._realtime_source_from_name(str(payload.get("source") or "fallback"))
+                if payload_source != RealtimeSource.FALLBACK:
+                    merged.source = payload_source
+            if not getattr(merged, "name", None) and payload.get("name"):
+                merged.name = str(payload.get("name"))
+            for field_name, zero_is_missing in field_specs.items():
+                current_value = getattr(merged, field_name, None)
+                if not self._quote_field_missing(current_value, zero_is_missing=zero_is_missing):
+                    continue
+                for key in alias_map.get(field_name, (field_name,)):
+                    candidate = payload.get(key)
+                    if not self._quote_field_missing(candidate, zero_is_missing=zero_is_missing):
+                        setattr(merged, field_name, candidate)
+                        break
+
+        return merged
+
+    @staticmethod
+    def _build_external_volume_samples(history_rows: Optional[List[Dict[str, Any]]], max_count: int = 5) -> List[float]:
+        samples: List[float] = []
+        for row in reversed(history_rows or []):
+            if not isinstance(row, dict):
+                continue
+            volume = row.get("volume")
+            try:
+                volume_value = float(volume)
+            except (TypeError, ValueError):
+                continue
+            if volume_value <= 0:
+                continue
+            samples.append(volume_value)
+            if len(samples) >= max_count:
+                break
+        return list(reversed(samples))
+
+    def _compute_volume_ratio(
+        self,
+        context: Dict[str, Any],
+        realtime_quote: Any,
+        fallback_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[float]:
         code = context.get("code", "")
         today_volume = getattr(realtime_quote, "volume", None)
         if today_volume in (None, 0):
@@ -928,6 +2003,30 @@ class StockAnalysisPipeline:
             today_date=today_date,
             max_count=5,
         )
+        if len(historical_volumes) < 5 and fallback_history:
+            seen_dates = {str(today_date or "").strip()}
+            for bar in bars or []:
+                bar_date = getattr(getattr(bar, "date", None), "isoformat", lambda: getattr(bar, "date", None))()
+                if bar_date:
+                    seen_dates.add(str(bar_date))
+            extra_samples: List[float] = []
+            for row in reversed(fallback_history or []):
+                if not isinstance(row, dict):
+                    continue
+                row_date = str(row.get("date") or "").strip()
+                if row_date and row_date in seen_dates:
+                    continue
+                volume = row.get("volume")
+                try:
+                    volume_value = float(volume)
+                except (TypeError, ValueError):
+                    continue
+                if volume_value <= 0:
+                    continue
+                extra_samples.append(volume_value)
+                if len(historical_volumes) + len(extra_samples) >= 5:
+                    break
+            historical_volumes = historical_volumes + extra_samples
         if len(historical_volumes) < 5:
             return None
         avg_volume_5d = sum(historical_volumes) / len(historical_volumes)
@@ -983,19 +2082,34 @@ class StockAnalysisPipeline:
         alpha_indicators: Dict[str, Optional[float]],
         alpha_overview: Optional[Dict[str, Any]],
         yfinance_fundamentals: Optional[Dict[str, Any]],
-        yfinance_quarterly_income: Optional[List[Dict[str, Any]]],
-        alpha_quarterly_income: Optional[List[Dict[str, Any]]],
-        alpha_errors: List[str],
+        yfinance_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        fmp_fundamentals: Optional[Dict[str, Any]] = None,
+        fmp_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        finnhub_fundamentals: Optional[Dict[str, Any]] = None,
+        external_price_history: Optional[List[Dict[str, Any]]] = None,
+        alpha_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        alpha_errors: Optional[List[str]] = None,
+        api_indicators: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        technicals = self._build_technicals_block(code, alpha_indicators)
+        technicals = self._build_technicals_block(
+            code,
+            alpha_indicators,
+            external_price_history=external_price_history,
+            api_indicators=api_indicators,
+        )
         fundamentals = self._build_fundamentals_block(
             fundamental_context,
             alpha_overview=alpha_overview,
             yfinance_fundamentals=yfinance_fundamentals,
+            yfinance_quarterly_income=yfinance_quarterly_income,
+            fmp_fundamentals=fmp_fundamentals,
+            fmp_quarterly_income=fmp_quarterly_income,
+            finnhub_fundamentals=finnhub_fundamentals,
         )
         earnings_analysis = self._build_earnings_analysis_block(
             fundamental_context,
             yfinance_quarterly_income=yfinance_quarterly_income,
+            fmp_quarterly_income=fmp_quarterly_income,
             alpha_quarterly_income=alpha_quarterly_income,
         )
         sentiment_analysis = self._build_sentiment_analysis_block(
@@ -1012,7 +2126,7 @@ class StockAnalysisPipeline:
             fundamentals=fundamentals,
             earnings_analysis=earnings_analysis,
             sentiment_analysis=sentiment_analysis,
-            alpha_errors=alpha_errors,
+            alpha_errors=alpha_errors or [],
             context=context,
             diagnostics=diagnostics,
         )
@@ -1024,99 +2138,252 @@ class StockAnalysisPipeline:
             "data_quality": data_quality,
         }
 
+    @staticmethod
+    def _history_row_date_key(value: Any) -> str:
+        if hasattr(value, "isoformat"):
+            try:
+                return str(value.isoformat())
+            except Exception:
+                return str(value)
+        return str(value or "")
+
+    @classmethod
+    def _merge_price_history_rows(
+        cls,
+        local_rows: List[Dict[str, Any]],
+        external_rows: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        merged: Dict[str, Dict[str, Any]] = {}
+        for row in external_rows:
+            if not isinstance(row, dict):
+                continue
+            key = cls._history_row_date_key(row.get("date"))
+            if not key:
+                continue
+            merged[key] = {
+                "date": row.get("date"),
+                "close": row.get("close"),
+                "volume": row.get("volume"),
+                "vwap": row.get("vwap"),
+            }
+        for row in local_rows:
+            if not isinstance(row, dict):
+                continue
+            key = cls._history_row_date_key(row.get("date"))
+            if not key:
+                continue
+            base = merged.get(key, {})
+            merged[key] = {
+                **base,
+                "date": row.get("date") or base.get("date"),
+                "close": row.get("close") if row.get("close") is not None else base.get("close"),
+                "volume": row.get("volume") if row.get("volume") is not None else base.get("volume"),
+                "vwap": row.get("vwap") if row.get("vwap") is not None else base.get("vwap"),
+            }
+        return [
+            merged[key]
+            for key in sorted(
+                merged.keys(),
+                key=lambda item: cls._history_row_date_key(item),
+            )
+        ]
+
+    @staticmethod
+    def _safe_indicator_number(value: Any, *, zero_is_missing: bool = False) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(parsed):
+            return None
+        if zero_is_missing and parsed == 0:
+            return None
+        return round(parsed, 4)
+
+    @classmethod
+    def _merge_api_indicator_overrides(
+        cls,
+        *,
+        api_indicators: Optional[Dict[str, Dict[str, Any]]],
+        external_price_history: Optional[List[Dict[str, Any]]],
+        alpha_indicators: Optional[Dict[str, Optional[float]]],
+    ) -> Dict[str, Dict[str, Any]]:
+        merged: Dict[str, Dict[str, Any]] = {
+            key: dict(value)
+            for key, value in (api_indicators or {}).items()
+            if isinstance(value, dict)
+        }
+
+        if "vwap" not in merged:
+            for row in reversed(external_price_history or []):
+                if not isinstance(row, dict):
+                    continue
+                value = cls._safe_indicator_number(row.get("vwap"), zero_is_missing=True)
+                if value is not None:
+                    merged["vwap"] = {
+                        "value": value,
+                        "status": "ok",
+                        "source": "fmp_historical_price",
+                    }
+                    break
+
+        alpha = alpha_indicators or {}
+        legacy_map = {
+            "ma20": ("sma20", True),
+            "ma60": ("sma60", True),
+            "rsi14": ("rsi14", False),
+        }
+        for metric, (alpha_key, zero_is_missing) in legacy_map.items():
+            if metric in merged:
+                continue
+            value = cls._safe_indicator_number(alpha.get(alpha_key), zero_is_missing=zero_is_missing)
+            if value is None:
+                continue
+            merged[metric] = {
+                "value": value,
+                "status": "ok",
+                "source": "alpha_vantage",
+            }
+
+        return merged
+
     def _build_technicals_block(
         self,
         code: str,
         alpha_indicators: Dict[str, Optional[float]],
+        external_price_history: Optional[List[Dict[str, Any]]] = None,
+        api_indicators: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         bars = self.db.get_latest_data(code, days=300) or []
-        if not bars:
-            return {
-                k: {"value": None, "status": "data_unavailable", "source": "local_from_ohlcv"}
-                for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist")
-            }
 
         rows: List[Dict[str, Any]] = []
         for bar in reversed(bars):
             rows.append(
                 {
-                    "date": getattr(bar, "date", None),
+                    "date": getattr(getattr(bar, "date", None), "isoformat", lambda: getattr(bar, "date", None))(),
                     "close": getattr(bar, "close", None),
                     "volume": getattr(bar, "volume", None),
                 }
             )
-        df = pd.DataFrame(rows)
-        df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        df = df.dropna(subset=["close"]).copy()
-        if df.empty:
-            return {
-                k: {"value": None, "status": "data_unavailable", "source": "local_from_ohlcv"}
-                for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist")
+        source_name = "local_from_ohlcv"
+        if external_price_history:
+            external_rows = []
+            for row in external_price_history:
+                if not isinstance(row, dict):
+                    continue
+                external_rows.append(
+                    {
+                        "date": row.get("date"),
+                        "close": row.get("close"),
+                        "volume": row.get("volume"),
+                        "vwap": row.get("vwap"),
+                    }
+                )
+            if external_rows:
+                rows = self._merge_price_history_rows(rows, external_rows)
+                if len(bars) < 60:
+                    source_name = "fmp_historical_price"
+
+        preferred_api_indicators = self._merge_api_indicator_overrides(
+            api_indicators=api_indicators,
+            external_price_history=external_price_history,
+            alpha_indicators=alpha_indicators,
+        )
+
+        if not rows:
+            technicals = {
+                k: {"value": None, "status": "data_unavailable", "source": source_name}
+                for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist", "vwap")
             }
+        else:
+            df = pd.DataFrame(rows)
+            df["close"] = pd.to_numeric(df["close"], errors="coerce")
+            df = df.dropna(subset=["close"]).copy()
+            if df.empty:
+                technicals = {
+                    k: {"value": None, "status": "data_unavailable", "source": source_name}
+                    for k in ("ma5", "ma10", "ma20", "ma60", "rsi14", "macd", "macd_signal", "macd_hist", "vwap")
+                }
+            else:
+                close = df["close"]
+                ma5 = close.rolling(window=5).mean()
+                ma10 = close.rolling(window=10).mean()
+                ma20 = close.rolling(window=20).mean()
+                ma60 = close.rolling(window=60).mean()
+                diff = close.diff()
+                gain = diff.clip(lower=0)
+                loss = -diff.clip(upper=0)
+                avg_gain = gain.rolling(14).mean()
+                avg_loss = loss.rolling(14).mean()
+                rs = avg_gain / avg_loss.replace(0, pd.NA)
+                rsi14 = 100 - (100 / (1 + rs))
+                ema12 = close.ewm(span=12, adjust=False).mean()
+                ema26 = close.ewm(span=26, adjust=False).mean()
+                macd = ema12 - ema26
+                macd_signal = macd.ewm(span=9, adjust=False).mean()
+                macd_hist = macd - macd_signal
 
-        close = df["close"]
-        ma5 = close.rolling(window=5).mean()
-        ma10 = close.rolling(window=10).mean()
-        ma20 = close.rolling(window=20).mean()
-        ma60 = close.rolling(window=60).mean()
-        diff = close.diff()
-        gain = diff.clip(lower=0)
-        loss = -diff.clip(upper=0)
-        avg_gain = gain.rolling(14).mean()
-        avg_loss = loss.rolling(14).mean()
-        rs = avg_gain / avg_loss.replace(0, pd.NA)
-        rsi14 = 100 - (100 / (1 + rs))
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        macd_signal = macd.ewm(span=9, adjust=False).mean()
-        macd_hist = macd - macd_signal
+                def _latest(series: pd.Series, min_len: int) -> Tuple[Optional[float], str]:
+                    if len(close) < min_len:
+                        return None, "insufficient_history"
+                    val = series.iloc[-1]
+                    if pd.isna(val):
+                        return None, "data_unavailable"
+                    return round(float(val), 4), "ok"
 
-        def _latest(series: pd.Series, min_len: int) -> Tuple[Optional[float], str]:
-            if len(close) < min_len:
-                return None, "insufficient_history"
-            val = series.iloc[-1]
-            if pd.isna(val):
-                return None, "data_unavailable"
-            return round(float(val), 4), "ok"
+                technicals = {}
+                series_map = {
+                    "ma5": (ma5, 5),
+                    "ma10": (ma10, 10),
+                    "ma20": (ma20, 20),
+                    "ma60": (ma60, 60),
+                    "rsi14": (rsi14, 15),
+                    "macd": (macd, 35),
+                    "macd_signal": (macd_signal, 35),
+                    "macd_hist": (macd_hist, 35),
+                }
+                for name, (series, min_len) in series_map.items():
+                    value, status = _latest(series, min_len)
+                    technicals[name] = {
+                        "value": value,
+                        "status": status,
+                        "source": source_name,
+                    }
 
-        technicals: Dict[str, Dict[str, Any]] = {}
-        series_map = {
-            "ma5": (ma5, 5),
-            "ma10": (ma10, 10),
-            "ma20": (ma20, 20),
-            "ma60": (ma60, 60),
-            "rsi14": (rsi14, 15),
-            "macd": (macd, 35),
-            "macd_signal": (macd_signal, 35),
-            "macd_hist": (macd_hist, 35),
-        }
-        for name, (series, min_len) in series_map.items():
-            value, status = _latest(series, min_len)
-            technicals[name] = {
+                vwap_value = None
+                vwap_status = "data_unavailable"
+                if "vwap" in df.columns:
+                    df["vwap"] = pd.to_numeric(df["vwap"], errors="coerce")
+                    vwap_series = df["vwap"].dropna()
+                    if not vwap_series.empty:
+                        vwap_value = round(float(vwap_series.iloc[-1]), 4)
+                        vwap_status = "ok"
+                technicals["vwap"] = {
+                    "value": vwap_value,
+                    "status": vwap_status,
+                    "source": source_name,
+                }
+
+        for metric_name, zero_is_missing in (
+            ("ma5", True),
+            ("ma10", True),
+            ("ma20", True),
+            ("ma60", True),
+            ("rsi14", False),
+            ("vwap", True),
+        ):
+            node = preferred_api_indicators.get(metric_name)
+            if not isinstance(node, dict):
+                continue
+            value = self._safe_indicator_number(node.get("value"), zero_is_missing=zero_is_missing)
+            if value is None:
+                continue
+            technicals[metric_name] = {
                 "value": value,
-                "status": status,
-                "source": "local_from_ohlcv",
+                "status": str(node.get("status") or "ok"),
+                "source": str(node.get("source") or "api"),
             }
 
-        if technicals["ma20"]["status"] != "ok" and alpha_indicators.get("sma20") is not None:
-            technicals["ma20"] = {
-                "value": round(float(alpha_indicators["sma20"]), 4),
-                "status": "ok",
-                "source": "alpha_vantage_fallback",
-            }
-        if technicals["ma60"]["status"] != "ok" and alpha_indicators.get("sma60") is not None:
-            technicals["ma60"] = {
-                "value": round(float(alpha_indicators["sma60"]), 4),
-                "status": "ok",
-                "source": "alpha_vantage_fallback",
-            }
-        if technicals["rsi14"]["status"] != "ok" and alpha_indicators.get("rsi14") is not None:
-            technicals["rsi14"] = {
-                "value": round(float(alpha_indicators["rsi14"]), 4),
-                "status": "ok",
-                "source": "alpha_vantage_fallback",
-            }
         return technicals
 
     @staticmethod
@@ -1124,46 +2391,260 @@ class StockAnalysisPipeline:
         fundamental_context: Optional[Dict[str, Any]],
         alpha_overview: Optional[Dict[str, Any]] = None,
         yfinance_fundamentals: Optional[Dict[str, Any]] = None,
+        yfinance_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        fmp_fundamentals: Optional[Dict[str, Any]] = None,
+        fmp_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        finnhub_fundamentals: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         payload = ((fundamental_context or {}).get("valuation") or {}).get("data", {})
         raw = payload if isinstance(payload, dict) else {}
         alpha = alpha_overview if isinstance(alpha_overview, dict) else {}
         yf_data = yfinance_fundamentals if isinstance(yfinance_fundamentals, dict) else {}
+        yf_quarterly = yfinance_quarterly_income if isinstance(yfinance_quarterly_income, list) else []
+        fmp_data = fmp_fundamentals if isinstance(fmp_fundamentals, dict) else {}
+        fmp_quarterly = fmp_quarterly_income if isinstance(fmp_quarterly_income, list) else []
+        finnhub_data = finnhub_fundamentals if isinstance(finnhub_fundamentals, dict) else {}
+        yf_meta = yf_data.get("_meta") if isinstance(yf_data.get("_meta"), dict) else {}
+        fmp_meta = fmp_data.get("_meta") if isinstance(fmp_data.get("_meta"), dict) else {}
+        source_meta_periods = {
+            "yfinance": yf_meta.get("field_periods") if isinstance(yf_meta.get("field_periods"), dict) else {},
+            "fmp": fmp_meta.get("field_periods") if isinstance(fmp_meta.get("field_periods"), dict) else {},
+        }
+        source_meta_sources = {
+            "yfinance": yf_meta.get("field_sources") if isinstance(yf_meta.get("field_sources"), dict) else {},
+            "fmp": fmp_meta.get("field_sources") if isinstance(fmp_meta.get("field_sources"), dict) else {},
+        }
         field_sources: Dict[str, str] = {}
+        field_periods: Dict[str, str] = {}
+
+        def is_missing(value: Any) -> bool:
+            if value is None:
+                return True
+            if isinstance(value, str):
+                return str(value).strip() in {"", "N/A", "None", "null", "nan"}
+            return False
+
+        zero_invalid_fields = {
+            "marketCap",
+            "trailingPE",
+            "forwardPE",
+            "priceToBook",
+            "beta",
+            "fiftyTwoWeekHigh",
+            "fiftyTwoWeekLow",
+            "sharesOutstanding",
+            "floatShares",
+            "totalRevenue",
+        }
+
+        def infer_period(field_name: str, source_name: str, raw_key: str) -> str:
+            meta_period = source_meta_periods.get(source_name, {}).get(field_name)
+            if isinstance(meta_period, str) and meta_period.strip():
+                return meta_period
+            if field_name == "trailingPE":
+                return "ttm"
+            if field_name == "forwardPE":
+                return "consensus"
+            if field_name in {"marketCap", "priceToBook", "sharesOutstanding", "floatShares", "debtToEquity", "currentRatio"}:
+                return "latest"
+            if field_name in {"fiftyTwoWeekHigh", "fiftyTwoWeekLow"}:
+                return "rolling_52w"
+            if field_name in {"grossMargins", "operatingMargins", "returnOnEquity", "returnOnAssets"}:
+                return "ttm"
+            if raw_key in {"QuarterlyRevenueGrowthYOY", "QuarterlyEarningsGrowthYOY"}:
+                return "latest_quarter_yoy"
+            if field_name in {"revenueGrowth", "netIncomeGrowth"}:
+                return "provider_reported_growth"
+            if field_name in {"totalRevenue", "netIncome", "freeCashflow", "operatingCashflow"}:
+                if source_name in {"yfinance", "fmp", "finnhub", "fmp_quarterly", "yfinance_quarterly"}:
+                    return "ttm"
+                return "provider_reported_total"
+            return "latest"
+
+        def resolve_source_label(field_name: str, source_name: str) -> str:
+            meta_source = source_meta_sources.get(source_name, {}).get(field_name)
+            if isinstance(meta_source, str) and meta_source.strip():
+                return meta_source
+            return source_name
+
+        def first_numeric(value: Any) -> Optional[float]:
+            if isinstance(value, bool) or value is None:
+                return None
+            if isinstance(value, (int, float)):
+                return float(value)
+            try:
+                return float(str(value).strip())
+            except (TypeError, ValueError):
+                return None
+
+        def sum_recent_quarters(rows: List[Dict[str, Any]], key: str, quarters: int = 4) -> Optional[float]:
+            samples: List[float] = []
+            for row in rows[:quarters]:
+                if not isinstance(row, dict):
+                    return None
+                value = first_numeric(row.get(key))
+                if value is None:
+                    return None
+                samples.append(value)
+            if len(samples) != quarters:
+                return None
+            return round(sum(samples), 4)
+
+        def growth_from_values(curr: Any, prev: Any) -> Optional[float]:
+            curr_value = first_numeric(curr)
+            prev_value = first_numeric(prev)
+            if curr_value is None or prev_value is None or prev_value == 0:
+                return None
+            return round((curr_value - prev_value) / abs(prev_value), 4)
+
+        def derive_quarterly_metric(rows: List[Dict[str, Any]], key: str) -> Tuple[Optional[float], Optional[str]]:
+            ttm_value = sum_recent_quarters(rows, key, quarters=4)
+            if ttm_value is not None:
+                return ttm_value, "ttm"
+            latest_value = first_numeric(rows[0].get(key)) if rows else None
+            if latest_value is not None:
+                return latest_value, "latest_quarter"
+            return None, None
+
+        def derive_quarterly_growth(rows: List[Dict[str, Any]], key: str) -> Tuple[Optional[float], Optional[str]]:
+            latest_ttm = sum_recent_quarters(rows, key, quarters=4)
+            previous_ttm = sum_recent_quarters(rows[4:], key, quarters=4) if len(rows) >= 8 else None
+            growth = growth_from_values(latest_ttm, previous_ttm)
+            if growth is not None:
+                return growth, "ttm_yoy"
+            if len(rows) >= 5:
+                growth = growth_from_values(rows[0].get(key), rows[4].get(key))
+                if growth is not None:
+                    return growth, "latest_quarter_yoy"
+            if len(rows) >= 2:
+                growth = growth_from_values(rows[0].get(key), rows[1].get(key))
+                if growth is not None:
+                    return growth, "latest_quarter_qoq"
+            return None, None
+
+        source_datasets = {
+            "yfinance": yf_data,
+            "fundamental_context": raw,
+            "fmp": fmp_data,
+            "finnhub": finnhub_data,
+            "alpha_vantage_overview": alpha,
+        }
+        source_priority_map = {
+            "returnOnEquity": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "returnOnAssets": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "grossMargins": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "operatingMargins": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "debtToEquity": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "currentRatio": ("fmp", "finnhub", "yfinance", "fundamental_context", "alpha_vantage_overview"),
+            "freeCashflow": ("fmp", "yfinance", "fundamental_context", "finnhub", "alpha_vantage_overview"),
+            "operatingCashflow": ("fmp", "yfinance", "fundamental_context", "finnhub", "alpha_vantage_overview"),
+            "totalRevenue": ("fmp", "yfinance", "fundamental_context", "finnhub", "alpha_vantage_overview"),
+            "netIncome": ("fmp", "yfinance", "fundamental_context", "finnhub", "alpha_vantage_overview"),
+        }
 
         def pick(field_name: str, *keys: str) -> Any:
-            for key in keys:
-                val = yf_data.get(key)
-                if val not in (None, "", "N/A", 0):
-                    field_sources[field_name] = "yfinance"
-                    return val
-            for key in keys:
-                val = raw.get(key)
-                if val not in (None, "", "N/A", 0):
-                    field_sources[field_name] = "fundamental_context"
-                    return val
-            for key in keys:
-                val = alpha.get(key)
-                if val not in (None, "", "N/A", 0):
-                    field_sources[field_name] = "alpha_vantage_overview"
+            source_names = source_priority_map.get(
+                field_name,
+                ("yfinance", "fundamental_context", "fmp", "finnhub", "alpha_vantage_overview"),
+            )
+            for source_name in source_names:
+                dataset = source_datasets.get(source_name, {})
+                for key in keys:
+                    val = dataset.get(key)
+                    if is_missing(val):
+                        continue
+                    numeric_val = first_numeric(val)
+                    if field_name in zero_invalid_fields and numeric_val == 0:
+                        continue
+                    field_sources[field_name] = resolve_source_label(field_name, source_name)
+                    field_periods[field_name] = infer_period(field_name, source_name, key)
                     return val
             return None
+
+        quarterly_candidates: List[Tuple[str, List[Dict[str, Any]]]] = []
+        if fmp_quarterly:
+            quarterly_candidates.append(("fmp_quarterly", fmp_quarterly))
+        if yf_quarterly:
+            quarterly_candidates.append(("yfinance_quarterly", yf_quarterly))
+
+        derived_ttm: Dict[str, Any] = {}
+        for source_name, rows in quarterly_candidates:
+            revenue_value, revenue_period = derive_quarterly_metric(rows, "revenue")
+            net_income_value, net_income_period = derive_quarterly_metric(rows, "net_income")
+            operating_cashflow_value, operating_cashflow_period = derive_quarterly_metric(rows, "operating_cashflow")
+            free_cashflow_value, free_cashflow_period = derive_quarterly_metric(rows, "free_cash_flow")
+            revenue_growth_value, revenue_growth_period = derive_quarterly_growth(rows, "revenue")
+            net_income_growth_value, net_income_growth_period = derive_quarterly_growth(rows, "net_income")
+
+            if revenue_value is not None and "totalRevenue" not in derived_ttm:
+                derived_ttm["totalRevenue"] = revenue_value
+                field_sources["totalRevenue"] = resolve_source_label("totalRevenue", source_name)
+                field_periods["totalRevenue"] = revenue_period or "ttm"
+            if net_income_value is not None and "netIncome" not in derived_ttm:
+                derived_ttm["netIncome"] = net_income_value
+                field_sources["netIncome"] = resolve_source_label("netIncome", source_name)
+                field_periods["netIncome"] = net_income_period or "ttm"
+            if operating_cashflow_value is not None and "operatingCashflow" not in derived_ttm:
+                derived_ttm["operatingCashflow"] = operating_cashflow_value
+                field_sources["operatingCashflow"] = resolve_source_label("operatingCashflow", source_name)
+                field_periods["operatingCashflow"] = operating_cashflow_period or "ttm"
+            if free_cashflow_value is not None and "freeCashflow" not in derived_ttm:
+                derived_ttm["freeCashflow"] = free_cashflow_value
+                field_sources["freeCashflow"] = resolve_source_label("freeCashflow", source_name)
+                field_periods["freeCashflow"] = free_cashflow_period or "ttm"
+            if revenue_growth_value is not None and "revenueGrowth" not in derived_ttm:
+                derived_ttm["revenueGrowth"] = revenue_growth_value
+                field_sources["revenueGrowth"] = resolve_source_label("revenueGrowth", source_name)
+                field_periods["revenueGrowth"] = revenue_growth_period or "ttm_yoy"
+            if net_income_growth_value is not None and "netIncomeGrowth" not in derived_ttm:
+                derived_ttm["netIncomeGrowth"] = net_income_growth_value
+                field_sources["netIncomeGrowth"] = resolve_source_label("netIncomeGrowth", source_name)
+                field_periods["netIncomeGrowth"] = net_income_growth_period or "ttm_yoy"
 
         normalized = {
             "marketCap": pick("marketCap", "marketCap", "total_market_cap", "market_cap", "MarketCapitalization"),
             "trailingPE": pick("trailingPE", "trailingPE", "pe_ttm", "pe", "PERatio"),
             "forwardPE": pick("forwardPE", "forwardPE", "forward_pe", "ForwardPE"),
-            "totalRevenue": pick("totalRevenue", "totalRevenue", "total_revenue", "revenue", "RevenueTTM"),
-            "revenueGrowth": pick("revenueGrowth", "revenueGrowth", "revenue_growth", "QuarterlyRevenueGrowthYOY"),
-            "grossMargins": pick("grossMargins", "grossMargins", "gross_margin", "GrossMargin", "GrossProfitTTM"),
+            "priceToBook": pick("priceToBook", "priceToBook", "pb_ratio", "pb", "PriceToBookRatio"),
+            "beta": pick("beta", "beta", "Beta"),
+            "fiftyTwoWeekHigh": pick("fiftyTwoWeekHigh", "fiftyTwoWeekHigh", "52week_high", "52WeekHigh"),
+            "fiftyTwoWeekLow": pick("fiftyTwoWeekLow", "fiftyTwoWeekLow", "52week_low", "52WeekLow"),
+            "sharesOutstanding": pick("sharesOutstanding", "sharesOutstanding", "shares_outstanding", "SharesOutstanding"),
+            "floatShares": pick("floatShares", "floatShares", "float_shares", "FloatShares"),
+            "totalRevenue": derived_ttm.get("totalRevenue") if "totalRevenue" in derived_ttm else pick("totalRevenue", "totalRevenue", "total_revenue", "revenue", "RevenueTTM"),
+            "revenueGrowth": derived_ttm.get("revenueGrowth") if "revenueGrowth" in derived_ttm else pick("revenueGrowth", "revenueGrowth", "revenue_growth", "QuarterlyRevenueGrowthYOY"),
+            "netIncome": derived_ttm.get("netIncome") if "netIncome" in derived_ttm else pick("netIncome", "netIncome", "net_income", "NetIncome", "NetIncomeTTM"),
+            "netIncomeGrowth": derived_ttm.get("netIncomeGrowth") if "netIncomeGrowth" in derived_ttm else pick("netIncomeGrowth", "netIncomeGrowth", "net_income_growth", "QuarterlyEarningsGrowthYOY"),
+            "grossMargins": pick("grossMargins", "grossMargins", "gross_margin", "GrossMargin"),
             "operatingMargins": pick("operatingMargins", "operatingMargins", "operating_margin", "OperatingMarginTTM"),
-            "freeCashflow": pick("freeCashflow", "freeCashflow", "free_cashflow"),
-            "operatingCashflow": pick("operatingCashflow", "operatingCashflow", "operating_cashflow"),
+            "freeCashflow": derived_ttm.get("freeCashflow") if "freeCashflow" in derived_ttm else pick("freeCashflow", "freeCashflow", "free_cashflow"),
+            "operatingCashflow": derived_ttm.get("operatingCashflow") if "operatingCashflow" in derived_ttm else pick("operatingCashflow", "operatingCashflow", "operating_cashflow"),
             "debtToEquity": pick("debtToEquity", "debtToEquity", "debt_to_equity"),
             "currentRatio": pick("currentRatio", "currentRatio", "current_ratio"),
             "returnOnEquity": pick("returnOnEquity", "returnOnEquity", "roe", "ReturnOnEquityTTM"),
             "returnOnAssets": pick("returnOnAssets", "returnOnAssets", "roa", "ReturnOnAssetsTTM"),
         }
+
+        for field_name in ("returnOnEquity", "returnOnAssets"):
+            period = str(field_periods.get(field_name) or "").strip().lower().replace("-", "_")
+            source = str(field_sources.get(field_name) or "").strip().lower().replace("-", "_")
+            if normalized.get(field_name) is None:
+                continue
+            if period and period != "ttm":
+                field_periods[field_name] = "ttm_pending_validation"
+            elif source in {"fundamental_context", "alpha_vantage_overview"}:
+                field_periods[field_name] = "ttm_pending_validation"
+
+        for field_name in ("freeCashflow", "operatingCashflow"):
+            period = str(field_periods.get(field_name) or "").strip().lower().replace("-", "_")
+            source = str(field_sources.get(field_name) or "").strip().lower().replace("-", "_")
+            if normalized.get(field_name) is None:
+                continue
+            if not period:
+                field_periods[field_name] = "ttm_pending_validation"
+                continue
+            if period == "provider_reported_total" and source in {"fundamental_context", "alpha_vantage_overview", "finnhub"}:
+                field_periods[field_name] = "ttm_pending_validation"
         missing = [k for k, v in normalized.items() if v in (None, "", "N/A")]
         insights = {}
         pe = normalized.get("trailingPE")
@@ -1215,6 +2696,7 @@ class StockAnalysisPipeline:
             "status": "partial" if missing else "ok",
             "missing_fields": missing,
             "field_sources": field_sources,
+            "field_periods": field_periods,
             "source": "yfinance_overview_fallback_chain" if field_sources else "fundamental_pipeline",
         }
 
@@ -1222,18 +2704,22 @@ class StockAnalysisPipeline:
     def _build_earnings_analysis_block(
         fundamental_context: Optional[Dict[str, Any]],
         yfinance_quarterly_income: Optional[List[Dict[str, Any]]] = None,
+        fmp_quarterly_income: Optional[List[Dict[str, Any]]] = None,
         alpha_quarterly_income: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         earnings_data = ((fundamental_context or {}).get("earnings") or {}).get("data", {})
         yfinance_income = yfinance_quarterly_income if isinstance(yfinance_quarterly_income, list) else []
+        fmp_income = fmp_quarterly_income if isinstance(fmp_quarterly_income, list) else []
         alpha_income = alpha_quarterly_income if isinstance(alpha_quarterly_income, list) else []
-        if not isinstance(earnings_data, dict) and not yfinance_income and not alpha_income:
+        if not isinstance(earnings_data, dict) and not yfinance_income and not fmp_income and not alpha_income:
             return {
                 "quarterly_series": [],
                 "derived_metrics": {},
                 "summary_flags": ["earnings_data_unavailable"],
                 "narrative_insights": ["财报数据不足，无法形成完整趋势判断"],
                 "field_sources": {},
+                "reporting_basis": "latest_quarter",
+                "summary_basis": None,
                 "status": "partial",
             }
         field_sources: Dict[str, str] = {}
@@ -1243,12 +2729,15 @@ class StockAnalysisPipeline:
         elif yfinance_income:
             quarterly = yfinance_income
             field_sources["quarterly_series"] = "yfinance"
+        elif fmp_income:
+            quarterly = fmp_income
+            field_sources["quarterly_series"] = "fmp_income_statement"
         elif alpha_income:
             quarterly = alpha_income
             field_sources["quarterly_series"] = "alpha_vantage_income_statement"
         if not isinstance(quarterly, list):
             quarterly = []
-        quarterly = quarterly[:4]
+        quarterly = quarterly[:8]
         trend = {}
         flags = []
         if quarterly:
@@ -1270,10 +2759,10 @@ class StockAnalysisPipeline:
             trend["loss_status"] = "loss" if isinstance(q0.get("net_income"), (int, float)) and q0.get("net_income") < 0 else "profit"
             if isinstance(q0.get("revenue"), (int, float)) and isinstance(q0.get("gross_profit"), (int, float)) and q0.get("revenue"):
                 trend["margin_trend"] = round(q0.get("gross_profit") / q0.get("revenue"), 4)
-        if len(quarterly) >= 4:
-            q0, q3 = quarterly[0], quarterly[3]
-            trend["yoy_revenue_growth"] = _delta(q0.get("revenue"), q3.get("revenue"))
-            trend["yoy_net_income_change"] = _delta(q0.get("net_income"), q3.get("net_income"))
+        if len(quarterly) >= 5:
+            q0, q4 = quarterly[0], quarterly[4]
+            trend["yoy_revenue_growth"] = _delta(q0.get("revenue"), q4.get("revenue"))
+            trend["yoy_net_income_change"] = _delta(q0.get("net_income"), q4.get("net_income"))
 
         recent_net_income = [x.get("net_income") for x in quarterly if isinstance(x, dict)]
         if recent_net_income:
@@ -1302,6 +2791,10 @@ class StockAnalysisPipeline:
             "earnings_flags": flags or ["earnings_partial"],
             "narrative_insights": narrative,
             "field_sources": field_sources,
+            "reporting_basis": "latest_quarter",
+            "summary_basis": "yoy" if isinstance(trend.get("yoy_revenue_growth"), (int, float)) or isinstance(trend.get("yoy_net_income_change"), (int, float)) else (
+                "qoq" if isinstance(trend.get("qoq_revenue_growth"), (int, float)) or isinstance(trend.get("qoq_net_income_change"), (int, float)) else None
+            ),
             "status": "ok" if flags else "partial",
         }
 

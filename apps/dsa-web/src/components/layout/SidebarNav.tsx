@@ -11,6 +11,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 type SidebarNavProps = {
   collapsed?: boolean;
   onNavigate?: () => void;
+  embeddedRail?: boolean;
 };
 
 type NavItem = {
@@ -30,23 +31,26 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'settings', label: '设置', to: '/settings', icon: Settings2 },
 ];
 
-export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNavigate }) => {
+export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNavigate, embeddedRail = false }) => {
   const { authEnabled, logout } = useAuth();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className={cn('mb-4 flex items-center gap-2 px-1', collapsed ? 'justify-center' : '')}>
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-gradient text-[hsl(var(--primary-foreground))] shadow-[0_12px_28px_var(--nav-brand-shadow)]">
+    <div className={cn('flex flex-col', embeddedRail ? 'h-auto' : 'h-full')}>
+      <div className={cn(embeddedRail ? 'mb-3 flex items-center gap-2 px-1' : 'mb-4 flex items-center gap-2 px-1', collapsed ? 'justify-center' : '')}>
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04] text-cyan shadow-[0_12px_28px_var(--nav-brand-shadow)]">
           <BarChart3 className="h-5 w-5" />
         </div>
         {!collapsed ? (
-          <p className="min-w-0 truncate text-sm font-semibold text-foreground">DSA</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-[0.12em] text-foreground">DSA</p>
+            <p className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-text">Terminal</p>
+          </div>
         ) : null}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5" aria-label="主导航">
+      <nav className={cn('flex flex-col gap-1.5', embeddedRail ? '' : 'flex-1')} aria-label="主导航">
         {NAV_ITEMS.map(({ key, label, to, icon: Icon, exact, badge }) => (
           <NavLink
             key={key}
@@ -56,12 +60,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
             aria-label={label}
             className={({ isActive }) =>
               cn(
-                'group relative flex items-center gap-3 border-y border-x-0 text-sm transition-all',
+                'group relative flex items-center gap-3 rounded-[1rem] border text-sm transition-all',
                 'h-[var(--nav-item-height)]',
                 collapsed ? 'justify-center px-0' : 'px-[var(--nav-item-padding-x)]',
                 isActive
-                  ? 'border-[var(--nav-active-border)] bg-[var(--nav-active-bg)] text-foreground shadow-[inset_0_0_15px_var(--nav-active-shadow)]'
-                  : 'border-transparent text-secondary-text hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
+                  ? 'border-[var(--nav-active-border)] bg-[var(--nav-active-bg)] text-foreground shadow-[inset_0_0_0_1px_var(--nav-active-shadow)]'
+                  : 'border-transparent text-secondary-text hover:border-white/6 hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
               )
             }
           >
@@ -70,7 +74,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                 {isActive && (
                   <motion.div 
                     layoutId="activeIndicator"
-                    className="absolute top-0 bottom-0 left-0 w-[var(--nav-indicator-width)] bg-[var(--nav-indicator-bg)] shadow-[0_0_10px_var(--nav-indicator-shadow)]"
+                    className="absolute bottom-2 left-1.5 top-2 w-[var(--nav-indicator-width)] rounded-full bg-[var(--nav-indicator-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2 }}
@@ -82,7 +86,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                   <span
                     data-testid="chat-completion-badge"
                     className={cn(
-                      'absolute right-3 h-2.5 w-2.5 rounded-full border-2 border-background bg-[var(--nav-badge-bg)] shadow-[0_0_10px_var(--nav-indicator-shadow)]',
+                      'absolute right-3 h-2.5 w-2.5 rounded-full border border-black bg-[var(--nav-badge-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]',
                       collapsed ? 'right-2 top-2' : ''
                     )}
                     aria-label="问股有新消息"
@@ -94,7 +98,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
         ))}
       </nav>
 
-      <div className="mt-4 mb-2">
+      <div className={cn(embeddedRail ? 'mt-3 mb-2' : 'mt-4 mb-2')}>
         <ThemeToggle variant="nav" collapsed={collapsed} />
       </div>
 
@@ -103,7 +107,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
           className={cn(
-            'mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl border border-transparent px-3 text-sm text-secondary-text transition-all hover:border-border/70 hover:bg-hover hover:text-foreground',
+            'mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 text-sm text-secondary-text transition-all hover:bg-white/[0.06] hover:text-foreground',
             collapsed ? 'justify-center px-2' : ''
           )}
         >

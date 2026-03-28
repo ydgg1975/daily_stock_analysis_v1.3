@@ -370,12 +370,15 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         sent_payloads = [call.kwargs.get("json", {}).get("content", "") for call in mock_post.call_args_list]
         merged = "\n".join(sent_payloads)
-        self.assertIn("1. 标题区", merged)
-        self.assertIn("2. 重要信息速览", merged)
-        self.assertIn("4. 当日行情", merged)
-        self.assertIn("7. 作战计划", merged)
+        self.assertIn("**评分 / 建议 / 趋势**", merged)
+        self.assertIn("**一句话结论**", merged)
+        self.assertIn("**核心行情**", merged)
+        self.assertIn("**技术定位**", merged)
+        self.assertIn("**作战计划**", merged)
         self.assertNotIn("|--|", merged)
         self.assertNotIn("| 字段 |", merged)
+        self.assertNotIn("1. 标题区", merged)
+        self.assertNotIn("4. 当日行情", merged)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_localizes_english_fallback(self, mock_get_config: mock.MagicMock):

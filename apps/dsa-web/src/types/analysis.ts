@@ -29,6 +29,10 @@ export interface ReportMeta {
   reportType: 'simple' | 'detailed' | 'full' | 'brief';
   reportLanguage?: ReportLanguage;
   createdAt: string;
+  marketTimestamp?: string;
+  marketSessionDate?: string;
+  newsPublishedAt?: string;
+  reportGeneratedAt?: string;
   currentPrice?: number;
   changePct?: number;
   modelUsed?: string;  // LLM model used for analysis
@@ -64,12 +68,179 @@ export interface ReportStrategy {
   takeProfit?: string;
 }
 
+export interface StandardReportField {
+  label: string;
+  value: string;
+  source?: string;
+  status?: string;
+  category?: string;
+}
+
+export interface StandardReportTag {
+  label: string;
+  value: string;
+}
+
+export interface StandardReportSummaryPanel {
+  stock?: string;
+  ticker?: string;
+  score?: number;
+  currentPrice?: string;
+  changeAmount?: string;
+  changePct?: string;
+  marketTime?: string;
+  marketSessionDate?: string;
+  sessionLabel?: string;
+  operationAdvice?: string;
+  trendPrediction?: string;
+  oneSentence?: string;
+  timeSensitivity?: string;
+  tags?: StandardReportTag[];
+}
+
+export interface StandardReportRegularMetrics {
+  price?: number;
+  prevClose?: number;
+  changeAmount?: number;
+  changePct?: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  amplitude?: number;
+  volume?: number;
+  amount?: number;
+  volumeRatio?: number;
+  turnoverRate?: number;
+  averagePrice?: number;
+  vwap?: number;
+}
+
+export interface StandardReportMarketBlock {
+  regularFields?: StandardReportField[];
+  extendedFields?: StandardReportField[];
+  consistencyWarnings?: string[];
+  regularPriceNumeric?: number;
+  regularMetrics?: StandardReportRegularMetrics;
+  timeContext?: Record<string, string | undefined>;
+}
+
+export interface StandardReportTableSection {
+  title: string;
+  fields: StandardReportField[];
+  note?: string;
+}
+
+export interface StandardReportVisualScore {
+  value?: number;
+  max?: number;
+}
+
+export interface StandardReportPricePosition {
+  currentPrice?: number;
+  ma20?: number;
+  ma60?: number;
+  distanceToMa20Pct?: number;
+  distanceToMa60Pct?: number;
+  vsMa20?: string;
+  vsMa60?: string;
+}
+
+export interface StandardReportRiskOpportunity {
+  positiveCount?: number;
+  riskCount?: number;
+  latestNewsCount?: number;
+}
+
+export interface StandardReportTrendStrength {
+  value?: number;
+  max?: number;
+  label?: string;
+}
+
+export interface StandardReportVisualBlocks {
+  score?: StandardReportVisualScore;
+  trendStrength?: StandardReportTrendStrength;
+  pricePosition?: StandardReportPricePosition;
+  riskOpportunity?: StandardReportRiskOpportunity;
+}
+
+export interface StandardReportHighlights {
+  positiveCatalysts?: string[];
+  riskAlerts?: string[];
+  latestNews?: string[];
+  newsValueGrade?: string;
+  sentimentSummary?: string;
+  earningsOutlook?: string;
+}
+
+export interface StandardReportBattlePlanItem {
+  label: string;
+  value: string;
+  tone?: string;
+}
+
+export interface StandardReportBattlePlanCompact {
+  cards?: StandardReportBattlePlanItem[];
+  notes?: StandardReportBattlePlanItem[];
+  warnings?: string[];
+}
+
+export interface StandardReportDecisionContext {
+  shortTermView?: string;
+  compositeView?: string;
+  adjustmentReason?: string;
+  changeReason?: string;
+  previousScore?: string;
+  scoreChange?: string;
+  scoreBreakdown?: StandardReportScoreBreakdownItem[];
+}
+
+export interface StandardReportScoreBreakdownItem {
+  label: string;
+  score?: number;
+  note?: string;
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'history' | string;
+}
+
+export interface StandardReportChecklistItem {
+  status: 'pass' | 'warn' | 'fail' | 'info' | 'na' | string;
+  icon: string;
+  text: string;
+}
+
+export interface StandardReport {
+  title?: Record<string, unknown>;
+  summaryPanel?: StandardReportSummaryPanel;
+  infoFields?: StandardReportField[];
+  positionAdvice?: Record<string, string | undefined>;
+  market?: StandardReportMarketBlock;
+  technicalFields?: StandardReportField[];
+  fundamentalFields?: StandardReportField[];
+  earningsFields?: StandardReportField[];
+  sentimentFields?: StandardReportField[];
+  tableSections?: {
+    market?: StandardReportTableSection;
+    technical?: StandardReportTableSection;
+    fundamental?: StandardReportTableSection;
+    earnings?: StandardReportTableSection;
+  };
+  visualBlocks?: StandardReportVisualBlocks;
+  decisionContext?: StandardReportDecisionContext;
+  highlights?: StandardReportHighlights;
+  battleFields?: StandardReportField[];
+  battlePlanCompact?: StandardReportBattlePlanCompact;
+  battleWarnings?: string[];
+  checklist?: string[];
+  checklistItems?: StandardReportChecklistItem[];
+}
+
 /** Details section */
 export interface ReportDetails {
   newsContent?: string;
   rawResult?: Record<string, unknown>;
   contextSnapshot?: Record<string, unknown>;
-  standardReport?: Record<string, unknown>;
+  standardReport?: StandardReport;
   financialReport?: Record<string, unknown>;
   dividendMetrics?: Record<string, unknown>;
 }

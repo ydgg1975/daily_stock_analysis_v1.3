@@ -252,14 +252,483 @@ class HistoryService:
             display_points[field] = str(db_value) if db_value is not None else None
         return display_points
 
+    @staticmethod
+    def _parse_context_snapshot(context_snapshot: Any) -> Any:
+        return parse_json_field(context_snapshot)
+
+    @staticmethod
+    def _is_context_missing(value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            text = value.strip()
+            return text in {"", "N/A", "NA", "None", "null", "数据缺失", "-", "--"} or text.startswith("NA（")
+        if isinstance(value, (list, tuple, set, dict)):
+            return len(value) == 0
+        return False
+
+    @classmethod
+    def _is_placeholder_zero(cls, key: str, value: Any, zero_missing_keys: Optional[set[str]] = None) -> bool:
+        if key not in (zero_missing_keys or set()):
+            return False
+        if value is None:
+            return True
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return True
+            try:
+                return float(text.rstrip("%")) == 0.0
+            except (TypeError, ValueError):
+                return False
+        if isinstance(value, (int, float)):
+            return float(value) == 0.0
+        return False
+
+    @classmethod
+    def _merge_missing_dict(
+        cls,
+        base: Any,
+        supplement: Any,
+        *,
+        zero_missing_keys: Optional[set[str]] = None,
+    ) -> Dict[str, Any]:
+        result = dict(base) if isinstance(base, dict) else {}
+        if not isinstance(supplement, dict):
+            return result
+        for key, value in supplement.items():
+            current = result.get(key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                result[key] = cls._merge_missing_dict(
+                    current,
+                    value,
+                    zero_missing_keys=zero_missing_keys,
+                )
+                continue
+            if (
+                key not in result
+                or cls._is_context_missing(current)
+                or cls._is_placeholder_zero(key, current, zero_missing_keys)
+            ):
+                result[key] = value
+        return result
+
+    @classmethod
+    def _first_present(cls, *values: Any) -> Any:
+        for value in values:
+            if not cls._is_context_missing(value):
+                return value
+        return None
+
+    @staticmethod
+    def _to_float(value: Any) -> Optional[float]:
+        if value is None or isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+        text = str(value).strip()
+        if not text or text.startswith("NA（"):
+            return None
+        try:
+            return float(text.rstrip("%").replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _has_meaningful_change(value: Optional[float], *, tolerance: float = 0.005) -> bool:
+        return value is not None and abs(value) > tolerance
+
+    @classmethod
+    def _derive_prev_close(
+        cls,
+        close: Any,
+        *,
+        change_amount: Any = None,
+        change_pct: Any = None,
+    ) -> Optional[float]:
+        close_value = cls._to_float(close)
+        if close_value is None:
+            return None
+        change_amount_value = cls._to_float(change_amount)
+        change_pct_value = cls._to_float(change_pct)
+        if change_amount_value is not None and (
+            abs(change_amount_value) > 0.005 or not cls._has_meaningful_change(change_pct_value)
+        ):
+            derived = close_value - change_amount_value
+            if derived > 0:
+                return derived
+        if change_pct_value is not None:
+            denominator = 1 + (change_pct_value / 100.0)
+            if abs(denominator) > 1e-9:
+                derived = close_value / denominator
+                if derived > 0:
+                    return derived
+        return None
+
+    @classmethod
+    def _repair_market_snapshot_price_basis(
+        cls,
+        payload: Dict[str, Any],
+        *,
+        preferred_prev_close: Any = None,
+    ) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+
+        repaired = dict(payload)
+        close = cls._to_float(repaired.get("close"))
+        prev_close = cls._to_float(repaired.get("prev_close"))
+        change_amount = cls._to_float(repaired.get("change_amount"))
+        change_pct = cls._to_float(repaired.get("pct_chg"))
+        if change_pct is None:
+            change_pct = cls._to_float(repaired.get("change_pct"))
+
+        preferred_prev_close_value = cls._to_float(preferred_prev_close)
+        derived_prev_close = preferred_prev_close_value or cls._derive_prev_close(
+            close,
+            change_amount=change_amount,
+            change_pct=change_pct,
+        )
+        suspicious_flat = (
+            close is not None
+            and prev_close is not None
+            and abs(close - prev_close) <= 0.01
+            and (
+                cls._has_meaningful_change(change_amount)
+                or cls._has_meaningful_change(change_pct)
+                or (
+                    preferred_prev_close_value is not None
+                    and abs(preferred_prev_close_value - prev_close) > 0.05
+                )
+            )
+        )
+
+        if derived_prev_close is not None and (prev_close is None or suspicious_flat):
+            prev_close = derived_prev_close
+            repaired["prev_close"] = round(derived_prev_close, 4)
+
+        if close is not None and prev_close not in (None, 0):
+            recalculated_change = close - prev_close
+            recalculated_pct = (recalculated_change / prev_close) * 100
+            if (
+                repaired.get("change_amount") is None
+                or suspicious_flat
+                or abs((change_amount or 0.0) - recalculated_change) > 0.05
+            ):
+                repaired["change_amount"] = round(recalculated_change, 2)
+            if (
+                repaired.get("pct_chg") is None
+                or suspicious_flat
+                or change_pct is None
+                or abs(change_pct - recalculated_pct) > 0.05
+            ):
+                repaired["pct_chg"] = round(recalculated_pct, 2)
+            if "change_pct" in repaired or change_pct is not None:
+                repaired["change_pct"] = round(recalculated_pct, 2)
+
+        return repaired
+
+    @classmethod
+    def _extract_time_contract(cls, context_snapshot: Any) -> Dict[str, Any]:
+        snapshot_obj = cls._parse_context_snapshot(context_snapshot)
+        enhanced = snapshot_obj.get("enhanced_context") if isinstance(snapshot_obj, dict) else {}
+        if not isinstance(enhanced, dict):
+            return {}
+        market_timestamp = enhanced.get("market_timestamp")
+        market_session_date = enhanced.get("market_session_date")
+        if market_timestamp:
+            try:
+                derived = datetime.fromisoformat(str(market_timestamp).replace("Z", "+00:00")).date().isoformat()
+                market_session_date = derived
+            except ValueError:
+                pass
+        return {
+            "market_timestamp": market_timestamp,
+            "market_session_date": market_session_date,
+            "news_published_at": enhanced.get("news_published_at"),
+            "report_generated_at": enhanced.get("report_generated_at"),
+            "session_type": enhanced.get("session_type"),
+        }
+
+    @classmethod
+    def _merge_market_snapshot_from_context(
+        cls,
+        market_snapshot: Any,
+        context_snapshot: Any,
+    ) -> Dict[str, Any]:
+        base = dict(market_snapshot) if isinstance(market_snapshot, dict) else {}
+        snapshot_obj = cls._parse_context_snapshot(context_snapshot)
+        if not isinstance(snapshot_obj, dict):
+            return base
+
+        enhanced = snapshot_obj.get("enhanced_context")
+        if not isinstance(enhanced, dict):
+            return base
+
+        today = enhanced.get("today") if isinstance(enhanced.get("today"), dict) else {}
+        yesterday = enhanced.get("yesterday") if isinstance(enhanced.get("yesterday"), dict) else {}
+        realtime = enhanced.get("realtime") if isinstance(enhanced.get("realtime"), dict) else {}
+        realtime_raw = snapshot_obj.get("realtime_quote_raw") if isinstance(snapshot_obj.get("realtime_quote_raw"), dict) else {}
+
+        prev_close = cls._first_present(
+            yesterday.get("close"),
+            realtime.get("pre_close"),
+            realtime_raw.get("pre_close"),
+            realtime_raw.get("previousClose"),
+            realtime_raw.get("regularMarketPreviousClose"),
+        )
+        high = cls._first_present(today.get("high"), realtime.get("high"), realtime_raw.get("high"))
+        low = cls._first_present(today.get("low"), realtime.get("low"), realtime_raw.get("low"))
+        close = cls._first_present(
+            today.get("close"),
+            realtime_raw.get("regularMarketPrice"),
+            realtime.get("price"),
+            realtime_raw.get("price"),
+        )
+        change_amount = None
+        amplitude = None
+        try:
+            if close is not None and prev_close not in (None, 0, "0", "0.0"):
+                change_amount = float(close) - float(prev_close)
+        except (TypeError, ValueError):
+            change_amount = None
+        try:
+            if high is not None and low is not None and prev_close not in (None, 0, "0", "0.0"):
+                amplitude = (float(high) - float(low)) / float(prev_close) * 100
+        except (TypeError, ValueError, ZeroDivisionError):
+            amplitude = None
+
+        supplement = {
+            "date": enhanced.get("date"),
+            "close": close,
+            "open": cls._first_present(today.get("open"), realtime.get("open_price"), realtime_raw.get("open")),
+            "high": high,
+            "low": low,
+            "prev_close": prev_close,
+            "pct_chg": cls._first_present(
+                today.get("pct_chg"),
+                realtime.get("change_pct"),
+                realtime_raw.get("change_pct"),
+                realtime_raw.get("pct_chg"),
+            ),
+            "change_amount": cls._first_present(
+                realtime.get("change_amount"),
+                realtime_raw.get("change_amount"),
+                change_amount,
+            ),
+            "amplitude": cls._first_present(
+                realtime.get("amplitude"),
+                realtime_raw.get("amplitude"),
+                amplitude,
+            ),
+            "volume": cls._first_present(today.get("volume"), realtime.get("volume"), realtime_raw.get("volume")),
+            "amount": cls._first_present(today.get("amount"), realtime.get("amount"), realtime_raw.get("amount")),
+            "price": cls._first_present(realtime.get("price"), realtime_raw.get("price")),
+            "volume_ratio": cls._first_present(realtime.get("volume_ratio"), realtime_raw.get("volume_ratio")),
+            "turnover_rate": cls._first_present(realtime.get("turnover_rate"), realtime_raw.get("turnover_rate")),
+            "source": cls._first_present(
+                today.get("data_source"),
+                yesterday.get("data_source"),
+                realtime.get("source"),
+                realtime_raw.get("source"),
+            ),
+            "session_type": cls._first_present(enhanced.get("session_type"), realtime.get("snapshot_type")),
+            "market_timestamp": cls._first_present(enhanced.get("market_timestamp"), realtime.get("market_timestamp")),
+            "pre_market_price": cls._first_present(realtime_raw.get("pre_market_price"), realtime_raw.get("preMarketPrice")),
+            "after_hours_price": cls._first_present(
+                realtime_raw.get("after_hours_price"),
+                realtime_raw.get("postMarketPrice"),
+                realtime_raw.get("afterHoursPrice"),
+            ),
+            "extended_price": cls._first_present(
+                realtime_raw.get("extended_price"),
+                realtime_raw.get("postMarketPrice"),
+                realtime_raw.get("preMarketPrice"),
+            ),
+            "extended_timestamp": cls._first_present(
+                realtime_raw.get("extended_timestamp"),
+                realtime_raw.get("postMarketTime"),
+                realtime_raw.get("preMarketTime"),
+            ),
+            "pb_ratio": cls._first_present(realtime.get("pb_ratio"), realtime_raw.get("pb_ratio")),
+            "total_mv": cls._first_present(realtime.get("total_mv"), realtime_raw.get("total_mv")),
+            "circ_mv": cls._first_present(realtime.get("circ_mv"), realtime_raw.get("circ_mv")),
+            "high_52w": cls._first_present(realtime.get("high_52w"), realtime_raw.get("high_52w")),
+            "low_52w": cls._first_present(realtime.get("low_52w"), realtime_raw.get("low_52w")),
+        }
+        if supplement.get("session_type") == "last_completed_session" and supplement.get("close") is not None:
+            supplement["price"] = supplement.get("close")
+        supplement = cls._repair_market_snapshot_price_basis(supplement)
+        merged = cls._merge_missing_dict(
+            base,
+            supplement,
+            zero_missing_keys={
+                "price",
+                "close",
+                "open",
+                "high",
+                "low",
+                "prev_close",
+                "volume",
+                "amount",
+                "volume_ratio",
+                "turnover_rate",
+                "pb_ratio",
+                "total_mv",
+                "circ_mv",
+                "high_52w",
+                "low_52w",
+            },
+        )
+        return cls._repair_market_snapshot_price_basis(
+            merged,
+            preferred_prev_close=supplement.get("prev_close"),
+        )
+
+    @classmethod
+    def _merge_dashboard_from_context(
+        cls,
+        dashboard: Any,
+        context_snapshot: Any,
+    ) -> Dict[str, Any]:
+        base = dict(dashboard) if isinstance(dashboard, dict) else {}
+        snapshot_obj = cls._parse_context_snapshot(context_snapshot)
+        if not isinstance(snapshot_obj, dict):
+            return base
+
+        enhanced = snapshot_obj.get("enhanced_context")
+        if not isinstance(enhanced, dict):
+            return base
+
+        structured = base.get("structured_analysis") if isinstance(base.get("structured_analysis"), dict) else {}
+        structured = cls._merge_missing_dict(
+            structured,
+            {
+                "time_context": {
+                    "market_timestamp": enhanced.get("market_timestamp"),
+                    "market_session_date": enhanced.get("market_session_date"),
+                    "report_generated_at": enhanced.get("report_generated_at"),
+                    "news_published_at": enhanced.get("news_published_at"),
+                    "session_type": enhanced.get("session_type"),
+                    "market_timezone": enhanced.get("market_timezone"),
+                },
+                "technicals": enhanced.get("technicals", {}),
+                "trend_analysis": enhanced.get("trend_analysis", {}),
+                "fundamentals": enhanced.get("fundamentals", {}),
+                "earnings_analysis": enhanced.get("earnings_analysis", {}),
+                "sentiment_analysis": enhanced.get("sentiment_analysis", {}),
+                "data_quality": enhanced.get("data_quality", {}),
+                "realtime_context": enhanced.get("realtime", {}),
+                "market_context": {
+                    "today": enhanced.get("today", {}),
+                    "yesterday": enhanced.get("yesterday", {}),
+                },
+                "fundamental_context": enhanced.get("fundamental_context", {}),
+            },
+            zero_missing_keys={
+                "price",
+                "volume",
+                "amount",
+                "volume_ratio",
+                "turnover_rate",
+                "ma5",
+                "ma10",
+                "ma20",
+                "ma60",
+                "vwap",
+                "trend_score",
+                "trend_strength",
+                "signal_score",
+                "marketCap",
+                "sharesOutstanding",
+                "floatShares",
+                "total_mv",
+                "circ_mv",
+                "pb_ratio",
+            },
+        )
+        base["structured_analysis"] = structured
+
+        data_persp = base.get("data_perspective") if isinstance(base.get("data_perspective"), dict) else {}
+        technicals = enhanced.get("technicals") if isinstance(enhanced.get("technicals"), dict) else {}
+        today = enhanced.get("today") if isinstance(enhanced.get("today"), dict) else {}
+        realtime = enhanced.get("realtime") if isinstance(enhanced.get("realtime"), dict) else {}
+        trend_analysis = enhanced.get("trend_analysis") if isinstance(enhanced.get("trend_analysis"), dict) else {}
+        trend_status = data_persp.get("trend_status") if isinstance(data_persp.get("trend_status"), dict) else {}
+        inferred_bullish = None
+        trend_status_text = str(trend_analysis.get("trend_status") or "").strip().lower()
+        if trend_status_text:
+            if "bull" in trend_status_text:
+                inferred_bullish = True
+            elif "bear" in trend_status_text:
+                inferred_bullish = False
+        trend_status = cls._merge_missing_dict(
+            trend_status,
+            {
+                "is_bullish": inferred_bullish,
+                "trend_score": trend_analysis.get("trend_strength"),
+                "signal_score": trend_analysis.get("signal_score"),
+                "ma_alignment": trend_analysis.get("ma_alignment"),
+            },
+            zero_missing_keys={"trend_score", "signal_score"},
+        )
+        price_position = data_persp.get("price_position") if isinstance(data_persp.get("price_position"), dict) else {}
+        price_position = cls._merge_missing_dict(
+            price_position,
+            {
+                "current_price": realtime.get("price") or today.get("close"),
+                "ma5": today.get("ma5") or ((technicals.get("ma5") or {}).get("value") if isinstance(technicals.get("ma5"), dict) else None),
+                "ma10": today.get("ma10") or ((technicals.get("ma10") or {}).get("value") if isinstance(technicals.get("ma10"), dict) else None),
+                "ma20": today.get("ma20") or ((technicals.get("ma20") or {}).get("value") if isinstance(technicals.get("ma20"), dict) else None),
+                "ma60": ((technicals.get("ma60") or {}).get("value") if isinstance(technicals.get("ma60"), dict) else None),
+                "bias_ma5": trend_analysis.get("bias_ma5"),
+            },
+            zero_missing_keys={"current_price", "ma5", "ma10", "ma20", "ma60", "vwap"},
+        )
+        volume_analysis = data_persp.get("volume_analysis") if isinstance(data_persp.get("volume_analysis"), dict) else {}
+        volume_analysis = cls._merge_missing_dict(
+            volume_analysis,
+            {
+                "volume_ratio": realtime.get("volume_ratio"),
+                "turnover_rate": realtime.get("turnover_rate"),
+                "volume_status": trend_analysis.get("volume_status"),
+                "volume_meaning": realtime.get("volume_ratio_desc"),
+            },
+            zero_missing_keys={"volume_ratio", "turnover_rate"},
+        )
+        data_persp["trend_status"] = trend_status
+        data_persp["price_position"] = price_position
+        data_persp["volume_analysis"] = volume_analysis
+        base["data_perspective"] = data_persp
+
+        intel = base.get("intelligence") if isinstance(base.get("intelligence"), dict) else {}
+        sentiment = enhanced.get("sentiment_analysis") if isinstance(enhanced.get("sentiment_analysis"), dict) else {}
+        if isinstance(sentiment, dict):
+            intel = cls._merge_missing_dict(
+                intel,
+                {
+                    "sentiment_summary": sentiment.get("sentiment_summary"),
+                    "company_sentiment": sentiment.get("company_sentiment"),
+                    "industry_sentiment": sentiment.get("industry_sentiment"),
+                    "regulatory_sentiment": sentiment.get("regulatory_sentiment"),
+                    "overall_confidence": sentiment.get("overall_confidence"),
+                },
+            )
+        base["intelligence"] = intel
+        return base
+
     def _record_to_detail_dict(self, record) -> Dict[str, Any]:
         """
         Convert an AnalysisHistory ORM record to a detail response dict.
         """
         raw_result = parse_json_field(record.raw_result)
+        context_snapshot = self._parse_context_snapshot(record.context_snapshot)
         standard_report = None
         if isinstance(raw_result, dict):
-            rebuilt = self._rebuild_analysis_result(raw_result, record)
+            rebuilt = self._rebuild_analysis_result(raw_result, record, context_snapshot=context_snapshot)
             if rebuilt is not None:
                 report_language = normalize_report_language(
                     raw_result.get("report_language")
@@ -273,13 +742,7 @@ class HistoryService:
         model_used = (raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None
         model_used = normalize_model_used(model_used)
         sniper_points = self._get_display_sniper_points(record, raw_result)
-
-        context_snapshot = None
-        if record.context_snapshot:
-            try:
-                context_snapshot = json.loads(record.context_snapshot)
-            except json.JSONDecodeError:
-                context_snapshot = record.context_snapshot
+        time_contract = self._extract_time_contract(context_snapshot)
 
         return {
             "id": record.id,
@@ -302,6 +765,11 @@ class HistoryService:
             "raw_result": raw_result,
             "context_snapshot": context_snapshot,
             "standard_report": standard_report,
+            "market_timestamp": time_contract.get("market_timestamp"),
+            "market_session_date": time_contract.get("market_session_date"),
+            "news_published_at": time_contract.get("news_published_at"),
+            "report_generated_at": time_contract.get("report_generated_at"),
+            "session_type": time_contract.get("session_type"),
         }
 
     def delete_history_records(self, record_ids: List[int]) -> int:
@@ -486,7 +954,11 @@ class HistoryService:
             )
 
         try:
-            result = self._rebuild_analysis_result(raw_result, record)
+            result = self._rebuild_analysis_result(
+                raw_result,
+                record,
+                context_snapshot=self._parse_context_snapshot(record.context_snapshot),
+            )
         except Exception as e:
             logger.error(f"get_markdown_report: failed to rebuild AnalysisResult for {record_id}: {e}", exc_info=True)
             raise MarkdownReportGenerationError(
@@ -535,7 +1007,8 @@ class HistoryService:
     def _rebuild_analysis_result(
         self,
         raw_result: Dict[str, Any],
-        record
+        record,
+        context_snapshot: Any = None,
     ) -> Optional[AnalysisResult]:
         """
         Rebuild an AnalysisResult object from stored raw_result dict.
@@ -549,8 +1022,14 @@ class HistoryService:
         """
         try:
             from src.analyzer import AnalysisResult
-            # Extract dashboard data if available
-            dashboard = raw_result.get("dashboard", {})
+            dashboard = self._merge_dashboard_from_context(
+                raw_result.get("dashboard", {}),
+                context_snapshot,
+            )
+            market_snapshot = self._merge_market_snapshot_from_context(
+                raw_result.get("market_snapshot"),
+                context_snapshot,
+            )
 
             # Build AnalysisResult with available data
             return AnalysisResult(
@@ -580,7 +1059,7 @@ class HistoryService:
                 key_points=raw_result.get("key_points", ""),
                 risk_warning=raw_result.get("risk_warning", ""),
                 buy_reason=raw_result.get("buy_reason", ""),
-                market_snapshot=raw_result.get("market_snapshot"),
+                market_snapshot=market_snapshot,
                 search_performed=raw_result.get("search_performed", False),
                 data_sources=raw_result.get("data_sources", ""),
                 success=raw_result.get("success", True),

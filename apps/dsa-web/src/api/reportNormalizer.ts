@@ -1,4 +1,4 @@
-import type { AnalysisReport, ReportMeta, ReportSummary } from '../types/analysis';
+import type { AnalysisReport, ReportMeta, ReportSummary, StandardReport } from '../types/analysis';
 
 interface ReportMetaFallback extends Partial<ReportMeta> {
   queryId?: string;
@@ -29,6 +29,22 @@ const toFiniteNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const toCamelKey = (key: string): string =>
+  key.replace(/_([a-z])/g, (_match, char: string) => char.toUpperCase());
+
+const camelizeDeep = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(camelizeDeep);
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+      acc[toCamelKey(key)] = camelizeDeep(entry);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
 export const normalizeAnalysisReport = (
   report: AnalysisReport,
   fallbackMeta: ReportMetaFallback = {},
@@ -38,10 +54,17 @@ export const normalizeAnalysisReport = (
   const details = toRecord(report.details);
   const rawResult = toRecord(details?.rawResult);
   const dashboard = toRecord(rawResult?.dashboard);
-  const standardReport =
+  const standardReport = (
     toRecord(details?.standardReport) ??
+    toRecord((details as Record<string, unknown> | undefined)?.standard_report) ??
+    toRecord(rawResult?.standardReport) ??
     toRecord(rawResult?.standard_report) ??
-    toRecord(dashboard?.standard_report);
+    toRecord(dashboard?.standardReport) ??
+    toRecord(dashboard?.standard_report)
+  );
+  const normalizedStandardReport = (
+    standardReport ? camelizeDeep(standardReport) : undefined
+  ) as StandardReport | undefined;
 
   const sentimentScore = toFiniteNumber(summary.sentimentScore) ?? DEFAULT_SENTIMENT_SCORE;
 
@@ -65,7 +88,7 @@ export const normalizeAnalysisReport = (
     details: report.details
       ? {
           ...report.details,
-          standardReport,
+          standardReport: normalizedStandardReport,
         }
       : report.details,
   };

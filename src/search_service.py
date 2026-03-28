@@ -253,6 +253,20 @@ class BaseSearchProvider(ABC):
                 search_time=elapsed
             )
 
+    def search_news(
+        self,
+        *,
+        stock_code: str,
+        stock_name: str,
+        query: str,
+        max_results: int = 5,
+        days: int = 7,
+        dimension: Optional[str] = None,
+    ) -> SearchResponse:
+        """Stock-news aware search hook. Providers can override for ticker-native APIs."""
+        _ = (stock_code, stock_name, dimension)
+        return self.search(query, max_results=max_results, days=days)
+
 
 class TavilySearchProvider(BaseSearchProvider):
     """
@@ -401,6 +415,198 @@ class TavilySearchProvider(BaseSearchProvider):
             return domain or '未知来源'
         except Exception:
             return '未知来源'
+
+
+class FinnhubNewsProvider(BaseSearchProvider):
+    """Finnhub company-news provider for US tickers."""
+
+    _US_TICKER_RE = re.compile(r"^[A-Z]{1,5}(?:\.[A-Z])?$")
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "Finnhub")
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        return SearchResponse(
+            query=query,
+            results=[],
+            provider=self.name,
+            success=False,
+            error_message="Finnhub 仅支持按股票代码查询公司新闻",
+        )
+
+    @classmethod
+    def _supports_symbol(cls, stock_code: str) -> bool:
+        candidate = (stock_code or "").strip().upper()
+        return bool(candidate and cls._US_TICKER_RE.match(candidate) and not is_us_index_code(candidate))
+
+    @staticmethod
+    def _rank_item_for_dimension(title: str, snippet: str, dimension: Optional[str]) -> int:
+        dimension_name = str(dimension or "").strip().lower()
+        payload = f"{title} {snippet}".lower()
+        if dimension_name == "risk_check":
+            keywords = ("lawsuit", "investigation", "sec", "regulation", "insider", "litigation", "risk")
+        elif dimension_name == "earnings":
+            keywords = ("earnings", "guidance", "revenue", "profit", "forecast", "quarter")
+        else:
+            keywords = ()
+        return sum(1 for keyword in keywords if keyword in payload)
+
+    def search_news(
+        self,
+        *,
+        stock_code: str,
+        stock_name: str,
+        query: str,
+        max_results: int = 5,
+        days: int = 7,
+        dimension: Optional[str] = None,
+    ) -> SearchResponse:
+        symbol = (stock_code or "").strip().upper()
+        if not self._supports_symbol(symbol):
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message="Finnhub 仅支持美股个股新闻",
+            )
+
+        api_key = self._get_next_key()
+        if not api_key:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=f"{self.name} 未配置 API Key",
+            )
+
+        start_time = time.time()
+        try:
+            today = datetime.now(timezone.utc).date()
+            from_date = (today - timedelta(days=max(1, int(days)))).isoformat()
+            to_date = today.isoformat()
+            response = _get_with_retry(
+                "https://finnhub.io/api/v1/company-news",
+                headers={},
+                params={"symbol": symbol, "from": from_date, "to": to_date, "token": api_key},
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("error"):
+                raise ValueError(str(payload.get("error")))
+            if not isinstance(payload, list):
+                payload = []
+
+            ranked_items = []
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("headline") or "").strip()
+                snippet = str(item.get("summary") or "").strip()
+                if not title and not snippet:
+                    continue
+                ranked_items.append(
+                    (
+                        self._rank_item_for_dimension(title, snippet, dimension),
+                        SearchResult(
+                            title=title or f"{stock_name} 最新动态",
+                            snippet=snippet[:500],
+                            url=str(item.get("url") or ""),
+                            source=str(item.get("source") or self.name),
+                            published_date=_epoch_to_iso8601(item.get("datetime")),
+                        ),
+                    )
+                )
+            ranked_items.sort(
+                key=lambda pair: (pair[0], pair[1].published_date or ""),
+                reverse=True,
+            )
+            results = [item for _, item in ranked_items[:max_results]]
+            elapsed = time.time() - start_time
+            self._record_success(api_key)
+            return SearchResponse(
+                query=query,
+                results=results,
+                provider=self.name,
+                success=True,
+                search_time=elapsed,
+            )
+        except Exception as e:
+            self._record_error(api_key)
+            elapsed = time.time() - start_time
+            logger.warning("[Finnhub] 搜索 '%s' 失败: %s", query, e)
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=str(e),
+                search_time=elapsed,
+            )
+
+
+class GNewsSearchProvider(BaseSearchProvider):
+    """GNews provider for generic recent-news fallback."""
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "GNews")
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        to_date = datetime.now(timezone.utc)
+        from_date = to_date - timedelta(days=max(1, int(days)))
+        response = _get_with_retry(
+            "https://gnews.io/api/v4/search",
+            headers={},
+            params={
+                "q": query,
+                "lang": "zh" if re.search(r"[\u4e00-\u9fff]", query) else "en",
+                "max": max(1, min(int(max_results), 10)),
+                "from": from_date.isoformat().replace("+00:00", "Z"),
+                "to": to_date.isoformat().replace("+00:00", "Z"),
+                "apikey": api_key,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, dict) and payload.get("errors"):
+            raise ValueError("; ".join(str(item) for item in payload.get("errors") or []))
+        articles = payload.get("articles", []) if isinstance(payload, dict) else []
+
+        results = []
+        for item in articles[:max_results]:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source") or {}
+            source_name = source.get("name") if isinstance(source, dict) else "GNews"
+            results.append(
+                SearchResult(
+                    title=str(item.get("title") or "").strip(),
+                    snippet=str(item.get("description") or item.get("content") or "").strip()[:500],
+                    url=str(item.get("url") or "").strip(),
+                    source=str(source_name or "GNews"),
+                    published_date=str(item.get("publishedAt") or "").strip() or None,
+                )
+            )
+
+        return SearchResponse(
+            query=query,
+            results=results,
+            provider=self.name,
+            success=True,
+        )
+
+
+def _epoch_to_iso8601(value: Any) -> Optional[str]:
+    try:
+        ts = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    if ts <= 0:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
 class SerpAPISearchProvider(BaseSearchProvider):
@@ -1643,6 +1849,8 @@ class SearchService:
         tavily_keys: Optional[List[str]] = None,
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
+        gnews_keys: Optional[List[str]] = None,
+        finnhub_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
         searxng_base_urls: Optional[List[str]] = None,
         searxng_public_instances_enabled: bool = True,
@@ -1657,6 +1865,8 @@ class SearchService:
             tavily_keys: Tavily API Key 列表
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
+            gnews_keys: GNews API Key 列表
+            finnhub_keys: Finnhub API Key 列表（美股公司新闻）
             minimax_keys: MiniMax API Key 列表
             searxng_base_urls: SearXNG 实例地址列表（自建无配额兜底）
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
@@ -1692,22 +1902,32 @@ class SearchService:
             self._providers.append(TavilySearchProvider(tavily_keys))
             logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
 
-        # 3. Brave Search（隐私优先，全球覆盖）
+        # 3. Finnhub（美股公司新闻 / 时间戳更稳定）
+        if finnhub_keys:
+            self._providers.append(FinnhubNewsProvider(finnhub_keys))
+            logger.info(f"已配置 Finnhub 新闻，共 {len(finnhub_keys)} 个 API Key")
+
+        # 4. Brave Search（隐私优先，全球覆盖）
         if brave_keys:
             self._providers.append(BraveSearchProvider(brave_keys))
             logger.info(f"已配置 Brave 搜索，共 {len(brave_keys)} 个 API Key")
 
-        # 4. SerpAPI 作为备选（每月 100 次）
+        # 5. SerpAPI 作为备选（每月 100 次）
         if serpapi_keys:
             self._providers.append(SerpAPISearchProvider(serpapi_keys))
             logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
 
-        # 5. MiniMax（Coding Plan Web Search，结构化结果）
+        # 6. GNews（通用新闻兜底）
+        if gnews_keys:
+            self._providers.append(GNewsSearchProvider(gnews_keys))
+            logger.info(f"已配置 GNews 搜索，共 {len(gnews_keys)} 个 API Key")
+
+        # 7. MiniMax（Coding Plan Web Search，结构化结果）
         if minimax_keys:
             self._providers.append(MiniMaxSearchProvider(minimax_keys))
             logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
 
-        # 6. SearXNG（自建实例优先；未配置时可自动发现公共实例）
+        # 8. SearXNG（自建实例优先；未配置时可自动发现公共实例）
         searxng_provider = SearXNGSearchProvider(
             searxng_base_urls,
             use_public_instances=bool(searxng_public_instances_enabled and not searxng_base_urls),
@@ -2134,11 +2354,19 @@ class SearchService:
             if not provider.is_available:
                 continue
 
-            search_kwargs: Dict[str, Any] = {}
             if isinstance(provider, TavilySearchProvider):
-                search_kwargs["topic"] = "news"
-
-            response = provider.search(query, provider_max_results, days=search_days, **search_kwargs)
+                response = provider.search(query, provider_max_results, days=search_days, topic="news")
+            elif hasattr(provider, "search_news"):
+                response = provider.search_news(
+                    stock_code=stock_code,
+                    stock_name=stock_name,
+                    query=query,
+                    max_results=provider_max_results,
+                    days=search_days,
+                    dimension="latest_news",
+                )
+            else:
+                response = provider.search(query, provider_max_results, days=search_days)
             filtered_response = self._filter_news_response(
                 response,
                 search_days=search_days,
@@ -2375,60 +2603,87 @@ class SearchService:
             provider_max_results,
         )
         
-        # 轮流使用不同的搜索引擎
-        provider_index = 0
-        
         for dim in search_dimensions:
             if search_count >= max_searches:
                 break
-            
-            # 选择搜索引擎（轮流使用）
+
             available_providers = [p for p in self._providers if p.is_available]
             if not available_providers:
                 break
-            
-            provider = available_providers[provider_index % len(available_providers)]
-            provider_index += 1
-            
-            logger.info(f"[情报搜索] {dim['desc']}: 使用 {provider.name}")
 
-            if isinstance(provider, TavilySearchProvider) and dim.get('tavily_topic'):
-                response = provider.search(
-                    dim['query'],
-                    max_results=provider_max_results,
-                    days=search_days,
-                    topic=dim['tavily_topic'],
-                )
-            else:
-                response = provider.search(
-                    dim['query'],
-                    max_results=provider_max_results,
-                    days=search_days,
-                )
-            if dim['strict_freshness']:
-                filtered_response = self._filter_news_response(
-                    response,
-                    search_days=search_days,
-                    max_results=target_per_dimension,
-                    log_scope=f"{stock_code}:{provider.name}:{dim['name']}",
-                )
-            else:
-                filtered_response = self._normalize_and_limit_response(
-                    response,
-                    max_results=target_per_dimension,
-                )
-            results[dim['name']] = filtered_response
+            last_response = SearchResponse(
+                query=dim["query"],
+                results=[],
+                provider="None",
+                success=False,
+                error_message="未找到可用搜索引擎",
+            )
+            final_response = last_response
+            last_raw_count = 0
+
+            for provider in available_providers:
+                logger.info(f"[情报搜索] {dim['desc']}: 尝试 {provider.name}")
+                if isinstance(provider, TavilySearchProvider) and dim.get('tavily_topic'):
+                    response = provider.search(
+                        dim['query'],
+                        max_results=provider_max_results,
+                        days=search_days,
+                        topic=dim['tavily_topic'],
+                    )
+                elif hasattr(provider, "search_news"):
+                    response = provider.search_news(
+                        stock_code=stock_code,
+                        stock_name=stock_name,
+                        query=dim['query'],
+                        max_results=provider_max_results,
+                        days=search_days,
+                        dimension=dim['name'],
+                    )
+                else:
+                    response = provider.search(
+                        dim['query'],
+                        max_results=provider_max_results,
+                        days=search_days,
+                    )
+
+                if dim['strict_freshness']:
+                    filtered_response = self._filter_news_response(
+                        response,
+                        search_days=search_days,
+                        max_results=target_per_dimension,
+                        log_scope=f"{stock_code}:{provider.name}:{dim['name']}",
+                    )
+                else:
+                    filtered_response = self._normalize_and_limit_response(
+                        response,
+                        max_results=target_per_dimension,
+                    )
+
+                last_response = filtered_response
+                last_raw_count = len(response.results)
+                if filtered_response.success and filtered_response.results:
+                    final_response = filtered_response
+                    break
+
+                if response.success and not filtered_response.results:
+                    logger.info("[情报搜索] %s: %s 成功但过滤后无结果，继续尝试下一引擎", dim['desc'], provider.name)
+                else:
+                    logger.warning("[情报搜索] %s: %s 失败 - %s", dim['desc'], provider.name, response.error_message)
+
+                final_response = filtered_response
+
+            results[dim['name']] = final_response
             search_count += 1
-            
-            if response.success:
+
+            if final_response.success:
                 logger.info(
                     "[情报搜索] %s: 原始=%s条, 过滤后=%s条",
                     dim['desc'],
-                    len(response.results),
-                    len(filtered_response.results),
+                    last_raw_count,
+                    len(final_response.results),
                 )
             else:
-                logger.warning(f"[情报搜索] {dim['desc']}: 搜索失败 - {response.error_message}")
+                logger.warning(f"[情报搜索] {dim['desc']}: 搜索失败 - {final_response.error_message}")
             
             # 短暂延迟避免请求过快
             time.sleep(0.5)
@@ -2704,6 +2959,8 @@ def get_search_service() -> SearchService:
             tavily_keys=config.tavily_api_keys,
             brave_keys=config.brave_api_keys,
             serpapi_keys=config.serpapi_keys,
+            gnews_keys=config.gnews_api_keys,
+            finnhub_keys=config.finnhub_api_keys,
             minimax_keys=config.minimax_api_keys,
             searxng_base_urls=config.searxng_base_urls,
             searxng_public_instances_enabled=config.searxng_public_instances_enabled,

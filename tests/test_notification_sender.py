@@ -104,6 +104,14 @@ class TestDiscordSender(unittest.TestCase):
         call_kw = mock_post.call_args[1]
         self.assertEqual(call_kw["headers"]["Authorization"], "Bot TOKEN")
 
+    @mock.patch("src.notification_sender.discord_sender.requests.post")
+    def test_send_bot_accepts_any_2xx_status(self, mock_post):
+        mock_post.return_value = _response(201)
+        cfg = _config(discord_bot_token="TOKEN", discord_main_channel_id="CH123")
+        sender = DiscordSender(cfg)
+        result = sender.send_to_discord("content")
+        self.assertTrue(result)
+
     def test_chunking_prefers_markdown_sections(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1", discord_max_words=120)
         sender = DiscordSender(cfg)
@@ -120,12 +128,64 @@ class TestDiscordSender(unittest.TestCase):
         self.assertIn("## 核心结论", combined)
         self.assertIn("## 数据透视", combined)
 
+    def test_chunking_enforces_discord_char_limit(self):
+        cfg = _config(discord_webhook_url="https://discord.com/webhook/1", discord_max_words=2000)
+        sender = DiscordSender(cfg)
+        content = "## 超长章节\n" + ("甲" * 2600)
+        chunks = sender._chunk_discord_content(content)
+        self.assertGreaterEqual(len(chunks), 2)
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk), sender._discord_hard_char_limit)
 
     def test_optimize_markdown_for_discord_converts_table_to_bullets(self):
         content = "## 当日行情\n|字段|数值|\n|--|--|\n|当前价|125.4|\n|涨跌幅|+1.2%|"
         out = DiscordSender._optimize_markdown_for_discord(content)
         self.assertIn("- **当前价**: 125.4", out)
         self.assertNotIn("|字段|数值|", out)
+
+    def test_optimize_markdown_for_discord_compacts_standard_report_sections(self):
+        content = (
+            "# 🎯 2026-03-28 股票分析日报\n"
+            "> 已分析 **1** 只股票\n"
+            "> 报告生成时间（北京时间）: `2026-03-28 21:35:00`\n\n"
+            "## 🟡 NVIDIA (NVDA)\n"
+            "### 1. 标题区 / Title\n"
+            "- **评分**: 78\n"
+            "- **买入 / 观望 / 卖出**: 观望\n"
+            "- **看多 / 看空 / 震荡**: 看多\n"
+            "- **一句话决策**: 等待回踩确认后再考虑加仓\n"
+            "### 2. 重要信息速览 / Key Updates\n"
+            "- **风险警报**: 估值偏高；波动放大\n"
+            "- **利好催化**: AI 订单延续；数据中心需求回暖\n"
+            "- **最新动态 / 重要公告**: 公司发布新品并强化生态合作\n"
+            "### 4. 当日行情（常规交易时段） / Market (Regular Session)\n"
+            "- **当前价**: 125.30\n"
+            "- **涨跌额**: 2.30\n"
+            "- **涨跌幅**: 1.87%\n"
+            "### 5. 技术面 / Technicals\n"
+            "- **MA20**: 120.99\n"
+            "- **MA60**: 118.88\n"
+            "- **RSI14**: 56.78\n"
+            "- **支撑位**: 119.11\n"
+            "- **压力位**: 129.00\n"
+            "### 7. 作战计划 / Battle Plan\n"
+            "- **理想买入点**: 120-121\n"
+            "- **止损位**: 115\n"
+            "- **目标位**: 132\n"
+            "- **仓位建议**: 分批试仓\n"
+            "### 8. 检查清单 / Checklist\n"
+            "- ⚠️ 等待回踩确认\n"
+            "- ✅ 量价结构未破坏\n"
+        )
+
+        out = DiscordSender._optimize_markdown_for_discord(content)
+
+        self.assertIn("## 🟡 NVIDIA (NVDA)", out)
+        self.assertIn("**评分 / 建议 / 趋势**: 78 / 观望 / 看多", out)
+        self.assertIn("**核心行情**: 当前价 125.30 | 涨跌幅 1.87% | 涨跌额 2.30", out)
+        self.assertIn("**作战计划**: 买点 120-121 | 止损 115 | 目标 132 | 仓位 分批试仓", out)
+        self.assertIn("Checklist", out)
+        self.assertNotIn("### 4. 当日行情（常规交易时段） / Market (Regular Session)", out)
 
     def test_send_chunks_continues_after_mid_failure(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1")

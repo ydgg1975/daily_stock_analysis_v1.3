@@ -498,6 +498,9 @@ class Config:
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
+    gnews_api_keys: List[str] = field(default_factory=list)  # GNews API Keys
+    finnhub_api_keys: List[str] = field(default_factory=list)  # Finnhub API Keys
+    fmp_api_keys: List[str] = field(default_factory=list)  # Financial Modeling Prep API Keys
     searxng_base_urls: List[str] = field(default_factory=list)  # SearXNG instance URLs (self-hosted, no quota)
     searxng_public_instances_enabled: bool = True  # Auto-discover public SearXNG instances when base URLs are absent
 
@@ -1006,6 +1009,27 @@ class Config:
         brave_keys_str = os.getenv('BRAVE_API_KEYS', '')
         brave_api_keys = [k.strip() for k in brave_keys_str.split(',') if k.strip()]
 
+        gnews_keys_str = os.getenv('GNEWS_API_KEYS', '')
+        gnews_api_keys = [k.strip() for k in gnews_keys_str.split(',') if k.strip()]
+        if not gnews_api_keys:
+            single_gnews = os.getenv('GNEWS_API_KEY', '').strip()
+            if single_gnews:
+                gnews_api_keys = [single_gnews]
+
+        finnhub_keys_str = os.getenv('FINNHUB_API_KEYS', '')
+        finnhub_api_keys = [k.strip() for k in finnhub_keys_str.split(',') if k.strip()]
+        if not finnhub_api_keys:
+            single_finnhub = os.getenv('FINNHUB_API_KEY', '').strip()
+            if single_finnhub:
+                finnhub_api_keys = [single_finnhub]
+
+        fmp_keys_str = os.getenv('FMP_API_KEYS', '')
+        fmp_api_keys = [k.strip() for k in fmp_keys_str.split(',') if k.strip()]
+        if not fmp_api_keys:
+            single_fmp = os.getenv('FMP_API_KEY', '').strip()
+            if single_fmp:
+                fmp_api_keys = [single_fmp]
+
         _raw_urls = [u.strip() for u in os.getenv('SEARXNG_BASE_URLS', '').split(',') if u.strip()]
         searxng_base_urls = []
         invalid_searxng_urls = []
@@ -1114,6 +1138,9 @@ class Config:
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
+            gnews_api_keys=gnews_api_keys,
+            finnhub_api_keys=finnhub_api_keys,
+            fmp_api_keys=fmp_api_keys,
             searxng_base_urls=searxng_base_urls,
             searxng_public_instances_enabled=searxng_public_instances_enabled,
             social_sentiment_api_key=os.getenv('SOCIAL_SENTIMENT_API_KEY') or None,

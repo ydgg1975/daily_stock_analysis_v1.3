@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧩 **前端工作栏整合 + Hero 压缩 + 策略面板继续收口** — Web `Shell / SidebarNav / HomePage / HistoryList / TaskPanel / StandardReportPanel` 本轮不再推翻骨架，而是继续做版面收口：Shell 新增统一 rail 上下文，把左侧 DSA 导航、历史分析和任务列表整合成同一深黑工作栏；首页主内容最大宽度明显放开，减少桌面端左右黑边；Hero Summary 压缩成更紧凑的两列布局，把时间信息改成紧凑 row，减少评分区空白；下层模块按“行情/技术、基本面/财报、新闻/作战计划、Checklist/评分拆解”的阅读节奏重新平衡；作战计划改成真正的横向策略面板，上层四格展示关键价位，下层两列展示仓位、建仓与风控说明，并统一列表项、按钮和卡片的轻量过渡，形成更顺滑但不花哨的终端式交互。
+- 🖥️ **整站壳层改成深黑 Web3 terminal，并把标准报告页重排成大矩形纵向模块** — Web `Shell / SidebarNav / HomePage / HistoryList / TaskPanel / StandardReportPanel` 继续从旧黑蓝 dashboard 骨架收口到统一的深黑石墨主题：左侧 DSA 导航、历史列表、任务面板和报告工作区全部去掉蓝色 glow 外壳，改成近黑实体面板 + 低亮边框 + 少量 cyan 强调；标准报告页也不再保留 tabs/chips/窄侧栏，而是直接重排为“顶部 Hero 总览 -> 行情/技术并排 -> 基本面/财报并排 -> 新闻/作战计划并排 -> Checklist/评分拆解/风险摘要宽卡片”的大矩形卡片序列，桌面端允许纵向滚动浏览，平板端优先主内容，手机端则按总览、行情、技术、基本面、财报、新闻/情绪、作战计划、checklist 的固定顺序单列展开，避免横向滚动和窄长条阅读。
+- 🧱 **NVDA 关键口径继续收口 + Web 报告页改成大矩形终端布局** — `pipeline` / `us_fundamentals_provider` 继续把 `freeCashflow / operatingCashflow / returnOnEquity / returnOnAssets` 的来源与时间窗显式下沉到 `_meta.field_sources / field_periods`，并在汇总基本面时把 `latest_quarter`、`provider_reported_total`、`overview/context` 这类高风险口径打成 `TTM待复核`，由 `report_renderer` 统一展示为 `NA（口径冲突，待校正）`，避免把可疑 ROE/ROA/FCF 直接暴露给用户。新闻 highlights 也继续修正语义：陈旧财报复盘归入催化/业绩预期，媒体解读类内容优先路由到风险/情绪，而非伪装成“最新动态”。Web 标准报告页则进一步抛弃窄条与碎卡片，改成更接近交易终端的“左历史窄栏 + 中间大矩形主内容 + 右侧辅助栏”结构：中间主内容按总览、行情/技术、基本面/财报、新闻/作战计划纵向分层，整体去掉黑蓝外壳、弱化来源胶囊与蓝色 glow，统一成深黑石墨终端主题。
+- 🎛️ **同 session 评分稳定器改为分项合成 + Web 报告页重构为深黑终端布局** — `pipeline` 不再只对 LLM 黑箱总分做事后限幅，而是显式拆成“行情/趋势分、技术分、基本面分、新闻/情绪分、风险修正项”后再合成总分，并在 `last_completed_session` 下优先锚定同一交易日/同一 session 的历史基线：当核心输入未变时严格限制单次漂移，技术指标补齐、新闻新增、provider 口径切换等场景则通过 `change_reason` 与 `score_breakdown` 解释来源。Web `StandardReportPanel` 同步放弃旧的黑蓝卡片堆叠骨架，改成更接近 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 的深黑 exchange terminal：顶部 summary strip、一级 tabs、二级 chips、左中右 dense table/rail 布局，以及底部新闻/作战计划区，整体减少 glow、卡片数和无效留白。
+- 🧮 **NVDA 基本面 TTM 口径与新闻时效语义继续收口** — `pipeline` 对美股基本面字段新增更细的 source priority：`freeCashflow / operatingCashflow` 优先使用 statement-derived TTM（FMP quarterly statements 优先，其次 Yahoo quarterly），`returnOnEquity / returnOnAssets` 优先使用 FMP/Finnhub 的 TTM ratios，再回退其他 overview 源，避免现金流总额和 ROE/ROA 混用不同时间窗。`report_renderer` 会把这些字段的 `来源 + 口径` 一并带进基本面/财报表，并在新闻 highlights 中将“陈旧财报复盘”从 `最新动态` 降级为催化/业绩语境，避免把 2026-02-25 的财报解读伪装成 2026-03-28 的新公告。Web `StandardReportPanel` 继续去卡片化：表格来源/口径改为终端式细文本列，右侧侧栏精简为评分/风险/情绪/checklist，整体进一步靠近 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 的深黑 terminal 风格。
+- 📉 **已收盘场景行情主口径修正 + Web 终端式结构继续收口** — `report_renderer` 不再把 `close` 当作 `prev_close` 的兜底来源；当美股处于 `last_completed_session` 且上游昨收缺失、被错误平盘化，或 `close / prev_close / change / pct` 出现互相打架时，会优先按同一套 regular close 口径重建昨收并重算涨跌，避免 NVDA 这类已收盘场景出现“收跌但昨收等于收盘、涨跌额/幅却是 0”的假平盘。`history_service` 同步在历史详情重建时修复这类污染快照，`pipeline` 的美股 fallback 也补充识别 `regularMarketPreviousClose / chartPreviousClose`。Web `StandardReportPanel` 则继续参考 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 收口为更像终端的结构：顶部 summary strip、一级 tabs、二级 chips、左侧高密度表格、右侧评分/风险/checklist 侧栏，减少卡片堆叠、压缩留白，并统一 badge / chip / checklist 的黑灰基调与尺寸。
+- 🧭 **评分稳定器与深黑终端式报告页重做** — `pipeline` 新增分析结果稳定器：把“短线技术趋势”和“综合操作建议”显式分层，降低空头排列、MA20 下方、放量下跌、RSI 偏弱等单一技术因子对综合评分的瞬时压制；当近期历史分数存在时会对单次评分变动做限幅，并在“强基本面 + 短线偏弱”的场景下保留基本面缓冲，避免 NVDA 这类大票因补齐技术字段后直接从中性/观望跳到强烈看空。`report_renderer` 同步输出 `decision_context`（短线视角 / 综合建议 / 调整说明 / 分数变化），Web `StandardReportPanel` 则按 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 的信息架构重排为更克制的深黑 terminal 风格：顶部 summary strip、一级 tabs、二级 chips、左侧高密度表格、右侧评分/趋势/风险/checklist/结论框架，并统一 badge / checklist pill / 表格行高与卡片边框层级，去掉过强 cyan glow 与多余 icon 底框。
+- 📡 **技术指标改为 API 优先 + Web 报告改成 OKX 风格终端布局** — `pipeline` / `us_fundamentals_provider` 新增 FMP technical indicator 接入，`MA5 / MA10 / MA20 / MA60 / RSI14` 现在优先取 FMP technical API，`VWAP` 优先取 FMP historical price；FMP 缺失时再回退 Alpha Vantage 或本地历史 OHLC 计算，避免 NVDA / TSLA / ORCL 这类大票长期落在“样本不足”。`report_renderer` 会把技术字段的 `source / status` 一并写入 `standard_report`，Web `StandardReportPanel` 同步改成更接近 OKX markets/prices 的深黑终端式布局：顶部 Hero 总览、一级 tabs、二级 chips、左侧紧凑表格、右侧信号/风险/checklist，并统一 badge / checklist / 表格视觉。
+- 🛡️ **多源 fallback 防回归与历史详情保真** — `pipeline` / `history_service` / `report_renderer` 继续收紧美股行情与基本面合并规则：已有有效 quote / fundamentals 不再被 `None`、空字符串、占位 `0` 或 `0.0` 污染；`market_timestamp` 会随 fallback quote 继续透传；历史详情重建会把 `trend_score=0`、`volume_ratio=0.0`、`turnover_rate=0.0`、占位均线等假零值替换为 `context_snapshot` 中的真实值。渲染层同步把量比、换手率、趋势强度等缺失指标恢复为 `NA（原因）`，避免 TSLA 等美股报告出现“字段还在但几乎全部退化成 NA / 0.00”的回归。
+- 🌑 **Web 报告页 dark terminal 质感继续收口** — `StandardReportPanel` / `Badge` 继续沿用统一 `standard_report` 数据，但把页面层级调整为更成熟的黑色 trading terminal 风格：去掉重复标题，弱化过度 glow，统一 badge / checklist pill 尺寸与居中对齐，把“时效性 / 市场时间 / 交易日 / session”下沉为次级 chip 信息，并让 Hero 区优先突出股票名、当前价、涨跌幅、评分、建议与趋势，减少“半成品 demo 感”。
+
+- 🌌 **TSLA 等美股标准报告口径校正 + Web3 Dark Dashboard 改版** — `report_renderer` / `history_service` / `pipeline` 进一步统一行情、基本面、财报三类字段语义：常规时段涨跌额/幅继续优先按当前价与昨收重算；`market_session_date` 改为优先从真实 `market_timestamp` 推导，避免美东交易日被本地时区误写；扩展时段时间不再误复用常规时段时间；基本面表去除与财报表混口径的增长字段，并通过 `TTM / 最新值 / 一致预期 / 最新季度同比/环比` 标签显式标注口径；MA5 / MA10 / MA20 / MA60 / VWAP 缺失时继续输出 `NA（原因）`，样本不足不再伪装成 `0.00`。Web 报告详情页则改为更紧凑的 web3 dark / terminal 风格 Hero + 双栏 dashboard 布局，统一 checklist pill、badge、半透明深色卡片、紧凑表格和评分/趋势/均线位置条，同时补齐 `standard_report` snake_case -> camelCase 归一化，确保 Web 与 Discord 继续共用同一 `standard_report` 结构。
+- 📘 **标准报告升级为紧凑投资简报视图** — `standard_report` 在服务层新增 `summary_panel / table_sections / visual_blocks / highlights / battle_plan_compact / checklist_items` 等结构化块，Web 端首屏改为摘要卡片、紧凑指标表、评分/价格位置条、风险机会摘要、紧凑作战计划和状态化 checklist，Discord 端则从统一 markdown 中抽取短版摘要，只保留顶部结论、核心行情、技术定位、风险/利好和作战计划，避免继续推送超长字段转储。
+- 🇨🇳 **标准报告用户可见字段统一中文化，并接入美股/新闻补数 fallback** — `standard_report` 的 market / technical / fundamental / earnings / sentiment 用户可见字段标签统一由后端渲染层输出中文，避免 Web、Discord 与 history markdown 各自翻译导致口径漂移；同时为美股补充 Finnhub `quote + basic metrics + company news`、FMP `quote + profile + ratios + quarterly statements + historical price`、GNews 通用新闻兜底，优先在现有数据源缺失时补齐昨收、涨跌额/幅、振幅、成交量、52 周高低、MA5/10/20/60、VWAP、Beta、PE/PB、marketCap、shares/float、营收/净利润及新闻发布时间等字段，并继续保持 regular / extended session 分离与 `NA（原因）` 语义。
+- 🧾 **标准报告字段映射补全与 Discord 推送稳态修复** — `report_renderer` 会继续沿用统一 `standard_report` 结构，但现在会补消费 `market_snapshot`、`structured_analysis`、`realtime_context`、`market_context`、`fundamental_context`、`earnings_analysis` 中已存在的行情/技术面/基本面字段，减少“上游已有数据却仍显示 `NA`”的情况，并保持 regular / extended session 分离；history 详情重建会合并 `context_snapshot` 补全 `details.standard_report`，Web 端同步兼容 `standardReport` / `standard_report` 回退；Discord 推送改为优先基于统一标准报告内容，补齐配置判定、稳定分块、逐块日志与失败原因输出，并接受任意 2xx 响应为成功，避免静默失败。
 - 🧱 **标准报告数据结构下沉到服务层** — `report_renderer` 现在先构建单一 `standard_report` 数据结构，再由 Web Markdown/Discord 消息共用渲染；历史详情 API `details.standard_report` 同步暴露该结构，避免网站、通知和客户端各自重复拼字段导致口径漂移。
 - 📣 **Discord 完整报告可读性与资讯价值分级修复** — 在不删字段前提下将 Discord 中的大表格转换为紧凑列表展示；重要信息区新增高价值关键词优先与低价值资讯降权，缺少高价值催化/动态时明确提示“未发现高价值新增催化/动态”。
 - 🧮 **报告口径一致性与交易位校验补齐** — 在报告渲染层新增行情口径一致性重算与告警（涨跌额/涨跌幅按当前价与昨收校验），并在作战计划中新增买点类型标注（突破买点/回踩买点）及止损位风险提示，避免 Discord/Web 完整报告出现交易语义自相矛盾。
@@ -1035,6 +1050,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 支持 DeepSeek、通义千问、Moonshot、智谱 GLM 等
   - Gemini 和 OpenAI 格式二选一
   - 自动降级重试机制
+
+## [Unreleased]
+
+### 修复
+- 收口 `last_completed_session` 的美股已收盘口径：常规字段会优先锁定单一 EOD bundle，避免 `close / prev_close / change / pct` 被多源 fallback 混写。
+- 报告评分新增显式拆解与同 session 稳定约束，减少同一交易日重复生成报告时的无解释大幅漂移。
+
+### Web
+- 重构标准报告详情页为更接近 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 的深黑终端布局：顶部 summary strip、表格主区、右侧信号栏、移动端紧凑 definition-list。
+- 移除 standard report 页面下方重复的旧资讯区，并放宽首页报告容器，减少桌面端无效留白与顶层横向滚动。
 
 ## [1.0.0] - 2026-01-10
 

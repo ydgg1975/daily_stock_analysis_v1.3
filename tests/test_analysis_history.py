@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +34,7 @@ except ModuleNotFoundError:
     get_history_detail = None
 
 from src.config import Config
-from src.storage import DatabaseManager, AnalysisHistory, BacktestResult
+from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, StockDaily
 from src.analyzer import AnalysisResult
 from src.services.history_service import HistoryService
 import src.auth as auth
@@ -223,6 +224,59 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsInstance(detail.get("raw_result"), dict)
         self.assertIsNone(detail.get("model_used"))
 
+    def test_extract_time_contract_derives_market_session_date_from_timestamp(self) -> None:
+        contract = HistoryService._extract_time_contract(
+            {
+                "enhanced_context": {
+                    "market_timestamp": "2026-03-27T13:32:41-04:00",
+                    "market_session_date": "2026-03-28",
+                    "session_type": "intraday_snapshot",
+                }
+            }
+        )
+
+        self.assertEqual(contract["market_session_date"], "2026-03-27")
+        self.assertEqual(contract["market_timestamp"], "2026-03-27T13:32:41-04:00")
+        self.assertEqual(contract["session_type"], "intraday_snapshot")
+
+    def test_merge_market_snapshot_repairs_completed_session_prev_close_basis(self) -> None:
+        merged = HistoryService._merge_market_snapshot_from_context(
+            {
+                "close": 167.52,
+                "prev_close": 167.52,
+                "change_amount": 0.0,
+                "pct_chg": 0.0,
+                "session_type": "last_completed_session",
+            },
+            {
+                "enhanced_context": {
+                    "session_type": "last_completed_session",
+                    "today": {
+                        "close": 167.52,
+                        "pct_chg": -2.17,
+                        "high": 171.0,
+                        "low": 167.1,
+                        "data_source": "yfinance_eod",
+                    },
+                    "yesterday": {
+                        "close": 171.24,
+                        "data_source": "yfinance_eod",
+                    },
+                    "realtime": {
+                        "price": 167.52,
+                        "change_pct": -2.17,
+                    },
+                }
+            },
+        )
+
+        self.assertAlmostEqual(float(merged["close"]), 167.52, places=2)
+        self.assertAlmostEqual(float(merged["prev_close"]), 171.24, places=2)
+        self.assertAlmostEqual(float(merged["change_amount"]), -3.72, places=2)
+        self.assertAlmostEqual(float(merged["pct_chg"]), -2.17, places=2)
+        self.assertAlmostEqual(float(merged["price"]), 167.52, places=2)
+        self.assertEqual(merged["source"], "yfinance_eod")
+
     def test_history_detail_prefers_raw_sniper_strings(self) -> None:
         """History detail should display the original sniper point strings from raw_result."""
         result = self._build_result()
@@ -359,6 +413,287 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         report = get_history_detail(str(record_id), db_manager=self.db)
         self.assertIsNone(report.details.financial_report)
         self.assertIsNone(report.details.dividend_metrics)
+
+    def test_history_detail_rebuilds_standard_report_from_context_snapshot(self) -> None:
+        result = AnalysisResult(
+            code="NVDA",
+            name="NVIDIA",
+            sentiment_score=82,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="等待确认",
+            dashboard={
+                "core_conclusion": {"one_sentence": "等待确认"},
+                "battle_plan": {},
+                "intelligence": {},
+            },
+        )
+        context_snapshot = {
+            "enhanced_context": {
+                "market_timestamp": "2026-03-27T09:35:00-04:00",
+                "market_session_date": "2026-03-27",
+                "report_generated_at": "2026-03-27T21:35:00+08:00",
+                "session_type": "intraday_snapshot",
+                "today": {
+                    "close": 125.3,
+                    "open": 123.5,
+                    "high": 126.2,
+                    "low": 122.9,
+                    "pct_chg": 1.87,
+                    "volume": 4500000,
+                    "amount": 880000000,
+                    "ma5": 123.4567,
+                    "ma10": 122.1234,
+                    "ma20": 120.9876,
+                },
+                "yesterday": {"close": 123.0},
+                "realtime": {
+                    "price": 125.3,
+                    "pre_close": 123.0,
+                    "change_amount": 2.3,
+                    "change_pct": 1.87,
+                    "amplitude": 2.68,
+                    "volume": 4500000,
+                    "amount": 880000000,
+                    "open_price": 123.5,
+                    "high": 126.2,
+                    "low": 122.9,
+                    "volume_ratio": 1.35,
+                    "turnover_rate": 0.88,
+                    "source": "yfinance",
+                    "vwap": 124.9876,
+                    "pb_ratio": 9.87,
+                    "total_mv": 123400000000,
+                    "circ_mv": 100000000000,
+                },
+                "technicals": {
+                    "ma5": {"value": 123.4567, "status": "ok"},
+                    "ma10": {"value": 122.1234, "status": "ok"},
+                    "ma20": {"value": 120.9876, "status": "ok"},
+                    "rsi14": {"value": 56.777, "status": "ok"},
+                },
+                "fundamentals": {
+                    "normalized": {
+                        "marketCap": 123400000000,
+                        "priceToBook": 9.87,
+                        "sharesOutstanding": 5000000000,
+                        "fiftyTwoWeekHigh": 199.876,
+                        "fiftyTwoWeekLow": 99.123,
+                    }
+                },
+                "fundamental_context": {
+                    "valuation": {
+                        "data": {
+                            "market_cap": 123400000000,
+                            "pb_ratio": 9.87,
+                            "shares_outstanding": 5000000000,
+                            "52week_high": 199.876,
+                            "52week_low": 99.123,
+                        }
+                    },
+                    "earnings": {
+                        "data": {
+                            "financial_report": {
+                                "revenue": 10000000000,
+                                "net_income": 2500000000,
+                            }
+                        }
+                    },
+                },
+                "earnings_analysis": {
+                    "quarterly_series": [{"revenue": 10000000000, "net_income": 2500000000}],
+                    "derived_metrics": {"yoy_net_income_change": 0.12},
+                },
+            }
+        }
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_context_standard_report_001",
+            report_type="full",
+            news_content="news",
+            context_snapshot=context_snapshot,
+            save_snapshot=True,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_context_standard_report_001"
+            ).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            record_id = row.id
+
+        detail = HistoryService(self.db).get_history_detail_by_id(record_id)
+        self.assertIsNotNone(detail)
+        std = detail["standard_report"]
+        self.assertEqual(std["summary_panel"]["ticker"], "NVDA")
+        self.assertEqual(std["table_sections"]["market"]["title"], "行情表")
+        regular = {item["label"]: item["value"] for item in std["market"]["regular_fields"]}
+        technical = {item["label"]: item["value"] for item in std["technical_fields"]}
+        fundamental = {item["label"]: item["value"] for item in std["fundamental_fields"]}
+
+        self.assertEqual(regular["昨收"], "123.00")
+        self.assertEqual(regular["涨跌额"], "2.30")
+        self.assertEqual(regular["涨跌幅"], "1.87%")
+        self.assertEqual(regular["成交量"], "450.00万")
+        self.assertEqual(regular["成交额"], "8.80亿")
+        self.assertEqual(technical["MA5"], "123.46")
+        self.assertEqual(technical["MA10"], "122.12")
+        self.assertEqual(technical["VWAP"], "124.99")
+        self.assertEqual(fundamental["市净率(最新值)"], "9.87")
+        self.assertEqual(fundamental["52周最高"], "199.88")
+        self.assertEqual(fundamental["净利润(TTM)"], "25.00亿")
+        self.assertEqual(detail["market_timestamp"], "2026-03-27T09:35:00-04:00")
+        self.assertEqual(detail["market_session_date"], "2026-03-27")
+        self.assertEqual(detail["report_generated_at"], "2026-03-27T21:35:00+08:00")
+
+    def test_get_analysis_context_ignores_future_dated_us_snapshot_rows(self) -> None:
+        with self.db.get_session() as session:
+            session.add_all(
+                [
+                    StockDaily(
+                        code="NVDA",
+                        date=date(2026, 3, 28),
+                        open=169.99,
+                        high=170.97,
+                        low=167.55,
+                        close=168.99,
+                        volume=107549476,
+                        data_source="yfinance_realtime_snapshot",
+                    ),
+                    StockDaily(
+                        code="NVDA",
+                        date=date(2026, 3, 27),
+                        open=176.17,
+                        high=176.50,
+                        low=171.14,
+                        close=171.24,
+                        volume=182162282,
+                        data_source="yfinance",
+                    ),
+                    StockDaily(
+                        code="NVDA",
+                        date=date(2026, 3, 26),
+                        open=174.00,
+                        high=177.00,
+                        low=173.50,
+                        close=175.00,
+                        volume=150000000,
+                        data_source="yfinance",
+                    ),
+                ]
+            )
+            session.commit()
+
+        class _FakeDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 27, 20, 0, 0)
+                return base.replace(tzinfo=tz) if tz is not None else base
+
+        with patch("src.storage.datetime", _FakeDateTime):
+            context = self.db.get_analysis_context("NVDA")
+
+        self.assertIsNotNone(context)
+        self.assertEqual(context["date"], "2026-03-27")
+        self.assertEqual(context["today"]["close"], 171.24)
+        self.assertEqual(context["yesterday"]["close"], 175.00)
+
+    def test_merge_dashboard_from_context_replaces_placeholder_zero_values(self) -> None:
+        merged = HistoryService._merge_dashboard_from_context(
+            {
+                "data_perspective": {
+                    "trend_status": {
+                        "trend_score": 0,
+                        "signal_score": "0.00",
+                    },
+                    "price_position": {
+                        "current_price": 0,
+                        "ma5": 0,
+                        "ma10": "0.00",
+                        "ma20": 0.0,
+                        "ma60": 0,
+                    },
+                    "volume_analysis": {
+                        "volume_ratio": 0.0,
+                        "turnover_rate": "0.00",
+                    },
+                }
+            },
+            {
+                "enhanced_context": {
+                    "today": {
+                        "close": 362.19,
+                        "ma5": None,
+                        "ma10": None,
+                        "ma20": 392.81,
+                    },
+                    "realtime": {
+                        "price": 362.19,
+                        "volume_ratio": 1.24,
+                        "turnover_rate": 0.99,
+                        "volume_ratio_desc": "资金回流",
+                    },
+                    "technicals": {
+                        "ma60": {"value": 415.74, "status": "ok"},
+                    },
+                    "trend_analysis": {
+                        "trend_strength": 20,
+                        "signal_score": 36,
+                        "ma_alignment": "空头/震荡",
+                        "volume_status": "正常",
+                        "bias_ma5": None,
+                    },
+                }
+            },
+        )
+
+        data_perspective = merged["data_perspective"]
+        self.assertEqual(data_perspective["trend_status"]["trend_score"], 20)
+        self.assertEqual(data_perspective["trend_status"]["signal_score"], 36)
+        self.assertEqual(data_perspective["trend_status"]["ma_alignment"], "空头/震荡")
+        self.assertEqual(data_perspective["price_position"]["current_price"], 362.19)
+        self.assertEqual(data_perspective["price_position"]["ma20"], 392.81)
+        self.assertEqual(data_perspective["price_position"]["ma60"], 415.74)
+        self.assertEqual(data_perspective["volume_analysis"]["volume_ratio"], 1.24)
+        self.assertEqual(data_perspective["volume_analysis"]["turnover_rate"], 0.99)
+        self.assertEqual(data_perspective["volume_analysis"]["volume_meaning"], "资金回流")
+
+    def test_history_detail_endpoint_exposes_time_contract_meta(self) -> None:
+        if get_history_detail is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        query_id = "query_history_time_contract_001"
+        saved = self.db.save_analysis_history(
+            result=self._build_result(),
+            query_id=query_id,
+            report_type="full",
+            news_content="news",
+            context_snapshot={
+                "enhanced_context": {
+                    "market_timestamp": "2026-03-27T09:35:00-04:00",
+                    "market_session_date": "2026-03-27",
+                    "news_published_at": "2026-03-27T09:00:00-04:00",
+                    "report_generated_at": "2026-03-27T21:35:00+08:00",
+                }
+            },
+            save_snapshot=True,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            if row is None:
+                self.fail("未找到保存的历史记录")
+            record_id = row.id
+
+        report = get_history_detail(str(record_id), db_manager=self.db)
+        self.assertEqual(report.meta.market_timestamp, "2026-03-27T09:35:00-04:00")
+        self.assertEqual(report.meta.market_session_date, "2026-03-27")
+        self.assertEqual(report.meta.news_published_at, "2026-03-27T09:00:00-04:00")
+        self.assertEqual(report.meta.report_generated_at, "2026-03-27T21:35:00+08:00")
 
     def test_history_markdown_localizes_english_report_and_placeholder_name(self) -> None:
         """History markdown should preserve report_language for English reports."""
@@ -505,7 +840,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         markdown = HistoryService(self.db).get_markdown_report(str(record_id))
 
         self.assertIsNotNone(markdown)
-        self.assertIn("**乖离率**: 1.33%", markdown)
+        self.assertIn("**乖离率(MA5)**: 1.33%", markdown)
         self.assertNotIn("🚨Safe", markdown)
 
     def test_delete_analysis_history_records_also_cleans_backtests(self) -> None:

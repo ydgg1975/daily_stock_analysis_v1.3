@@ -123,7 +123,9 @@ describe('HomePage', () => {
     );
 
     expect(await screen.findByText('开始分析')).toBeInTheDocument();
-    expect(screen.getByText('输入股票代码进行分析，或从左侧选择历史报告查看')).toBeInTheDocument();
+    expect(
+      screen.getByText('输入股票代码进行分析，或从左侧历史列表中选择已有报告。主内容区会按总览、行情、技术、基本面、财报和作战计划顺序展开。'),
+    ).toBeInTheDocument();
     expect(screen.getByText('暂无历史分析记录')).toBeInTheDocument();
   });
 

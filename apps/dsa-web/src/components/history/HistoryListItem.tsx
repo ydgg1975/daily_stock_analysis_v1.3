@@ -48,14 +48,16 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
           checked={isChecked}
           onChange={() => onToggleChecked(item.id)}
           disabled={isDeleting}
-          className="h-3.5 w-3.5 cursor-pointer rounded border-subtle-hover bg-transparent text-[var(--home-accent-text)] focus:ring-[color:var(--home-accent-border-hover)] disabled:opacity-50"
+          className="h-3.5 w-3.5 cursor-pointer rounded border-white/10 bg-transparent text-cyan focus:ring-cyan/30 disabled:opacity-50"
         />
       </div>
       <button
         type="button"
         onClick={() => onClick(item.id)}
-        className={`home-history-item flex-1 text-left p-2.5 group/item ${
-          isViewing ? 'home-history-item-selected' : ''
+        className={`group/item flex-1 rounded-[0.95rem] border p-3 text-left transition-all duration-200 ease-out ${
+          isViewing
+            ? 'border-white/10 bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(34,211,238,0.08)]'
+            : 'border-white/6 bg-white/[0.02] hover:-translate-y-[1px] hover:border-white/10 hover:bg-white/[0.035]'
         }`}
       >
         <div className="flex items-center gap-2.5 relative z-10">

@@ -310,6 +310,10 @@ def get_history_detail(
             report_type=result.get("report_type"),
             report_language=report_language,
             created_at=result.get("created_at"),
+            market_timestamp=result.get("market_timestamp"),
+            market_session_date=result.get("market_session_date"),
+            news_published_at=result.get("news_published_at"),
+            report_generated_at=result.get("report_generated_at"),
             current_price=current_price,
             change_pct=change_pct,
             model_used=normalize_model_used(result.get("model_used"))

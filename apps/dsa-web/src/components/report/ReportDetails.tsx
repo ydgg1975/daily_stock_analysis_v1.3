@@ -88,7 +88,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   };
 
   return (
-    <Card variant="bordered" padding="md" className="home-panel-card text-left">
+    <Card variant="bordered" padding="md" className="!rounded-[1rem] !border-white/6 !bg-[#050505] !shadow-none text-left">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">{text.transparency}</span>
         <h3 className="mt-0.5 text-base font-semibold text-foreground">{text.traceability}</h3>
@@ -98,7 +98,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
       {recordId && (
         <div className="home-divider mb-3 flex items-center gap-2 border-b pb-3 text-xs text-muted-text">
           <span>{text.recordId}:</span>
-          <code className="home-accent-chip px-1.5 py-0.5 font-mono text-xs">
+          <code className="rounded-full border border-white/6 bg-white/[0.04] px-1.5 py-0.5 font-mono text-xs text-secondary-text">
             {recordId}
           </code>
         </div>
@@ -112,7 +112,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowRaw(!showRaw)}
-              className="home-surface-button flex w-full items-center justify-between rounded-lg p-2.5"
+              className="flex w-full items-center justify-between rounded-lg border border-white/6 bg-white/[0.03] p-2.5"
             >
               <span className="text-xs text-foreground">{text.rawResult}</span>
               <svg
@@ -138,7 +138,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowSnapshot(!showSnapshot)}
-              className="home-surface-button flex w-full items-center justify-between rounded-lg p-2.5"
+              className="flex w-full items-center justify-between rounded-lg border border-white/6 bg-white/[0.03] p-2.5"
             >
               <span className="text-xs text-foreground">{text.analysisSnapshot}</span>
               <svg

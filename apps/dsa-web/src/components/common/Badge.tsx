@@ -12,21 +12,21 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'border-border/40 bg-elevated/40 text-secondary-text',
-  success: 'border-success/20 bg-success/10 text-success',
-  warning: 'border-warning/20 bg-warning/10 text-warning',
-  danger: 'border-danger/20 bg-danger/10 text-danger',
-  info: 'border-cyan/20 bg-cyan/10 text-cyan',
-  history: 'border-purple/20 bg-purple/10 text-purple',
+  default: 'border-white/8 bg-white/[0.035] text-secondary-text',
+  success: 'border-emerald-400/16 bg-emerald-400/[0.08] text-emerald-200',
+  warning: 'border-amber-300/16 bg-amber-300/[0.08] text-amber-100',
+  danger: 'border-rose-400/16 bg-rose-400/[0.08] text-rose-200',
+  info: 'border-cyan/14 bg-cyan/[0.08] text-cyan-100',
+  history: 'border-violet-400/14 bg-violet-400/[0.08] text-violet-100',
 };
 
 const glowStyles: Record<BadgeVariant, string> = {
-  default: '',
-  success: 'shadow-success/20',
-  warning: 'shadow-warning/20',
-  danger: 'shadow-danger/20',
-  info: 'shadow-cyan/20',
-  history: 'shadow-purple/20',
+  default: 'ring-1 ring-white/6',
+  success: 'ring-1 ring-emerald-400/10',
+  warning: 'ring-1 ring-amber-300/10',
+  danger: 'ring-1 ring-rose-400/10',
+  info: 'ring-1 ring-cyan/10',
+  history: 'ring-1 ring-violet-400/10',
 };
 
 /**
@@ -39,15 +39,15 @@ export const Badge: React.FC<BadgeProps> = ({
   glow = false,
   className = '',
 }) => {
-  const sizeStyles = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
+  const sizeStyles = size === 'sm' ? 'min-h-6 px-2.5 py-0.5 text-[11px]' : 'min-h-7 px-3 py-1 text-sm';
 
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border font-medium backdrop-blur-sm',
+        'inline-flex items-center justify-center gap-1 rounded-full border font-medium leading-none backdrop-blur-sm',
         sizeStyles,
         variantStyles[variant],
-        glow && `shadow-lg ${glowStyles[variant]}`,
+        glow && glowStyles[variant],
         className,
       )}
     >

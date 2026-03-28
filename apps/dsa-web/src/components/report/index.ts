@@ -1,4 +1,5 @@
 export * from './ReportSummary';
+export * from './StandardReportPanel';
 export * from './ReportOverview';
 export * from './ReportStrategy';
 export * from './ReportNews';
