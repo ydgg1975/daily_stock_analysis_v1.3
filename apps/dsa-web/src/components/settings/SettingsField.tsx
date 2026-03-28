@@ -53,6 +53,7 @@ function renderFieldControl(
   isPasswordEditable: boolean,
   onPasswordFocus: () => void,
   controlId: string,
+  isMasked: boolean = false,
 ) {
   const schema = item.schema;
   const commonClass = 'input-surface input-focus-glow h-11 w-full rounded-xl border bg-transparent px-4 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60';
@@ -102,6 +103,8 @@ function renderFieldControl(
 
   if (controlType === 'password') {
     const iconType = inferPasswordIconType(item.key);
+    // When isMasked is true, don't allow toggling visibility (no real value to reveal)
+    const showPasswordToggle = !isMasked;
 
     if (isMultiValue) {
       const values = parseMultiValues(value);
@@ -113,13 +116,13 @@ function renderFieldControl(
               <div className="flex-1">
                 <Input
                   type="password"
-                  allowTogglePassword
+                  allowTogglePassword={showPasswordToggle}
                   iconType={iconType}
                   id={index === 0 ? controlId : `${controlId}-${index}`}
-                  readOnly={!isPasswordEditable}
-                  onFocus={onPasswordFocus}
+                  readOnly={!isPasswordEditable || isMasked}
+                  onFocus={isMasked ? undefined : onPasswordFocus}
                   value={entry}
-                  disabled={disabled || !schema?.isEditable}
+                  disabled={disabled || !schema?.isEditable || isMasked}
                   onChange={(event) => {
                     const nextValues = [...values];
                     nextValues[index] = event.target.value;
@@ -162,13 +165,13 @@ function renderFieldControl(
     return (
       <Input
         type="password"
-        allowTogglePassword
+        allowTogglePassword={showPasswordToggle}
         iconType={iconType}
         id={controlId}
-        readOnly={!isPasswordEditable}
-        onFocus={onPasswordFocus}
+        readOnly={!isPasswordEditable || isMasked}
+        onFocus={isMasked ? undefined : onPasswordFocus}
         value={value}
-        disabled={disabled || !schema?.isEditable}
+        disabled={disabled || !schema?.isEditable || isMasked}
         onChange={(event) => onChange(event.target.value)}
       />
     );
@@ -244,12 +247,15 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
           isPasswordEditable,
           () => setIsPasswordEditable(true),
           controlId,
+          Boolean(item.isMasked),
         )}
       </div>
 
       {schema?.isSensitive ? (
         <p className="mt-3 text-[11px] leading-5 text-secondary-text">
-          敏感内容默认隐藏，可点击眼睛图标查看明文。
+          {item.isMasked
+            ? '敏感内容已掩码，如需更改请直接输入新值。'
+            : '敏感内容默认隐藏，可点击眼睛图标查看明文。'}
           {isMultiValue ? ' 支持添加多个输入框进行增删。' : ''}
         </p>
       ) : null}

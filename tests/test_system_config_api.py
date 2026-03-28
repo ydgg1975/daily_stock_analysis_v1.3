@@ -52,11 +52,16 @@ class SystemConfigApiTestCase(unittest.TestCase):
         os.environ.pop("ENV_FILE", None)
         self.temp_dir.cleanup()
 
-    def test_get_config_returns_raw_secret_value(self) -> None:
+    def test_get_config_returns_masked_secret_value(self) -> None:
+        """Sensitive fields like API keys should return masked values."""
         payload = system_config.get_system_config(include_schema=True, service=self.service).model_dump(by_alias=True)
         item_map = {item["key"]: item for item in payload["items"]}
-        self.assertEqual(item_map["GEMINI_API_KEY"]["value"], "secret-key-value")
-        self.assertFalse(item_map["GEMINI_API_KEY"]["is_masked"])
+        # API key should be masked
+        self.assertEqual(item_map["GEMINI_API_KEY"]["value"], "******")
+        self.assertTrue(item_map["GEMINI_API_KEY"]["is_masked"])
+        # Non-sensitive fields should still return actual values
+        self.assertEqual(item_map["STOCK_LIST"]["value"], "600519,000001")
+        self.assertFalse(item_map["STOCK_LIST"]["is_masked"])
 
     def test_put_config_updates_secret_and_plain_field(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()

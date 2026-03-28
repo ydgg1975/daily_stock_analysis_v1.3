@@ -4,6 +4,7 @@ import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import { ApiErrorAlert, Badge, Button, InlineAlert, Input, Select, StatusDot, Tooltip } from '../common';
+import type { SystemConfigItem } from '../../types/systemConfig';
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 
@@ -139,6 +140,7 @@ interface ChannelConfig {
   apiKey: string;
   models: string;
   enabled: boolean;
+  isApiKeyMasked: boolean;
 }
 
 interface ChannelTestState {
@@ -155,7 +157,7 @@ interface RuntimeConfig {
 }
 
 interface LLMChannelEditorProps {
-  items: Array<{ key: string; value: string }>;
+  items: SystemConfigItem[];
   configVersion: string;
   maskToken: string;
   onSaved: (updatedItems: Array<{ key: string; value: string }>) => void | Promise<void>;
@@ -174,6 +176,7 @@ interface ChannelRowProps {
   onToggleExpand: (index: number) => void;
   onToggleKeyVisibility: (index: number, nextVisible: boolean) => void;
   onTest: (channel: ChannelConfig, index: number) => void;
+  isApiKeyMasked?: boolean;
 }
 
 const ChannelRow: React.FC<ChannelRowProps> = ({
@@ -188,6 +191,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
   onToggleExpand,
   onToggleKeyVisibility,
   onTest,
+  isApiKeyMasked = false,
 }) => {
   const preset = CHANNEL_PRESETS[channel.name];
   const displayName = preset?.label || channel.name;
@@ -324,14 +328,15 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
           <Input
             label="API Key"
             type="password"
-            allowTogglePassword
+            allowTogglePassword={!isApiKeyMasked}
             iconType="key"
-            passwordVisible={visibleKey}
-            onPasswordVisibleChange={(nextVisible) => onToggleKeyVisibility(index, nextVisible)}
+            passwordVisible={isApiKeyMasked ? false : visibleKey}
+            onPasswordVisibleChange={isApiKeyMasked ? undefined : ((nextVisible) => onToggleKeyVisibility(index, nextVisible))}
+            readOnly={isApiKeyMasked}
             value={channel.apiKey}
-            disabled={busy}
+            disabled={busy || isApiKeyMasked}
             onChange={(e) => onUpdate(index, 'apiKey', e.target.value)}
-            placeholder={channel.protocol === 'ollama' ? '本地 Ollama 可留空' : '支持多个 Key 逗号分隔'}
+            placeholder={channel.protocol === 'ollama' ? '本地 Ollama 可留空' : isApiKeyMasked ? '已掩码，如需更改请直接输入新值' : '支持多个 Key 逗号分隔'}
           />
 
           <Input
@@ -536,26 +541,30 @@ function parseRuntimeConfigFromItems(items: Array<{ key: string; value: string }
   };
 }
 
-function parseChannelsFromItems(items: Array<{ key: string; value: string }>): ChannelConfig[] {
-  const itemMap = new Map(items.map((item) => [item.key, item.value]));
-  const channelNames = (itemMap.get('LLM_CHANNELS') || '')
+function parseChannelsFromItems(items: SystemConfigItem[]): ChannelConfig[] {
+  const itemMap = new Map(items.map((item) => [item.key, item]));
+  const valueMap = new Map(items.map((item) => [item.key, item.value]));
+  const channelNames = (valueMap.get('LLM_CHANNELS') || '')
     .split(',')
     .map((segment) => segment.trim())
     .filter(Boolean);
 
   return channelNames.map((name) => {
     const upperName = name.toUpperCase();
-    const baseUrl = itemMap.get(`LLM_${upperName}_BASE_URL`) || '';
-    const rawModels = itemMap.get(`LLM_${upperName}_MODELS`) || '';
+    const baseUrl = valueMap.get(`LLM_${upperName}_BASE_URL`) || '';
+    const rawModels = valueMap.get(`LLM_${upperName}_MODELS`) || '';
     const models = splitModels(rawModels);
+    const apiKeyItem = itemMap.get(`LLM_${upperName}_API_KEY`) || itemMap.get(`LLM_${upperName}_API_KEYS`);
+    const isApiKeyMasked = apiKeyItem?.isMasked ?? false;
 
     return {
       name: name.toLowerCase(),
-      protocol: inferProtocol(itemMap.get(`LLM_${upperName}_PROTOCOL`) || '', baseUrl, models),
+      protocol: inferProtocol(valueMap.get(`LLM_${upperName}_PROTOCOL`) || '', baseUrl, models),
       baseUrl,
-      apiKey: itemMap.get(`LLM_${upperName}_API_KEYS`) || itemMap.get(`LLM_${upperName}_API_KEY`) || '',
+      apiKey: valueMap.get(`LLM_${upperName}_API_KEYS`) || valueMap.get(`LLM_${upperName}_API_KEY`) || '',
       models: rawModels,
-      enabled: parseEnabled(itemMap.get(`LLM_${upperName}_ENABLED`)),
+      enabled: parseEnabled(valueMap.get(`LLM_${upperName}_ENABLED`)),
+      isApiKeyMasked,
     };
   });
 }
@@ -975,6 +984,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 onToggleExpand={toggleExpand}
                 onToggleKeyVisibility={toggleKeyVisibility}
                 onTest={(ch, idx) => void handleTest(ch, idx)}
+                isApiKeyMasked={channel.isApiKeyMasked}
               />
             ))}
           </div>

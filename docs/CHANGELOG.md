@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 安全性
+
+- 🔒 **API Key 在前端设置页面默认掩码显示** — 系统配置中的敏感字段（API Key 等）现在默认返回掩码值 `******` 而非实际密钥，前端设置页面不再明文展示；需要更改时用户直接输入新值即可。此改动适用于通用配置字段与 LLM 渠道配置的 API Key。
+
 ## [3.11.0] - 2026-03-27
 
 ### 发布亮点

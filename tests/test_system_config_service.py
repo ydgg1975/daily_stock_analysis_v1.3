@@ -49,14 +49,19 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.manager = ConfigManager(env_path=self.env_path)
         self.service = SystemConfigService(manager=self.manager)
 
-    def test_get_config_returns_raw_sensitive_values(self) -> None:
+    def test_get_config_returns_masked_sensitive_values(self) -> None:
+        """Sensitive fields like API keys should return masked values."""
         payload = self.service.get_config(include_schema=True)
         items = {item["key"]: item for item in payload["items"]}
 
         self.assertIn("GEMINI_API_KEY", items)
-        self.assertEqual(items["GEMINI_API_KEY"]["value"], "secret-key-value")
-        self.assertFalse(items["GEMINI_API_KEY"]["is_masked"])
+        # API key should be masked when there's an existing value
+        self.assertEqual(items["GEMINI_API_KEY"]["value"], "******")
+        self.assertTrue(items["GEMINI_API_KEY"]["is_masked"])
         self.assertTrue(items["GEMINI_API_KEY"]["raw_value_exists"])
+        # Non-sensitive fields should still return actual values
+        self.assertEqual(items["STOCK_LIST"]["value"], "600519,000001")
+        self.assertFalse(items["STOCK_LIST"]["is_masked"])
 
     def test_export_desktop_env_returns_raw_text(self) -> None:
         self.env_path.write_text(
