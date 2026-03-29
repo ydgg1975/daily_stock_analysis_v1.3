@@ -238,10 +238,18 @@ const BacktestPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full flex flex-col rounded-[1.5rem] bg-transparent">
-      {/* Header */}
-      <header className="flex-shrink-0 border-b border-white/5 px-3 py-3 sm:px-4">
-        <div className="flex max-w-5xl flex-wrap items-center gap-2">
+    <div className="workspace-page">
+      <header className="workspace-header-panel flex-shrink-0">
+        <div className="space-y-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Backtest Lab</p>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">策略回测</h1>
+            <p className="mt-2 text-sm leading-6 text-secondary-text">
+              用统一窗口快速复盘建议方向、止盈止损触发率和历史执行质量。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-[1_1_220px]">
             <input
               type="text"
@@ -313,20 +321,15 @@ const BacktestPage: React.FC = () => {
             )}
           </button>
         </div>
-        {runResult && (
-          <div className="mt-2 max-w-4xl">
-            <RunSummary data={runResult} />
-          </div>
-        )}
-        {runError && (
-          <ApiErrorAlert error={runError} className="mt-2 max-w-4xl" />
-        )}
+        {runResult ? <RunSummary data={runResult} /> : null}
+        {runError ? <ApiErrorAlert error={runError} /> : null}
+        </div>
       </header>
 
       {/* Main content */}
-      <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row">
+      <main className="workspace-split-layout">
         {/* Left sidebar - Performance */}
-        <div className="flex max-h-[38vh] flex-col gap-3 overflow-y-auto lg:max-h-none lg:w-60 lg:flex-shrink-0">
+        <div className="workspace-split-rail grid gap-3">
           {isLoadingPerf ? (
             <div className="flex items-center justify-center py-8">
               <div className="w-8 h-8 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
@@ -347,7 +350,7 @@ const BacktestPage: React.FC = () => {
         </div>
 
         {/* Right content - Results table */}
-        <section className="min-h-0 flex-1 overflow-y-auto">
+        <section className="workspace-split-main">
           {pageError ? (
             <ApiErrorAlert error={pageError} className="mb-3" />
           ) : null}

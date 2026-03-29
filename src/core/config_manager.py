@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Literal, Optional, Set, Tuple
 
-from dotenv import dotenv_values
+from src.utils.dotenv_loader import read_dotenv_values
 
 _ASSIGNMENT_PATTERN = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
 _FALLBACK_REWRITE_ERRNOS = {errno.EBUSY, errno.EXDEV}
@@ -83,7 +83,7 @@ class ConfigManager:
         if not self._env_path.exists():
             return {}
 
-        values = dotenv_values(self._env_path)
+        values = read_dotenv_values(self._env_path)
         return {
             str(key): "" if value is None else str(value)
             for key, value in values.items()

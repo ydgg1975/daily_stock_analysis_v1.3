@@ -17,13 +17,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlparse
-from dotenv import load_dotenv, dotenv_values
 from dataclasses import dataclass, field
 
 from src.report_language import (
     is_supported_report_language_value,
     normalize_report_language,
 )
+from src.utils.dotenv_loader import load_dotenv_file, read_dotenv_values
 
 logger = logging.getLogger(__name__)
 
@@ -411,7 +411,7 @@ def setup_env(override: bool = False):
         env_path = Path(env_file)
     else:
         env_path = Path(__file__).parent.parent / '.env'
-    load_dotenv(dotenv_path=env_path, override=override)
+    load_dotenv_file(env_path, override=override)
 
 
 @dataclass
@@ -1646,7 +1646,7 @@ class Config:
             return None
 
         try:
-            env_values = dotenv_values(env_path)
+            env_values = read_dotenv_values(env_path)
         except Exception as exc:  # pragma: no cover - defensive branch
             logging.getLogger(__name__).warning(
                 "Failed to read %s while resolving %s: %s",
@@ -1836,7 +1836,7 @@ class Config:
         stock_list_str = ''
         if env_path.exists():
             # 直接从 .env 文件读取最新的配置
-            env_values = dotenv_values(env_path)
+            env_values = read_dotenv_values(env_path)
             stock_list_str = (env_values.get('STOCK_LIST') or '').strip()
 
         # 如果 .env 文件不存在或未配置，才尝试从系统环境变量读取

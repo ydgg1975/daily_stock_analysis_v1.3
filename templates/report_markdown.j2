@@ -3,11 +3,10 @@
 
 > {{ labels.analyzed_prefix }} **{{ results|length }}** {{ labels.stock_unit }} | 🟢{{ labels.buy_label }}:{{ buy_count }} 🟡{{ labels.watch_label }}:{{ hold_count }} 🔴{{ labels.sell_label }}:{{ sell_count }}
 > {{ labels.report_title }}
-> 报告生成时间（北京时间）: `{{ report_generated_at_bjt or na('接口未返回') }}`
-> 市场时间（原始）: `{{ market_timestamp or na('接口未返回') }}`
-> 市场时间（北京时间）: `{{ market_timestamp_bjt or na('接口未返回') }}`
-> 交易日: `{{ market_session_date or na('接口未返回') }}`
-> 会话类型: `{{ session_type or na('接口未返回') }}`
+> Report time: `{{ report_generated_at_bjt or na('接口未返回') }}`
+> Updated: `{{ market_timestamp_bjt or na('接口未返回') }}`
+> Session: `{{ market_session_date or na('接口未返回') }}`
+> Price basis: `{{ price_basis or na('接口未返回') }}`
 > 新闻发布时间（北京时间）: `{{ news_published_at_bjt or na('接口未返回') }}`
 
 ## 📊 {{ labels.summary_heading }}
@@ -22,55 +21,87 @@
 {% for e in enriched %}
 {% set result = e.result %}
 {% set std = e.standard_report %}
+{% set decision = std.decision_panel %}
+{% set reason = std.reason_layer %}
+{% set coverage = std.coverage_notes %}
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
-### 1. 标题区 / Title
-- **股票名 / ticker**: {{ std.title.stock }}
-- **评分**: {{ std.title.score if std.title.score is not none else na('接口未返回') }}
-- **买入 / 观望 / 卖出**: {{ std.title.operation_advice }}
-- **看多 / 看空 / 震荡**: {{ std.title.trend_prediction }}
-- **一句话决策**: {{ std.title.one_sentence }}
-- **时效性**: {{ std.title.time_sensitivity }}
-
-### 2. 重要信息速览 / Key Updates
-{{ render_field_group(std.info_fields) }}
-
-### 3. 持仓建议 / Position Advice
-- **空仓者建议**: {{ std.position_advice.no_position }}
-- **持仓者建议**: {{ std.position_advice.has_position }}
-
-### 4. 当日行情（常规交易时段） / Market (Regular Session)
-{{ render_field_group(std.market.regular_fields) }}
-
-### 4.1 扩展时段（盘前/盘后） / Extended Session
-{{ render_field_group(std.market.extended_fields) }}
-{% if std.market.consistency_warnings %}
-- **口径校验**: {{ std.market.consistency_warnings | join('；') }}
+### Part A. Executive Summary
+- **评分 / 建议 / 趋势**: {{ std.title.score if std.title.score is not none else na('接口未返回') }} / {{ std.title.operation_advice }} / {{ std.title.trend_prediction }}
+- **一句话结论**: {{ std.title.one_sentence }}
+- **{{ std.summary_panel.price_label or 'Analysis Price' }} / 涨跌**: {{ std.summary_panel.current_price }} | {{ std.summary_panel.change_amount }} / {{ std.summary_panel.change_pct }}
+- **Price basis / Session**: {{ std.summary_panel.price_basis }} / {{ std.summary_panel.reference_session }}
+- **Updated / Report time**: {{ std.summary_panel.snapshot_time }} / {{ std.summary_panel.report_generated_at }}
+- **交易场景 / 置信度**: {{ decision.setup_type }} / {{ decision.confidence }}
+- **关键动作**: {{ decision.key_action }}
+- **理想买入点 / 次优买入点 / 止损位**: {{ decision.ideal_entry }} / {{ decision.backup_entry }} / {{ decision.stop_loss }}
+- **目标一区 / 目标二区 / 目标区间**: {{ decision.target_one }} / {{ decision.target_two }} / {{ decision.target_zone }}
+- **关键支撑 / 关键压力 / 仓位**: {{ decision.support }} / {{ decision.resistance }} / {{ decision.position_sizing }}
+- **核心利好**: {{ reason.top_catalyst }}
+- **核心风险**: {{ reason.top_risk }}
+- **最新关键更新**: {{ reason.latest_key_update }}
+- **核心理由**:
+{% if reason.core_reasons %}
+{% for item in reason.core_reasons %}
+  - {{ item }}
+{% endfor %}
+{% else %}
+  - {{ na('接口未返回') }}
 {% endif %}
 
-### 5. 技术面 / Technicals
-{{ render_field_group(std.technical_fields) }}
-
-### 6. 基本面 / 财报 / 情绪
-#### 6.1 基本面
-{{ render_field_group(std.fundamental_fields) }}
-
-#### 6.2 财报
-{{ render_field_group(std.earnings_fields) }}
-
-#### 6.3 情绪
-{{ render_field_group(std.sentiment_fields) }}
-
-### 7. 作战计划 / Battle Plan
-{{ render_field_group(std.battle_fields) }}
-{% if std.battle_warnings %}
-- **风险提示**: {{ std.battle_warnings | join('；') }}
-{% endif %}
-
-### 8. 检查清单 / Checklist
+### Part B. Action Plan
+- **空仓者建议**: {{ decision.no_position_advice }}
+- **持仓者建议**: {{ decision.holder_advice }}
+- **建仓策略**: {{ decision.build_strategy }}
+- **风控策略**: {{ decision.risk_control_strategy }}
+- **止损说明 / 目标说明**: {{ decision.stop_reason }} / {{ decision.target_reason }}
+- **市场结构**: {{ decision.market_structure }}
+- **Checklist 摘要**: {{ reason.checklist_summary }}
+{% if std.checklist %}
 {% for item in std.checklist %}
 - {{ item }}
 {% endfor %}
+{% else %}
+- {{ na('字段待接入') }}
+{% endif %}
+{% if decision.execution_reminders %}
+- **执行提醒**: {{ decision.execution_reminders | join('；') }}
+{% endif %}
+
+### Part C. Events / Sentiment / News
+- **利好催化**: {{ std.highlights.positive_catalysts | join('；') if std.highlights.positive_catalysts else na('接口未返回') }}
+- **风险警报**: {{ std.highlights.risk_alerts | join('；') if std.highlights.risk_alerts else na('接口未返回') }}
+- **Bullish factors**: {{ std.highlights.bullish_factors | join('；') if std.highlights.bullish_factors else na('接口未返回') }}
+- **Bearish factors**: {{ std.highlights.bearish_factors | join('；') if std.highlights.bearish_factors else na('接口未返回') }}
+- **Mixed / neutral context**: {{ std.highlights.neutral_factors | join('；') if std.highlights.neutral_factors else na('接口未返回') }}
+- **最新关键更新**: {{ reason.latest_key_update }}
+- **情绪摘要**: {{ std.highlights.sentiment_summary }}
+- **新闻价值分级**: {{ reason.news_value_tier }}
+- **业绩预期**: {{ std.highlights.earnings_outlook }}
+
+### Part D. Evidence
+#### D1. Market
+{{ render_field_group(std.market.display_fields or std.market.regular_fields) }}
+{% if std.market.extended_fields %}
+#### D1.1 Extended Session
+{{ render_field_group(std.market.extended_fields) }}
+{% endif %}
+
+#### D2. Technicals
+{{ render_field_group(std.technical_fields) }}
+
+#### D3. Fundamentals
+{{ render_field_group(std.fundamental_fields) }}
+
+#### D4. Earnings
+{{ render_field_group(std.earnings_fields) }}
+
+### Part E. Source / Coverage / Method Notes
+- **数据来源**: {{ coverage.data_sources | join('；') if coverage.data_sources else na('接口未返回') }}
+- **覆盖缺口**: {{ coverage.coverage_gaps | join('；') if coverage.coverage_gaps else na('接口未返回') }}
+- **状态 / 冲突说明**: {{ coverage.conflict_notes | join('；') if coverage.conflict_notes else na('接口未返回') }}
+- **缺失字段说明**: {{ coverage.missing_field_notes | join('；') if coverage.missing_field_notes else na('接口未返回') }}
+- **方法说明**: {{ coverage.method_notes | join('；') if coverage.method_notes else na('接口未返回') }}
 
 ---
 {% endfor %}

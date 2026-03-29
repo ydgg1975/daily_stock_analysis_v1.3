@@ -450,6 +450,7 @@ class StockAnalysisPipeline:
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
             news_items: List[Dict[str, Any]] = []
+            social_context = None
             if self.search_service.is_available:
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
@@ -642,6 +643,8 @@ class StockAnalysisPipeline:
                 alpha_errors=alpha_errors + yfinance_errors,
             )
             enhanced_context.update(multidim_blocks)
+            if social_context:
+                enhanced_context["social_context"] = social_context
             tech = multidim_blocks.get("technicals", {})
             diagnostics["ma20_source"] = (tech.get("ma20") or {}).get("source", "unknown")
             diagnostics["fundamentals_status"] = (multidim_blocks.get("fundamentals") or {}).get("status", "unknown")
@@ -727,6 +730,10 @@ class StockAnalysisPipeline:
         structured["fundamentals"] = enhanced_context.get("fundamentals", {})
         structured["earnings_analysis"] = enhanced_context.get("earnings_analysis", {})
         structured["sentiment_analysis"] = enhanced_context.get("sentiment_analysis", {})
+        if enhanced_context.get("social_context"):
+            sentiment_block = structured["sentiment_analysis"] if isinstance(structured.get("sentiment_analysis"), dict) else {}
+            sentiment_block.setdefault("social_context", enhanced_context.get("social_context"))
+            structured["sentiment_analysis"] = sentiment_block
         structured["data_quality"] = enhanced_context.get("data_quality", {})
         structured["realtime_context"] = enhanced_context.get("realtime", {})
         structured["market_context"] = {
@@ -744,6 +751,8 @@ class StockAnalysisPipeline:
             intel.setdefault("industry_sentiment", sentiment.get("industry_sentiment"))
             intel.setdefault("regulatory_sentiment", sentiment.get("regulatory_sentiment"))
             intel.setdefault("overall_confidence", sentiment.get("overall_confidence"))
+        if enhanced_context.get("social_context"):
+            intel.setdefault("social_context", enhanced_context.get("social_context"))
         dashboard["intelligence"] = intel
         result.dashboard = dashboard
 
@@ -3033,6 +3042,7 @@ class StockAnalysisPipeline:
             # Agent path: inject social sentiment as news_context so both
             # executor (_build_user_message) and orchestrator (ctx.set_data)
             # can consume it through the existing news_context channel
+            social_context = None
             if self.social_sentiment_service.is_available and is_us_stock_code(code):
                 try:
                     social_context = self.social_sentiment_service.get_social_context(code)
@@ -3042,6 +3052,7 @@ class StockAnalysisPipeline:
                             initial_context["news_context"] = existing + "\n\n" + social_context
                         else:
                             initial_context["news_context"] = social_context
+                        initial_context["social_context"] = social_context
                         logger.info(f"[{code}] Agent mode: social sentiment data injected into news_context")
                 except Exception as e:
                     logger.warning(f"[{code}] Agent mode: social sentiment fetch failed: {e}")
@@ -3057,6 +3068,18 @@ class StockAnalysisPipeline:
             result = self._agent_result_to_analysis_result(agent_result, code, stock_name, report_type, query_id)
             if result:
                 result.query_id = query_id
+                if social_context:
+                    dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+                    intel = dashboard.get("intelligence") if isinstance(dashboard.get("intelligence"), dict) else {}
+                    intel.setdefault("social_context", social_context)
+                    dashboard["intelligence"] = intel
+                    dashboard.setdefault("structured_analysis", {})
+                    structured = dashboard["structured_analysis"] if isinstance(dashboard.get("structured_analysis"), dict) else {}
+                    sentiment = structured.get("sentiment_analysis") if isinstance(structured.get("sentiment_analysis"), dict) else {}
+                    sentiment.setdefault("social_context", social_context)
+                    structured["sentiment_analysis"] = sentiment
+                    dashboard["structured_analysis"] = structured
+                    result.dashboard = dashboard
             # Agent weak integrity: placeholder fill only, no LLM retry
             if result and getattr(self.config, "report_integrity_enabled", False):
                 from src.analyzer import check_content_integrity, apply_placeholder_fill

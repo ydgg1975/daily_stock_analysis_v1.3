@@ -86,11 +86,18 @@ export interface StandardReportSummaryPanel {
   ticker?: string;
   score?: number;
   currentPrice?: string;
+  priceLabel?: string;
+  priceBasis?: string;
+  priceBasisDetail?: string;
   changeAmount?: string;
   changePct?: string;
   marketTime?: string;
   marketSessionDate?: string;
   sessionLabel?: string;
+  referenceSession?: string;
+  snapshotTime?: string;
+  reportGeneratedAt?: string;
+  priceContextNote?: string;
   operationAdvice?: string;
   trendPrediction?: string;
   oneSentence?: string;
@@ -118,6 +125,7 @@ export interface StandardReportRegularMetrics {
 
 export interface StandardReportMarketBlock {
   regularFields?: StandardReportField[];
+  displayFields?: StandardReportField[];
   extendedFields?: StandardReportField[];
   consistencyWarnings?: string[];
   regularPriceNumeric?: number;
@@ -172,6 +180,14 @@ export interface StandardReportHighlights {
   newsValueGrade?: string;
   sentimentSummary?: string;
   earningsOutlook?: string;
+  bullishFactors?: string[];
+  bearishFactors?: string[];
+  neutralFactors?: string[];
+  socialSynthesis?: string;
+  socialAttention?: string;
+  socialTone?: string;
+  socialNarrativeFocus?: string;
+  socialSources?: string[];
 }
 
 export interface StandardReportBattlePlanItem {
@@ -184,6 +200,57 @@ export interface StandardReportBattlePlanCompact {
   cards?: StandardReportBattlePlanItem[];
   notes?: StandardReportBattlePlanItem[];
   warnings?: string[];
+}
+
+export interface StandardReportDecisionPanel {
+  setupType?: string;
+  confidence?: string;
+  keyAction?: string;
+  analysisPrice?: number;
+  support?: string;
+  supportLevel?: number;
+  resistance?: string;
+  resistanceLevel?: number;
+  idealEntry?: string;
+  idealEntryCenter?: number;
+  backupEntry?: string;
+  backupEntryCenter?: number;
+  stopLoss?: string;
+  stopLossLevel?: number;
+  target?: string;
+  targetOne?: string;
+  targetOneLevel?: number;
+  targetTwo?: string;
+  targetTwoLevel?: number;
+  targetZone?: string;
+  stopReason?: string;
+  targetReason?: string;
+  marketStructure?: string;
+  atrProxy?: number;
+  positionSizing?: string;
+  buildStrategy?: string;
+  riskControlStrategy?: string;
+  noPositionAdvice?: string;
+  holderAdvice?: string;
+  executionReminders?: string[];
+}
+
+export interface StandardReportReasonLayer {
+  coreReasons?: string[];
+  topRisk?: string;
+  topCatalyst?: string;
+  latestKeyUpdate?: string;
+  sentimentSummary?: string;
+  checklistSummary?: string;
+  newsValueTier?: string;
+}
+
+export interface StandardReportCoverageNotes {
+  dataSources?: string[];
+  coverageGaps?: string[];
+  conflictNotes?: string[];
+  missingFieldNotes?: string[];
+  methodNotes?: string[];
 }
 
 export interface StandardReportDecisionContext {
@@ -227,10 +294,13 @@ export interface StandardReport {
   };
   visualBlocks?: StandardReportVisualBlocks;
   decisionContext?: StandardReportDecisionContext;
+  decisionPanel?: StandardReportDecisionPanel;
+  reasonLayer?: StandardReportReasonLayer;
   highlights?: StandardReportHighlights;
   battleFields?: StandardReportField[];
   battlePlanCompact?: StandardReportBattlePlanCompact;
   battleWarnings?: string[];
+  coverageNotes?: StandardReportCoverageNotes;
   checklist?: string[];
   checklistItems?: StandardReportChecklistItem[];
 }

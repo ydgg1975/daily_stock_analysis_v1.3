@@ -61,6 +61,7 @@ function createDeferred<T>() {
 describe('stockPoolStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
   });
 
@@ -228,9 +229,47 @@ describe('stockPoolStore', () => {
     state = useStockPoolStore.getState();
     expect(state.activeTasks).toHaveLength(0);
     expect(state.query).toBe('');
+    expect(state.highlightedHistoryId).toBeNull();
     expect(state.selectedHistoryIds).toHaveLength(0);
     expect(state.selectedReport).toBeNull();
     expect(state.markdownDrawerOpen).toBe(false);
+  });
+
+  it('focuses the newest matching history item after a task completes', async () => {
+    const latestHistoryItem = {
+      ...historyItem,
+      id: 2,
+      queryId: 'q-2',
+      stockCode: 'NVDA',
+      stockName: 'NVIDIA',
+      createdAt: '2026-03-19T09:00:00Z',
+    };
+    const latestHistoryReport = {
+      ...historyReport,
+      meta: {
+        ...historyReport.meta,
+        id: 2,
+        queryId: 'q-2',
+        stockCode: 'NVDA',
+        stockName: 'NVIDIA',
+      },
+    };
+
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 20,
+      items: [latestHistoryItem, historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(latestHistoryReport);
+
+    const focusedId = await useStockPoolStore.getState().focusLatestHistoryForStock('NVDA');
+
+    const state = useStockPoolStore.getState();
+    expect(focusedId).toBe(2);
+    expect(state.selectedReport?.meta.id).toBe(2);
+    expect(state.highlightedHistoryId).toBe(2);
+    expect(state.historyItems[0].id).toBe(2);
   });
 
   it('ignores late task updates after a task has been removed', () => {

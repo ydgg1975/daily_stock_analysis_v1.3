@@ -149,31 +149,18 @@ class TestDiscordSender(unittest.TestCase):
             "> 已分析 **1** 只股票\n"
             "> 报告生成时间（北京时间）: `2026-03-28 21:35:00`\n\n"
             "## 🟡 NVIDIA (NVDA)\n"
-            "### 1. 标题区 / Title\n"
-            "- **评分**: 78\n"
-            "- **买入 / 观望 / 卖出**: 观望\n"
-            "- **看多 / 看空 / 震荡**: 看多\n"
-            "- **一句话决策**: 等待回踩确认后再考虑加仓\n"
-            "### 2. 重要信息速览 / Key Updates\n"
-            "- **风险警报**: 估值偏高；波动放大\n"
-            "- **利好催化**: AI 订单延续；数据中心需求回暖\n"
-            "- **最新动态 / 重要公告**: 公司发布新品并强化生态合作\n"
-            "### 4. 当日行情（常规交易时段） / Market (Regular Session)\n"
-            "- **当前价**: 125.30\n"
-            "- **涨跌额**: 2.30\n"
-            "- **涨跌幅**: 1.87%\n"
-            "### 5. 技术面 / Technicals\n"
-            "- **MA20**: 120.99\n"
-            "- **MA60**: 118.88\n"
-            "- **RSI14**: 56.78\n"
-            "- **支撑位**: 119.11\n"
-            "- **压力位**: 129.00\n"
-            "### 7. 作战计划 / Battle Plan\n"
-            "- **理想买入点**: 120-121\n"
-            "- **止损位**: 115\n"
-            "- **目标位**: 132\n"
-            "- **仓位建议**: 分批试仓\n"
-            "### 8. 检查清单 / Checklist\n"
+            "### Part A. Executive Summary\n"
+            "- **评分 / 建议 / 趋势**: 78 / 观望 / 看多\n"
+            "- **一句话结论**: 等待回踩确认后再考虑加仓\n"
+            "- **当前价 / 涨跌**: 当前价 125.30 | 涨跌 2.30 / 1.87%\n"
+            "- **理想买入点 / 次优买入点 / 止损位 / 目标位 / 仓位**: 120-121 / 118 / 115 / 132 / 分批试仓\n"
+            "- **核心风险**: 估值偏高；波动放大\n"
+            "- **核心利好**: AI 订单延续；数据中心需求回暖\n"
+            "- **最新关键更新**: 公司发布新品并强化生态合作\n"
+            "### Part B. Action Plan\n"
+            "- **空仓者建议**: 等待回踩确认\n"
+            "- **持仓者建议**: 量价未坏可继续跟踪\n"
+            "- **Checklist 摘要**: ⚠️ 等待回踩确认；✅ 量价结构未破坏\n"
             "- ⚠️ 等待回踩确认\n"
             "- ✅ 量价结构未破坏\n"
         )
@@ -182,10 +169,11 @@ class TestDiscordSender(unittest.TestCase):
 
         self.assertIn("## 🟡 NVIDIA (NVDA)", out)
         self.assertIn("**评分 / 建议 / 趋势**: 78 / 观望 / 看多", out)
-        self.assertIn("**核心行情**: 当前价 125.30 | 涨跌幅 1.87% | 涨跌额 2.30", out)
-        self.assertIn("**作战计划**: 买点 120-121 | 止损 115 | 目标 132 | 仓位 分批试仓", out)
-        self.assertIn("Checklist", out)
-        self.assertNotIn("### 4. 当日行情（常规交易时段） / Market (Regular Session)", out)
+        self.assertIn("**当前价 / 涨跌**: 当前价 125.30 | 涨跌 2.30 / 1.87%", out)
+        self.assertIn("**执行计划**: 120-121 / 118 / 115 / 132 / 分批试仓", out)
+        self.assertIn("**空仓 / 持仓建议**: 空仓 等待回踩确认 | 持仓 量价未坏可继续跟踪", out)
+        self.assertIn("**Checklist 摘要**: ⚠️ 等待回踩确认；✅ 量价结构未破坏", out)
+        self.assertNotIn("### Part A. Executive Summary", out)
 
     def test_send_chunks_continues_after_mid_failure(self):
         cfg = _config(discord_webhook_url="https://discord.com/webhook/1")

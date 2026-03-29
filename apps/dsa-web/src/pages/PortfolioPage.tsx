@@ -730,16 +730,17 @@ const PortfolioPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-6 space-y-4">
-      <section className="space-y-3">
+    <div className="workspace-page">
+      <section className="workspace-header-panel space-y-4">
         <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Portfolio Workbench</p>
           <h1 className="text-xl md:text-2xl font-semibold text-foreground">持仓管理</h1>
-          <p className="text-xs md:text-sm text-secondary">
+          <p className="text-sm text-secondary">
             组合快照、手工录入、CSV 导入与风险分析（支持全组合 / 单账户切换）
           </p>
         </div>
         {hasAccounts ? (
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <div className="workspace-surface-muted p-3">
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_220px_280px] gap-2 items-end">
               <div>
                 <p className="text-xs text-secondary mb-1">账户视图</p>
@@ -1194,7 +1195,7 @@ const PortfolioPage: React.FC = () => {
             <div className="text-[11px] text-secondary">
               {writeBlocked ? '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。' : '如有错误流水，可直接删除后重新录入。'}
             </div>
-            <div className="max-h-64 overflow-auto rounded-lg border border-white/10 p-2">
+            <div className="rounded-lg border border-white/10 p-2 max-h-none overflow-visible lg:max-h-64 lg:overflow-auto">
               {eventType === 'trade' && tradeEvents.map((item) => (
                 <div key={`t-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
                   <div className="min-w-0">

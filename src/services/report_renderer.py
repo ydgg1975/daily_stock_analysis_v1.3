@@ -439,18 +439,23 @@ def _format_number_token_text(value: Any, *, reason: str = "字段待接入") ->
     return _NUMERIC_TOKEN_RE.sub(lambda m: f"{float(m.group(0)):.2f}", text)
 
 
-def _pick_first(payload: Dict[str, Any], candidates: Iterable[str]) -> Any:
+def _pick_first(payload: Dict[str, Any], candidates: Iterable[str], *, zero_is_missing: bool = False) -> Any:
     for key in candidates:
-        if key in payload and not _is_missing_value(payload.get(key)):
+        if key in payload and not _is_missing_value(payload.get(key), zero_is_missing=zero_is_missing):
             return payload.get(key)
     return None
 
 
-def _pick_first_from_sources(sources: Iterable[Any], candidates: Iterable[str]) -> Any:
+def _pick_first_from_sources(
+    sources: Iterable[Any],
+    candidates: Iterable[str],
+    *,
+    zero_is_missing: bool = False,
+) -> Any:
     for payload in sources:
         if not isinstance(payload, dict):
             continue
-        value = _pick_first(payload, candidates)
+        value = _pick_first(payload, candidates, zero_is_missing=zero_is_missing)
         if value is not None:
             return value
     return None
@@ -527,6 +532,202 @@ def _normalize_session_type(session_type: Any) -> Tuple[str, str]:
     if "intraday" in text or "snapshot" in text:
         return "intraday", "盘中快照"
     return "regular", "常规交易时段"
+
+
+def _describe_price_basis(
+    session_kind: str,
+    *,
+    session_label: str,
+    market_session_date: Optional[str],
+) -> Dict[str, str]:
+    reference_session = (
+        f"{market_session_date} regular session"
+        if market_session_date
+        else "latest available session"
+    )
+    if session_kind == "intraday":
+        return {
+            "price_label": "Analysis Price",
+            "price_basis": "Intraday snapshot",
+            "price_basis_detail": "Captured from a market snapshot during the current session, not streaming tick-by-tick data.",
+            "reference_session": reference_session,
+            "price_context_note": "Entry, stop, target, support and resistance are anchored to the same intraday snapshot shown above.",
+        }
+    if session_kind == "extended":
+        return {
+            "price_label": "Analysis Price",
+            "price_basis": "Regular-session close",
+            "price_basis_detail": "The analysis stays anchored to the regular-session close. Extended-hours pricing is shown separately.",
+            "reference_session": reference_session,
+            "price_context_note": "The report stays anchored to the regular close so pre-market or after-hours moves do not overwrite the trading plan baseline.",
+        }
+    if session_kind == "completed":
+        return {
+            "price_label": "Analysis Price",
+            "price_basis": "Last close",
+            "price_basis_detail": "Based on the most recent completed trading session.",
+            "reference_session": reference_session,
+            "price_context_note": "The trading plan is anchored to the last completed session close and does not pretend to be live pricing.",
+        }
+    return {
+        "price_label": "Analysis Price",
+        "price_basis": "Session reference",
+        "price_basis_detail": f"Based on the best available quote from {session_label or 'the current session'}.",
+        "reference_session": reference_session,
+        "price_context_note": "The report’s key trading levels use the same reference price shown above.",
+    }
+
+
+def _humanize_quote_source(raw_source: Any) -> str:
+    text = str(raw_source or "").strip()
+    if not text:
+        return "Upstream quote feed"
+
+    lowered = text.lower()
+    if "yfinance" in lowered or lowered in {"yf"}:
+        return "YFinance"
+    if "akshare" in lowered:
+        return "AkShare"
+    if "tushare" in lowered:
+        return "Tushare"
+    if "tickflow" in lowered:
+        return "TickFlow"
+    if "alpha" in lowered and "vantage" in lowered:
+        return "Alpha Vantage"
+    if "fmp" in lowered:
+        return "FMP"
+
+    words = re.split(r"[_\-\s]+", text)
+    return " ".join(word.upper() if len(word) <= 3 else word.capitalize() for word in words if word)
+
+
+def _describe_market_feed(
+    raw_source: Any,
+    *,
+    session_kind: str,
+    selected_bundle_name: str,
+) -> str:
+    provider = _humanize_quote_source(raw_source)
+    if session_kind == "intraday":
+        descriptor = "intraday snapshot"
+    elif session_kind == "completed":
+        descriptor = "last-close feed"
+    elif session_kind == "extended":
+        descriptor = "regular-session reference"
+    elif "realtime" in selected_bundle_name or "snapshot" in selected_bundle_name:
+        descriptor = "session snapshot"
+    else:
+        descriptor = "session reference"
+    return f"{provider} · {descriptor}"
+
+
+def _build_social_digest(
+    raw_social_context: Any,
+    *,
+    company_sentiment: str,
+    industry_sentiment: str,
+    regulatory_sentiment: str,
+    scenario_label: str,
+    volume_status: str,
+) -> Dict[str, Any]:
+    raw_text = str(raw_social_context or "").strip()
+    lowered = raw_text.lower()
+
+    def _extract(pattern: str) -> Optional[float]:
+        match = re.search(pattern, lowered)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", ""))
+        except Exception:
+            return None
+
+    sources: List[str] = []
+    if "reddit" in lowered:
+        sources.append("Reddit")
+    if " twitter" in lowered or " x " in lowered or "\nx" in lowered or "x trending" in lowered:
+        sources.append("X / Twitter")
+    if "stocktwits" in lowered:
+        sources.append("Stocktwits")
+    if "polymarket" in lowered:
+        sources.append("Polymarket")
+
+    buzz_score = _extract(r"buzz score:\s*([+-]?\d+(?:\.\d+)?)")
+    sentiment_score = _extract(r"sentiment score:\s*([+-]?\d+(?:\.\d+)?)")
+    mention_count = _extract(r"mentions:\s*([0-9,]+)")
+    if mention_count is None:
+        mention_count = _extract(r"mention count:\s*([0-9,]+)")
+
+    quoted_focus = [
+        re.sub(r"\s+", " ", match).strip()
+        for match in re.findall(r"\"([^\"]{16,180})\"", raw_text)
+    ]
+    focus_items = unique_meaningful_items(quoted_focus, 2)
+    focus_text = "、".join(focus_items) if focus_items else ""
+
+    if sentiment_score is not None and sentiment_score >= 0.25:
+        tone = "bullish"
+        tone_text = "tone leans bullish"
+    elif sentiment_score is not None and sentiment_score <= -0.25:
+        tone = "bearish"
+        tone_text = "tone leans bearish"
+    elif regulatory_sentiment == "negative":
+        tone = "bearish"
+        tone_text = "tone is cautious because regulation remains a drag"
+    elif (company_sentiment == "positive" or industry_sentiment == "positive") and sentiment_score is None:
+        tone = "bullish"
+        tone_text = "tone is constructive"
+    elif company_sentiment == "negative" or industry_sentiment == "negative":
+        tone = "bearish"
+        tone_text = "tone is defensive"
+    else:
+        tone = "mixed"
+        tone_text = "tone is mixed"
+
+    if (
+        (buzz_score is not None and buzz_score >= 68)
+        or (mention_count is not None and mention_count >= 120)
+        or "trending" in lowered
+    ):
+        attention = "discussion appears elevated"
+    elif (
+        (buzz_score is not None and buzz_score >= 45)
+        or (mention_count is not None and mention_count >= 35)
+        or "top mentions" in lowered
+        or "放量" in volume_status
+    ):
+        attention = "attention is event-driven"
+    else:
+        attention = "retail attention is muted"
+
+    if not focus_text:
+        if scenario_label and "突破" in scenario_label:
+            focus_text = "突破确认与追价风险"
+        elif scenario_label and "回踩" in scenario_label:
+            focus_text = "回踩承接与均线防守"
+        elif "放量" in volume_status:
+            focus_text = "量能是否能继续放大"
+        else:
+            focus_text = "估值、结构确认与下一步催化"
+
+    if raw_text:
+        synthesis = (
+            f"综合 {' / '.join(sources) if sources else '零售讨论源'} 的讨论语义：{attention}，{tone_text}，"
+            f"当前关注点集中在 {focus_text}。该卡片为 LLM 综合讨论摘要，不等同于已核实硬新闻。"
+        )
+    else:
+        synthesis = (
+            f"暂无可直接展示的零售讨论抓取，当前以市场语境补位：{attention}，{tone_text}，"
+            f"关注点偏向 {focus_text}。该卡片为 LLM 综合讨论摘要，不等同于已核实硬新闻。"
+        )
+
+    return {
+        "social_synthesis": synthesis,
+        "social_attention": attention,
+        "social_tone": tone,
+        "social_narrative_focus": focus_text,
+        "social_sources": sources,
+    }
 
 
 def _coerce_session_type(code: str, session_type: Any, market_timestamp: Any) -> Any:
@@ -745,32 +946,46 @@ def _build_summary_panel(
     market_block: Dict[str, Any],
 ) -> Dict[str, Any]:
     time_ctx = market_block.get("time_context") if isinstance(market_block.get("time_context"), dict) else {}
-    regular_fields = market_block.get("regular_fields") if isinstance(market_block.get("regular_fields"), list) else []
-    regular_map = _build_field_map(regular_fields)
+    regular_metrics = market_block.get("regular_metrics") if isinstance(market_block.get("regular_metrics"), dict) else {}
     session_value = time_ctx.get("session_label") or time_ctx.get("session_type")
-    current_price = regular_map.get("当前价", _na("接口未返回"))
-    change_amount = regular_map.get("涨跌额", _na("接口未返回"))
-    change_pct = regular_map.get("涨跌幅", _na("接口未返回"))
+    price_label = _format_text(time_ctx.get("price_label"), reason="字段待接入")
+    price_basis = _format_text(time_ctx.get("price_basis"), reason="字段待接入")
+    price_basis_detail = _format_text(time_ctx.get("price_basis_detail"), reason="字段待接入")
+    current_price = _format_price(regular_metrics.get("price"))
+    change_amount = _format_price(regular_metrics.get("change_amount"))
+    change_pct = _format_percent(regular_metrics.get("change_pct"))
     market_time = _format_text(
         time_ctx.get("market_timestamp_local") or time_ctx.get("market_timestamp_bjt") or time_ctx.get("market_timestamp"),
         reason="接口未返回",
     )
+    report_generated_at = _format_text(
+        time_ctx.get("report_generated_at_bjt") or time_ctx.get("report_generated_at"),
+        reason="接口未返回",
+    )
+    reference_session = _format_text(time_ctx.get("reference_session"), reason="接口未返回")
     tags = [
-        {"label": "交易日", "value": _format_text(time_ctx.get("market_session_date"), reason="接口未返回")},
-        {"label": "市场时间", "value": market_time},
-        {"label": "会话类型", "value": _format_text(session_value, reason="接口未返回")},
-        {"label": "新闻发布时间", "value": _format_text(time_ctx.get("news_published_at_bjt") or time_ctx.get("news_published_at"), reason="接口未返回")},
+        {"label": "Basis", "value": price_basis},
+        {"label": "Session", "value": reference_session},
+        {"label": "As of", "value": market_time},
+        {"label": "Report", "value": report_generated_at},
     ]
     return {
         "stock": title.get("stock"),
         "ticker": result.code,
         "score": result.sentiment_score,
         "current_price": current_price,
+        "price_label": price_label,
+        "price_basis": price_basis,
+        "price_basis_detail": price_basis_detail,
         "change_amount": change_amount,
         "change_pct": change_pct,
         "market_time": market_time,
         "market_session_date": _format_text(time_ctx.get("market_session_date"), reason="接口未返回"),
         "session_label": _format_text(session_value, reason="接口未返回"),
+        "reference_session": reference_session,
+        "snapshot_time": market_time,
+        "report_generated_at": report_generated_at,
+        "price_context_note": _format_text(time_ctx.get("price_context_note"), reason="字段待接入"),
         "operation_advice": title.get("operation_advice"),
         "trend_prediction": title.get("trend_prediction"),
         "one_sentence": title.get("one_sentence"),
@@ -890,6 +1105,9 @@ def _build_highlights(
     *,
     fundamentals: Optional[Dict[str, Any]] = None,
     earnings: Optional[Dict[str, Any]] = None,
+    market_block: Optional[Dict[str, Any]] = None,
+    technical_fields: Optional[List[Dict[str, str]]] = None,
+    trade_setup: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     structured = dashboard.get("structured_analysis") if isinstance(dashboard.get("structured_analysis"), dict) else {}
     time_context = structured.get("time_context") if isinstance(structured.get("time_context"), dict) else {}
@@ -941,14 +1159,232 @@ def _build_highlights(
         intel["latest_news"] = ""
         intel["latest_news_notice"] = "未发现高价值新增动态"
 
+    technical_map = _build_field_map(technical_fields or [])
+    market_metrics = market_block.get("regular_metrics") if isinstance(market_block, dict) else {}
+    fundamentals_payload = fundamentals if isinstance(fundamentals, dict) else {}
+    normalized_fundamentals = (
+        fundamentals_payload.get("normalized")
+        if isinstance(fundamentals_payload.get("normalized"), dict)
+        else {}
+    )
+    trade_ctx = trade_setup if isinstance(trade_setup, dict) else {}
+
+    def _append_unique(bucket: List[str], text: str) -> None:
+        normalized_text = _normalize_inline_text(text)
+        if normalized_text and normalized_text not in bucket:
+            bucket.append(normalized_text)
+
+    bullish_factors: List[str] = []
+    bearish_factors: List[str] = []
+    neutral_factors: List[str] = []
+
+    for item in intel.get("positive_catalysts") or []:
+        _append_unique(bullish_factors, str(item))
+    for item in intel.get("risk_alerts") or []:
+        _append_unique(bearish_factors, str(item))
+
+    current_price = _to_float(
+        _pick_first_from_sources(
+            (market_metrics, market_block or {}),
+            ("price", "current_price", "regular_price_numeric", "close"),
+            zero_is_missing=True,
+        )
+    )
+    ma20 = _extract_first_number(technical_map.get("MA20"))
+    ma5 = _extract_first_number(technical_map.get("MA5"))
+    support = _extract_first_number(technical_map.get("支撑位"))
+    resistance = _extract_first_number(technical_map.get("压力位"))
+    high_52w = _to_float(
+        _pick_first_from_sources(
+            (normalized_fundamentals, market_block or {}),
+            ("fiftyTwoWeekHigh", "high_52w", "52week_high"),
+            zero_is_missing=True,
+        )
+    )
+    trailing_pe = _to_float(normalized_fundamentals.get("trailingPE"))
+    forward_pe = _to_float(normalized_fundamentals.get("forwardPE"))
+    company_sentiment = str(sentiment.get("company_sentiment") or "").strip().lower()
+    industry_sentiment = str(sentiment.get("industry_sentiment") or "").strip().lower()
+    regulatory_sentiment = str(sentiment.get("regulatory_sentiment") or "").strip().lower()
+    confidence_text = localize_confidence_level(
+        sentiment.get("overall_confidence") or sentiment.get("confidence"),
+        "zh",
+    )
+    confidence_suffix = f"置信度{confidence_text if confidence_text and not confidence_text.startswith('NA（') else '中'}。"
+    volume_status = _normalize_inline_text(technical_map.get(get_standard_report_field_label("volume_judgment", "zh"))).lower()
+    ma20_position = _normalize_inline_text(technical_map.get(get_standard_report_field_label("ma20_position", "zh")))
+    earnings_outlook = _derive_earnings_outlook(fundamentals, earnings)
+    scenario_label = _normalize_inline_text(trade_ctx.get("scenario_label"))
+    support_text = _normalize_inline_text(trade_ctx.get("support_text"))
+    resistance_text = _normalize_inline_text(trade_ctx.get("resistance_text"))
+    has_company_specific_catalyst = bool(intel.get("positive_catalysts"))
+    has_company_specific_risk = bool(intel.get("risk_alerts"))
+    social_context = (
+        intel.get("social_context")
+        or sentiment.get("social_context")
+        or sentiment.get("social_summary")
+    )
+    social_digest = _build_social_digest(
+        social_context,
+        company_sentiment=company_sentiment,
+        industry_sentiment=industry_sentiment,
+        regulatory_sentiment=regulatory_sentiment,
+        scenario_label=scenario_label,
+        volume_status=volume_status,
+    )
+
+    if earnings_outlook and not earnings_outlook.startswith("NA（"):
+        if any(token in earnings_outlook for token in ("改善", "增长", "回升", "同向改善")):
+            _append_unique(
+                bullish_factors,
+                f"业绩预期：{earnings_outlook.rstrip('。')}，有助于维持基本面支撑；方向偏多；{confidence_suffix}",
+            )
+        elif any(token in earnings_outlook for token in ("承压", "回落", "下滑", "不足")):
+            _append_unique(
+                bearish_factors,
+                f"业绩预期：{earnings_outlook.rstrip('。')}，基本面缓冲有限；方向偏空；{confidence_suffix}",
+            )
+
+    if current_price is not None and ma20 is not None:
+        if current_price >= ma20:
+            structure_text = support_text or f"{support:.2f}" if support is not None else f"{ma20:.2f}"
+            _append_unique(
+                bullish_factors,
+                f"技术结构：价格仍位于 MA20 上方，防守位在 {structure_text} 一带；若回踩企稳，趋势延续概率更高；方向偏多；{confidence_suffix}",
+            )
+        else:
+            _append_unique(
+                bearish_factors,
+                f"技术结构：价格已落到 MA20 下方，说明趋势确认不足；若不能快速收复均线，回撤风险仍在；方向偏空；{confidence_suffix}",
+            )
+
+    if scenario_label and resistance_text and scenario_label.startswith("突破"):
+        _append_unique(
+            bullish_factors,
+            f"触发条件：放量站上 {resistance_text} 才算真正突破，届时才具备追随性催化；方向偏多；{confidence_suffix}",
+        )
+    elif scenario_label and support_text and scenario_label.startswith("回踩"):
+        _append_unique(
+            bullish_factors,
+            f"执行节奏：更适合等回踩 {support_text} 附近出现承接，再按计划试仓；方向偏多；{confidence_suffix}",
+        )
+    elif scenario_label and "观望" in scenario_label:
+        _append_unique(
+            neutral_factors,
+            f"交易状态：当前更接近等待区，先等结构重新确认再行动；方向中性；{confidence_suffix}",
+        )
+
+    if trailing_pe is not None and trailing_pe >= 30:
+        _append_unique(
+            bearish_factors,
+            f"估值约束：TTM PE 约 {trailing_pe:.1f}，估值容错率偏低；若催化不能继续兑现，波动放大的概率上升；方向偏空；{confidence_suffix}",
+        )
+    elif forward_pe is not None and forward_pe >= 28:
+        _append_unique(
+            bearish_factors,
+            f"估值约束：前瞻 PE 约 {forward_pe:.1f}，市场已计入较多乐观预期；方向偏空；{confidence_suffix}",
+        )
+
+    if current_price is not None and high_52w is not None and high_52w > 0:
+        distance_52w = (high_52w - current_price) / high_52w * 100
+        if 0 <= distance_52w <= 8:
+            _append_unique(
+                neutral_factors,
+                f"高位语境：当前距 52 周高点约 {distance_52w:.1f}%，上方空间存在，但也意味着突破前容易反复；方向中性；{confidence_suffix}",
+            )
+
+    if company_sentiment == "positive" or industry_sentiment == "positive":
+        _append_unique(
+            bullish_factors,
+            "情绪与叙事：公司/行业层面的风险偏好偏积极，利于强势结构延续；方向偏多；置信度中。",
+        )
+    if regulatory_sentiment == "negative":
+        _append_unique(
+            bearish_factors,
+            "监管语境：监管情绪偏负面，短线估值和风险偏好都可能受压制；方向偏空；置信度中。",
+        )
+    elif company_sentiment in {"neutral", ""} and industry_sentiment in {"neutral", ""}:
+        _append_unique(
+            neutral_factors,
+            "消息面偏安静，缺少新的公司级催化，短线更依赖板块风险偏好和技术位置。方向中性；置信度中。",
+        )
+
+    if "缩量" in volume_status:
+        _append_unique(
+            neutral_factors,
+            "量能语境：当前量能偏缩，说明追价意愿一般，更适合等待确认而不是主观放大仓位。方向中性；置信度中。",
+        )
+    elif "放量" in volume_status:
+        _append_unique(
+            bullish_factors,
+            "量能语境：近期量能较前期改善，若与关键价位共振，更容易形成有效延续。方向偏多；置信度中。",
+        )
+
+    if not has_company_specific_catalyst:
+        _append_unique(
+            neutral_factors,
+            "暂无新的公司级催化落地；当前可参考的驱动更多来自行业景气、盈利预期和技术结构。",
+        )
+    if not has_company_specific_risk and ma20_position and "下方" in ma20_position:
+        _append_unique(
+            bearish_factors,
+            "暂无新的硬风险公告，但技术位置本身已经成为当前的主要风险来源。",
+        )
+
+    latest_news_items: List[str] = []
     latest_news = _normalize_inline_text(intel.get("latest_news") or intel.get("latest_news_notice"))
+    if latest_news:
+        latest_news_items.append(latest_news)
+    if not latest_news_items:
+        latest_news_items.append(
+            "暂无新的公司级公告/催化，当前优先跟踪行业情绪、盈利预期与技术位是否出现新的确认信号。"
+        )
+        if scenario_label:
+            latest_news_items.append(f"当前执行语境：{scenario_label}。")
+        if support_text and resistance_text:
+            latest_news_items.append(f"关键结构位：支撑关注 {support_text}，压力关注 {resistance_text}。")
+
+    sentiment_summary_text = _normalize_inline_text(intel.get("sentiment_summary"))
+    if not sentiment_summary_text:
+        bullish_lead = bullish_factors[0] if bullish_factors else "暂无明显偏多增量"
+        bearish_lead = bearish_factors[0] if bearish_factors else "暂无明显偏空增量"
+        neutral_lead = neutral_factors[0] if neutral_factors else "当前更偏等待确认"
+        sentiment_summary_text = (
+            f"偏多因素：{bullish_lead} 偏空因素：{bearish_lead} "
+            f"中性/混合：{neutral_lead}"
+        )
+
+    positive_items = unique_meaningful_items(
+        [*intel.get("positive_catalysts", []), *bullish_factors],
+        4,
+    )
+    risk_items = unique_meaningful_items(
+        [*intel.get("risk_alerts", []), *bearish_factors],
+        4,
+    )
+    neutral_items = unique_meaningful_items(
+        [
+            *neutral_factors,
+            f"零售讨论：{social_digest['social_attention']}，{social_digest['social_narrative_focus']}。",
+        ],
+        4,
+    )
+
     return {
-        "positive_catalysts": intel.get("positive_catalysts") or [],
-        "risk_alerts": intel.get("risk_alerts") or [],
-        "latest_news": [latest_news] if latest_news else [],
+        "positive_catalysts": positive_items,
+        "risk_alerts": risk_items,
+        "latest_news": latest_news_items[:3],
         "news_value_grade": _format_text(intel.get("news_value_grade"), reason="接口未返回"),
-        "sentiment_summary": _format_text(intel.get("sentiment_summary"), reason="接口未返回"),
-        "earnings_outlook": _derive_earnings_outlook(fundamentals, earnings),
+        "sentiment_summary": _format_text(sentiment_summary_text, reason="接口未返回"),
+        "earnings_outlook": earnings_outlook,
+        "bullish_factors": positive_items,
+        "bearish_factors": risk_items,
+        "neutral_factors": neutral_items,
+        "social_synthesis": _format_text(social_digest.get("social_synthesis"), reason="字段待接入"),
+        "social_attention": _format_text(social_digest.get("social_attention"), reason="字段待接入"),
+        "social_tone": _format_text(social_digest.get("social_tone"), reason="字段待接入"),
+        "social_narrative_focus": _format_text(social_digest.get("social_narrative_focus"), reason="字段待接入"),
+        "social_sources": social_digest.get("social_sources") or [],
     }
 
 
@@ -1008,10 +1444,16 @@ def _build_battle_plan_compact(
     cards: List[Dict[str, str]] = []
     notes: List[Dict[str, str]] = []
     tone_map = {
+        "交易场景": "info",
+        "关键动作": "info",
         "理想买入点": "buy",
         "次优买入点": "secondary",
         "止损位": "risk",
+        "目标一区": "target",
+        "目标二区": "target",
         "目标位": "target",
+        "关键支撑": "info",
+        "关键压力": "warning",
         "仓位建议": "position",
     }
     for item in battle_fields:
@@ -1030,6 +1472,194 @@ def _build_battle_plan_compact(
         "cards": cards,
         "notes": notes,
         "warnings": warnings or [],
+    }
+
+
+def _meaningful_text(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text or text.startswith("NA（"):
+        return None
+    return text
+
+
+def _pick_first_nonempty(items: Iterable[Any], *, default: Optional[str] = None) -> Optional[str]:
+    for item in items or []:
+        text = _meaningful_text(item)
+        if text:
+            return text
+    return default
+
+
+def unique_meaningful_items(items: Iterable[Any], limit: int) -> List[str]:
+    seen: set[str] = set()
+    normalized: List[str] = []
+    for item in items or []:
+        text = _meaningful_text(item)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+        if len(normalized) >= limit:
+            break
+    return normalized
+
+
+def _extract_missing_reason(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if text.startswith("NA（") and text.endswith("）"):
+        return text[3:-1].strip()
+    return None
+
+
+def _build_decision_panel(
+    *,
+    battle_fields: List[Dict[str, str]],
+    position_advice: Dict[str, Any],
+    risk_warnings: List[str],
+    decision_context: Dict[str, Any],
+    trade_setup: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    battle_map = _build_field_map(battle_fields)
+    execution_reminders = [str(item).strip() for item in (risk_warnings or []) if str(item).strip()]
+    change_reason = _meaningful_text(decision_context.get("change_reason"))
+    if change_reason and change_reason not in execution_reminders:
+        execution_reminders.append(change_reason)
+
+    trade_ctx = trade_setup if isinstance(trade_setup, dict) else {}
+
+    return {
+        "setup_type": battle_map.get("交易场景", _format_text(trade_ctx.get("scenario_label"), reason="字段待接入")),
+        "confidence": _format_text(trade_ctx.get("confidence_label"), reason="字段待接入"),
+        "key_action": battle_map.get("关键动作", _format_text(trade_ctx.get("key_action"), reason="字段待接入")),
+        "analysis_price": _to_float(trade_ctx.get("analysis_price")),
+        "support": battle_map.get("关键支撑", _format_text(trade_ctx.get("support_text"), reason="字段待接入")),
+        "support_level": _to_float(trade_ctx.get("support_level")),
+        "resistance": battle_map.get("关键压力", _format_text(trade_ctx.get("resistance_text"), reason="字段待接入")),
+        "resistance_level": _to_float(trade_ctx.get("resistance_level")),
+        "ideal_entry": battle_map.get("理想买入点", _na("字段待接入")),
+        "ideal_entry_center": _to_float(trade_ctx.get("ideal_entry_center")),
+        "backup_entry": battle_map.get("次优买入点", _na("字段待接入")),
+        "backup_entry_center": _to_float(trade_ctx.get("backup_entry_center")),
+        "stop_loss": battle_map.get("止损位", _na("字段待接入")),
+        "stop_loss_level": _to_float(trade_ctx.get("stop_loss_level")),
+        "target": battle_map.get("目标位", _na("字段待接入")),
+        "target_one": battle_map.get("目标一区", _format_text(trade_ctx.get("target_one"), reason="字段待接入")),
+        "target_one_level": _to_float(trade_ctx.get("target_one_level")),
+        "target_two": battle_map.get("目标二区", _format_text(trade_ctx.get("target_two"), reason="字段待接入")),
+        "target_two_level": _to_float(trade_ctx.get("target_two_level")),
+        "target_zone": _format_text(trade_ctx.get("target_zone"), reason="字段待接入"),
+        "stop_reason": _format_text(trade_ctx.get("stop_reason"), reason="字段待接入"),
+        "target_reason": _format_text(trade_ctx.get("target_reason"), reason="字段待接入"),
+        "market_structure": _format_text(trade_ctx.get("market_structure"), reason="字段待接入"),
+        "atr_proxy": _to_float(trade_ctx.get("atr_proxy")),
+        "position_sizing": battle_map.get("仓位建议", _na("字段待接入")),
+        "build_strategy": battle_map.get("建仓策略", _na("字段待接入")),
+        "risk_control_strategy": battle_map.get("风控策略", _na("字段待接入")),
+        "no_position_advice": _format_text(position_advice.get("no_position") or trade_ctx.get("no_position_advice"), reason="字段待接入"),
+        "holder_advice": _format_text(position_advice.get("has_position") or trade_ctx.get("holder_advice"), reason="字段待接入"),
+        "execution_reminders": execution_reminders,
+    }
+
+
+def _build_reason_layer(
+    *,
+    highlights: Dict[str, Any],
+    checklist: List[str],
+    decision_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    top_risk = _pick_first_nonempty(highlights.get("risk_alerts") or [], default=_na("接口未返回"))
+    top_catalyst = _pick_first_nonempty(highlights.get("positive_catalysts") or [], default=_na("接口未返回"))
+    latest_update = _pick_first_nonempty(highlights.get("latest_news") or [], default=_na("接口未返回"))
+    sentiment_summary = _format_text(highlights.get("sentiment_summary"), reason="接口未返回")
+    checklist_summary = _summarize_checklist(checklist)
+
+    core_reasons: List[str] = []
+    seen: set[str] = set()
+    for candidate in (
+        decision_context.get("composite_view"),
+        decision_context.get("short_term_view"),
+        top_catalyst,
+        top_risk,
+        latest_update,
+        sentiment_summary,
+        checklist_summary,
+    ):
+        text = _meaningful_text(candidate)
+        if not text:
+            continue
+        normalized = text.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        core_reasons.append(text)
+        if len(core_reasons) >= 3:
+            break
+
+    return {
+        "core_reasons": core_reasons,
+        "top_risk": top_risk,
+        "top_catalyst": top_catalyst,
+        "latest_key_update": latest_update,
+        "sentiment_summary": sentiment_summary,
+        "checklist_summary": checklist_summary,
+        "news_value_tier": _format_text(highlights.get("news_value_grade"), reason="接口未返回"),
+    }
+
+
+def _build_coverage_notes(
+    *,
+    market_block: Dict[str, Any],
+    technical_fields: List[Dict[str, str]],
+    fundamental_fields: List[Dict[str, str]],
+    earnings_fields: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    all_fields: List[Dict[str, str]] = []
+    for bucket in (
+        market_block.get("regular_fields") or [],
+        market_block.get("extended_fields") or [],
+        technical_fields or [],
+        fundamental_fields or [],
+        earnings_fields or [],
+    ):
+        if isinstance(bucket, list):
+            all_fields.extend([item for item in bucket if isinstance(item, dict)])
+
+    data_sources: List[str] = []
+    for field in all_fields:
+        source = _meaningful_text(field.get("source"))
+        if source and source not in data_sources:
+            data_sources.append(source)
+
+    coverage_gaps: List[str] = []
+    missing_field_notes: List[str] = []
+    conflict_notes: List[str] = [str(item).strip() for item in (market_block.get("consistency_warnings") or []) if str(item).strip()]
+
+    for field in all_fields:
+        label = str(field.get("label") or "").strip()
+        value = field.get("value")
+        status = _meaningful_text(field.get("status"))
+        missing_reason = _extract_missing_reason(value)
+        if missing_reason:
+            if label and label not in coverage_gaps:
+                coverage_gaps.append(label)
+            note = f"{label}：{missing_reason}" if label else missing_reason
+            if note not in missing_field_notes:
+                missing_field_notes.append(note)
+        if status and ("待复核" in status or "冲突" in status):
+            note = f"{label}：{status}" if label else status
+            if note not in conflict_notes:
+                conflict_notes.append(note)
+
+    return {
+        "data_sources": data_sources[:6],
+        "coverage_gaps": coverage_gaps[:8],
+        "conflict_notes": conflict_notes[:8],
+        "missing_field_notes": missing_field_notes[:8],
+        "method_notes": [
+            "已收盘场景优先使用单一 EOD / official close 口径锁定 close、prev_close、涨跌与成交量。",
+            "标准技术指标优先使用 API 原始值，API 缺失时才回退本地历史计算。",
+            "策略型字段如支撑/压力、趋势强度、执行位继续由本地逻辑派生。",
+        ],
     }
 
 
@@ -1443,7 +2073,7 @@ def _build_market_block(
         )
         completeness = sum(
             1
-            for item in (close_value, prev_close_value, open_value, high_value, low_value, volume_value)
+            for item in (price_value, close_value, prev_close_value, open_value, high_value, low_value, volume_value)
             if item is not None
         )
         return {
@@ -1462,6 +2092,74 @@ def _build_market_block(
             "source": source_value,
             "completeness": completeness,
         }
+
+    def _select_quote_bundle(
+        candidates: List[Dict[str, Any]],
+        *,
+        preferred_names: Tuple[str, ...],
+        require_close: bool = False,
+    ) -> Dict[str, Any]:
+        preference_order = {name: index for index, name in enumerate(preferred_names)}
+
+        def _matches_requirement(item: Dict[str, Any]) -> bool:
+            if require_close:
+                return item.get("close") is not None and item.get("prev_close") is not None
+            return (
+                item.get("price") is not None
+                and item.get("open") is not None
+                and item.get("high") is not None
+                and item.get("low") is not None
+            ) or item.get("price") is not None or item.get("close") is not None
+
+        preferred_matches = sorted(
+            [
+                item
+                for item in candidates
+                if str(item.get("name") or "") in preference_order and _matches_requirement(item)
+            ],
+            key=lambda item: (
+                preference_order.get(str(item.get("name") or ""), len(preferred_names)),
+                -int(item.get("completeness", 0)),
+            ),
+        )
+        if preferred_matches:
+            return preferred_matches[0]
+
+        preference_rank = {name: len(preferred_names) - index for index, name in enumerate(preferred_names)}
+        ordered = sorted(
+            candidates,
+            key=lambda item: (
+                item.get("completeness", 0),
+                1 if item.get("price") is not None else 0,
+                1 if item.get("close") is not None else 0,
+                preference_rank.get(str(item.get("name") or ""), 0),
+            ),
+            reverse=True,
+        )
+        if not ordered:
+            return {}
+        if require_close:
+            selected = next(
+                (item for item in ordered if item.get("close") is not None and item.get("prev_close") is not None),
+                None,
+            )
+            if selected is None:
+                selected = next((item for item in ordered if item.get("close") is not None), None)
+            return selected or ordered[0]
+
+        selected = next(
+            (
+                item for item in ordered
+                if item.get("price") is not None
+                and item.get("open") is not None
+                and item.get("high") is not None
+                and item.get("low") is not None
+            ),
+            None,
+        )
+        if selected is None:
+            selected = next((item for item in ordered if item.get("price") is not None or item.get("close") is not None), None)
+        return selected or ordered[0]
 
     close = _to_float(
         _pick_first_number_from_sources(
@@ -1578,68 +2276,116 @@ def _build_market_block(
     )
 
     source_candidate = _pick_first_from_sources(quote_sources, ("source", "provider", "data_source"))
+    selected_bundle: Dict[str, Any]
     if session_kind == "completed":
-        candidate_bundles = [
-            _build_quote_bundle(
-                name="session_eod_context",
-                primary=today_context,
-                secondary=yesterday_context,
-                prefer_close_as_price=True,
-            ),
-            _build_quote_bundle(
-                name="market_snapshot",
-                primary=snapshot,
-                secondary=yesterday_context,
-                prefer_close_as_price=True,
-            ),
-            _build_quote_bundle(
-                name="realtime_quote",
-                primary=realtime_context,
-                secondary=yesterday_context,
-                prefer_close_as_price=True,
-            ),
-        ]
-        candidate_bundles.sort(
-            key=lambda item: (
-                item.get("completeness", 0),
-                3 if item.get("name") == "session_eod_context" else 2 if item.get("name") == "market_snapshot" else 1,
-            ),
-            reverse=True,
+        selected_bundle = _select_quote_bundle(
+            [
+                _build_quote_bundle(
+                    name="session_eod_context",
+                    primary=today_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+                _build_quote_bundle(
+                    name="market_snapshot",
+                    primary=snapshot,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+                _build_quote_bundle(
+                    name="realtime_quote",
+                    primary=realtime_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+            ],
+            preferred_names=("session_eod_context", "market_snapshot", "realtime_quote"),
+            require_close=True,
         )
-        selected_bundle = next(
-            (
-                item
-                for item in candidate_bundles
-                if item.get("name") == "session_eod_context"
-                and item.get("close") is not None
-                and item.get("prev_close") is not None
-            ),
-            None,
-        )
-        if selected_bundle is None:
-            selected_bundle = next(
-                (item for item in candidate_bundles if item.get("close") is not None and item.get("prev_close") is not None),
-                candidate_bundles[0],
-            )
-        close = selected_bundle.get("close")
-        prev_close = selected_bundle.get("prev_close")
         regular_price = selected_bundle.get("close") if selected_bundle.get("close") is not None else selected_bundle.get("price")
-        source_candidate = selected_bundle.get("source") or source_candidate
-        provided_regular_change = selected_bundle.get("change_amount")
-        provided_regular_pct = selected_bundle.get("change_pct")
-        open_value = selected_bundle.get("open")
-        high_value = selected_bundle.get("high")
-        low_value = selected_bundle.get("low")
-        volume = selected_bundle.get("volume")
-        amount = selected_bundle.get("amount")
-        amplitude_value = selected_bundle.get("amplitude")
-        selected_bundle_name = str(selected_bundle.get("name") or "")
     elif session_kind == "extended":
-        regular_price = close
-        selected_bundle_name = "extended_regular_close"
+        selected_bundle = _select_quote_bundle(
+            [
+                _build_quote_bundle(
+                    name="session_regular_context",
+                    primary=today_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+                _build_quote_bundle(
+                    name="market_snapshot",
+                    primary=snapshot,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+                _build_quote_bundle(
+                    name="realtime_quote",
+                    primary=realtime_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=True,
+                ),
+            ],
+            preferred_names=("session_regular_context", "market_snapshot", "realtime_quote"),
+            require_close=True,
+        )
+        regular_price = selected_bundle.get("close") if selected_bundle.get("close") is not None else close
     else:
-        regular_price = live_price if live_price is not None else close
-        selected_bundle_name = "intraday_snapshot"
+        selected_bundle = _select_quote_bundle(
+            [
+                _build_quote_bundle(
+                    name="realtime_quote",
+                    primary=realtime_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=False,
+                ),
+                _build_quote_bundle(
+                    name="session_intraday_context",
+                    primary=today_context,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=False,
+                ),
+                _build_quote_bundle(
+                    name="market_snapshot",
+                    primary=snapshot,
+                    secondary=yesterday_context,
+                    prefer_close_as_price=False,
+                ),
+            ],
+            preferred_names=("realtime_quote", "session_intraday_context", "market_snapshot"),
+            require_close=False,
+        )
+        regular_price = (
+            selected_bundle.get("price")
+            if selected_bundle.get("price") is not None
+            else selected_bundle.get("close")
+            if selected_bundle.get("close") is not None
+            else live_price
+            if live_price is not None
+            else close
+        )
+
+    if selected_bundle:
+        close = selected_bundle.get("close") if selected_bundle.get("close") is not None else close
+        prev_close = selected_bundle.get("prev_close") if selected_bundle.get("prev_close") is not None else prev_close
+        source_candidate = selected_bundle.get("source") or source_candidate
+        provided_regular_change = (
+            selected_bundle.get("change_amount")
+            if selected_bundle.get("change_amount") is not None
+            else provided_regular_change
+        )
+        provided_regular_pct = (
+            selected_bundle.get("change_pct")
+            if selected_bundle.get("change_pct") is not None
+            else provided_regular_pct
+        )
+        open_value = selected_bundle.get("open") if selected_bundle.get("open") is not None else open_value
+        high_value = selected_bundle.get("high") if selected_bundle.get("high") is not None else high_value
+        low_value = selected_bundle.get("low") if selected_bundle.get("low") is not None else low_value
+        volume = selected_bundle.get("volume") if selected_bundle.get("volume") is not None else volume
+        amount = selected_bundle.get("amount") if selected_bundle.get("amount") is not None else amount
+        amplitude_value = selected_bundle.get("amplitude") if selected_bundle.get("amplitude") is not None else amplitude_value
+
+    selected_bundle_name = str(selected_bundle.get("name") or "")
 
     recovered_prev_close = _derive_prev_close_from_change(
         close if close is not None else regular_price,
@@ -1647,6 +2393,10 @@ def _build_market_block(
         change_pct=provided_regular_pct,
     )
     prev_close_recovered = False
+    authoritative_prev_close = (
+        selected_bundle.get("prev_close") is not None
+        and selected_bundle_name in {"session_eod_context", "session_regular_context"}
+    )
     if recovered_prev_close is not None:
         flat_placeholder = (
             session_kind == "completed"
@@ -1661,7 +2411,10 @@ def _build_market_block(
             provided_regular_pct,
             percent=True,
         )
-        if prev_close is None or flat_placeholder or (session_kind == "completed" and hinted_conflict):
+        should_replace_prev_close = prev_close is None or flat_placeholder
+        if session_kind == "completed" and hinted_conflict and not authoritative_prev_close:
+            should_replace_prev_close = True
+        if should_replace_prev_close:
             prev_close = recovered_prev_close
             prev_close_recovered = True
 
@@ -1808,6 +2561,9 @@ def _build_market_block(
         consistency_warnings.append("扩展时段多源涨跌口径存在较大偏差，已优先采用扩展价格与昨收重算结果")
     if session_kind == "extended" and close is None:
         consistency_warnings.append("当前处于扩展时段，但缺少 regular close，常规口径字段可能不完整")
+    explicit_session_date = _iso_or_none(time_context.get("market_session_date"))
+    if explicit_session_date and market_timestamp and explicit_session_date != _market_session_date_from_timestamp(market_timestamp):
+        consistency_warnings.append("接口返回的参考交易日与行情时间戳不一致，已优先采用时间戳推导出的会话日期")
 
     has_market_snapshot = any(
         value is not None
@@ -1822,6 +2578,11 @@ def _build_market_block(
     )
     source = source_candidate if has_market_snapshot else None
     market_session_date = _market_session_date_from_timestamp(market_timestamp) or _iso_or_none(time_context.get("market_session_date"))
+    price_semantics = _describe_price_basis(
+        session_kind,
+        session_label=session_label,
+        market_session_date=market_session_date,
+    )
 
     regular_fields = [
         {"label": labels["current_price_label"], "value": _format_price(regular_price)},
@@ -1870,6 +2631,83 @@ def _build_market_block(
         },
     ]
 
+    display_source = _describe_market_feed(
+        source,
+        session_kind=session_kind,
+        selected_bundle_name=selected_bundle_name,
+    )
+    open_display_label = (
+        "Regular Open"
+        if session_kind == "extended"
+        else "Session Open"
+        if session_kind in {"intraday", "regular"}
+        else "Open"
+    )
+    high_display_label = (
+        "Regular High"
+        if session_kind == "extended"
+        else "Session High"
+        if session_kind in {"intraday", "regular"}
+        else "High"
+    )
+    low_display_label = (
+        "Regular Low"
+        if session_kind == "extended"
+        else "Session Low"
+        if session_kind in {"intraday", "regular"}
+        else "Low"
+    )
+    should_show_close = (
+        session_kind not in {"intraday", "regular"}
+        and close is not None
+        and regular_price is not None
+        and not _numbers_nearly_equal(close, regular_price, tolerance=max(0.01, abs(regular_price) * 0.0005))
+    )
+    if session_kind in {"intraday", "regular"}:
+        should_show_close = False
+    display_fields = [
+        {"label": price_semantics.get("price_label") or "Analysis Price", "value": _format_price(regular_price)},
+        {"label": "Prev Close", "value": _format_price(prev_close)},
+        {"label": open_display_label, "value": _format_price(open_value)},
+        {"label": high_display_label, "value": _format_price(high_value)},
+        {"label": low_display_label, "value": _format_price(low_value)},
+    ]
+    if should_show_close:
+        display_fields.append(
+            {
+                "label": "Reference Close" if session_kind in {"intraday", "regular"} else "Close",
+                "value": _format_price(close),
+            }
+        )
+    display_fields.extend(
+        [
+            {"label": "Change", "value": regular_change_text},
+            {"label": "Change %", "value": regular_change_pct_text},
+            {"label": "Volume", "value": _format_volume(volume, reason="当前数据源未提供")},
+            {"label": "Turnover", "value": _format_amount(amount, reason="当前数据源未提供")},
+            {
+                "label": "Volume Ratio",
+                "value": _format_decimal(volume_ratio, reason="当前数据源未提供"),
+            },
+            {
+                "label": "Turnover Rate",
+                "value": _format_percent(turnover_rate, reason="字段待接入"),
+            },
+            {
+                "label": "Avg Price",
+                "value": _format_nonzero_price(avg_price, reason="字段待接入"),
+            },
+            {
+                "label": "VWAP",
+                "value": _format_nonzero_price(vwap, reason="字段待接入"),
+            },
+            {
+                "label": "Market Feed",
+                "value": display_source,
+            },
+        ]
+    )
+
     extended_fields = [
         {
             "label": "盘前价",
@@ -1894,6 +2732,7 @@ def _build_market_block(
 
     return {
         "regular_fields": regular_fields,
+        "display_fields": display_fields,
         "extended_fields": extended_fields,
         "consistency_warnings": consistency_warnings,
         "regular_price_numeric": regular_price,
@@ -1925,6 +2764,14 @@ def _build_market_block(
             "news_published_at_bjt": _format_bjt_datetime(time_context.get("news_published_at")),
             "session_type": _iso_or_none(session_type) or str(session_type or ""),
             "session_label": session_label,
+            "session_kind": session_kind,
+            "price_label": price_semantics.get("price_label"),
+            "price_basis": price_semantics.get("price_basis"),
+            "price_basis_detail": price_semantics.get("price_basis_detail"),
+            "reference_session": price_semantics.get("reference_session"),
+            "price_context_note": price_semantics.get("price_context_note"),
+            "source_display": display_source,
+            "raw_source": _iso_or_none(source_candidate) or str(source_candidate or ""),
         },
     }
 
@@ -2328,19 +3175,26 @@ def _build_info_fields(*, dashboard: Dict[str, Any], highlights: Optional[Dict[s
         },
         {
             "label": "风险警报",
-            "value": _join_list(intel.get("risk_alerts") or [], empty_reason="接口未返回"),
+            "value": _join_list(
+                highlight_payload.get("risk_alerts") or intel.get("risk_alerts") or [],
+                empty_reason="接口未返回",
+            ),
         },
         {
             "label": "利好催化",
             "value": _join_list(
-                intel.get("positive_catalysts") or [intel.get("positive_catalysts_notice")],
+                highlight_payload.get("positive_catalysts")
+                or intel.get("positive_catalysts")
+                or [intel.get("positive_catalysts_notice")],
                 empty_reason="接口未返回",
             ),
         },
         {
             "label": "最新动态 / 重要公告",
             "value": _format_text(
-                intel.get("latest_news") or intel.get("latest_news_notice"),
+                _pick_first_nonempty(highlight_payload.get("latest_news") or [])
+                or intel.get("latest_news")
+                or intel.get("latest_news_notice"),
                 reason="接口未返回",
             ),
         },
@@ -2351,47 +3205,434 @@ def _build_info_fields(*, dashboard: Dict[str, Any], highlights: Optional[Dict[s
     ]
 
 
+def _dedupe_numeric_levels(values: Iterable[Any], *, tolerance: Optional[float] = None) -> List[float]:
+    levels: List[float] = []
+    for value in values:
+        numeric = _extract_first_number(value)
+        if numeric is None:
+            continue
+        if any(abs(numeric - existing) <= (tolerance or max(abs(existing) * 0.0025, 0.12)) for existing in levels):
+            continue
+        levels.append(numeric)
+    return levels
+
+
+def _format_trade_level(level: Optional[float], *, reason: Optional[str] = None) -> str:
+    if level is None:
+        return _na("字段待接入")
+    base = f"{level:.2f}"
+    if reason:
+        return f"{base}（{reason}）"
+    return base
+
+
+def _format_trade_range(center: Optional[float], volatility: float, *, reason: Optional[str] = None) -> str:
+    if center is None:
+        return _na("字段待接入")
+    band = max(volatility * 0.22, center * 0.0025)
+    lower = max(0.01, center - band)
+    upper = center + band
+    text = f"{lower:.2f}-{upper:.2f}"
+    if reason:
+        return f"{text}（{reason}）"
+    return text
+
+
+def _trade_confidence_label(score: int) -> str:
+    if score >= 75:
+        return "高"
+    if score >= 55:
+        return "中"
+    return "低"
+
+
+def _should_preserve_trade_text(value: Any) -> bool:
+    text = _normalize_inline_text(value)
+    if not text:
+        return False
+    upper_text = text.upper()
+    return any(
+        token in upper_text
+        for token in ("MA", "ATR", "VWAP", "RSI", "MACD", "BOLL", "ADX", "EMA", "SMA")
+    ) or any(
+        token in text
+        for token in ("均线", "支撑", "压力", "前高", "前低", "回踩", "突破", "缩量", "放量", "止损", "仓位")
+    )
+
+
+def _build_trade_setup(
+    *,
+    result: AnalysisResult,
+    dashboard: Dict[str, Any],
+    market_block: Dict[str, Any],
+    technical_fields: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    battle = dashboard.get("battle_plan") if isinstance(dashboard.get("battle_plan"), dict) else {}
+    sniper = battle.get("sniper_points") if isinstance(battle.get("sniper_points"), dict) else {}
+    position_strategy = battle.get("position_strategy") if isinstance(battle.get("position_strategy"), dict) else {}
+    structured = dashboard.get("structured_analysis") if isinstance(dashboard.get("structured_analysis"), dict) else {}
+    fundamentals = structured.get("fundamentals") if isinstance(structured.get("fundamentals"), dict) else {}
+    fundamentals_normalized = fundamentals.get("normalized") if isinstance(fundamentals.get("normalized"), dict) else {}
+    market_metrics = market_block.get("regular_metrics") if isinstance(market_block.get("regular_metrics"), dict) else {}
+    technical_map = _build_field_map(technical_fields or [])
+    data_perspective = dashboard.get("data_perspective") if isinstance(dashboard.get("data_perspective"), dict) else {}
+    price_position = data_perspective.get("price_position") if isinstance(data_perspective.get("price_position"), dict) else {}
+    volume_analysis = data_perspective.get("volume_analysis") if isinstance(data_perspective.get("volume_analysis"), dict) else {}
+    trend_status = data_perspective.get("trend_status") if isinstance(data_perspective.get("trend_status"), dict) else {}
+
+    current_price = _to_float(
+        _pick_first_from_sources(
+            (market_metrics, price_position, result.market_snapshot if isinstance(result.market_snapshot, dict) else {}),
+            ("price", "current_price", "regular_price_numeric", "close"),
+            zero_is_missing=True,
+        )
+    )
+    prev_close = _to_float(_pick_first_from_sources((market_metrics,), ("prev_close", "prevClose"), zero_is_missing=True))
+    day_high = _to_float(_pick_first_from_sources((market_metrics, result.market_snapshot if isinstance(result.market_snapshot, dict) else {}), ("high",), zero_is_missing=True))
+    day_low = _to_float(_pick_first_from_sources((market_metrics, result.market_snapshot if isinstance(result.market_snapshot, dict) else {}), ("low",), zero_is_missing=True))
+    ma5 = _extract_first_number(price_position.get("ma5")) or _extract_first_number(technical_map.get("MA5"))
+    ma10 = _extract_first_number(price_position.get("ma10")) or _extract_first_number(technical_map.get("MA10"))
+    ma20 = _extract_first_number(price_position.get("ma20")) or _extract_first_number(technical_map.get("MA20"))
+    ma60 = _extract_first_number(price_position.get("ma60")) or _extract_first_number(technical_map.get("MA60"))
+    support = _extract_first_number(price_position.get("support_level")) or _extract_first_number(technical_map.get("支撑位"))
+    resistance = _extract_first_number(price_position.get("resistance_level")) or _extract_first_number(technical_map.get("压力位"))
+    high_52w = _to_float(
+        _pick_first_from_sources(
+            (fundamentals_normalized, result.market_snapshot if isinstance(result.market_snapshot, dict) else {}),
+            ("fiftyTwoWeekHigh", "high_52w", "52week_high"),
+            zero_is_missing=True,
+        )
+    )
+    low_52w = _to_float(
+        _pick_first_from_sources(
+            (fundamentals_normalized, result.market_snapshot if isinstance(result.market_snapshot, dict) else {}),
+            ("fiftyTwoWeekLow", "low_52w", "52week_low"),
+            zero_is_missing=True,
+        )
+    )
+    trailing_pe = _to_float(fundamentals_normalized.get("trailingPE"))
+    forward_pe = _to_float(fundamentals_normalized.get("forwardPE"))
+    volume_ratio = _to_float(volume_analysis.get("volume_ratio"))
+    volume_judgment = _normalize_inline_text(technical_map.get(get_standard_report_field_label("volume_judgment", "zh"))).lower()
+    trend_strength = _to_float(trend_status.get("trend_score"))
+    trend_prediction = _normalize_inline_text(result.trend_prediction).lower()
+    ma_alignment = _normalize_inline_text(technical_map.get(get_standard_report_field_label("ma_alignment", "zh"))).lower()
+    bias_ma5 = _to_float(price_position.get("bias_ma5")) or _extract_first_number(technical_map.get(get_standard_report_field_label("bias_ma5", "zh")))
+
+    support_levels = sorted(
+        [
+            level for level in _dedupe_numeric_levels(
+                [
+                    sniper.get("ideal_buy"),
+                    sniper.get("secondary_buy"),
+                    support,
+                    ma5,
+                    ma10,
+                    ma20,
+                    ma60,
+                    day_low,
+                    low_52w if current_price is not None and low_52w is not None and low_52w >= current_price * 0.78 else None,
+                ],
+                tolerance=(current_price or 0) * 0.003 if current_price else None,
+            )
+            if current_price is None or level <= current_price * 1.02
+        ],
+        reverse=True,
+    )
+    resistance_levels = sorted(
+        [
+            level for level in _dedupe_numeric_levels(
+                [
+                    sniper.get("take_profit"),
+                    resistance,
+                    day_high,
+                    high_52w,
+                ],
+                tolerance=(current_price or 0) * 0.003 if current_price else None,
+            )
+            if current_price is None or level >= current_price * 0.985
+        ]
+    )
+
+    nearest_support = support_levels[0] if support_levels else None
+    secondary_support = support_levels[1] if len(support_levels) > 1 else None
+    nearest_resistance = next((level for level in resistance_levels if current_price is None or level > current_price * 1.003), resistance_levels[0] if resistance_levels else None)
+    second_resistance = next((level for level in resistance_levels if nearest_resistance is not None and level > nearest_resistance + max((current_price or nearest_resistance) * 0.004, 0.2)), None)
+
+    volatility_inputs = [
+        abs(day_high - day_low) if day_high is not None and day_low is not None else None,
+        abs(current_price - prev_close) * 1.1 if current_price is not None and prev_close is not None else None,
+        abs(current_price) * abs(_to_float(market_metrics.get("amplitude")) or 0) / 100 * 0.55 if current_price is not None else None,
+        abs(current_price) * 0.012 if current_price is not None else None,
+    ]
+    atr_proxy = max([value for value in volatility_inputs if value is not None] or [1.0])
+    if current_price is not None:
+        atr_proxy = min(max(atr_proxy, current_price * 0.006), current_price * 0.08)
+
+    bullish_structure = bool(
+        (trend_status.get("is_bullish") is True)
+        or ("多头" in ma_alignment)
+        or ("bull" in trend_prediction)
+        or ("看多" in trend_prediction)
+    )
+    weak_structure = bool(
+        (current_price is not None and ma20 is not None and current_price < ma20)
+        or ("空头" in ma_alignment)
+        or ("bear" in trend_prediction)
+        or ("看空" in trend_prediction)
+    )
+    overextended = bool(bias_ma5 is not None and bias_ma5 >= 4.8)
+    volume_confirm = bool(("放量" in volume_judgment) or (volume_ratio is not None and volume_ratio >= 1.05))
+    near_resistance = bool(current_price is not None and nearest_resistance is not None and current_price >= nearest_resistance * 0.992)
+    near_support = bool(current_price is not None and nearest_support is not None and current_price <= nearest_support * 1.02)
+
+    scenario = "no_trade"
+    scenario_label = "观望 / 等待确认"
+    confidence_score = 42
+    if current_price is None:
+        scenario_label = "数据不足 / 暂不交易"
+        confidence_score = 20
+    elif weak_structure and not bullish_structure:
+        scenario_label = "观望 / 趋势未确认"
+        confidence_score = 30
+    elif bullish_structure and near_resistance and volume_confirm and not overextended:
+        scenario = "breakout"
+        scenario_label = "突破跟随"
+        confidence_score = 78 if (trend_strength or 0) >= 65 else 66
+    elif bullish_structure and near_support:
+        scenario = "pullback"
+        scenario_label = "回踩买点"
+        confidence_score = 74 if (trend_strength or 0) >= 60 else 62
+    elif bullish_structure and not overextended:
+        scenario = "continuation"
+        scenario_label = "趋势延续 / 等回踩"
+        confidence_score = 58 if (trend_strength or 0) >= 55 else 52
+    elif overextended:
+        scenario_label = "观望 / 不追高"
+        confidence_score = 36
+
+    if scenario == "breakout":
+        ideal_center = (nearest_resistance or current_price) + max(atr_proxy * 0.18, (current_price or 0) * 0.003)
+        backup_center = max(nearest_resistance or current_price, ma5 or current_price)
+        invalidation_anchor = secondary_support or ma10 or ma20 or nearest_support or current_price
+        stop_price = max(0.01, invalidation_anchor - max(atr_proxy * 0.45, invalidation_anchor * 0.004))
+        target_one = second_resistance or high_52w or (ideal_center + max((ideal_center - stop_price) * 1.4, atr_proxy * 1.2))
+        target_two = high_52w if high_52w and target_one and high_52w > target_one else (
+            target_one + max((ideal_center - stop_price) * 1.0, atr_proxy * 1.3) if target_one is not None else None
+        )
+        key_action = f"只在放量站上 {nearest_resistance:.2f} 后跟进，不提前预判突破。"
+        build_strategy = f"首笔等突破价上方确认，回踩 {backup_center:.2f} 不破时再考虑补第二笔。"
+        risk_control = f"止损放在 {stop_price:.2f}，对应前高回踩失败 / MA10-MA20 防守失效。"
+    elif scenario == "pullback":
+        ideal_center = nearest_support or ma10 or ma20 or current_price
+        backup_center = secondary_support or ma20 or (ideal_center - atr_proxy * 0.6 if ideal_center is not None else None)
+        invalidation_anchor = secondary_support or ma20 or day_low or current_price
+        stop_price = max(0.01, invalidation_anchor - max(atr_proxy * 0.38, invalidation_anchor * 0.004))
+        target_one = nearest_resistance or day_high or (current_price + max((current_price - stop_price) * 1.3, atr_proxy * 1.1))
+        target_two = second_resistance or high_52w or (target_one + max((current_price - stop_price) * 0.9, atr_proxy * 1.2) if target_one is not None else None)
+        key_action = f"优先等回踩 {ideal_center:.2f} 一带出现承接后再试仓，避免离均线过远追价。"
+        build_strategy = f"理想做法是回踩支撑簇小仓试错，若站回 MA5/MA10 再做第二笔。"
+        risk_control = f"止损放在 {stop_price:.2f}，跌破近期支撑簇就视为回踩失败。"
+    elif scenario == "continuation":
+        ideal_center = ma5 or nearest_support or current_price
+        backup_center = ma10 or ma20 or nearest_support
+        invalidation_anchor = ma20 or secondary_support or nearest_support or current_price
+        stop_price = max(0.01, invalidation_anchor - max(atr_proxy * 0.42, invalidation_anchor * 0.004))
+        target_one = nearest_resistance or high_52w or (current_price + max((current_price - stop_price) * 1.2, atr_proxy))
+        target_two = second_resistance or high_52w or (target_one + max((current_price - stop_price) * 0.8, atr_proxy * 1.1) if target_one is not None else None)
+        key_action = "趋势未坏，但更适合等回踩均线再接，不建议在扩张段主动追高。"
+        build_strategy = f"等靠近 {ideal_center:.2f} 的均线支撑后分批试仓，若继续偏离均线则只跟踪不追。"
+        risk_control = f"若失守 {stop_price:.2f} 一带，说明趋势延续条件被破坏。"
+    else:
+        ideal_center = nearest_support or ma20
+        backup_center = ma20 or secondary_support
+        invalidation_anchor = backup_center or nearest_support or current_price
+        stop_price = max(0.01, (invalidation_anchor or current_price or 1.0) - max(atr_proxy * 0.4, (current_price or invalidation_anchor or 1.0) * 0.004))
+        target_one = nearest_resistance or high_52w
+        target_two = second_resistance or high_52w
+        wait_for = (
+            f"放量站上 {nearest_resistance:.2f}" if nearest_resistance is not None
+            else f"回踩 {nearest_support:.2f} 后企稳" if nearest_support is not None
+            else "趋势重新确认"
+        )
+        key_action = f"当前暂无高确定性主动买点，先等待 {wait_for}。"
+        build_strategy = "不在弱结构或高乖离区强行给出精确买点，优先等待更清晰的确认信号。"
+        risk_control = f"已有仓位可把防守位先看在 {stop_price:.2f} 附近，失守则继续收缩风险。"
+
+    target_one = target_one if target_one is None or current_price is None else min(target_one, current_price * 1.18 if high_52w is None else max(high_52w, current_price * 1.12))
+    target_two = target_two if target_two is None or current_price is None else min(target_two, current_price * 1.22 if high_52w is None else max(high_52w, current_price * 1.18))
+
+    stop_reason = (
+        "跌破最近支撑 / MA 簇后，做多结构被技术性否定。"
+        if scenario != "no_trade"
+        else "仅供持仓者参考的防守位，不构成新的进场建议。"
+    )
+    target_reason = "目标优先锚定首个技术压力、前高或 52 周高点，避免脱离当前波动结构。"
+    confidence_label = _trade_confidence_label(confidence_score)
+    position_sizing = (
+        "初始 25%-35%，确认后最多提高到 50%。"
+        if scenario in {"breakout", "pullback"}
+        else "初始 15%-25%，只在回踩确认后再考虑加仓。"
+        if scenario == "continuation"
+        else "暂无新开仓，已有仓位以控制回撤为主。"
+    )
+
+    support_text = _format_trade_level(nearest_support, reason="近期支撑 / MA 簇") if nearest_support is not None else _na("接口未返回")
+    resistance_text = _format_trade_level(nearest_resistance, reason="前高 / 压力位") if nearest_resistance is not None else _na("接口未返回")
+    ideal_entry_text = _format_trade_range(
+        ideal_center,
+        atr_proxy,
+        reason="回踩支撑确认" if scenario != "breakout" else "突破确认带",
+    )
+    backup_entry_text = _format_trade_range(
+        backup_center,
+        atr_proxy,
+        reason="更深一层支撑" if scenario != "breakout" else "突破后回踩不破",
+    )
+    stop_loss_text = _format_trade_level(stop_price, reason="技术失效位")
+    target_one_text = _format_trade_level(target_one, reason="首个技术目标") if target_one is not None else _na("字段待接入")
+    target_two_text = _format_trade_level(target_two, reason="更强压力 / 高位目标") if target_two is not None else _na("字段待接入")
+    target_zone_text = (
+        f"{_extract_first_number(target_one_text):.2f}-{_extract_first_number(target_two_text):.2f}（目标区间）"
+        if target_one is not None and target_two is not None
+        else target_one_text
+    )
+
+    raw_ideal_text = _normalize_inline_text(sniper.get("ideal_buy"))
+    raw_backup_text = _normalize_inline_text(sniper.get("secondary_buy"))
+    raw_stop_text = _normalize_inline_text(sniper.get("stop_loss"))
+    raw_target_text = _normalize_inline_text(sniper.get("take_profit"))
+    raw_position_text = _normalize_inline_text(position_strategy.get("suggested_position"))
+    raw_build_text = _normalize_inline_text(position_strategy.get("entry_plan"))
+    raw_risk_text = _normalize_inline_text(position_strategy.get("risk_control"))
+
+    if _should_preserve_trade_text(raw_ideal_text):
+        ideal_entry_text = _format_number_token_text(raw_ideal_text)
+    if _should_preserve_trade_text(raw_backup_text):
+        backup_entry_text = _format_number_token_text(raw_backup_text)
+    if _should_preserve_trade_text(raw_stop_text):
+        stop_loss_text = _format_number_token_text(raw_stop_text)
+    if _should_preserve_trade_text(raw_target_text):
+        target_one_text = _format_number_token_text(raw_target_text)
+        target_zone_text = target_one_text
+    if _should_preserve_trade_text(raw_position_text):
+        position_sizing = _format_number_token_text(raw_position_text)
+    if _should_preserve_trade_text(raw_build_text):
+        build_strategy = _format_number_token_text(raw_build_text)
+    if _should_preserve_trade_text(raw_risk_text):
+        risk_control = _format_number_token_text(raw_risk_text)
+
+    no_position_advice = (
+        f"{key_action} 只有在结构确认后才值得开第一笔仓位。"
+        if scenario != "no_trade"
+        else key_action
+    )
+    holder_advice = (
+        f"已有仓位就沿着 {stop_price:.2f} 做风控，目标先看 {target_one:.2f}" if target_one is not None
+        else f"已有仓位先围绕 {stop_price:.2f} 收紧风控。"
+    )
+    execution_reminders = unique_meaningful_items(
+        [
+            key_action,
+            build_strategy,
+            risk_control,
+            "若价格偏离 MA5 过大或未放量确认，不要为了给出动作而强行交易。",
+        ],
+        4,
+    )
+    checklist = unique_meaningful_items(
+        [
+            f"{'✅' if scenario != 'no_trade' else '⚠️'} 交易场景：{scenario_label}",
+            f"{'✅' if bullish_structure and current_price is not None and (ma20 is None or current_price >= ma20) else '⚠️'} 趋势位置：{_format_text('价格位于 MA20 上方' if current_price is not None and ma20 is not None and current_price >= ma20 else '仍需等待趋势重新确认', reason='字段待接入')}",
+            f"{'✅' if volume_confirm else '⚠️'} 量能确认：{_format_text('放量/量比支持' if volume_confirm else '量能仍需确认', reason='字段待接入')}",
+            f"{'❌' if overextended else '✅'} 追价控制：{_format_text('当前乖离偏大，不宜追高' if overextended else '距离均线未明显失真', reason='字段待接入')}",
+        ],
+        4,
+    )
+    market_structure = "MA5/10/20/60 = "
+    market_structure += f"{ma5:.2f}" if ma5 is not None else "NA"
+    market_structure += " / "
+    market_structure += f"{ma10:.2f}" if ma10 is not None else "NA"
+    market_structure += " / "
+    market_structure += f"{ma20:.2f}" if ma20 is not None else "NA"
+    market_structure += " / "
+    market_structure += f"{ma60:.2f}" if ma60 is not None else "NA"
+
+    return {
+        "scenario": scenario,
+        "scenario_label": scenario_label,
+        "confidence_label": confidence_label,
+        "confidence_score": confidence_score,
+        "analysis_price": current_price,
+        "key_action": key_action,
+        "support_text": support_text,
+        "support_level": nearest_support,
+        "resistance_text": resistance_text,
+        "resistance_level": nearest_resistance,
+        "ideal_entry": ideal_entry_text,
+        "ideal_entry_center": ideal_center,
+        "backup_entry": backup_entry_text,
+        "backup_entry_center": backup_center,
+        "stop_loss": stop_loss_text,
+        "stop_loss_level": stop_price,
+        "stop_reason": stop_reason,
+        "target_one": target_one_text,
+        "target_one_level": target_one,
+        "target_two": target_two_text,
+        "target_two_level": target_two,
+        "target_zone": target_zone_text,
+        "target_reason": target_reason,
+        "position_sizing": position_sizing,
+        "build_strategy": build_strategy,
+        "risk_control": risk_control,
+        "no_position_advice": no_position_advice,
+        "holder_advice": holder_advice,
+        "execution_reminders": execution_reminders,
+        "checklist": checklist,
+        "market_structure": market_structure,
+        "atr_proxy": atr_proxy,
+        "trailing_pe": trailing_pe,
+        "forward_pe": forward_pe,
+        "overextended": overextended,
+    }
+
+
 def _build_battle_fields(
     *,
     result: AnalysisResult,
     dashboard: Dict[str, Any],
-    market_regular_price: Optional[float],
-) -> Tuple[List[Dict[str, str]], List[str], List[str]]:
+    market_block: Dict[str, Any],
+    technical_fields: List[Dict[str, str]],
+) -> Tuple[List[Dict[str, str]], List[str], List[str], Dict[str, Any]]:
     battle = dashboard.get("battle_plan") if isinstance(dashboard.get("battle_plan"), dict) else {}
-    sniper = battle.get("sniper_points") if isinstance(battle.get("sniper_points"), dict) else {}
-    position = battle.get("position_strategy") if isinstance(battle.get("position_strategy"), dict) else {}
-
-    levels = _annotate_trade_levels(
-        market_regular_price,
-        sniper.get("ideal_buy"),
-        sniper.get("secondary_buy"),
-        sniper.get("stop_loss"),
-        result.trend_prediction,
+    trade_setup = _build_trade_setup(
+        result=result,
+        dashboard=dashboard,
+        market_block=market_block,
+        technical_fields=technical_fields,
     )
 
-    ideal = _clean_sniper_value(sniper.get("ideal_buy"))
-    if levels.get("ideal_buy_tag") and not ideal.startswith("NA（"):
-        ideal = f"{ideal}（{levels['ideal_buy_tag']}）"
-
-    secondary = _clean_sniper_value(sniper.get("secondary_buy"))
-    if levels.get("secondary_buy_tag") and not secondary.startswith("NA（"):
-        secondary = f"{secondary}（{levels['secondary_buy_tag']}）"
-
     battle_fields = [
-        {"label": "理想买入点", "value": ideal},
-        {"label": "次优买入点", "value": secondary},
-        {"label": "止损位", "value": _clean_sniper_value(sniper.get("stop_loss"))},
-        {"label": "目标位", "value": _clean_sniper_value(sniper.get("take_profit"))},
-        {"label": "仓位建议", "value": _format_number_token_text(position.get("suggested_position"), reason="字段待接入")},
-        {"label": "建仓策略", "value": _format_text(position.get("entry_plan"), reason="字段待接入")},
-        {"label": "风控策略", "value": _format_text(position.get("risk_control"), reason="字段待接入")},
+        {"label": "交易场景", "value": trade_setup["scenario_label"]},
+        {"label": "关键动作", "value": trade_setup["key_action"]},
+        {"label": "理想买入点", "value": trade_setup["ideal_entry"]},
+        {"label": "次优买入点", "value": trade_setup["backup_entry"]},
+        {"label": "止损位", "value": trade_setup["stop_loss"]},
+        {"label": "目标一区", "value": trade_setup["target_one"]},
+        {"label": "目标二区", "value": trade_setup["target_two"]},
+        {"label": "目标位", "value": trade_setup["target_zone"]},
+        {"label": "关键支撑", "value": trade_setup["support_text"]},
+        {"label": "关键压力", "value": trade_setup["resistance_text"]},
+        {"label": "仓位建议", "value": trade_setup["position_sizing"]},
+        {"label": "建仓策略", "value": trade_setup["build_strategy"]},
+        {"label": "风控策略", "value": trade_setup["risk_control"]},
     ]
 
     checklist = [str(item).strip() for item in (battle.get("action_checklist") or []) if str(item).strip()]
     if not checklist:
-        checklist = [_na("字段待接入")]
+        checklist = trade_setup["checklist"] or [_na("字段待接入")]
 
-    return battle_fields, checklist, levels.get("risk_warnings") or []
+    return battle_fields, checklist, trade_setup["execution_reminders"] or [], trade_setup
 
 
 def build_standard_report_payload(result: AnalysisResult, report_language: str = "zh") -> Dict[str, Any]:
@@ -2419,10 +3660,11 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         market_snapshot=result.market_snapshot if isinstance(result.market_snapshot, dict) else {},
     )
     earnings_fields, sentiment_fields = _build_earnings_sentiment_fields(language=language, dashboard=dashboard)
-    battle_fields, checklist, risk_warnings = _build_battle_fields(
+    battle_fields, checklist, risk_warnings, trade_setup = _build_battle_fields(
         result=result,
         dashboard=dashboard,
-        market_regular_price=market_block.get("regular_price_numeric"),
+        market_block=market_block,
+        technical_fields=technical_fields,
     )
     title_block = {
         "stock": f"{stock_name} ({result.code})",
@@ -2439,14 +3681,17 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         dashboard,
         fundamentals=structured.get("fundamentals") if isinstance(structured.get("fundamentals"), dict) else {},
         earnings=structured.get("earnings_analysis") if isinstance(structured.get("earnings_analysis"), dict) else {},
+        market_block=market_block,
+        technical_fields=technical_fields,
+        trade_setup=trade_setup,
     )
     info_fields = _build_info_fields(dashboard=dashboard, highlights=highlights)
     checklist_items = _build_checklist_items(checklist)
     table_sections = {
         "market": {
             "title": "行情表",
-            "fields": market_block.get("regular_fields") or [],
-            "note": "常规交易时段与扩展时段分开展示；涨跌额与涨跌幅优先按当前价和昨收重算。",
+            "fields": market_block.get("display_fields") or market_block.get("regular_fields") or [],
+            "note": "主表以 Analysis Price 为中心展示同一会话的价格、涨跌与成交字段；若 Close 与 Analysis Price 等价则不重复展示。",
         },
         "technical": {
             "title": "技术面表",
@@ -2464,12 +3709,12 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
             "note": "财报表统一按最新季度 QoQ / YoY 口径展示，避免与基本面 TTM 混读。",
         },
     }
+    decision_context = _build_decision_context(dashboard=dashboard)
     summary_panel = _build_summary_panel(
         result=result,
         title=title_block,
         market_block=market_block,
     )
-    decision_context = _build_decision_context(dashboard=dashboard)
     visual_blocks = _build_visual_blocks(
         result=result,
         market_block=market_block,
@@ -2477,6 +3722,24 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         highlights=highlights,
     )
     battle_plan_compact = _build_battle_plan_compact(battle_fields, risk_warnings)
+    decision_panel = _build_decision_panel(
+        battle_fields=battle_fields,
+        position_advice=position_advice,
+        risk_warnings=risk_warnings,
+        decision_context=decision_context,
+        trade_setup=trade_setup,
+    )
+    reason_layer = _build_reason_layer(
+        highlights=highlights,
+        checklist=checklist,
+        decision_context=decision_context,
+    )
+    coverage_notes = _build_coverage_notes(
+        market_block=market_block,
+        technical_fields=technical_fields,
+        fundamental_fields=fundamental_fields,
+        earnings_fields=earnings_fields,
+    )
 
     no_position = position_advice.get("no_position") or localize_operation_advice(result.operation_advice, language)
     has_position = position_advice.get("has_position") or labels["continue_holding"]
@@ -2497,10 +3760,13 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         "table_sections": table_sections,
         "visual_blocks": visual_blocks,
         "decision_context": decision_context,
+        "decision_panel": decision_panel,
+        "reason_layer": reason_layer,
         "highlights": highlights,
         "battle_fields": battle_fields,
         "battle_plan_compact": battle_plan_compact,
         "battle_warnings": risk_warnings,
+        "coverage_notes": coverage_notes,
         "checklist": checklist,
         "checklist_items": checklist_items,
     }
@@ -2707,6 +3973,7 @@ def render(
         "market_timestamp_bjt": _format_bjt_datetime(market_timestamp),
         "market_session_date": (extra_context or {}).get("market_session_date") or first_time_ctx.get("market_session_date"),
         "session_type": (extra_context or {}).get("session_type") or first_time_ctx.get("session_type"),
+        "price_basis": (extra_context or {}).get("price_basis") or first_time_ctx.get("price_basis"),
         "news_published_at": news_published_at,
         "news_published_at_bjt": _format_bjt_datetime(news_published_at),
         "to_shanghai_iso": _to_shanghai_iso,

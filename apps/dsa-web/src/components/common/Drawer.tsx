@@ -61,7 +61,7 @@ export const Drawer: React.FC<DrawerProps> = ({
   const borderClass = side === 'left' ? 'border-r' : 'border-l';
 
   return (
-    <div className="fixed inset-0 overflow-hidden" style={{ zIndex }} role="presentation">
+    <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300"
@@ -98,7 +98,7 @@ export const Drawer: React.FC<DrawerProps> = ({
               </svg>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 [-webkit-overflow-scrolling:touch]">
             {children}
           </div>
         </div>

@@ -130,12 +130,13 @@ const SettingsPage: React.FC = () => {
       : rawActiveItems;
 
   return (
-    <div className="min-h-full px-4 pb-6 pt-4 md:px-6">
-      <div className="mb-5 rounded-xl bg-card/50 px-5 py-5 shadow-soft-card-strong">
+    <div className="workspace-page">
+      <div className="workspace-header-panel shadow-soft-card-strong">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">系统设置</h1>
-            <p className="text-xs leading-6 text-muted-text">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA System Config</p>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">系统设置</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-text">
               统一管理模型、数据源、通知、安全认证与导入能力。
             </p>
           </div>
@@ -165,7 +166,7 @@ const SettingsPage: React.FC = () => {
 
         {saveError ? (
           <ApiErrorAlert
-            className="mt-3"
+            className="mt-4"
             error={saveError}
             actionLabel={retryAction === 'save' ? '重试保存' : undefined}
             onAction={retryAction === 'save' ? () => void retry() : undefined}
@@ -185,8 +186,8 @@ const SettingsPage: React.FC = () => {
       {isLoading ? (
         <SettingsLoading />
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
-          <aside className="lg:sticky lg:top-4 lg:self-start">
+        <div className="workspace-split-layout">
+          <aside className="workspace-split-rail">
             <SettingsCategoryNav
               categories={categories}
               itemsByCategory={itemsByCategory}
@@ -195,7 +196,7 @@ const SettingsPage: React.FC = () => {
             />
           </aside>
 
-          <section className="space-y-4">
+          <section className="workspace-split-main space-y-4">
             {activeCategory === 'system' ? <AuthSettingsCard /> : null}
             {activeCategory === 'base' ? (
               <SettingsSectionCard

@@ -748,7 +748,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
 
         self.assertIsNotNone(markdown)
         self.assertIn("Stock Analysis Report", markdown)
-        self.assertIn("1. 标题区 / Title", markdown)
+        self.assertIn("Part A. Executive Summary", markdown)
         self.assertIn("Unnamed Stock (AAPL)", markdown)
         self.assertIn("Decision Dashboard", markdown)
 

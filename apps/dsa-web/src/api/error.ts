@@ -3,11 +3,14 @@ import axios from 'axios';
 export type ApiErrorCategory =
   | 'agent_disabled'
   | 'missing_params'
+  | 'analysis_conflict'
   | 'llm_not_configured'
   | 'model_tool_incompatible'
   | 'invalid_tool_call'
   | 'portfolio_oversell'
   | 'portfolio_busy'
+  | 'upstream_forbidden'
+  | 'upstream_unavailable'
   | 'upstream_llm_400'
   | 'upstream_timeout'
   | 'upstream_network'
@@ -323,6 +326,20 @@ export function parseApiError(error: unknown): ParsedApiError {
     });
   }
 
+  if (
+    status === 409
+    || errorCode === 'duplicate_task'
+    || includesAny(matchText, ['正在分析中', 'duplicate task', 'duplicate_task'])
+  ) {
+    return createParsedApiError({
+      title: '分析任务已在进行中',
+      message: '同一标的已有分析任务正在运行，请等待当前任务完成后再试。',
+      rawMessage,
+      status,
+      category: 'analysis_conflict',
+    });
+  }
+
   if (errorCode === 'portfolio_oversell' || includesAny(matchText, ['oversell detected'])) {
     return createParsedApiError({
       title: '卖出数量超过可用持仓',
@@ -330,6 +347,39 @@ export function parseApiError(error: unknown): ParsedApiError {
       rawMessage,
       status,
       category: 'portfolio_oversell',
+    });
+  }
+
+  if (
+    status === 403
+    || includesAny(matchText, ['403 forbidden', 'status code 403', 'forbidden for url'])
+  ) {
+    if (includesAny(matchText, ['fmp', 'financialmodelingprep'])) {
+      return createParsedApiError({
+        title: '上游数据源拒绝访问',
+        message: 'FMP 返回了 403，可能是 API Key、额度或权限限制。请稍后重试或检查相关配置。',
+        rawMessage,
+        status,
+        category: 'upstream_forbidden',
+      });
+    }
+
+    if (includesAny(matchText, ['gemini', 'generativelanguage', 'google'])) {
+      return createParsedApiError({
+        title: '上游模型拒绝访问',
+        message: 'Gemini 返回了 403，可能是模型权限、Key 配额或渠道配置问题。',
+        rawMessage,
+        status,
+        category: 'upstream_forbidden',
+      });
+    }
+
+    return createParsedApiError({
+      title: '上游服务拒绝访问',
+      message: '外部模型或数据接口拒绝了本次请求，请检查权限、配额或相关配置。',
+      rawMessage,
+      status,
+      category: 'upstream_forbidden',
     });
   }
 
@@ -416,6 +466,16 @@ export function parseApiError(error: unknown): ParsedApiError {
       '503',
     ])
   ) {
+    if (includesAny(matchText, ['gemini', 'generativelanguage', 'model overloaded', 'service unavailable'])) {
+      return createParsedApiError({
+        title: '上游模型暂时不可用',
+        message: 'Gemini 当前繁忙或临时不可用，系统会在下一次分析时继续重试，请稍后再试。',
+        rawMessage,
+        status,
+        category: 'upstream_unavailable',
+      });
+    }
+
     return createParsedApiError({
       title: '服务端无法访问外部依赖',
       message: '页面已连接到本地服务，但本地服务访问外部模型或数据接口失败，请检查代理、DNS 或出网配置。',

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,7 @@ import { downloadSession, formatSessionAsMarkdown } from '../utils/chatExport';
 import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
 import { isNearBottom } from '../utils/chatScroll';
+import { useShellRail } from '../components/layout/ShellRailContext';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
@@ -24,6 +25,27 @@ const QUICK_QUESTIONS = [
   { label: '箱体震荡技能看中芯国际', skill: 'box_oscillation' },
   { label: '分析腾讯 hk00700', skill: 'bull_trend' },
   { label: '用情绪周期分析东方财富', skill: 'emotion_cycle' },
+];
+
+const STARTER_PROMPT_CARDS = [
+  {
+    title: '开仓执行判断',
+    description: '快速判断现在能不能介入，并直接给出买点、止损和目标位。',
+    prompt: '请判断 NVDA 现在是否适合介入，并给出买点、止损和目标位',
+    skill: 'bull_trend',
+  },
+  {
+    title: '持仓风控复盘',
+    description: '适合已有仓位时判断继续持有、减仓还是等待反弹。',
+    prompt: '我持有 TSLA，接下来该持有、减仓还是等待回踩确认？请给出风控建议',
+    skill: 'bull_trend',
+  },
+  {
+    title: '事件驱动跟踪',
+    description: '聚焦财报、催化、风险与情绪，不只停留在泛泛聊天。',
+    prompt: 'ORCL 财报后还值得继续跟踪吗？请列出催化、风险和执行计划',
+    skill: 'bull_trend',
+  },
 ];
 
 const ChatPage: React.FC = () => {
@@ -48,6 +70,7 @@ const ChatPage: React.FC = () => {
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
+  const { setRailContent, closeMobileRail, isConnected: hasShellRail } = useShellRail();
 
   // Set page title
   useEffect(() => {
@@ -140,19 +163,30 @@ const ChatPage: React.FC = () => {
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
   const quickQuestions = QUICK_QUESTIONS.filter((question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill));
+  const starterPromptCards = STARTER_PROMPT_CARDS.filter(
+    (card) => availableSkillIds.size === 0 || availableSkillIds.has(card.skill),
+  );
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
     requestScrollToBottom('auto');
     useAgentChatStore.getState().startNewChat();
-    setSidebarOpen(false);
-  }, [requestScrollToBottom]);
+    if (hasShellRail) {
+      closeMobileRail();
+    } else {
+      setSidebarOpen(false);
+    }
+  }, [closeMobileRail, hasShellRail, requestScrollToBottom]);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
     requestScrollToBottom('auto');
     switchSession(targetSessionId);
-    setSidebarOpen(false);
-  }, [requestScrollToBottom, switchSession]);
+    if (hasShellRail) {
+      closeMobileRail();
+    } else {
+      setSidebarOpen(false);
+    }
+  }, [closeMobileRail, hasShellRail, requestScrollToBottom, switchSession]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteConfirmId) return;
@@ -333,9 +367,9 @@ const ChatPage: React.FC = () => {
     </div>
   );
 
-  const sidebarContent = (
-    <>
-      <div className="flex items-center justify-between border-b border-white/5 bg-white/2 p-3.5">
+  const sidebarContent = useMemo(() => (
+    <div className="theme-panel-solid flex h-full min-h-0 flex-col overflow-hidden rounded-[1.2rem]">
+      <div className="theme-sidebar-divider flex items-center justify-between border-b px-3.5 py-3">
         <h2 className="text-[11px] font-semibold text-cyan uppercase tracking-[0.2em] flex items-center gap-2">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -344,7 +378,7 @@ const ChatPage: React.FC = () => {
         </h2>
         <button
           onClick={handleStartNewChat}
-          className="rounded-lg p-1.5 text-muted-text transition-all hover:bg-white/10 hover:text-foreground"
+          className="theme-panel-subtle rounded-lg p-1.5 text-muted-text transition-all duration-200 ease-out hover:text-foreground"
           title="开启新对话"
         >
           <svg
@@ -362,13 +396,13 @@ const ChatPage: React.FC = () => {
           </svg>
         </button>
       </div>
-      <ScrollArea testId="chat-session-list-scroll">
+      <ScrollArea testId="chat-session-list-scroll" viewportClassName="p-3">
         {sessionsLoading ? (
           <div className="p-4 text-center text-xs text-muted-text">加载中...</div>
         ) : sessions.length === 0 ? (
           <div className="p-4 text-center text-xs text-muted-text">暂无历史对话</div>
         ) : (
-          <div className="space-y-2 p-3">
+          <div className="space-y-2">
             {sessions.map((s) => (
               <div
                 key={s.session_id}
@@ -381,11 +415,8 @@ const ChatPage: React.FC = () => {
                     handleSwitchSession(s.session_id);
                   }
                 }}
-                className={`group relative flex w-full cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-2.5 transition-all duration-200 ${
-                  s.session_id === sessionId
-                    ? 'border-cyan bg-cyan/10 shadow-[0_0_15px_rgba(0,212,255,0.1)]'
-                    : 'border-white/5 bg-white/2 hover:border-white/10 hover:bg-white/5'
-                }`}
+                data-active={s.session_id === sessionId}
+                className="theme-list-item group relative flex w-full cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-2.5 transition-all duration-200 ease-out"
                 aria-label={`切换到对话 ${s.title}`}
               >
                 {/* 装饰条 */}
@@ -447,160 +478,81 @@ const ChatPage: React.FC = () => {
           </div>
         )}
       </ScrollArea>
-    </>
-  );
+    </div>
+  ), [handleStartNewChat, handleSwitchSession, sessionId, sessions, sessionsLoading]);
+
+  useEffect(() => {
+    if (!hasShellRail) {
+      return undefined;
+    }
+    setRailContent(sidebarContent);
+    return () => setRailContent(null);
+  }, [hasShellRail, setRailContent, sidebarContent]);
 
   return (
-    <div
-      data-testid="chat-workspace"
-      className="flex h-[calc(100vh-5rem)] w-full min-w-0 gap-4 overflow-hidden sm:h-[calc(100vh-5.5rem)] lg:h-[calc(100vh-2rem)]"
-    >
-      {/* Desktop sidebar */}
-      <div className="hidden h-full w-64 flex-shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-white/8 bg-card/82 shadow-soft-card md:flex">
-        {sidebarContent}
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        >
-          <div className="absolute inset-0 bg-black/60" />
-          <div
-            className="absolute left-0 top-0 bottom-0 w-72 flex flex-col glass-card overflow-hidden border-r border-white/10 bg-card/90 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+    <div data-testid="chat-workspace" className="workspace-page workspace-page--chat">
+      <div className="workspace-chat-layout">
+        {!hasShellRail ? (
+          <div className="hidden h-full w-[var(--layout-context-rail-width)] flex-shrink-0 flex-col overflow-hidden md:flex">
             {sidebarContent}
           </div>
-        </div>
-      )}
+        ) : null}
 
-      {/* Delete confirmation dialog */}
-      <ConfirmDialog
-        isOpen={Boolean(deleteConfirmId)}
-        title="删除对话"
-        message="删除后，该对话将不可恢复，确认删除吗？"
-        confirmText="删除"
-        cancelText="取消"
-        isDanger
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteConfirmId(null)}
-      />
+        {!hasShellRail && sidebarOpen ? (
+          <div
+            className="fixed inset-0 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <div className="absolute inset-0 bg-black/60" />
+            <div
+              className="theme-sidebar-shell absolute bottom-0 left-0 top-0 flex w-[min(var(--layout-context-rail-width),88vw)] flex-col overflow-hidden rounded-none rounded-r-[1.35rem]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {sidebarContent}
+            </div>
+          </div>
+        ) : null}
 
-      {/* Main chat area */}
-      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="mb-4 flex-shrink-0">
-          <h1 className="text-2xl font-bold text-foreground mb-2 flex items-center gap-2">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-hover transition-colors text-secondary-text hover:text-foreground"
-              title="历史对话"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-            <svg
-              className="w-6 h-6 text-cyan"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
-            问股
-          </h1>
-          <p className="text-secondary-text text-sm">
-            向 AI 询问个股分析，获取基于技能视角的交易建议与实时决策报告。
-          </p>
-          {messages.length > 0 && (
-            <div className="mt-2 flex gap-2 items-center">
-              <button
-                type="button"
-                onClick={() => downloadSession(messages)}
-                className="px-3 py-1.5 rounded-lg text-sm text-secondary-text hover:text-foreground hover:bg-hover border border-border/70 transition-colors flex items-center gap-1.5"
-                title="导出会话为 Markdown 文件"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                导出会话
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (sending) return;
-                  setSending(true);
-                  setSendToast(null);
-                  try {
-                    const content = formatSessionAsMarkdown(messages);
-                    await agentApi.sendChat(content);
-                    setSendToast({ type: 'success', message: '已发送到通知渠道' });
-                    setTimeout(() => setSendToast(null), 3000);
-                  } catch (err) {
-                    const parsed = getParsedApiError(err);
-                    setSendToast({
-                      type: 'error',
-                      message: parsed.message || '发送失败',
-                    });
-                    setTimeout(() => setSendToast(null), 5000);
-                  } finally {
-                    setSending(false);
-                  }
-                }}
-                disabled={sending}
-                className="px-3 py-1.5 rounded-lg text-sm text-secondary-text hover:text-foreground hover:bg-hover border border-border/70 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="发送到已配置的通知机器人/邮箱"
-              >
-                {sending ? (
+        <ConfirmDialog
+          isOpen={Boolean(deleteConfirmId)}
+          title="删除对话"
+          message="删除后，该对话将不可恢复，确认删除吗？"
+          confirmText="删除"
+          cancelText="取消"
+          isDanger
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteConfirmId(null)}
+        />
+
+        <div className="workspace-chat-main">
+          <header className="workspace-header-panel mb-4 flex-shrink-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Research Assistant</p>
+                <h1 className="mb-2 mt-2 flex items-center gap-2 text-2xl font-bold text-foreground">
+                  {!hasShellRail ? (
+                    <button
+                      onClick={() => setSidebarOpen(true)}
+                      className="-ml-1 rounded-lg p-1.5 text-secondary-text transition-colors hover:bg-hover hover:text-foreground md:hidden"
+                      title="历史对话"
+                    >
+                      <svg
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 6h16M4 12h16M4 18h16"
+                        />
+                      </svg>
+                    </button>
+                  ) : null}
                   <svg
-                    className="w-4 h-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-4 h-4"
+                    className="h-6 w-6 text-cyan"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -609,24 +561,113 @@ const ChatPage: React.FC = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                     />
                   </svg>
-                )}
-                发送
-              </button>
-              {sendToast && (
-                <span
-                  className={`text-sm ${sendToast.type === 'success' ? 'text-green-400' : 'text-red-400'}`}
-                >
-                  {sendToast.message}
-                </span>
-              )}
-            </div>
-          )}
-        </header>
+                  问股
+                </h1>
+                <p className="text-sm leading-6 text-secondary-text">
+                  把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。
+                </p>
+              </div>
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden border border-white/6 bg-card/78 glass-card">
+              {messages.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadSession(messages)}
+                    className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+                    title="导出会话为 Markdown 文件"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    导出会话
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (sending) return;
+                      setSending(true);
+                      setSendToast(null);
+                      try {
+                        const content = formatSessionAsMarkdown(messages);
+                        await agentApi.sendChat(content);
+                        setSendToast({ type: 'success', message: '已发送到通知渠道' });
+                        setTimeout(() => setSendToast(null), 3000);
+                      } catch (err) {
+                        const parsed = getParsedApiError(err);
+                        setSendToast({
+                          type: 'error',
+                          message: parsed.message || '发送失败',
+                        });
+                        setTimeout(() => setSendToast(null), 5000);
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    disabled={sending}
+                    className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    title="发送到已配置的通知机器人/邮箱"
+                  >
+                    {sending ? (
+                      <svg
+                        className="h-4 w-4 animate-spin"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                        />
+                      </svg>
+                    )}
+                    发送
+                  </button>
+                  {sendToast ? (
+                    <span className={`text-sm ${sendToast.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                      {sendToast.message}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </header>
+
+          <div className="workspace-surface relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem]">
           {/* Messages */}
           <ScrollArea
             className="relative z-10 flex-1"
@@ -636,39 +677,60 @@ const ChatPage: React.FC = () => {
             testId="chat-message-scroll"
           >
             {messages.length === 0 && !loading ? (
-              <div className="h-full flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 mb-4 rounded-2xl bg-card/70 flex items-center justify-center">
-                  <svg
-                    className="w-8 h-8 text-muted-text"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-foreground mb-2">
-                  开始问股
-                </h3>
-                <p className="text-sm text-secondary-text max-w-sm mb-6">
-                  输入「分析 600519」或「茅台现在能买吗」，AI
-                  将调用实时数据工具为您生成决策报告。
-                </p>
-                <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                  {quickQuestions.map((q, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleQuickQuestion(q)}
-                      className="px-3 py-1.5 rounded-full bg-card/70 border border-border/70 text-sm text-secondary-text hover:text-foreground hover:border-cyan/40 hover:bg-cyan/5 transition-all"
-                    >
-                      {q.label}
-                    </button>
-                  ))}
+              <div className="mx-auto flex h-full w-full max-w-5xl flex-col justify-center">
+                <div className="theme-panel-glass rounded-[1.35rem] px-5 py-5">
+                  <div className="flex items-start gap-4">
+                    <div className="theme-panel-subtle flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+                      <svg
+                        className="h-7 w-7 text-cyan"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-medium text-foreground">从一个高价值问题开始</h3>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary-text">
+                        问股页现在更偏向“研究助手工作台”：优先帮你形成交易结论、风险提示、催化判断和执行计划，而不是泛泛聊天。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 md:grid-cols-3">
+                    {starterPromptCards.map((card) => (
+                      <button
+                        key={card.title}
+                        type="button"
+                        onClick={() => handleSend(card.prompt, card.skill)}
+                        className="theme-panel-subtle rounded-[1.1rem] px-4 py-4 text-left transition-all duration-200 ease-out hover:-translate-y-[1px]"
+                      >
+                        <p className="text-sm font-semibold tracking-tight text-foreground">{card.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-secondary-text">{card.description}</p>
+                        <p className="mt-3 text-xs leading-5 text-muted-text">{card.prompt}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {quickQuestions.length > 0 ? (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {quickQuestions.slice(0, 4).map((q, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleQuickQuestion(q)}
+                          className="theme-inline-chip rounded-full px-3 py-1.5 text-sm text-secondary-text transition-all duration-200 ease-out hover:text-foreground"
+                        >
+                          {q.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : (
@@ -687,10 +749,10 @@ const ChatPage: React.FC = () => {
                     {msg.role === 'user' ? 'U' : 'AI'}
                   </div>
                   <div
-                    className={`min-w-0 w-fit max-w-[min(100%,48rem)] overflow-hidden rounded-2xl px-5 py-3.5 ${
+                    className={`min-w-0 w-fit max-w-[min(100%,56rem)] overflow-hidden rounded-2xl px-5 py-3.5 ${
                       msg.role === 'user'
                         ? 'bg-cyan/10 text-foreground border border-cyan/20 rounded-tr-sm'
-                        : 'bg-card/72 text-secondary-text border border-white/30 rounded-tl-sm'
+                        : 'theme-panel-subtle text-secondary-text rounded-tl-sm'
                     }`}
                   >
                     {msg.role === 'assistant' && msg.skillName && (
@@ -764,7 +826,7 @@ const ChatPage: React.FC = () => {
                 <div className="w-8 h-8 rounded-full bg-elevated text-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold">
                   AI
                 </div>
-                <div className="min-w-[200px] max-w-[min(100%,48rem)] overflow-hidden rounded-2xl rounded-tl-sm border border-white/6 bg-card/72 px-5 py-4">
+                <div className="theme-panel-subtle min-w-[200px] max-w-[min(100%,56rem)] overflow-hidden rounded-2xl rounded-tl-sm px-5 py-4">
                   <div className="flex items-center gap-2.5 text-sm text-secondary-text">
                     <div className="relative w-4 h-4 flex-shrink-0">
                       <div className="absolute inset-0 rounded-full border-2 border-cyan/20" />
@@ -782,92 +844,100 @@ const ChatPage: React.FC = () => {
           </ScrollArea>
 
           {/* Input area */}
-          <div className="p-4 md:p-6 border-t border-white/6 bg-card/88 relative z-20">
+          <div className="theme-sidebar-divider relative z-20 border-t p-4 md:p-5">
             {chatError ? (
               <ApiErrorAlert error={chatError} className="mb-3" />
             ) : null}
             {skills.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-x-5 gap-y-2 items-start">
-                <span className="text-xs text-muted-text font-medium uppercase tracking-wider flex-shrink-0 mt-1">
-                  策略
-                </span>
-                <label className="flex items-center gap-1.5 text-sm cursor-pointer group mt-0.5">
-                  <input
-                    type="radio"
-                    name="skill"
-                    value=""
-                    checked={selectedSkill === ''}
-                    onChange={() => setSelectedSkill('')}
-                    className="w-3.5 h-3.5 accent-cyan"
-                  />
-                  <span
-                    className={`transition-colors text-sm ${selectedSkill === '' ? 'text-foreground font-medium' : 'text-secondary-text group-hover:text-foreground'}`}
+              <div className="theme-panel-subtle mb-3 rounded-[1rem] p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">研究模式</p>
+                    <p className="mt-1 text-sm text-secondary-text">选择一个策略视角，让回答更贴近你的分析框架。</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSkill('')}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
+                      selectedSkill === ''
+                        ? 'border-cyan/24 bg-cyan/[0.08] text-foreground'
+                        : 'theme-inline-chip text-secondary-text hover:text-foreground'
+                    }`}
                   >
                     通用分析
-                  </span>
-                </label>
-                {skills.map((s) => (
-                  <label
-                    key={s.id}
-                    className="flex items-center gap-1.5 cursor-pointer group relative mt-0.5"
-                    onMouseEnter={() => setShowSkillDesc(s.id)}
-                    onMouseLeave={() => setShowSkillDesc(null)}
-                  >
-                    <input
-                      type="radio"
-                      name="skill"
-                      value={s.id}
-                      checked={selectedSkill === s.id}
-                      onChange={() => setSelectedSkill(s.id)}
-                      className="w-3.5 h-3.5 accent-cyan"
-                    />
-                    <span
-                      className={`transition-colors text-sm ${selectedSkill === s.id ? 'text-foreground font-medium' : 'text-secondary-text group-hover:text-foreground'}`}
+                  </button>
+                  {skills.map((s) => (
+                    <div
+                      key={s.id}
+                      className="relative"
+                      onMouseEnter={() => setShowSkillDesc(s.id)}
+                      onMouseLeave={() => setShowSkillDesc(null)}
                     >
-                      {s.name}
-                    </span>
-                    {showSkillDesc === s.id && s.description && (
-                      <div className="absolute left-0 bottom-full mb-2 z-50 w-64 p-2.5 rounded-lg bg-elevated border border-border/70 shadow-xl text-xs text-secondary-text leading-relaxed pointer-events-none animate-fade-in">
-                        <p className="font-medium text-foreground mb-1">{s.name}</p>
-                        <p>{s.description}</p>
-                      </div>
-                    )}
-                  </label>
-                ))}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSkill(s.id)}
+                        className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
+                          selectedSkill === s.id
+                            ? 'border-cyan/24 bg-cyan/[0.08] text-foreground'
+                            : 'theme-inline-chip text-secondary-text hover:text-foreground'
+                        }`}
+                      >
+                        {s.name}
+                      </button>
+                      {showSkillDesc === s.id && s.description ? (
+                        <div className="theme-menu-panel absolute left-0 bottom-full mb-2 z-50 w-64 rounded-lg p-2.5 text-xs leading-relaxed text-secondary-text shadow-xl pointer-events-none animate-fade-in">
+                          <p className="mb-1 font-medium text-foreground">{s.name}</p>
+                          <p>{s.description}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="flex gap-3 items-end">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="例如：分析 600519 / 茅台现在适合买入吗？ (Enter 发送, Shift+Enter 换行)"
-                disabled={loading}
-                rows={1}
-                className="input-terminal flex-1 min-h-[44px] max-h-[200px] py-2.5 resize-none"
-                style={{ height: 'auto' }}
-                onInput={(e) => {
-                  const t = e.target as HTMLTextAreaElement;
-                  t.style.height = 'auto';
-                  t.style.height = `${Math.min(t.scrollHeight, 200)}px`;
-                }}
-              />
-              <Button
-                variant="primary"
-                onClick={() => handleSend()}
-                disabled={!input.trim() || loading}
-                isLoading={loading}
-                className="h-[44px] px-6 flex-shrink-0"
-              >
-                发送
-              </Button>
+            <div className="theme-panel-subtle rounded-[1rem] p-3">
+              <div className="flex items-end gap-3">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？ (Enter 发送, Shift+Enter 换行)"
+                  disabled={loading}
+                  rows={1}
+                  className="input-terminal flex-1 min-h-[46px] max-h-[200px] resize-none py-2.5"
+                  style={{ height: 'auto' }}
+                  onInput={(e) => {
+                    const t = e.target as HTMLTextAreaElement;
+                    t.style.height = 'auto';
+                    t.style.height = `${Math.min(t.scrollHeight, 200)}px`;
+                  }}
+                />
+                <Button
+                  variant="primary"
+                  onClick={() => handleSend()}
+                  disabled={!input.trim() || loading}
+                  isLoading={loading}
+                  className="h-[46px] flex-shrink-0 px-6"
+                >
+                  发送
+                </Button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-text">优先提问：买点、止损、目标位、风险和催化。</p>
+                <span className="text-xs text-secondary-text">
+                  当前策略：{selectedSkill ? (skills.find((item) => item.id === selectedSkill)?.name || selectedSkill) : '通用分析'}
+                </span>
+              </div>
             </div>
             {isFollowUpContextLoading && (
               <p className="mt-2 text-xs text-secondary-text">
                 正在加载历史分析上下文；现在可直接发送追问。
               </p>
             )}
+          </div>
           </div>
         </div>
       </div>

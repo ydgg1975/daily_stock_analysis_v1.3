@@ -10,6 +10,7 @@ interface HistoryListProps {
   isLoadingMore: boolean;
   hasMore: boolean;
   selectedId?: number;  // 当前选中的历史记录 ID
+  highlightedId?: number | null;
   selectedIds: Set<number>;
   isDeleting?: boolean;
   onItemClick: (recordId: number) => void;  // 点击记录的回调
@@ -31,6 +32,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   isLoadingMore,
   hasMore,
   selectedId,
+  highlightedId,
   selectedIds,
   isDeleting = false,
   onItemClick,
@@ -85,9 +87,23 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     }
   }, [someVisibleSelected]);
 
+  useEffect(() => {
+    if (!highlightedId) {
+      return;
+    }
+
+    const viewport = scrollContainerRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const target = viewport.querySelector<HTMLElement>(`[data-history-item-id="${highlightedId}"]`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [highlightedId, items]);
+
   const wrapperClass = embedded
     ? `flex flex-col overflow-hidden ${className}`
-    : `flex flex-col overflow-hidden rounded-[1rem] border border-white/6 bg-[#050505] shadow-[0_12px_28px_rgba(0,0,0,0.22)] ${className}`;
+    : `theme-panel-solid flex flex-col overflow-hidden rounded-[1rem] ${className}`;
 
   return (
     <aside className={wrapperClass}>
@@ -166,6 +182,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                 key={item.id}
                 item={item}
                 isViewing={selectedId === item.id}
+                isHighlighted={highlightedId === item.id}
                 isChecked={selectedIds.has(item.id)}
                 isDeleting={isDeleting}
                 onToggleChecked={onToggleItemSelection}

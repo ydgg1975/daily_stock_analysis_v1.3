@@ -19,8 +19,10 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
+    IntradayBar,
     KLineData,
     StockHistoryResponse,
+    StockIntradayResponse,
     StockQuote,
 )
 from api.v1.schemas.common import ErrorResponse
@@ -305,6 +307,67 @@ def get_stock_quote(stock_code: str) -> StockQuote:
                 "error": "internal_error",
                 "message": f"获取实时行情失败: {str(e)}"
             }
+        )
+
+
+@router.get(
+    "/{stock_code}/intraday",
+    response_model=StockIntradayResponse,
+    responses={
+        200: {"description": "日内行情数据"},
+        422: {"description": "不支持的参数", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取股票日内行情",
+    description="获取指定股票的分钟级 / 日内行情，供图表与快照分析使用",
+)
+def get_stock_intraday(
+    stock_code: str,
+    interval: str = Query("5m", description="分钟间隔", pattern="^(1m|2m|5m|15m|30m|60m|90m)$"),
+    range_period: str = Query("1d", alias="range", description="时间范围", pattern="^(1d|5d|1mo)$"),
+) -> StockIntradayResponse:
+    try:
+        service = StockService()
+        result = service.get_intraday_data(
+            stock_code=stock_code,
+            interval=interval,
+            range_period=range_period,
+        )
+        data = [
+            IntradayBar(
+                time=item.get("time"),
+                open=item.get("open"),
+                high=item.get("high"),
+                low=item.get("low"),
+                close=item.get("close"),
+                volume=item.get("volume"),
+            )
+            for item in result.get("data", [])
+        ]
+        return StockIntradayResponse(
+            stock_code=stock_code,
+            stock_name=result.get("stock_name"),
+            interval=interval,
+            range=range_period,
+            source=result.get("source"),
+            data=data,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "unsupported_intraday_param",
+                "message": str(e),
+            },
+        )
+    except Exception as e:
+        logger.error(f"获取日内行情失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"获取日内行情失败: {str(e)}",
+            },
         )
 
 

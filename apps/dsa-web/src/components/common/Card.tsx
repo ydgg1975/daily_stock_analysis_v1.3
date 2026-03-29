@@ -41,7 +41,7 @@ export const Card: React.FC<CardProps> = ({
   if (variant === 'gradient') {
     return (
       <div className={cn(variantStyles.gradient, className)}>
-        <div className={cn('gradient-border-card-inner', paddingStyles[padding])}>
+        <div className={cn('gradient-border-card-inner theme-card-surface', paddingStyles[padding])}>
           {(title || subtitle) && (
             <div className="mb-3">
               {subtitle ? <span className="label-uppercase">{subtitle}</span> : null}
@@ -56,7 +56,7 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
-      className={cn('rounded-2xl', variantStyles[variant], hoverStyles, paddingStyles[padding], className)}
+      className={cn('theme-card-surface rounded-[var(--theme-panel-radius-lg)]', variantStyles[variant], hoverStyles, paddingStyles[padding], className)}
     >
       {(title || subtitle) && (
         <div className="mb-3">

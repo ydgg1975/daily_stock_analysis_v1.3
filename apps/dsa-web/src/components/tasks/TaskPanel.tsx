@@ -1,5 +1,24 @@
 import type React from 'react';
 import type { TaskInfo } from '../../types/analysis';
+import { inferAnalysisStage } from '../../utils/analysisStatus';
+
+const STATUS_LABELS = {
+  queued: '排队中',
+  fetching: '拉取数据',
+  generating: '生成分析',
+  completed: '已完成',
+  failed: '失败',
+  submitted: '已提交',
+} as const;
+
+const STATUS_TONE_CLASS: Record<string, string> = {
+  queued: 'border-white/8 bg-white/[0.03] text-muted-text',
+  fetching: 'border-cyan/14 bg-cyan/[0.08] text-cyan',
+  generating: 'border-amber-300/18 bg-amber-300/[0.08] text-amber-100',
+  completed: 'border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-200',
+  failed: 'border-rose-400/18 bg-rose-400/[0.08] text-rose-200',
+  submitted: 'border-white/8 bg-white/[0.03] text-muted-text',
+};
 
 /**
  * 任务项组件属性
@@ -12,11 +31,12 @@ interface TaskItemProps {
  * 单个任务项
  */
 const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
-  const isPending = task.status === 'pending';
-  const isProcessing = task.status === 'processing';
+  const stage = inferAnalysisStage(task, { isSubmitting: false }) || 'queued';
+  const isProcessing = stage === 'fetching' || stage === 'generating';
+  const isPending = stage === 'queued' || stage === 'submitted';
 
   return (
-    <div className="flex items-center gap-3 rounded-[0.9rem] border border-white/6 bg-white/[0.03] px-3 py-2 transition-all duration-200 ease-out hover:border-white/10 hover:bg-white/[0.045]">
+    <div className="theme-list-item flex items-center gap-3 rounded-[0.9rem] px-3 py-2 transition-all duration-200 ease-out">
       {/* 状态图标 */}
       <div className="shrink-0">
         {isProcessing ? (
@@ -59,9 +79,9 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
             {task.stockCode}
           </span>
         </div>
-        {task.message && (
+        {(task.message || isProcessing) && (
           <p className="text-xs text-secondary-text truncate mt-0.5">
-            {task.message}
+            {task.message || (stage === 'generating' ? '正在输出结构化报告...' : '正在拉取行情与基础数据...')}
           </p>
         )}
       </div>
@@ -69,13 +89,9 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
       {/* 状态标签 */}
       <div className="flex-shrink-0">
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] ${
-            isProcessing
-              ? 'border border-cyan/12 bg-cyan/[0.08] text-cyan'
-              : 'border border-white/8 bg-white/[0.03] text-muted-text'
-          }`}
+          className={`rounded-full border px-2.5 py-0.5 text-[10px] ${STATUS_TONE_CLASS[stage] ?? STATUS_TONE_CLASS.queued}`}
         >
-          {isProcessing ? '分析中' : '等待中'}
+          {STATUS_LABELS[stage] ?? '处理中'}
         </span>
       </div>
     </div>
@@ -104,7 +120,7 @@ interface TaskPanelProps {
 export const TaskPanel: React.FC<TaskPanelProps> = ({
   tasks,
   visible = true,
-  title = '分析任务',
+  title = '分析状态',
   className = '',
   embedded = false,
 }) => {
@@ -123,12 +139,12 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
 
   const wrapperClass = embedded
     ? `overflow-hidden ${className}`
-    : `overflow-hidden rounded-[1rem] border border-white/6 bg-[#050505] shadow-[0_12px_28px_rgba(0,0,0,0.22)] ${className}`;
+    : `theme-panel-solid overflow-hidden rounded-[1rem] ${className}`;
 
   return (
     <div className={wrapperClass}>
       {/* 标题栏 */}
-      <div className={embedded ? 'flex items-center justify-between border-b border-white/6 px-3 py-2.5' : 'flex items-center justify-between border-b border-white/6 px-3 py-2'}>
+      <div className={embedded ? 'theme-sidebar-divider flex items-center justify-between border-b px-3 py-2.5' : 'theme-sidebar-divider flex items-center justify-between border-b px-3 py-2'}>
         <div className="flex items-center gap-2">
           <svg className="w-4 h-4 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -144,11 +160,11 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
           {processingCount > 0 && (
             <span className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan animate-pulse" />
-              {processingCount} 进行中
+              {processingCount} 处理中
             </span>
           )}
           {pendingCount > 0 && (
-            <span>{pendingCount} 等待中</span>
+            <span>{pendingCount} 排队中</span>
           )}
         </div>
       </div>

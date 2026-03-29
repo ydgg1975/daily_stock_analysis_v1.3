@@ -73,6 +73,7 @@ describe('HomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigateMock.mockReset();
+    window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
   });
 
@@ -97,8 +98,8 @@ describe('HomePage', () => {
 
     const dashboard = await screen.findByTestId('home-dashboard');
     expect(dashboard).toBeInTheDocument();
-    expect(dashboard.className).toContain('h-[calc(100vh-5rem)]');
-    expect(dashboard.className).toContain('lg:h-[calc(100vh-2rem)]');
+    expect(dashboard.className).toContain('workspace-page');
+    expect(dashboard.className).toContain('workspace-page--home');
     expect(screen.getByPlaceholderText('输入股票代码或名称，如 600519、贵州茅台、AAPL')).toBeInTheDocument();
     expect(await screen.findByText('趋势维持强势')).toBeInTheDocument();
     expect(
@@ -153,6 +154,34 @@ describe('HomePage', () => {
     await waitFor(() => {
       expect(screen.getByText(/股票 600519 正在分析中/)).toBeInTheDocument();
     });
+  });
+
+  it('shows a visible analysis status strip as soon as async analysis is accepted', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
+      taskId: 'task-accepted',
+      status: 'pending',
+      message: '任务已加入队列',
+    });
+
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const input = await screen.findByPlaceholderText('输入股票代码或名称，如 600519、贵州茅台、AAPL');
+    fireEvent.change(input, { target: { value: '600519' } });
+    fireEvent.click(screen.getByRole('button', { name: '分析' }));
+
+    expect(await screen.findByTestId('analysis-status-strip')).toBeInTheDocument();
+    expect(screen.getAllByText('排队中').length).toBeGreaterThan(0);
+    expect(screen.getByText(/600519 已进入分析队列/)).toBeInTheDocument();
   });
 
   it('navigates to chat with report context when asking a follow-up question', async () => {

@@ -39,7 +39,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
   return (
     <div className={cn('flex flex-col', embeddedRail ? 'h-auto' : 'h-full')}>
       <div className={cn(embeddedRail ? 'mb-3 flex items-center gap-2 px-1' : 'mb-4 flex items-center gap-2 px-1', collapsed ? 'justify-center' : '')}>
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04] text-cyan shadow-[0_12px_28px_var(--nav-brand-shadow)]">
+        <div className="theme-sidebar-brand flex h-10 w-10 items-center justify-center rounded-2xl">
           <BarChart3 className="h-5 w-5" />
         </div>
         {!collapsed ? (
@@ -58,14 +58,14 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
             end={exact}
             onClick={onNavigate}
             aria-label={label}
-            className={({ isActive }) =>
+          className={({ isActive }) =>
               cn(
                 'group relative flex items-center gap-3 rounded-[1rem] border text-sm transition-all',
                 'h-[var(--nav-item-height)]',
                 collapsed ? 'justify-center px-0' : 'px-[var(--nav-item-padding-x)]',
                 isActive
                   ? 'border-[var(--nav-active-border)] bg-[var(--nav-active-bg)] text-foreground shadow-[inset_0_0_0_1px_var(--nav-active-shadow)]'
-                  : 'border-transparent text-secondary-text hover:border-white/6 hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
+                  : 'border-transparent text-secondary-text hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
               )
             }
           >
@@ -107,7 +107,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
           className={cn(
-            'mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 text-sm text-secondary-text transition-all hover:bg-white/[0.06] hover:text-foreground',
+            'theme-panel-subtle mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl px-3 text-sm text-secondary-text transition-all hover:text-foreground',
             collapsed ? 'justify-center px-2' : ''
           )}
         >

@@ -125,6 +125,20 @@ describe('ChatPage', () => {
     expect(mockClearCompletionBadge).toHaveBeenCalled();
   });
 
+  it('shows research-focused starter cards in the empty state', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('从一个高价值问题开始')).toBeInTheDocument();
+    expect(screen.getByText('开仓执行判断')).toBeInTheDocument();
+    expect(screen.getByText('持仓风控复盘')).toBeInTheDocument();
+    expect(screen.getByText('事件驱动跟踪')).toBeInTheDocument();
+    expect(screen.getAllByText(/研究助手工作台/).length).toBeGreaterThan(0);
+  });
+
   it('switches session when clicking anywhere on the session card', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>

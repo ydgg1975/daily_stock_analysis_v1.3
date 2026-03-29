@@ -261,7 +261,9 @@ describe('PortfolioPage FX refresh', () => {
     const riskCallsBeforeRefresh = getRisk.mock.calls.length;
     const tradeCallsBeforeRefresh = listTrades.mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: '刷新汇率' }));
+    const refreshFxButton = screen.getByRole('button', { name: '刷新汇率' });
+    await waitFor(() => expect(refreshFxButton).not.toBeDisabled());
+    fireEvent.click(refreshFxButton);
 
     await waitFor(() => expect(refreshFx).toHaveBeenCalledWith({ accountId: 1 }));
     expect(await screen.findByText('汇率已刷新，共更新 1 对。')).toBeInTheDocument();

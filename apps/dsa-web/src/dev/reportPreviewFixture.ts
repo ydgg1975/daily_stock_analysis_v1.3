@@ -1,39 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { StandardReportPanel } from '../StandardReportPanel';
-import type { AnalysisReport } from '../../../types/analysis';
-import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
+import type { AnalysisReport } from '../types/analysis';
+import type { ReportPriceChartFixtures } from '../components/report/ReportPriceChart';
 
-vi.mock('../../../api/stocks', () => ({
-  stocksApi: {
-    getIntraday: vi.fn().mockResolvedValue({
-      stockCode: 'NVDA',
-      stockName: 'NVIDIA',
-      interval: '5m',
-      range: '1d',
-      source: 'yfinance',
-      data: [
-        { time: '2026-03-28T09:30:00-04:00', open: 124.9, high: 125.6, low: 124.7, close: 125.3, volume: 1200 },
-        { time: '2026-03-28T09:35:00-04:00', open: 125.3, high: 125.9, low: 125.1, close: 125.6, volume: 1600 },
-      ],
-    }),
-    getHistory: vi.fn().mockResolvedValue({
-      stockCode: 'NVDA',
-      stockName: 'NVIDIA',
-      period: 'daily',
-      data: [
-        { date: '2026-03-24', open: 120, high: 123, low: 119, close: 122, volume: 10 },
-        { date: '2026-03-25', open: 122, high: 124, low: 121, close: 123, volume: 11 },
-        { date: '2026-03-26', open: 123, high: 125, low: 122, close: 124, volume: 12 },
-        { date: '2026-03-27', open: 124, high: 126, low: 123, close: 125.3, volume: 13 },
-      ],
-    }),
-  },
-}));
-
-const report: AnalysisReport = {
+export const previewReport: AnalysisReport = {
   meta: {
-    queryId: 'q1',
+    queryId: 'preview-q1',
     stockCode: 'NVDA',
     stockName: 'NVIDIA',
     reportType: 'full',
@@ -68,13 +38,31 @@ const report: AnalysisReport = {
         trendPrediction: '看多',
         oneSentence: '等待回踩确认后再考虑加仓',
         timeSensitivity: '3日内',
-        tags: [
-          { label: '交易日', value: '2026-03-28' },
-          { label: '市场时间', value: '2026-03-28 09:35:00' },
-          { label: '会话类型', value: '常规交易时段' },
-        ],
       },
       market: {
+        regularMetrics: {
+          price: 125.3,
+          prevClose: 123.0,
+          changeAmount: 2.3,
+          changePct: 1.87,
+          open: 123.5,
+          high: 126.2,
+          low: 122.9,
+          close: 124.0,
+          volume: 45678900,
+          amount: 5723456789,
+        },
+        displayFields: [
+          { label: 'Analysis Price', value: '125.30' },
+          { label: 'Prev Close', value: '123.00' },
+          { label: 'Session Open', value: '123.50' },
+          { label: 'Session High', value: '126.20' },
+          { label: 'Session Low', value: '122.90' },
+          { label: 'Change', value: '2.30' },
+          { label: 'Change %', value: '1.87%' },
+          { label: 'Volume', value: '45.68M' },
+          { label: 'Turnover', value: '5.72B' },
+        ],
         consistencyWarnings: ['常规时段多源涨跌口径存在较大偏差，已优先采用当前价与昨收重算结果'],
       },
       tableSections: {
@@ -108,15 +96,8 @@ const report: AnalysisReport = {
         },
       },
       visualBlocks: {
-        score: {
-          value: 78,
-          max: 100,
-        },
-        trendStrength: {
-          value: 72,
-          max: 100,
-          label: '多头排列',
-        },
+        score: { value: 78, max: 100 },
+        trendStrength: { value: 72, max: 100, label: '多头排列' },
         pricePosition: {
           currentPrice: 125.3,
           ma20: 120.99,
@@ -228,67 +209,59 @@ const report: AnalysisReport = {
   },
 };
 
-describe('StandardReportPanel', () => {
-  it('renders the rebuilt wide terminal layout without legacy tabs and narrow rails', async () => {
-    render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
-
-    expect(screen.getAllByText('NVIDIA').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('等待回踩确认后再考虑加仓').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('125.30').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1.87%').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Analysis Price').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Intraday snapshot').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('tab', { name: '概览' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '全部' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('hero-summary-card')).toBeInTheDocument();
-    expect(screen.getByTestId('report-price-chart')).toBeInTheDocument();
-    expect(screen.getByText('Market chart')).toBeInTheDocument();
-    expect(screen.getByTestId('decision-execution-panel')).toBeInTheDocument();
-    expect(screen.getAllByText('120-121').length).toBeGreaterThan(0);
-    expect(screen.getByText('等待回踩确认后分批试仓')).toBeInTheDocument();
-    expect(screen.getAllByText('Key action').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('回踩买点').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Confidence/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Key catalyst').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Key risk').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('行情表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('技术面表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('基本面表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('财报表').length).toBeGreaterThan(0);
-    expect(screen.getByText('催化、风险与情绪')).toBeInTheDocument();
-    expect(screen.getByTestId('risk-catalyst-panel')).toBeInTheDocument();
-    expect(screen.getByText('作战计划')).toBeInTheDocument();
-    expect(screen.getByText('Checklist 与评分')).toBeInTheDocument();
-    expect(screen.getByText('评分拆解')).toBeInTheDocument();
-    expect(screen.getByText('Bullish factors')).toBeInTheDocument();
-    expect(screen.getByText('Bearish factors')).toBeInTheDocument();
-    expect(screen.getByText('Mixed / neutral context')).toBeInTheDocument();
-    expect(screen.getAllByText('最新关键更新').length).toBeGreaterThan(0);
-    expect(screen.getByText('情绪摘要')).toBeInTheDocument();
-    expect(screen.getByText('Synthesized')).toBeInTheDocument();
-    expect(screen.getByText(/Retail tone/)).toBeInTheDocument();
-    expect(screen.getByText('Checklist 状态')).toBeInTheDocument();
-    expect(screen.getByText('短线趋势')).toBeInTheDocument();
-    expect(screen.getByText('变动原因')).toBeInTheDocument();
-    expect(screen.getAllByText('短线技术偏弱，等待均线重新收敛。').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('MA5/10/20/60 已补齐，并保留基本面缓冲。').length).toBeGreaterThan(0);
-    expect(screen.getByText('技术指标补齐导致')).toBeInTheDocument();
-    expect(screen.getAllByText('数据中心需求回暖').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('估值仍偏高').length).toBeGreaterThan(0);
-    expect(screen.getByText('上方前高压力仍在')).toBeInTheDocument();
-    expect(screen.getByText('暂无新的公司级催化，短线更依赖技术结构确认。')).toBeInTheDocument();
-    expect(screen.getAllByText('FMP API').length).toBeGreaterThan(0);
-    expect(screen.getByText('来源与覆盖')).toBeInTheDocument();
-    expect(screen.getByText('ROE(TTM待复核)：TTM待复核')).toBeInTheDocument();
-    expect(screen.getByText('VWAP：字段待接入')).toBeInTheDocument();
-    expect(screen.getByTestId('battle-plan-grid')).toBeInTheDocument();
-    expect(screen.getByTestId('decision-board-panel')).toBeInTheDocument();
-    expect(screen.getAllByText('若放量跌破支撑位，需立即收缩仓位').length).toBeGreaterThan(0);
-    await waitFor(() => {
-      expect(screen.getByText('Bars / source')).toBeInTheDocument();
-    });
-    expect(screen.getByText('Latest bar close')).toBeInTheDocument();
-    expect(screen.queryByText('Report Block')).not.toBeInTheDocument();
-    expect(screen.queryByText(/先看最重要的最新更新/)).not.toBeInTheDocument();
-  });
-});
+export const previewChartFixtures: ReportPriceChartFixtures = {
+  intraday: {
+    source: 'Preview intraday feed',
+    data: [
+      { time: '2026-03-28T09:30:00-04:00', open: 124.9, high: 125.6, low: 124.7, close: 125.3, volume: 1200 },
+      { time: '2026-03-28T09:35:00-04:00', open: 125.3, high: 125.9, low: 125.1, close: 125.6, volume: 1600 },
+      { time: '2026-03-28T09:40:00-04:00', open: 125.6, high: 126.0, low: 125.2, close: 125.4, volume: 1500 },
+      { time: '2026-03-28T09:45:00-04:00', open: 125.4, high: 126.2, low: 125.3, close: 125.9, volume: 1800 },
+      { time: '2026-03-28T09:50:00-04:00', open: 125.9, high: 126.1, low: 125.4, close: 125.7, volume: 1700 },
+    ],
+  },
+  month: {
+    source: 'Preview daily feed',
+    data: [
+      { date: '2026-03-24', open: 120, high: 123, low: 119, close: 122, volume: 10 },
+      { date: '2026-03-25', open: 122, high: 124, low: 121, close: 123, volume: 11 },
+      { date: '2026-03-26', open: 123, high: 125, low: 122, close: 124, volume: 12 },
+      { date: '2026-03-27', open: 124, high: 126, low: 123, close: 125.3, volume: 13 },
+    ],
+  },
+  quarter: {
+    source: 'Preview daily feed',
+    data: [
+      { date: '2026-01-08', open: 111, high: 115, low: 109, close: 114, volume: 21 },
+      { date: '2026-02-08', open: 116, high: 119, low: 113, close: 117, volume: 24 },
+      { date: '2026-03-08', open: 118, high: 126, low: 117, close: 125.3, volume: 27 },
+    ],
+  },
+  year: {
+    source: 'Preview daily feed',
+    data: [
+      { date: '2025-06-28', open: 96, high: 102, low: 94, close: 101, volume: 28 },
+      { date: '2025-09-28', open: 103, high: 111, low: 100, close: 109, volume: 30 },
+      { date: '2025-12-28', open: 111, high: 118, low: 108, close: 116, volume: 34 },
+      { date: '2026-03-28', open: 118, high: 126, low: 117, close: 125.3, volume: 38 },
+    ],
+  },
+  weekly: {
+    source: 'Preview weekly feed',
+    data: [
+      { date: '2026-03-06', open: 117, high: 120, low: 114, close: 118, volume: 42 },
+      { date: '2026-03-13', open: 118, high: 122, low: 116, close: 121, volume: 45 },
+      { date: '2026-03-20', open: 121, high: 124, low: 118, close: 123, volume: 48 },
+      { date: '2026-03-27', open: 123, high: 126.2, low: 122.9, close: 125.3, volume: 52 },
+    ],
+  },
+  monthly: {
+    source: 'Preview monthly feed',
+    data: [
+      { date: '2025-12-01', open: 98, high: 108, low: 95, close: 106, volume: 62 },
+      { date: '2026-01-01', open: 106, high: 116, low: 104, close: 113, volume: 68 },
+      { date: '2026-02-01', open: 113, high: 121, low: 111, close: 118, volume: 72 },
+      { date: '2026-03-01', open: 118, high: 126.2, low: 117, close: 125.3, volume: 76 },
+    ],
+  },
+};

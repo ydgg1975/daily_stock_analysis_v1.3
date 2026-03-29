@@ -109,3 +109,25 @@ class StockHistoryResponse(BaseModel):
                 "data": []
             }
         }
+
+
+class IntradayBar(BaseModel):
+    """分钟 / 日内行情数据点"""
+
+    time: str = Field(..., description="时间戳")
+    open: float = Field(..., description="开盘价")
+    high: float = Field(..., description="最高价")
+    low: float = Field(..., description="最低价")
+    close: float = Field(..., description="收盘价")
+    volume: Optional[float] = Field(None, description="成交量")
+
+
+class StockIntradayResponse(BaseModel):
+    """股票日内行情响应"""
+
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    interval: str = Field(..., description="分钟间隔")
+    range: str = Field(..., description="时间范围")
+    source: Optional[str] = Field(None, description="数据源")
+    data: List[IntradayBar] = Field(default_factory=list, description="分钟行情列表")

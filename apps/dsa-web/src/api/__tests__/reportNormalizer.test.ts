@@ -177,8 +177,26 @@ describe('normalizeAnalysisReport', () => {
               { label: '技术分', score: 38, note: '均线结构偏空', tone: 'danger' },
             ],
           },
+          decision_panel: {
+            ideal_entry: '回踩 MA20 附近分批',
+            backup_entry: '回踩 MA60 二次确认',
+            stop_loss: '跌破 MA60',
+            target: '前高附近',
+            position_sizing: '轻仓试错',
+          },
+          reason_layer: {
+            core_reasons: ['短线技术偏弱，价格位于 MA20 下方。'],
+            top_risk: '估值压力仍在',
+            top_catalyst: 'AI 需求延续',
+            latest_key_update: '最新季度盈利继续改善',
+            checklist_summary: '仍有1项执行条件待确认',
+          },
           battle_plan_compact: {
             cards: [{ label: '理想买入点', value: '回踩 MA20 附近分批' }],
+          },
+          coverage_notes: {
+            data_sources: ['FMP API', 'FMP Statements'],
+            missing_field_notes: ['VWAP：字段待接入'],
           },
           checklist_items: [{ status: 'warn', icon: '⚠️', text: '等待回踩确认' }],
         },
@@ -198,7 +216,10 @@ describe('normalizeAnalysisReport', () => {
     expect(normalized.details?.standardReport?.decisionContext?.adjustmentReason).toBe('MA5/10/20/60 已补齐，并保留基本面缓冲。');
     expect(normalized.details?.standardReport?.decisionContext?.changeReason).toBe('技术指标补齐导致');
     expect(normalized.details?.standardReport?.decisionContext?.scoreBreakdown?.[0]?.score).toBe(38);
+    expect(normalized.details?.standardReport?.decisionPanel?.idealEntry).toBe('回踩 MA20 附近分批');
+    expect(normalized.details?.standardReport?.reasonLayer?.topRisk).toBe('估值压力仍在');
     expect(normalized.details?.standardReport?.battlePlanCompact?.cards?.[0]?.value).toBe('回踩 MA20 附近分批');
+    expect(normalized.details?.standardReport?.coverageNotes?.missingFieldNotes?.[0]).toBe('VWAP：字段待接入');
     expect(normalized.details?.standardReport?.checklistItems?.[0]?.status).toBe('warn');
   });
 });

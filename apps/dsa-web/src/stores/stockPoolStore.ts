@@ -8,6 +8,7 @@ import { getRecentStartDate, getTodayInShanghai } from '../utils/format';
 import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } from '../utils/validation';
 
 const PAGE_SIZE = 20;
+const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
 
 type SelectionSource = 'manual' | 'autocomplete' | 'import' | 'image';
 
@@ -29,6 +30,33 @@ let analyzeRequestSeq = 0;
 let historyRequestSeq = 0;
 const dismissedTaskIds = new Set<string>();
 
+function readPersistedSelectedHistoryId(): number | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(SELECTED_HISTORY_ID_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function persistSelectedHistoryId(recordId?: number | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (recordId && Number.isFinite(recordId)) {
+    window.localStorage.setItem(SELECTED_HISTORY_ID_STORAGE_KEY, String(recordId));
+    return;
+  }
+
+  window.localStorage.removeItem(SELECTED_HISTORY_ID_STORAGE_KEY);
+}
+
 export interface StockPoolState {
   query: string;
   selectionSource: SelectionSource;
@@ -37,6 +65,7 @@ export interface StockPoolState {
   error: ParsedApiError | null;
   isAnalyzing: boolean;
   historyItems: HistoryItem[];
+  highlightedHistoryId: number | null;
   selectedHistoryIds: number[];
   isDeletingHistory: boolean;
   isLoadingHistory: boolean;
@@ -60,6 +89,8 @@ export interface StockPoolState {
   toggleSelectAllVisible: () => void;
   deleteSelectedHistory: () => Promise<void>;
   submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<void>;
+  focusLatestHistoryForStock: (stockCode: string) => Promise<number | null>;
+  clearHighlightedHistory: () => void;
   syncTaskCreated: (task: TaskInfo) => void;
   syncTaskUpdated: (task: TaskInfo) => void;
   syncTaskFailed: (task: TaskInfo) => void;
@@ -75,6 +106,7 @@ const initialState = {
   error: null,
   isAnalyzing: false,
   historyItems: [] as HistoryItem[],
+  highlightedHistoryId: null as number | null,
   selectedHistoryIds: [] as number[],
   isDeletingHistory: false,
   isLoadingHistory: false,
@@ -94,6 +126,10 @@ function buildHistoryParams(page: number) {
     page,
     limit: PAGE_SIZE,
   };
+}
+
+function isSameStockCode(left?: string, right?: string): boolean {
+  return String(left || '').trim().toUpperCase() === String(right || '').trim().toUpperCase();
 }
 
 async function fetchHistory(
@@ -148,7 +184,14 @@ async function fetchHistory(
       selectedHistoryIds: get().selectedHistoryIds.filter((id) => visibleIds.has(id)),
     });
 
-    if (autoSelectFirst && response.items.length > 0 && !get().selectedReport) {
+    const currentSelectedId = get().selectedReport?.meta.id;
+    const persistedSelectedId = readPersistedSelectedHistoryId();
+    const preferredId = response.items.find((item) => item.id === currentSelectedId)?.id
+      ?? response.items.find((item) => item.id === persistedSelectedId)?.id;
+
+    if (preferredId && preferredId !== currentSelectedId) {
+      await get().selectHistoryItem(preferredId);
+    } else if (autoSelectFirst && response.items.length > 0 && !get().selectedReport) {
       await get().selectHistoryItem(response.items[0].id);
     }
 
@@ -224,6 +267,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
         error: null,
         isLoadingReport: false,
       });
+      persistSelectedHistoryId(report.meta.id ?? recordId);
     } catch (error) {
       if (requestId !== reportRequestSeq) {
         return;
@@ -285,6 +329,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
           await get().selectHistoryItem(nextItem.id);
         } else {
           set({ selectedReport: null });
+          persistSelectedHistoryId(null);
         }
       }
     } catch (error) {
@@ -331,7 +376,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
     const requestId = ++analyzeRequestSeq;
     try {
-      await analysisApi.analyzeAsync({
+      const response = await analysisApi.analyzeAsync({
         stockCode: normalizedStockCode,
         reportType: 'detailed',
         stockName,
@@ -341,6 +386,21 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
       if (requestId !== analyzeRequestSeq) {
         return;
+      }
+
+      if ('taskId' in response) {
+        get().syncTaskCreated({
+          taskId: response.taskId,
+          stockCode: normalizedStockCode,
+          stockName,
+          status: response.status,
+          progress: 0,
+          message: response.message || '任务已提交',
+          reportType: 'detailed',
+          createdAt: new Date().toISOString(),
+          originalQuery: originalQuery || stockCodeInput,
+          selectionSource,
+        });
       }
 
       set({
@@ -366,6 +426,34 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       }
     }
   },
+
+  focusLatestHistoryForStock: async (stockCode) => {
+    try {
+      const response = await historyApi.getList(buildHistoryParams(1));
+      const visibleIds = new Set(response.items.map((item) => item.id));
+
+      set({
+        historyItems: response.items,
+        currentPage: 1,
+        hasMore: response.items.length < response.total,
+        selectedHistoryIds: get().selectedHistoryIds.filter((id) => visibleIds.has(id)),
+      });
+
+      const latestMatch = response.items.find((item) => isSameStockCode(item.stockCode, stockCode));
+      if (!latestMatch) {
+        return null;
+      }
+
+      await get().selectHistoryItem(latestMatch.id);
+      set({ highlightedHistoryId: latestMatch.id, error: null });
+      return latestMatch.id;
+    } catch (error) {
+      set({ error: getParsedApiError(error) });
+      return null;
+    }
+  },
+
+  clearHighlightedHistory: () => set({ highlightedHistoryId: null }),
 
   syncTaskCreated: (task) => {
     if (dismissedTaskIds.has(task.taskId)) {

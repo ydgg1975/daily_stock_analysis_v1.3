@@ -6,6 +6,7 @@ import { formatDateTime } from '../../utils/format';
 interface HistoryListItemProps {
   item: HistoryItem;
   isViewing: boolean; // Indicates if this report is currently being viewed in the right panel
+  isHighlighted?: boolean;
   isChecked: boolean; // Indicates if the checkbox is checked for bulk operations
   isDeleting: boolean;
   onToggleChecked: (recordId: number) => void;
@@ -35,6 +36,7 @@ const getOperationBadgeLabel = (advice?: string) => {
 export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   item,
   isViewing,
+  isHighlighted = false,
   isChecked,
   isDeleting,
   onToggleChecked,
@@ -54,11 +56,10 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
       <button
         type="button"
         onClick={() => onClick(item.id)}
-        className={`group/item flex-1 rounded-[0.95rem] border p-3 text-left transition-all duration-200 ease-out ${
-          isViewing
-            ? 'border-white/10 bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(34,211,238,0.08)]'
-            : 'border-white/6 bg-white/[0.02] hover:-translate-y-[1px] hover:border-white/10 hover:bg-white/[0.035]'
-        }`}
+        data-history-item-id={item.id}
+        data-active={isViewing}
+        data-highlighted={isHighlighted}
+        className="theme-history-item group/item flex-1 rounded-[0.95rem] border p-3 text-left transition-all duration-200 ease-out"
       >
         <div className="flex items-center gap-2.5 relative z-10">
           {item.sentimentScore !== undefined && (

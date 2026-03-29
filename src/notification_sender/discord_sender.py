@@ -145,7 +145,11 @@ class DiscordSender:
     @classmethod
     def _build_compact_stock_digest(cls, content: str) -> str:
         normalized = content.replace("\r\n", "\n")
-        if "### 1. 标题区 / Title" not in normalized and "### 1. Title" not in normalized:
+        if (
+            "### 1. 标题区 / Title" not in normalized
+            and "### 1. Title" not in normalized
+            and "### Part A. Executive Summary" not in normalized
+        ):
             return ""
         lines = normalized.split("\n")
         header_lines: list[str] = []
@@ -186,7 +190,11 @@ class DiscordSender:
                         fields[field_match.group(1).strip()] = field_match.group(2).strip()
                     continue
 
-                if "检查清单" in current_section:
+                if (
+                    "检查清单" in current_section
+                    or "Checklist" in current_section
+                    or "Action Plan" in current_section
+                ):
                     checklist = current_stock["checklist"]
                     if isinstance(checklist, list):
                         checklist.append(stripped[2:].strip())
@@ -217,30 +225,45 @@ class DiscordSender:
 
             output.append("")
             output.append(f"## {header}")
-            output.append(
-                f"- **评分 / 建议 / 趋势**: {pick('评分')} / {pick('买入 / 观望 / 卖出')} / {pick('看多 / 看空 / 震荡')}"
+            score_line = pick(
+                "评分 / 建议 / 趋势",
+                f"{pick('评分')} / {pick('买入 / 观望 / 卖出')} / {pick('看多 / 看空 / 震荡')}",
             )
-            output.append(f"- **一句话结论**: {cls._truncate_text(pick('一句话决策'))}")
-            output.append(
-                f"- **核心行情**: 当前价 {pick('当前价')} | 涨跌幅 {pick('涨跌幅')} | 涨跌额 {pick('涨跌额')}"
+            one_line = pick("一句话结论", pick("一句话决策"))
+            current_line = pick(
+                "当前价 / 涨跌",
+                f"当前价 {pick('当前价')} | 涨跌 {pick('涨跌额')} / {pick('涨跌幅')}",
             )
-            output.append(
-                f"- **技术定位**: MA20 {pick('MA20')} | MA60 {pick('MA60')} | RSI14 {pick('RSI14')} | 支撑位 {pick('支撑位')} | 压力位 {pick('压力位')}"
+            execution_line = pick(
+                "理想买入点 / 次优买入点 / 止损位 / 目标位 / 仓位",
+                f"{pick('理想买入点')} / {pick('次优买入点')} / {pick('止损位')} / {pick('目标位')} / {pick('仓位建议')}",
             )
-            output.append(f"- **利好催化**: {cls._truncate_text(cls._compact_list_value(pick('利好催化')), 120)}")
-            output.append(f"- **风险警报**: {cls._truncate_text(cls._compact_list_value(pick('风险警报')), 120)}")
-            output.append(
-                f"- **最新动态**: {cls._truncate_text(cls._compact_list_value(pick('最新动态 / 重要公告', pick('新闻价值分级'))), 120)}"
-            )
-            output.append(
-                f"- **作战计划**: 买点 {pick('理想买入点')} | 止损 {pick('止损位')} | 目标 {pick('目标位')} | 仓位 {pick('仓位建议')}"
-            )
+            top_risk = pick("核心风险", cls._compact_list_value(pick("风险警报")))
+            top_catalyst = pick("核心利好", cls._compact_list_value(pick("利好催化")))
+            latest_update = pick("最新关键更新", cls._compact_list_value(pick("最新动态 / 重要公告", pick("新闻价值分级"))))
+            no_position = pick("空仓者建议")
+            holder = pick("持仓者建议")
+
+            output.append(f"- **评分 / 建议 / 趋势**: {score_line}")
+            output.append(f"- **一句话结论**: {cls._truncate_text(one_line)}")
+            output.append(f"- **当前价 / 涨跌**: {current_line}")
+            output.append(f"- **执行计划**: {execution_line}")
+            output.append(f"- **核心风险**: {cls._truncate_text(top_risk, 120)}")
+            output.append(f"- **核心利好**: {cls._truncate_text(top_catalyst, 120)}")
+            output.append(f"- **最新关键更新**: {cls._truncate_text(latest_update, 120)}")
+            if no_position != "NA（接口未返回）" or holder != "NA（接口未返回）":
+                output.append(
+                    f"- **空仓 / 持仓建议**: 空仓 {cls._truncate_text(no_position, 64)} | 持仓 {cls._truncate_text(holder, 64)}"
+                )
 
             compact_checklist = []
             if isinstance(checklist, list):
                 compact_checklist = [str(item).strip() for item in checklist if str(item).strip()][:4]
-            if compact_checklist:
-                output.append(f"- **Checklist**: {'；'.join(compact_checklist)}")
+            checklist_summary = pick("Checklist 摘要")
+            if checklist_summary != "NA（接口未返回）":
+                output.append(f"- **Checklist 摘要**: {cls._truncate_text(checklist_summary, 120)}")
+            elif compact_checklist:
+                output.append(f"- **Checklist 摘要**: {'；'.join(compact_checklist)}")
 
         return "\n".join(output).strip()
 

@@ -13,6 +13,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
+import pandas as pd
+
 from src.repositories.stock_repo import StockRepository
 
 logger = logging.getLogger(__name__)
@@ -101,27 +103,32 @@ class StockService:
             
         Returns:
             历史行情数据字典
-            
-        Raises:
-            ValueError: 当 period 不是 daily 时抛出（weekly/monthly 暂未实现）
         """
-        # 验证 period 参数，只支持 daily
-        if period != "daily":
-            raise ValueError(
-                f"暂不支持 '{period}' 周期，目前仅支持 'daily'。"
-                "weekly/monthly 聚合功能将在后续版本实现。"
-            )
+        if period not in {"daily", "weekly", "monthly"}:
+            raise ValueError(f"不支持的周期参数: {period}")
         
         try:
             # 调用数据获取器获取历史数据
             from data_provider.base import DataFetcherManager
             
             manager = DataFetcherManager()
-            df, source = manager.get_daily_data(stock_code, days=days)
+            fetch_days = days
+            if period == "weekly":
+                fetch_days = max(days * 2, 90)
+            elif period == "monthly":
+                fetch_days = max(days * 3, 180)
+
+            df, source = manager.get_daily_data(stock_code, days=fetch_days)
             
             if df is None or df.empty:
                 logger.warning(f"获取 {stock_code} 历史数据失败")
                 return {"stock_code": stock_code, "period": period, "data": []}
+
+            if period != "daily":
+                df = self._aggregate_history_frame(df, period)
+                if df.empty:
+                    logger.warning(f"聚合 {stock_code} {period} 历史数据后为空")
+                    return {"stock_code": stock_code, "period": period, "data": []}
             
             # 获取股票名称
             stock_name = manager.get_stock_name(stock_code)
@@ -159,6 +166,132 @@ class StockService:
         except Exception as e:
             logger.error(f"获取历史数据失败: {e}", exc_info=True)
             return {"stock_code": stock_code, "period": period, "data": []}
+
+    def get_intraday_data(
+        self,
+        stock_code: str,
+        interval: str = "5m",
+        range_period: str = "1d",
+    ) -> Dict[str, Any]:
+        """
+        获取分钟级 / 日内行情，优先用于报告图表展示。
+        """
+        supported_intervals = {"1m", "2m", "5m", "15m", "30m", "60m", "90m"}
+        supported_ranges = {"1d", "5d", "1mo"}
+        if interval not in supported_intervals:
+            raise ValueError(f"不支持的 interval 参数: {interval}")
+        if range_period not in supported_ranges:
+            raise ValueError(f"不支持的 range 参数: {range_period}")
+
+        try:
+            import yfinance as yf
+            from data_provider.base import DataFetcherManager
+            from data_provider.yfinance_fetcher import YfinanceFetcher
+
+            manager = DataFetcherManager()
+            symbol = YfinanceFetcher()._convert_stock_code(stock_code)
+            df = yf.download(
+                tickers=symbol,
+                period=range_period,
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+                prepost=True,
+                multi_level_index=True,
+            )
+            if isinstance(df.columns, pd.MultiIndex):
+                ticker_level = df.columns.get_level_values(-1)
+                if (ticker_level == symbol).any():
+                    df = df.loc[:, ticker_level == symbol].copy()
+                df.columns = df.columns.get_level_values(0)
+
+            if df is None or df.empty:
+                logger.warning("获取 %s intraday 数据为空", stock_code)
+                return {
+                    "stock_code": stock_code,
+                    "stock_name": manager.get_stock_name(stock_code),
+                    "interval": interval,
+                    "range": range_period,
+                    "data": [],
+                    "source": "yfinance",
+                }
+
+            df = df.reset_index()
+            timestamp_column = next((col for col in df.columns if str(col).lower() in {"datetime", "date"}), None)
+            if timestamp_column is None:
+                raise ValueError("intraday 数据缺少时间列")
+
+            data: List[Dict[str, Any]] = []
+            for _, row in df.iterrows():
+                timestamp = row.get(timestamp_column)
+                if hasattr(timestamp, "isoformat"):
+                    time_value = timestamp.isoformat()
+                else:
+                    time_value = str(timestamp)
+                data.append({
+                    "time": time_value,
+                    "open": float(row.get("Open", 0)),
+                    "high": float(row.get("High", 0)),
+                    "low": float(row.get("Low", 0)),
+                    "close": float(row.get("Close", 0)),
+                    "volume": float(row.get("Volume", 0)) if row.get("Volume") is not None else None,
+                })
+
+            return {
+                "stock_code": stock_code,
+                "stock_name": manager.get_stock_name(stock_code),
+                "interval": interval,
+                "range": range_period,
+                "data": data,
+                "source": "yfinance",
+            }
+        except ImportError:
+            logger.warning("yfinance 不可用，无法获取 intraday 数据")
+            return {
+                "stock_code": stock_code,
+                "interval": interval,
+                "range": range_period,
+                "data": [],
+                "source": "unavailable",
+            }
+        except Exception as e:
+            logger.error(f"获取 intraday 数据失败: {e}", exc_info=True)
+            return {
+                "stock_code": stock_code,
+                "interval": interval,
+                "range": range_period,
+                "data": [],
+                "source": "error",
+            }
+
+    def _aggregate_history_frame(self, df: pd.DataFrame, period: str) -> pd.DataFrame:
+        if period == "daily":
+            return df
+
+        if "date" not in df.columns:
+            return pd.DataFrame()
+
+        frame = df.copy()
+        frame["date"] = pd.to_datetime(frame["date"])
+        frame = frame.sort_values("date")
+        frame = frame.set_index("date")
+
+        rule = "W-FRI" if period == "weekly" else "M"
+        aggregated = frame.resample(rule).agg(
+            {
+                "open": "first",
+                "high": "max",
+                "low": "min",
+                "close": "last",
+                "volume": "sum",
+                "amount": "sum",
+            }
+        )
+        aggregated = aggregated.dropna(subset=["open", "high", "low", "close"]).reset_index()
+        aggregated["pct_chg"] = aggregated["close"].pct_change() * 100
+        aggregated["pct_chg"] = aggregated["pct_chg"].fillna(0).round(2)
+        aggregated["code"] = frame["code"].iloc[-1] if "code" in frame.columns and not frame.empty else None
+        return aggregated
     
     def _get_placeholder_quote(self, stock_code: str) -> Dict[str, Any]:
         """

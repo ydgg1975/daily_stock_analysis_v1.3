@@ -136,14 +136,11 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [_make_result()], summary_only=False)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("1. 标题区", out)
-        self.assertIn("2. 重要信息速览", out)
-        self.assertIn("3. 持仓建议", out)
-        self.assertIn("4. 当日行情", out)
-        self.assertIn("5. 技术面", out)
-        self.assertIn("6. 基本面 / 财报 / 情绪", out)
-        self.assertIn("7. 作战计划", out)
-        self.assertIn("8. 检查清单", out)
+        self.assertIn("Part A. Executive Summary", out)
+        self.assertIn("Part B. Action Plan", out)
+        self.assertIn("Part C. Events / Sentiment / News", out)
+        self.assertIn("Part D. Evidence", out)
+        self.assertIn("Part E. Source / Coverage / Method Notes", out)
 
     def test_regular_change_uses_price_minus_prev_close(self) -> None:
         r = _make_result(
@@ -159,8 +156,8 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**涨跌额**: 10.00", out)
-        self.assertIn("**涨跌幅**: 10.00%", out)
+        self.assertIn("**Change**: 10.00", out)
+        self.assertIn("**Change %**: 10.00%", out)
 
     def test_regular_and_extended_sessions_are_separated(self) -> None:
         r = _make_result(
@@ -177,9 +174,35 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**当前价**: 100.00", out)  # regular section uses close
+        self.assertIn("**Analysis Price**: 100.00", out)
         self.assertIn("**扩展时段价格**: 105.00", out)
         self.assertIn("**会话标签**: 盘后", out)
+
+    def test_summary_panel_exposes_user_facing_price_basis_labels(self) -> None:
+        payload = build_standard_report_payload(_make_result(), report_language="zh")
+        summary = payload["summary_panel"]
+        self.assertEqual(summary["price_label"], "Analysis Price")
+        self.assertEqual(summary["price_basis"], "Intraday snapshot")
+        self.assertIn("market snapshot", summary["price_basis_detail"])
+        self.assertTrue(summary["reference_session"])
+
+    def test_completed_session_uses_completed_close_basis_label(self) -> None:
+        payload = build_standard_report_payload(
+            _make_result(
+                market_snapshot={
+                    "close": 124,
+                    "prev_close": 121,
+                    "open": 122,
+                    "high": 125,
+                    "low": 120,
+                    "session_type": "last_completed_session",
+                }
+            ),
+            report_language="zh",
+        )
+        summary = payload["summary_panel"]
+        self.assertEqual(summary["price_basis"], "Last close")
+        self.assertIn("last completed session close", payload["market"]["time_context"]["price_context_note"])
 
     def test_material_conflict_prefers_recomputed_change_and_keeps_warning(self) -> None:
         r = _make_result(
@@ -193,8 +216,8 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**涨跌额**: 10.00", out)
-        self.assertIn("**涨跌幅**: 10.00%", out)
+        self.assertIn("**Change**: 10.00", out)
+        self.assertIn("**Change %**: 10.00%", out)
         self.assertIn("常规时段多源涨跌口径存在较大偏差", out)
 
     def test_numeric_display_is_rounded(self) -> None:
@@ -243,20 +266,53 @@ class TestReportRenderer(unittest.TestCase):
             },
             trend_prediction="看多",
         )
-        out = render("markdown", [r], summary_only=False)
-        assert out is not None
-        self.assertIn("突破买点", out)
-        self.assertIn("回踩买点", out)
-        self.assertIn("做多语境下止损位不能高于当前价", out)
-        self.assertIn("当前价已跌破关键防守位", out)
+        payload = build_standard_report_payload(r, report_language="zh")
+        decision_panel = payload["decision_panel"]
+
+        self.assertEqual(decision_panel["setup_type"], "趋势延续 / 等回踩")
+        self.assertIn("技术失效位", decision_panel["stop_loss"])
+        self.assertIn("95.00", decision_panel["support"])
+        self.assertIn("125.00", decision_panel["resistance"])
+        self.assertNotIn("110", decision_panel["stop_loss"])
+
+    def test_social_synthesis_fills_highlights_even_when_no_hard_news(self) -> None:
+        result = _make_result(
+            dashboard={
+                "core_conclusion": {},
+                "battle_plan": {},
+                "intelligence": {
+                    "social_context": (
+                        "📱 Social Sentiment Intelligence for NVDA (Reddit / X / Polymarket)\n"
+                        "Buzz Score: 74/100\n"
+                        "Sentiment Score: 0.12\n"
+                        "Mentions: 180\n"
+                        "Top Mentions:\n"
+                        "1. \"AI demand remains strong and traders are watching the breakout level\""
+                    ),
+                },
+                "structured_analysis": {
+                    "sentiment_analysis": {
+                        "company_sentiment": "neutral",
+                        "industry_sentiment": "positive",
+                        "regulatory_sentiment": "neutral",
+                    },
+                },
+            },
+        )
+        payload = build_standard_report_payload(result, report_language="zh")
+        highlights = payload["highlights"]
+        self.assertIn("LLM 综合讨论摘要", highlights["social_synthesis"])
+        self.assertEqual(highlights["social_tone"], "mixed")
+        self.assertEqual(highlights["social_attention"], "discussion appears elevated")
+        self.assertIn("AI demand remains strong", highlights["social_narrative_focus"])
 
     def test_key_metrics_present_or_reasoned_na(self) -> None:
         r = _make_result()
         out = render("markdown", [r], summary_only=False)
         assert out is not None
         self.assertIn("**VWAP**:", out)
-        self.assertIn("**成交额**:", out)
-        self.assertIn("**均价**:", out)
+        self.assertIn("**Turnover**:", out)
+        self.assertIn("**Avg Price**:", out)
         self.assertIn("**52周最高**:", out)
         self.assertIn("**Beta系数**:", out)
         self.assertIn("**总股本**:", out)
@@ -330,8 +386,8 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**昨收**: 123.00", out)
-        self.assertIn("**成交量**: 450.00万", out)
+        self.assertIn("**Prev Close**: 123.00", out)
+        self.assertIn("**Volume**: 450.00万", out)
         self.assertIn("**MA5**: 123.46", out)
         self.assertIn("**MA10**: 122.12", out)
         self.assertIn("**VWAP**: 124.99", out)
@@ -693,11 +749,11 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**量比**: NA（当前数据源未提供）", out)
-        self.assertIn("**换手率**: NA（字段待接入）", out)
+        self.assertIn("**Volume Ratio**: NA（当前数据源未提供）", out)
+        self.assertIn("**Turnover Rate**: NA（字段待接入）", out)
         self.assertIn("**趋势强度**: NA（接口未返回）", out)
-        self.assertNotIn("**量比**: 0.00", out)
-        self.assertNotIn("**换手率**: 0.00%", out)
+        self.assertNotIn("**Volume Ratio**: 0.00", out)
+        self.assertNotIn("**Turnover Rate**: 0.00%", out)
         self.assertNotIn("**趋势强度**: 0.00/100", out)
 
     def test_source_is_hidden_when_only_provider_tag_exists_without_quote_data(self) -> None:
@@ -719,9 +775,9 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**当前价**: NA（接口未返回）", out)
-        self.assertIn("**行情来源**: NA（上游映射缺失）", out)
-        self.assertNotIn("**行情来源**: finnhub", out)
+        self.assertIn("**Analysis Price**: NA（接口未返回）", out)
+        self.assertIn("**Market Feed**: Upstream quote feed · intraday snapshot", out)
+        self.assertNotIn("**Market Feed**: Finnhub", out)
 
     def test_market_close_timestamp_forces_last_completed_session_price_basis(self) -> None:
         r = _make_result(
@@ -751,10 +807,10 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**当前价**: 168.99", out)
-        self.assertIn("**收盘**: 168.99", out)
-        self.assertIn("**会话类型**: 上一已收盘交易日", out)
-        self.assertNotIn("**当前价**: 167.52", out)
+        self.assertIn("**Analysis Price**: 168.99", out)
+        self.assertIn("**Price basis / Session**: Last close / 2026-03-27 regular session", out)
+        self.assertIn("**会话标签**: 上一已收盘交易日", out)
+        self.assertNotIn("**Analysis Price**: 167.52", out)
 
     def test_completed_session_recovers_prev_close_and_recomputes_change(self) -> None:
         r = _make_result(
@@ -890,18 +946,35 @@ class TestReportRenderer(unittest.TestCase):
         self.assertEqual(payload["summary_panel"]["ticker"], "AAPL")
         self.assertEqual(payload["summary_panel"]["operation_advice"], "持有")
         self.assertEqual(payload["table_sections"]["market"]["title"], "行情表")
+        self.assertEqual(payload["table_sections"]["market"]["fields"][0]["label"], "Analysis Price")
         self.assertEqual(payload["table_sections"]["technical"]["title"], "技术面表")
         self.assertEqual(payload["table_sections"]["fundamental"]["title"], "基本面表")
         self.assertEqual(payload["table_sections"]["earnings"]["title"], "财报表")
         self.assertEqual(payload["summary_panel"]["current_price"], "125.30")
         self.assertEqual(payload["visual_blocks"]["price_position"]["vs_ma20"], "上方")
-        self.assertEqual(payload["highlights"]["positive_catalysts"], ["公司获重大订单"])
-        self.assertEqual(payload["battle_plan_compact"]["cards"][0]["label"], "理想买入点")
+        self.assertIn("公司获重大订单", payload["highlights"]["positive_catalysts"])
+        self.assertIn("理想买入点", [item["label"] for item in payload["battle_plan_compact"]["cards"]])
         self.assertEqual(payload["checklist_items"][0]["status"], "warn")
+        self.assertIn(payload["decision_panel"]["setup_type"], {"突破跟随", "回踩买点", "趋势延续 / 等回踩"})
+        self.assertIn("（", payload["decision_panel"]["ideal_entry"])
+        self.assertEqual(payload["decision_panel"]["no_position_advice"], "等待回踩确认")
+        self.assertEqual(payload["reason_layer"]["top_risk"], "监管调查进展")
+        self.assertEqual(payload["reason_layer"]["top_catalyst"], "公司获重大订单")
+        self.assertEqual(payload["reason_layer"]["latest_key_update"], "公司发布季度财报并上调指引")
+        self.assertTrue(payload["coverage_notes"]["data_sources"])
+        self.assertTrue(payload["coverage_notes"]["method_notes"])
         self.assertEqual(ma20_field["source"], "Local OHLCV")
         self.assertEqual(ma20_field["status"], "已就绪")
         self.assertEqual(support_field["source"], "本地派生")
         self.assertEqual(support_field["status"], "派生")
+
+    def test_market_display_fields_dedupe_close_when_same_as_reference_price(self) -> None:
+        payload = build_standard_report_payload(_make_result(), report_language="zh")
+        display_labels = [item["label"] for item in payload["market"]["display_fields"]]
+
+        self.assertIn("Analysis Price", display_labels)
+        self.assertIn("Session Open", display_labels)
+        self.assertNotIn("Reference Close", display_labels)
 
     def test_standard_report_exposes_decision_context_for_stability_notes(self) -> None:
         r = _make_result(
@@ -983,10 +1056,10 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**昨收**: 123.00", out)
-        self.assertIn("**成交量**: 450.00万", out)
-        self.assertIn("**成交额**: 8.80亿", out)
-        self.assertIn("**行情来源**: yfinance", out)
+        self.assertIn("**Prev Close**: 123.00", out)
+        self.assertIn("**Volume**: 450.00万", out)
+        self.assertIn("**Turnover**: 8.80亿", out)
+        self.assertIn("**Market Feed**: YFinance · intraday snapshot", out)
 
     def test_standard_report_keeps_time_context_when_available(self) -> None:
         r = _make_result()
@@ -1021,16 +1094,17 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("未发现高价值新增催化", out)
         self.assertIn("未发现高价值新增动态", out)
         self.assertIn("低价值已降权", out)
+        self.assertNotIn("公司参加品牌活动", out)
+        self.assertNotIn("高管出席品牌活动", out)
 
     def test_summary_only_still_renders_dashboard_summary(self) -> None:
         out = render("markdown", [_make_result()], summary_only=True)
         self.assertIsNotNone(out)
         assert out is not None
         self.assertIn("分析结果摘要", out)
-        self.assertNotIn("1. 标题区", out)
+        self.assertNotIn("Part A. Executive Summary", out)
 
     def test_english_report_uses_english_title_labels(self) -> None:
         r = _make_result(report_language="en", name="Unnamed Stock", code="TSLA")
