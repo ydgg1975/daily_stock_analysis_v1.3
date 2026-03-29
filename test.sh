@@ -124,7 +124,7 @@ test_au_stock() {
     header "测试场景: 澳股分析"
     info "分析澳股: BHP.AX(必和必拓), CBA.AX(联邦银行)"
     # 允许透传参数，默认不带 --no-notify
-    python3 main.py --stocks BHP.AX --no-market-review "$@"
+    python3 main.py --stocks BHP.AX,CBA.AX --no-market-review "$@"
     success "澳股分析测试完成"
 }
 
