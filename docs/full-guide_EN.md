@@ -582,8 +582,9 @@ System defaults to AkShare (free), also supports other data sources:
 
 ### YFinance
 - Free, no configuration needed
-- Supports US/HK stock data
+- Supports US/HK/AU stock data
 - US stock historical and real-time data both use YFinance exclusively to avoid technical indicator errors from akshare's US stock adjustment issues
+- AU stock historical and real-time data both use YFinance exclusively
 
 ---
 
@@ -596,6 +597,16 @@ Use `hk` prefix for HK stock codes:
 ```bash
 STOCK_LIST=600519,hk00700,hk01810
 ```
+
+### Australian Stock Support
+
+Use `.AX` suffix for ASX stock codes (e.g., BHP, CBA):
+
+```bash
+STOCK_LIST=BHP.AX,CBA.AX
+```
+
+Australian stock data is fetched via YFinance, supporting historical K-line and real-time quotes.
 
 ### Multi-Model Switching
 
@@ -781,6 +792,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 | A-shares | 6-digit number | `600519`, `000001`, `300750` |
 | BSE (Beijing) | 8/4/92 prefix, 6-digit | `920748`, `838163`, `430047` |
 | HK stocks | hk + 5-digit number | `hk00700`, `hk09988` |
+| AU stocks | 1-5 letters + .AX suffix | `BHP.AX`, `CBA.AX` |
 
 ### Notes
 

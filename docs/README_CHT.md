@@ -14,7 +14,7 @@
   <a href="https://hellogithub.com/repository/ZhuLinsen/daily_stock_analysis" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=6daa16e405ce46ed97b4a57706aeb29f&claim_uid=pfiJMqhR9uvDGlT&theme=neutral" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </p>
 
-**基於 AI 大模型的 A股/港股/美股 智能分析系統**
+**基於 AI 大模型的 A股/港股/美股/澳股 智能分析系統**
 
 自動分析自選股 → 生成決策儀表盤 → 多渠道推送（Telegram/Discord/Slack/郵件/企業微信/飛書）
 
@@ -41,7 +41,7 @@
 |------|------|------|
 | AI | 決策儀表盤 | 一句話核心結論 + 精確買賣點位 + 操作檢查清單 |
 | 分析 | 多維度分析 | 技術面 + 籌碼分布 + 輿情情報 + 實時行情 |
-| 市場 | 全球市場 | 支援 A股、港股、美股 |
+| 市場 | 全球市場 | 支援 A股、港股、美股、澳股 |
 | 補全 | 智慧補全 (MVP) | **[測試階段]** 首頁搜尋框支援代碼 / 名稱 / 拼音 / 別名聯想；本地索引已覆蓋 A股、港股、美股，並可透過 Tushare 或 AkShare 重新生成 |
 | 復盤 | 大盤復盤 | 每日市場概覽、板塊漲跌、北向資金 |
 | 回測 | AI 回測驗證 | 自動評估歷史分析準確率，方向勝率、止盈止損命中率 |
@@ -307,6 +307,7 @@ daily_stock_analysis/
 - [x] 港股支持
 - [x] Web 管理界面 (簡易版)
 - [x] 美股支持
+- [x] 澳股支持
 - [ ] 歷史分析回測
 
 ## ☕ 支持項目

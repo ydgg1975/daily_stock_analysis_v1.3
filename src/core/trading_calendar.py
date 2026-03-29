@@ -5,7 +5,7 @@
 ===================================
 
 职责：
-1. 按市场（A股/港股/美股）判断当日是否为交易日
+1. 按市场（A股/港股/美股/澳股）判断当日是否为交易日
 2. 按市场时区取“今日”日期，避免服务器 UTC 导致日期错误
 3. 支持 per-stock 过滤：只分析当日开市市场的股票
 
@@ -30,7 +30,7 @@ except ImportError:
     )
 
 # Market -> exchange code (exchange-calendars)
-MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS", "au": "ASX"}
+MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS", "au": "XASX"}
 
 # Market -> IANA timezone for "today"
 MARKET_TIMEZONE = {

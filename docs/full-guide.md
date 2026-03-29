@@ -515,8 +515,8 @@ docker run -e SCHEDULE_ENABLED=true -e SCHEDULE_RUN_IMMEDIATELY=false ...
 
 #### 交易日判断（Issue #373）
 
-默认根据自选股市场（A 股 / 港股 / 美股）和 `MARKET_REVIEW_REGION` 判断是否为交易日：
-- 使用 `exchange-calendars` 区分 A 股 / 港股 / 美股各自的交易日历（含节假日）
+默认根据自选股市场（A 股 / 港股 / 美股 / 澳股）和 `MARKET_REVIEW_REGION` 判断是否为交易日：
+- 使用 `exchange-calendars` 区分 A 股 / 港股 / 美股 / 澳股各自的交易日历（含节假日）
 - 混合持仓时，每只股票只在其市场开市日分析，休市股票当日跳过
 - 全部相关市场均为非交易日时，整体跳过执行（不启动 pipeline、不发推送）
 - 覆盖方式：`TRADING_DAY_CHECK_ENABLED=false` 或 命令行 `--force-run`
@@ -701,8 +701,9 @@ PUSHOVER_API_TOKEN=your_api_token
 
 ### YFinance
 - 免费，无需配置
-- 支持美股/港股数据
+- 支持美股/港股/澳股数据
 - 美股历史数据与实时行情均统一使用 YFinance，以避免 akshare 美股复权异常导致的技术指标错误
+- 澳股历史数据与实时行情均统一使用 YFinance
 
 ### 东财接口频繁失败时的处理
 
@@ -723,6 +724,16 @@ PUSHOVER_API_TOKEN=your_api_token
 ```bash
 STOCK_LIST=600519,hk00700,hk01810
 ```
+
+### 澳股支持
+
+使用 `.AX` 后缀指定澳股代码（如 BHP、CBA、CSL）：
+
+```bash
+STOCK_LIST=BHP.AX,CBA.AX
+```
+
+澳股数据通过 YFinance 获取，支持历史K线与实时行情。
 
 ### ETF 与指数分析
 
@@ -934,6 +945,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 | A股 | 6位数字 | `600519`、`000001`、`300750` |
 | 北交所 | 8/4/92 开头 6 位 | `920748`、`838163`、`430047` |
 | 港股 | hk + 5位数字 | `hk00700`、`hk09988` |
+| 澳股 | 1-5 字母 + .AX 后缀 | `BHP.AX`、`CBA.AX` |
 | 美股 | 1-5 字母（可选 .X 后缀） | `AAPL`、`TSLA`、`BRK.B` |
 | 美股指数 | SPX/DJI/IXIC 等 | `SPX`、`DJI`、`NASDAQ`、`VIX` |
 
