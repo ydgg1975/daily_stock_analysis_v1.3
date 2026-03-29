@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### 新功能
-
-- 🇦🇺 **澳股（ASX）股票代码支持** — 新增澳股代码识别与数据获取能力，支持 `.AX` 后缀格式（如 `BHP.AX`、`CBA.AX`）；数据源走 YfinanceFetcher，同时支持历史日线和实时行情查询；交易日历同步扩展澳交所交易时段。
+- [新功能] 🦘 **澳股（ASX）股票代码支持** — 新增澳股代码识别与数据获取能力，支持 `.AX` 后缀格式（如 `BHP.AX`、`CBA.AX`）；数据源走 YfinanceFetcher，同时支持历史日线和实时行情查询；交易日历同步扩展澳交所交易时段。
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
