@@ -41,7 +41,7 @@ export type StockHistoryPoint = {
 export type StockHistoryResponse = {
   stockCode: string;
   stockName?: string | null;
-  period: 'daily' | 'weekly' | 'monthly' | string;
+  period: 'daily' | 'weekly' | 'monthly' | 'yearly' | string;
   data: StockHistoryPoint[];
 };
 
@@ -72,7 +72,7 @@ export const stocksApi = {
   async getHistory(
     stockCode: string,
     params: {
-      period?: 'daily' | 'weekly' | 'monthly';
+      period?: 'daily' | 'weekly' | 'monthly' | 'yearly';
       days?: number;
     } = {},
   ): Promise<StockHistoryResponse> {

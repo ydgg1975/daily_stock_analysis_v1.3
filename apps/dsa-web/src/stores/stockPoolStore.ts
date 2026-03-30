@@ -4,11 +4,13 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { historyApi } from '../api/history';
 import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
-import { getRecentStartDate, getTodayInShanghai } from '../utils/format';
+import { translateForCurrentLanguage } from '../i18n/core';
 import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } from '../utils/validation';
 
 const PAGE_SIZE = 20;
 const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
+const TASK_QUEUE_STORAGE_KEY = 'dsa-task-queue-v1';
+const MAX_RECENT_TASKS = 12;
 
 type SelectionSource = 'manual' | 'autocomplete' | 'import' | 'image';
 
@@ -57,6 +59,83 @@ function persistSelectedHistoryId(recordId?: number | null): void {
   window.localStorage.removeItem(SELECTED_HISTORY_ID_STORAGE_KEY);
 }
 
+function readPersistedTasks(): TaskInfo[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(TASK_QUEUE_STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as TaskInfo[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistTasks(tasks: TaskInfo[]): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(TASK_QUEUE_STORAGE_KEY, JSON.stringify(tasks.slice(0, MAX_RECENT_TASKS)));
+}
+
+function touchTask(task: TaskInfo): TaskInfo {
+  const now = new Date().toISOString();
+  return {
+    ...task,
+    updatedAt: task.updatedAt || task.completedAt || task.startedAt || now,
+  };
+}
+
+function sortTasks(tasks: TaskInfo[]): TaskInfo[] {
+  const statusWeight = (task: TaskInfo): number => {
+    if (task.status === 'processing') {
+      return 3;
+    }
+    if (task.status === 'pending') {
+      return 2;
+    }
+    if (task.status === 'failed') {
+      return 1;
+    }
+    return 0;
+  };
+
+  return [...tasks].sort((left, right) => {
+    const statusDiff = statusWeight(right) - statusWeight(left);
+    if (statusDiff !== 0) {
+      return statusDiff;
+    }
+    const leftTime = Date.parse(left.updatedAt || left.completedAt || left.startedAt || left.createdAt || '');
+    const rightTime = Date.parse(right.updatedAt || right.completedAt || right.startedAt || right.createdAt || '');
+    return rightTime - leftTime;
+  }).slice(0, MAX_RECENT_TASKS);
+}
+
+function upsertTask(tasks: TaskInfo[], task: TaskInfo): TaskInfo[] {
+  const normalizedTask = touchTask(task);
+  const nextTasks = [...tasks];
+  const index = nextTasks.findIndex((item) => item.taskId === task.taskId);
+  if (index >= 0) {
+    nextTasks[index] = {
+      ...nextTasks[index],
+      ...normalizedTask,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    nextTasks.unshift({
+      ...normalizedTask,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return sortTasks(nextTasks);
+}
+
 export interface StockPoolState {
   query: string;
   selectionSource: SelectionSource;
@@ -83,6 +162,7 @@ export interface StockPoolState {
   closeMarkdownDrawer: () => void;
   loadInitialHistory: () => Promise<void>;
   refreshHistory: (silent?: boolean) => Promise<void>;
+  hydrateRecentTasks: () => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   selectHistoryItem: (recordId: number) => Promise<void>;
   toggleHistorySelection: (recordId: number) => void;
@@ -115,14 +195,12 @@ const initialState = {
   currentPage: 1,
   selectedReport: null as AnalysisReport | null,
   isLoadingReport: false,
-  activeTasks: [] as TaskInfo[],
+  activeTasks: readPersistedTasks() as TaskInfo[],
   markdownDrawerOpen: false,
 };
 
 function buildHistoryParams(page: number) {
   return {
-    startDate: getRecentStartDate(30),
-    endDate: getTodayInShanghai(),
     page,
     limit: PAGE_SIZE,
   };
@@ -240,6 +318,22 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     await fetchHistory(get, set, { reset: true, silent });
   },
 
+  hydrateRecentTasks: async () => {
+    try {
+      const response = await analysisApi.getTasks({ limit: MAX_RECENT_TASKS });
+      const hydrated = sortTasks((response.tasks || []).map((task) => ({
+        ...task,
+        updatedAt: task.updatedAt || task.completedAt || task.startedAt || task.createdAt,
+      })));
+      persistTasks(hydrated);
+      set({ activeTasks: hydrated });
+    } catch {
+      const persisted = sortTasks(readPersistedTasks());
+      persistTasks(persisted);
+      set({ activeTasks: persisted });
+    }
+  },
+
   loadMoreHistory: async () => {
     const state = get();
     if (state.isLoadingMore || !state.hasMore) {
@@ -348,12 +442,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const originalQuery = (options?.originalQuery ?? state.query).trim();
 
     if (!stockCodeInput) {
-      set({ inputError: '请输入股票代码', duplicateError: null });
+      set({ inputError: translateForCurrentLanguage('home.inputRequired'), duplicateError: null });
       return;
     }
 
     if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
-      set({ inputError: '请输入有效的股票代码或股票名称', duplicateError: null });
+      set({ inputError: translateForCurrentLanguage('home.invalidInput'), duplicateError: null });
       return;
     }
 
@@ -395,9 +489,10 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
           stockName,
           status: response.status,
           progress: 0,
-          message: response.message || '任务已提交',
+          message: response.message || translateForCurrentLanguage('tasks.submitted'),
           reportType: 'detailed',
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           originalQuery: originalQuery || stockCodeInput,
           selectionSource,
         });
@@ -414,7 +509,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
       if (error instanceof DuplicateTaskError) {
         set({
-          duplicateError: `股票 ${error.stockCode} 正在分析中，请等待完成`,
+          duplicateError: translateForCurrentLanguage('home.duplicateTask', { stockCode: error.stockCode }),
         });
         return;
       }
@@ -459,22 +554,22 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     if (dismissedTaskIds.has(task.taskId)) {
       return;
     }
-    if (get().activeTasks.some((item) => item.taskId === task.taskId)) {
-      return;
-    }
-    set({ activeTasks: [...get().activeTasks, task] });
+    const nextTasks = upsertTask(get().activeTasks, task);
+    persistTasks(nextTasks);
+    set({ activeTasks: nextTasks });
   },
 
   syncTaskUpdated: (task) => {
     if (dismissedTaskIds.has(task.taskId)) {
       return;
     }
-    const nextTasks = [...get().activeTasks];
-    const index = nextTasks.findIndex((item) => item.taskId === task.taskId);
-    if (index >= 0) {
-      nextTasks[index] = task;
-      set({ activeTasks: nextTasks });
+    const index = get().activeTasks.findIndex((item) => item.taskId === task.taskId);
+    if (index < 0) {
+      return;
     }
+    const nextTasks = upsertTask(get().activeTasks, task);
+    persistTasks(nextTasks);
+    set({ activeTasks: nextTasks });
   },
 
   syncTaskFailed: (task) => {
@@ -484,7 +579,9 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
   removeTask: (taskId) => {
     dismissedTaskIds.add(taskId);
-    set({ activeTasks: get().activeTasks.filter((task) => task.taskId !== taskId) });
+    const nextTasks = get().activeTasks.filter((task) => task.taskId !== taskId);
+    persistTasks(nextTasks);
+    set({ activeTasks: nextTasks });
   },
 
   resetDashboardState: () => {
@@ -492,6 +589,9 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     reportRequestSeq = 0;
     analyzeRequestSeq = 0;
     dismissedTaskIds.clear();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(TASK_QUEUE_STORAGE_KEY);
+    }
     set({ ...initialState });
   },
 }));

@@ -104,7 +104,7 @@ class StockService:
         Returns:
             历史行情数据字典
         """
-        if period not in {"daily", "weekly", "monthly"}:
+        if period not in {"daily", "weekly", "monthly", "yearly"}:
             raise ValueError(f"不支持的周期参数: {period}")
         
         try:
@@ -114,9 +114,11 @@ class StockService:
             manager = DataFetcherManager()
             fetch_days = days
             if period == "weekly":
-                fetch_days = max(days * 2, 90)
+                fetch_days = max(days, 180)
             elif period == "monthly":
-                fetch_days = max(days * 3, 180)
+                fetch_days = max(days, 365)
+            elif period == "yearly":
+                fetch_days = max(days, 365 * 5)
 
             df, source = manager.get_daily_data(stock_code, days=fetch_days)
             
@@ -276,7 +278,14 @@ class StockService:
         frame = frame.sort_values("date")
         frame = frame.set_index("date")
 
-        rule = "W-FRI" if period == "weekly" else "M"
+        if period == "weekly":
+            rule = "W-FRI"
+        elif period == "monthly":
+            rule = "ME"
+        elif period == "yearly":
+            rule = "YE"
+        else:
+            return frame.reset_index()
         aggregated = frame.resample(rule).agg(
             {
                 "open": "first",

@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useRef, useCallback, useEffect, useId } from 'react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import type { HistoryItem } from '../../types/analysis';
 import { Badge, Button, ScrollArea } from '../common';
 import { HistoryListItem } from './HistoryListItem';
@@ -43,6 +44,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   className = '',
   embedded = false,
 }) => {
+  const { t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -57,14 +59,55 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     (entries: IntersectionObserverEntry[]) => {
       const target = entries[0];
       if (target.isIntersecting && hasMore && !isLoading && !isLoadingMore) {
-        const container = scrollContainerRef.current;
-        if (container && container.scrollHeight > container.clientHeight) {
-          onLoadMore();
-        }
+        onLoadMore();
       }
     },
     [hasMore, isLoading, isLoadingMore, onLoadMore]
   );
+
+  const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
+    (event) => {
+      if (!hasMore || isLoading || isLoadingMore) {
+        return;
+      }
+      const viewport = event.currentTarget;
+      const remaining = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      if (remaining <= 96) {
+        onLoadMore();
+      }
+    },
+    [hasMore, isLoading, isLoadingMore, onLoadMore],
+  );
+
+  const handleAsideWheelCapture = useCallback<React.WheelEventHandler<HTMLElement>>((event) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const viewport = scrollContainerRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    if (maxScrollTop <= 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const nextScrollTop = Math.min(
+      maxScrollTop,
+      Math.max(0, viewport.scrollTop + event.deltaY),
+    );
+
+    if (nextScrollTop !== viewport.scrollTop) {
+      viewport.scrollTop = nextScrollTop;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   useEffect(() => {
     const trigger = loadMoreTriggerRef.current;
@@ -80,6 +123,56 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     observer.observe(trigger);
     return () => observer.disconnect();
   }, [handleObserver]);
+
+  useEffect(() => {
+    const viewport = scrollContainerRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (!event.cancelable) {
+        return;
+      }
+
+      const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      if (maxScrollTop <= 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      const nextScrollTop = Math.min(
+        maxScrollTop,
+        Math.max(0, viewport.scrollTop + event.deltaY),
+      );
+
+      if (nextScrollTop !== viewport.scrollTop) {
+        viewport.scrollTop = nextScrollTop;
+      }
+
+      // Always consume wheel inside history viewport to prevent page scroll chaining.
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const stopTouchBubble = (event: TouchEvent) => {
+      event.stopPropagation();
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    viewport.addEventListener('touchstart', stopTouchBubble, { passive: true });
+    viewport.addEventListener('touchmove', stopTouchBubble, { passive: true });
+
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('touchstart', stopTouchBubble);
+      viewport.removeEventListener('touchmove', stopTouchBubble);
+    };
+  }, []);
 
   useEffect(() => {
     if (selectAllRef.current) {
@@ -102,35 +195,55 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   }, [highlightedId, items]);
 
   const wrapperClass = embedded
-    ? `flex flex-col overflow-hidden ${className}`
-    : `theme-panel-solid flex flex-col overflow-hidden rounded-[1rem] ${className}`;
+    ? `theme-panel-solid min-h-0 h-full flex flex-1 flex-col overflow-hidden rounded-[1rem] ${className}`
+    : `theme-panel-solid min-h-0 flex flex-1 flex-col overflow-hidden rounded-[1rem] ${className}`;
 
   return (
-    <aside className={wrapperClass}>
+    <aside className={wrapperClass} onWheelCapture={handleAsideWheelCapture}>
+      {embedded ? (
+        <div className="theme-sidebar-divider flex items-center justify-between border-b px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <svg className="h-3.5 w-3.5 theme-accent-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary-text">
+              {t('history.title')}
+            </h2>
+          </div>
+          {selectedCount > 0 ? (
+            <Badge variant="info" size="sm" className="animate-in fade-in zoom-in duration-200">
+              {t('history.selected', { count: selectedCount })}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
       <ScrollArea
         viewportRef={scrollContainerRef}
-        viewportClassName={embedded ? 'px-1 pb-1' : 'p-4'}
+        viewportClassName={embedded ? 'history-scroll-viewport h-full min-h-0 overflow-y-scroll px-1.5 pb-2' : 'history-scroll-viewport h-full min-h-0 p-4'}
         testId="home-history-list-scroll"
+        onScroll={handleScroll}
       >
-        <div className={embedded ? 'mb-3 space-y-3 px-3 pt-3' : 'mb-4 space-y-3'}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-secondary-text">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              历史分析
-            </h2>
-            {selectedCount > 0 && (
-              <Badge variant="info" size="sm" className="animate-in fade-in zoom-in duration-200">
-                已选 {selectedCount}
-              </Badge>
-            )}
-          </div>
+        <div className={embedded ? 'mb-2 space-y-2 px-2.5 pt-2.5' : 'mb-4 space-y-3'}>
+          {!embedded ? (
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-secondary-text">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {t('history.title')}
+              </h2>
+              {selectedCount > 0 && (
+                <Badge variant="info" size="sm" className="animate-in fade-in zoom-in duration-200">
+                  {t('history.selected', { count: selectedCount })}
+                </Badge>
+              )}
+            </div>
+          ) : null}
 
           {items.length > 0 && (
             <div className="flex items-center gap-2">
               <label
-                className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 py-1"
+                className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 py-0.5"
                 htmlFor={selectAllId}
               >
                 <input
@@ -140,10 +253,10 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   disabled={isDeleting}
-                  aria-label="全选当前已加载历史记录"
-                  className="h-3.5 w-3.5 cursor-pointer rounded border-white/10 bg-transparent text-cyan focus:ring-cyan/30 disabled:opacity-50"
+                  aria-label={t('history.currentLoaded')}
+                  className="theme-checkbox"
                 />
-                <span className="text-[11px] text-muted-text select-none">全选当前</span>
+                <span className="select-none text-[11px] text-muted-text">{t('history.selectAllLoaded')}</span>
               </label>
               <Button
                 variant="danger-subtle"
@@ -153,7 +266,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                 isLoading={isDeleting}
                 className="h-6 px-2 text-[9px] disabled:!border-transparent disabled:!bg-transparent"
               >
-                {isDeleting ? '删除中' : '删除'}
+                {isDeleting ? t('history.deleting') : t('history.delete')}
               </Button>
             </div>
           )}
@@ -171,12 +284,12 @@ export const HistoryList: React.FC<HistoryListProps> = ({
               </svg>
             </div>
             <div className="space-y-1">
-              <p className="text-sm text-secondary-text">暂无历史分析记录</p>
-              <p className="text-xs text-muted-text">完成首次分析后，这里会保留最近结果。</p>
+              <p className="text-sm text-secondary-text">{t('history.emptyTitle')}</p>
+              <p className="text-xs text-muted-text">{t('history.emptyBody')}</p>
             </div>
           </div>
         ) : (
-          <div className={embedded ? 'space-y-2 px-3 pb-3' : 'space-y-2'}>
+          <div className={embedded ? 'space-y-1.5 px-2.5 pb-3' : 'space-y-2'}>
             {items.map((item) => (
               <HistoryListItem
                 key={item.id}
@@ -201,7 +314,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
             {!hasMore && items.length > 0 && (
               <div className="text-center py-5">
                 <div className="h-px bg-subtle w-full mb-3" />
-                <span className="text-[10px] text-muted-text/50 uppercase tracking-[0.2em]">已到底部</span>
+                <span className="text-[10px] text-muted-text/50 uppercase tracking-[0.2em]">{t('history.bottom')}</span>
               </div>
             )}
           </div>

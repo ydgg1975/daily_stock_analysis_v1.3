@@ -1,5 +1,6 @@
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
+import { translateForCurrentLanguage } from '../i18n/core';
 import type { AnalysisReport, TaskInfo } from '../types/analysis';
 
 export type AnalysisStageKey =
@@ -7,6 +8,7 @@ export type AnalysisStageKey =
   | 'queued'
   | 'fetching'
   | 'generating'
+  | 'notifying'
   | 'completed'
   | 'failed';
 
@@ -22,6 +24,7 @@ export const ANALYSIS_STAGE_ORDER: AnalysisStageKey[] = [
   'queued',
   'fetching',
   'generating',
+  'notifying',
   'completed',
 ];
 
@@ -31,6 +34,18 @@ function inferProcessingStage(task: TaskInfo): AnalysisStageKey {
   const elapsedSeconds = Number.isFinite(startedAt)
     ? Math.max(0, (Date.now() - startedAt) / 1000)
     : 0;
+
+  if (
+    message.includes('通知')
+    || message.includes('discord')
+    || message.includes('wechat')
+    || message.includes('telegram')
+    || message.includes('push')
+    || message.includes('send')
+    || message.includes('sync')
+  ) {
+    return 'notifying';
+  }
 
   if (
     message.includes('生成')
@@ -94,8 +109,8 @@ export function getAnalysisStageDescriptor(
   if (options.duplicateError) {
     return {
       key: 'failed',
-      label: '分析冲突',
-      summary: '同一标的已有任务在进行中',
+      label: translateForCurrentLanguage('status.conflict'),
+      summary: translateForCurrentLanguage('status.conflict'),
       detail: options.duplicateError,
     };
   }
@@ -116,36 +131,53 @@ export function getAnalysisStageDescriptor(
   if (stage === 'submitted') {
     return {
       key: stage,
-      label: '已提交',
-      summary: '分析请求已提交，正在等待任务进入队列',
-      detail: '如果当前展示的是历史报告，最新任务完成后会自动刷新历史列表。',
+      label: translateForCurrentLanguage('status.submitted'),
+      summary: translateForCurrentLanguage('status.submittedSummary'),
+      detail: translateForCurrentLanguage('status.submittedDetail'),
     };
   }
 
   if (stage === 'queued') {
     return {
       key: stage,
-      label: '排队中',
-      summary: `${task?.stockName || task?.stockCode || '当前标的'} 已进入分析队列`,
-      detail: task?.message || '队列繁忙时会稍后开始执行。',
+      label: translateForCurrentLanguage('status.queued'),
+      summary: translateForCurrentLanguage('status.queuedSummary', {
+        name: task?.stockName || task?.stockCode || '当前标的',
+      }),
+      detail: task?.message || translateForCurrentLanguage('status.queuedDetail'),
     };
   }
 
   if (stage === 'fetching') {
     return {
       key: stage,
-      label: '拉取行情 / 数据中',
-      summary: `${task?.stockName || task?.stockCode || '当前标的'} 正在拉取行情、技术面和新闻数据`,
-      detail: task?.message || '这一步会优先获取当前会话所需的行情与基础信息。',
+      label: translateForCurrentLanguage('status.fetching'),
+      summary: translateForCurrentLanguage('status.fetchingSummary', {
+        name: task?.stockName || task?.stockCode || '当前标的',
+      }),
+      detail: task?.message || translateForCurrentLanguage('status.fetchingDetail'),
     };
   }
 
   if (stage === 'generating') {
     return {
       key: stage,
-      label: '生成分析中',
-      summary: `${task?.stockName || task?.stockCode || '当前标的'} 的结构化报告正在生成`,
-      detail: task?.message || '系统已进入总结与决策生成阶段。',
+      label: translateForCurrentLanguage('status.generating'),
+      summary: translateForCurrentLanguage('status.generatingSummary', {
+        name: task?.stockName || task?.stockCode || '当前标的',
+      }),
+      detail: task?.message || translateForCurrentLanguage('status.generatingDetail'),
+    };
+  }
+
+  if (stage === 'notifying') {
+    return {
+      key: stage,
+      label: translateForCurrentLanguage('status.notifying'),
+      summary: translateForCurrentLanguage('status.notifyingSummary', {
+        name: task?.stockName || task?.stockCode || '当前标的',
+      }),
+      detail: task?.message || translateForCurrentLanguage('status.notifyingDetail'),
     };
   }
 
@@ -153,20 +185,22 @@ export function getAnalysisStageDescriptor(
     const isShowingLatestResult = options.selectedReport?.meta?.stockCode === task?.stockCode;
     return {
       key: stage,
-      label: '已完成',
-      summary: `${task?.stockName || task?.stockCode || '当前标的'} 的分析已完成`,
+      label: translateForCurrentLanguage('status.completed'),
+      summary: translateForCurrentLanguage('status.completedSummary', {
+        name: task?.stockName || task?.stockCode || '当前标的',
+      }),
       detail: isShowingLatestResult
-        ? '最新结果已自动打开，可以继续查看完整报告或追问 AI。'
+        ? translateForCurrentLanguage('status.completedDetailOpen')
         : options.selectedReport
-          ? '历史列表已刷新；如果你仍在查看旧报告，可从左侧选择最新结果。'
-          : '历史列表已刷新，可以继续打开完整报告或追问 AI。',
+          ? translateForCurrentLanguage('status.completedDetailStale')
+          : translateForCurrentLanguage('status.completedDetailDefault'),
     };
   }
 
   const parsedFailure = getParsedApiError(task?.error || options.globalError || '分析失败');
   return {
     key: 'failed',
-    label: '失败',
+    label: translateForCurrentLanguage('status.failed'),
     summary: parsedFailure.title,
     detail: parsedFailure.message,
   };
@@ -182,10 +216,13 @@ export function getStatusRelationCopy(
 
   if (selectedReport.meta.stockCode === task.stockCode) {
     if (task.status === 'completed') {
-      return '当前已自动切换到最新结果。';
+      return translateForCurrentLanguage('status.relationLatest');
     }
-    return '当前展示的是历史版本，新的同标的结果生成后可从左侧刷新查看。';
+    return translateForCurrentLanguage('status.relationStale');
   }
 
-  return `当前正在查看 ${selectedReport.meta.stockCode} 的历史报告，后台任务正在分析 ${task.stockCode}。`;
+  return translateForCurrentLanguage('status.relationCross', {
+    selected: selectedReport.meta.stockCode,
+    task: task.stockCode,
+  });
 }

@@ -5,8 +5,107 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dsa-web</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #070911;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 18% 14%, rgba(248, 40, 150, 0.18), transparent 42%),
+          radial-gradient(circle at 84% -6%, rgba(120, 34, 255, 0.22), transparent 46%),
+          radial-gradient(circle at 50% 100%, rgba(5, 15, 36, 0.74), transparent 60%),
+          linear-gradient(180deg, #090b16 0%, #05070f 100%);
+        transition:
+          opacity 0.38s ease,
+          visibility 0.38s ease;
+      }
+      #boot-splash.is-fading {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .boot-splash-fallback__inner {
+        width: min(92vw, 360px);
+        text-align: center;
+      }
+      .boot-splash-fallback__logo-wrap {
+        position: relative;
+        margin: 0 auto;
+        width: clamp(150px, 36vw, 218px);
+        aspect-ratio: 1 / 1;
+      }
+      .boot-splash-fallback__halo {
+        position: absolute;
+        inset: 14%;
+        border-radius: 999px;
+        border: 1px solid rgba(248, 40, 150, 0.45);
+        box-shadow:
+          0 0 30px rgba(248, 40, 150, 0.34),
+          0 0 46px rgba(118, 39, 255, 0.28);
+        animation: boot-pulse 2.1s ease-in-out infinite;
+      }
+      .boot-splash-fallback__logo {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        filter: drop-shadow(0 0 28px rgba(248, 40, 150, 0.26));
+        animation: boot-float 2.8s ease-in-out infinite;
+      }
+      .boot-splash-fallback__text {
+        margin: 16px 0 0;
+        font:
+          600 15px/1.2 "Sora", "Inter", "Segoe UI", system-ui,
+          sans-serif;
+        letter-spacing: 0.08em;
+        color: rgba(245, 236, 255, 0.92);
+      }
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          opacity: 0.72;
+          transform: scale(0.96);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.02);
+        }
+      }
+      @keyframes boot-float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-6px);
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-splash-fallback__inner">
+        <div class="boot-splash-fallback__logo-wrap">
+          <span class="boot-splash-fallback__halo"></span>
+          <img src="/image.png" alt="WolfyStock logo" class="boot-splash-fallback__logo" />
+        </div>
+        <p class="boot-splash-fallback__text">Loading WolfyStock...</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

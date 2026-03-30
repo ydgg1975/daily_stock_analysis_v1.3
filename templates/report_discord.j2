@@ -1,0 +1,27 @@
+# 🎯 {{ report_date }} {{ labels.brief_title }}
+
+> {{ results|length }} {{ labels.stock_unit_compact }} | 🟢{{ buy_count }} 🟡{{ hold_count }} 🔴{{ sell_count }}
+> Report time: `{{ report_generated_at_bjt or na('接口未返回') }}`
+
+{% for e in enriched %}
+{% set summary = e.standard_report.channel_summary %}
+## {{ e.signal_emoji }} {{ summary.stock or (e.stock_name ~ '(' ~ e.result.code ~ ')') }}
+- **评分 / 建议 / 趋势**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
+- **一句话结论**: {{ summary.one_line_conclusion }}
+- **当前价 / 涨跌**: {{ summary.analysis_price }} | {{ summary.change_amount }} / {{ summary.change_pct }}
+- **价格口径 / 会话**: {{ summary.price_basis }} / {{ summary.reference_session }}
+- **关键动作**: {{ summary.key_action }}
+- **理想买入点 / 次优买入点 / 止损位**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
+- **目标一区 / 目标二区 / 目标区间**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
+- **核心利好**: {{ summary.top_bullish_factor }}
+- **核心风险**: {{ summary.top_risk }}
+- **最新关键更新**: {{ summary.latest_key_update }}
+- **空仓 / 持仓建议**: {{ summary.no_position_advice }} / {{ summary.holder_advice }}
+- **Checklist 摘要**: {{ summary.checklist_summary }}
+{% if summary.checklist_items %}
+{% for item in summary.checklist_items %}
+- {{ item }}
+{% endfor %}
+{% endif %}
+
+{% endfor %}

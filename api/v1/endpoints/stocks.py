@@ -384,8 +384,8 @@ def get_stock_intraday(
 )
 def get_stock_history(
     stock_code: str,
-    period: str = Query("daily", description="K 线周期", pattern="^(daily|weekly|monthly)$"),
-    days: int = Query(30, ge=1, le=365, description="获取天数")
+    period: str = Query("daily", description="K 线周期", pattern="^(daily|weekly|monthly|yearly)$"),
+    days: int = Query(30, ge=1, le=3650, description="获取天数")
 ) -> StockHistoryResponse:
     """
     获取股票历史行情
@@ -394,7 +394,7 @@ def get_stock_history(
     
     Args:
         stock_code: 股票代码
-        period: K 线周期 (daily/weekly/monthly)
+        period: K 线周期 (daily/weekly/monthly/yearly)
         days: 获取天数
         
     Returns:

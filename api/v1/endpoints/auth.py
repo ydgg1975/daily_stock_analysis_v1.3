@@ -12,11 +12,13 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_system_config_service
 from src.auth import (
+    ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
     COOKIE_NAME,
     SESSION_MAX_AGE_HOURS_DEFAULT,
     change_password,
     check_rate_limit,
     clear_rate_limit,
+    create_admin_unlock_token,
     create_session,
     get_client_ip,
     has_stored_password,
@@ -67,6 +69,15 @@ class AuthSettingsRequest(BaseModel):
     password: str = Field(default="")
     password_confirm: str | None = Field(default=None, alias="passwordConfirm")
     current_password: str = Field(default="", alias="currentPassword")
+
+
+class VerifyPasswordRequest(BaseModel):
+    """Password verification request for unlocking admin settings."""
+
+    model_config = {"populate_by_name": True}
+
+    password: str = Field(default="", description="Admin password")
+    password_confirm: str | None = Field(default=None, alias="passwordConfirm", description="Confirm password when setting initial secret")
 
 
 def _cookie_params(request: Request) -> dict:
@@ -190,6 +201,85 @@ def _get_auth_status_dict(request: Request | None = None) -> dict:
 async def auth_status(request: Request):
     """Return authEnabled, loggedIn, passwordSet, passwordChangeable, setupState without requiring auth."""
     return _get_auth_status_dict(request)
+
+
+@router.post(
+    "/verify-password",
+    summary="Verify admin password for settings unlock",
+    description=(
+        "Verifies the admin password and returns a short-lived unlock token for admin-only "
+        "settings edits. If no stored password exists yet, accepts password + passwordConfirm "
+        "to bootstrap the initial admin password."
+    ),
+)
+async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
+    """Verify or initialize admin password and return a short-lived unlock token."""
+    password = (body.password or "").strip()
+    if not password:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "password_required", "message": "请输入管理员密码"},
+        )
+
+    ip = get_client_ip(request)
+    if not check_rate_limit(ip):
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "rate_limited",
+                "message": "Too many failed attempts. Please try again later.",
+            },
+        )
+
+    if not has_stored_password():
+        confirm = (body.password_confirm or "").strip()
+        if not confirm:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "password_confirm_required",
+                    "message": "当前尚未设置管理员密码，请输入并确认初始密码。",
+                },
+            )
+        if password != confirm:
+            record_login_failure(ip)
+            return JSONResponse(
+                status_code=400,
+                content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
+            )
+        err = set_initial_password(password)
+        if err:
+            record_login_failure(ip)
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_password", "message": err},
+            )
+    elif not verify_stored_password(password):
+        record_login_failure(ip)
+        return JSONResponse(
+            status_code=401,
+            content={"error": "invalid_password", "message": "管理员密码错误"},
+        )
+
+    clear_rate_limit(ip)
+    unlock_token = create_admin_unlock_token()
+    if not unlock_token:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal_error", "message": "Failed to create admin unlock token"},
+        )
+
+    try:
+        ttl_minutes = int(os.getenv("ADMIN_UNLOCK_MAX_AGE_MINUTES", str(ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT)))
+    except ValueError:
+        ttl_minutes = ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT
+    expires_in_seconds = max(60, ttl_minutes * 60)
+
+    return {
+        "ok": True,
+        "unlockToken": unlock_token,
+        "expiresInSeconds": expires_in_seconds,
+    }
 
 
 @router.post(

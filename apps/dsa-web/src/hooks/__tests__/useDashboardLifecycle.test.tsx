@@ -30,19 +30,21 @@ describe('useDashboardLifecycle', () => {
   it('loads history, refreshes on interval, and reacts to visibility changes', () => {
     const loadInitialHistory = vi.fn().mockResolvedValue(undefined);
     const refreshHistory = vi.fn().mockResolvedValue(undefined);
+    const hydrateRecentTasks = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
       useDashboardLifecycle({
         loadInitialHistory,
         refreshHistory,
+        hydrateRecentTasks,
         syncTaskCreated: vi.fn(),
         syncTaskUpdated: vi.fn(),
         syncTaskFailed: vi.fn(),
-        removeTask: vi.fn(),
       }),
     );
 
     expect(loadInitialHistory).toHaveBeenCalledTimes(1);
+    expect(hydrateRecentTasks).toHaveBeenCalledTimes(1);
 
     act(() => {
       vi.advanceTimersByTime(30_000);
@@ -60,17 +62,18 @@ describe('useDashboardLifecycle', () => {
     expect(refreshHistory).toHaveBeenCalledTimes(2);
   });
 
-  it('cleans pending task removal timers on unmount', () => {
-    const removeTask = vi.fn();
+  it('refreshes history when a task completes and forwards task updates', () => {
+    const refreshHistory = vi.fn().mockResolvedValue(undefined);
+    const syncTaskUpdated = vi.fn();
 
-    const { unmount } = renderHook(() =>
+    renderHook(() =>
       useDashboardLifecycle({
         loadInitialHistory: vi.fn().mockResolvedValue(undefined),
-        refreshHistory: vi.fn().mockResolvedValue(undefined),
+        refreshHistory,
+        hydrateRecentTasks: vi.fn().mockResolvedValue(undefined),
         syncTaskCreated: vi.fn(),
-        syncTaskUpdated: vi.fn(),
+        syncTaskUpdated,
         syncTaskFailed: vi.fn(),
-        removeTask,
       }),
     );
 
@@ -81,12 +84,7 @@ describe('useDashboardLifecycle', () => {
       taskStreamOptions?.onTaskCompleted?.(createTask());
     });
 
-    unmount();
-
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
-
-    expect(removeTask).not.toHaveBeenCalled();
+    expect(syncTaskUpdated).toHaveBeenCalledWith(createTask());
+    expect(refreshHistory).toHaveBeenCalledWith(true);
   });
 });

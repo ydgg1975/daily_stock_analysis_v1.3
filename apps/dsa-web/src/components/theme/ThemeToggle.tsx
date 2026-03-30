@@ -3,37 +3,40 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Palette, Sparkles, SquareTerminal } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useThemeStyle, type ThemeStylePreset } from './ThemeProvider';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 type ThemeToggleVariant = 'default' | 'nav';
 
 const THEME_OPTIONS: Array<{
   value: ThemeStylePreset;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: typeof Palette;
 }> = [
   {
     value: 'terminal',
-    label: '深黑终端',
-    description: '默认深黑终端风格，适合日常分析。',
+    labelKey: 'theme.terminal',
+    descriptionKey: 'theme.terminalDesc',
     icon: SquareTerminal,
   },
   {
     value: 'cyber',
-    label: '赛博朋克',
-    description: '霓虹紫粉和电蓝高对比界面，强调未来感与发光边界。',
+    labelKey: 'theme.cyber',
+    descriptionKey: 'theme.cyberDesc',
     icon: Sparkles,
   },
   {
     value: 'hacker',
-    label: 'Geek / DOS',
-    description: '老式 DOS/终端视觉，单色字符、方角边框和复古面板。',
+    labelKey: 'theme.hacker',
+    descriptionKey: 'theme.hackerDesc',
     icon: Palette,
   },
 ];
 
-function resolveThemeLabel(themeStyle: ThemeStylePreset) {
-  return THEME_OPTIONS.find((item) => item.value === themeStyle)?.label || '深黑终端';
+function resolveThemeLabel(themeStyle: ThemeStylePreset, t: (key: string) => string) {
+  return THEME_OPTIONS.find((item) => item.value === themeStyle)
+    ? t(THEME_OPTIONS.find((item) => item.value === themeStyle)!.labelKey)
+    : t('theme.terminal');
 }
 
 interface ThemeToggleProps {
@@ -45,6 +48,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   variant = 'default',
   collapsed = false,
 }) => {
+  const { t } = useI18n();
   const { themeStyle, setThemeStyle } = useThemeStyle();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -84,27 +88,27 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         )}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="切换主题"
+        aria-label={t('theme.label')}
       >
         <TriggerIcon className={cn('shrink-0', isNavVariant ? 'h-5 w-5' : 'h-4 w-4')} />
         {isNavVariant ? (
           collapsed ? null : (
             <div className="min-w-0">
-              <span className="block truncate text-[1.02rem] font-medium">主题</span>
+              <span className="block truncate text-[1.02rem] font-medium">{t('nav.theme')}</span>
               <span className="block truncate text-[10px] uppercase tracking-[0.16em] text-muted-text">
-                {resolveThemeLabel(activeTheme)}
+                {resolveThemeLabel(activeTheme, t)}
               </span>
             </div>
           )
         ) : (
-          <span className="hidden sm:inline">{resolveThemeLabel(activeTheme)}</span>
+          <span className="hidden sm:inline">{resolveThemeLabel(activeTheme, t)}</span>
         )}
       </button>
 
       {open ? (
         <div
           role="menu"
-          aria-label="主题模式"
+          aria-label={t('theme.menu')}
           className={cn(
             'theme-menu-panel z-[100] min-w-[14rem] overflow-hidden rounded-2xl p-1.5',
             isNavVariant
@@ -112,7 +116,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
               : 'absolute right-0 mt-2'
           )}
         >
-          {THEME_OPTIONS.map(({ value, label, description, icon: Icon }) => {
+          {THEME_OPTIONS.map(({ value, labelKey, descriptionKey, icon: Icon }) => {
             const isActive = activeTheme === value;
             return (
               <button
@@ -137,11 +141,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-muted-text">{description}</span>
+                    <span className="block text-sm font-medium">{t(labelKey)}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-text">{t(descriptionKey)}</span>
                   </span>
                 </span>
-                {isActive ? <Check className="h-4 w-4 text-cyan" /> : null}
+                {isActive ? <Check className="theme-accent-icon h-4 w-4" /> : null}
               </button>
             );
           })}

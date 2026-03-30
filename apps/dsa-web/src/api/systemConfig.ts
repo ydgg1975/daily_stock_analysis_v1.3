@@ -14,6 +14,23 @@ import type {
   ValidateSystemConfigResponse,
 } from '../types/systemConfig';
 
+let adminUnlockToken: string | null = null;
+
+export function setSystemConfigAdminUnlockToken(token: string | null) {
+  adminUnlockToken = token && token.trim() ? token.trim() : null;
+}
+
+function withAdminUnlockHeader() {
+  if (!adminUnlockToken) {
+    return undefined;
+  }
+  return {
+    headers: {
+      'X-Admin-Unlock-Token': adminUnlockToken,
+    },
+  };
+}
+
 export class SystemConfigValidationError extends Error {
   issues: SystemConfigValidationErrorResponse['issues'];
   parsedError: ParsedApiError;
@@ -100,6 +117,7 @@ export const systemConfigApi = {
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/system/config/validate',
       toSnakeValidatePayload(payload),
+      withAdminUnlockHeader(),
     );
     return toCamelCase<ValidateSystemConfigResponse>(response.data);
   },
@@ -108,6 +126,7 @@ export const systemConfigApi = {
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/system/config/llm/test-channel',
       toSnakeTestChannelPayload(payload),
+      withAdminUnlockHeader(),
     );
     return toCamelCase<TestLLMChannelResponse>(response.data);
   },
@@ -117,6 +136,7 @@ export const systemConfigApi = {
       const response = await apiClient.put<Record<string, unknown>>(
         '/api/v1/system/config',
         toSnakeUpdatePayload(payload),
+        withAdminUnlockHeader(),
       );
       return toCamelCase<UpdateSystemConfigResponse>(response.data);
     } catch (error: unknown) {

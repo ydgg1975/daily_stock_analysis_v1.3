@@ -74,7 +74,7 @@ const ChatPage: React.FC = () => {
 
   // Set page title
   useEffect(() => {
-    document.title = '问股 - DSA';
+    document.title = '问股 - WolfyStock';
   }, []);
 
   useEffect(() => () => {
@@ -528,7 +528,7 @@ const ChatPage: React.FC = () => {
           <header className="workspace-header-panel mb-4 flex-shrink-0">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Research Assistant</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">WolfyStock Quant Research</p>
                 <h1 className="mb-2 mt-2 flex items-center gap-2 text-2xl font-bold text-foreground">
                   {!hasShellRail ? (
                     <button

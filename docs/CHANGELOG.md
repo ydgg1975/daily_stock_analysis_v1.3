@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧱 **主题系统升级为“独立家族皮肤”并清理残留硬编码颜色** — Web 端进一步把 `Dark Terminal / Cyberpunk / Geek(DOS)` 收口为真正的全局主题家族：Cyberpunk 仅保留黑 + 粉 + 紫（去除可见 cyan/teal/green 残留），Geek / DOS 收敛为黑白灰单色终端。新增并对齐 `chart-toolbar / input / focus-ring` 等全局 token，状态条、历史选择框、任务队列、自动补全 market/match badge、分页、确认弹窗、内联告警、通用按钮与 loading 图标等组件全部改为 token 驱动，不再依赖 `bg-cyan` / `text-green-*` / `border-rose-*` 这类硬编码 Tailwind 色值。
+
+- 🌌 **Cyberpunk / Geek(DOS) 主题再次重绘 + 品牌化启动加载页落地** — `dsa-web` 赛博主题不再以青色为主，而是切换为黑底 + 霓虹粉/紫主导的高对比视觉（按钮、激活 pill、导航、进度条、图表 chrome 与卡片边缘发光同步偏向 pink/purple）；Geek / DOS 主题则从绿黑终端改为近黑白灰的单色复古样式（低饱和、平面化、弱发光、mono 字体主导）。同时新增品牌化首屏加载体验：`index.html` 提供预挂载 splash fallback，React 挂载后由 `BrandedLoadingScreen` 接管，中心使用 `/image.png` logo 动画并在关键初始加载完成后平滑淡出，避免慢网环境先看到半成品页面。
+
+- 🎨 **Web 主题系统重构为硬约束 token contract + 图表/历史滚动隔离加固** — `dsa-web` 主题切换不再依赖零散颜色覆写，新增并落地 `--bg-page / --bg-sidebar / --bg-card / --accent-* / --chart-* / --font-* / --progress-*` 等核心 token，并让 Sidebar、Hero、卡片、按钮、badge、dropdown、设置面板、任务队列、图表 toolbar/legend/candle 配色统一走 token 渲染；`Dark Terminal / Cyberpunk / Geek(DOS)` 的背景、边框、发光强度、字体与图表语义已显式拉开。History rail 与 K 线区同时加固 wheel/touch 事件消费、`passive` 监听、`overscroll-behavior` 与 `touch-action`，滚轮/拖拽在局部容器内交互时不再串联到整页滚动。
+
+- 🧩 **History rail 在无任务场景下的真实滚动可达性修复** — Home 侧栏现在只在存在活动任务时渲染任务卡，避免空任务卡继续占用第二行并压缩历史区高度；历史卡容器同时固定为 `h-full + min-h-0` 的 bounded 区，确保 8+ 条历史记录可在同一卡片内继续滚动访问，而不是被 rail 裁剪后只显示前几条。
+
+- 🧱 **历史分析滚动根因、字号设置与 K 线语义对齐修复** — 侧栏历史分析现在使用独立 card + 独立 viewport（`min-h-0` + bounded grid row），滚轮在历史卡内部只驱动历史列表本身，离开卡片后页面滚动恢复默认；并在列表底部继续保持 nested-scroll 场景下的 load-more 触发。设置页基础配置新增“字体大小”用户偏好（小/默认/大），持久化到本地并通过全局 CSS 变量受控生效。图表区的 range 语义也已重新对齐为 `1M=1分钟K`、`5M=5分钟K`、`1D=日K`，并补齐 `周K/月K/年K`，前后端周期参数与聚合规则保持一致，默认仍只开启 Candles + Volume。
+
+- 🧭 **品牌位填充、独立历史卡、Key Action 提醒合并与 broker-style range defaults 再收口** — Sidebar 顶部 `WolfyStock` logo 现在会真正填满品牌图标位，避免小图悬在中间；首页左侧历史分析区重构为独立 card + 独立 viewport，鼠标滚轮进入历史卡后只驱动历史列表本身，older records 可以在 rail 内继续向下访问而不把主页面一起带动。任务队列则维持更紧凑的扫描式卡片，仅保留名称、代码、阶段、状态和创建时间，减少每个任务的垂直占用。Key Action 卡本身继续增密，并把 `Execution Reminder` 合并进同一卡片下半区，不再额外占一块竖向空间。图表默认态只显示 `Candles + Volume`，range 控件同步收敛为券商风格语义，并给 reset/zoom 控件单独留出右侧间距。
+
+- 📈 **历史 rail 与 broker-style K 线继续收口** — 首页历史请求不再默认限制在最近 30 天，左侧 `HistoryList` 同时增加滚动阈值触发的分页加载兜底，避免在固定 rail 内滚到底后仍拿不到 Oracle 更早的记录。报告页 `ReportPriceChart` 现在把周线/月线历史拉长到 2~3 年范围，并把非分时视图的默认视窗从固定 64 根调整为整段历史，日/周/月 K 不再默认只剩约两个月；蜡烛体也改为实心填充，并降低长周期视图的最小 candle 宽度，减少密集重叠。
+
+- 🐺 **品牌块、侧边历史 rail 与移动端密度继续收口** — Web 左上角导航品牌块改为使用新的 `WolfyStock` 图形资产与 `QUANTITATIVE SYSTEM` 副标题，替换旧的 `DSA` 名称与图标；Home 侧边 rail 继续压缩任务面板高度、收紧历史条目与列表头部间距，并移除历史请求层的 30 天截断，让更早的分析记录可以在固定高度侧栏里继续纵向滚动访问。与此同时，报告页和图表的移动端间距、时间框按钮、指标 pill、footer metrics 与 disclosure padding 继续压缩，减少空白和换行，保持 broker-style 的紧凑信息密度而不牺牲可读性。
+
+- 🧭 **历史滚动、作战计划占位与 K 线交互继续收口** — 首页左侧 `HistoryList` 现在在 shell rail 中使用真实可收缩滚动容器，历史分析记录可以上下滚动到更早条目，不再因父层高度锁死而截断；标准报告页移除了“来源与覆盖 / 透明度”面板，让作战计划独占整行，并把顶部“关键动作”重排成左侧 bullet plan、右侧 3 条关键利好 + 3 条关键风险，减少空卡片与竖向浪费。市场图表则去掉了与十字光标重复的行情 KPI 卡片，只保留固定 inspector 与指标标线，并通过 `wheel preventDefault + stopPropagation` 配合 `overscroll-behavior: contain` / `touch-action: none` 阻止滚轮缩放时同时带动页面上下滑动，使 K 线交互更接近交易终端。
+
+- 🧩 **统一报告 schema、UI 语言切换、任务队列与交互图表继续收口** — `report_renderer` 现在会在 `standard_report` 中额外产出 `channel_summary`，让完整 Markdown、Discord 精简通知和 brief/homepage 摘要都从同一份结构化对象读取评分、建议、趋势、结论、价格、执行位、风险/利好、最新更新与 checklist，而不是各自拼接字段；`NotificationService.generate_dashboard_report()` 也会在返回 Markdown 前预热 Discord 专用缓存，修复 Discord 明明有数据却仍回退成 `NA` 或继续发送整份长 Markdown 的问题。Web 前端新增全局中英 i18n provider 与语言切换器（默认中文并持久化），并把首页、侧栏、设置页、主题菜单、任务状态、历史列表、图表标题/按钮等首路径文本抽到资源文件；首页任务区改成保留最近任务的队列面板，支持 `queued / analyzing / generating / notifying / completed / failed` 阶段、刷新后恢复与最近完成任务保留。图表侧则修复月线 `days=730` 越界问题，移除多余说明文案，新增指标显隐、缩放、拖拽平移、tooltip 跟踪与更清晰的价格/时间/成交量分区，并让主题菜单、报告面板和测试基线与新的本地默认语言保持一致。
+
 - 🧭 **报告顶部价格语义、金融图表与全局工作区壳层继续收口** — `report_renderer` 现在会把顶部主价明确标成 `Analysis Price`，并用 `Intraday snapshot / Last close / Regular-session close` 区分盘中快照、已收盘与扩展时段基准，避免把分析基准价误导性写成“实时当前价”；同一 bundle 内的 `Prev Close / Open / High / Low / Change` 会一起落盘，盘中场景不再额外展示语义暧昧的 `Reference Close`。Web 报告页的主摘要下方同步改为 API 驱动的金融图表：`1D / 1M / 3M / 1Y / W / M` 视图、真正按价格坐标绘制的 K 线 / 日内图、成交量副图、MA5/10/20 与支撑/压力/买点/止损/目标位标线，替代原先的大面积空白和弱线图；桌面端 Hero 改成“宽主价格区 + 紧凑状态栏”的双栏终端布局，移动端则把次级元信息折叠、让 chart 与 market stats 更早进入首屏。分析完成后的“最新报告已打开”提示则改为自动消失的 toast，不再长期占用主页面。`Shell` / `ChatPage` / `HomePage` 同步统一 desktop rail 宽度、workspace max-width 与断点间距，继续修复 Home / Query / Holdings / Backtest / Settings 路由切换时的缩进与壳层不一致问题；本轮还补上 `workspace-split-layout--main-only` 与基于实际内容宽度触发的 Hero 桌面模式，避免历史 rail 已外置到 shell 后，浏览器放大/全屏时主报告仍误落进窄 rail 列而被挤扁。Cyberpunk / Geek(DOS) 也继续在 badge、卡片、按钮、侧栏和图表上呈现明显不同的视觉语言。
 - 🧭 **报告自动打开、交易计划结构化重算、移动端滚动与主题分化同步落地** — `report_renderer` 不再机械复用松散 sniper point，而是按 recent support / resistance、MA5/10/20/60、日内波动与 52 周语境重算 `理想买点 / 次优买点 / 止损 / 目标一区 / 目标二区 / 目标区间 / 仓位建议`，并把 quiet-news 场景下的 risk / catalyst / sentiment 自动补齐为“公司级 → 行业/市场级 → 技术语境”三层摘要；Web 首页在分析任务完成后会重试拉取并自动打开最新历史报告，失败时给出 `View latest report` CTA，同时把当前选中的报告 ID 持久化以便刷新后恢复；Home / Holdings / Backtest 共用统一 workspace 宽度与间距体系，移动端移除固定高度与嵌套滚动陷阱，恢复正常纵向浏览；`cyber / hacker(Geek / DOS)` 主题则升级为真正的 design-token 级切换，连同字体、圆角、按钮、输入框、卡片、历史列表和壳层背景一起改变，避免主题只剩轻微色差。
 - 🎯 **分析状态自动聚焦、移动端滚动与主题表面继续收口** — Web 前端本轮没有再改后端数据逻辑，而是围绕实际产品体验补齐三处关键缺口：分析任务完成后，首页会自动定位并选中同股票的最新历史报告、滚动到结果区，并对刚生成的记录做短时高亮，避免用户手动去历史列表里寻找结果；Home/Ask 的根容器同时修正为移动端可正常纵向滚动、桌面端才使用受控滚动，不再因固定高度与 `overflow-hidden` 造成手机端下拉失效；主题系统也继续从“技术上能切换”推进到“关键表面真实响应主题”，历史列表、任务区、问股侧栏、主题菜单、实体卡片与列表项全部改为基于 theme token 渲染，配合 `terminal / cyber / hacker` 的字体、panel 和 surface token，让三套主题在实际工作台里有可读、克制但明确的视觉差异。
@@ -1066,6 +1086,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Web
 - 重构标准报告详情页为更接近 [OKX Markets/Prices](https://www.okx.com/en-us/markets/prices) 的深黑终端布局：顶部 summary strip、表格主区、右侧信号栏、移动端紧凑 definition-list。
 - 移除 standard report 页面下方重复的旧资讯区，并放宽首页报告容器，减少桌面端无效留白与顶层横向滚动。
+- 主题系统增强为明显分层：`Dark Terminal` 保持克制终端风格，`Cyberpunk` 提升霓虹边界与高对比发光，`Geek / DOS` 切换为低饱和复古终端面板与方角控制。
+- 新增 5 档全局字号系统（XS/S/M/L/XL），并分别控制桌面与移动端缩放比例，设置持久化到本地存储。
+- 移动端密度优化：收紧页面间距、标题与图表工具条字号/间距，提升同屏信息量。
+- 修复移动端 K 线交互滚动串扰：在图表内部触摸拖拽/缩放时隔离页面滚动，图表外区域保持正常页面滚动。
 
 ## [1.0.0] - 2026-01-10
 

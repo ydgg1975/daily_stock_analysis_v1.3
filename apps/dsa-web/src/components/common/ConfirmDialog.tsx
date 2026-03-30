@@ -30,11 +30,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   const dialog = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all"
+      className="theme-overlay-backdrop fixed inset-0 z-50 flex items-center justify-center transition-all"
       onClick={onCancel}
     >
       <div
-        className="mx-4 w-full max-w-sm rounded-xl border border-border/70 bg-elevated p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
+        className="theme-modal-panel mx-4 w-full max-w-sm rounded-xl border p-6 animate-in fade-in zoom-in duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="mb-2 text-lg font-medium text-foreground">{title}</h3>
@@ -45,7 +45,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-border/70 px-4 py-2 text-sm font-medium text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+            className="rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-4 py-2 text-sm font-medium text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--pill-active-bg)] hover:text-foreground"
           >
             {cancelText}
           </button>
@@ -54,8 +54,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             onClick={onConfirm}
             className={`rounded-lg px-4 py-2 text-sm font-medium text-foreground transition-colors ${
               isDanger
-                ? 'bg-red-500/80 hover:bg-red-500 shadow-lg shadow-red-500/20'
-                : 'bg-cyan/80 hover:bg-cyan shadow-lg shadow-cyan/20'
+                ? 'border border-[hsl(var(--accent-danger-hsl)/0.64)] bg-[hsl(var(--accent-danger-hsl)/0.34)] hover:bg-[hsl(var(--accent-danger-hsl)/0.46)]'
+                : 'border border-[hsl(var(--border-strong-hsl)/0.62)] bg-[var(--button-bg)] hover:bg-[var(--button-hover-bg)]'
             }`}
           >
             {confirmText}

@@ -3,16 +3,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { Drawer } from '../common/Drawer';
+import { LanguageToggle } from '../common/LanguageToggle';
 import { SidebarNav } from './SidebarNav';
 import { cn } from '../../utils/cn';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { ShellRailContext } from './ShellRailContext';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 type ShellProps = {
   children?: React.ReactNode;
 };
 
 export const Shell: React.FC<ShellProps> = ({ children }) => {
+  const { t } = useI18n();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
   const collapsed = false;
@@ -52,11 +55,12 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             type="button"
             onClick={() => setMobileOpen(true)}
             className="theme-floating-control pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl text-secondary-text backdrop-blur-xl transition-colors hover:text-foreground"
-            aria-label="打开导航菜单"
+            aria-label={t('shell.openMenu')}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <LanguageToggle />
             <ThemeToggle />
           </div>
         </div>
@@ -65,7 +69,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           <aside
             className={cn(
               'theme-sidebar-shell sticky top-3 hidden shrink-0 overflow-hidden rounded-[1.6rem] p-2.5 backdrop-blur-md transition-[width] duration-200 lg:flex',
-              'max-h-[calc(100vh-1.5rem)] self-start sm:top-4 sm:max-h-[calc(100vh-2rem)]',
+              'h-[calc(100vh-1.5rem)] self-start sm:top-4 sm:h-[calc(100vh-2rem)]',
               collapsed ? 'w-[68px]' : 'w-[var(--layout-sidebar-width)]',
             )}
             aria-label="桌面侧边导航"
@@ -82,11 +86,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Workspace Shell</p>
                       <p className="mt-2 text-sm leading-6 text-secondary-text">
-                        统一导航宽度、内容起点与桌面端滚动关系，让首页、问股、持仓和回测共享同一视觉节奏。
+                        {t('shell.workspaceShellBody')}
                       </p>
                     </div>
                     <p className="mt-4 text-xs leading-5 text-muted-text">
-                      Navigation、theme switcher 与内容 rail 现在共用同一套桌面壳层宽度。
+                      {t('shell.workspaceShellFoot')}
                     </p>
                   </div>
                 </div>
@@ -102,7 +106,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         <Drawer
           isOpen={mobileOpen}
           onClose={() => setMobileOpen(false)}
-          title="导航菜单"
+          title={t('shell.drawerTitle')}
           width="max-w-xs"
           zIndex={90}
           side="left"
@@ -116,7 +120,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             ) : (
               <div className="theme-sidebar-divider mt-4 border-t pt-4">
                 <div className="theme-panel-subtle rounded-[1rem] px-4 py-4 text-sm leading-6 text-secondary-text">
-                  当前页面没有附加 rail，但仍沿用统一的壳层宽度和移动端抽屉行为。
+                  {t('shell.noRail')}
                 </div>
               </div>
             )}

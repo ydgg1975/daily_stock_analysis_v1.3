@@ -13,6 +13,7 @@ const {
   applyPartialUpdate,
   refreshAfterExternalSave,
   refreshStatus,
+  setThemeStyle,
   useAuthMock,
   useSystemConfigMock,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   applyPartialUpdate: vi.fn(),
   refreshAfterExternalSave: vi.fn(),
   refreshStatus: vi.fn(),
+  setThemeStyle: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
 }));
@@ -32,6 +34,13 @@ const {
 vi.mock('../../hooks', () => ({
   useAuth: () => useAuthMock(),
   useSystemConfig: () => useSystemConfigMock(),
+}));
+
+vi.mock('../../components/theme/ThemeProvider', () => ({
+  useThemeStyle: () => ({
+    themeStyle: 'terminal',
+    setThemeStyle,
+  }),
 }));
 
 vi.mock('../../components/settings', () => ({
@@ -42,6 +51,7 @@ vi.mock('../../components/settings', () => ({
       merge stock list
     </button>
   ),
+  FontSizeSettingsCard: () => <div>字体大小</div>,
   LLMChannelEditor: ({
     onSaved,
   }: {
@@ -248,9 +258,13 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
+    window.sessionStorage.setItem('dsa-admin-settings-unlock-token', 'unit-test-token');
+    window.sessionStorage.setItem('dsa-admin-settings-unlock-expires-at', String(Date.now() + 60_000));
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: true,
+      setupState: 'enabled',
       refreshStatus,
     });
     useSystemConfigMock.mockReturnValue(buildSystemConfigState());
@@ -260,9 +274,20 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     expect(await screen.findByRole('heading', { name: '系统设置' })).toBeInTheDocument();
-    expect(screen.getByText('认证与登录保护')).toBeInTheDocument();
-    expect(screen.getByText('修改密码')).toBeInTheDocument();
+    expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
+    expect(await screen.findByText('修改密码')).toBeInTheDocument();
     expect(load).toHaveBeenCalled();
+  });
+
+  it('keeps admin controls locked by default without unlock token', () => {
+    window.sessionStorage.clear();
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'system' }));
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText('锁定状态下仅可浏览，无法修改系统级配置。')).toBeInTheDocument();
+    expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
+    expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
   });
 
   it('resets local drafts from the page header button', () => {

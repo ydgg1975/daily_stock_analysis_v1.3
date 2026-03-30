@@ -136,11 +136,37 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [_make_result()], summary_only=False)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("Part A. Executive Summary", out)
-        self.assertIn("Part B. Action Plan", out)
-        self.assertIn("Part C. Events / Sentiment / News", out)
-        self.assertIn("Part D. Evidence", out)
-        self.assertIn("Part E. Source / Coverage / Method Notes", out)
+        self.assertIn("### Top Overview", out)
+        self.assertIn("### Conclusion & Action Guidance", out)
+        self.assertIn("### Key Signals", out)
+        self.assertIn("### Risks & Catalysts", out)
+        self.assertIn("### Market / Technical / Fundamental Evidence", out)
+        self.assertIn("### Source / Coverage Notes", out)
+
+    def test_channel_summary_drives_brief_and_discord_rendering(self) -> None:
+        result = _make_result()
+        payload = build_standard_report_payload(result, report_language="zh")
+        channel_summary = payload["channel_summary"]
+
+        self.assertEqual(channel_summary["score"], 68)
+        self.assertEqual(channel_summary["recommendation"], "持有")
+        self.assertEqual(channel_summary["trend"], "看多")
+        self.assertEqual(channel_summary["analysis_price"], "125.30")
+        self.assertEqual(channel_summary["change_amount"], "2.30")
+        self.assertEqual(channel_summary["change_pct"], "1.87%")
+        self.assertEqual(channel_summary["key_action"], payload["decision_panel"]["key_action"])
+
+        discord_out = render("discord", [result], summary_only=False)
+        brief_out = render("brief", [result], summary_only=False)
+        self.assertIsNotNone(discord_out)
+        self.assertIsNotNone(brief_out)
+        assert discord_out is not None
+        assert brief_out is not None
+        self.assertIn("**评分 / 建议 / 趋势**: 68 / 持有 / 看多", discord_out)
+        self.assertIn("**当前价 / 涨跌**: 125.30 | 2.30 / 1.87%", discord_out)
+        self.assertIn("**核心利好**: 公司获重大订单", discord_out)
+        self.assertIn("**Apple (AAPL)**", brief_out)
+        self.assertIn("评分 68", brief_out)
 
     def test_regular_change_uses_price_minus_prev_close(self) -> None:
         r = _make_result(
@@ -185,6 +211,31 @@ class TestReportRenderer(unittest.TestCase):
         self.assertEqual(summary["price_basis"], "Intraday snapshot")
         self.assertIn("market snapshot", summary["price_basis_detail"])
         self.assertTrue(summary["reference_session"])
+
+    def test_summary_market_and_channel_values_share_same_canonical_quote_basis(self) -> None:
+        payload = build_standard_report_payload(_make_result(), report_language="zh")
+        summary = payload["summary_panel"]
+        channel_summary = payload["channel_summary"]
+        market_fields = {
+            field["label"]: field["value"]
+            for field in (payload["market"]["display_fields"] or payload["market"]["regular_fields"])
+        }
+        technical_fields = {field["label"]: field["value"] for field in payload["technical_fields"]}
+
+        self.assertEqual(summary["current_price"], channel_summary["analysis_price"])
+        self.assertEqual(summary["change_amount"], channel_summary["change_amount"])
+        self.assertEqual(summary["change_pct"], channel_summary["change_pct"])
+        self.assertEqual(market_fields["Analysis Price"], summary["current_price"])
+        self.assertEqual(market_fields["Prev Close"], "123.00")
+        self.assertEqual(market_fields["Change"], "2.30")
+        self.assertEqual(market_fields["Change %"], "1.87%")
+        self.assertEqual(technical_fields["MA5"], "123.46")
+        self.assertEqual(technical_fields["MA10"], "122.12")
+        self.assertEqual(technical_fields["MA20"], "120.99")
+        self.assertEqual(technical_fields["MA60"], "118.88")
+        self.assertEqual(technical_fields["RSI14"], "56.78")
+        self.assertEqual(technical_fields["支撑位"], "119.11")
+        self.assertEqual(technical_fields["压力位"], "129.00")
 
     def test_completed_session_uses_completed_close_basis_label(self) -> None:
         payload = build_standard_report_payload(
@@ -808,7 +859,7 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=False)
         assert out is not None
         self.assertIn("**Analysis Price**: 168.99", out)
-        self.assertIn("**Price basis / Session**: Last close / 2026-03-27 regular session", out)
+        self.assertIn("- **价格口径 / 参考会话 / 更新时间**: Last close / 2026-03-27 regular session / 2026-03-27 16:00:00 UTC-04:00", out)
         self.assertIn("**会话标签**: 上一已收盘交易日", out)
         self.assertNotIn("**Analysis Price**: 167.52", out)
 
@@ -1095,7 +1146,7 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [r], summary_only=False)
         assert out is not None
         self.assertIn("未发现高价值新增动态", out)
-        self.assertIn("低价值已降权", out)
+        self.assertNotIn("低价值已降权", out)
         self.assertNotIn("公司参加品牌活动", out)
         self.assertNotIn("高管出席品牌活动", out)
 
@@ -1104,7 +1155,7 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIsNotNone(out)
         assert out is not None
         self.assertIn("分析结果摘要", out)
-        self.assertNotIn("Part A. Executive Summary", out)
+        self.assertNotIn("### Top Overview", out)
 
     def test_english_report_uses_english_title_labels(self) -> None:
         r = _make_result(report_language="en", name="Unnamed Stock", code="TSLA")

@@ -111,7 +111,7 @@ const RunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => (
 const BacktestPage: React.FC = () => {
   // Set page title
   useEffect(() => {
-    document.title = '策略回测 - DSA';
+    document.title = '策略回测 - WolfyStock';
   }, []);
 
   // Input state
@@ -242,7 +242,7 @@ const BacktestPage: React.FC = () => {
       <header className="workspace-header-panel flex-shrink-0">
         <div className="space-y-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Backtest Lab</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">WolfyStock Quant Lab</p>
             <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">策略回测</h1>
             <p className="mt-2 text-sm leading-6 text-secondary-text">
               用统一窗口快速复盘建议方向、止盈止损触发率和历史执行质量。

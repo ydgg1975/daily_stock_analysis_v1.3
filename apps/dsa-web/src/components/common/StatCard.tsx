@@ -18,10 +18,10 @@ interface StatCardProps {
 
 const toneStyles = {
   default: 'border-subtle',
-  primary: 'border-cyan/18',
-  success: 'border-success/18',
-  warning: 'border-warning/18',
-  danger: 'border-danger/18',
+  primary: 'border-[hsl(var(--accent-primary-hsl)/0.28)]',
+  success: 'border-[hsl(var(--accent-positive-hsl)/0.28)]',
+  warning: 'border-[hsl(var(--accent-warning-hsl)/0.28)]',
+  danger: 'border-[hsl(var(--accent-danger-hsl)/0.28)]',
 };
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -40,7 +40,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
           {hint ? <div className="mt-2 text-sm text-secondary-text">{hint}</div> : null}
         </div>
-        {icon ? <div className="text-cyan">{icon}</div> : null}
+        {icon ? <div className="theme-accent-icon">{icon}</div> : null}
       </div>
     </div>
   );

@@ -64,7 +64,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-300"
+        className="theme-overlay-backdrop absolute inset-0 transition-opacity duration-300"
         onClick={onClose}
       />
 
@@ -74,13 +74,13 @@ export const Drawer: React.FC<DrawerProps> = ({
           aria-modal="true"
           aria-labelledby={titleId}
           className={cn(
-            'relative flex w-full flex-col bg-card',
+            'theme-modal-panel relative flex w-full flex-col',
             borderClass,
-            side === 'right' ? 'border-border/80' : 'border-border/70 shadow-2xl',
+            side === 'right' ? 'border-border/70' : 'border-border/70',
             side === 'left' ? 'animate-slide-in-left' : 'animate-slide-in-right'
           )}
         >
-          <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
+          <div className="flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-6 py-4">
             {title ? (
               <div>
                 <span className="label-uppercase">DETAIL VIEW</span>
@@ -90,7 +90,7 @@ export const Drawer: React.FC<DrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-card/80 text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-muted)] bg-[var(--pill-bg)] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--pill-active-bg)] hover:text-foreground"
               aria-label="关闭抽屉"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

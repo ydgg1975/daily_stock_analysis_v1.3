@@ -7,6 +7,7 @@ import { HistoryList } from '../components/history';
 import { ReportMarkdown, ReportSummary } from '../components/report';
 import { TaskPanel } from '../components/tasks';
 import { useShellRail } from '../components/layout/ShellRailContext';
+import { useI18n } from '../contexts/UiLanguageContext';
 import { useDashboardLifecycle } from '../hooks';
 import { useStockPoolStore } from '../stores';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
@@ -18,16 +19,7 @@ import {
   getStatusRelationCopy,
   inferAnalysisStage,
 } from '../utils/analysisStatus';
-import { getReportText, normalizeReportLanguage } from '../utils/reportLanguage';
-
-const STATUS_STEP_LABELS: Record<(typeof ANALYSIS_STAGE_ORDER)[number], string> = {
-  submitted: '已提交',
-  queued: '排队中',
-  fetching: '拉取数据',
-  generating: '生成分析',
-  completed: '已完成',
-  failed: '失败',
-};
+import { normalizeReportLanguage } from '../utils/reportLanguage';
 
 type LatestReportOpenState = {
   taskId: string;
@@ -83,6 +75,7 @@ const AnalysisStatusStrip: React.FC<{
   duplicateError,
   error,
 }) => {
+  const { t } = useI18n();
   const descriptor = getAnalysisStageDescriptor(task, {
     isSubmitting: isAnalyzing,
     selectedReport,
@@ -97,7 +90,7 @@ const AnalysisStatusStrip: React.FC<{
   const stage = inferAnalysisStage(task, { isSubmitting: isAnalyzing }) || descriptor.key;
   const orderedStage = stage === 'failed' ? 'generating' : stage;
   const taskError = descriptor.key === 'failed'
-    ? getParsedApiError(task?.error || error || duplicateError || '分析失败')
+    ? getParsedApiError(task?.error || error || duplicateError || t('status.failed'))
     : null;
   const relationCopy = getStatusRelationCopy(task, selectedReport);
 
@@ -112,12 +105,12 @@ const AnalysisStatusStrip: React.FC<{
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span
-              className={`inline-flex min-h-7 items-center rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] ${
+              className={`workspace-status-badge ${
                 descriptor.key === 'failed'
-                  ? 'border-rose-400/18 bg-rose-400/[0.08] text-rose-200'
+                  ? 'workspace-status-badge--failed'
                   : descriptor.key === 'completed'
-                    ? 'border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-200'
-                    : 'border-cyan/18 bg-cyan/[0.08] text-cyan'
+                    ? 'workspace-status-badge--completed'
+                    : 'workspace-status-badge--active'
               }`}
             >
               {descriptor.label}
@@ -130,7 +123,7 @@ const AnalysisStatusStrip: React.FC<{
             ) : null}
             {selectedReport ? (
               <span className="theme-inline-chip rounded-full px-3 py-1 text-[11px] text-muted-text">
-                当前查看：{selectedReport.meta.stockCode}
+                {t('home.currentViewing', { code: selectedReport.meta.stockCode })}
               </span>
             ) : null}
           </div>
@@ -143,13 +136,13 @@ const AnalysisStatusStrip: React.FC<{
             <p className="mt-2 text-xs leading-5 text-muted-text">{relationCopy}</p>
           ) : null}
           {taskError && descriptor.key === 'failed' ? (
-            <p className="mt-2 text-xs leading-5 text-rose-200/90">
+            <p className="workspace-status-error mt-2 text-xs leading-5">
               {taskError.message}
             </p>
           ) : null}
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-5 xl:min-w-[30rem]">
+        <div className="grid gap-2 sm:grid-cols-6 xl:min-w-[34rem]">
           {ANALYSIS_STAGE_ORDER.map((item) => {
             const isComplete = descriptor.key !== 'failed'
               && ANALYSIS_STAGE_ORDER.indexOf(item) < ANALYSIS_STAGE_ORDER.indexOf(orderedStage);
@@ -163,18 +156,18 @@ const AnalysisStatusStrip: React.FC<{
                 data-failed={descriptor.key === 'failed' && item === orderedStage}
               >
                 <span
-                  className={`inline-flex h-2.5 w-2.5 rounded-full ${
+                  className={`workspace-status-dot ${
                     descriptor.key === 'failed' && item === orderedStage
-                      ? 'bg-rose-300'
+                      ? 'workspace-status-dot--failed'
                       : isComplete
-                        ? 'bg-emerald-300'
+                        ? 'workspace-status-dot--complete'
                         : isActive
-                          ? 'bg-cyan'
-                          : 'bg-white/12'
+                          ? 'workspace-status-dot--active'
+                          : ''
                   }`}
                 />
                 <span className="truncate text-[11px] uppercase tracking-[0.14em]">
-                  {STATUS_STEP_LABELS[item]}
+                  {t(`status.${item}`)}
                 </span>
               </div>
             );
@@ -186,6 +179,7 @@ const AnalysisStatusStrip: React.FC<{
 };
 
 const HomePage: React.FC = () => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -218,6 +212,7 @@ const HomePage: React.FC = () => {
     clearError,
     loadInitialHistory,
     refreshHistory,
+    hydrateRecentTasks,
     loadMoreHistory,
     selectHistoryItem,
     toggleHistorySelection,
@@ -229,24 +224,22 @@ const HomePage: React.FC = () => {
     syncTaskCreated,
     syncTaskUpdated,
     syncTaskFailed,
-    removeTask,
     openMarkdownDrawer,
     closeMarkdownDrawer,
   } = useStockPoolStore((state) => state);
 
   useEffect(() => {
-    document.title = '每日选股分析 - DSA';
-  }, []);
+    document.title = t('home.documentTitle');
+  }, [t]);
   const reportLanguage = normalizeReportLanguage(selectedReport?.meta.reportLanguage);
-  const reportText = getReportText(reportLanguage);
 
   useDashboardLifecycle({
     loadInitialHistory,
     refreshHistory,
+    hydrateRecentTasks,
     syncTaskCreated,
     syncTaskUpdated,
     syncTaskFailed,
-    removeTask,
   });
 
   const selectedIds = useMemo(() => new Set(selectedHistoryIds), [selectedHistoryIds]);
@@ -255,7 +248,12 @@ const HomePage: React.FC = () => {
   const sidebarContent = useMemo(
     () => (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            'grid min-h-0 flex-1 gap-3 overflow-hidden',
+            activeTasks.length > 0 ? 'grid-rows-[minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)]',
+          )}
+        >
           <HistoryList
             items={historyItems}
             isLoading={isLoadingHistory}
@@ -277,10 +275,12 @@ const HomePage: React.FC = () => {
             onToggleItemSelection={toggleHistorySelection}
             onToggleSelectAll={toggleSelectAllVisible}
             onDeleteSelected={() => setShowDeleteConfirm(true)}
-            className="flex-1 overflow-hidden"
+            className="min-h-0 h-full overflow-hidden"
             embedded
           />
-          <TaskPanel tasks={activeTasks} embedded className="theme-sidebar-divider border-t" />
+          {activeTasks.length > 0 ? (
+            <TaskPanel tasks={activeTasks} embedded className="shrink-0" />
+          ) : null}
         </div>
       </div>
     ),
@@ -432,17 +432,17 @@ const HomePage: React.FC = () => {
       <header className="workspace-header-panel overflow-hidden">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Research Terminal</p>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">股票分析工作台</h1>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{t('home.eyebrow')}</p>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">{t('home.title')}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">
-              统一查看结论、执行计划与完整报告。
+              {t('home.subtitle')}
             </p>
           </div>
           {!hasShellRail ? (
             <button
               onClick={() => setSidebarOpen(true)}
               className="theme-panel-subtle -mr-1 flex-shrink-0 rounded-xl p-2 text-secondary-text transition-colors hover:text-foreground xl:hidden"
-              title="历史记录"
+              title={t('home.historyTitle')}
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -466,7 +466,7 @@ const HomePage: React.FC = () => {
                       selectionSource: selectionSource ?? 'manual',
                     });
                   }}
-                  placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
+                  placeholder={t('home.placeholder')}
                   disabled={isAnalyzing}
                   className={inputError ? 'border-danger/50' : undefined}
                 />
@@ -481,12 +481,12 @@ const HomePage: React.FC = () => {
                   <>
                     <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    分析中
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                    {t('home.analyzing')}
                   </>
                 ) : (
-                  '分析'
+                  t('home.analyze')
                 )}
               </button>
             </div>
@@ -507,11 +507,11 @@ const HomePage: React.FC = () => {
                   const rid = selectedReport.meta.id!;
                   navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
                 }}
-              >
+                >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                追问 AI
+                {t('home.followAi')}
               </Button>
               <Button
                 variant="home-action-report"
@@ -522,7 +522,7 @@ const HomePage: React.FC = () => {
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                {reportText.fullReport}
+                {t('home.viewFullReport')}
               </Button>
             </div>
           ) : null}
@@ -535,25 +535,31 @@ const HomePage: React.FC = () => {
           duplicateError={duplicateError}
           error={isAnalyzing || activeTasks.length > 0 || Boolean(duplicateError) ? error : null}
         />
+        {activeTasks.length > 0 ? (
+          <TaskPanel
+            tasks={activeTasks}
+            title={t('tasks.activeTitle')}
+            className="mt-4"
+          />
+        ) : null}
         {latestReportOpenState?.status === 'fallback' ? (
           <div
             className={cn(
-              'mt-4 rounded-[1rem] border px-4 py-3 transition-colors',
-              'border-amber-300/18 bg-amber-300/[0.08]',
+              'theme-inline-banner theme-inline-banner--warning mt-4 px-4 py-3 transition-colors',
             )}
             data-testid="latest-report-status"
           >
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
-                  最新报告待手动打开
+                  {t('home.latestPendingTitle')}
                 </p>
                 <p className="mt-1 text-sm font-medium text-foreground">
                   {latestReportOpenState.stockName || latestReportOpenState.stockCode}
                   <span className="ml-2 text-xs font-normal text-muted-text">{latestReportOpenState.stockCode}</span>
                 </p>
                 <p className="mt-1 text-xs leading-5 text-secondary-text">
-                  报告已生成，但写入历史列表存在延迟。可以点击右侧按钮再次打开最新报告。
+                  {t('home.latestPendingBody')}
                 </p>
               </div>
               <Button
@@ -561,7 +567,7 @@ const HomePage: React.FC = () => {
                 size="sm"
                 onClick={() => void attemptOpenLatestReport(latestReportOpenState, 4, true)}
               >
-                View latest report
+                {t('home.viewLatestReport')}
               </Button>
             </div>
           </div>
@@ -598,7 +604,7 @@ const HomePage: React.FC = () => {
             {isLoadingReport ? (
               <div className="flex min-h-[20rem] flex-col items-center justify-center">
                 <div className="home-spinner h-10 w-10 animate-spin border-3" />
-                <p className="mt-3 text-sm text-secondary-text">加载报告中...</p>
+                <p className="mt-3 text-sm text-secondary-text">{t('home.loadingReport')}</p>
               </div>
             ) : selectedReport ? (
               <div
@@ -617,9 +623,9 @@ const HomePage: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                   </div>
-                  <h3 className="mb-2 text-lg font-semibold text-foreground">开始分析</h3>
+                  <h3 className="mb-2 text-lg font-semibold text-foreground">{t('home.emptyTitle')}</h3>
                   <p className="mx-auto max-w-xl text-sm leading-6 text-secondary-text">
-                    输入股票代码进行分析，或从左侧历史列表中选择已有报告。主内容区会按总览、行情、技术、基本面、财报和作战计划顺序展开。
+                    {t('home.emptyBody')}
                   </p>
                 </div>
               </div>
@@ -639,14 +645,14 @@ const HomePage: React.FC = () => {
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="删除历史记录"
+        title={t('home.deleteTitle')}
         message={
           selectedHistoryIds.length === 1
-            ? '确认删除这条历史记录吗？删除后将不可恢复。'
-            : `确认删除选中的 ${selectedHistoryIds.length} 条历史记录吗？删除后将不可恢复。`
+            ? t('home.deleteSingle')
+            : t('home.deleteMultiple', { count: selectedHistoryIds.length })
         }
-        confirmText={isDeletingHistory ? '删除中...' : '确认删除'}
-        cancelText="取消"
+        confirmText={isDeletingHistory ? t('home.deleting') : t('home.deleteConfirm')}
+        cancelText={t('home.cancel')}
         isDanger={true}
         onConfirm={() => {
           void deleteSelectedHistory();
@@ -662,14 +668,14 @@ const HomePage: React.FC = () => {
           aria-live="polite"
           data-testid="latest-report-toast"
         >
-          <div className="theme-panel-solid border border-emerald-400/18 bg-emerald-400/[0.08] px-4 py-3 shadow-[0_18px_38px_rgba(0,0,0,0.28)]">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100">Latest report opened</p>
+          <div className="theme-inline-banner theme-inline-banner--success px-4 py-3 shadow-[0_18px_38px_rgba(0,0,0,0.28)]">
+            <p className="theme-inline-banner-title text-[11px] uppercase tracking-[0.16em]">{t('home.toastTitle')}</p>
             <p className="mt-1 text-sm font-medium text-foreground">
               {latestReportToast.stockName || latestReportToast.stockCode}
               <span className="ml-2 text-xs font-normal text-muted-text">{latestReportToast.stockCode}</span>
             </p>
             <p className="mt-1 text-xs leading-5 text-secondary-text">
-              分析完成后已自动切换到最新报告，历史记录也同步高亮。
+              {t('home.toastBody')}
             </p>
           </div>
         </div>

@@ -3635,6 +3635,61 @@ def _build_battle_fields(
     return battle_fields, checklist, trade_setup["execution_reminders"] or [], trade_setup
 
 
+def _first_non_empty_text(*values: Any) -> Optional[str]:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _build_channel_summary(
+    *,
+    result: AnalysisResult,
+    title_block: Dict[str, Any],
+    summary_panel: Dict[str, Any],
+    decision_panel: Dict[str, Any],
+    reason_layer: Dict[str, Any],
+    highlights: Dict[str, Any],
+    checklist: List[str],
+) -> Dict[str, Any]:
+    bullish_factors = [str(item).strip() for item in (highlights.get("bullish_factors") or []) if str(item).strip()]
+    risk_alerts = [str(item).strip() for item in (highlights.get("risk_alerts") or []) if str(item).strip()]
+    latest_news = [str(item).strip() for item in (highlights.get("latest_news") or []) if str(item).strip()]
+
+    return {
+        "stock": summary_panel.get("stock") or title_block.get("stock"),
+        "ticker": summary_panel.get("ticker") or result.code,
+        "score": title_block.get("score"),
+        "recommendation": title_block.get("operation_advice"),
+        "trend": title_block.get("trend_prediction"),
+        "one_line_conclusion": title_block.get("one_sentence"),
+        "analysis_price": summary_panel.get("current_price"),
+        "change_amount": summary_panel.get("change_amount"),
+        "change_pct": summary_panel.get("change_pct"),
+        "price_basis": summary_panel.get("price_basis"),
+        "reference_session": summary_panel.get("reference_session") or summary_panel.get("market_session_date"),
+        "snapshot_time": summary_panel.get("snapshot_time") or summary_panel.get("market_time"),
+        "report_generated_at": summary_panel.get("report_generated_at"),
+        "key_action": decision_panel.get("key_action") or decision_panel.get("no_position_advice"),
+        "ideal_entry": decision_panel.get("ideal_entry"),
+        "backup_entry": decision_panel.get("backup_entry"),
+        "stop_loss": decision_panel.get("stop_loss"),
+        "target_one": decision_panel.get("target_one"),
+        "target_two": decision_panel.get("target_two"),
+        "target_zone": decision_panel.get("target_zone") or decision_panel.get("target"),
+        "support": decision_panel.get("support"),
+        "resistance": decision_panel.get("resistance"),
+        "top_risk": _first_non_empty_text(reason_layer.get("top_risk"), *risk_alerts),
+        "top_bullish_factor": _first_non_empty_text(reason_layer.get("top_catalyst"), *bullish_factors),
+        "latest_key_update": _first_non_empty_text(reason_layer.get("latest_key_update"), *latest_news),
+        "no_position_advice": decision_panel.get("no_position_advice"),
+        "holder_advice": decision_panel.get("holder_advice"),
+        "checklist_summary": reason_layer.get("checklist_summary"),
+        "checklist_items": [str(item).strip() for item in (checklist or []) if str(item).strip()][:4],
+    }
+
+
 def build_standard_report_payload(result: AnalysisResult, report_language: str = "zh") -> Dict[str, Any]:
     """Public helper: build the single standard report payload for all channels."""
     language = normalize_report_language(report_language or getattr(result, "report_language", "zh"))
@@ -3740,6 +3795,15 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         fundamental_fields=fundamental_fields,
         earnings_fields=earnings_fields,
     )
+    channel_summary = _build_channel_summary(
+        result=result,
+        title_block=title_block,
+        summary_panel=summary_panel,
+        decision_panel=decision_panel,
+        reason_layer=reason_layer,
+        highlights=highlights,
+        checklist=checklist,
+    )
 
     no_position = position_advice.get("no_position") or localize_operation_advice(result.operation_advice, language)
     has_position = position_advice.get("has_position") or labels["continue_holding"]
@@ -3767,6 +3831,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         "battle_plan_compact": battle_plan_compact,
         "battle_warnings": risk_warnings,
         "coverage_notes": coverage_notes,
+        "channel_summary": channel_summary,
         "checklist": checklist,
         "checklist_items": checklist_items,
     }

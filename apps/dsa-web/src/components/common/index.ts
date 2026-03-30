@@ -20,6 +20,7 @@ export * from './Collapsible';
 export * from './ScoreGauge';
 export * from './JsonViewer';
 export * from './Select';
+export * from './BrandedLoadingScreen';
 export * from './Badge';
 export * from './Pagination';
 export * from './ConfirmDialog';

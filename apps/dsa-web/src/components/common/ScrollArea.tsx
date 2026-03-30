@@ -8,6 +8,7 @@ interface ScrollAreaProps {
   testId?: string;
   viewportRef?: React.Ref<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
+  onWheel?: React.WheelEventHandler<HTMLDivElement>;
 }
 
 export const ScrollArea: React.FC<ScrollAreaProps> = ({
@@ -17,6 +18,7 @@ export const ScrollArea: React.FC<ScrollAreaProps> = ({
   testId,
   viewportRef,
   onScroll,
+  onWheel,
 }) => {
   return (
     <div className={cn('min-h-0 flex-1 overflow-hidden', className)}>
@@ -24,6 +26,7 @@ export const ScrollArea: React.FC<ScrollAreaProps> = ({
         ref={viewportRef}
         data-testid={testId}
         onScroll={onScroll}
+        onWheel={onWheel}
         className={cn('h-full overflow-y-auto overscroll-contain custom-scrollbar [-webkit-overflow-scrolling:touch]', viewportClassName)}
       >
         {children}

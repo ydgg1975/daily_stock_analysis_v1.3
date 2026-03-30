@@ -131,7 +131,7 @@ function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefreshFeed
 const PortfolioPage: React.FC = () => {
   // Set page title
   useEffect(() => {
-    document.title = '持仓分析 - DSA';
+    document.title = '持仓分析 - WolfyStock';
   }, []);
 
   const [accounts, setAccounts] = useState<PortfolioAccountItem[]>([]);
@@ -733,7 +733,7 @@ const PortfolioPage: React.FC = () => {
     <div className="workspace-page">
       <section className="workspace-header-panel space-y-4">
         <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">DSA Portfolio Workbench</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">WolfyStock Portfolio Desk</p>
           <h1 className="text-xl md:text-2xl font-semibold text-foreground">持仓管理</h1>
           <p className="text-sm text-secondary">
             组合快照、手工录入、CSV 导入与风险分析（支持全组合 / 单账户切换）

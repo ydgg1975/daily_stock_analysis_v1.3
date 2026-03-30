@@ -24,41 +24,26 @@
 {% set decision = std.decision_panel %}
 {% set reason = std.reason_layer %}
 {% set coverage = std.coverage_notes %}
+{% set summary = std.channel_summary %}
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
-### Part A. Executive Summary
-- **评分 / 建议 / 趋势**: {{ std.title.score if std.title.score is not none else na('接口未返回') }} / {{ std.title.operation_advice }} / {{ std.title.trend_prediction }}
-- **一句话结论**: {{ std.title.one_sentence }}
-- **{{ std.summary_panel.price_label or 'Analysis Price' }} / 涨跌**: {{ std.summary_panel.current_price }} | {{ std.summary_panel.change_amount }} / {{ std.summary_panel.change_pct }}
-- **Price basis / Session**: {{ std.summary_panel.price_basis }} / {{ std.summary_panel.reference_session }}
-- **Updated / Report time**: {{ std.summary_panel.snapshot_time }} / {{ std.summary_panel.report_generated_at }}
-- **交易场景 / 置信度**: {{ decision.setup_type }} / {{ decision.confidence }}
-- **关键动作**: {{ decision.key_action }}
-- **理想买入点 / 次优买入点 / 止损位**: {{ decision.ideal_entry }} / {{ decision.backup_entry }} / {{ decision.stop_loss }}
-- **目标一区 / 目标二区 / 目标区间**: {{ decision.target_one }} / {{ decision.target_two }} / {{ decision.target_zone }}
-- **关键支撑 / 关键压力 / 仓位**: {{ decision.support }} / {{ decision.resistance }} / {{ decision.position_sizing }}
-- **核心利好**: {{ reason.top_catalyst }}
-- **核心风险**: {{ reason.top_risk }}
-- **最新关键更新**: {{ reason.latest_key_update }}
-- **核心理由**:
-{% if reason.core_reasons %}
-{% for item in reason.core_reasons %}
-  - {{ item }}
-{% endfor %}
-{% else %}
-  - {{ na('接口未返回') }}
-{% endif %}
+### Top Overview
+- **评分 / 建议 / 趋势**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
+- **一句话结论**: {{ summary.one_line_conclusion }}
+- **Analysis Price / 涨跌**: {{ summary.analysis_price }} | {{ summary.change_amount }} / {{ summary.change_pct }}
+- **价格口径 / 参考会话 / 更新时间**: {{ summary.price_basis }} / {{ summary.reference_session }} / {{ summary.snapshot_time }}
+- **报告生成时间**: {{ summary.report_generated_at }}
+- **最新关键更新**: {{ summary.latest_key_update }}
 
-### Part B. Action Plan
-- **空仓者建议**: {{ decision.no_position_advice }}
-- **持仓者建议**: {{ decision.holder_advice }}
-- **建仓策略**: {{ decision.build_strategy }}
-- **风控策略**: {{ decision.risk_control_strategy }}
-- **止损说明 / 目标说明**: {{ decision.stop_reason }} / {{ decision.target_reason }}
-- **市场结构**: {{ decision.market_structure }}
-- **Checklist 摘要**: {{ reason.checklist_summary }}
-{% if std.checklist %}
-{% for item in std.checklist %}
+### Conclusion & Action Guidance
+- **关键动作**: {{ summary.key_action }}
+- **理想买入点 / 次优买入点 / 止损位**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
+- **目标一区 / 目标二区 / 目标区间**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
+- **关键支撑 / 关键压力**: {{ summary.support }} / {{ summary.resistance }}
+- **空仓者建议 / 持仓者建议**: {{ summary.no_position_advice }} / {{ summary.holder_advice }}
+- **Checklist 摘要**: {{ summary.checklist_summary }}
+{% if summary.checklist_items %}
+{% for item in summary.checklist_items %}
 - {{ item }}
 {% endfor %}
 {% else %}
@@ -68,35 +53,49 @@
 - **执行提醒**: {{ decision.execution_reminders | join('；') }}
 {% endif %}
 
-### Part C. Events / Sentiment / News
+### Key Signals
+- **交易场景 / 置信度**: {{ decision.setup_type }} / {{ decision.confidence }}
+- **市场结构**: {{ decision.market_structure }}
+- **建仓策略 / 风控策略**: {{ decision.build_strategy }} / {{ decision.risk_control_strategy }}
+- **止损说明 / 目标说明**: {{ decision.stop_reason }} / {{ decision.target_reason }}
+- **核心理由**:
+{% if reason.core_reasons %}
+{% for item in reason.core_reasons %}
+  - {{ item }}
+{% endfor %}
+{% else %}
+  - {{ na('接口未返回') }}
+{% endif %}
+
+### Risks & Catalysts
+- **核心利好**: {{ summary.top_bullish_factor }}
+- **核心风险**: {{ summary.top_risk }}
 - **利好催化**: {{ std.highlights.positive_catalysts | join('；') if std.highlights.positive_catalysts else na('接口未返回') }}
 - **风险警报**: {{ std.highlights.risk_alerts | join('；') if std.highlights.risk_alerts else na('接口未返回') }}
 - **Bullish factors**: {{ std.highlights.bullish_factors | join('；') if std.highlights.bullish_factors else na('接口未返回') }}
 - **Bearish factors**: {{ std.highlights.bearish_factors | join('；') if std.highlights.bearish_factors else na('接口未返回') }}
 - **Mixed / neutral context**: {{ std.highlights.neutral_factors | join('；') if std.highlights.neutral_factors else na('接口未返回') }}
-- **最新关键更新**: {{ reason.latest_key_update }}
-- **情绪摘要**: {{ std.highlights.sentiment_summary }}
-- **新闻价值分级**: {{ reason.news_value_tier }}
-- **业绩预期**: {{ std.highlights.earnings_outlook }}
+- **情绪摘要 / 业绩预期**: {{ std.highlights.sentiment_summary }} / {{ std.highlights.earnings_outlook }}
+- **社交讨论综合判断**: {{ std.highlights.social_synthesis if std.highlights.social_synthesis else na('接口未返回') }}
 
-### Part D. Evidence
-#### D1. Market
+### Market / Technical / Fundamental Evidence
+#### Market
 {{ render_field_group(std.market.display_fields or std.market.regular_fields) }}
 {% if std.market.extended_fields %}
-#### D1.1 Extended Session
+#### Extended Session
 {{ render_field_group(std.market.extended_fields) }}
 {% endif %}
 
-#### D2. Technicals
+#### Technicals
 {{ render_field_group(std.technical_fields) }}
 
-#### D3. Fundamentals
+#### Fundamentals
 {{ render_field_group(std.fundamental_fields) }}
 
-#### D4. Earnings
+#### Earnings
 {{ render_field_group(std.earnings_fields) }}
 
-### Part E. Source / Coverage / Method Notes
+### Source / Coverage Notes
 - **数据来源**: {{ coverage.data_sources | join('；') if coverage.data_sources else na('接口未返回') }}
 - **覆盖缺口**: {{ coverage.coverage_gaps | join('；') if coverage.coverage_gaps else na('接口未返回') }}
 - **状态 / 冲突说明**: {{ coverage.conflict_notes | join('；') if coverage.conflict_notes else na('接口未返回') }}

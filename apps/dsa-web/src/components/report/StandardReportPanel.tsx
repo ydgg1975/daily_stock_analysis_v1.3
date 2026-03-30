@@ -1,7 +1,7 @@
 import React from 'react';
+import { translateForCurrentLanguage } from '../../i18n/core';
 import type {
   AnalysisReport,
-  StandardReportCoverageNotes,
   StandardReportDecisionPanel,
   StandardReport,
   StandardReportBattlePlanCompact,
@@ -36,6 +36,7 @@ const middleSectionGridClass =
 const denseTableColumns =
   'md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,0.8fr)]';
 const WIDE_DESKTOP_HERO_MIN = 1100;
+const ui = translateForCurrentLanguage;
 
 const parseNumericValue = (value?: string | number): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -75,23 +76,28 @@ const softenMissingValue = (value?: string | null): string => {
     return String(value || '').trim();
   }
   if (reason.includes('冲突')) {
-    return '待校正（口径冲突）';
+    return ui('report.conflicts');
   }
   if (reason.includes('样本不足')) {
-    return '暂缺（样本不足）';
+    return ui('report.noFields');
   }
   if (reason.includes('会话')) {
-    return '暂缺（当前会话无数据）';
+    return `${ui('report.noFields')}（${ui('report.session')}）`;
   }
   if (reason.includes('市场暂不支持')) {
-    return '暂缺（当前市场未覆盖）';
+    return `${ui('report.noFields')}（${ui('report.coverageGaps')}）`;
   }
-  return '暂缺（上游未覆盖）';
+  return ui('report.noFields');
 };
 
 const isMeaningfulMetaText = (value?: string | null): boolean => {
   const text = String(value || '').trim();
-  return Boolean(text) && !isMissingDisplayText(text) && text !== '已就绪';
+  return Boolean(text) && !isMissingDisplayText(text) && text !== '已就绪' && text !== 'ready';
+};
+
+const isPresentValue = (value?: string | null): boolean => {
+  const text = String(value || '').trim();
+  return Boolean(text) && !isMissingDisplayText(text);
 };
 
 const lowerText = (value?: string | null): string => String(value || '').trim().toLowerCase();
@@ -120,7 +126,7 @@ const buildSection = (
   fallbackTitle?: string,
   fallbackFields?: StandardReportField[],
 ): StandardReportTableSection => ({
-  title: section?.title || fallbackTitle || '数据表',
+  title: section?.title || fallbackTitle || ui('report.evidence'),
   fields: section?.fields || fallbackFields || [],
   note: section?.note,
 });
@@ -169,18 +175,18 @@ const checklistBadgeTone = (
 
 const checklistLabel = (status: string): string => {
   if (status === 'pass') {
-    return '通过';
+    return ui('tasks.completed');
   }
   if (status === 'warn') {
-    return '警惕';
+    return ui('report.risk');
   }
   if (status === 'fail') {
-    return '不满足';
+    return ui('tasks.failed');
   }
   if (status === 'na') {
     return 'NA';
   }
-  return '提示';
+  return ui('report.note');
 };
 
 const scoreToneClass = (score?: number): string => {
@@ -188,12 +194,12 @@ const scoreToneClass = (score?: number): string => {
     return 'text-foreground';
   }
   if (score >= 70) {
-    return 'text-emerald-300';
+    return 'text-[var(--accent-positive)]';
   }
   if (score >= 45) {
-    return 'text-amber-200';
+    return 'text-[var(--accent-warning)]';
   }
-  return 'text-rose-300';
+  return 'text-[var(--accent-danger)]';
 };
 
 const changeToneClass = (changePct?: string): string => {
@@ -202,25 +208,25 @@ const changeToneClass = (changePct?: string): string => {
     return 'text-secondary-text';
   }
   if (numeric > 0) {
-    return 'text-emerald-300';
+    return 'text-[var(--accent-positive)]';
   }
   if (numeric < 0) {
-    return 'text-rose-300';
+    return 'text-[var(--accent-danger)]';
   }
   return 'text-secondary-text';
 };
 
 const progressToneClass = (score?: number): string => {
   if (score === undefined) {
-    return 'bg-white/20';
+    return 'theme-progress-fill';
   }
   if (score >= 70) {
-    return 'bg-emerald-400';
+    return 'theme-progress-fill theme-progress-fill--positive';
   }
   if (score >= 45) {
-    return 'bg-amber-300';
+    return 'theme-progress-fill theme-progress-fill--warning';
   }
-  return 'bg-rose-400';
+  return 'theme-progress-fill theme-progress-fill--danger';
 };
 
 const clampPercent = (value?: number): number => {
@@ -258,9 +264,9 @@ const HeroMetaRow: React.FC<{
 
 const compactSessionLabel = (summary: StandardReport['summaryPanel'] | undefined): string => {
   const sessionText = summary?.marketSessionDate
-    ? `${summary.marketSessionDate} session`
+    ? `${summary.marketSessionDate} ${ui('report.sessionSuffix')}`
     : summary?.referenceSession;
-  const snapshotText = summary?.snapshotTime ? `Updated ${summary.snapshotTime}` : undefined;
+  const snapshotText = summary?.snapshotTime ? `${ui('report.updatedShort')} ${summary.snapshotTime}` : undefined;
   return uniqueMeaningfulItems(
     [summary?.priceBasis, sessionText, snapshotText],
     3,
@@ -275,7 +281,7 @@ const CompactSummaryBlock: React.FC<{
   <div className="theme-panel-subtle rounded-[1rem] px-3.5 py-3.5">
     <div className="flex items-center justify-between gap-3">
       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
-      <Badge variant={tone}>{label === 'Setup' ? 'Plan' : tone === 'danger' ? 'Risk' : tone === 'success' ? 'Bull' : tone === 'info' ? 'Mixed' : 'Note'}</Badge>
+      <Badge variant={tone}>{label === ui('report.setup') ? ui('report.plan') : tone === 'danger' ? ui('report.risk') : tone === 'success' ? ui('report.bull') : tone === 'info' ? ui('report.mixed') : ui('report.note')}</Badge>
     </div>
     <p className={cn('mt-2.5 text-sm leading-6', isMissingDisplayText(value) ? 'text-muted-text' : 'text-secondary-text')}>
       {softenMissingValue(value)}
@@ -288,18 +294,12 @@ const HeroStat: React.FC<{ label: string; value?: string | number; accent?: 'sco
   value,
   accent = 'advice',
 }) => {
-  const wrapperClass =
-    accent === 'score'
-      ? 'theme-stat-score'
-      : accent === 'trend'
-        ? 'theme-stat-trend'
-        : 'theme-stat-advice';
-  const accentClass =
-    accent === 'score'
-      ? 'text-cyan'
-      : accent === 'trend'
-        ? 'text-amber-200'
-        : 'text-foreground';
+  const wrapperClass = 'theme-panel-subtle border border-[var(--theme-panel-subtle-border)]';
+  const accentClass = accent === 'score'
+    ? 'text-[var(--accent-primary)]'
+    : accent === 'trend'
+      ? 'text-secondary-text'
+      : 'text-foreground';
   const valueClass =
     accent === 'score'
       ? 'text-[2.5rem] leading-none md:text-[2.9rem]'
@@ -323,7 +323,7 @@ const ExecutionMetricCard: React.FC<{
     <div className="flex items-center justify-between gap-3">
       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
       <Badge variant={tone} className="min-w-[3.75rem]">
-        {tone === 'danger' ? '风控' : tone === 'success' ? '目标' : tone === 'info' ? '仓位' : '执行'}
+        {tone === 'danger' ? ui('report.riskControl') : tone === 'success' ? ui('report.targetOne') : tone === 'info' ? ui('report.positionSizing') : ui('report.execution')}
       </Badge>
     </div>
     <p className={cn('mt-3 text-base font-semibold leading-7 break-words', isMissingDisplayText(value) ? 'text-muted-text' : 'text-foreground')}>
@@ -350,12 +350,12 @@ const NarrativeBucketCard: React.FC<{
       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
       <Badge variant={tone} className="min-w-[4rem]">
         {tone === 'success'
-          ? 'Bull'
+          ? ui('report.bull')
           : tone === 'danger'
-            ? 'Bear'
+            ? ui('report.risk')
             : tone === 'info'
-              ? 'Mixed'
-              : 'Recent'}
+              ? ui('report.mixed')
+              : ui('report.latestUpdate')}
       </Badge>
     </div>
     {items.length > 0 ? (
@@ -370,6 +370,50 @@ const NarrativeBucketCard: React.FC<{
       <p className="mt-3 text-sm leading-6 text-muted-text">{emptyText}</p>
     )}
     {footer ? <div className="mt-3 border-t border-[var(--theme-panel-subtle-border)] pt-3">{footer}</div> : null}
+  </div>
+);
+
+const BulletSummaryCard: React.FC<{
+  title: string;
+  items: string[];
+  reminders?: string[];
+}> = ({ title, items, reminders = [] }) => (
+  <div className="theme-panel-subtle flex h-full flex-col rounded-[1rem] px-5 py-5">
+    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{title}</p>
+    <ul className="mt-3.5 space-y-3.5 text-[15.5px] leading-7 text-secondary-text">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`} className="flex items-start gap-3">
+          <span className="mt-2.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
+          <span className="min-w-0 flex-1">
+            {item.includes('：') || item.includes(':') ? (
+              <>
+                <span className="mr-1.5 text-[12px] uppercase tracking-[0.14em] text-muted-text">
+                  {item.split(/[：:]/)[0]}
+                </span>
+                <span className="font-semibold text-foreground">
+                  {item.split(/[：:]/).slice(1).join('：').trim()}
+                </span>
+              </>
+            ) : (
+              <span className="font-semibold text-foreground">{item}</span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+    {reminders.length > 0 ? (
+      <div className="mt-auto border-t border-[var(--theme-panel-subtle-border)] pt-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.reminders')}</p>
+        <ul className="mt-2.5 space-y-2 text-[13px] leading-6 text-secondary-text">
+          {reminders.slice(0, 3).map((item, index) => (
+            <li key={`${item}-${index}`} className="flex items-start gap-2.5">
+              <span className="mt-2 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-warning)]" />
+              <span className="min-w-0 flex-1">{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null}
   </div>
 );
 
@@ -399,10 +443,10 @@ const DenseTable: React.FC<{
               columnClass,
             )}
           >
-            <span>字段</span>
-            <span>数值</span>
-            {showSource ? <span>来源</span> : null}
-            {showStatus ? <span>口径 / 状态</span> : null}
+            <span>{ui('report.field')}</span>
+            <span>{ui('report.value')}</span>
+            {showSource ? <span>{ui('report.source')}</span> : null}
+            {showStatus ? <span>{ui('report.status')}</span> : null}
           </div>
 
           <div className="divide-y divide-white/6">
@@ -415,24 +459,24 @@ const DenseTable: React.FC<{
                 )}
               >
                 <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">字段</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.field')}</p>
                   <p className="text-sm font-medium leading-6 text-foreground break-words">{field.label}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">数值</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.value')}</p>
                   <p className={cn('text-sm leading-6 break-words', isMissingDisplayText(field.value) ? 'text-muted-text' : 'text-secondary-text')}>
                     {softenMissingValue(field.value)}
                   </p>
                 </div>
                 {showSource ? (
                   <div className="space-y-1">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">来源</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.source')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.source) ? field.source : '—'}</p>
                   </div>
                 ) : null}
                 {showStatus ? (
                   <div className="space-y-1">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">口径 / 状态</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.status')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? field.status : '—'}</p>
                   </div>
                 ) : null}
@@ -441,8 +485,8 @@ const DenseTable: React.FC<{
           </div>
         </div>
       ) : (
-        <div className="rounded-[1rem] border border-dashed border-white/8 bg-black/20 px-4 py-6 text-sm text-muted-text">
-          暂无可展示字段
+        <div className="rounded-[1rem] border border-dashed border-[var(--border-muted)] bg-[hsl(var(--bg-card-elevated-hsl)/0.72)] px-4 py-6 text-sm text-muted-text">
+          {ui('report.noFields')}
         </div>
       )}
 
@@ -455,60 +499,60 @@ const DecisionExecutionPanel: React.FC<{
   decisionPanel?: StandardReportDecisionPanel;
 }> = ({ decisionPanel }) => (
   <section className={cn(solidCardClass, 'animate-in slide-in-from-bottom-2 duration-300')} data-testid="decision-execution-panel">
-    <SectionHeader title="交易执行" />
+    <SectionHeader title={ui('report.tradeExecution')} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <Badge variant="info">{softenMissingValue(decisionPanel?.setupType)}</Badge>
-          <Badge variant="history">置信度 {softenMissingValue(decisionPanel?.confidence)}</Badge>
+          <Badge variant="history">{ui('report.confidenceLabel')} {softenMissingValue(decisionPanel?.confidence)}</Badge>
         </div>
-        <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-text">关键动作</p>
+        <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
           {softenMissingValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label="关键支撑" value={decisionPanel?.support} />
-          <CompactDecisionMetric label="关键压力" value={decisionPanel?.resistance} />
-          <CompactDecisionMetric label="止损说明" value={decisionPanel?.stopReason} />
-          <CompactDecisionMetric label="目标说明" value={decisionPanel?.targetReason} />
+          <CompactDecisionMetric label={ui('report.keySupport')} value={decisionPanel?.support} />
+          <CompactDecisionMetric label={ui('report.keyResistance')} value={decisionPanel?.resistance} />
+          <CompactDecisionMetric label={ui('report.stopReason')} value={decisionPanel?.stopReason} />
+          <CompactDecisionMetric label={ui('report.targetReason')} value={decisionPanel?.targetReason} />
         </div>
       </div>
 
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">市场结构</p>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {softenMissingValue(decisionPanel?.marketStructure)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label="仓位建议" value={decisionPanel?.positionSizing} />
-          <CompactDecisionMetric label="目标区间" value={decisionPanel?.targetZone || decisionPanel?.target} />
+          <CompactDecisionMetric label={ui('report.positionSizing')} value={decisionPanel?.positionSizing} />
+          <CompactDecisionMetric label={ui('report.targetZone')} value={decisionPanel?.targetZone || decisionPanel?.target} />
         </div>
       </div>
     </div>
 
     <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-      <ExecutionMetricCard label="理想买入点" value={decisionPanel?.idealEntry} />
-      <ExecutionMetricCard label="次优买入点" value={decisionPanel?.backupEntry} />
-      <ExecutionMetricCard label="止损位" value={decisionPanel?.stopLoss} tone="danger" />
-      <ExecutionMetricCard label="目标一区" value={decisionPanel?.targetOne || decisionPanel?.target} tone="success" />
-      <ExecutionMetricCard label="目标二区" value={decisionPanel?.targetTwo} tone="success" />
-      <ExecutionMetricCard label="目标区间" value={decisionPanel?.targetZone || decisionPanel?.target} tone="info" />
+      <ExecutionMetricCard label={ui('report.idealEntry')} value={decisionPanel?.idealEntry} />
+      <ExecutionMetricCard label={ui('report.backupEntry')} value={decisionPanel?.backupEntry} />
+      <ExecutionMetricCard label={ui('report.stopLoss')} value={decisionPanel?.stopLoss} tone="danger" />
+      <ExecutionMetricCard label={ui('report.targetOne')} value={decisionPanel?.targetOne || decisionPanel?.target} tone="success" />
+      <ExecutionMetricCard label={ui('report.targetTwo')} value={decisionPanel?.targetTwo} tone="success" />
+      <ExecutionMetricCard label={ui('report.targetZone')} value={decisionPanel?.targetZone || decisionPanel?.target} tone="info" />
     </div>
 
     <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <div className="grid gap-3">
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">仓位建议</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.positionSizing')}</p>
           <p className="mt-3 text-sm leading-6 text-secondary-text">{softenMissingValue(decisionPanel?.positionSizing)}</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div className={subtlePanelClass}>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">建仓策略</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.buildStrategy')}</p>
             <p className="mt-3 text-sm leading-6 text-secondary-text">{softenMissingValue(decisionPanel?.buildStrategy)}</p>
           </div>
           <div className={subtlePanelClass}>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">风控策略</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.riskControl')}</p>
             <p className="mt-3 text-sm leading-6 text-secondary-text">{softenMissingValue(decisionPanel?.riskControlStrategy)}</p>
           </div>
         </div>
@@ -516,26 +560,15 @@ const DecisionExecutionPanel: React.FC<{
 
       <div className="grid gap-3">
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">空仓者建议</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.noPositionAdvice')}</p>
           <p className="mt-3 text-sm leading-6 text-secondary-text">{softenMissingValue(decisionPanel?.noPositionAdvice)}</p>
         </div>
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">持仓者建议</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.holderAdvice')}</p>
           <p className="mt-3 text-sm leading-6 text-secondary-text">{softenMissingValue(decisionPanel?.holderAdvice)}</p>
         </div>
       </div>
     </div>
-
-    {decisionPanel?.executionReminders?.length ? (
-      <div className="mt-4 rounded-[1rem] border border-amber-300/14 bg-amber-300/[0.06] px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100">执行提醒</p>
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50/90">
-          {decisionPanel.executionReminders.slice(0, 4).map((item, index) => (
-            <li key={`${item}-${index}`}>{item}</li>
-          ))}
-        </ul>
-      </div>
-    ) : null}
   </section>
 );
 
@@ -546,7 +579,6 @@ const SummaryHero: React.FC<{
 }> = ({ standardReport, report, chartFixtures }) => {
   const { ref: heroRef, size: heroSize } = useElementSize<HTMLElement>();
   const summary = standardReport.summaryPanel || {};
-  const market = standardReport.market;
   const visualBlocks = standardReport.visualBlocks || {};
   const decisionPanel = standardReport.decisionPanel || {};
   const reasonLayer = standardReport.reasonLayer || {};
@@ -562,20 +594,30 @@ const SummaryHero: React.FC<{
   const topCatalyst = reasonLayer.topCatalyst || highlights.positiveCatalysts?.[0];
   const latestUpdate = reasonLayer.latestKeyUpdate || highlights.latestNews?.[0];
   const heroMetaItems = [
-    { label: 'Price basis', value: summary.priceBasis },
-    { label: 'Session', value: summary.referenceSession || summary.marketSessionDate },
-    { label: 'Updated', value: summary.snapshotTime || summary.marketTime },
+    { label: ui('report.priceBasis'), value: summary.priceBasis },
+    { label: ui('report.session'), value: summary.referenceSession || summary.marketSessionDate },
+    { label: ui('report.updated'), value: summary.snapshotTime || summary.marketTime },
   ];
   const companyTitle = report.meta.stockName || summary.stock || report.meta.stockCode;
   const tickerLabel = summary.ticker || report.meta.stockCode;
-  const priceLabel = 'Analysis price';
+  const priceLabel = ui('report.analysisPrice');
   const compactMetaLine = compactSessionLabel(summary);
   const mobileHeroChips = [
-    { label: `Score ${score ?? 'NA'}`, tone: 'history' as const },
+    { label: `${ui('report.score')} ${score ?? 'NA'}`, tone: 'history' as const },
     { label: softenMissingValue(summary.operationAdvice || report.summary.operationAdvice), tone: 'info' as const },
     { label: softenMissingValue(summary.trendPrediction || report.summary.trendPrediction), tone: 'warning' as const },
   ];
   const desktopHighlightRows = uniqueMeaningfulItems([latestUpdate, topCatalyst, topRisk], 3);
+  const actionItems = uniqueMeaningfulItems([
+    topAction,
+    isPresentValue(decisionPanel?.idealEntry) ? `${ui('report.idealEntry')}：${softenMissingValue(decisionPanel?.idealEntry)}` : undefined,
+    isPresentValue(decisionPanel?.backupEntry) ? `${ui('report.backupEntry')}：${softenMissingValue(decisionPanel?.backupEntry)}` : undefined,
+    isPresentValue(decisionPanel?.stopLoss) ? `${ui('report.stopLoss')}：${softenMissingValue(decisionPanel?.stopLoss)}` : undefined,
+    isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? `${ui('report.targetOne')}：${softenMissingValue(decisionPanel?.targetOne || decisionPanel?.target)}` : undefined,
+  ], 5);
+  const catalystItems = uniqueMeaningfulItems([topCatalyst, ...(highlights.positiveCatalysts || [])], 3);
+  const riskItems = uniqueMeaningfulItems([topRisk, ...(highlights.riskAlerts || [])], 3);
+  const executionReminders = uniqueMeaningfulItems(decisionPanel.executionReminders || [], 3);
   const useWideDesktopHero = heroSize.width >= WIDE_DESKTOP_HERO_MIN;
 
   return (
@@ -587,7 +629,7 @@ const SummaryHero: React.FC<{
             <h2 className="min-w-0 text-[2.1rem] font-semibold tracking-tight text-foreground 2xl:text-[2.55rem]">
               {companyTitle}
             </h2>
-            <span className="rounded-full border border-white/8 bg-black/25 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-text">
+            <span className="theme-inline-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-text">
               {tickerLabel}
             </span>
           </div>
@@ -608,77 +650,83 @@ const SummaryHero: React.FC<{
             <div className="report-hero-desktop-meta">
               <HeroMetaRow items={heroMetaItems} />
               <p className="mt-3 text-xs leading-5 text-muted-text">
-                Report time {softenMissingValue(summary.reportGeneratedAt)}
+                {ui('report.reportTime')} {softenMissingValue(summary.reportGeneratedAt)}
               </p>
             </div>
           </div>
 
           <p className="mt-5 max-w-5xl text-[15px] leading-7 text-secondary-text 2xl:text-base">
-            {summary.oneSentence || report.summary.analysisSummary || '暂无一句话结论'}
+            {summary.oneSentence || report.summary.analysisSummary || ui('report.oneLineFallback')}
           </p>
 
           <div className="mt-5 grid gap-3 2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-            <div className="theme-panel-subtle rounded-[1rem] px-5 py-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Key action</p>
-              <p className="mt-2 text-[1.05rem] font-semibold leading-8 text-foreground">
-                {softenMissingValue(topAction)}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-secondary-text">
-                {softenMissingValue(summary.priceBasisDetail || summary.priceContextNote)}
-              </p>
-            </div>
+            <BulletSummaryCard
+              title={ui('report.keyAction')}
+              items={actionItems.length > 0 ? actionItems : [softenMissingValue(topAction)]}
+              reminders={executionReminders}
+            />
             <div className="grid gap-3">
-              <CompactSummaryBlock label="Key catalyst" value={topCatalyst} tone="success" />
-              <CompactSummaryBlock label="Key risk" value={topRisk} tone="danger" />
+              <NarrativeBucketCard
+                label={ui('report.keyCatalyst')}
+                items={catalystItems}
+                emptyText={ui('report.oneLineFallback')}
+                tone="success"
+              />
+              <NarrativeBucketCard
+                label={ui('report.keyRisk')}
+                items={riskItems}
+                emptyText={ui('report.noFields')}
+                tone="danger"
+              />
             </div>
           </div>
         </div>
 
         <aside className="report-hero-status-column grid gap-3">
           <div className="grid gap-2.5 sm:grid-cols-[minmax(170px,0.9fr)_1fr_1fr] xl:grid-cols-1 2xl:grid-cols-[minmax(170px,0.9fr)_1fr_1fr]">
-            <HeroStat label="综合评分" value={score !== undefined ? `${score}` : 'NA'} accent="score" />
-            <HeroStat label="操作建议" value={summary.operationAdvice || report.summary.operationAdvice} accent="advice" />
-            <HeroStat label="趋势判断" value={summary.trendPrediction || report.summary.trendPrediction} accent="trend" />
+            <HeroStat label={ui('report.score')} value={score !== undefined ? `${score}` : 'NA'} accent="score" />
+            <HeroStat label={ui('report.actionAdvice')} value={summary.operationAdvice || report.summary.operationAdvice} accent="advice" />
+            <HeroStat label={ui('report.trend')} value={summary.trendPrediction || report.summary.trendPrediction} accent="trend" />
           </div>
 
           <div className={cn(subtlePanelClass, 'grid gap-3')}>
             <div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs uppercase tracking-[0.16em] text-muted-text">评分强度</span>
+                <span className="text-xs uppercase tracking-[0.16em] text-muted-text">{ui('report.scoreStrength')}</span>
                 <span className={cn('text-sm font-semibold', scoreToneClass(score))}>{score ?? 'NA'}/100</span>
               </div>
-              <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/8">
+              <div className="theme-progress-track mt-2.5 h-2 overflow-hidden rounded-full">
                 <div className={cn('h-full rounded-full transition-all duration-300', progressToneClass(score))} style={{ width: `${scorePercent}%` }} />
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs uppercase tracking-[0.16em] text-muted-text">趋势强度</span>
+                <span className="text-xs uppercase tracking-[0.16em] text-muted-text">{ui('report.trendStrength')}</span>
                 <span className="text-sm font-semibold text-foreground">
                   {trendStrength?.value ?? 'NA'}
                   {trendStrength?.max ? `/${trendStrength.max}` : ''}
                 </span>
               </div>
-              <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/8">
-                <div className="h-full rounded-full bg-amber-300 transition-all duration-300" style={{ width: `${trendPercent}%` }} />
+              <div className="theme-progress-track mt-2.5 h-2 overflow-hidden rounded-full">
+                <div className="theme-progress-fill theme-progress-fill--warning h-full rounded-full transition-all duration-300" style={{ width: `${trendPercent}%` }} />
               </div>
             </div>
             {isMeaningfulText(trendStrength?.label) || isMeaningfulText(summary.timeSensitivity) ? (
               <p className="text-sm leading-6 text-secondary-text">
                 {trendStrength?.label}
                 {isMeaningfulText(trendStrength?.label) && isMeaningfulText(summary.timeSensitivity) ? ' · ' : ''}
-                {isMeaningfulText(summary.timeSensitivity) ? `Time horizon ${summary.timeSensitivity}` : ''}
+                {isMeaningfulText(summary.timeSensitivity) ? `${ui('report.timeHorizon')} ${summary.timeSensitivity}` : ''}
               </p>
             ) : null}
           </div>
 
           <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Status board</p>
-              <Badge variant="info">Desktop</Badge>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.statusBoard')}</p>
+              <Badge variant="info">{ui('report.desktop')}</Badge>
             </div>
             <div className="mt-3 space-y-3">
-              <CompactDecisionMetric label="Setup" value={`${softenMissingValue(decisionPanel.setupType)} · Confidence ${softenMissingValue(decisionPanel.confidence)}`} />
+              <CompactDecisionMetric label={ui('report.setup')} value={`${softenMissingValue(decisionPanel.setupType)} · ${ui('report.confidence')} ${softenMissingValue(decisionPanel.confidence)}`} />
               {desktopHighlightRows.map((item, index) => (
                 <div key={`${item}-${index}`} className="border-t border-[var(--theme-panel-subtle-border)] pt-3 first:border-t-0 first:pt-0">
                   <p className="text-sm leading-6 text-secondary-text">{item}</p>
@@ -692,10 +740,10 @@ const SummaryHero: React.FC<{
       <div>
         <div className="report-hero-mobile-top">
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-            <h2 className="min-w-0 text-[1.7rem] font-semibold tracking-tight text-foreground">
+            <h2 className="min-w-0 text-[1.42rem] font-semibold tracking-tight text-foreground sm:text-[1.64rem]">
               {companyTitle}
             </h2>
-            <span className="rounded-full border border-white/8 bg-black/25 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-text">
+            <span className="theme-inline-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-text">
               {tickerLabel}
             </span>
           </div>
@@ -703,10 +751,10 @@ const SummaryHero: React.FC<{
           <div className="mt-4">
             <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{priceLabel}</p>
             <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
-              <p className="text-[2.4rem] font-semibold tracking-tight text-foreground">
+              <p className="text-[2.02rem] font-semibold tracking-tight text-foreground sm:text-[2.28rem]">
                 {softenMissingValue(summary.currentPrice)}
               </p>
-              <p className={cn('pb-1 text-base font-semibold', changeToneClass(summary.changePct))}>
+              <p className={cn('pb-1 text-[0.95rem] font-semibold sm:text-base', changeToneClass(summary.changePct))}>
                 {softenMissingValue(summary.changeAmount)} / {softenMissingValue(summary.changePct)}
               </p>
             </div>
@@ -720,32 +768,47 @@ const SummaryHero: React.FC<{
             ))}
           </div>
 
-          <p className="mt-4 text-[15px] leading-7 text-secondary-text">
-            {summary.oneSentence || report.summary.analysisSummary || '暂无一句话结论'}
+          <p className="mt-3 text-[13px] leading-6 text-secondary-text sm:text-[14px]">
+            {summary.oneSentence || report.summary.analysisSummary || ui('report.oneLineFallback')}
           </p>
 
           {isMeaningfulText(compactMetaLine) ? (
-            <div className="mt-4 rounded-[1rem] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] px-3.5 py-3 text-sm leading-6 text-secondary-text">
+            <div className="mt-3 rounded-[1rem] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] px-3 py-2.5 text-[12px] leading-5 text-secondary-text">
               {compactMetaLine}
             </div>
           ) : null}
 
-          <div className="mt-4 theme-panel-subtle rounded-[1rem] px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Key action</p>
-            <p className="mt-2 text-base font-semibold leading-7 text-foreground">
-              {softenMissingValue(topAction)}
-            </p>
+          <div className="mt-3 theme-panel-subtle rounded-[1rem] px-3.5 py-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.keyAction')}</p>
+            <ul className="mt-2.5 space-y-1.5 text-[13px] leading-5 text-secondary-text">
+              {(actionItems.length > 0 ? actionItems.slice(0, 3) : [softenMissingValue(topAction)]).map((item, index) => (
+                <li key={`${item}-${index}`} className="flex items-start gap-2">
+                  <span className="mt-2 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
+                  <span className="min-w-0 flex-1 font-medium text-foreground">{item}</span>
+                </li>
+              ))}
+            </ul>
+            {executionReminders.length > 0 ? (
+              <div className="mt-2.5 border-t border-[var(--theme-panel-subtle-border)] pt-2.5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.reminders')}</p>
+                <ul className="mt-1.5 space-y-1 text-[11px] leading-5 text-secondary-text">
+                  {executionReminders.map((item, index) => (
+                    <li key={`${item}-${index}`} className="flex items-start gap-2">
+                      <span className="mt-1.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-warning)]" />
+                      <span className="min-w-0 flex-1">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
 
-          <details className="report-hero-disclosure mt-4">
-            <summary>More quote context</summary>
+          <details className="report-hero-disclosure mt-3">
+            <summary>{ui('report.moreQuoteContext')}</summary>
             <div className="report-hero-disclosure-body">
               <HeroMetaRow items={heroMetaItems} />
-              <p className="mt-3 text-sm leading-6 text-secondary-text">
-                {softenMissingValue(summary.priceBasisDetail || summary.priceContextNote)}
-              </p>
               <p className="mt-3 text-xs leading-5 text-muted-text">
-                Report time {softenMissingValue(summary.reportGeneratedAt)}
+                {ui('report.reportTime')} {softenMissingValue(summary.reportGeneratedAt)}
               </p>
             </div>
           </details>
@@ -758,7 +821,7 @@ const SummaryHero: React.FC<{
           stockCode={report.meta.stockCode}
           stockName={report.meta.stockName}
           summary={standardReport.summaryPanel}
-          market={market}
+          market={standardReport.market}
           decisionPanel={standardReport.decisionPanel}
           integrated
           fixtures={chartFixtures}
@@ -768,12 +831,12 @@ const SummaryHero: React.FC<{
       {!useWideDesktopHero ? (
       <div className="mt-4 grid gap-3">
         <div className="grid gap-3 sm:grid-cols-2">
-          <CompactSummaryBlock label="Key catalyst" value={topCatalyst} tone="success" />
-          <CompactSummaryBlock label="Key risk" value={topRisk} tone="danger" />
+          <CompactSummaryBlock label={ui('report.keyCatalyst')} value={topCatalyst} tone="success" />
+          <CompactSummaryBlock label={ui('report.keyRisk')} value={topRisk} tone="danger" />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <CompactSummaryBlock label="Latest update" value={latestUpdate} tone="history" />
-          <CompactSummaryBlock label="Setup" value={`${softenMissingValue(decisionPanel.setupType)} · Confidence ${softenMissingValue(decisionPanel.confidence)}`} tone="info" />
+          <CompactSummaryBlock label={ui('report.latestUpdate')} value={latestUpdate} tone="history" />
+          <CompactSummaryBlock label={ui('report.setup')} value={`${softenMissingValue(decisionPanel.setupType)} · ${ui('report.confidence')} ${softenMissingValue(decisionPanel.confidence)}`} tone="info" />
         </div>
       </div>
       ) : null}
@@ -812,61 +875,61 @@ const NewsRiskPanel: React.FC<{
 
   return (
     <div className={cn(solidCardClass, 'animate-in slide-in-from-bottom-2 duration-300')} data-testid="risk-catalyst-panel">
-      <SectionHeader title="催化、风险与情绪" />
+      <SectionHeader title={ui('report.riskCatalystSentiment')} />
 
       <div className="grid gap-3 xl:grid-cols-2">
         <NarrativeBucketCard
-          label="最新关键更新"
+          label={ui('report.latestUpdate')}
           items={latestUpdates}
-          emptyText="未发现新的公司级公告，当前以行业/技术确认信号为主。"
+          emptyText={ui('report.oneLineFallback')}
           footer={isMeaningfulText(highlights?.newsValueGrade) ? (
-            <p className="text-xs leading-5 text-muted-text">新闻价值分级：{highlights?.newsValueGrade}</p>
+            <p className="text-xs leading-5 text-muted-text">{ui('report.note')}: {highlights?.newsValueGrade}</p>
           ) : null}
         />
         <NarrativeBucketCard
-          label="Bullish factors"
+          label={ui('report.bullishFactors')}
           items={bullish}
-          emptyText="暂无新增强催化，更多需要等待公司级驱动兑现。"
+          emptyText={ui('report.oneLineFallback')}
           tone="success"
         />
         <NarrativeBucketCard
-          label="Bearish factors"
+          label={ui('report.bearishFactors')}
           items={bearish}
-          emptyText="暂无新增硬风险，但仍需关注估值、量能和结构失效信号。"
+          emptyText={ui('report.noFields')}
           tone="danger"
         />
         <NarrativeBucketCard
-          label="Mixed / neutral context"
+          label={ui('report.neutralFactors')}
           items={neutral}
-          emptyText="暂无明确中性补充，当前以走势与成交量确认为主。"
+          emptyText={ui('report.noFields')}
           tone="info"
           footer={
             <>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">情绪摘要</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.mixed')}</p>
               <p className="mt-2 text-sm leading-5 text-secondary-text">
                 {softenMissingValue(reasonLayer?.sentimentSummary || highlights?.sentimentSummary)}
               </p>
               <div className="mt-3 rounded-[0.95rem] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] px-3 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="info">Synthesized</Badge>
-                  <Badge variant="history">Retail tone {softenMissingValue(highlights?.socialTone)}</Badge>
+                  <Badge variant="info">{ui('report.synthesized')}</Badge>
+                  <Badge variant="history">{ui('report.retailTone')} {softenMissingValue(highlights?.socialTone)}</Badge>
                   <Badge variant="default">{softenMissingValue(highlights?.socialAttention)}</Badge>
                 </div>
                 <p className="mt-3 text-sm leading-5 text-secondary-text">
                   {softenMissingValue(highlights?.socialSynthesis)}
                 </p>
                 <p className="mt-3 text-xs leading-5 text-muted-text">
-                  Narrative focus: {softenMissingValue(highlights?.socialNarrativeFocus)}
+                  {ui('report.narrativeFocus')}: {softenMissingValue(highlights?.socialNarrativeFocus)}
                 </p>
                 {socialSources.length > 0 ? (
                   <p className="mt-2 text-xs leading-5 text-muted-text">
-                    Sources: {socialSources.join(' / ')}
+                    {ui('report.socialSources')}: {socialSources.join(' / ')}
                   </p>
                 ) : null}
               </div>
               {isMeaningfulText(highlights?.earningsOutlook) ? (
                 <>
-                  <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-text">业绩预期</p>
+                  <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.earningsOutlook')}</p>
                   <p className="mt-2 text-sm leading-5 text-secondary-text">{softenMissingValue(highlights?.earningsOutlook)}</p>
                 </>
               ) : null}
@@ -905,7 +968,7 @@ const BattlePlanPanel: React.FC<{
 
   return (
     <div className={cn(solidCardClass, 'animate-in slide-in-from-bottom-2 duration-300')} data-testid="battle-plan-panel">
-      <SectionHeader title="作战计划" />
+      <SectionHeader title={ui('report.battlePlan')} />
 
       {topGridItems.length > 0 || lowerNotes.length > 0 ? (
         <div className="space-y-4">
@@ -920,12 +983,12 @@ const BattlePlanPanel: React.FC<{
                     <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{item.label}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'buy'
-                        ? '买点'
+                        ? ui('report.planBuy')
                         : item.tone === 'risk'
-                          ? '风控'
+                          ? ui('report.planRisk')
                           : item.tone === 'target'
-                            ? '目标'
-                            : '计划'}
+                            ? ui('report.planTarget')
+                            : ui('report.planDefault')}
                     </Badge>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-foreground break-words">{item.value}</p>
@@ -942,10 +1005,10 @@ const BattlePlanPanel: React.FC<{
                     <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{item.label}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'position'
-                        ? '仓位'
+                        ? ui('report.planPosition')
                         : item.tone === 'risk'
-                          ? '风控'
-                          : '策略'}
+                          ? ui('report.planRisk')
+                          : ui('report.planDefault')}
                     </Badge>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-secondary-text break-words">{item.value}</p>
@@ -955,17 +1018,17 @@ const BattlePlanPanel: React.FC<{
           ) : null}
         </div>
       ) : (
-        <div className="rounded-[1rem] border border-dashed border-white/8 bg-black/20 px-4 py-6 text-sm text-muted-text">
-          暂无作战计划字段
+        <div className="rounded-[1rem] border border-dashed border-[var(--border-muted)] bg-[hsl(var(--bg-card-elevated-hsl)/0.72)] px-4 py-6 text-sm text-muted-text">
+          {ui('report.noBattlePlan')}
         </div>
       )}
 
       {battlePlan?.warnings?.length ? (
         <div
-          className="mt-4 rounded-[1rem] border border-rose-400/14 bg-rose-400/[0.06] px-4 py-3"
+          className="mt-4 rounded-[1rem] border border-[hsl(var(--accent-danger-hsl)/0.24)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-4 py-3"
         >
-          <p className="text-[11px] uppercase tracking-[0.16em] text-rose-200">执行提醒</p>
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-rose-100">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--accent-danger)]">{ui('report.reminders')}</p>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-danger-hsl)/0.9)]">
             {battlePlan.warnings.map((warning, index) => (
               <li key={`${warning}-${index}`}>{warning}</li>
             ))}
@@ -978,7 +1041,7 @@ const BattlePlanPanel: React.FC<{
 
 const ScoreBreakdownList: React.FC<{ items: StandardReportScoreBreakdownItem[] }> = ({ items }) => {
   if (items.length === 0) {
-    return <p className="text-sm text-muted-text">暂无评分拆解</p>;
+    return <p className="text-sm text-muted-text">{ui('report.noScoreBreakdown')}</p>;
   }
 
   const compactGrid = items.length <= 4;
@@ -1004,7 +1067,7 @@ const ScoreBreakdownList: React.FC<{ items: StandardReportScoreBreakdownItem[] }
 
 const ChecklistPanel: React.FC<{ items: StandardReportChecklistItem[] }> = ({ items }) => {
   if (items.length === 0) {
-    return <p className="text-sm text-muted-text">暂无 checklist</p>;
+    return <p className="text-sm text-muted-text">{ui('report.noChecklist')}</p>;
   }
 
   return (
@@ -1037,12 +1100,12 @@ const DecisionBoardPanel: React.FC<{
   reasonLayer?: StandardReportReasonLayer;
 }> = ({ decisionContext, checklistItems, reasonLayer }) => (
   <div className={cn(solidCardClass, 'animate-in slide-in-from-bottom-2 duration-300')} data-testid="decision-board-panel">
-    <SectionHeader title="Checklist 与评分" />
+    <SectionHeader title={ui('report.checklistAndScore')} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
       <div className="grid gap-4">
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">三条核心理由</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.topReasons')}</p>
           {reasonLayer?.coreReasons?.length ? (
             <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
               {reasonLayer.coreReasons.slice(0, 3).map((item, index) => (
@@ -1050,12 +1113,12 @@ const DecisionBoardPanel: React.FC<{
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-muted-text">暂无关键理由摘要</p>
+            <p className="mt-3 text-sm text-muted-text">{ui('report.noReasons')}</p>
           )}
         </div>
 
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Checklist 状态</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.checklistState')}</p>
           <div className="mt-2.5">
             <ChecklistPanel items={checklistItems} />
           </div>
@@ -1064,88 +1127,36 @@ const DecisionBoardPanel: React.FC<{
 
       <div className="grid gap-4">
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">评分拆解</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.scoreBreakdown')}</p>
           <div className="mt-2.5">
             <ScoreBreakdownList items={decisionContext?.scoreBreakdown || []} />
           </div>
         </div>
 
         <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">评分说明</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.scoreNotes')}</p>
           <div className="mt-2.5 grid gap-x-4 gap-y-3 sm:grid-cols-2">
-            <CompactDecisionMetric label="短线趋势" value={decisionContext?.shortTermView || 'NA（接口未返回）'} />
-            <CompactDecisionMetric label="综合建议" value={decisionContext?.compositeView || 'NA（接口未返回）'} />
-            <CompactDecisionMetric label="Checklist 摘要" value={reasonLayer?.checklistSummary || 'NA（字段待接入）'} />
-            <CompactDecisionMetric label="变动原因" value={decisionContext?.changeReason || decisionContext?.adjustmentReason || 'NA（字段待接入）'} />
+            <CompactDecisionMetric label={ui('report.shortTermView')} value={decisionContext?.shortTermView || ui('report.noFields')} />
+            <CompactDecisionMetric label={ui('report.compositeView')} value={decisionContext?.compositeView || ui('report.noFields')} />
+            <CompactDecisionMetric label={ui('report.checklistSummary')} value={reasonLayer?.checklistSummary || ui('report.noFields')} />
+            <CompactDecisionMetric label={ui('report.changeReason')} value={decisionContext?.changeReason || decisionContext?.adjustmentReason || ui('report.noFields')} />
             {isMeaningfulText(decisionContext?.adjustmentReason) ? (
-              <CompactDecisionMetric label="调整说明" value={decisionContext?.adjustmentReason} />
+              <CompactDecisionMetric label={ui('report.adjustmentReason')} value={decisionContext?.adjustmentReason} />
             ) : null}
             {decisionContext?.previousScore ? (
-              <CompactDecisionMetric label="前次评分" value={decisionContext?.previousScore} />
+              <CompactDecisionMetric label={ui('report.previousScore')} value={decisionContext?.previousScore} />
             ) : null}
             {decisionContext?.scoreChange ? (
-              <CompactDecisionMetric label="评分变化" value={decisionContext?.scoreChange} />
+              <CompactDecisionMetric label={ui('report.scoreChange')} value={decisionContext?.scoreChange} />
             ) : null}
           </div>
           {isMeaningfulText(reasonLayer?.checklistSummary) ? (
             <div className="mt-3 border-t border-white/6 pt-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">执行提醒</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.reminders')}</p>
               <p className="mt-2 text-sm leading-5 text-secondary-text">{reasonLayer?.checklistSummary}</p>
             </div>
           ) : null}
         </div>
-      </div>
-    </div>
-  </div>
-);
-
-const CoveragePanel: React.FC<{ coverageNotes?: StandardReportCoverageNotes }> = ({ coverageNotes }) => (
-  <div className={solidCardClass}>
-    <SectionHeader title="来源与覆盖" />
-    <div className="grid gap-3 lg:grid-cols-2">
-      <div className={subtlePanelClass}>
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">数据来源</p>
-        {coverageNotes?.dataSources?.length ? (
-          <p className="mt-3 text-sm leading-6 text-secondary-text">{coverageNotes.dataSources.join('；')}</p>
-        ) : (
-          <p className="mt-3 text-sm text-muted-text">暂无额外来源说明</p>
-        )}
-      </div>
-      <div className={subtlePanelClass}>
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">方法说明</p>
-        {coverageNotes?.methodNotes?.length ? (
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary-text">
-            {coverageNotes.methodNotes.slice(0, 3).map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-muted-text">暂无额外方法说明</p>
-        )}
-      </div>
-      <div className={subtlePanelClass}>
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">口径说明</p>
-        {coverageNotes?.conflictNotes?.length ? (
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary-text">
-            {coverageNotes.conflictNotes.slice(0, 4).map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-muted-text">暂无额外口径冲突说明</p>
-        )}
-      </div>
-      <div className={subtlePanelClass}>
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">覆盖缺口</p>
-        {coverageNotes?.missingFieldNotes?.length ? (
-          <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary-text">
-            {coverageNotes.missingFieldNotes.slice(0, 4).map((item, index) => (
-              <li key={`${item}-${index}`}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-muted-text">暂无额外缺失字段说明</p>
-        )}
       </div>
     </div>
   </div>
@@ -1156,9 +1167,9 @@ const MarketWarnings: React.FC<{ warnings: string[] }> = ({ warnings }) => {
     return null;
   }
   return (
-    <div className="rounded-[1rem] border border-amber-300/16 bg-amber-300/[0.06] px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100">口径提示</p>
-      <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50/90">
+    <div className="rounded-[1rem] border border-[hsl(var(--accent-warning-hsl)/0.46)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--accent-warning)]">{ui('report.basisNotes')}</p>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-warning-hsl)/0.9)]">
         {warnings.map((warning, index) => (
           <li key={`${warning}-${index}`}>{warning}</li>
         ))}
@@ -1176,12 +1187,12 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
 
   const marketSection = buildSection(
     standardReport.tableSections?.market,
-    '行情表',
+    ui('report.evidence'),
     standardReport.market?.displayFields || standardReport.market?.regularFields,
   );
-  const technicalSection = buildSection(standardReport.tableSections?.technical, '技术面表', standardReport.technicalFields);
-  const fundamentalSection = buildSection(standardReport.tableSections?.fundamental, '基本面表', standardReport.fundamentalFields);
-  const earningsSection = buildSection(standardReport.tableSections?.earnings, '财报表', standardReport.earningsFields);
+  const technicalSection = buildSection(standardReport.tableSections?.technical, ui('report.signals'), standardReport.technicalFields);
+  const fundamentalSection = buildSection(standardReport.tableSections?.fundamental, ui('report.evidence'), standardReport.fundamentalFields);
+  const earningsSection = buildSection(standardReport.tableSections?.earnings, ui('report.sourceNotes'), standardReport.earningsFields);
   const warnings = standardReport.market?.consistencyWarnings || [];
 
   return (
@@ -1218,10 +1229,7 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
         />
       </div>
 
-      <div className={rowGridClass}>
-        <BattlePlanPanel battlePlan={standardReport.battlePlanCompact} />
-        <CoveragePanel coverageNotes={standardReport.coverageNotes} />
-      </div>
+      <BattlePlanPanel battlePlan={standardReport.battlePlanCompact} />
     </div>
   );
 };

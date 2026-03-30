@@ -138,6 +138,41 @@ class AuthApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_verify_password_bootstrap_sets_initial_password_and_returns_unlock_token(self) -> None:
+        response = asyncio.run(
+            auth_endpoint.auth_verify_password(
+                self._build_request(),
+                auth_endpoint.VerifyPasswordRequest(
+                    password="bootstrap-pass",
+                    passwordConfirm="bootstrap-pass",
+                ),
+            )
+        )
+
+        self.assertEqual(response["ok"], True)
+        self.assertTrue(response["unlockToken"])
+        self.assertGreater(response["expiresInSeconds"], 0)
+        self.assertTrue(auth.has_stored_password())
+
+    def test_verify_password_rejects_wrong_password(self) -> None:
+        first_response = asyncio.run(
+            auth_endpoint.auth_login(
+                self._build_request(),
+                auth_endpoint.LoginRequest(password="passwd6", passwordConfirm="passwd6"),
+            )
+        )
+        self.assertEqual(first_response.status_code, 200)
+
+        response = asyncio.run(
+            auth_endpoint.auth_verify_password(
+                self._build_request(),
+                auth_endpoint.VerifyPasswordRequest(password="wrong-pass"),
+            )
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertIn(b'"error":"invalid_password"', response.body)
+
     def test_logout_clears_cookie(self) -> None:
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
         self.assertEqual(response.status_code, 204)
@@ -311,6 +346,29 @@ class AuthApiTestCase(unittest.TestCase):
         call_next = AsyncMock(return_value=next_response)
 
         with patch("api.middlewares.auth.is_auth_enabled", return_value=False):
+            response = asyncio.run(middleware.dispatch(request, call_next))
+
+        self.assertEqual(response.status_code, 200)
+        call_next.assert_awaited_once()
+
+    def test_verify_password_endpoint_is_exempt_when_auth_enabled(self) -> None:
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/auth/verify-password",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "root_path": "",
+        }
+        request = Request(scope)
+        middleware = AuthMiddleware(app=MagicMock())
+        next_response = Response(status_code=200)
+        call_next = AsyncMock(return_value=next_response)
+
+        with patch("api.middlewares.auth.is_auth_enabled", return_value=True):
             response = asyncio.run(middleware.dispatch(request, call_next))
 
         self.assertEqual(response.status_code, 200)

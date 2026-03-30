@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { stocksApi, type StockHistoryPoint, type StockIntradayPoint } from '../../api/stocks';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import type {
   StandardReportDecisionPanel,
   StandardReportMarketBlock,
@@ -8,7 +9,7 @@ import type {
 import { cn } from '../../utils/cn';
 import { useElementSize } from '../../hooks/useElementSize';
 
-export type ChartViewKey = 'intraday' | 'month' | 'quarter' | 'year' | 'weekly' | 'monthly';
+export type ChartViewKey = 'minute1' | 'minute5' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 type ChartDatum = {
   stamp: string;
@@ -26,11 +27,11 @@ type ChartDatum = {
 
 type ChartViewConfig = {
   key: ChartViewKey;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   request:
-    | { kind: 'intraday'; interval: '5m' | '15m' | '30m'; range: '1d' | '5d' | '1mo' }
-    | { kind: 'history'; period: 'daily' | 'weekly' | 'monthly'; days: number };
+    | { kind: 'intraday'; interval: '1m' | '5m' | '15m' | '30m'; range: '1d' | '5d' | '1mo' }
+    | { kind: 'history'; period: 'daily' | 'weekly' | 'monthly' | 'yearly'; days: number };
 };
 
 export type ReportPriceChartFixtureView = {
@@ -41,7 +42,7 @@ export type ReportPriceChartFixtureView = {
 export type ReportPriceChartFixtures = Partial<Record<ChartViewKey, ReportPriceChartFixtureView>>;
 
 type AnnotationLine = {
-  label: string;
+  labelKey: string;
   value: number;
   stroke: string;
 };
@@ -64,40 +65,40 @@ type ChartGeometry = {
 
 const VIEW_CONFIGS: ChartViewConfig[] = [
   {
-    key: 'intraday',
-    label: '1D',
-    description: '5m intraday',
-    request: { kind: 'intraday', interval: '5m', range: '1d' },
+    key: 'minute1',
+    labelKey: 'chart.minute1',
+    descriptionKey: 'chart.minute1Desc',
+    request: { kind: 'intraday', interval: '1m', range: '1d' },
   },
   {
-    key: 'month',
-    label: '1M',
-    description: 'Daily candles',
-    request: { kind: 'history', period: 'daily', days: 30 },
+    key: 'minute5',
+    labelKey: 'chart.minute5',
+    descriptionKey: 'chart.minute5Desc',
+    request: { kind: 'intraday', interval: '5m', range: '5d' },
   },
   {
-    key: 'quarter',
-    label: '3M',
-    description: 'Daily candles',
-    request: { kind: 'history', period: 'daily', days: 90 },
-  },
-  {
-    key: 'year',
-    label: '1Y',
-    description: 'Daily context',
-    request: { kind: 'history', period: 'daily', days: 365 },
+    key: 'daily',
+    labelKey: 'chart.daily',
+    descriptionKey: 'chart.dailyDesc',
+    request: { kind: 'history', period: 'daily', days: 3650 },
   },
   {
     key: 'weekly',
-    label: 'W',
-    description: 'Weekly K-line',
-    request: { kind: 'history', period: 'weekly', days: 365 },
+    labelKey: 'chart.weekly',
+    descriptionKey: 'chart.weeklyDesc',
+    request: { kind: 'history', period: 'weekly', days: 3650 },
   },
   {
     key: 'monthly',
-    label: 'M',
-    description: 'Monthly K-line',
-    request: { kind: 'history', period: 'monthly', days: 730 },
+    labelKey: 'chart.monthly',
+    descriptionKey: 'chart.monthlyDesc',
+    request: { kind: 'history', period: 'monthly', days: 3650 },
+  },
+  {
+    key: 'yearly',
+    labelKey: 'chart.year',
+    descriptionKey: 'chart.yearDesc',
+    request: { kind: 'history', period: 'yearly', days: 3650 },
   },
 ];
 
@@ -132,27 +133,52 @@ const formatVolume = (value?: number | null): string => {
   return numeric.toFixed(0);
 };
 
-const formatShortLabel = (stamp: string, view: ChartViewKey): string => {
-  const date = new Date(stamp);
-  if (Number.isNaN(date.getTime())) {
-    return stamp;
+const formatSignedPrice = (value?: number | null): string => {
+  if (!Number.isFinite(value ?? NaN)) {
+    return '--';
   }
-  if (view === 'intraday') {
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  }
-  if (view === 'monthly') {
-    return date.toLocaleDateString('en-US', { year: '2-digit', month: 'short' });
-  }
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const numeric = Number(value);
+  return `${numeric > 0 ? '+' : ''}${formatAxisPrice(numeric)}`;
 };
 
-const formatLongLabel = (stamp: string, view: ChartViewKey): string => {
+const formatSignedPercent = (value?: number | null): string => {
+  if (!Number.isFinite(value ?? NaN)) {
+    return '--';
+  }
+  const numeric = Number(value);
+  return `${numeric > 0 ? '+' : ''}${numeric.toFixed(2)}%`;
+};
+
+const parseNumericText = (value?: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const normalized = String(value).replace(/[%,$,\s]/g, '');
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const formatShortLabel = (stamp: string, view: ChartViewKey, locale: string): string => {
   const date = new Date(stamp);
   if (Number.isNaN(date.getTime())) {
     return stamp;
   }
-  if (view === 'intraday') {
-    return date.toLocaleString('en-US', {
+  if (view === 'minute1' || view === 'minute5') {
+    return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  if (view === 'yearly') {
+    return date.toLocaleDateString(locale, { year: '2-digit', month: 'short' });
+  }
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
+
+const formatLongLabel = (stamp: string, view: ChartViewKey, locale: string): string => {
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) {
+    return stamp;
+  }
+  if (view === 'minute1' || view === 'minute5') {
+    return date.toLocaleString(locale, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -160,7 +186,7 @@ const formatLongLabel = (stamp: string, view: ChartViewKey): string => {
       hour12: false,
     });
   }
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -183,14 +209,15 @@ const computeMovingAverage = (values: number[], index: number, length: number): 
 const buildChartData = (
   items: Array<StockIntradayPoint | StockHistoryPoint>,
   view: ChartViewKey,
+  locale: string,
 ): ChartDatum[] => {
   const closes = items.map((item) => item.close);
   return items.map((item, index) => {
     const stamp = 'time' in item ? item.time : item.date;
     return {
       stamp,
-      label: formatLongLabel(stamp, view),
-      shortLabel: formatShortLabel(stamp, view),
+      label: formatLongLabel(stamp, view, locale),
+      shortLabel: formatShortLabel(stamp, view, locale),
       open: item.open,
       high: item.high,
       low: item.low,
@@ -239,55 +266,54 @@ const buildPath = (points: Array<{ x: number; y?: number }>): string => {
   return path.trim();
 };
 
-const resolveViewSourceLabel = (view: ChartViewKey, responseSource?: string): string => {
-  if (responseSource && responseSource.trim()) {
-    if (view === 'intraday') {
-      return `${responseSource} intraday`;
-    }
-    return responseSource;
-  }
-  if (view === 'weekly') {
-    return 'Weekly aggregate';
-  }
-  if (view === 'monthly') {
-    return 'Monthly aggregate';
-  }
-  if (view === 'intraday') {
-    return 'Intraday snapshot';
-  }
-  return 'Daily history';
-};
-
 const resolveAnnotationLines = (decisionPanel?: StandardReportDecisionPanel): AnnotationLine[] => {
   const items: AnnotationLine[] = [
-    { label: 'Support', value: decisionPanel?.supportLevel ?? NaN, stroke: 'var(--theme-chart-support)' },
-    { label: 'Resistance', value: decisionPanel?.resistanceLevel ?? NaN, stroke: 'var(--theme-chart-resistance)' },
-    { label: 'Entry', value: decisionPanel?.idealEntryCenter ?? NaN, stroke: 'var(--theme-chart-entry)' },
-    { label: 'Stop', value: decisionPanel?.stopLossLevel ?? NaN, stroke: 'var(--theme-chart-stop)' },
-    { label: 'Target 1', value: decisionPanel?.targetOneLevel ?? NaN, stroke: 'var(--theme-chart-target)' },
-    { label: 'Target 2', value: decisionPanel?.targetTwoLevel ?? NaN, stroke: 'var(--theme-chart-target-strong)' },
+    { labelKey: 'chart.support', value: decisionPanel?.supportLevel ?? NaN, stroke: 'var(--theme-chart-support)' },
+    { labelKey: 'chart.resistance', value: decisionPanel?.resistanceLevel ?? NaN, stroke: 'var(--theme-chart-resistance)' },
+    { labelKey: 'chart.entry', value: decisionPanel?.idealEntryCenter ?? NaN, stroke: 'var(--theme-chart-entry)' },
+    { labelKey: 'chart.stop', value: decisionPanel?.stopLossLevel ?? NaN, stroke: 'var(--theme-chart-stop)' },
+    { labelKey: 'chart.targetOne', value: decisionPanel?.targetOneLevel ?? NaN, stroke: 'var(--theme-chart-target)' },
+    { labelKey: 'chart.targetTwo', value: decisionPanel?.targetTwoLevel ?? NaN, stroke: 'var(--theme-chart-target-strong)' },
   ];
   return items.filter((item) => isFiniteNumber(item.value));
 };
 
-const normalizeFieldLabel = (value: string): string => value.trim().toLowerCase();
-
-const pickMarketFieldValue = (
-  market: StandardReportMarketBlock | undefined,
-  labels: string[],
-): string | undefined => {
-  const wanted = new Set(labels.map(normalizeFieldLabel));
-  const match = (market?.displayFields || market?.regularFields || []).find((field) =>
-    wanted.has(normalizeFieldLabel(field.label)),
-  );
-  const value = String(match?.value || '').trim();
-  return value || undefined;
+const createDefaultViewWindow = (view: ChartViewKey, count: number): ViewWindow => {
+  if (count <= 0) {
+    return { start: 0, end: 0 };
+  }
+  const isMinuteView = view === 'minute1' || view === 'minute5';
+  const preferredSize = isMinuteView ? Math.min(count, 96) : count;
+  const size = Math.min(count, Math.max(preferredSize, Math.min(count, 24)));
+  return {
+    start: Math.max(0, count - size),
+    end: count - 1,
+  };
 };
 
-type ChartStat = {
-  label: string;
-  value?: string;
-  emphasis?: 'primary' | 'default';
+const normalizeViewWindow = (window: ViewWindow, count: number): ViewWindow => {
+  if (count <= 0) {
+    return { start: 0, end: 0 };
+  }
+  const safeStart = clamp(window.start, 0, count - 1);
+  const safeEnd = clamp(window.end, safeStart, count - 1);
+  return { start: safeStart, end: safeEnd };
+};
+
+type IndicatorKey =
+  | 'candles'
+  | 'volume'
+  | 'ma5'
+  | 'ma10'
+  | 'ma20'
+  | 'support'
+  | 'resistance'
+  | 'entry'
+  | 'targets';
+
+type ViewWindow = {
+  start: number;
+  end: number;
 };
 
 interface ReportPriceChartProps {
@@ -309,49 +335,104 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   integrated = false,
   fixtures,
 }) => {
-  const [activeView, setActiveView] = useState<ChartViewKey>('intraday');
+  const { language, t } = useI18n();
+  const locale = language === 'zh' ? 'zh-CN' : 'en-US';
+  const [activeView, setActiveView] = useState<ChartViewKey>('minute1');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartData, setChartData] = useState<Record<ChartViewKey, ChartDatum[]>>({
-    intraday: [],
-    month: [],
-    quarter: [],
-    year: [],
+    minute1: [],
+    minute5: [],
+    daily: [],
     weekly: [],
     monthly: [],
-  });
-  const [sourceByView, setSourceByView] = useState<Record<ChartViewKey, string>>({
-    intraday: '',
-    month: '',
-    quarter: '',
-    year: '',
-    weekly: '',
-    monthly: '',
+    yearly: [],
   });
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [indicatorVisibility, setIndicatorVisibility] = useState<Record<IndicatorKey, boolean>>({
+    candles: true,
+    volume: true,
+    ma5: false,
+    ma10: false,
+    ma20: false,
+    support: false,
+    resistance: false,
+    entry: false,
+    targets: false,
+  });
+  const [viewWindowByView, setViewWindowByView] = useState<Record<ChartViewKey, ViewWindow | null>>({
+    minute1: null,
+    minute5: null,
+    daily: null,
+    weekly: null,
+    monthly: null,
+    yearly: null,
+  });
+  const dragStateRef = useRef<{ pointerX: number; window: ViewWindow } | null>(null);
+  const chartStageRef = useRef<HTMLDivElement | null>(null);
+  const activeTouchPointerIdRef = useRef<number | null>(null);
+  const pageScrollLockStateRef = useRef<{
+    bodyOverflow: string;
+    htmlOverflow: string;
+    bodyTouchAction: string;
+  } | null>(null);
   const { ref: chartRef, size } = useElementSize<HTMLDivElement>();
 
+  const lockPageScroll = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (pageScrollLockStateRef.current != null) {
+      return;
+    }
+    pageScrollLockStateRef.current = {
+      bodyOverflow: document.body.style.overflow,
+      htmlOverflow: document.documentElement.style.overflow,
+      bodyTouchAction: document.body.style.touchAction,
+    };
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+  }, []);
+
+  const unlockPageScroll = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (pageScrollLockStateRef.current == null) {
+      return;
+    }
+    document.body.style.overflow = pageScrollLockStateRef.current.bodyOverflow;
+    document.documentElement.style.overflow = pageScrollLockStateRef.current.htmlOverflow;
+    document.body.style.touchAction = pageScrollLockStateRef.current.bodyTouchAction;
+    pageScrollLockStateRef.current = null;
+  }, []);
+
   useEffect(() => {
-    setActiveView('intraday');
+    setActiveView('minute1');
     setHoveredIndex(null);
     setError(null);
     setChartData({
-      intraday: [],
-      month: [],
-      quarter: [],
-      year: [],
+      minute1: [],
+      minute5: [],
+      daily: [],
       weekly: [],
       monthly: [],
+      yearly: [],
     });
-    setSourceByView({
-      intraday: '',
-      month: '',
-      quarter: '',
-      year: '',
-      weekly: '',
-      monthly: '',
+    setViewWindowByView({
+      minute1: null,
+      minute5: null,
+      daily: null,
+      weekly: null,
+      monthly: null,
+      yearly: null,
     });
   }, [stockCode]);
+
+  useEffect(() => () => {
+    unlockPageScroll();
+  }, [unlockPageScroll]);
 
   useEffect(() => {
     let cancelled = false;
@@ -372,11 +453,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
           }
           setChartData((current) => ({
             ...current,
-            [activeView]: buildChartData(fixture.data || [], activeView),
-          }));
-          setSourceByView((current) => ({
-            ...current,
-            [activeView]: resolveViewSourceLabel(activeView, fixture.source || viewConfig.description),
+            [activeView]: buildChartData(fixture.data || [], activeView, locale),
           }));
           return;
         }
@@ -391,11 +468,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
           }
           setChartData((current) => ({
             ...current,
-            [activeView]: buildChartData(response.data || [], activeView),
-          }));
-          setSourceByView((current) => ({
-            ...current,
-            [activeView]: resolveViewSourceLabel(activeView, response.source ?? undefined),
+            [activeView]: buildChartData(response.data || [], activeView, locale),
           }));
           return;
         }
@@ -409,15 +482,11 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         }
         setChartData((current) => ({
           ...current,
-          [activeView]: buildChartData(response.data || [], activeView),
-        }));
-        setSourceByView((current) => ({
-          ...current,
-          [activeView]: resolveViewSourceLabel(activeView, viewConfig.description),
+          [activeView]: buildChartData(response.data || [], activeView, locale),
         }));
       } catch (fetchError) {
         if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : 'Chart data failed to load');
+          setError(fetchError instanceof Error ? fetchError.message : t('chart.noData'));
         }
       } finally {
         if (!cancelled) {
@@ -431,14 +500,42 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [activeView, fixtures, stockCode]);
+  }, [activeView, fixtures, locale, stockCode, t]);
 
   const activeData = chartData[activeView];
-  const latestBar = activeData[activeData.length - 1];
+  const activeWindow = useMemo(() => {
+    const existing = viewWindowByView[activeView];
+    if (!existing) {
+      return createDefaultViewWindow(activeView, activeData.length);
+    }
+    return normalizeViewWindow(existing, activeData.length);
+  }, [activeData.length, activeView, viewWindowByView]);
+  const visibleData = useMemo(
+    () => activeData.slice(activeWindow.start, activeWindow.end + 1),
+    [activeData, activeWindow.end, activeWindow.start],
+  );
   const activeIndex = hoveredIndex != null
-    ? clamp(hoveredIndex, 0, Math.max(activeData.length - 1, 0))
-    : Math.max(activeData.length - 1, 0);
-  const activeBar = activeData[activeIndex];
+    ? clamp(hoveredIndex, 0, Math.max(visibleData.length - 1, 0))
+    : Math.max(visibleData.length - 1, 0);
+  const activeBar = visibleData[activeIndex];
+
+  useEffect(() => {
+    if (activeData.length === 0) {
+      return;
+    }
+    const existing = viewWindowByView[activeView];
+    if (
+      !existing
+      || existing.start >= activeData.length
+      || existing.end >= activeData.length
+      || existing.end <= existing.start
+    ) {
+      setViewWindowByView((current) => ({
+        ...current,
+        [activeView]: createDefaultViewWindow(activeView, activeData.length),
+      }));
+    }
+  }, [activeData.length, activeView, viewWindowByView]);
 
   const annotationLines = useMemo(
     () => resolveAnnotationLines(decisionPanel),
@@ -462,8 +559,9 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     const priceBottom = priceTop + priceHeight;
     const volumeTop = priceBottom + gap;
     const volumeBottom = volumeTop + volumeHeight;
-    const step = activeData.length > 1 ? plotWidth / (activeData.length - 1) : plotWidth;
-    const candleWidth = clamp(step * 0.56, 3.5, activeView === 'intraday' ? 7.5 : 12);
+    const step = visibleData.length > 1 ? plotWidth / (visibleData.length - 1) : plotWidth;
+    const isMinuteView = activeView === 'minute1' || activeView === 'minute5';
+    const candleWidth = clamp(step * 0.68, isMinuteView ? 2.8 : 1.6, isMinuteView ? 7.5 : 9.5);
 
     return {
       width,
@@ -480,10 +578,10 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       candleWidth,
       step,
     };
-  }, [activeData.length, activeView, size.height, size.width]);
+  }, [activeView, size.height, size.width, visibleData.length]);
 
   const priceDomain = useMemo(() => {
-    const values = activeData.flatMap((item) => [item.low, item.high]);
+    const values = visibleData.flatMap((item) => [item.low, item.high]);
     annotationLines.forEach((item) => values.push(item.value));
     if (isFiniteNumber(decisionPanel?.analysisPrice)) {
       values.push(decisionPanel.analysisPrice);
@@ -499,22 +597,22 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
       min: minValue - padding,
       max: maxValue + padding,
     };
-  }, [activeData, annotationLines, decisionPanel?.analysisPrice]);
+  }, [annotationLines, decisionPanel?.analysisPrice, visibleData]);
 
   const volumeMax = useMemo(
-    () => Math.max(...activeData.map((item) => item.volume || 0), 1),
-    [activeData],
+    () => Math.max(...visibleData.map((item) => item.volume || 0), 1),
+    [visibleData],
   );
 
   const xAt = useCallback((index: number): number => {
     if (!chartGeometry) {
       return 0;
     }
-    if (activeData.length <= 1) {
+    if (visibleData.length <= 1) {
       return chartGeometry.plotLeft + chartGeometry.plotWidth / 2;
     }
     return chartGeometry.plotLeft + chartGeometry.step * index;
-  }, [activeData.length, chartGeometry]);
+  }, [chartGeometry, visibleData.length]);
 
   const priceY = useCallback((value: number): number => {
     if (!chartGeometry || !priceDomain) {
@@ -542,191 +640,365 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
     });
   }, [priceDomain]);
 
-  const xTickIndices = useMemo(() => buildTickIndices(activeData.length, 6), [activeData.length]);
+  const xTickIndices = useMemo(() => buildTickIndices(visibleData.length, 6), [visibleData.length]);
 
   const ma5Path = useMemo(
-    () => buildPath(activeData.map((item, index) => ({ x: xAt(index), y: item.ma5 != null ? priceY(item.ma5) : undefined }))),
-    [activeData, priceY, xAt],
+    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma5 != null ? priceY(item.ma5) : undefined }))),
+    [priceY, visibleData, xAt],
   );
   const ma10Path = useMemo(
-    () => buildPath(activeData.map((item, index) => ({ x: xAt(index), y: item.ma10 != null ? priceY(item.ma10) : undefined }))),
-    [activeData, priceY, xAt],
+    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma10 != null ? priceY(item.ma10) : undefined }))),
+    [priceY, visibleData, xAt],
   );
   const ma20Path = useMemo(
-    () => buildPath(activeData.map((item, index) => ({ x: xAt(index), y: item.ma20 != null ? priceY(item.ma20) : undefined }))),
-    [activeData, priceY, xAt],
+    () => buildPath(visibleData.map((item, index) => ({ x: xAt(index), y: item.ma20 != null ? priceY(item.ma20) : undefined }))),
+    [priceY, visibleData, xAt],
   );
 
   const resolveHoverIndex = (clientX: number): number | null => {
-    if (!chartGeometry || !chartRef.current || activeData.length === 0) {
+    if (!chartGeometry || !chartRef.current || visibleData.length === 0) {
       return null;
     }
     const rect = chartRef.current.getBoundingClientRect();
     const localX = clamp(clientX - rect.left, chartGeometry.plotLeft, chartGeometry.plotRight);
-    if (activeData.length <= 1) {
+    if (visibleData.length <= 1) {
       return 0;
     }
-    return clamp(Math.round((localX - chartGeometry.plotLeft) / chartGeometry.step), 0, activeData.length - 1);
+    return clamp(Math.round((localX - chartGeometry.plotLeft) / chartGeometry.step), 0, visibleData.length - 1);
   };
 
+  const setViewWindow = useCallback((nextWindow: ViewWindow) => {
+    setViewWindowByView((current) => ({
+      ...current,
+      [activeView]: normalizeViewWindow(nextWindow, activeData.length),
+    }));
+  }, [activeData.length, activeView]);
+
+  const zoomWindow = useCallback((direction: 'in' | 'out') => {
+    if (activeData.length <= 8) {
+      return;
+    }
+    const currentWindow = activeWindow;
+    const currentCount = Math.max(currentWindow.end - currentWindow.start + 1, 1);
+    const nextCount = direction === 'in'
+      ? Math.max(8, Math.round(currentCount * 0.8))
+      : Math.min(activeData.length, Math.round(currentCount * 1.25));
+    const anchorIndex = hoveredIndex != null ? currentWindow.start + hoveredIndex : currentWindow.start + Math.floor(currentCount / 2);
+    const nextStart = clamp(anchorIndex - Math.floor(nextCount / 2), 0, Math.max(activeData.length - nextCount, 0));
+    setViewWindow({ start: nextStart, end: nextStart + nextCount - 1 });
+  }, [activeData.length, activeWindow, hoveredIndex, setViewWindow]);
+
+  const resetViewWindow = useCallback(() => {
+    setViewWindow(createDefaultViewWindow(activeView, activeData.length));
+  }, [activeData.length, activeView, setViewWindow]);
+
+  const visibleAnnotationLines = useMemo(() => annotationLines.filter((line) => {
+    if (line.labelKey === 'chart.support') {
+      return indicatorVisibility.support;
+    }
+    if (line.labelKey === 'chart.resistance') {
+      return indicatorVisibility.resistance;
+    }
+    if (line.labelKey === 'chart.entry') {
+      return indicatorVisibility.entry;
+    }
+    return indicatorVisibility.targets;
+  }), [annotationLines, indicatorVisibility.entry, indicatorVisibility.resistance, indicatorVisibility.support, indicatorVisibility.targets]);
+
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current && chartGeometry) {
+      if (event.pointerType === 'touch') {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      const currentWindow = dragStateRef.current.window;
+      const currentCount = currentWindow.end - currentWindow.start + 1;
+      const deltaBars = Math.round(((event.clientX - dragStateRef.current.pointerX) / chartGeometry.plotWidth) * currentCount);
+      const nextStart = clamp(currentWindow.start - deltaBars, 0, Math.max(activeData.length - currentCount, 0));
+      setViewWindow({ start: nextStart, end: nextStart + currentCount - 1 });
+      return;
+    }
     const index = resolveHoverIndex(event.clientX);
     if (index != null) {
       setHoveredIndex(index);
     }
   };
 
-  const handlePointerLeave = () => {
-    setHoveredIndex(null);
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!chartGeometry) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (event.pointerType === 'touch') {
+      event.preventDefault();
+      event.stopPropagation();
+      activeTouchPointerIdRef.current = event.pointerId;
+      lockPageScroll();
+    }
+    dragStateRef.current = {
+      pointerX: event.clientX,
+      window: activeWindow,
+    };
+    setHoveredIndex(resolveHoverIndex(event.clientX));
   };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragStateRef.current = null;
+    if (event.pointerType === 'touch') {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (activeTouchPointerIdRef.current === event.pointerId) {
+      activeTouchPointerIdRef.current = null;
+      unlockPageScroll();
+    }
+  };
+
+  const handlePointerLeave = () => {
+    dragStateRef.current = null;
+    setHoveredIndex(null);
+    if (activeTouchPointerIdRef.current != null) {
+      activeTouchPointerIdRef.current = null;
+      unlockPageScroll();
+    }
+  };
+
+  const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragStateRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (activeTouchPointerIdRef.current === event.pointerId) {
+      activeTouchPointerIdRef.current = null;
+      unlockPageScroll();
+    }
+  };
+
+  useEffect(() => {
+    const stage = chartStageRef.current;
+    if (!stage) {
+      return;
+    }
+
+    const stopTouchPropagation = (event: TouchEvent) => {
+      event.stopPropagation();
+    };
+
+    const preventTouchScroll = (event: TouchEvent) => {
+      if (!event.cancelable) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.cancelable || event.deltaY === 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      zoomWindow(event.deltaY > 0 ? 'out' : 'in');
+    };
+
+    stage.addEventListener('wheel', handleWheel, { passive: false });
+    stage.addEventListener('touchstart', stopTouchPropagation, { passive: true });
+    stage.addEventListener('touchmove', preventTouchScroll, { passive: false });
+
+    return () => {
+      stage.removeEventListener('wheel', handleWheel);
+      stage.removeEventListener('touchstart', stopTouchPropagation);
+      stage.removeEventListener('touchmove', preventTouchScroll);
+    };
+  }, [zoomWindow]);
 
   const chartShellClass = integrated
     ? 'theme-chart-shell report-hero-chart'
     : 'theme-chart-shell theme-panel-solid px-4 py-4 md:px-5 md:py-5';
 
-  const tooltipLeft = useMemo(() => {
-    if (!chartGeometry || hoveredIndex == null) {
-      return 16;
-    }
-    const x = xAt(hoveredIndex);
-    const preferred = x > chartGeometry.width * 0.62 ? x - 212 : x + 14;
-    return clamp(preferred, 12, Math.max(chartGeometry.width - 220, 12));
-  }, [chartGeometry, hoveredIndex, xAt]);
-
   const legendItems = useMemo(() => {
     const items = [
-      { label: 'Candles', color: 'var(--theme-chart-bull)' },
-      { label: 'Volume', color: 'var(--theme-chart-volume)' },
-      { label: 'MA5', color: 'var(--theme-chart-ma5)' },
-      { label: 'MA10', color: 'var(--theme-chart-ma10)' },
-      { label: 'MA20', color: 'var(--theme-chart-ma20)' },
+      { label: t('chart.candles'), color: 'var(--theme-chart-bull)', key: 'candles' as IndicatorKey },
+      { label: t('chart.volumeBars'), color: 'var(--theme-chart-volume)', key: 'volume' as IndicatorKey },
+      { label: 'MA5', color: 'var(--theme-chart-ma5)', key: 'ma5' as IndicatorKey },
+      { label: 'MA10', color: 'var(--theme-chart-ma10)', key: 'ma10' as IndicatorKey },
+      { label: 'MA20', color: 'var(--theme-chart-ma20)', key: 'ma20' as IndicatorKey },
+      { label: t('chart.support'), color: 'var(--theme-chart-support)', key: 'support' as IndicatorKey },
+      { label: t('chart.resistance'), color: 'var(--theme-chart-resistance)', key: 'resistance' as IndicatorKey },
+      { label: t('chart.entry'), color: 'var(--theme-chart-entry)', key: 'entry' as IndicatorKey },
+      { label: t('chart.targetOne'), color: 'var(--theme-chart-target)', key: 'targets' as IndicatorKey },
     ];
-    annotationLines.slice(0, 3).forEach((item) => {
-      items.push({ label: item.label, color: item.stroke });
-    });
     return items;
-  }, [annotationLines]);
+  }, [t]);
 
-  const priceContextNote = summary?.priceContextNote || summary?.priceBasisDetail || 'This chart uses the same reference price basis as the report.';
   const activeViewConfig = VIEW_CONFIGS.find((item) => item.key === activeView);
-  const marketStats = useMemo(() => {
-    const analysisPrice = String(summary?.currentPrice || '').trim()
-      || pickMarketFieldValue(market, ['Analysis Price', 'Reference Price', 'Current Price']);
-    const previousClose = pickMarketFieldValue(market, ['Prev Close']);
-    const open = pickMarketFieldValue(market, ['Session Open', 'Regular Open', 'Open']);
-    const high = pickMarketFieldValue(market, ['Session High', 'Regular High', 'High']);
-    const low = pickMarketFieldValue(market, ['Session Low', 'Regular Low', 'Low']);
-    const volume = pickMarketFieldValue(market, ['Volume']);
-    const turnover = pickMarketFieldValue(market, ['Turnover', 'Amount']);
-
-    const desktop: ChartStat[] = [
-      { label: 'Analysis', value: analysisPrice, emphasis: 'primary' as const },
-      { label: 'Prev close', value: previousClose },
-      { label: 'Open', value: open },
-      { label: 'High', value: high },
-      { label: 'Low', value: low },
-      { label: 'Volume', value: volume },
-      { label: 'Turnover', value: turnover },
-    ].filter((item) => Boolean(item.value));
-
-    const mobile: ChartStat[] = [
-      { label: 'Analysis', value: analysisPrice, emphasis: 'primary' as const },
-      { label: 'Open', value: open },
-      { label: 'High', value: high },
-      { label: 'Low', value: low },
-      { label: 'Prev close', value: previousClose },
-      { label: 'Volume', value: volume },
-    ].filter((item) => Boolean(item.value));
-
-    return { desktop, mobile };
-  }, [market, summary?.currentPrice]);
   const compactContextLine = useMemo(() => {
     const parts = [
       summary?.priceBasis,
-      summary?.snapshotTime ? `Updated ${summary.snapshotTime}` : undefined,
-      sourceByView[activeView] ? `Feed ${sourceByView[activeView]}` : undefined,
+      summary?.referenceSession,
+      summary?.snapshotTime ? `${t('chart.updated')} ${summary.snapshotTime}` : undefined,
     ].filter(Boolean);
     return parts.join(' · ');
-  }, [activeView, sourceByView, summary?.priceBasis, summary?.snapshotTime]);
+  }, [summary?.priceBasis, summary?.referenceSession, summary?.snapshotTime, t]);
+
+  const inspectorRows = useMemo(() => {
+    if (!activeBar) {
+      return [];
+    }
+    return [
+      { label: t('chart.open'), value: formatAxisPrice(activeBar.open) },
+      { label: t('chart.high'), value: formatAxisPrice(activeBar.high) },
+      { label: t('chart.low'), value: formatAxisPrice(activeBar.low) },
+      { label: t('chart.close'), value: formatAxisPrice(activeBar.close) },
+      { label: t('chart.volume'), value: formatVolume(activeBar.volume) },
+      {
+        label: 'MA5 / MA10 / MA20',
+        value: [
+          isFiniteNumber(activeBar.ma5) ? formatAxisPrice(activeBar.ma5) : '--',
+          isFiniteNumber(activeBar.ma10) ? formatAxisPrice(activeBar.ma10) : '--',
+          isFiniteNumber(activeBar.ma20) ? formatAxisPrice(activeBar.ma20) : '--',
+        ].join(' / '),
+      },
+    ];
+  }, [activeBar, t]);
+
+  const sessionMetricRows = useMemo(() => {
+    const metrics = market?.regularMetrics;
+    const latestPrice = metrics?.price ?? parseNumericText(summary?.currentPrice);
+    const prevClose = metrics?.prevClose;
+    const open = metrics?.open;
+    const high = metrics?.high;
+    const low = metrics?.low;
+    const volume = metrics?.volume;
+    const turnover = metrics?.amount;
+    const changeAmount = metrics?.changeAmount ?? parseNumericText(summary?.changeAmount);
+    const changePct = metrics?.changePct ?? parseNumericText(summary?.changePct);
+    const vwap = metrics?.vwap ?? metrics?.averagePrice;
+
+    return [
+      { label: t('chart.latest'), value: latestPrice != null ? formatAxisPrice(latestPrice) : (summary?.currentPrice || '--') },
+      { label: t('chart.change'), value: `${formatSignedPrice(changeAmount)} / ${formatSignedPercent(changePct)}` },
+      { label: t('chart.open'), value: formatAxisPrice(open ?? NaN) },
+      { label: t('chart.high'), value: formatAxisPrice(high ?? NaN) },
+      { label: t('chart.low'), value: formatAxisPrice(low ?? NaN) },
+      { label: t('chart.prevClose'), value: formatAxisPrice(prevClose ?? NaN) },
+      { label: t('chart.volume'), value: formatVolume(volume) },
+      { label: t('chart.turnover'), value: formatVolume(turnover) },
+      ...(isFiniteNumber(vwap) ? [{ label: 'VWAP', value: formatAxisPrice(vwap) }] : []),
+    ];
+  }, [market?.regularMetrics, summary?.changeAmount, summary?.changePct, summary?.currentPrice, t]);
 
   return (
     <div className={chartShellClass} data-testid="report-price-chart">
-      <div className={cn('flex flex-col gap-4', integrated ? 'pt-1' : '')}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className={cn('flex flex-col gap-3', integrated ? 'pt-1' : '')}>
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">Market chart</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{t('chart.title')}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h3 className="text-lg font-semibold tracking-tight text-foreground">
+              <h3 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
                 {stockName || stockCode}
               </h3>
-              <span className="text-sm text-muted-text">{activeViewConfig?.description || 'Market chart'}</span>
+              <span className="text-xs text-muted-text sm:text-sm">{activeViewConfig ? t(activeViewConfig.descriptionKey) : t('chart.title')}</span>
             </div>
-            <p className="mt-2 hidden max-w-4xl text-sm leading-6 text-secondary-text md:block">
-              Candles, volume and trade-plan markers all use the same price basis as the report so the chart and execution levels stay in sync.
-            </p>
-            <p className="mt-2 text-xs leading-5 text-muted-text md:hidden">{compactContextLine || priceContextNote}</p>
+            {compactContextLine ? <p className="mt-1.5 text-[11px] leading-5 text-muted-text sm:text-xs">{compactContextLine}</p> : null}
+            <p className="mt-2 hidden text-xs leading-5 text-muted-text md:block">{t('chart.dragHint')}</p>
           </div>
 
           <div className="theme-chart-toolbar flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-            {VIEW_CONFIGS.map((view) => (
-              <button
-                key={view.key}
-                type="button"
-                onClick={() => setActiveView(view.key)}
-                className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
-              >
-                <span className="font-medium">{view.label}</span>
-                <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{view.description}</span>
-              </button>
-            ))}
+            <div className="flex flex-nowrap items-center gap-2">
+              {VIEW_CONFIGS.map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  onClick={() => setActiveView(view.key)}
+                  className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
+                >
+                  <span className="font-medium">{t(view.labelKey)}</span>
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{t(view.descriptionKey)}</span>
+                </button>
+              ))}
+            </div>
+            <div className="theme-chart-toolbar-actions flex flex-nowrap items-center gap-2">
+              <button type="button" className="theme-chart-tab px-3" onClick={() => zoomWindow('in')} aria-label={t('chart.zoomIn')}>+</button>
+              <button type="button" className="theme-chart-tab px-3" onClick={() => zoomWindow('out')} aria-label={t('chart.zoomOut')}>-</button>
+              <button type="button" className="theme-chart-tab px-3.5" onClick={resetViewWindow}>{t('chart.resetView')}</button>
+            </div>
           </div>
         </div>
 
-        {marketStats.mobile.length > 0 ? (
-          <div className="theme-chart-kpi-grid md:hidden">
-            {marketStats.mobile.map((item) => (
-              <div key={`${item.label}-${item.value}`} className={cn('theme-chart-kpi', item.emphasis === 'primary' && 'theme-chart-kpi--primary')}>
-                <span className="theme-chart-kpi-label">{item.label}</span>
-                <span className="theme-chart-kpi-value">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {marketStats.desktop.length > 0 ? (
-          <div className="theme-chart-kpi-grid hidden md:grid">
-            {marketStats.desktop.map((item) => (
-              <div key={`${item.label}-${item.value}`} className={cn('theme-chart-kpi', item.emphasis === 'primary' && 'theme-chart-kpi--primary')}>
-                <span className="theme-chart-kpi-label">{item.label}</span>
-                <span className="theme-chart-kpi-value">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="theme-chart-legend hidden flex-wrap items-center gap-2.5 md:flex">
+        <div className="theme-chart-legend flex flex-wrap items-center gap-2.5">
           {legendItems.map((item) => (
-            <span key={item.label} className="theme-chart-legend-item">
+            <button
+              key={item.label}
+              type="button"
+              className={cn('theme-chart-legend-item', !indicatorVisibility[item.key] && 'opacity-45')}
+              onClick={() => setIndicatorVisibility((current) => ({ ...current, [item.key]: !current[item.key] }))}
+            >
               <span className="theme-chart-legend-swatch" style={{ background: item.color }} />
               <span>{item.label}</span>
-            </span>
+            </button>
           ))}
         </div>
-
         <div className="theme-chart-canvas">
+          {activeBar ? (
+            <div className="mb-2.5 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.98fr)]">
+              <div className="theme-panel-subtle rounded-[1rem] px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
+                  {hoveredIndex != null ? t('chart.inspectBar') : t('chart.currentBar')}
+                </p>
+                <p className="mt-1 text-xs font-medium text-foreground sm:text-sm">{activeBar.label}</p>
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                  {inspectorRows.map((row) => (
+                    <div key={row.label} className="space-y-1">
+                      <p className="text-[10px] uppercase tracking-[0.13em] text-muted-text">{row.label}</p>
+                      <p className="text-[12px] font-medium text-secondary-text sm:text-sm">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="theme-panel-subtle rounded-[1rem] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{t('chart.sessionMetrics')}</p>
+                  <span className="text-[10px] text-muted-text sm:text-[11px]">{summary?.snapshotTime || summary?.marketSessionDate || '--'}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 xl:grid-cols-3">
+                  {sessionMetricRows.map((row) => (
+                    <div key={row.label} className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-muted-text">{row.label}</p>
+                      <p className="mt-0.5 truncate text-[12px] font-medium text-foreground sm:text-sm">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div
-            ref={chartRef}
-            className="theme-chart-stage relative h-[300px] w-full sm:h-[340px] md:h-[420px] xl:h-[460px]"
+            onTouchStartCapture={(event) => {
+              event.stopPropagation();
+            }}
+            onTouchMoveCapture={(event) => {
+              event.stopPropagation();
+            }}
+            className="theme-chart-stage relative h-[250px] w-full touch-none sm:h-[340px] md:h-[420px] xl:h-[460px]"
+            onPointerCancel={handlePointerCancel}
             onPointerMove={handlePointerMove}
-            onPointerDown={handlePointerMove}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
+            ref={(node) => {
+              chartRef.current = node;
+              chartStageRef.current = node;
+            }}
           >
             {loading ? (
-              <div className="flex h-full items-center justify-center text-sm text-secondary-text">Loading market chart…</div>
+              <div className="flex h-full items-center justify-center text-sm text-secondary-text">{t('chart.loading')}</div>
             ) : error ? (
               <div className="flex h-full items-center justify-center text-sm text-secondary-text">{error}</div>
-            ) : activeData.length === 0 || !chartGeometry || !priceDomain ? (
-              <div className="flex h-full items-center justify-center text-sm text-secondary-text">No chart data available for this view.</div>
+            ) : visibleData.length === 0 || !chartGeometry || !priceDomain ? (
+              <div className="flex h-full items-center justify-center text-sm text-secondary-text">{t('chart.noData')}</div>
             ) : (
               <>
                 <svg width={chartGeometry.width} height={chartGeometry.height} role="img" aria-label={`${stockCode} market chart`}>
@@ -771,10 +1043,10 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     stroke="var(--theme-chart-grid)"
                   />
 
-                  {annotationLines.map((line, index) => {
+                  {visibleAnnotationLines.map((line, index) => {
                     const y = priceY(line.value);
                     return (
-                      <g key={`${line.label}-${line.value}-${index}`}>
+                      <g key={`${line.labelKey}-${line.value}-${index}`}>
                         <line
                           x1={chartGeometry.plotLeft}
                           x2={chartGeometry.plotRight}
@@ -800,17 +1072,17 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                           fontSize={10.5}
                           fill={line.stroke}
                         >
-                          {`${line.label} ${formatAxisPrice(line.value)}`}
+                          {`${t(line.labelKey)} ${formatAxisPrice(line.value)}`}
                         </text>
                       </g>
                     );
                   })}
 
-                  {ma20Path ? <path d={ma20Path} fill="none" stroke="var(--theme-chart-ma20)" strokeWidth={1.75} /> : null}
-                  {ma10Path ? <path d={ma10Path} fill="none" stroke="var(--theme-chart-ma10)" strokeWidth={1.6} /> : null}
-                  {ma5Path ? <path d={ma5Path} fill="none" stroke="var(--theme-chart-ma5)" strokeWidth={1.55} /> : null}
+                  {indicatorVisibility.ma20 && ma20Path ? <path d={ma20Path} fill="none" stroke="var(--theme-chart-ma20)" strokeWidth={1.75} /> : null}
+                  {indicatorVisibility.ma10 && ma10Path ? <path d={ma10Path} fill="none" stroke="var(--theme-chart-ma10)" strokeWidth={1.6} /> : null}
+                  {indicatorVisibility.ma5 && ma5Path ? <path d={ma5Path} fill="none" stroke="var(--theme-chart-ma5)" strokeWidth={1.55} /> : null}
 
-                  {activeData.map((datum, index) => {
+                  {visibleData.map((datum, index) => {
                     const x = xAt(index);
                     const wickTop = priceY(datum.high);
                     const wickBottom = priceY(datum.low);
@@ -819,57 +1091,98 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     const candleTop = Math.min(openY, closeY);
                     const candleHeight = Math.max(Math.abs(closeY - openY), 1.8);
                     const bullish = datum.close >= datum.open;
-                    const bodyFill = bullish ? 'var(--theme-chart-bull-fill)' : 'var(--theme-chart-bear-fill)';
+                    const bodyFill = bullish ? 'var(--theme-chart-bull)' : 'var(--theme-chart-bear)';
                     const bodyStroke = bullish ? 'var(--theme-chart-bull)' : 'var(--theme-chart-bear)';
                     const volumeTop = volumeY(datum.volume || 0);
                     const active = index === activeIndex;
 
                     return (
                       <g key={`${datum.stamp}-${index}`}>
-                        <rect
-                          x={x - chartGeometry.candleWidth / 2}
-                          y={volumeTop}
-                          width={chartGeometry.candleWidth}
-                          height={Math.max(chartGeometry.volumeBottom - volumeTop, 1)}
-                          rx={Math.min(chartGeometry.candleWidth / 4, 2)}
-                          fill="url(#chartVolumeFill)"
-                          opacity={active ? 0.9 : 0.62}
-                        />
-                        <line
-                          x1={x}
-                          x2={x}
-                          y1={wickTop}
-                          y2={wickBottom}
-                          stroke={bodyStroke}
-                          strokeWidth={active ? 1.7 : 1.3}
-                        />
-                        <rect
-                          x={x - chartGeometry.candleWidth / 2}
-                          y={candleTop}
-                          width={chartGeometry.candleWidth}
-                          height={candleHeight}
-                          rx={Math.min(chartGeometry.candleWidth / 4, 2)}
-                          fill={bodyFill}
-                          stroke={bodyStroke}
-                          strokeWidth={active ? 1.5 : 1.1}
-                        />
+                        {indicatorVisibility.volume ? (
+                          <rect
+                            x={x - chartGeometry.candleWidth / 2}
+                            y={volumeTop}
+                            width={chartGeometry.candleWidth}
+                            height={Math.max(chartGeometry.volumeBottom - volumeTop, 1)}
+                            rx={Math.min(chartGeometry.candleWidth / 4, 2)}
+                            fill="url(#chartVolumeFill)"
+                            opacity={active ? 0.9 : 0.62}
+                          />
+                        ) : null}
+                        {indicatorVisibility.candles ? (
+                          <>
+                            <line
+                              x1={x}
+                              x2={x}
+                              y1={wickTop}
+                              y2={wickBottom}
+                              stroke={bodyStroke}
+                              strokeWidth={active ? 1.7 : 1.3}
+                            />
+                            <rect
+                              x={x - chartGeometry.candleWidth / 2}
+                              y={candleTop}
+                              width={chartGeometry.candleWidth}
+                              height={candleHeight}
+                              rx={Math.min(chartGeometry.candleWidth / 4, 2)}
+                              fill={bodyFill}
+                              stroke={bodyStroke}
+                              strokeWidth={active ? 1.5 : 1.1}
+                            />
+                          </>
+                        ) : null}
                       </g>
                     );
                   })}
 
                   {hoveredIndex != null && activeBar ? (
-                    <line
-                      x1={xAt(activeIndex)}
-                      x2={xAt(activeIndex)}
-                      y1={chartGeometry.priceTop}
-                      y2={chartGeometry.volumeBottom}
-                      stroke="var(--theme-chart-crosshair)"
-                      strokeDasharray="4 4"
-                    />
+                    <g>
+                      <line
+                        x1={xAt(activeIndex)}
+                        x2={xAt(activeIndex)}
+                        y1={chartGeometry.priceTop}
+                        y2={chartGeometry.volumeBottom}
+                        stroke="var(--theme-chart-crosshair)"
+                        strokeDasharray="4 4"
+                      />
+                      <rect
+                        x={chartGeometry.plotRight + 6}
+                        y={priceY(activeBar.close) - 11}
+                        width={62}
+                        height={18}
+                        rx={9}
+                        fill="color-mix(in srgb, var(--theme-chart-tooltip-bg) 88%, transparent)"
+                      />
+                      <text
+                        x={chartGeometry.plotRight + 12}
+                        y={priceY(activeBar.close) + 2}
+                        fontSize={10.5}
+                        fill="var(--theme-chart-axis)"
+                      >
+                        {formatAxisPrice(activeBar.close)}
+                      </text>
+                      <rect
+                        x={clamp(xAt(activeIndex) - 52, chartGeometry.plotLeft, chartGeometry.plotRight - 104)}
+                        y={chartGeometry.height - 22}
+                        width={104}
+                        height={18}
+                        rx={9}
+                        fill="color-mix(in srgb, var(--theme-chart-tooltip-bg) 88%, transparent)"
+                      />
+                      <text
+                        x={clamp(xAt(activeIndex), chartGeometry.plotLeft + 52, chartGeometry.plotRight - 52)}
+                        y={chartGeometry.height - 9}
+                        textAnchor="middle"
+                        fontSize={10.5}
+                        fill="var(--theme-chart-axis)"
+                      >
+                        {activeBar.shortLabel}
+                      </text>
+                    </g>
                   ) : null}
 
                   {xTickIndices.map((index) => {
-                    const datum = activeData[index];
+                    const datum = visibleData[index];
                     if (!datum) {
                       return null;
                     }
@@ -889,83 +1202,21 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                   })}
 
                   <text x={chartGeometry.plotLeft} y={chartGeometry.priceTop - 2} fontSize={11} fill="var(--theme-chart-axis)">
-                    Price
+                    {t('chart.priceAxis')}
                   </text>
                   <text x={chartGeometry.plotLeft} y={chartGeometry.volumeTop - 12} fontSize={11} fill="var(--theme-chart-axis)">
-                    Volume
+                    {t('chart.volumeAxis')}
                   </text>
                   <text x={chartGeometry.plotRight + 8} y={chartGeometry.volumeTop + 12} fontSize={11} fill="var(--theme-chart-axis)">
                     {formatVolume(volumeMax)}
                   </text>
                 </svg>
 
-                {activeBar ? (
-                  <div className="theme-chart-tooltip absolute top-3 z-[1] min-w-[13.5rem] rounded-[1rem] px-3.5 py-3 text-sm" style={{ left: tooltipLeft }}>
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{activeBar.label}</p>
-                    <div className="mt-2 grid gap-1.5">
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">Open</span>
-                        <span className="font-medium text-foreground">{formatAxisPrice(activeBar.open)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">High</span>
-                        <span className="font-medium text-foreground">{formatAxisPrice(activeBar.high)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">Low</span>
-                        <span className="font-medium text-foreground">{formatAxisPrice(activeBar.low)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">Close</span>
-                        <span className="font-medium text-foreground">{formatAxisPrice(activeBar.close)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">Volume</span>
-                        <span className="font-medium text-secondary-text">{formatVolume(activeBar.volume)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-muted-text">MA5 / MA10 / MA20</span>
-                        <span className="font-medium text-secondary-text">
-                          {isFiniteNumber(activeBar.ma5) ? formatAxisPrice(activeBar.ma5) : '--'}
-                          {' / '}
-                          {isFiniteNumber(activeBar.ma10) ? formatAxisPrice(activeBar.ma10) : '--'}
-                          {' / '}
-                          {isFiniteNumber(activeBar.ma20) ? formatAxisPrice(activeBar.ma20) : '--'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
               </>
             )}
           </div>
         </div>
 
-        <div className="grid gap-2.5 md:hidden">
-          <div className="theme-chart-footnote">
-            <span className="theme-chart-footnote-label">Data</span>
-            <span className="theme-chart-footnote-value">
-              {activeData.length || 0} bars · {sourceByView[activeView] || '--'}
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden gap-2.5 md:grid md:grid-cols-3">
-          <div className="theme-chart-footnote">
-            <span className="theme-chart-footnote-label">Latest bar close</span>
-            <span className="theme-chart-footnote-value">{latestBar ? formatAxisPrice(latestBar.close) : '--'}</span>
-          </div>
-          <div className="theme-chart-footnote">
-            <span className="theme-chart-footnote-label">Bars / source</span>
-            <span className="theme-chart-footnote-value">
-              {activeData.length || 0} bars · {sourceByView[activeView] || '--'}
-            </span>
-          </div>
-          <div className="theme-chart-footnote">
-            <span className="theme-chart-footnote-label">Price basis</span>
-            <span className="theme-chart-footnote-value">{summary?.priceBasis || priceContextNote}</span>
-          </div>
-        </div>
       </div>
     </div>
   );

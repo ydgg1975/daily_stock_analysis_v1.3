@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -55,6 +56,29 @@ class SystemConfigApiTestCase(unittest.TestCase):
         item_map = {item["key"]: item for item in payload["items"]}
         self.assertEqual(item_map["GEMINI_API_KEY"]["value"], "secret-key-value")
         self.assertFalse(item_map["GEMINI_API_KEY"]["is_masked"])
+
+    def test_require_admin_unlock_rejects_missing_token(self) -> None:
+        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
+        with self.assertRaises(HTTPException) as context:
+            system_config.require_admin_unlock(request=request, admin_unlock_token=None)
+
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertEqual(context.exception.detail["error"], "admin_unlock_required")
+
+    def test_require_admin_unlock_rejects_invalid_token(self) -> None:
+        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
+        with patch("api.v1.endpoints.system_config.verify_admin_unlock_token", return_value=False):
+            with self.assertRaises(HTTPException) as context:
+                system_config.require_admin_unlock(request=request, admin_unlock_token="invalid-token")
+
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertEqual(context.exception.detail["error"], "admin_unlock_required")
+
+    def test_require_admin_unlock_accepts_valid_token(self) -> None:
+        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
+        with patch("api.v1.endpoints.system_config.verify_admin_unlock_token", return_value=True):
+            # No exception means token is accepted.
+            system_config.require_admin_unlock(request=request, admin_unlock_token="valid-token")
 
     def test_put_config_updates_secret_and_plain_field(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()

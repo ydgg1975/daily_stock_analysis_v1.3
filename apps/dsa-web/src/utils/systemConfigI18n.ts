@@ -1,3 +1,4 @@
+import type { UiLanguage } from '../i18n/core';
 import type { SystemConfigCategory } from '../types/systemConfig';
 
 const categoryTitleMap: Record<SystemConfigCategory, string> = {
@@ -20,6 +21,28 @@ const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
   agent: '管理 Agent 模式、策略与多 Agent 编排配置。',
   backtest: '管理回测开关、评估窗口和引擎参数。',
   uncategorized: '其他未归类的配置项。',
+};
+
+const categoryTitleMapEn: Record<SystemConfigCategory, string> = {
+  base: 'Base settings',
+  data_source: 'Data sources',
+  ai_model: 'AI models',
+  notification: 'Notifications',
+  system: 'System settings',
+  agent: 'Agent settings',
+  backtest: 'Backtest settings',
+  uncategorized: 'Other',
+};
+
+const categoryDescriptionMapEn: Partial<Record<SystemConfigCategory, string>> = {
+  base: 'Manage watchlists and baseline runtime parameters.',
+  data_source: 'Manage quote providers and fallback priority.',
+  ai_model: 'Manage model providers, model names, and inference parameters.',
+  notification: 'Manage bot, webhook, and push notification settings.',
+  system: 'Manage scheduling, logging, ports, and system-level parameters.',
+  agent: 'Manage agent mode, strategies, and multi-agent orchestration settings.',
+  backtest: 'Manage backtest switches, evaluation windows, and engine parameters.',
+  uncategorized: 'Other uncategorized settings.',
 };
 
 const fieldTitleMap: Record<string, string> = {
@@ -134,18 +157,54 @@ const fieldDescriptionMap: Record<string, string> = {
   BACKTEST_NEUTRAL_BAND_PCT: '中性区间阈值百分比，例如 2 表示 -2%~+2%。',
 };
 
+function toTitleCase(value: string): string {
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function humanizeKey(key: string): string {
+  return toTitleCase(key.toLowerCase().replace(/_/g, ' '));
+}
+
+export function getCategoryTitle(language: UiLanguage, category: SystemConfigCategory, fallback?: string): string {
+  if (language === 'zh') {
+    return categoryTitleMap[category] || fallback || category;
+  }
+  return categoryTitleMapEn[category] || fallback || humanizeKey(category);
+}
+
+export function getCategoryDescription(language: UiLanguage, category: SystemConfigCategory, fallback?: string): string {
+  if (language === 'zh') {
+    return categoryDescriptionMap[category] || fallback || '';
+  }
+  return categoryDescriptionMapEn[category] || fallback || '';
+}
+
+export function getFieldTitle(language: UiLanguage, key: string, fallback?: string): string {
+  if (language === 'zh') {
+    return fieldTitleMap[key] || fallback || key;
+  }
+  return fallback || humanizeKey(key);
+}
+
+export function getFieldDescription(language: UiLanguage, key: string, fallback?: string): string {
+  if (language === 'zh') {
+    return fieldDescriptionMap[key] || fallback || '';
+  }
+  return fallback || '';
+}
+
 export function getCategoryTitleZh(category: SystemConfigCategory, fallback?: string): string {
-  return categoryTitleMap[category] || fallback || category;
+  return getCategoryTitle('zh', category, fallback);
 }
 
 export function getCategoryDescriptionZh(category: SystemConfigCategory, fallback?: string): string {
-  return categoryDescriptionMap[category] || fallback || '';
+  return getCategoryDescription('zh', category, fallback);
 }
 
 export function getFieldTitleZh(key: string, fallback?: string): string {
-  return fieldTitleMap[key] || fallback || key;
+  return getFieldTitle('zh', key, fallback);
 }
 
 export function getFieldDescriptionZh(key: string, fallback?: string): string {
-  return fieldDescriptionMap[key] || fallback || '';
+  return getFieldDescription('zh', key, fallback);
 }

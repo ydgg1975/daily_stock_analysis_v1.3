@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from starlette.requests import Request
 
 from api.deps import get_system_config_service
 from api.v1.schemas.common import ErrorResponse
@@ -21,11 +22,30 @@ from api.v1.schemas.system_config import (
     ValidateSystemConfigRequest,
     ValidateSystemConfigResponse,
 )
+from src.auth import verify_admin_unlock_token
 from src.services.system_config_service import ConfigConflictError, ConfigValidationError, SystemConfigService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def require_admin_unlock(
+    request: Request,
+    admin_unlock_token: str | None = Header(default=None, alias="X-Admin-Unlock-Token"),
+) -> None:
+    """Require a valid admin unlock token for write-sensitive config operations."""
+    if admin_unlock_token and verify_admin_unlock_token(admin_unlock_token):
+        return
+
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "admin_unlock_required",
+            "message": "Admin settings are locked. Verify admin password to continue.",
+            "path": str(request.url.path),
+        },
+    )
 
 
 @router.get(
@@ -64,6 +84,7 @@ def get_system_config(
     responses={
         200: {"description": "Configuration updated"},
         400: {"description": "Validation failed", "model": SystemConfigValidationErrorResponse},
+        403: {"description": "Admin unlock required", "model": ErrorResponse},
         409: {"description": "Version conflict", "model": SystemConfigConflictResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
@@ -73,6 +94,7 @@ def get_system_config(
 def update_system_config(
     request: UpdateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
+    _: None = Depends(require_admin_unlock),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
     try:
@@ -117,6 +139,7 @@ def update_system_config(
     response_model=ValidateSystemConfigResponse,
     responses={
         200: {"description": "Validation completed"},
+        403: {"description": "Admin unlock required", "model": ErrorResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
     summary="Validate system configuration",
@@ -125,6 +148,7 @@ def update_system_config(
 def validate_system_config(
     request: ValidateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
+    _: None = Depends(require_admin_unlock),
 ) -> ValidateSystemConfigResponse:
     """Run pre-save validation only."""
     try:
@@ -146,6 +170,7 @@ def validate_system_config(
     response_model=TestLLMChannelResponse,
     responses={
         200: {"description": "Channel test completed"},
+        403: {"description": "Admin unlock required", "model": ErrorResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
     summary="Test one LLM channel",
@@ -154,6 +179,7 @@ def validate_system_config(
 def test_llm_channel(
     request: TestLLMChannelRequest,
     service: SystemConfigService = Depends(get_system_config_service),
+    _: None = Depends(require_admin_unlock),
 ) -> TestLLMChannelResponse:
     """Validate and test one channel definition without writing `.env`."""
     try:

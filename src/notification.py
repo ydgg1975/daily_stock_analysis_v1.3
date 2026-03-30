@@ -147,6 +147,7 @@ class NotificationService(
         # 仅分析结果摘要（Issue #262）：true 时只推送汇总，不含个股详情
         self._report_summary_only = getattr(config, 'report_summary_only', False)
         self._history_compare_cache: Dict[Tuple[int, Tuple[Tuple[str, str], ...]], Dict[str, List[Dict[str, Any]]]] = {}
+        self._channel_report_cache: Dict[NotificationChannel, str] = {}
 
         # 初始化各渠道
         AstrbotSender.__init__(self, config)
@@ -267,10 +268,42 @@ class NotificationService(
         report_date: Optional[str] = None,
     ) -> str:
         """Generate the aggregate report content used by merge/save/push paths."""
+        self._channel_report_cache = {}
         normalized_type = self._normalize_report_type(report_type)
         if normalized_type == ReportType.BRIEF:
             return self.generate_brief_report(results, report_date=report_date)
         return self.generate_dashboard_report(results, report_date=report_date)
+
+    def _prime_channel_report_cache(
+        self,
+        results: List[AnalysisResult],
+        *,
+        report_date: str,
+        report_language: str,
+    ) -> None:
+        config = get_config()
+        if not getattr(config, 'report_renderer_enabled', False) or not results:
+            return
+
+        try:
+            from src.services.report_renderer import render
+
+            discord_content = render(
+                platform='discord',
+                results=results,
+                report_date=report_date,
+                summary_only=self._report_summary_only,
+                extra_context={
+                    "report_language": report_language,
+                    **self._get_time_context_from_results(results),
+                },
+            )
+        except Exception as exc:
+            logger.debug("Discord renderer cache skipped: %s", exc)
+            discord_content = None
+
+        if discord_content:
+            self._channel_report_cache[NotificationChannel.DISCORD] = discord_content
 
     def _collect_models_used(self, results: List[AnalysisResult]) -> List[str]:
         models: List[str] = []
@@ -565,6 +598,7 @@ class NotificationService(
             report_date = datetime.now().strftime('%Y-%m-%d')
         report_language = self._get_report_language(results)
         labels = get_report_labels(report_language)
+        self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
 
         # 标题
         report_lines = [
@@ -818,6 +852,12 @@ class NotificationService(
         news_heading = "News Flow" if report_language == "en" else "消息面"
         # 单股通知默认完整报告，避免 summary_only 误触发导致 Discord 丢失章节
         render_summary_only = self._report_summary_only and len(results) > 1
+
+        if report_date is None:
+            report_date = datetime.now().strftime('%Y-%m-%d')
+
+        self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
+
         if getattr(config, 'report_renderer_enabled', False) and results:
             from src.services.report_renderer import render
             out = render(
@@ -834,9 +874,6 @@ class NotificationService(
             )
             if out:
                 return out
-
-        if report_date is None:
-            report_date = datetime.now().strftime('%Y-%m-%d')
 
         # 按评分排序（高分在前）
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
@@ -1137,6 +1174,7 @@ class NotificationService(
         config = get_config()
         report_language = self._get_report_language(results)
         labels = get_report_labels(report_language)
+        self._prime_channel_report_cache(results, report_date=report_date or datetime.now().strftime('%Y-%m-%d'), report_language=report_language)
         if getattr(config, 'report_renderer_enabled', False) and results:
             from src.services.report_renderer import render
             out = render(
@@ -1303,6 +1341,7 @@ class NotificationService(
         report_date = datetime.now().strftime('%Y-%m-%d')
         report_language = self._get_report_language(results)
         labels = get_report_labels(report_language)
+        self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
 
         # 按评分排序
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
@@ -1762,7 +1801,8 @@ class NotificationService(
                     else:
                         result = self.send_to_custom(content)
                 elif channel == NotificationChannel.DISCORD:
-                    result = self.send_to_discord(content)
+                    discord_content = self._channel_report_cache.get(NotificationChannel.DISCORD, content)
+                    result = self.send_to_discord(discord_content)
                 elif channel == NotificationChannel.SLACK:
                     if use_image:
                         result = self._send_slack_image(

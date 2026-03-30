@@ -8,6 +8,12 @@ export type AuthStatusResponse = {
   setupState: 'enabled' | 'password_retained' | 'no_password';
 };
 
+export type VerifyAdminPasswordResponse = {
+  ok: boolean;
+  unlockToken: string;
+  expiresInSeconds: number;
+};
+
 export const authApi = {
   async getStatus(): Promise<AuthStatusResponse> {
     const { data } = await apiClient.get<AuthStatusResponse>('/api/v1/auth/status');
@@ -45,6 +51,18 @@ export const authApi = {
       body.passwordConfirm = passwordConfirm;
     }
     await apiClient.post('/api/v1/auth/login', body);
+  },
+
+  async verifyAdminPassword(
+    password: string,
+    passwordConfirm?: string
+  ): Promise<VerifyAdminPasswordResponse> {
+    const body: { password: string; passwordConfirm?: string } = { password };
+    if (passwordConfirm !== undefined) {
+      body.passwordConfirm = passwordConfirm;
+    }
+    const { data } = await apiClient.post<VerifyAdminPasswordResponse>('/api/v1/auth/verify-password', body);
+    return data;
   },
 
   async changePassword(

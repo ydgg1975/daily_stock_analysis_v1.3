@@ -4,6 +4,19 @@ import { StandardReportPanel } from '../StandardReportPanel';
 import type { AnalysisReport } from '../../../types/analysis';
 import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
 
+vi.mock('../../../hooks/useElementSize', () => {
+  let callCount = 0;
+  return {
+    useElementSize: () => {
+      callCount += 1;
+      if (callCount % 2 === 1) {
+        return { ref: { current: null }, size: { width: 1360, height: 720 } };
+      }
+      return { ref: { current: null }, size: { width: 1280, height: 460 } };
+    },
+  };
+});
+
 vi.mock('../../../api/stocks', () => ({
   stocksApi: {
     getIntraday: vi.fn().mockResolvedValue({
@@ -236,21 +249,21 @@ describe('StandardReportPanel', () => {
     expect(screen.getAllByText('等待回踩确认后再考虑加仓').length).toBeGreaterThan(0);
     expect(screen.getAllByText('125.30').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.87%').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Analysis Price').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('分析价格').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Intraday snapshot').length).toBeGreaterThan(0);
     expect(screen.queryByRole('tab', { name: '概览' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '全部' })).not.toBeInTheDocument();
     expect(screen.getByTestId('hero-summary-card')).toBeInTheDocument();
     expect(screen.getByTestId('report-price-chart')).toBeInTheDocument();
-    expect(screen.getByText('Market chart')).toBeInTheDocument();
+    expect(screen.getByText('市场图表')).toBeInTheDocument();
     expect(screen.getByTestId('decision-execution-panel')).toBeInTheDocument();
     expect(screen.getAllByText('120-121').length).toBeGreaterThan(0);
     expect(screen.getByText('等待回踩确认后分批试仓')).toBeInTheDocument();
-    expect(screen.getAllByText('Key action').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('关键动作').length).toBeGreaterThan(0);
     expect(screen.getAllByText('回踩买点').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Confidence/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Key catalyst').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Key risk').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/置信度/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('关键利好').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('关键风险').length).toBeGreaterThan(0);
     expect(screen.getAllByText('行情表').length).toBeGreaterThan(0);
     expect(screen.getAllByText('技术面表').length).toBeGreaterThan(0);
     expect(screen.getAllByText('基本面表').length).toBeGreaterThan(0);
@@ -260,13 +273,13 @@ describe('StandardReportPanel', () => {
     expect(screen.getByText('作战计划')).toBeInTheDocument();
     expect(screen.getByText('Checklist 与评分')).toBeInTheDocument();
     expect(screen.getByText('评分拆解')).toBeInTheDocument();
-    expect(screen.getByText('Bullish factors')).toBeInTheDocument();
-    expect(screen.getByText('Bearish factors')).toBeInTheDocument();
-    expect(screen.getByText('Mixed / neutral context')).toBeInTheDocument();
+    expect(screen.getByText('看多因素')).toBeInTheDocument();
+    expect(screen.getByText('看空因素')).toBeInTheDocument();
+    expect(screen.getByText('中性 / 混合信号')).toBeInTheDocument();
     expect(screen.getAllByText('最新关键更新').length).toBeGreaterThan(0);
-    expect(screen.getByText('情绪摘要')).toBeInTheDocument();
-    expect(screen.getByText('Synthesized')).toBeInTheDocument();
-    expect(screen.getByText(/Retail tone/)).toBeInTheDocument();
+    expect(screen.getAllByText('中性').length).toBeGreaterThan(0);
+    expect(screen.getByText('综合提炼')).toBeInTheDocument();
+    expect(screen.getByText(/散户讨论/)).toBeInTheDocument();
     expect(screen.getByText('Checklist 状态')).toBeInTheDocument();
     expect(screen.getByText('短线趋势')).toBeInTheDocument();
     expect(screen.getByText('变动原因')).toBeInTheDocument();
@@ -278,16 +291,14 @@ describe('StandardReportPanel', () => {
     expect(screen.getByText('上方前高压力仍在')).toBeInTheDocument();
     expect(screen.getByText('暂无新的公司级催化，短线更依赖技术结构确认。')).toBeInTheDocument();
     expect(screen.getAllByText('FMP API').length).toBeGreaterThan(0);
-    expect(screen.getByText('来源与覆盖')).toBeInTheDocument();
-    expect(screen.getByText('ROE(TTM待复核)：TTM待复核')).toBeInTheDocument();
-    expect(screen.getByText('VWAP：字段待接入')).toBeInTheDocument();
     expect(screen.getByTestId('battle-plan-grid')).toBeInTheDocument();
     expect(screen.getByTestId('decision-board-panel')).toBeInTheDocument();
     expect(screen.getAllByText('若放量跌破支撑位，需立即收缩仓位').length).toBeGreaterThan(0);
     await waitFor(() => {
-      expect(screen.getByText('Bars / source')).toBeInTheDocument();
+      expect(screen.getAllByText('会话指标').length).toBeGreaterThan(0);
     });
-    expect(screen.getByText('Latest bar close')).toBeInTheDocument();
+    expect(screen.getAllByText('成交额').length).toBeGreaterThan(0);
+    expect(screen.queryByText('来源与覆盖')).not.toBeInTheDocument();
     expect(screen.queryByText('Report Block')).not.toBeInTheDocument();
     expect(screen.queryByText(/先看最重要的最新更新/)).not.toBeInTheDocument();
   });

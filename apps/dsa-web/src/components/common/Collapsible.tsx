@@ -35,7 +35,7 @@ export const Collapsible: React.FC<CollapsibleProps> = ({
         className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-hover"
       >
         <div className="flex items-center gap-3">
-          {icon && <span className="text-cyan">{icon}</span>}
+          {icon && <span className="theme-accent-icon">{icon}</span>}
           <span className="font-medium text-foreground">{title}</span>
         </div>
         <svg

@@ -19,7 +19,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
 
   if (!data) {
     return (
-      <div className="text-gray-500 italic py-4 text-center">暂无数据</div>
+      <div className="py-4 text-center italic text-muted-text">暂无数据</div>
     );
   }
 
@@ -37,22 +37,22 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
       // 高亮 key
       let highlighted = line.replace(
         /"([^"]+)":/g,
-        '<span class="text-cyan-400">"$1"</span>:'
+        '<span class="theme-json-key">"$1"</span>:'
       );
       // 高亮字符串值
       highlighted = highlighted.replace(
         /: "([^"]*)"/g,
-        ': <span class="text-emerald-400">"$1"</span>'
+        ': <span class="theme-json-string">"$1"</span>'
       );
       // 高亮数字
       highlighted = highlighted.replace(
         /: (-?\d+\.?\d*)/g,
-        ': <span class="text-amber-400">$1</span>'
+        ': <span class="theme-json-number">$1</span>'
       );
       // 高亮布尔值和 null
       highlighted = highlighted.replace(
         /: (true|false|null)/g,
-        ': <span class="text-purple-400">$1</span>'
+        ': <span class="theme-json-literal">$1</span>'
       );
 
       return (
@@ -70,17 +70,14 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
       {/* 复制按钮 */}
       <button
         onClick={handleCopy}
-        className="absolute top-2 right-2 px-2 py-1 text-xs rounded
-          bg-slate-700 hover:bg-slate-600 text-gray-300
-          transition-colors z-10"
+        className="absolute right-2 top-2 z-10 rounded border border-[var(--border-muted)] bg-[var(--pill-bg)] px-2 py-1 text-xs text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--pill-active-bg)] hover:text-foreground"
       >
         {copied ? '已复制!' : '复制'}
       </button>
 
       {/* JSON 内容 */}
       <div
-        className="bg-slate-900/80 rounded-lg p-4 overflow-auto custom-scrollbar
-          border border-slate-700/50 font-mono text-sm text-gray-300"
+        className="theme-panel-subtle custom-scrollbar overflow-auto rounded-lg border p-4 font-mono text-sm text-secondary-text"
         style={{ maxHeight }}
       >
         <pre className="whitespace-pre-wrap break-words">

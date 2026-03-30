@@ -3,10 +3,9 @@
 > {{ results|length }} {{ labels.stock_unit_compact }} | 🟢{{ buy_count }} 🟡{{ hold_count }} 🔴{{ sell_count }}
 
 {% for e in enriched %}
-{% set dash = e.result.dashboard or {} %}
-{% set core = (dash.get('core_conclusion') or {}) if dash else {} %}
-{% set one = (core.get('one_sentence') or e.result.analysis_summary or '')[:60] %}
-**{{ e.stock_name }}({{ e.result.code }})** {{ e.signal_emoji }} {{ e.localized_operation_advice }} | {{ labels.score_label }} {{ e.result.sentiment_score }} | {{ one }}
+{% set std = e.standard_report %}
+{% set summary = std.channel_summary %}
+**{{ summary.stock or e.stock_name ~ '(' ~ e.result.code ~ ')' }}** {{ e.signal_emoji }} {{ summary.recommendation }} | {{ labels.score_label }} {{ summary.score if summary.score is not none else na('接口未返回') }} | {{ (summary.one_line_conclusion or e.result.analysis_summary or '')[:60] }}
 {% endfor %}
 
 *{{ report_timestamp }}*

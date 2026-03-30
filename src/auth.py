@@ -28,6 +28,8 @@ PBKDF2_ITERATIONS = 100_000
 RATE_LIMIT_WINDOW_SEC = 300
 RATE_LIMIT_MAX_FAILURES = 5
 SESSION_MAX_AGE_HOURS_DEFAULT = 24
+ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
+ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
 MIN_PASSWORD_LEN = 6
 
 # Lazy-loaded state
@@ -233,6 +235,22 @@ def _get_session_secret() -> Optional[bytes]:
     return _load_session_secret()
 
 
+def _get_admin_unlock_secret() -> Optional[bytes]:
+    """Return signing secret for admin unlock tokens."""
+    return _load_session_secret()
+
+
+def _get_admin_unlock_max_age_seconds() -> int:
+    """Read unlock token ttl from env."""
+    try:
+        max_age_minutes = int(
+            os.getenv("ADMIN_UNLOCK_MAX_AGE_MINUTES", str(ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT))
+        )
+    except ValueError:
+        max_age_minutes = ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT
+    return max(60, max_age_minutes * 60)
+
+
 def _validate_password(pwd: str) -> Optional[str]:
     """Return error message if invalid, None if valid."""
     if not pwd or not pwd.strip():
@@ -340,6 +358,19 @@ def create_session() -> str:
     return f"{payload}.{sig}"
 
 
+def create_admin_unlock_token() -> str:
+    """Create a signed admin-unlock token for write-sensitive settings."""
+    secret = _get_admin_unlock_secret()
+    if not secret:
+        return ""
+
+    nonce = secrets.token_urlsafe(24)
+    ts = str(int(time.time()))
+    payload = f"{nonce}.{ts}.{ADMIN_UNLOCK_TOKEN_PURPOSE}"
+    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
 def verify_session(value: str) -> bool:
     """Verify session cookie and check expiry."""
     secret = _get_session_secret()
@@ -362,6 +393,36 @@ def verify_session(value: str) -> bool:
     except ValueError:
         max_age_hours = SESSION_MAX_AGE_HOURS_DEFAULT
     if time.time() - ts > max_age_hours * 3600:
+        return False
+    return True
+
+
+def verify_admin_unlock_token(value: str) -> bool:
+    """Verify signed admin-unlock token and enforce expiry."""
+    secret = _get_admin_unlock_secret()
+    if not secret or not value:
+        return False
+
+    parts = value.split(".")
+    if len(parts) != 4:
+        return False
+
+    nonce, ts_str, purpose, sig = parts
+    if purpose != ADMIN_UNLOCK_TOKEN_PURPOSE or not nonce:
+        return False
+
+    payload = f"{nonce}.{ts_str}.{purpose}"
+    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return False
+
+    try:
+        ts = int(ts_str)
+    except ValueError:
+        return False
+
+    max_age = _get_admin_unlock_max_age_seconds()
+    if time.time() - ts > max_age:
         return False
     return True
 

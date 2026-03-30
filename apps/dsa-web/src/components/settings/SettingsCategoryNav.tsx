@@ -1,6 +1,7 @@
 import type React from 'react';
 import { Badge } from '../common';
-import { getCategoryDescriptionZh, getCategoryTitleZh } from '../../utils/systemConfigI18n';
+import { useI18n } from '../../contexts/UiLanguageContext';
+import { getCategoryDescription, getCategoryTitle } from '../../utils/systemConfigI18n';
 import type { SystemConfigCategorySchema, SystemConfigItem } from '../../types/systemConfig';
 import { cn } from '../../utils/cn';
 
@@ -9,6 +10,7 @@ interface SettingsCategoryNavProps {
   itemsByCategory: Record<string, SystemConfigItem[]>;
   activeCategory: string;
   onSelect: (category: string) => void;
+  disabled?: boolean;
 }
 
 export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
@@ -16,20 +18,22 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
   itemsByCategory,
   activeCategory,
   onSelect,
+  disabled = false,
 }) => {
+  const { language, t } = useI18n();
   return (
     <div className="h-full rounded-[1.5rem] border settings-border bg-card p-4 shadow-soft-card-strong">
       <div className="mb-4">
-        <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.3em]">配置分类</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-text">按模块整理系统设置与认证能力。</p>
+        <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.3em]">{t('settings.categoriesTitle')}</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-text">{t('settings.categoriesDesc')}</p>
       </div>
 
       <div className="space-y-2.5">
         {categories.map((category) => {
           const isActive = category.category === activeCategory;
           const count = (itemsByCategory[category.category] || []).length;
-          const title = getCategoryTitleZh(category.category, category.title);
-          const description = getCategoryDescriptionZh(category.category, category.description);
+          const title = getCategoryTitle(language, category.category, category.title);
+          const description = getCategoryDescription(language, category.category, category.description);
 
           return (
             <button
@@ -40,8 +44,15 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
                 isActive
                   ? 'settings-accent-badge-soft settings-shadow-accent'
                   : 'settings-border settings-surface hover:settings-border-strong hover:settings-surface-hover',
+                disabled ? 'pointer-events-none opacity-60' : '',
               )}
-              onClick={() => onSelect(category.category)}
+              onClick={() => {
+                if (disabled) {
+                  return;
+                }
+                onSelect(category.category);
+              }}
+              disabled={disabled}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

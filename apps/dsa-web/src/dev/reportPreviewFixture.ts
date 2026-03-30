@@ -210,7 +210,7 @@ export const previewReport: AnalysisReport = {
 };
 
 export const previewChartFixtures: ReportPriceChartFixtures = {
-  intraday: {
+  minute1: {
     source: 'Preview intraday feed',
     data: [
       { time: '2026-03-28T09:30:00-04:00', open: 124.9, high: 125.6, low: 124.7, close: 125.3, volume: 1200 },
@@ -220,7 +220,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
       { time: '2026-03-28T09:50:00-04:00', open: 125.9, high: 126.1, low: 125.4, close: 125.7, volume: 1700 },
     ],
   },
-  month: {
+  minute5: {
     source: 'Preview daily feed',
     data: [
       { date: '2026-03-24', open: 120, high: 123, low: 119, close: 122, volume: 10 },
@@ -229,7 +229,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
       { date: '2026-03-27', open: 124, high: 126, low: 123, close: 125.3, volume: 13 },
     ],
   },
-  quarter: {
+  daily: {
     source: 'Preview daily feed',
     data: [
       { date: '2026-01-08', open: 111, high: 115, low: 109, close: 114, volume: 21 },
@@ -237,7 +237,7 @@ export const previewChartFixtures: ReportPriceChartFixtures = {
       { date: '2026-03-08', open: 118, high: 126, low: 117, close: 125.3, volume: 27 },
     ],
   },
-  year: {
+  yearly: {
     source: 'Preview daily feed',
     data: [
       { date: '2025-06-28', open: 96, high: 102, low: 94, close: 101, volume: 28 },
