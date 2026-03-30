@@ -75,6 +75,16 @@ class TestIsCodeLike:
     def test_us_ticker_with_exchange(self):
         assert is_code_like("TSLA.O") is True
 
+    # --- AU tickers ---
+    def test_au_ticker(self):
+        assert is_code_like("BHP.AX") is True
+
+    def test_au_ticker_mix(self):
+        assert is_code_like("14D.AX") is True
+
+    def test_au_ticker_rejects_numeric(self):
+        assert is_code_like("12345.AX") is False
+
     # --- Negative cases ---
     def test_plain_text(self):
         assert is_code_like("贵州茅台") is False
@@ -147,6 +157,16 @@ class TestNormalizeCode:
     # --- US tickers ---
     def test_us_ticker(self):
         assert normalize_code("AAPL") == "AAPL"
+
+    # --- AU tickers ---
+    def test_au_ticker(self):
+        assert normalize_code("BHP.AX") == "BHP.AX"
+
+    def test_au_ticker_mix(self):
+        assert normalize_code("14D.AX") == "14D.AX"
+
+    def test_au_ticker_rejects_numeric(self):
+        assert normalize_code("12345.AX") is None
 
     # --- Invalid inputs ---
     def test_empty_returns_none(self):

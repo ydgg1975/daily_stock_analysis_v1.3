@@ -56,7 +56,7 @@ def is_code_like(value: str) -> bool:
     if _strip_exchange_suffix(text) is not None:
         return True
     # Support ASX: BHP.AX
-    if text.endswith(".AX"):
+    if re.match(r"^(?![0-9]{3,6}\.AX$)[A-Z0-9]{3,6}\.AX$", text):
         return True
     if re.match(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$", text):
         return True
@@ -82,7 +82,7 @@ def normalize_code(raw: str) -> Optional[str]:
     if text.isdigit() and len(text) in (5, 6):
         return text
     # ASX: BHP.AX
-    if text.endswith(".AX"):
+    if re.match(r"^(?![0-9]{3,6}\.AX$)[A-Z0-9]{3,6}\.AX$", text):
         return text
     if re.match(r"^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$", text):
         return text

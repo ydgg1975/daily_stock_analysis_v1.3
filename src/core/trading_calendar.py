@@ -98,7 +98,7 @@ def get_open_markets_today() -> Set[str]:
     Get markets that are open today (by each market's local timezone).
 
     Returns:
-        Set of market keys ('cn', 'hk', 'us') that are trading today
+        Set of market keys ('cn', 'hk', 'us', 'au') that are trading today
     """
     if not _XCALS_AVAILABLE:
         return {"cn", "hk", "us", "au"}

@@ -24,8 +24,8 @@ def detect_market(stock_code: Optional[str]) -> str:
 
     code = stock_code.strip().upper()
 
-    # AU stocks: .AX suffix (e.g., BHP.AX, CBA.AX)
-    if code.endswith(".AX"):
+    # AU stocks: .AX suffix (e.g., BHP.AX, CBA.AX, Z1P.AX, 14D.AX)
+    if re.match(r"^(?![0-9]{3,6}\.AX$)[A-Z0-9]{3,6}\.AX$", code):
         return "au"
 
     # HK stocks: HK00700, 00700.HK, or 5-digit pure numbers

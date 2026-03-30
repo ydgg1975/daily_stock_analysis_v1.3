@@ -158,8 +158,10 @@ def is_au_stock_code(code: str) -> bool:
     Returns:
         True if AU stock, False otherwise
     """
+    import re
+
     normalized = (code or "").strip().upper()
-    if normalized.endswith(".AX"):
+    if re.match(r"^(?![0-9]{3,6}\.AX$)[A-Z0-9]{3,6}\.AX$", normalized):
         return True
     return False
 
