@@ -794,7 +794,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 | A-shares | 6-digit number | `600519`, `000001`, `300750` |
 | BSE (Beijing) | 8/4/92 prefix, 6-digit | `920748`, `838163`, `430047` |
 | HK stocks | hk + 5-digit number | `hk00700`, `hk09988` |
-| AU stocks | 1-5 letters + .AX suffix | `BHP.AX`, `CBA.AX` |
+| AU stocks | 3-6 alphanumeric (at least 1 letter) + .AX suffix | `BHP.AX`, `CBA.AX` |
 
 ### Notes
 

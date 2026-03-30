@@ -14,7 +14,7 @@ const STOCK_CODE_PATTERNS = [
   /^HK\d{1,5}$/, // HK-prefixed code, for example HK00700
   /^\d{1,5}\.HK$/, // HK suffix format, for example 00700.HK
   /^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$/, // Common US ticker format
-  /^[A-Z]{1,5}\.AX$/, // ASX suffix format, for example BHP.AX
+  /^(?![0-9]{3,6}\.AX$)[A-Z0-9]{3,6}\.AX$/, // ASX suffix format, for example BHP.AX, CBA.AX
 ];
 
 /**
