@@ -17,7 +17,7 @@
 
 model_list:
   # --- OpenRouter (聚合平台) ---
-   - model_name: openrouter
+   - model_name: openrouter/openai/gpt-3.5-turbo
      litellm_params:
        model: openrouter/openai/gpt-3.5-turbo
        api_key: "os.environ/OPENROUTER_API_KEY"
