@@ -20,7 +20,7 @@ model_list:
    - model_name: openrouter/openai/gpt-3.5-turbo
      litellm_params:
        model: openrouter/openai/gpt-3.5-turbo
-       api_key: "os.environ/OPENROUTER_API_KEY"
+       api_key: "os.environ/LITELLM_API_KEY"
        api_base: https://openrouter.ai/api/v1
 
 # ===================================
