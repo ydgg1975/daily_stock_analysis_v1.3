@@ -348,11 +348,11 @@ const ChatPage: React.FC = () => {
         } else if (step.type === 'tool_done') {
           icon = step.success ? '✅' : '❌';
           text = `${step.display_name || step.tool} (${step.duration}s)`;
-          colorClass = step.success ? 'text-green-400' : 'text-red-400';
+          colorClass = step.success ? 'text-success' : 'text-danger';
         } else if (step.type === 'generating') {
           icon = '✍️';
           text = step.message || '生成分析';
-          colorClass = 'text-cyan';
+          colorClass = 'text-[hsl(var(--accent-primary-hsl))]';
         }
         return (
           <div
@@ -370,7 +370,7 @@ const ChatPage: React.FC = () => {
   const sidebarContent = useMemo(() => (
     <div className="theme-panel-solid flex h-full min-h-0 flex-col overflow-hidden rounded-[1.2rem]">
       <div className="theme-sidebar-divider flex items-center justify-between border-b px-3.5 py-3">
-        <h2 className="text-[11px] font-semibold text-cyan uppercase tracking-[0.2em] flex items-center gap-2">
+        <h2 className="text-[11px] font-semibold text-[hsl(var(--accent-primary-hsl))] uppercase tracking-[0.2em] flex items-center gap-2">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -422,7 +422,7 @@ const ChatPage: React.FC = () => {
                 {/* 装饰条 */}
                 <div
                   className={`h-10 w-1 rounded-full flex-shrink-0 transition-colors ${
-                    s.session_id === sessionId ? 'bg-cyan' : 'bg-white/10'
+                    s.session_id === sessionId ? 'bg-[hsl(var(--accent-primary-hsl))]' : 'bg-white/10'
                   }`}
                 />
 
@@ -441,7 +441,7 @@ const ChatPage: React.FC = () => {
                         e.stopPropagation();
                         setDeleteConfirmId(s.session_id);
                       }}
-                      className="flex-shrink-0 rounded p-1 text-muted-text opacity-0 transition-all hover:bg-white/10 hover:text-rose-400 group-hover:opacity-100"
+                      className="flex-shrink-0 rounded p-1 text-muted-text opacity-0 transition-all hover:bg-white/10 hover:text-danger group-hover:opacity-100"
                       title="删除"
                     >
                       <svg
@@ -552,7 +552,7 @@ const ChatPage: React.FC = () => {
                     </button>
                   ) : null}
                   <svg
-                    className="h-6 w-6 text-cyan"
+                    className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -658,7 +658,7 @@ const ChatPage: React.FC = () => {
                     发送
                   </button>
                   {sendToast ? (
-                    <span className={`text-sm ${sendToast.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
                       {sendToast.message}
                     </span>
                   ) : null}
@@ -682,7 +682,7 @@ const ChatPage: React.FC = () => {
                   <div className="flex items-start gap-4">
                     <div className="theme-panel-subtle flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
                       <svg
-                        className="h-7 w-7 text-cyan"
+                        className="h-7 w-7 text-[hsl(var(--accent-primary-hsl))]"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -742,7 +742,7 @@ const ChatPage: React.FC = () => {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${
                       msg.role === 'user'
-                        ? 'bg-cyan text-black'
+                        ? 'bg-[hsl(var(--accent-primary-hsl))] text-[hsl(var(--bg-page-hsl))]'
                         : 'bg-elevated text-foreground'
                     }`}
                   >
@@ -751,13 +751,13 @@ const ChatPage: React.FC = () => {
                   <div
                     className={`min-w-0 w-fit max-w-[min(100%,56rem)] overflow-hidden rounded-2xl px-5 py-3.5 ${
                       msg.role === 'user'
-                        ? 'bg-cyan/10 text-foreground border border-cyan/20 rounded-tr-sm'
+                        ? 'bg-[hsl(var(--accent-primary-hsl)/0.12)] text-foreground border border-[hsl(var(--accent-primary-hsl)/0.32)] rounded-tr-sm'
                         : 'theme-panel-subtle text-secondary-text rounded-tl-sm'
                     }`}
                   >
                     {msg.role === 'assistant' && msg.skillName && (
                       <div className="mb-2">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan/10 border border-cyan/20 text-xs text-cyan">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[hsl(var(--accent-primary-hsl)/0.12)] border border-[hsl(var(--accent-primary-hsl)/0.3)] text-xs text-[hsl(var(--accent-primary-hsl))]">
                           <svg
                             className="w-3 h-3"
                             fill="none"
@@ -788,14 +788,14 @@ const ChatPage: React.FC = () => {
                       prose-p:mb-2 prose-p:last:mb-0 prose-p:leading-7 prose-p:break-words
                       prose-strong:text-foreground prose-strong:font-semibold
                       prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-li:break-words
-                      prose-code:text-cyan prose-code:bg-card/70 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:break-all
+                      prose-code:text-[hsl(var(--accent-primary-hsl))] prose-code:bg-card/70 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:break-all
                       prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:bg-black/30 prose-pre:border prose-pre:border-border/70 prose-pre:rounded-lg prose-pre:p-3
                       prose-table:w-full prose-table:text-sm
                       prose-th:text-foreground prose-th:font-medium prose-th:border-border prose-th:px-3 prose-th:py-1.5 prose-th:bg-card/70
                       prose-td:border-border/70 prose-td:px-3 prose-td:py-1.5
                       prose-hr:border-border/70 prose-hr:my-3
-                      prose-a:text-cyan prose-a:no-underline hover:prose-a:underline
-                      prose-blockquote:border-cyan/30 prose-blockquote:text-secondary-text
+                      prose-a:text-[hsl(var(--accent-primary-hsl))] prose-a:no-underline hover:prose-a:underline
+                      prose-blockquote:border-[hsl(var(--accent-primary-hsl)/0.3)] prose-blockquote:text-secondary-text
                       [&_table]:block [&_table]:overflow-x-auto [&_table]:whitespace-nowrap
                       [&_img]:max-w-full
                     "
@@ -829,8 +829,8 @@ const ChatPage: React.FC = () => {
                 <div className="theme-panel-subtle min-w-[200px] max-w-[min(100%,56rem)] overflow-hidden rounded-2xl rounded-tl-sm px-5 py-4">
                   <div className="flex items-center gap-2.5 text-sm text-secondary-text">
                     <div className="relative w-4 h-4 flex-shrink-0">
-                      <div className="absolute inset-0 rounded-full border-2 border-cyan/20" />
-                      <div className="absolute inset-0 rounded-full border-2 border-cyan border-t-transparent animate-spin" />
+                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl)/0.2)]" />
+                      <div className="absolute inset-0 rounded-full border-2 border-[hsl(var(--accent-primary-hsl))] border-t-transparent animate-spin" />
                     </div>
                     <span className="text-secondary-text">
                       {getCurrentStage(progressSteps)}
@@ -862,7 +862,7 @@ const ChatPage: React.FC = () => {
                     onClick={() => setSelectedSkill('')}
                     className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
                       selectedSkill === ''
-                        ? 'border-cyan/24 bg-cyan/[0.08] text-foreground'
+                        ? 'border-[hsl(var(--accent-primary-hsl)/0.3)] bg-[hsl(var(--accent-primary-hsl)/0.08)] text-foreground'
                         : 'theme-inline-chip text-secondary-text hover:text-foreground'
                     }`}
                   >
@@ -880,7 +880,7 @@ const ChatPage: React.FC = () => {
                         onClick={() => setSelectedSkill(s.id)}
                         className={`rounded-full border px-3 py-1.5 text-sm transition-all duration-200 ease-out ${
                           selectedSkill === s.id
-                            ? 'border-cyan/24 bg-cyan/[0.08] text-foreground'
+                            ? 'border-[hsl(var(--accent-primary-hsl)/0.3)] bg-[hsl(var(--accent-primary-hsl)/0.08)] text-foreground'
                             : 'theme-inline-chip text-secondary-text hover:text-foreground'
                         }`}
                       >

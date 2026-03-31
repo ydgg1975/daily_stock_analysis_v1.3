@@ -1,0 +1,26 @@
+[
+  {
+    "theme": "terminal",
+    "body": "none",
+    "root": "none",
+    "shell": null,
+    "sidebar": null,
+    "main": null
+  },
+  {
+    "theme": "cyber",
+    "body": "none",
+    "root": "none",
+    "shell": null,
+    "sidebar": null,
+    "main": null
+  },
+  {
+    "theme": "hacker",
+    "body": "none",
+    "root": "none",
+    "shell": null,
+    "sidebar": null,
+    "main": null
+  }
+]

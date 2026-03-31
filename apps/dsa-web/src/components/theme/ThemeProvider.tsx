@@ -11,6 +11,7 @@ import {
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 
 export type ThemeStylePreset = 'terminal' | 'cyber' | 'hacker';
+type RootThemeName = 'terminal' | 'cyberpunk' | 'dos';
 
 type ThemeStyleContextValue = {
   themeStyle: ThemeStylePreset;
@@ -30,6 +31,12 @@ function isThemeStylePreset(value: string | null): value is ThemeStylePreset {
   return value === 'terminal' || value === 'cyber' || value === 'hacker';
 }
 
+function toRootThemeName(style: ThemeStylePreset): RootThemeName {
+  if (style === 'cyber') return 'cyberpunk';
+  if (style === 'hacker') return 'dos';
+  return 'terminal';
+}
+
 const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeStyle, setThemeStyleState] = useState<ThemeStylePreset>(() => {
     if (typeof window === 'undefined') {
@@ -44,8 +51,9 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    document.documentElement.dataset.themeStyle = themeStyle;
-    document.body.dataset.themeStyle = themeStyle;
+    const rootTheme = toRootThemeName(themeStyle);
+    document.documentElement.dataset.theme = rootTheme;
+    document.body.dataset.theme = rootTheme;
     window.localStorage.setItem(THEME_STYLE_STORAGE_KEY, themeStyle);
   }, [themeStyle]);
 

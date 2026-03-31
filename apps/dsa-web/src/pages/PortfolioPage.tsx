@@ -792,7 +792,7 @@ const PortfolioPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="text-xs text-amber-300 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 inline-block">
+          <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2 inline-block">
             还没有可用账户，请先创建账户后再录入交易或导入 CSV。
           </div>
         )}
@@ -800,12 +800,12 @@ const PortfolioPage: React.FC = () => {
 
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
-        <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm">
+        <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
           风险模块降级：{riskWarning}
         </div>
       ) : null}
       {writeWarning ? (
-        <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-amber-100 text-sm">
+        <div className="rounded-xl border border-[hsl(var(--accent-warning-hsl)/0.35)] bg-[hsl(var(--accent-warning-hsl)/0.1)] px-4 py-3 text-[hsl(var(--accent-warning-hsl))] text-sm">
           操作提示：{writeWarning}
         </div>
       ) : null}
@@ -831,12 +831,12 @@ const PortfolioPage: React.FC = () => {
             )}
           </div>
           {accountCreateError ? (
-            <div className="mt-2 text-xs text-red-300 rounded-lg border border-red-400/30 bg-red-400/10 px-2 py-1">
+            <div className="mt-2 text-xs text-danger rounded-lg border border-[hsl(var(--accent-danger-hsl)/0.3)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-2 py-1">
               {accountCreateError}
             </div>
           ) : null}
           {accountCreateSuccess ? (
-            <div className="mt-2 text-xs text-emerald-300 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1">
+            <div className="mt-2 text-xs text-success rounded-lg border border-[hsl(var(--accent-positive-hsl)/0.3)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-2 py-1">
               {accountCreateSuccess}
             </div>
           ) : null}
@@ -905,9 +905,9 @@ const PortfolioPage: React.FC = () => {
             <p
               className={`mt-2 text-xs ${
                 fxRefreshFeedback.tone === 'success'
-                  ? 'text-emerald-200'
+                  ? 'text-success'
                   : fxRefreshFeedback.tone === 'warning'
-                    ? 'text-amber-100'
+                    ? 'text-[hsl(var(--accent-warning-hsl))]'
                     : 'text-secondary'
               }`}
             >
@@ -948,7 +948,7 @@ const PortfolioPage: React.FC = () => {
                       <td className="py-2 pr-2 text-right">{row.avgCost.toFixed(4)}</td>
                       <td className="py-2 pr-2 text-right">{row.lastPrice.toFixed(4)}</td>
                       <td className="py-2 pr-2 text-right">{formatMoney(row.marketValueBase, row.valuationCurrency)}</td>
-                      <td className={`py-2 text-right ${row.unrealizedPnlBase >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <td className={`py-2 text-right ${row.unrealizedPnlBase >= 0 ? 'text-success' : 'text-danger'}`}>
                         {formatMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                       </td>
                     </tr>
@@ -987,7 +987,7 @@ const PortfolioPage: React.FC = () => {
       </section>
 
       {writeBlocked && hasAccounts ? (
-        <div className="text-xs text-amber-300 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
+        <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2">
           当前处于“全部账户”视图。为避免误写，请先选择一个具体账户后再进行手工录入或 CSV 提交。
         </div>
       ) : null}
@@ -1104,7 +1104,7 @@ const PortfolioPage: React.FC = () => {
           <h3 className="text-sm font-semibold text-foreground mb-3">券商 CSV 导入</h3>
           <div className="space-y-2">
             {brokerLoadWarning ? (
-              <div className="text-xs text-amber-300 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-1">
+              <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-2 py-1">
                 {brokerLoadWarning}
               </div>
             ) : null}

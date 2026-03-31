@@ -49,7 +49,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
   return (
     <ShellRailContext.Provider value={railContextValue}>
-      <div className="theme-shell dark min-h-screen overflow-x-clip text-foreground">
+      <div className="theme-shell min-h-screen overflow-x-clip text-foreground">
         <div className="pointer-events-none fixed inset-x-0 top-3 z-40 flex items-start justify-between px-3 lg:hidden">
           <button
             type="button"

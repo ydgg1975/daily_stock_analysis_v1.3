@@ -86,22 +86,22 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
   // These match the original branch's color values for consistency
   const sentimentConfig = {
     greed: {
-      color: '#00d4ff',       // Cyan
-      colorHsl: 'hsl(193, 100%, 43%)',
-      glow: 'rgba(0, 212, 255, 0.4)',
-      glowFilter: 'rgba(0, 212, 255, 0.66)',
+      color: 'hsl(var(--sentiment-greed))',
+      colorHsl: 'hsl(var(--sentiment-greed))',
+      glow: 'hsl(var(--sentiment-greed) / 0.4)',
+      glowFilter: 'hsl(var(--sentiment-greed) / 0.66)',
     },
     neutral: {
-      color: '#a855f7',       // Purple
-      colorHsl: 'hsl(247, 84%, 66%)',
-      glow: 'rgba(168, 85, 247, 0.4)',
-      glowFilter: 'rgba(168, 85, 247, 0.66)',
+      color: 'hsl(var(--sentiment-neutral))',
+      colorHsl: 'hsl(var(--sentiment-neutral))',
+      glow: 'hsl(var(--sentiment-neutral) / 0.4)',
+      glowFilter: 'hsl(var(--sentiment-neutral) / 0.66)',
     },
     fear: {
-      color: '#ff4466',       // Red
-      colorHsl: 'hsl(349, 82%, 56%)',
-      glow: 'rgba(255, 68, 102, 0.4)',
-      glowFilter: 'rgba(255, 68, 102, 0.66)',
+      color: 'hsl(var(--sentiment-fear))',
+      colorHsl: 'hsl(var(--sentiment-fear))',
+      glow: 'hsl(var(--sentiment-fear) / 0.4)',
+      glowFilter: 'hsl(var(--sentiment-fear) / 0.66)',
     },
   };
 

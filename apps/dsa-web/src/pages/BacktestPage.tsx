@@ -45,8 +45,8 @@ function statusBadge(status: string) {
 }
 
 function boolIcon(value?: boolean | null) {
-  if (value === true) return <span className="text-emerald-400">&#10003;</span>;
-  if (value === false) return <span className="text-red-400">&#10007;</span>;
+  if (value === true) return <span className="text-success">&#10003;</span>;
+  if (value === false) return <span className="text-danger">&#10007;</span>;
   return <span className="text-muted-text">--</span>;
 }
 
@@ -55,7 +55,7 @@ function boolIcon(value?: boolean | null) {
 const MetricRow: React.FC<{ label: string; value: string; accent?: boolean }> = ({ label, value, accent }) => (
   <div className="flex items-center justify-between border-b border-white/5 py-1.5 last:border-0">
     <span className="text-xs text-secondary-text">{label}</span>
-    <span className={`text-sm font-mono font-semibold ${accent ? 'text-cyan' : 'text-foreground'}`}>{value}</span>
+    <span className={`text-sm font-mono font-semibold ${accent ? 'text-[hsl(var(--accent-primary-hsl))]' : 'text-foreground'}`}>{value}</span>
   </div>
 );
 
@@ -82,11 +82,11 @@ const PerformanceCard: React.FC<{ metrics: PerformanceMetrics; title: string }> 
     <div className="flex items-center justify-between">
       <span className="text-xs text-muted-text">W / L / N</span>
       <span className="text-xs font-mono">
-        <span className="text-emerald-400">{metrics.winCount}</span>
+        <span className="text-success">{metrics.winCount}</span>
         {' / '}
-        <span className="text-red-400">{metrics.lossCount}</span>
+        <span className="text-danger">{metrics.lossCount}</span>
         {' / '}
-        <span className="text-amber-400">{metrics.neutralCount}</span>
+        <span className="text-[hsl(var(--accent-warning-hsl))]">{metrics.neutralCount}</span>
       </span>
     </div>
   </Card>
@@ -97,11 +97,11 @@ const PerformanceCard: React.FC<{ metrics: PerformanceMetrics; title: string }> 
 const RunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => (
   <div className="flex items-center gap-4 rounded-lg border border-white/5 bg-elevated px-3 py-2 text-xs font-mono animate-fade-in">
     <span className="text-secondary-text">Processed: <span className="text-foreground">{data.processed}</span></span>
-    <span className="text-secondary-text">Saved: <span className="text-cyan">{data.saved}</span></span>
-    <span className="text-secondary-text">Completed: <span className="text-emerald-400">{data.completed}</span></span>
-    <span className="text-secondary-text">Insufficient: <span className="text-amber-400">{data.insufficient}</span></span>
+    <span className="text-secondary-text">Saved: <span className="text-[hsl(var(--accent-primary-hsl))]">{data.saved}</span></span>
+    <span className="text-secondary-text">Completed: <span className="text-success">{data.completed}</span></span>
+    <span className="text-secondary-text">Insufficient: <span className="text-[hsl(var(--accent-warning-hsl))]">{data.insufficient}</span></span>
     {data.errors > 0 && (
-      <span className="text-secondary-text">Errors: <span className="text-red-400">{data.errors}</span></span>
+      <span className="text-secondary-text">Errors: <span className="text-danger">{data.errors}</span></span>
     )}
   </div>
 );
@@ -290,7 +290,7 @@ const BacktestPage: React.FC = () => {
               flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
               transition-all duration-200 whitespace-nowrap border cursor-pointer
               ${forceRerun
-                ? 'border-cyan/40 bg-cyan/10 text-cyan shadow-[0_0_8px_rgba(0,212,255,0.15)]'
+                ? 'border-[hsl(var(--accent-primary-hsl)/0.4)] bg-[hsl(var(--accent-primary-hsl)/0.1)] text-[hsl(var(--accent-primary-hsl))] shadow-[0_0_8px_hsl(var(--accent-primary-hsl)/0.2)]'
                 : 'border-white/10 bg-transparent text-muted-text hover:border-white/20 hover:text-secondary-text'
               }
               disabled:opacity-50 disabled:cursor-not-allowed
@@ -298,7 +298,7 @@ const BacktestPage: React.FC = () => {
           >
             <span className={`
               inline-block w-1.5 h-1.5 rounded-full transition-colors duration-200
-              ${forceRerun ? 'bg-cyan shadow-[0_0_4px_rgba(0,212,255,0.6)]' : 'bg-border'}
+              ${forceRerun ? 'bg-[hsl(var(--accent-primary-hsl))] shadow-[0_0_4px_hsl(var(--accent-primary-hsl)/0.6)]' : 'bg-border'}
             `} />
             Force
           </button>
@@ -332,7 +332,7 @@ const BacktestPage: React.FC = () => {
         <div className="workspace-split-rail grid gap-3">
           {isLoadingPerf ? (
             <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-[hsl(var(--accent-primary-hsl)/0.2)] border-t-[hsl(var(--accent-primary-hsl))] rounded-full animate-spin" />
             </div>
           ) : overallPerf ? (
             <PerformanceCard metrics={overallPerf} title="Overall Performance" />
@@ -356,7 +356,7 @@ const BacktestPage: React.FC = () => {
           ) : null}
           {isLoadingResults ? (
             <div className="flex flex-col items-center justify-center h-64">
-              <div className="w-10 h-10 border-3 border-cyan/20 border-t-cyan rounded-full animate-spin" />
+              <div className="w-10 h-10 border-3 border-[hsl(var(--accent-primary-hsl)/0.2)] border-t-[hsl(var(--accent-primary-hsl))] rounded-full animate-spin" />
               <p className="mt-3 text-secondary-text text-sm">Loading results...</p>
             </div>
           ) : results.length === 0 ? (
@@ -394,7 +394,7 @@ const BacktestPage: React.FC = () => {
                         key={row.analysisHistoryId}
                         className="border-t border-white/5 transition-colors hover:bg-hover"
                       >
-                        <td className="px-3 py-2 font-mono text-cyan text-xs">{row.code}</td>
+                        <td className="px-3 py-2 font-mono text-[hsl(var(--accent-primary-hsl))] text-xs">{row.code}</td>
                         <td className="px-3 py-2 text-xs text-secondary-text">{row.analysisDate || '--'}</td>
                         <td className="px-3 py-2 text-xs text-foreground truncate max-w-[140px]" title={row.operationAdvice || ''}>
                           {row.operationAdvice || '--'}
@@ -409,7 +409,7 @@ const BacktestPage: React.FC = () => {
                         <td className="px-3 py-2 text-xs font-mono text-right">
                           <span className={
                             row.simulatedReturnPct != null
-                              ? row.simulatedReturnPct > 0 ? 'text-emerald-400' : row.simulatedReturnPct < 0 ? 'text-red-400' : 'text-secondary-text'
+                              ? row.simulatedReturnPct > 0 ? 'text-success' : row.simulatedReturnPct < 0 ? 'text-danger' : 'text-secondary-text'
                               : 'text-muted-text'
                           }>
                             {pct(row.simulatedReturnPct)}

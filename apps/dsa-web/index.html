@@ -5,6 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dsa-web</title>
+    <script>
+      (() => {
+        const style = window.localStorage.getItem('dsa-theme-style');
+        const rootTheme = style === 'cyber' ? 'cyberpunk' : style === 'hacker' ? 'dos' : 'terminal';
+        const prebootBackgroundByTheme = {
+          terminal: '#060b10',
+          cyberpunk: '#0b0612',
+          dos: '#060606',
+        };
+        const prebootBackground =
+          prebootBackgroundByTheme[rootTheme] ?? prebootBackgroundByTheme.terminal;
+        document.documentElement.dataset.theme = rootTheme;
+        document.documentElement.style.setProperty('--preboot-bg', prebootBackground);
+      })();
+    </script>
     <style>
       :root {
         color-scheme: dark;
@@ -13,7 +28,7 @@
       body {
         margin: 0;
         min-height: 100%;
-        background: #070911;
+        background: var(--preboot-bg, #060b10);
       }
       #root {
         min-height: 100vh;

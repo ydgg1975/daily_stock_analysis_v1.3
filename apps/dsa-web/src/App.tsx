@@ -125,7 +125,7 @@ const AppContent: React.FC = () => {
 };
 
 const PreviewAppShell: React.FC = () => (
-  <div className="theme-shell dark min-h-screen overflow-x-clip text-foreground">
+  <div className="theme-shell min-h-screen overflow-x-clip text-foreground">
     <div className="pointer-events-none fixed right-3 top-3 z-40">
       <div className="pointer-events-auto">
         <ThemeToggle />

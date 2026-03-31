@@ -1,0 +1,29 @@
+[
+  {
+    "themeStyle": "terminal",
+    "rootTheme": "terminal",
+    "bodyBackground": "rgb(12, 17, 24)",
+    "htmlBackground": "rgb(12, 17, 24)",
+    "rootBackground": "rgb(12, 17, 24)",
+    "shellBackground": null,
+    "sidebarBackground": null
+  },
+  {
+    "themeStyle": "cyber",
+    "rootTheme": "cyberpunk",
+    "bodyBackground": "rgb(10, 6, 14)",
+    "htmlBackground": "rgb(10, 6, 14)",
+    "rootBackground": "rgb(10, 6, 14)",
+    "shellBackground": null,
+    "sidebarBackground": null
+  },
+  {
+    "themeStyle": "hacker",
+    "rootTheme": "dos",
+    "bodyBackground": "rgb(8, 8, 8)",
+    "htmlBackground": "rgb(8, 8, 8)",
+    "rootBackground": "rgb(8, 8, 8)",
+    "shellBackground": null,
+    "sidebarBackground": null
+  }
+]
