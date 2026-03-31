@@ -294,10 +294,19 @@ class SystemConfigService:
 
             started_at = time.perf_counter()
             response = litellm.completion(**call_kwargs)
+            # 发送日志
+            logger.info("LLM channel response for %s: %s", channel_name, response)
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             content = ""
             if response and getattr(response, "choices", None):
-                content = str(response.choices[0].message.content or "").strip()
+                message = response.choices[0].message
+                # 优先使用 content，如果为空则使用 reasoning_content（用于思考模式）
+                content = str(message.content or "").strip()
+                if not content:
+                    # 对于思考模式的模型（如 MiniMax-M2.7），使用 reasoning_content
+                    reasoning = getattr(message, "reasoning_content", None)
+                    if reasoning:
+                        content = str(reasoning).strip()
 
             if not content:
                 return {
