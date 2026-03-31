@@ -1,5 +1,6 @@
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Palette, Sparkles, SquareTerminal } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useThemeStyle, type ThemeStylePreset } from './ThemeProvider';
@@ -44,31 +45,128 @@ interface ThemeToggleProps {
   collapsed?: boolean;
 }
 
+type PopoverPlacement = 'top' | 'bottom';
+
 export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   variant = 'default',
   collapsed = false,
 }) => {
   const { t } = useI18n();
   const { themeStyle, setThemeStyle } = useThemeStyle();
-  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [uiState, setUiState] = useState<'open' | 'closed'>('closed');
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const openPopover = useCallback(() => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setMounted(true);
+    window.requestAnimationFrame(() => {
+      setUiState('open');
+    });
+  }, []);
+
+  const closePopover = useCallback(() => {
+    setUiState('closed');
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setMounted(false);
+      closeTimerRef.current = null;
+    }, 180);
+  }, []);
+
+  const updatePopoverPosition = useCallback(() => {
+    if (!triggerRef.current || !panelRef.current) return;
+
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const panelRect = panelRef.current?.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const viewportPadding = 12;
+    const edgeGap = 8;
+    const targetMinWidth = variant === 'nav' ? 248 : 224;
+    const estimatedWidth = panelRect?.width ?? targetMinWidth;
+    const estimatedHeight = panelRect?.height ?? (variant === 'nav' ? 264 : 236);
+
+    const alignLeft = variant === 'nav';
+    const preferredLeft = alignLeft ? triggerRect.left : triggerRect.right - estimatedWidth;
+    const clampedLeft = Math.min(
+      Math.max(preferredLeft, viewportPadding),
+      viewportWidth - estimatedWidth - viewportPadding,
+    );
+
+    const canOpenBottom = triggerRect.bottom + edgeGap + estimatedHeight <= viewportHeight - viewportPadding;
+    const canOpenTop = triggerRect.top - edgeGap - estimatedHeight >= viewportPadding;
+    const placement: PopoverPlacement = canOpenBottom || !canOpenTop ? 'bottom' : 'top';
+    const rawTop = placement === 'bottom'
+      ? triggerRect.bottom + edgeGap
+      : triggerRect.top - estimatedHeight - edgeGap;
+    const clampedTop = Math.min(
+      Math.max(rawTop, viewportPadding),
+      viewportHeight - estimatedHeight - viewportPadding,
+    );
+
+    panelRef.current.style.top = `${clampedTop}px`;
+    panelRef.current.style.left = `${clampedLeft}px`;
+    panelRef.current.style.minWidth = `${targetMinWidth}px`;
+    panelRef.current.style.maxWidth = `${Math.min(estimatedWidth, viewportWidth - viewportPadding * 2)}px`;
+    panelRef.current.style.transformOrigin = placement === 'top' ? 'bottom left' : 'top left';
+    panelRef.current.style.visibility = 'visible';
+  }, [variant]);
 
   useEffect(() => {
-    if (!open) {
+    if (!mounted) {
       return undefined;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (
+        containerRef.current?.contains(target)
+        || panelRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closePopover();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closePopover();
       }
     };
 
+    const handleViewportChange = () => {
+      updatePopoverPosition();
+    };
+
+    window.requestAnimationFrame(updatePopoverPosition);
     document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
     };
-  }, [open]);
+  }, [closePopover, mounted, updatePopoverPosition]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+  }, []);
 
   const activeTheme = themeStyle;
   const TriggerIcon = THEME_OPTIONS.find((item) => item.value === activeTheme)?.icon || SquareTerminal;
@@ -77,9 +175,16 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   return (
     <div className="relative" ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        data-state={open ? 'open' : 'closed'}
+        onClick={() => {
+          if (mounted) {
+            closePopover();
+          } else {
+            openPopover();
+          }
+        }}
+        data-state={mounted ? 'open' : 'closed'}
         className={cn(
           isNavVariant
             ? 'theme-panel-subtle group relative flex h-12 w-full select-none items-center gap-3 rounded-[1.35rem] px-4 text-sm text-secondary-text transition-all duration-200 ease-out hover:text-foreground data-[state=open]:text-foreground'
@@ -87,7 +192,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
           isNavVariant && collapsed ? 'justify-center px-2' : ''
         )}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={mounted}
         aria-label={t('theme.label')}
       >
         <TriggerIcon className={cn('shrink-0', isNavVariant ? 'h-5 w-5' : 'h-4 w-4')} />
@@ -105,16 +210,24 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         )}
       </button>
 
-      {open ? (
+      {mounted && typeof document !== 'undefined' ? createPortal(
         <div
+          ref={panelRef}
           role="menu"
           aria-label={t('theme.menu')}
+          data-state={uiState}
           className={cn(
-            'theme-menu-panel z-[100] min-w-[14rem] overflow-hidden rounded-2xl p-1.5',
-            isNavVariant
-              ? 'absolute bottom-full left-0 mb-2 w-max min-w-[15rem]'
-              : 'absolute right-0 mt-2'
+            'theme-menu-panel fixed z-[160] w-max min-w-[14rem] overflow-hidden rounded-2xl p-1.5 transition-all duration-200 ease-out',
+            uiState === 'open' ? 'opacity-100' : 'pointer-events-none opacity-0'
           )}
+          style={{
+            top: '0px',
+            left: '0px',
+            minWidth: `${isNavVariant ? 248 : 224}px`,
+            maxWidth: '320px',
+            transformOrigin: 'top left',
+            visibility: 'hidden',
+          }}
         >
           {THEME_OPTIONS.map(({ value, labelKey, descriptionKey, icon: Icon }) => {
             const isActive = activeTheme === value;
@@ -126,7 +239,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                 aria-checked={isActive}
                 onClick={() => {
                   setThemeStyle(value);
-                  setOpen(false);
+                  closePopover();
                 }}
                 data-active={isActive}
                 className={cn(
@@ -149,7 +262,8 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

@@ -4,7 +4,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
 import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea } from '../components/common';
-import { getParsedApiError } from '../api/error';
+import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
 import {
   useAgentChatStore,
@@ -63,6 +63,7 @@ const ChatPage: React.FC = () => {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [skillsLoadError, setSkillsLoadError] = useState<ParsedApiError | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
@@ -88,6 +89,7 @@ const ChatPage: React.FC = () => {
     sessionId,
     sessions,
     sessionsLoading,
+    sessionLoadError,
     chatError,
     loadSessions,
     loadInitialSession,
@@ -150,16 +152,26 @@ const ChatPage: React.FC = () => {
     loadInitialSession();
   }, [loadInitialSession]);
 
-  useEffect(() => {
-    agentApi.getSkills().then((res) => {
+  const loadSkills = useCallback(async () => {
+    try {
+      setSkillsLoadError(null);
+      const res = await agentApi.getSkills();
       setSkills(res.skills);
       const defaultId =
         res.default_skill_id ||
         res.skills[0]?.id ||
         '';
       setSelectedSkill(defaultId);
-    }).catch(() => {});
+    } catch (error: unknown) {
+      setSkillsLoadError(getParsedApiError(error));
+      setSkills([]);
+      setSelectedSkill('');
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSkills();
+  }, [loadSkills]);
 
   const availableSkillIds = new Set(skills.map((skill) => skill.id));
   const quickQuestions = QUICK_QUESTIONS.filter((question) => availableSkillIds.size === 0 || availableSkillIds.has(question.skill));
@@ -396,6 +408,16 @@ const ChatPage: React.FC = () => {
           </svg>
         </button>
       </div>
+      {sessionLoadError ? (
+        <ApiErrorAlert
+          error={sessionLoadError}
+          className="m-3"
+          actionLabel="重试加载会话"
+          onAction={() => {
+            void loadSessions();
+          }}
+        />
+      ) : null}
       <ScrollArea testId="chat-session-list-scroll" viewportClassName="p-3">
         {sessionsLoading ? (
           <div className="p-4 text-center text-xs text-muted-text">加载中...</div>
@@ -479,7 +501,7 @@ const ChatPage: React.FC = () => {
         )}
       </ScrollArea>
     </div>
-  ), [handleStartNewChat, handleSwitchSession, sessionId, sessions, sessionsLoading]);
+  ), [handleStartNewChat, handleSwitchSession, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
 
   useEffect(() => {
     if (!hasShellRail) {
@@ -668,6 +690,17 @@ const ChatPage: React.FC = () => {
           </header>
 
           <div className="workspace-surface relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem]">
+          {skillsLoadError ? (
+            <div className="px-4 pb-0 pt-4 md:px-6 md:pt-6">
+              <ApiErrorAlert
+                error={skillsLoadError}
+                actionLabel="重试加载策略"
+                onAction={() => {
+                  void loadSkills();
+                }}
+              />
+            </div>
+          ) : null}
           {/* Messages */}
           <ScrollArea
             className="relative z-10 flex-1"
@@ -846,7 +879,18 @@ const ChatPage: React.FC = () => {
           {/* Input area */}
           <div className="theme-sidebar-divider relative z-20 border-t p-4 md:p-5">
             {chatError ? (
-              <ApiErrorAlert error={chatError} className="mb-3" />
+              <ApiErrorAlert
+                error={chatError}
+                className="mb-3"
+                actionLabel={chatError.category === 'local_connection_failed' ? '刷新页面后重试' : undefined}
+                onAction={
+                  chatError.category === 'local_connection_failed'
+                    ? () => {
+                        window.location.reload();
+                      }
+                    : undefined
+                }
+              />
             ) : null}
             {skills.length > 0 && (
               <div className="theme-panel-subtle mb-3 rounded-[1rem] p-3.5">

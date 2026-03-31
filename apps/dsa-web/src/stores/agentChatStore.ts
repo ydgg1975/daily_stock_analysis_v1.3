@@ -43,6 +43,7 @@ interface AgentChatState {
   sessionId: string;
   sessions: ChatSessionItem[];
   sessionsLoading: boolean;
+  sessionLoadError: ParsedApiError | null;
   chatError: ParsedApiError | null;
   currentRoute: string;
   completionBadge: boolean;
@@ -72,6 +73,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
   sessionId: getInitialSessionId(),
   sessions: [],
   sessionsLoading: false,
+  sessionLoadError: null,
   chatError: null,
   currentRoute: '',
   completionBadge: false,
@@ -83,12 +85,12 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
   clearCompletionBadge: () => set({ completionBadge: false }),
 
   loadSessions: async () => {
-    set({ sessionsLoading: true });
+    set({ sessionsLoading: true, sessionLoadError: null });
     try {
       const sessions = await agentApi.getChatSessions();
-      set({ sessions });
-    } catch {
-      // Ignore load errors
+      set({ sessions, sessionLoadError: null });
+    } catch (error: unknown) {
+      set({ sessionLoadError: getParsedApiError(error) });
     } finally {
       set({ sessionsLoading: false });
     }
@@ -97,11 +99,11 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
   loadInitialSession: async () => {
     const { hasInitialLoad } = get();
     if (hasInitialLoad) return;
-    set({ hasInitialLoad: true, sessionsLoading: true });
+    set({ hasInitialLoad: true, sessionsLoading: true, sessionLoadError: null });
 
     try {
       const sessionList = await agentApi.getChatSessions();
-      set({ sessions: sessionList });
+      set({ sessions: sessionList, sessionLoadError: null });
 
       const savedId = localStorage.getItem(STORAGE_KEY_SESSION);
       if (savedId) {
@@ -125,8 +127,11 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       } else {
         localStorage.setItem(STORAGE_KEY_SESSION, get().sessionId);
       }
-    } catch {
-      // Ignore
+    } catch (error: unknown) {
+      set({
+        hasInitialLoad: false,
+        sessionLoadError: getParsedApiError(error),
+      });
     } finally {
       set({ sessionsLoading: false });
     }
@@ -139,7 +144,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
     abortController?.abort();
     set({ abortController: null });
 
-    set({ messages: [], sessionId: targetSessionId });
+    set({ messages: [], sessionId: targetSessionId, sessionLoadError: null });
     localStorage.setItem(STORAGE_KEY_SESSION, targetSessionId);
 
     try {
@@ -151,8 +156,8 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
           content: m.content,
         })),
       });
-    } catch {
-      // Ignore
+    } catch (error: unknown) {
+      set({ sessionLoadError: getParsedApiError(error) });
     }
   },
 
@@ -166,6 +171,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
       loading: false,
       progressSteps: [],
       chatError: null,
+      sessionLoadError: null,
       abortController: null,
     });
     localStorage.setItem(STORAGE_KEY_SESSION, newId);
@@ -208,6 +214,66 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
             ...s.sessions,
           ],
     }));
+
+    const shouldFallbackToStandardChat = (error: unknown): boolean => {
+      const parsed = getParsedApiError(error);
+      if (parsed.category === 'local_connection_failed') {
+        return false;
+      }
+
+      if (parsed.status === 404 || parsed.status === 405 || parsed.status === 415) {
+        return true;
+      }
+
+      const normalized = `${parsed.title} ${parsed.message} ${parsed.rawMessage}`.toLowerCase();
+      return (
+        normalized.includes('流式响应不可用')
+        || normalized.includes('stream')
+        || normalized.includes('readablestream')
+        || normalized.includes('getreader')
+      );
+    };
+
+    const appendAssistantMessage = (content: string, thinkingSteps: ProgressStep[] = []) => {
+      const { sessionId: currentSessionId } = get();
+      if (currentSessionId !== streamSessionId || ac.signal.aborted) {
+        return;
+      }
+      set((s) => ({
+        messages: [
+          ...s.messages,
+          {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: content.trim() ? content : '（无内容）',
+            skill: payload.skills?.[0],
+            skillName,
+            thinkingSteps: [...thinkingSteps],
+          },
+        ],
+      }));
+    };
+
+    const syncCompletionBadge = () => {
+      const { currentRoute } = get();
+      if (currentRoute !== '/chat') {
+        set({ completionBadge: true });
+      }
+    };
+
+    const runNonStreamFallback = async () => {
+      const fallbackResponse = await agentApi.chat({
+        message: payload.message,
+        skills: payload.skills,
+        session_id: streamSessionId,
+        context: payload.context,
+      });
+      if (fallbackResponse.success === false) {
+        throw getParsedApiError(fallbackResponse.error || '问股执行失败');
+      }
+      appendAssistantMessage(fallbackResponse.content || '（无内容）');
+      syncCompletionBadge();
+    };
 
     try {
       const response = await agentApi.chatStream(payload, { signal: ac.signal });
@@ -281,37 +347,22 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
         }
       }
 
-      const { sessionId: currentSessionId, currentRoute } = get();
-      const shouldAppend =
-        currentSessionId === streamSessionId && !ac.signal.aborted;
-
-      if (shouldAppend) {
-        set((s) => ({
-          messages: [
-            ...s.messages,
-            {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: finalContent || '（无内容）',
-              skill: payload.skills?.[0],
-              skillName,
-              thinkingSteps: [...currentProgressSteps],
-            },
-          ],
-        }));
-      }
-
-      if (currentRoute !== '/chat') {
-        set({ completionBadge: true });
-      }
+      appendAssistantMessage(finalContent || '（无内容）', currentProgressSteps);
+      syncCompletionBadge();
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         // User-initiated abort: silent, no badge
       } else {
-        set({ chatError: getParsedApiError(error) });
-        const { currentRoute } = get();
-        if (currentRoute !== '/chat') {
-          set({ completionBadge: true });
+        if (shouldFallbackToStandardChat(error)) {
+          try {
+            await runNonStreamFallback();
+          } catch (fallbackError: unknown) {
+            set({ chatError: getParsedApiError(fallbackError) });
+            syncCompletionBadge();
+          }
+        } else {
+          set({ chatError: getParsedApiError(error) });
+          syncCompletionBadge();
         }
       }
     } finally {

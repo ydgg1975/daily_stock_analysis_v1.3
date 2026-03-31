@@ -65,10 +65,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           </div>
         </div>
 
-        <div className="mx-auto flex min-h-screen w-full max-w-[var(--layout-shell-max)] gap-[var(--layout-gap)] px-2 py-2 sm:px-3 sm:py-3 lg:px-4">
+        <div className="mx-auto flex min-h-screen w-full max-w-[var(--layout-shell-max)] gap-[var(--layout-shell-gap,var(--layout-gap))] px-2 py-2 sm:px-3 sm:py-3 lg:px-4">
           <aside
             className={cn(
-              'theme-sidebar-shell sticky top-3 hidden shrink-0 overflow-hidden rounded-[1.6rem] p-2.5 backdrop-blur-md transition-[width] duration-200 lg:flex',
+              'theme-sidebar-shell sticky top-3 hidden shrink-0 overflow-hidden rounded-[1.6rem] backdrop-blur-md transition-[width,box-shadow,border-color,background] duration-220 ease-out lg:flex',
               'h-[calc(100vh-1.5rem)] self-start sm:top-4 sm:h-[calc(100vh-2rem)]',
               collapsed ? 'w-[68px]' : 'w-[var(--layout-sidebar-width)]',
             )}
@@ -98,7 +98,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             </div>
           </aside>
 
-          <main className="min-h-0 min-w-0 flex-1 pt-14 lg:pt-0">
+          <main className="theme-main-lane min-h-0 min-w-0 flex-1 pt-14 lg:pt-0">
             {children ?? <Outlet />}
           </main>
         </div>

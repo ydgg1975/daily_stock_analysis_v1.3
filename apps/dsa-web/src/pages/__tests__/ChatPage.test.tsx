@@ -36,6 +36,7 @@ const mockStoreState = {
     },
   ],
   sessionsLoading: false,
+  sessionLoadError: null,
   chatError: null,
   loadSessions: mockLoadSessions,
   loadInitialSession: mockLoadInitialSession,

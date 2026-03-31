@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ConfirmDialogProps {
@@ -26,15 +27,44 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
-  if (!isOpen) return null;
+  const [isMounted, setIsMounted] = useState(isOpen);
+  const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
+
+  useEffect(() => {
+    if (isOpen) {
+      window.requestAnimationFrame(() => {
+        setIsMounted(true);
+        window.requestAnimationFrame(() => setUiState('open'));
+      });
+      return;
+    }
+    if (!isMounted) {
+      return;
+    }
+    queueMicrotask(() => setUiState('closed'));
+    const timer = window.setTimeout(() => {
+      setIsMounted(false);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, isMounted]);
+
+  if (!isMounted) return null;
 
   const dialog = (
     <div
-      className="theme-overlay-backdrop fixed inset-0 z-50 flex items-center justify-center transition-all"
+      className={`theme-overlay-backdrop fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200 ease-out ${
+        uiState === 'open' ? 'opacity-100' : 'opacity-0'
+      }`}
+      data-state={uiState}
       onClick={onCancel}
     >
       <div
-        className="theme-modal-panel mx-4 w-full max-w-sm rounded-xl border p-6 animate-in fade-in zoom-in duration-200"
+        className={`theme-modal-panel mx-4 w-full max-w-sm rounded-xl border p-6 transition-all duration-200 ease-out ${
+          uiState === 'open'
+            ? 'translate-y-0 scale-100 opacity-100'
+            : 'translate-y-1.5 scale-[0.985] opacity-0'
+        }`}
+        data-state={uiState}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="mb-2 text-lg font-medium text-foreground">{title}</h3>

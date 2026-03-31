@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧭 **三主题侧栏语言重构 + 壳层间距与交互动效再抛光** — Web 端新增侧栏专用 token（nav 几何、icon 容器、激活指示、分隔线、品牌块边框/阴影、rail framing），并在 `Dark Terminal / Cyberpunk / Geek(DOS)` 里分别落地为交易终端、赛博控制轨、单色 DOS 控制台三种侧栏语言，不再是同构侧栏仅换色。`Shell` 与 workspace split/chat 布局同时改为独立 `layout-shell-gap/layout-content-gap`，提高侧栏与主内容之间的结构间距，减少“贴边拥挤”感；导航项/图标容器/激活条与主区卡片的 hover/active 过渡也统一到 motion token，交互更平滑而不拖慢响应。
+
+- 📱 **移动端问股加载失败与侧栏遮挡问题修复（含主题/交互动效细化）** — `dsa-web` 的问股链路新增流式请求兼容处理：`chatStream` 统一携带 `credentials`/SSE header，移动端不支持 `ReadableStream` 或流式端点不可用时自动回退到标准 `/agent/chat`，并在会话加载失败、策略加载失败、网络失败时给出可执行的错误指引与重试入口。首页移动端侧栏移除了重复任务队列，只保留历史面板，避免遮挡历史分析列表。交互层补充了 Drawer/ConfirmDialog 的平滑开关场动画，Cyberpunk 主题进一步压暗并降低高亮粉色占比，保持三主题在背景、圆角、字体与控件语言上的差异化。
+
 - 🧱 **主题系统升级为“独立家族皮肤”并清理残留硬编码颜色** — Web 端进一步把 `Dark Terminal / Cyberpunk / Geek(DOS)` 收口为真正的全局主题家族：Cyberpunk 仅保留黑 + 粉 + 紫（去除可见 cyan/teal/green 残留），Geek / DOS 收敛为黑白灰单色终端。新增并对齐 `chart-toolbar / input / focus-ring` 等全局 token，状态条、历史选择框、任务队列、自动补全 market/match badge、分页、确认弹窗、内联告警、通用按钮与 loading 图标等组件全部改为 token 驱动，不再依赖 `bg-cyan` / `text-green-*` / `border-rose-*` 这类硬编码 Tailwind 色值。
 
 - 🌌 **Cyberpunk / Geek(DOS) 主题再次重绘 + 品牌化启动加载页落地** — `dsa-web` 赛博主题不再以青色为主，而是切换为黑底 + 霓虹粉/紫主导的高对比视觉（按钮、激活 pill、导航、进度条、图表 chrome 与卡片边缘发光同步偏向 pink/purple）；Geek / DOS 主题则从绿黑终端改为近黑白灰的单色复古样式（低饱和、平面化、弱发光、mono 字体主导）。同时新增品牌化首屏加载体验：`index.html` 提供预挂载 splash fallback，React 挂载后由 `BrandedLoadingScreen` 接管，中心使用 `/image.png` logo 动画并在关键初始加载完成后平滑淡出，避免慢网环境先看到半成品页面。

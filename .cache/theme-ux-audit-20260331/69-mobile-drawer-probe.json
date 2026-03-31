@@ -1,0 +1,5 @@
+{
+  "drawerTaskQueueCount": 0,
+  "globalTaskQueueCount": 1,
+  "note": "Task queue text remains in main page status section, but is removed from mobile sidebar drawer content."
+}

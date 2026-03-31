@@ -248,44 +248,33 @@ const HomePage: React.FC = () => {
   const sidebarContent = useMemo(
     () => (
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div
-          className={cn(
-            'grid min-h-0 flex-1 gap-3 overflow-hidden',
-            activeTasks.length > 0 ? 'grid-rows-[minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)]',
-          )}
-        >
-          <HistoryList
-            items={historyItems}
-            isLoading={isLoadingHistory}
-            isLoadingMore={isLoadingMore}
-            hasMore={hasMore}
-            selectedId={selectedReport?.meta.id}
-            highlightedId={highlightedHistoryId}
-            selectedIds={selectedIds}
-            isDeleting={isDeletingHistory}
-            onItemClick={(recordId) => {
-              void selectHistoryItem(recordId);
-              if (hasShellRail) {
-                closeMobileRail();
-              } else {
-                setSidebarOpen(false);
-              }
-            }}
-            onLoadMore={() => void loadMoreHistory()}
-            onToggleItemSelection={toggleHistorySelection}
-            onToggleSelectAll={toggleSelectAllVisible}
-            onDeleteSelected={() => setShowDeleteConfirm(true)}
-            className="min-h-0 h-full overflow-hidden"
-            embedded
-          />
-          {activeTasks.length > 0 ? (
-            <TaskPanel tasks={activeTasks} embedded className="shrink-0" />
-          ) : null}
-        </div>
+        <HistoryList
+          items={historyItems}
+          isLoading={isLoadingHistory}
+          isLoadingMore={isLoadingMore}
+          hasMore={hasMore}
+          selectedId={selectedReport?.meta.id}
+          highlightedId={highlightedHistoryId}
+          selectedIds={selectedIds}
+          isDeleting={isDeletingHistory}
+          onItemClick={(recordId) => {
+            void selectHistoryItem(recordId);
+            if (hasShellRail) {
+              closeMobileRail();
+            } else {
+              setSidebarOpen(false);
+            }
+          }}
+          onLoadMore={() => void loadMoreHistory()}
+          onToggleItemSelection={toggleHistorySelection}
+          onToggleSelectAll={toggleSelectAllVisible}
+          onDeleteSelected={() => setShowDeleteConfirm(true)}
+          className="min-h-0 h-full overflow-hidden"
+          embedded
+        />
       </div>
     ),
     [
-      activeTasks,
       hasMore,
       historyItems,
       highlightedHistoryId,

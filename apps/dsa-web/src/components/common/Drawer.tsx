@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { cn } from '../../utils/cn';
 
 let activeDrawerCount = 0;
@@ -26,6 +26,9 @@ export const Drawer: React.FC<DrawerProps> = ({
   zIndex = 50,
   side = 'right',
 }) => {
+  const [isMounted, setIsMounted] = useState(isOpen);
+  const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
+
   // Close the drawer when Escape is pressed.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -38,33 +41,64 @@ export const Drawer: React.FC<DrawerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      activeDrawerCount++;
-      if (activeDrawerCount === 1) {
-        document.body.style.overflow = 'hidden';
-      }
-
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-        activeDrawerCount--;
-        if (activeDrawerCount === 0) {
-          document.body.style.overflow = '';
-        }
-      };
+      window.requestAnimationFrame(() => {
+        setIsMounted(true);
+        window.requestAnimationFrame(() => setUiState('open'));
+      });
+      return;
     }
-  }, [isOpen, handleKeyDown]);
 
-  if (!isOpen) return null;
+    if (!isMounted) {
+      return;
+    }
+    queueMicrotask(() => setUiState('closed'));
+    const timer = window.setTimeout(() => {
+      setIsMounted(false);
+    }, 190);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) {
+      return;
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    activeDrawerCount++;
+    if (activeDrawerCount === 1) {
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      activeDrawerCount--;
+      if (activeDrawerCount === 0) {
+        document.body.style.overflow = '';
+      }
+    };
+  }, [isMounted, handleKeyDown]);
+
+  if (!isMounted) return null;
 
   const titleId = title ? `drawer-title-${side}` : undefined;
   const sidePositionClass = side === 'left' ? 'left-0 justify-start' : 'right-0 justify-end';
   const borderClass = side === 'left' ? 'border-r' : 'border-l';
+  const panelStateClass = side === 'left'
+    ? uiState === 'open'
+      ? 'translate-x-0 opacity-100'
+      : '-translate-x-full opacity-0'
+    : uiState === 'open'
+      ? 'translate-x-0 opacity-100'
+      : 'translate-x-full opacity-0';
 
   return (
     <div className="fixed inset-0 overflow-hidden overscroll-contain" style={{ zIndex }} role="presentation">
       {/* Backdrop */}
       <div
-        className="theme-overlay-backdrop absolute inset-0 transition-opacity duration-300"
+        data-state={uiState}
+        className={cn(
+          'theme-overlay-backdrop absolute inset-0 transition-opacity duration-200 ease-out',
+          uiState === 'open' ? 'opacity-100' : 'opacity-0',
+        )}
         onClick={onClose}
       />
 
@@ -74,11 +108,12 @@ export const Drawer: React.FC<DrawerProps> = ({
           aria-modal="true"
           aria-labelledby={titleId}
           className={cn(
-            'theme-modal-panel relative flex w-full flex-col',
+            'theme-modal-panel relative flex w-full flex-col transition-all duration-200 ease-out',
             borderClass,
             side === 'right' ? 'border-border/70' : 'border-border/70',
-            side === 'left' ? 'animate-slide-in-left' : 'animate-slide-in-right'
+            panelStateClass,
           )}
+          data-state={uiState}
         >
           <div className="flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-6 py-4">
             {title ? (

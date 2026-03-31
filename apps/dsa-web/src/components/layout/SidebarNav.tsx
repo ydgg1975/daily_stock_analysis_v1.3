@@ -54,7 +54,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
         ) : null}
       </div>
 
-      <nav className={cn('flex flex-col gap-1.5', embeddedRail ? '' : 'flex-1')} aria-label={t('shell.drawerTitle')}>
+      <div className={cn(embeddedRail ? 'mb-3 grid gap-2' : 'mb-3 grid gap-2')}>
+        <LanguageToggle variant="nav" collapsed={collapsed} />
+        <ThemeToggle variant="nav" collapsed={collapsed} />
+      </div>
+
+      <nav className={cn('theme-nav flex flex-col', embeddedRail ? '' : 'flex-1')} aria-label={t('shell.drawerTitle')}>
         {NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, exact, badge }) => {
           const label = t(labelKey);
           return (
@@ -66,12 +71,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
             aria-label={label}
           className={({ isActive }) =>
               cn(
-                'group relative flex items-center gap-3 rounded-[1rem] border text-sm transition-all',
+                'theme-nav-item group relative flex items-center gap-3 text-sm transition-all',
                 'h-[var(--nav-item-height)]',
                 collapsed ? 'justify-center px-0' : 'px-[var(--nav-item-padding-x)]',
                 isActive
-                  ? 'border-[var(--nav-active-border)] bg-[var(--nav-active-bg)] text-foreground shadow-[inset_0_0_0_1px_var(--nav-active-shadow)]'
-                  : 'border-transparent text-secondary-text hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
+                  ? 'is-active text-foreground'
+                  : 'text-secondary-text hover:text-foreground'
               )
             }
           >
@@ -80,13 +85,15 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                 {isActive && (
                   <motion.div 
                     layoutId="activeIndicator"
-                    className="absolute bottom-2 left-1.5 top-2 w-[var(--nav-indicator-width)] rounded-full bg-[var(--nav-indicator-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]"
+                    className="theme-nav-indicator absolute bottom-1.5 left-1.5 top-1.5 bg-[var(--nav-indicator-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                   />
                 )}
-                <Icon className={cn('ml-1 h-5 w-5 shrink-0', isActive ? 'text-[var(--nav-icon-active)]' : 'text-current')} />
+                <span className={cn('theme-nav-icon-wrap ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center', collapsed ? 'ml-0' : '')}>
+                  <Icon className={cn('h-[1.125rem] w-[1.125rem] shrink-0', isActive ? 'text-[var(--nav-icon-active)]' : 'text-current')} />
+                </span>
                 {!collapsed ? <span className="truncate">{label}</span> : null}
                 {badge === 'completion' && completionBadge ? (
                   <span
@@ -103,11 +110,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
           </NavLink>
         )})}
       </nav>
-
-      <div className={cn(embeddedRail ? 'mt-3 mb-2 grid gap-2' : 'mt-4 mb-2 grid gap-2')}>
-        <LanguageToggle variant="nav" collapsed={collapsed} />
-        <ThemeToggle variant="nav" collapsed={collapsed} />
-      </div>
 
       {authEnabled ? (
         <button

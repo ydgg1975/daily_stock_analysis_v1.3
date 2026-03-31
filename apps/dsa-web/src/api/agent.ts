@@ -1,6 +1,6 @@
 import apiClient from './index';
 import { API_BASE_URL } from '../utils/constants';
-import { createApiError, isApiRequestError, parseApiError } from './error';
+import { createApiError, createParsedApiError, isApiRequestError, parseApiError } from './error';
 
 export interface ChatStreamOptions {
   signal?: AbortSignal;
@@ -50,7 +50,7 @@ export interface ChatSessionMessage {
 }
 
 export const agentApi = {
-  async chat(payload: ChatRequest): Promise<ChatResponse> {
+  async chat(payload: ChatStreamRequest): Promise<ChatResponse> {
     const response = await apiClient.post<ChatResponse>('/api/v1/agent/chat', payload, {
       timeout: 120000,
     });
@@ -92,14 +92,40 @@ export const agentApi = {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          'X-Requested-With': 'fetch',
+        },
         body: JSON.stringify(payload),
         credentials: 'include',
+        cache: 'no-store',
         signal: options?.signal,
       });
 
       if (response.ok) {
+        if (!response.body || typeof response.body.getReader !== 'function') {
+          const parsed = createParsedApiError({
+            title: '流式响应不可用',
+            message: '当前环境不支持流式响应，已准备回退到标准响应模式。',
+            category: 'unknown',
+          });
+          throw createApiError(parsed, {
+            response: {
+              status: 200,
+              statusText: 'OK',
+            },
+          });
+        }
         return response;
+      }
+
+      if (response.status === 401) {
+        const path = window.location.pathname + window.location.search;
+        if (!path.startsWith('/login')) {
+          const redirect = encodeURIComponent(path);
+          window.location.assign(`/login?redirect=${redirect}`);
+        }
       }
 
       const contentType = response.headers.get('content-type') || '';

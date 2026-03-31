@@ -37,9 +37,33 @@ describe('ThemeToggle', () => {
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Geek \/ DOS/ }));
 
     await waitFor(() => {
-      expect(document.documentElement.dataset.themeStyle).toBe('hacker');
-      expect(document.body.dataset.themeStyle).toBe('hacker');
+      expect(document.documentElement.dataset.theme).toBe('dos');
+      expect(document.body.dataset.theme).toBe('dos');
       expect(window.localStorage.getItem('dsa-theme-style')).toBe('hacker');
+    });
+  });
+
+  it('closes popover on outside click and Escape', async () => {
+    render(
+      <ThemeProvider>
+        <ThemeToggle />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '切换主题' }));
+    expect(await screen.findByRole('menu', { name: '主题模式' })).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByRole('menu', { name: '主题模式' })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '切换主题' }));
+    expect(await screen.findByRole('menu', { name: '主题模式' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menu', { name: '主题模式' })).not.toBeInTheDocument();
     });
   });
 });
