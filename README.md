@@ -409,8 +409,7 @@ LITELLM_MODEL=openai/deepseek-chat
 > **注意**：配置了任意 AI API Key 后，Agent 对话功能自动可用，无需手动设置 `AGENT_MODE=true`。如需显式关闭可设置 `AGENT_MODE=false`。每次对话会产生 LLM API 调用费用。若你手动修改了 `.env` 中的主模型 / Agent 主模型 / 备选模型 / 模型渠道配置（如 `LITELLM_MODEL` / `AGENT_LITELLM_MODEL` / `LITELLM_FALLBACK_MODELS` / `LLM_CHANNELS`），需要重启服务或触发配置重载后，新进程才会按新模型生效。
 
 ### 启动方式
-
-1. **启动服务**（默认会自动编译前端）
+full
    ```bash
    python main.py --webui       # 启动 Web 界面 + 执行定时分析
    python main.py --webui-only  # 仅启动 Web 界面
