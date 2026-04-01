@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { historyApi } from '../../api/history';
+import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import ChatPage from '../ChatPage';
 
 function createDeferred<T>() {
@@ -115,7 +116,9 @@ describe('ChatPage', () => {
   it('renders a fixed workspace shell with independent session and message viewports', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -129,7 +132,9 @@ describe('ChatPage', () => {
   it('shows research-focused starter cards in the empty state', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -143,7 +148,9 @@ describe('ChatPage', () => {
   it('switches session when clicking anywhere on the session card', async () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -162,7 +169,9 @@ describe('ChatPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&recordId=1']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -258,7 +267,9 @@ describe('ChatPage', () => {
 
     render(
       <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&recordId=1']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -294,7 +305,9 @@ describe('ChatPage', () => {
   it('falls back to base stock context when recordId is missing', async () => {
     render(
       <MemoryRouter initialEntries={['/chat?stock=AAPL']}>
-        <ChatPage />
+        <ShellRailHarness>
+          <ChatPage />
+        </ShellRailHarness>
       </MemoryRouter>
     );
 
@@ -328,7 +341,7 @@ describe('ChatPage', () => {
       .mockImplementationOnce(() => secondDeferred.promise);
 
     const router = createMemoryRouter(
-      [{ path: '/chat', element: <ChatPage /> }],
+      [{ path: '/chat', element: <ShellRailHarness><ChatPage /></ShellRailHarness> }],
       {
         initialEntries: ['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&recordId=1'],
       },

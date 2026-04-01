@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi, DuplicateTaskError } from '../../api/analysis';
 import { historyApi } from '../../api/history';
+import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import { useStockPoolStore } from '../../stores';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import HomePage from '../HomePage';
@@ -92,7 +93,9 @@ describe('HomePage', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
       </MemoryRouter>,
     );
 
@@ -119,7 +122,9 @@ describe('HomePage', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
       </MemoryRouter>,
     );
 
@@ -127,7 +132,7 @@ describe('HomePage', () => {
     expect(
       screen.getByText('输入股票代码进行分析，或从左侧历史列表中选择已有报告。主内容区会按总览、行情、技术、基本面、财报和作战计划顺序展开。'),
     ).toBeInTheDocument();
-    expect(screen.getByText('暂无历史分析记录')).toBeInTheDocument();
+    expect(await screen.findByText('暂无历史分析记录')).toBeInTheDocument();
   });
 
   it('surfaces duplicate task warnings from dashboard submission', async () => {
@@ -143,7 +148,9 @@ describe('HomePage', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
       </MemoryRouter>,
     );
 
@@ -171,7 +178,9 @@ describe('HomePage', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
       </MemoryRouter>,
     );
 
@@ -195,7 +204,9 @@ describe('HomePage', () => {
 
     render(
       <MemoryRouter>
-        <HomePage />
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
       </MemoryRouter>,
     );
 

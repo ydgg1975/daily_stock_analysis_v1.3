@@ -6,6 +6,7 @@ import type {
   StandardReportMarketBlock,
   StandardReportSummaryPanel,
 } from '../../types/analysis';
+import { SupportPanel } from '../common';
 import { cn } from '../../utils/cn';
 import { useElementSize } from '../../hooks/useElementSize';
 
@@ -945,11 +946,12 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         <div className="theme-chart-canvas">
           {activeBar ? (
             <div className="mb-2.5 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.98fr)]">
-              <div className="theme-panel-subtle rounded-[1rem] px-3 py-2.5">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
-                  {hoveredIndex != null ? t('chart.inspectBar') : t('chart.currentBar')}
-                </p>
-                <p className="mt-1 text-xs font-medium text-foreground sm:text-sm">{activeBar.label}</p>
+              <SupportPanel
+                className="px-3 py-2.5"
+                title={hoveredIndex != null ? t('chart.inspectBar') : t('chart.currentBar')}
+                titleClassName="text-[11px] uppercase tracking-[0.16em] text-muted-text"
+              >
+                <p className="text-xs font-medium text-foreground sm:text-sm">{activeBar.label}</p>
                 <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
                   {inspectorRows.map((row) => (
                     <div key={row.label} className="space-y-1">
@@ -958,13 +960,19 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="theme-panel-subtle rounded-[1rem] px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{t('chart.sessionMetrics')}</p>
-                  <span className="text-[10px] text-muted-text sm:text-[11px]">{summary?.snapshotTime || summary?.marketSessionDate || '--'}</span>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 xl:grid-cols-3">
+              </SupportPanel>
+              <SupportPanel
+                className="px-3 py-2.5"
+                title={t('chart.sessionMetrics')}
+                titleClassName="text-[11px] uppercase tracking-[0.16em] text-muted-text"
+                actions={(
+                  <span className="text-[10px] text-muted-text sm:text-[11px]">
+                    {summary?.snapshotTime || summary?.marketSessionDate || '--'}
+                  </span>
+                )}
+                actionsClassName="mt-0 justify-end"
+              >
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 xl:grid-cols-3">
                   {sessionMetricRows.map((row) => (
                     <div key={row.label} className="min-w-0">
                       <p className="text-[10px] uppercase tracking-[0.12em] text-muted-text">{row.label}</p>
@@ -972,7 +980,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
+              </SupportPanel>
             </div>
           ) : null}
           <div

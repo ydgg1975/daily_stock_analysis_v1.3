@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🛡️ **B3 受控弃用准备：报告渲染新增 legacy fallback 开关与契约观测** — Web 报告分支新增 `VITE_REPORT_LEGACY_FALLBACK`（`on/off/auto`）受控策略，`standard_report` 作为主路径，legacy 分支降级为兼容回退；同时补齐 `legacy_only` 契约测试、switch 分支测试与 fallback 观测日志（含 `payloadVariant / standardReportSource / mode`），为后续最终移除 legacy 路径提供可回滚保障。
+
 - 🧭 **三主题侧栏语言重构 + 壳层间距与交互动效再抛光** — Web 端新增侧栏专用 token（nav 几何、icon 容器、激活指示、分隔线、品牌块边框/阴影、rail framing），并在 `Dark Terminal / Cyberpunk / Geek(DOS)` 里分别落地为交易终端、赛博控制轨、单色 DOS 控制台三种侧栏语言，不再是同构侧栏仅换色。`Shell` 与 workspace split/chat 布局同时改为独立 `layout-shell-gap/layout-content-gap`，提高侧栏与主内容之间的结构间距，减少“贴边拥挤”感；导航项/图标容器/激活条与主区卡片的 hover/active 过渡也统一到 motion token，交互更平滑而不拖慢响应。
 
 - 📱 **移动端问股加载失败与侧栏遮挡问题修复（含主题/交互动效细化）** — `dsa-web` 的问股链路新增流式请求兼容处理：`chatStream` 统一携带 `credentials`/SSE header，移动端不支持 `ReadableStream` 或流式端点不可用时自动回退到标准 `/agent/chat`，并在会话加载失败、策略加载失败、网络失败时给出可执行的错误指引与重试入口。首页移动端侧栏移除了重复任务队列，只保留历史面板，避免遮挡历史分析列表。交互层补充了 Drawer/ConfirmDialog 的平滑开关场动画，Cyberpunk 主题进一步压暗并降低高亮粉色占比，保持三主题在背景、圆角、字体与控件语言上的差异化。

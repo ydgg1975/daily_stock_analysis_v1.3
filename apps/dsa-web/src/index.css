@@ -1278,6 +1278,79 @@ html[data-theme] :where(
   padding: clamp(1rem, 1.35vw, 1.35rem) clamp(1rem, 1.55vw, 1.55rem);
 }
 
+.workspace-header-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspace-header-copy {
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+
+.workspace-header-actions {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.workspace-header-actions--end {
+  justify-content: flex-start;
+}
+
+.workspace-header-actions-note {
+  min-width: 0;
+  flex: 1 1 14rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.report-support-card {
+  border-color: hsl(var(--border-muted-hsl) / 0.5) !important;
+  background: hsl(var(--bg-card-hsl) / 0.84) !important;
+  box-shadow: 0 10px 26px hsl(0 0% 0% / 0.18);
+}
+
+.report-support-note {
+  margin-bottom: 0.9rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.report-empty-state {
+  padding: 1rem;
+}
+
+.report-empty-state-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-empty-state-body {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+@media (min-width: 768px) {
+  .workspace-header-actions--end {
+    justify-content: flex-end;
+  }
+
+  .workspace-header-actions-note {
+    text-align: right;
+  }
+}
+
 .workspace-surface {
   border-radius: var(--theme-panel-radius-lg);
   border-width: var(--theme-border-width);
@@ -1434,6 +1507,11 @@ html[data-theme] :where(
   background: hsl(var(--accent-positive-hsl) / 0.16);
 }
 
+.theme-inline-banner--danger {
+  border-color: hsl(var(--accent-danger-hsl) / 0.44);
+  background: hsl(var(--accent-danger-hsl) / 0.16);
+}
+
 .theme-inline-banner-title {
   color: var(--text-primary);
 }
@@ -1516,7 +1594,7 @@ html[data-theme] :where(
 
 .workspace-split-main {
   min-width: 0;
-  padding-left: clamp(0.06rem, 0.35vw, 0.24rem);
+  padding-left: clamp(0.14rem, 0.5vw, 0.42rem);
 }
 
 .workspace-split-layout--main-only > .workspace-split-main {
@@ -1528,7 +1606,7 @@ html[data-theme] :where(
   display: flex;
   min-width: 0;
   flex: 1;
-  gap: var(--layout-content-gap, var(--layout-gap));
+  gap: calc(var(--layout-content-gap, var(--layout-gap)) + 0.1rem);
   overflow: visible;
 }
 

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
 
@@ -32,6 +32,11 @@ beforeAll(() => {
       dispatchEvent: vi.fn(),
     })),
   });
+});
+
+afterEach(() => {
+  window.innerWidth = 1024;
+  window.dispatchEvent(new Event('resize'));
 });
 
 describe('Shell', () => {
@@ -86,5 +91,27 @@ describe('Shell', () => {
     expect(await screen.findByRole('heading', { name: '退出登录' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认退出' }));
     expect(mockLogout).toHaveBeenCalled();
+  });
+
+  it('keeps theme and language controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
+    window.innerWidth = 375;
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '切换语言' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+
+    expect(await screen.findByRole('button', { name: '切换主题' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '切换语言' })).toBeInTheDocument();
   });
 });

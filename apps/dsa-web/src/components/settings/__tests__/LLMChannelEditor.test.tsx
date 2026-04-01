@@ -4,7 +4,6 @@ import { LLMChannelEditor } from '../LLMChannelEditor';
 
 vi.mock('../../../api/systemConfig', () => ({
   systemConfigApi: {
-    update: vi.fn(),
     testLLMChannel: vi.fn(),
   },
 }));
@@ -21,9 +20,7 @@ describe('LLMChannelEditor', () => {
           { key: 'LLM_OPENAI_API_KEY', value: 'secret-key' },
           { key: 'LLM_OPENAI_MODELS', value: 'gpt-4o-mini' },
         ]}
-        configVersion="v1"
-        maskToken="******"
-        onSaved={() => {}}
+        onSaveItems={() => {}}
       />
     );
 

@@ -4,7 +4,7 @@ import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recha
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, ConfirmDialog } from '../components/common';
+import { ApiErrorAlert, Card, Badge, ConfirmDialog, WorkspacePageHeader } from '../components/common';
 import { toDateInputValue } from '../utils/format';
 import type {
   PortfolioAccountItem,
@@ -730,24 +730,48 @@ const PortfolioPage: React.FC = () => {
   };
 
   return (
-    <div className="workspace-page">
-      <section className="workspace-header-panel space-y-4">
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">WolfyStock Portfolio Desk</p>
-          <h1 className="text-xl md:text-2xl font-semibold text-foreground">持仓管理</h1>
-          <p className="text-sm text-secondary">
-            组合快照、手工录入、CSV 导入与风险分析（支持全组合 / 单账户切换）
+    <div className="workspace-page workspace-page--portfolio">
+      <WorkspacePageHeader
+        eyebrow="WolfyStock Portfolio Desk"
+        title="持仓管理"
+        description="组合快照、手工录入、CSV 导入与风险分析（支持全组合 / 单账户切换）"
+        actions={hasAccounts ? (
+          <>
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              onClick={() => {
+                setShowCreateAccount((prev) => !prev);
+                setAccountCreateError(null);
+                setAccountCreateSuccess(null);
+              }}
+            >
+              {showCreateAccount ? '收起新建' : '新建账户'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={isLoading || fxRefreshing}
+              className="btn-secondary text-sm"
+            >
+              {isLoading ? '刷新中...' : '刷新数据'}
+            </button>
+          </>
+        ) : (
+          <p className="workspace-header-actions-note">
+            还没有可用账户，请先创建账户后再录入交易或导入 CSV。
           </p>
-        </div>
+        )}
+      >
         {hasAccounts ? (
-          <div className="workspace-surface-muted p-3">
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_220px_280px] gap-2 items-end">
+          <div className="workspace-surface-muted p-3.5">
+            <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1fr)_220px_minmax(0,260px)] xl:items-end">
               <div>
-                <p className="text-xs text-secondary mb-1">账户视图</p>
+                <p className="mb-1 text-xs text-secondary">账户视图</p>
                 <select
                   value={String(selectedAccount)}
                   onChange={(e) => setSelectedAccount(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                  className="input-terminal text-sm w-full"
+                  className="input-terminal w-full text-sm"
                 >
                   <option value="all">全部账户</option>
                   {accounts.map((account) => (
@@ -758,45 +782,23 @@ const PortfolioPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <p className="text-xs text-secondary mb-1">成本口径</p>
+                <p className="mb-1 text-xs text-secondary">成本口径</p>
                 <select
                   value={costMethod}
                   onChange={(e) => setCostMethod(e.target.value as PortfolioCostMethod)}
-                  className="input-terminal text-sm w-full"
+                  className="input-terminal w-full text-sm"
                 >
                   <option value="fifo">先进先出（FIFO）</option>
                   <option value="avg">均价成本（AVG）</option>
                 </select>
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn-secondary text-sm flex-1"
-                  onClick={() => {
-                    setShowCreateAccount((prev) => !prev);
-                    setAccountCreateError(null);
-                    setAccountCreateSuccess(null);
-                  }}
-                >
-                  {showCreateAccount ? '收起新建' : '新建账户'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleRefresh()}
-                  disabled={isLoading || fxRefreshing}
-                  className="btn-secondary text-sm flex-1"
-                >
-                  {isLoading ? '刷新中...' : '刷新数据'}
-                </button>
-              </div>
+              <p className="workspace-header-actions-note xl:text-right">
+                当前视图会同步刷新组合快照、风险指标与账户维度的持仓明细。
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-2 inline-block">
-            还没有可用账户，请先创建账户后再录入交易或导入 CSV。
-          </div>
-        )}
-      </section>
+        ) : null}
+      </WorkspacePageHeader>
 
       {error ? <ApiErrorAlert error={error} onDismiss={() => setError(null)} /> : null}
       {riskWarning ? (
@@ -976,7 +978,12 @@ const PortfolioPage: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="text-sm text-muted py-8 text-center">暂无集中度数据</p>
+            <div className="rounded-xl border border-white/8 bg-white/[0.03] px-4 py-6 text-center">
+              <p className="text-sm font-medium text-foreground">暂无集中度数据</p>
+              <p className="mt-2 text-xs leading-6 text-muted-text">
+                补齐持仓市值后，这里会显示行业或个股维度的权重分布与集中度提示。
+              </p>
+            </div>
           )}
           <div className="mt-3 text-xs text-secondary space-y-1">
             <div>展示口径: {concentrationMode === 'sector' ? '行业维度' : '个股维度（降级显示）'}</div>
@@ -1260,7 +1267,12 @@ const PortfolioPage: React.FC = () => {
                 && ((eventType === 'trade' && tradeEvents.length === 0)
                   || (eventType === 'cash' && cashEvents.length === 0)
                   || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
-                    <p className="text-xs text-muted text-center py-3">暂无流水</p>
+                    <div className="px-2 py-3 text-center">
+                      <p className="text-sm font-medium text-foreground">暂无流水记录</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-text">
+                        调整筛选条件，或先录入一条交易、资金流水或公司行为。
+                      </p>
+                    </div>
                   ) : null}
             </div>
             <div className="flex items-center justify-between text-xs text-secondary">

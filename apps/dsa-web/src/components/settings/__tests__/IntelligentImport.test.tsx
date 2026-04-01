@@ -3,10 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntelligentImport } from '../IntelligentImport';
 import { SystemConfigConflictError } from '../../../api/systemConfig';
 
-const { parseImport, update, onMerged } = vi.hoisted(() => ({
+const { parseImport, onMergeStockList } = vi.hoisted(() => ({
   parseImport: vi.fn(),
-  update: vi.fn(),
-  onMerged: vi.fn(),
+  onMergeStockList: vi.fn(),
 }));
 
 vi.mock('../../../api/stocks', () => ({
@@ -15,17 +14,6 @@ vi.mock('../../../api/stocks', () => ({
     extractFromImage: vi.fn(),
   },
 }));
-
-vi.mock('../../../api/systemConfig', async () => {
-  const actual = await vi.importActual<typeof import('../../../api/systemConfig')>('../../../api/systemConfig');
-  return {
-    ...actual,
-    systemConfigApi: {
-      ...actual.systemConfigApi,
-      update,
-    },
-  };
-});
 
 describe('IntelligentImport', () => {
   beforeEach(() => {
@@ -37,16 +25,14 @@ describe('IntelligentImport', () => {
       items: [{ code: 'SZ000001', name: 'Ping An Bank', confidence: 'high' }],
       codes: [],
     });
-    update.mockRejectedValue(
-      new SystemConfigConflictError('配置版本冲突', 'v2'),
-    );
+    onMergeStockList
+      .mockRejectedValueOnce(new SystemConfigConflictError('配置版本冲突', 'v2'))
+      .mockResolvedValueOnce(undefined);
 
     render(
       <IntelligentImport
         stockListValue="SH600000"
-        configVersion="v1"
-        maskToken="******"
-        onMerged={onMerged}
+        onMergeStockList={onMergeStockList}
       />,
     );
 
@@ -60,11 +46,9 @@ describe('IntelligentImport', () => {
     fireEvent.click(screen.getByRole('button', { name: '合并到自选股' }));
 
     await waitFor(() => {
-      expect(update).toHaveBeenCalled();
+      expect(onMergeStockList).toHaveBeenCalledTimes(2);
     });
-    await waitFor(() => {
-      expect(onMerged).toHaveBeenCalledWith('SH600000,SZ000001');
-    });
+    expect(onMergeStockList).toHaveBeenCalledWith('SH600000,SZ000001');
     expect(await screen.findByText('配置已更新，请再次点击「合并到自选股」')).toBeInTheDocument();
   });
 });

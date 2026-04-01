@@ -5,13 +5,12 @@ import { getParsedApiError } from '../api/error';
 import { historyApi } from '../api/history';
 import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
 import { translateForCurrentLanguage } from '../i18n/core';
+import { MAX_RECENT_TASKS, sortTasksByPriority } from '../utils/taskQueue';
 import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } from '../utils/validation';
 
 const PAGE_SIZE = 20;
 const SELECTED_HISTORY_ID_STORAGE_KEY = 'dsa-selected-history-id';
 const TASK_QUEUE_STORAGE_KEY = 'dsa-task-queue-v1';
-const MAX_RECENT_TASKS = 12;
-
 type SelectionSource = 'manual' | 'autocomplete' | 'import' | 'image';
 
 type FetchHistoryOptions = {
@@ -92,31 +91,6 @@ function touchTask(task: TaskInfo): TaskInfo {
   };
 }
 
-function sortTasks(tasks: TaskInfo[]): TaskInfo[] {
-  const statusWeight = (task: TaskInfo): number => {
-    if (task.status === 'processing') {
-      return 3;
-    }
-    if (task.status === 'pending') {
-      return 2;
-    }
-    if (task.status === 'failed') {
-      return 1;
-    }
-    return 0;
-  };
-
-  return [...tasks].sort((left, right) => {
-    const statusDiff = statusWeight(right) - statusWeight(left);
-    if (statusDiff !== 0) {
-      return statusDiff;
-    }
-    const leftTime = Date.parse(left.updatedAt || left.completedAt || left.startedAt || left.createdAt || '');
-    const rightTime = Date.parse(right.updatedAt || right.completedAt || right.startedAt || right.createdAt || '');
-    return rightTime - leftTime;
-  }).slice(0, MAX_RECENT_TASKS);
-}
-
 function upsertTask(tasks: TaskInfo[], task: TaskInfo): TaskInfo[] {
   const normalizedTask = touchTask(task);
   const nextTasks = [...tasks];
@@ -133,7 +107,7 @@ function upsertTask(tasks: TaskInfo[], task: TaskInfo): TaskInfo[] {
       updatedAt: new Date().toISOString(),
     });
   }
-  return sortTasks(nextTasks);
+  return sortTasksByPriority(nextTasks);
 }
 
 export interface StockPoolState {
@@ -321,14 +295,14 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
   hydrateRecentTasks: async () => {
     try {
       const response = await analysisApi.getTasks({ limit: MAX_RECENT_TASKS });
-      const hydrated = sortTasks((response.tasks || []).map((task) => ({
+      const hydrated = sortTasksByPriority((response.tasks || []).map((task) => ({
         ...task,
         updatedAt: task.updatedAt || task.completedAt || task.startedAt || task.createdAt,
       })));
       persistTasks(hydrated);
       set({ activeTasks: hydrated });
     } catch {
-      const persisted = sortTasks(readPersistedTasks());
+      const persisted = sortTasksByPriority(readPersistedTasks());
       persistTasks(persisted);
       set({ activeTasks: persisted });
     }

@@ -1,12 +1,13 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiErrorAlert, ConfirmDialog, Button } from '../components/common';
+import { ApiErrorAlert, ConfirmDialog, Button, WorkspacePageHeader } from '../components/common';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { HistoryList } from '../components/history';
 import { ReportMarkdown, ReportSummary } from '../components/report';
 import { TaskPanel } from '../components/tasks';
 import { useShellRail } from '../components/layout/ShellRailContext';
+import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useDashboardLifecycle } from '../hooks';
 import { useStockPoolStore } from '../stores';
@@ -20,6 +21,7 @@ import {
   inferAnalysisStage,
 } from '../utils/analysisStatus';
 import { normalizeReportLanguage } from '../utils/reportLanguage';
+import { selectCompletedTasksByRecency, selectPrimaryTask } from '../utils/taskQueue';
 
 type LatestReportOpenState = {
   taskId: string;
@@ -34,33 +36,6 @@ type LatestReportToast = {
   stockCode: string;
   stockName?: string;
 };
-
-function selectPrimaryTask(tasks: TaskInfo[]): TaskInfo | null {
-  if (tasks.length === 0) {
-    return null;
-  }
-
-  const weight = (task: TaskInfo): number => {
-    if (task.status === 'processing') {
-      return 3;
-    }
-    if (task.status === 'pending') {
-      return 2;
-    }
-    if (task.status === 'failed') {
-      return 1;
-    }
-    return 0;
-  };
-
-  return [...tasks].sort((left, right) => {
-    const weightDiff = weight(right) - weight(left);
-    if (weightDiff !== 0) {
-      return weightDiff;
-    }
-    return Date.parse(right.createdAt || '') - Date.parse(left.createdAt || '');
-  })[0];
-}
 
 const AnalysisStatusStrip: React.FC<{
   task: TaskInfo | null;
@@ -181,9 +156,8 @@ const AnalysisStatusStrip: React.FC<{
 const HomePage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { setRailContent, closeMobileRail, isConnected: hasShellRail } = useShellRail();
+  const { closeMobileRail } = useShellRail();
   const resultRegionRef = useRef<HTMLDivElement | null>(null);
   const handledCompletedTaskIdsRef = useRef<Set<string>>(new Set());
   const openingCompletedTaskIdsRef = useRef<Set<string>>(new Set());
@@ -259,11 +233,7 @@ const HomePage: React.FC = () => {
           isDeleting={isDeletingHistory}
           onItemClick={(recordId) => {
             void selectHistoryItem(recordId);
-            if (hasShellRail) {
-              closeMobileRail();
-            } else {
-              setSidebarOpen(false);
-            }
+            closeMobileRail();
           }}
           onLoadMore={() => void loadMoreHistory()}
           onToggleItemSelection={toggleHistorySelection}
@@ -286,19 +256,12 @@ const HomePage: React.FC = () => {
       selectedReport?.meta.id,
       selectHistoryItem,
       closeMobileRail,
-      hasShellRail,
       toggleHistorySelection,
       toggleSelectAllVisible,
     ],
   );
 
-  useEffect(() => {
-    if (!hasShellRail) {
-      return undefined;
-    }
-    setRailContent(sidebarContent);
-    return () => setRailContent(null);
-  }, [hasShellRail, setRailContent, sidebarContent]);
+  useShellRailSlot(sidebarContent);
 
   useEffect(() => {
     const handledTaskIds = handledCompletedTaskIdsRef.current;
@@ -400,9 +363,7 @@ const HomePage: React.FC = () => {
   );
 
   useEffect(() => {
-    const completedTasks = activeTasks
-      .filter((task) => task.status === 'completed')
-      .sort((left, right) => Date.parse(right.completedAt || right.createdAt || '') - Date.parse(left.completedAt || left.createdAt || ''));
+    const completedTasks = selectCompletedTasksByRecency(activeTasks);
 
     completedTasks.forEach((task) => {
       if (
@@ -418,28 +379,43 @@ const HomePage: React.FC = () => {
 
   return (
     <div data-testid="home-dashboard" className="workspace-page workspace-page--home">
-      <header className="workspace-header-panel overflow-hidden">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{t('home.eyebrow')}</p>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">{t('home.title')}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">
-              {t('home.subtitle')}
-            </p>
-          </div>
-          {!hasShellRail ? (
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="theme-panel-subtle -mr-1 flex-shrink-0 rounded-xl p-2 text-secondary-text transition-colors hover:text-foreground xl:hidden"
-              title={t('home.historyTitle')}
+      <WorkspacePageHeader
+        className="overflow-hidden"
+        eyebrow={t('home.eyebrow')}
+        title={t('home.title')}
+        description={t('home.subtitle')}
+        actions={selectedReport ? (
+          <>
+            <Button
+              variant="home-action-ai"
+              size="sm"
+              disabled={selectedReport.meta.id === undefined}
+              onClick={() => {
+                const code = selectedReport.meta.stockCode;
+                const name = selectedReport.meta.stockName;
+                const rid = selectedReport.meta.id!;
+                navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
+              }}
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
-            </button>
-          ) : null}
-        </div>
-
+              {t('home.followAi')}
+            </Button>
+            <Button
+              variant="home-action-report"
+              size="sm"
+              disabled={selectedReport.meta.id === undefined}
+              onClick={openMarkdownDrawer}
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {t('home.viewFullReport')}
+            </Button>
+          </>
+        ) : null}
+      >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div className="space-y-2">
             <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -484,37 +460,6 @@ const HomePage: React.FC = () => {
             ) : null}
           </div>
 
-          {selectedReport ? (
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <Button
-                variant="home-action-ai"
-                size="sm"
-                disabled={selectedReport.meta.id === undefined}
-                onClick={() => {
-                  const code = selectedReport.meta.stockCode;
-                  const name = selectedReport.meta.stockName;
-                  const rid = selectedReport.meta.id!;
-                  navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
-                }}
-                >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                {t('home.followAi')}
-              </Button>
-              <Button
-                variant="home-action-report"
-                size="sm"
-                disabled={selectedReport.meta.id === undefined}
-                onClick={openMarkdownDrawer}
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {t('home.viewFullReport')}
-              </Button>
-            </div>
-          ) : null}
         </div>
 
         <AnalysisStatusStrip
@@ -561,27 +506,9 @@ const HomePage: React.FC = () => {
             </div>
           </div>
         ) : null}
-      </header>
+      </WorkspacePageHeader>
 
-      <div className={cn('workspace-split-layout', hasShellRail && 'workspace-split-layout--main-only')}>
-        {!hasShellRail ? (
-          <aside className="workspace-split-rail hidden min-h-0 xl:flex xl:max-h-[calc(100vh-6.5rem)] xl:flex-col">
-              {sidebarContent}
-          </aside>
-        ) : null}
-
-        {!hasShellRail && sidebarOpen ? (
-          <div className="fixed inset-0 z-40 xl:hidden" onClick={() => setSidebarOpen(false)}>
-            <div className="absolute inset-0 home-mobile-overlay" />
-            <div
-              className="theme-sidebar-shell absolute bottom-0 left-0 top-0 flex w-[min(var(--layout-context-rail-width),88vw)] flex-col overflow-hidden rounded-none rounded-r-[1.35rem] p-3"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {sidebarContent}
-            </div>
-          </div>
-        ) : null}
-
+      <div className="workspace-split-layout workspace-split-layout--main-only">
         <section className="workspace-split-main overflow-x-hidden">
             {error ? (
               <ApiErrorAlert
@@ -601,7 +528,7 @@ const HomePage: React.FC = () => {
                 className={selectedReport.details?.standardReport ? 'w-full min-w-0 pb-8' : 'max-w-5xl pb-8'}
               >
                 <div key={selectedReport.meta.id ?? selectedReport.meta.queryId} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <ReportSummary data={selectedReport} isHistory />
+                  <ReportSummary data={selectedReport} />
                 </div>
               </div>
             ) : (

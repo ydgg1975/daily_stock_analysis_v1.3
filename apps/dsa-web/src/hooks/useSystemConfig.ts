@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigConflictError, SystemConfigValidationError } from '../api/systemConfig';
 import type {
@@ -24,6 +24,12 @@ type SaveResult = {
   issues?: ConfigValidationIssue[];
 };
 
+type PersistSaveOptions = {
+  validateBeforeSave: boolean;
+  preserveDirty: boolean;
+  successMessage: string;
+};
+
 const CATEGORY_DISPLAY_ORDER: Record<string, number> = {
   base: 10,
   ai_model: 20,
@@ -34,6 +40,9 @@ const CATEGORY_DISPLAY_ORDER: Record<string, number> = {
   backtest: 60,
   uncategorized: 99,
 };
+
+const ADMIN_UNLOCK_TOKEN_STORAGE_KEY = 'dsa-admin-settings-unlock-token';
+const ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY = 'dsa-admin-settings-unlock-expires-at';
 
 function sortItemsByOrder(items: SystemConfigItem[]): SystemConfigItem[] {
   return [...items].sort((a, b) => {
@@ -82,6 +91,16 @@ export function useSystemConfig() {
   const [saveError, setSaveError] = useState<ParsedApiError | null>(null);
   const [retryAction, setRetryAction] = useState<RetryAction>(null);
   const serverItemByKeyRef = useRef<Record<string, SystemConfigItem>>({});
+
+  // Unlock/session state
+  const [adminUnlockToken, setAdminUnlockToken] = useState<string | null>(null);
+  const [adminUnlockExpiresAt, setAdminUnlockExpiresAt] = useState<number | null>(null);
+
+  const isAdminUnlocked = Boolean(
+    adminUnlockToken
+    && adminUnlockExpiresAt
+    && adminUnlockExpiresAt > Date.now(),
+  );
 
   const mergedItems = useMemo(() => {
     return sortItemsByOrder(
@@ -214,6 +233,27 @@ export function useSystemConfig() {
     [],
   );
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storedToken = window.sessionStorage.getItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
+    const rawExpiresAt = window.sessionStorage.getItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
+    const parsedExpiresAt = Number(rawExpiresAt || '0');
+
+    if (!storedToken || !Number.isFinite(parsedExpiresAt) || parsedExpiresAt <= Date.now()) {
+      setAdminUnlockToken(null);
+      setAdminUnlockExpiresAt(null);
+      window.sessionStorage.removeItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
+      window.sessionStorage.removeItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
+      return;
+    }
+
+    setAdminUnlockToken(storedToken);
+    setAdminUnlockExpiresAt(parsedExpiresAt);
+  }, []);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -251,17 +291,6 @@ export function useSystemConfig() {
     });
   }, []);
 
-  const refreshAfterExternalSave = useCallback(
-    async (committedKeys: string[]) => {
-      const config = await systemConfigApi.getConfig(true);
-      applyServerPayload(config.items, config.configVersion, config.maskToken, {
-        preserveDirty: true,
-        committedKeys,
-      });
-    },
-    [applyServerPayload],
-  );
-
   const setDraftValue = useCallback((key: string, value: string) => {
     setDraftValues((previous) => ({
       ...previous,
@@ -286,6 +315,94 @@ export function useSystemConfig() {
       });
   }, [dirtyKeys, draftValues, serverItemByKey]);
 
+  const setAdminUnlockSession = useCallback((token: string, expiresAt: number) => {
+    const normalizedToken = token.trim();
+    if (!normalizedToken || !Number.isFinite(expiresAt)) {
+      return;
+    }
+
+    setAdminUnlockToken(normalizedToken);
+    setAdminUnlockExpiresAt(expiresAt);
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY, normalizedToken);
+      window.sessionStorage.setItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY, String(expiresAt));
+    }
+  }, []);
+
+  const clearAdminUnlockSession = useCallback(() => {
+    setAdminUnlockToken(null);
+    setAdminUnlockExpiresAt(null);
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
+      window.sessionStorage.removeItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
+    }
+  }, []);
+
+  const persistItems = useCallback(async (
+    changedItems: SystemConfigUpdateItem[],
+    options: PersistSaveOptions,
+  ): Promise<void> => {
+    if (!changedItems.length) {
+      return;
+    }
+
+    if (options.validateBeforeSave) {
+      const validateResult = await systemConfigApi.validate({ items: changedItems }, { adminUnlockToken });
+      setValidationIssues(validateResult.issues || []);
+
+      if (!validateResult.valid) {
+        throw createParsedApiError({
+          title: '配置校验未通过',
+          message: '请先修正表单错误后再保存。',
+          rawMessage: '配置校验未通过，请先修正表单错误。',
+          category: 'http_error',
+        });
+      }
+    }
+
+    const updateResult = await systemConfigApi.update({
+      configVersion,
+      maskToken,
+      reloadNow: true,
+      items: changedItems,
+    }, { adminUnlockToken });
+
+    const refreshed = await systemConfigApi.getConfig(true);
+    applyServerPayload(refreshed.items, refreshed.configVersion, refreshed.maskToken, {
+      preserveDirty: options.preserveDirty,
+      committedKeys: changedItems.map((item) => item.key),
+    });
+
+    const warningText = updateResult.warnings?.length
+      ? `；警告：${updateResult.warnings.join('；')}`
+      : '';
+    setToast({ type: 'success', message: `${options.successMessage}${warningText}` });
+  }, [adminUnlockToken, applyServerPayload, configVersion, maskToken]);
+
+  const handleSaveFailure = useCallback((error: unknown, setRetryOnFailure: boolean) => {
+    if (error instanceof SystemConfigValidationError) {
+      setValidationIssues(error.issues);
+      setSaveError(error.parsedError);
+    } else if (error instanceof SystemConfigConflictError) {
+      setSaveError(createParsedApiError({
+        title: '配置版本冲突',
+        message: `${error.message}，请先重新加载配置。`,
+        rawMessage: error.parsedError.rawMessage,
+        status: error.parsedError.status,
+        category: error.parsedError.category,
+      }));
+    } else {
+      setSaveError(getParsedApiError(error));
+    }
+
+    setToast({ type: 'error', error: getParsedApiError(error) });
+    if (setRetryOnFailure) {
+      setRetryAction('save');
+    }
+  }, []);
+
   const save = useCallback(async (): Promise<SaveResult> => {
     if (!hasDirty) {
       setToast({ type: 'success', message: '当前没有可保存的修改。' });
@@ -299,68 +416,40 @@ export function useSystemConfig() {
     const changedItems = getChangedItems();
 
     try {
-      const validateResult = await systemConfigApi.validate({ items: changedItems });
-      setValidationIssues(validateResult.issues || []);
-
-      if (!validateResult.valid) {
-        setSaveError(createParsedApiError({
-          title: '配置校验未通过',
-          message: '请先修正表单错误后再保存。',
-          rawMessage: '配置校验未通过，请先修正表单错误。',
-          category: 'http_error',
-        }));
-        setRetryAction('save');
-        return {
-          success: false,
-          message: '配置校验未通过',
-          issues: validateResult.issues,
-        };
-      }
-
-      const updateResult = await systemConfigApi.update({
-        configVersion,
-        maskToken,
-        reloadNow: true,
-        items: changedItems,
+      await persistItems(changedItems, {
+        validateBeforeSave: true,
+        preserveDirty: false,
+        successMessage: '配置已更新',
       });
-
-      const refreshed = await systemConfigApi.getConfig(true);
-      applyServerPayload(refreshed.items, refreshed.configVersion, refreshed.maskToken);
-
-      const warningText = updateResult.warnings?.length
-        ? `；警告：${updateResult.warnings.join('；')}`
-        : '';
-      setToast({ type: 'success', message: `配置已更新${warningText}` });
       return { success: true };
     } catch (error: unknown) {
-      if (error instanceof SystemConfigValidationError) {
-        setValidationIssues(error.issues);
-        setSaveError(error.parsedError);
-      } else if (error instanceof SystemConfigConflictError) {
-        setSaveError(createParsedApiError({
-          title: '配置版本冲突',
-          message: `${error.message}，请先重新加载配置。`,
-          rawMessage: error.parsedError.rawMessage,
-          status: error.parsedError.status,
-          category: error.parsedError.category,
-        }));
-      } else {
-        setSaveError(getParsedApiError(error));
-      }
-
-      setToast({ type: 'error', error: getParsedApiError(error) });
-      setRetryAction('save');
+      handleSaveFailure(error, true);
       return { success: false, message: '保存失败' };
     } finally {
       setIsSaving(false);
     }
-  }, [
-    applyServerPayload,
-    configVersion,
-    getChangedItems,
-    hasDirty,
-    maskToken,
-  ]);
+  }, [getChangedItems, handleSaveFailure, hasDirty, persistItems]);
+
+  const saveExternalItems = useCallback(async (
+    changedItems: SystemConfigUpdateItem[],
+    successMessage = '配置已更新',
+  ) => {
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await persistItems(changedItems, {
+        validateBeforeSave: false,
+        preserveDirty: true,
+        successMessage,
+      });
+    } catch (error: unknown) {
+      handleSaveFailure(error, false);
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [handleSaveFailure, persistItems]);
 
   const retry = useCallback(async () => {
     if (retryAction === 'load') {
@@ -385,6 +474,11 @@ export function useSystemConfig() {
     itemsByCategory,
     issueByKey,
 
+    // Unlock state
+    adminUnlockToken,
+    adminUnlockExpiresAt,
+    isAdminUnlocked,
+
     // UI state
     activeCategory,
     setActiveCategory,
@@ -404,9 +498,11 @@ export function useSystemConfig() {
     load,
     retry,
     save,
+    saveExternalItems,
     resetDraft,
     setDraftValue,
     applyPartialUpdate,
-    refreshAfterExternalSave,
+    setAdminUnlockSession,
+    clearAdminUnlockSession,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from '../../types/analysis';
 import { normalizeAnalysisReport } from '../reportNormalizer';
+import { previewReport } from '../../dev/reportPreviewFixture';
 
 describe('normalizeAnalysisReport', () => {
   it('fills required summary fields and defaults sentiment score when missing', () => {
@@ -26,6 +27,10 @@ describe('normalizeAnalysisReport', () => {
     expect(normalized.summary.operationAdvice).toBe('');
     expect(normalized.summary.trendPrediction).toBe('');
     expect(normalized.summary.sentimentScore).toBe(50);
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'legacy_empty',
+      standardReportSource: 'none',
+    });
   });
 
   it('uses top-level fallback metadata when report.meta fields are missing', () => {
@@ -57,6 +62,45 @@ describe('normalizeAnalysisReport', () => {
     expect(normalized.meta.stockName).toBe('Microsoft');
     expect(normalized.meta.reportType).toBe('detailed');
     expect(normalized.meta.createdAt).toBe('2026-03-26T08:00:00+08:00');
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'legacy_empty',
+      standardReportSource: 'none',
+    });
+  });
+
+  it('classifies reports with details but without any standard report payload as legacy_only', () => {
+    const report = {
+      meta: {
+        queryId: 'q-legacy-only',
+        stockCode: 'BABA',
+        stockName: 'Alibaba',
+        reportType: 'detailed',
+        createdAt: '2026-03-26T00:00:00Z',
+      },
+      summary: {
+        analysisSummary: 'legacy data',
+        operationAdvice: 'hold',
+        trendPrediction: 'sideways',
+        sentimentScore: 51,
+      },
+      details: {
+        rawResult: {
+          dashboard: {
+            structuredAnalysis: {
+              note: 'exists but no standard report payload',
+            },
+          },
+        },
+      },
+    } as unknown as AnalysisReport;
+
+    const normalized = normalizeAnalysisReport(report);
+
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'legacy_only',
+      standardReportSource: 'none',
+    });
+    expect(normalized.details?.standardReport).toBeUndefined();
   });
 
   it('keeps standardReport when only camelCase rawResult fallback exists', () => {
@@ -85,6 +129,10 @@ describe('normalizeAnalysisReport', () => {
     const normalized = normalizeAnalysisReport(report);
 
     expect(normalized.details?.standardReport).toEqual(standardReport);
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'standard_report',
+      standardReportSource: 'details.rawResult.standardReport',
+    });
   });
 
   it('keeps structured standardReport summary blocks for compact web rendering', () => {
@@ -128,6 +176,10 @@ describe('normalizeAnalysisReport', () => {
     expect(normalized.details?.standardReport?.summaryPanel?.ticker).toBe('NVDA');
     expect(normalized.details?.standardReport?.tableSections?.market?.title).toBe('行情表');
     expect(normalized.details?.standardReport?.battlePlanCompact?.cards?.[0]?.value).toBe('120-121');
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'standard_report',
+      standardReportSource: 'details.standardReport',
+    });
   });
 
   it('camelizes snake_case standard_report payloads from history and API detail responses', () => {
@@ -221,5 +273,164 @@ describe('normalizeAnalysisReport', () => {
     expect(normalized.details?.standardReport?.battlePlanCompact?.cards?.[0]?.value).toBe('回踩 MA20 附近分批');
     expect(normalized.details?.standardReport?.coverageNotes?.missingFieldNotes?.[0]).toBe('VWAP：字段待接入');
     expect(normalized.details?.standardReport?.checklistItems?.[0]?.status).toBe('warn');
+    expect(normalized.contractMeta).toEqual({
+      payloadVariant: 'standard_report',
+      standardReportSource: 'details.standard_report',
+    });
+  });
+
+  it('builds contract metadata matrix for supported standard report payload variants', () => {
+    const baseMeta = {
+      queryId: 'matrix-q',
+      stockCode: 'AAPL',
+      stockName: 'Apple',
+      reportType: 'full' as const,
+      createdAt: '2026-03-26T00:00:00Z',
+    };
+    const baseSummary = {
+      analysisSummary: 'ok',
+      operationAdvice: 'hold',
+      trendPrediction: 'up',
+      sentimentScore: 62,
+    };
+    const variants: Array<{
+      source: string;
+      report: AnalysisReport;
+      expectedSource: string;
+    }> = [
+      {
+        source: 'details.standardReport',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            standardReport: {
+              summaryPanel: { ticker: 'AAPL' },
+            },
+          },
+        },
+        expectedSource: 'details.standardReport',
+      },
+      {
+        source: 'details.standard_report',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            standard_report: {
+              summary_panel: { ticker: 'AAPL' },
+            },
+          } as unknown as AnalysisReport['details'],
+        },
+        expectedSource: 'details.standard_report',
+      },
+      {
+        source: 'details.rawResult.standardReport',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            rawResult: {
+              standardReport: {
+                summaryPanel: { ticker: 'AAPL' },
+              },
+            },
+          },
+        },
+        expectedSource: 'details.rawResult.standardReport',
+      },
+      {
+        source: 'details.rawResult.standard_report',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            rawResult: {
+              standard_report: {
+                summary_panel: { ticker: 'AAPL' },
+              },
+            } as unknown as Record<string, unknown>,
+          },
+        },
+        expectedSource: 'details.rawResult.standard_report',
+      },
+      {
+        source: 'details.rawResult.dashboard.standardReport',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            rawResult: {
+              dashboard: {
+                standardReport: {
+                  summaryPanel: { ticker: 'AAPL' },
+                },
+              },
+            },
+          },
+        },
+        expectedSource: 'details.rawResult.dashboard.standardReport',
+      },
+      {
+        source: 'details.rawResult.dashboard.standard_report',
+        report: {
+          meta: baseMeta,
+          summary: baseSummary,
+          details: {
+            rawResult: {
+              dashboard: {
+                standard_report: {
+                  summary_panel: { ticker: 'AAPL' },
+                },
+              },
+            } as unknown as Record<string, unknown>,
+          },
+        },
+        expectedSource: 'details.rawResult.dashboard.standard_report',
+      },
+    ];
+
+    for (const variant of variants) {
+      const normalized = normalizeAnalysisReport(variant.report);
+      expect(normalized.contractMeta?.payloadVariant, variant.source).toBe('standard_report');
+      expect(normalized.contractMeta?.standardReportSource, variant.source).toBe(variant.expectedSource);
+      expect(normalized.details?.standardReport?.summaryPanel?.ticker, variant.source).toBe('AAPL');
+    }
+  });
+
+  it('keeps preview and production-like payloads aligned at normalized contract level', () => {
+    const previewNormalized = normalizeAnalysisReport(previewReport);
+    const productionLike = {
+      ...previewReport,
+      details: {
+        standard_report: {
+          summary_panel: {
+            ticker: previewReport.details?.standardReport?.summaryPanel?.ticker,
+            score: previewReport.details?.standardReport?.summaryPanel?.score,
+            market_session_date: previewReport.details?.standardReport?.summaryPanel?.marketSessionDate,
+          },
+          decision_panel: {
+            setup_type: previewReport.details?.standardReport?.decisionPanel?.setupType,
+          },
+        },
+      },
+    } as unknown as AnalysisReport;
+
+    const productionLikeNormalized = normalizeAnalysisReport(productionLike);
+
+    expect(previewNormalized.details?.standardReport?.summaryPanel?.ticker).toBe(
+      productionLikeNormalized.details?.standardReport?.summaryPanel?.ticker,
+    );
+    expect(previewNormalized.details?.standardReport?.summaryPanel?.score).toBe(
+      productionLikeNormalized.details?.standardReport?.summaryPanel?.score,
+    );
+    expect(previewNormalized.details?.standardReport?.summaryPanel?.marketSessionDate).toBe(
+      productionLikeNormalized.details?.standardReport?.summaryPanel?.marketSessionDate,
+    );
+    expect(previewNormalized.details?.standardReport?.decisionPanel?.setupType).toBe(
+      productionLikeNormalized.details?.standardReport?.decisionPanel?.setupType,
+    );
+    expect(previewNormalized.contractMeta?.payloadVariant).toBe('standard_report');
+    expect(productionLikeNormalized.contractMeta?.payloadVariant).toBe('standard_report');
   });
 });

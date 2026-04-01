@@ -12,21 +12,6 @@ export type ExtractFromImageResponse = {
   rawText?: string;
 };
 
-export type StockQuoteResponse = {
-  stockCode: string;
-  stockName?: string | null;
-  currentPrice: number;
-  change?: number | null;
-  changePercent?: number | null;
-  open?: number | null;
-  high?: number | null;
-  low?: number | null;
-  prevClose?: number | null;
-  volume?: number | null;
-  amount?: number | null;
-  updateTime?: string | null;
-};
-
 export type StockHistoryPoint = {
   date: string;
   open: number;
@@ -64,11 +49,6 @@ export type StockIntradayResponse = {
 };
 
 export const stocksApi = {
-  async getQuote(stockCode: string): Promise<StockQuoteResponse> {
-    const response = await apiClient.get(`/api/v1/stocks/${encodeURIComponent(stockCode)}/quote`);
-    return response.data as StockQuoteResponse;
-  },
-
   async getHistory(
     stockCode: string,
     params: {

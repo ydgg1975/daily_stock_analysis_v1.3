@@ -23,6 +23,9 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
 
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
+  const contextualNote = reportLanguage === 'en'
+    ? 'Raw result and snapshot are shown for traceability only and do not change the rendered recommendation blocks.'
+    : '原始结果和上下文快照仅用于追溯，不会改变页面上已经渲染的建议与结论区块。';
   const [showRaw, setShowRaw] = useState(false);
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [copiedPanels, setCopiedPanels] = useState<CopiedPanelState>({
@@ -88,11 +91,12 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
   };
 
   return (
-    <Card variant="bordered" padding="md" className="!rounded-[1rem] !border-white/6 !bg-[#050505] !shadow-none text-left">
+    <Card variant="bordered" padding="md" className="home-panel-card report-support-card text-left">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">{text.transparency}</span>
         <h3 className="mt-0.5 text-base font-semibold text-foreground">{text.traceability}</h3>
       </div>
+      <p className="report-support-note">{contextualNote}</p>
 
       {/* Record ID */}
       {recordId && (
@@ -112,7 +116,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowRaw(!showRaw)}
-              className="flex w-full items-center justify-between rounded-lg border border-white/6 bg-white/[0.03] p-2.5"
+              className="theme-panel-subtle flex w-full items-center justify-between p-2.5"
             >
               <span className="text-xs text-foreground">{text.rawResult}</span>
               <svg
@@ -138,7 +142,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowSnapshot(!showSnapshot)}
-              className="flex w-full items-center justify-between rounded-lg border border-white/6 bg-white/[0.03] p-2.5"
+              className="theme-panel-subtle flex w-full items-center justify-between p-2.5"
             >
               <span className="text-xs text-foreground">{text.analysisSnapshot}</span>
               <svg

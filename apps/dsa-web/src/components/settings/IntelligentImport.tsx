@@ -2,8 +2,8 @@ import type React from 'react';
 import { useCallback, useState } from 'react';
 import { getParsedApiError } from '../../api/error';
 import { stocksApi, type ExtractItem } from '../../api/stocks';
-import { systemConfigApi, SystemConfigConflictError } from '../../api/systemConfig';
-import { Badge, Button } from '../common';
+import { SystemConfigConflictError } from '../../api/systemConfig';
+import { Badge, Button, SupportBanner, SupportPanel } from '../common';
 
 const IMG_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const IMG_MAX = 5 * 1024 * 1024; // 5MB
@@ -12,9 +12,7 @@ const TEXT_MAX = 100 * 1024; // 100KB
 
 interface IntelligentImportProps {
   stockListValue: string;
-  configVersion: string;
-  maskToken: string;
-  onMerged: (newValue: string) => void | Promise<void>;
+  onMergeStockList: (newValue: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -96,9 +94,7 @@ function mergeItems(
 
 export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   stockListValue,
-  configVersion,
-  maskToken,
-  onMerged,
+  onMergeStockList,
   disabled,
 }) => {
   const [items, setItems] = useState<ItemWithChecked[]>([]);
@@ -245,10 +241,6 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
   const mergeToWatchlist = useCallback(async () => {
     const toMerge = items.filter((i) => i.checked && i.code).map((i) => i.code!);
     if (toMerge.length === 0) return;
-    if (!configVersion) {
-      setError('请先加载配置后再合并');
-      return;
-    }
     const current = parseCurrentList();
     const merged = [...new Set([...current, ...toMerge])];
     const value = merged.join(',');
@@ -256,18 +248,12 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     setIsMerging(true);
     setError(null);
     try {
-      await systemConfigApi.update({
-        configVersion,
-        maskToken,
-        reloadNow: true,
-        items: [{ key: 'STOCK_LIST', value }],
-      });
+      await onMergeStockList(value);
       setItems([]);
       setPasteText('');
-      await onMerged(value);
     } catch (e) {
       if (e instanceof SystemConfigConflictError) {
-        await onMerged(value);
+        await onMergeStockList(value);
         setError('配置已更新，请再次点击「合并到自选股」');
       } else {
         setError(e instanceof Error ? e.message : '合并保存失败');
@@ -275,7 +261,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     } finally {
       setIsMerging(false);
     }
-  }, [items, configVersion, maskToken, onMerged, parseCurrentList]);
+  }, [items, onMergeStockList, parseCurrentList]);
 
   const validCount = items.filter((i) => i.code).length;
   const checkedCount = items.filter((i) => i.checked && i.code).length;
@@ -331,16 +317,24 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         </div>
       </div>
 
-      {isLoading && <p className="text-sm text-secondary-text">处理中...</p>}
+      {isLoading ? (
+        <SupportPanel
+          title="处理中..."
+          body="正在解析文件或识别图片，请保持当前页面不要关闭。"
+          className="rounded-xl"
+        />
+      ) : null}
       {error && (
-        <div className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+        <SupportBanner tone="danger" title="导入失败" body={error} role="alert" />
       )}
 
       {items.length > 0 && (
         <div className="space-y-2">
-          <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            建议人工逐条核对后再合并。高置信度默认勾选，中/低置信度需手动确认。
-          </div>
+          <SupportBanner
+            tone="warning"
+            title="建议逐条核对后再合并"
+            body="高置信度默认勾选，中低置信度需手动确认，避免误把识别结果写入自选股。"
+          />
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary-text">
               共 {validCount} 条可合并，已勾选 {checkedCount} 条
@@ -357,7 +351,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
               </button>
             </div>
           </div>
-          <div className="max-h-[220px] space-y-1 overflow-y-auto rounded-xl border border-border/40 bg-background/18 p-2">
+          <div className="max-h-[220px] space-y-1 overflow-y-auto rounded-xl border settings-border-soft settings-surface-overlay-soft p-2">
             {items.map((it) => {
               const confidence = normalizeConfidence(it.confidence);
               const confidenceMeta = getConfidenceMeta(confidence);

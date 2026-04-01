@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { analysisApi } from '../api/analysis';
+import { toCamelCase } from '../api/utils';
 import type { TaskInfo } from '../types/analysis';
 
 /**
@@ -101,30 +102,11 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
     };
   });
 
-  // Convert snake_case payloads into camelCase TaskInfo objects.
-  const toCamelCase = (data: Record<string, unknown>): TaskInfo => {
-    return {
-      taskId: data.task_id as string,
-      stockCode: data.stock_code as string,
-      stockName: data.stock_name as string | undefined,
-      status: data.status as TaskInfo['status'],
-      progress: data.progress as number,
-      message: data.message as string | undefined,
-      reportType: data.report_type as string,
-      createdAt: data.created_at as string,
-      startedAt: data.started_at as string | undefined,
-      completedAt: data.completed_at as string | undefined,
-      error: data.error as string | undefined,
-      originalQuery: data.original_query as string | undefined,
-      selectionSource: data.selection_source as string | undefined,
-    };
-  };
-
   // Parse an SSE payload.
   const parseEventData = useCallback((eventData: string): TaskInfo | null => {
     try {
       const data = JSON.parse(eventData);
-      return toCamelCase(data);
+      return toCamelCase<TaskInfo>(data);
     } catch (e) {
       console.error('Failed to parse SSE event data:', e);
       return null;

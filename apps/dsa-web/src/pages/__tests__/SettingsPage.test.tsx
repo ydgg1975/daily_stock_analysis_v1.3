@@ -8,10 +8,12 @@ const {
   clearToast,
   setActiveCategory,
   save,
+  saveExternalItems,
   resetDraft,
   setDraftValue,
   applyPartialUpdate,
-  refreshAfterExternalSave,
+  setAdminUnlockSession,
+  clearAdminUnlockSession,
   refreshStatus,
   setThemeStyle,
   useAuthMock,
@@ -21,10 +23,12 @@ const {
   clearToast: vi.fn(),
   setActiveCategory: vi.fn(),
   save: vi.fn(),
+  saveExternalItems: vi.fn(),
   resetDraft: vi.fn(),
   setDraftValue: vi.fn(),
   applyPartialUpdate: vi.fn(),
-  refreshAfterExternalSave: vi.fn(),
+  setAdminUnlockSession: vi.fn(),
+  clearAdminUnlockSession: vi.fn(),
   refreshStatus: vi.fn(),
   setThemeStyle: vi.fn(),
   useAuthMock: vi.fn(),
@@ -46,20 +50,20 @@ vi.mock('../../components/theme/ThemeProvider', () => ({
 vi.mock('../../components/settings', () => ({
   AuthSettingsCard: () => <div>认证与登录保护</div>,
   ChangePasswordCard: () => <div>修改密码</div>,
-  IntelligentImport: ({ onMerged }: { onMerged: (value: string) => void }) => (
-    <button type="button" onClick={() => onMerged('SZ000001,SZ000002')}>
+  IntelligentImport: ({ onMergeStockList }: { onMergeStockList: (value: string) => void }) => (
+    <button type="button" onClick={() => onMergeStockList('SZ000001,SZ000002')}>
       merge stock list
     </button>
   ),
   FontSizeSettingsCard: () => <div>字体大小</div>,
   LLMChannelEditor: ({
-    onSaved,
+    onSaveItems,
   }: {
-    onSaved: (items: Array<{ key: string; value: string }>) => void;
+    onSaveItems: (items: Array<{ key: string; value: string }>, successMessage: string) => void;
   }) => (
     <button
       type="button"
-      onClick={() => onSaved([{ key: 'LLM_CHANNELS', value: 'primary,backup' }])}
+      onClick={() => onSaveItems([{ key: 'LLM_CHANNELS', value: 'primary,backup' }], '渠道配置已保存')}
     >
       save llm channels
     </button>
@@ -135,12 +139,15 @@ type ConfigState = {
   load: typeof load;
   retry: ReturnType<typeof vi.fn>;
   save: typeof save;
+  saveExternalItems: typeof saveExternalItems;
   resetDraft: typeof resetDraft;
   setDraftValue: typeof setDraftValue;
   applyPartialUpdate: typeof applyPartialUpdate;
-  refreshAfterExternalSave: typeof refreshAfterExternalSave;
-  configVersion: string;
-  maskToken: string;
+  adminUnlockToken: string | null;
+  adminUnlockExpiresAt: number | null;
+  isAdminUnlocked: boolean;
+  setAdminUnlockSession: typeof setAdminUnlockSession;
+  clearAdminUnlockSession: typeof clearAdminUnlockSession;
 };
 
 type ConfigOverride = Partial<ConfigState>;
@@ -245,12 +252,15 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
     load,
     retry: vi.fn(),
     save,
+    saveExternalItems,
     resetDraft,
     setDraftValue,
     applyPartialUpdate,
-    refreshAfterExternalSave,
-    configVersion: 'v1',
-    maskToken: '******',
+    adminUnlockToken: 'unit-test-token',
+    adminUnlockExpiresAt: Date.now() + 60_000,
+    isAdminUnlocked: true,
+    setAdminUnlockSession,
+    clearAdminUnlockSession,
     ...overrides,
   };
 }
@@ -281,7 +291,12 @@ describe('SettingsPage', () => {
 
   it('keeps admin controls locked by default without unlock token', () => {
     window.sessionStorage.clear();
-    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'system' }));
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+      isAdminUnlocked: false,
+      adminUnlockToken: null,
+      adminUnlockExpiresAt: null,
+    }));
 
     render(<SettingsPage />);
 
@@ -407,7 +422,7 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'merge stock list' }));
 
-    expect(refreshAfterExternalSave).toHaveBeenCalledWith(['STOCK_LIST']);
+    expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'STOCK_LIST', value: 'SZ000001,SZ000002' }], '自选股配置已更新');
     expect(load).toHaveBeenCalledTimes(1);
   });
 
@@ -418,7 +433,7 @@ describe('SettingsPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'save llm channels' }));
 
-    expect(refreshAfterExternalSave).toHaveBeenCalledWith(['LLM_CHANNELS']);
+    expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'LLM_CHANNELS', value: 'primary,backup' }], '渠道配置已保存');
     expect(load).toHaveBeenCalledTimes(1);
   });
 });

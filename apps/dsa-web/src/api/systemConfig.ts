@@ -4,7 +4,6 @@ import { toCamelCase } from './utils';
 import type {
   SystemConfigConflictResponse,
   SystemConfigResponse,
-  SystemConfigSchemaResponse,
   SystemConfigValidationErrorResponse,
   TestLLMChannelRequest,
   TestLLMChannelResponse,
@@ -14,19 +13,18 @@ import type {
   ValidateSystemConfigResponse,
 } from '../types/systemConfig';
 
-let adminUnlockToken: string | null = null;
+type SystemConfigRequestOptions = {
+  adminUnlockToken?: string | null;
+};
 
-export function setSystemConfigAdminUnlockToken(token: string | null) {
-  adminUnlockToken = token && token.trim() ? token.trim() : null;
-}
-
-function withAdminUnlockHeader() {
-  if (!adminUnlockToken) {
+function withAdminUnlockHeader(adminUnlockToken?: string | null) {
+  const normalizedToken = adminUnlockToken?.trim();
+  if (!normalizedToken) {
     return undefined;
   }
   return {
     headers: {
-      'X-Admin-Unlock-Token': adminUnlockToken,
+      'X-Admin-Unlock-Token': normalizedToken,
     },
   };
 }
@@ -108,35 +106,39 @@ export const systemConfigApi = {
     return toCamelCase<SystemConfigResponse>(response.data);
   },
 
-  async getSchema(): Promise<SystemConfigSchemaResponse> {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/system/config/schema');
-    return toCamelCase<SystemConfigSchemaResponse>(response.data);
-  },
-
-  async validate(payload: ValidateSystemConfigRequest): Promise<ValidateSystemConfigResponse> {
+  async validate(
+    payload: ValidateSystemConfigRequest,
+    options?: SystemConfigRequestOptions,
+  ): Promise<ValidateSystemConfigResponse> {
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/system/config/validate',
       toSnakeValidatePayload(payload),
-      withAdminUnlockHeader(),
+      withAdminUnlockHeader(options?.adminUnlockToken),
     );
     return toCamelCase<ValidateSystemConfigResponse>(response.data);
   },
 
-  async testLLMChannel(payload: TestLLMChannelRequest): Promise<TestLLMChannelResponse> {
+  async testLLMChannel(
+    payload: TestLLMChannelRequest,
+    options?: SystemConfigRequestOptions,
+  ): Promise<TestLLMChannelResponse> {
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/system/config/llm/test-channel',
       toSnakeTestChannelPayload(payload),
-      withAdminUnlockHeader(),
+      withAdminUnlockHeader(options?.adminUnlockToken),
     );
     return toCamelCase<TestLLMChannelResponse>(response.data);
   },
 
-  async update(payload: UpdateSystemConfigRequest): Promise<UpdateSystemConfigResponse> {
+  async update(
+    payload: UpdateSystemConfigRequest,
+    options?: SystemConfigRequestOptions,
+  ): Promise<UpdateSystemConfigResponse> {
     try {
       const response = await apiClient.put<Record<string, unknown>>(
         '/api/v1/system/config',
         toSnakeUpdatePayload(payload),
-        withAdminUnlockHeader(),
+        withAdminUnlockHeader(options?.adminUnlockToken),
       );
       return toCamelCase<UpdateSystemConfigResponse>(response.data);
     } catch (error: unknown) {

@@ -315,12 +315,32 @@ export interface ReportDetails {
   dividendMetrics?: Record<string, unknown>;
 }
 
+export type ReportStandardSource =
+  | 'details.standardReport'
+  | 'details.standard_report'
+  | 'details.rawResult.standardReport'
+  | 'details.rawResult.standard_report'
+  | 'details.rawResult.dashboard.standardReport'
+  | 'details.rawResult.dashboard.standard_report'
+  | 'none';
+
+export type ReportPayloadVariant =
+  | 'standard_report'
+  | 'legacy_only'
+  | 'legacy_empty';
+
+export interface FrontendReportContractMeta {
+  payloadVariant: ReportPayloadVariant;
+  standardReportSource: ReportStandardSource;
+}
+
 /** Full analysis report */
 export interface AnalysisReport {
   meta: ReportMeta;
   summary: ReportSummary;
   strategy?: ReportStrategy;
   details?: ReportDetails;
+  contractMeta?: FrontendReportContractMeta;
 }
 
 // ============ Analysis Result Types ============

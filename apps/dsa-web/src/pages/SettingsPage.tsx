@@ -2,8 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
-import { setSystemConfigAdminUnlockToken } from '../api/systemConfig';
-import { ApiErrorAlert, Button, Input } from '../components/common';
+import { ApiErrorAlert, Button, Input, WorkspacePageHeader } from '../components/common';
 import { useThemeStyle, type ThemeStylePreset } from '../components/theme/ThemeProvider';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useAuth, useSystemConfig } from '../hooks';
@@ -21,9 +20,6 @@ import {
   SettingsLoading,
   SettingsSectionCard,
 } from '../components/settings';
-
-const ADMIN_UNLOCK_TOKEN_STORAGE_KEY = 'dsa-admin-settings-unlock-token';
-const ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY = 'dsa-admin-settings-unlock-expires-at';
 
 const THEME_OPTIONS: Array<{
   value: ThemeStylePreset;
@@ -55,8 +51,6 @@ const SettingsPage: React.FC = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
-  const [unlockExpiresAt, setUnlockExpiresAt] = useState<number | null>(null);
   const [adminUnlockError, setAdminUnlockError] = useState<string | null>(null);
 
   const requiresInitialPasswordConfirm = setupState === 'no_password';
@@ -79,25 +73,21 @@ const SettingsPage: React.FC = () => {
     load,
     retry,
     save,
+    saveExternalItems,
     resetDraft,
     setDraftValue,
-    refreshAfterExternalSave,
-    configVersion,
-    maskToken,
+    adminUnlockToken,
+    adminUnlockExpiresAt,
+    isAdminUnlocked,
+    setAdminUnlockSession,
+    clearAdminUnlockSession,
   } = useSystemConfig();
 
   const clearAdminUnlockState = useCallback(() => {
-    setIsAdminUnlocked(false);
-    setUnlockExpiresAt(null);
     setAdminPassword('');
     setAdminPasswordConfirm('');
-    setSystemConfigAdminUnlockToken(null);
-
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-    }
-  }, []);
+    clearAdminUnlockSession();
+  }, [clearAdminUnlockSession]);
 
   const relockAdminSettings = useCallback(() => {
     clearAdminUnlockState();
@@ -112,25 +102,6 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const storedToken = window.sessionStorage.getItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-    const rawExpiresAt = window.sessionStorage.getItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-    const parsedExpiresAt = Number(rawExpiresAt || '0');
-
-    if (!storedToken || !Number.isFinite(parsedExpiresAt) || parsedExpiresAt <= Date.now()) {
-      clearAdminUnlockState();
-      return;
-    }
-
-    setIsAdminUnlocked(true);
-    setUnlockExpiresAt(parsedExpiresAt);
-    setSystemConfigAdminUnlockToken(storedToken);
-  }, [clearAdminUnlockState]);
 
   useEffect(() => {
     if (!toast) {
@@ -220,11 +191,11 @@ const SettingsPage: React.FC = () => {
   const adminSaveDisabled = adminLocked || !hasDirty || isSaving || isLoading;
 
   const adminUnlockExpiresText = useMemo(() => {
-    if (!unlockExpiresAt) {
+    if (!adminUnlockExpiresAt) {
       return null;
     }
     try {
-      return new Date(unlockExpiresAt).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', {
+      return new Date(adminUnlockExpiresAt).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -232,7 +203,7 @@ const SettingsPage: React.FC = () => {
     } catch {
       return null;
     }
-  }, [language, unlockExpiresAt]);
+  }, [adminUnlockExpiresAt, language]);
 
   const handleUnlockSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -256,16 +227,9 @@ const SettingsPage: React.FC = () => {
       );
 
       const expiresAt = Date.now() + Math.max(60, payload.expiresInSeconds) * 1000;
-      setSystemConfigAdminUnlockToken(payload.unlockToken);
-      setIsAdminUnlocked(true);
-      setUnlockExpiresAt(expiresAt);
+      setAdminUnlockSession(payload.unlockToken, expiresAt);
       setAdminPassword('');
       setAdminPasswordConfirm('');
-
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.setItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY, payload.unlockToken);
-        window.sessionStorage.setItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY, String(expiresAt));
-      }
     } catch (error: unknown) {
       const parsed = getParsedApiError(error);
       setAdminUnlockError(parsed.message || t('settings.adminUnlockErrorGeneric'));
@@ -276,6 +240,7 @@ const SettingsPage: React.FC = () => {
     adminPassword,
     adminPasswordConfirm,
     requiresInitialPasswordConfirm,
+    setAdminUnlockSession,
     t,
   ]);
 
@@ -288,16 +253,39 @@ const SettingsPage: React.FC = () => {
   }, [adminLocked, save, t]);
 
   return (
-    <div className="workspace-page">
-      <div className="workspace-header-panel shadow-soft-card-strong">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{t('settings.eyebrow')}</p>
-          <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{t('settings.title')}</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-text">
-            {t('settings.subtitle')}
-          </p>
-        </div>
-      </div>
+    <div className="workspace-page workspace-page--settings">
+      <WorkspacePageHeader
+        className="shadow-soft-card-strong"
+        eyebrow={t('settings.eyebrow')}
+        title={t('settings.title')}
+        description={t('settings.subtitle')}
+        actions={(
+          <>
+            <p className="workspace-header-actions-note">
+              {adminLocked ? t('settings.adminSaveLocked') : t('settings.adminSaveReady')}
+            </p>
+            <Button
+              type="button"
+              variant="settings-secondary"
+              className="border-border/50 bg-muted/30 hover:border-border/70"
+              onClick={resetDraft}
+              disabled={isLoading || isSaving || adminLocked}
+            >
+              {t('settings.reset')}
+            </Button>
+            <Button
+              type="button"
+              variant="settings-primary"
+              onClick={handleSave}
+              disabled={adminSaveDisabled}
+              isLoading={isSaving}
+              loadingText={t('settings.saving')}
+            >
+              {isSaving ? t('settings.saving') : `${t('settings.save')}${dirtyCount ? ` (${dirtyCount})` : ''}`}
+            </Button>
+          </>
+        )}
+      />
 
       <SettingsSectionCard
         title={t('settings.basicTitle')}
@@ -466,33 +454,6 @@ const SettingsPage: React.FC = () => {
           </aside>
 
           <section className="workspace-split-main space-y-4">
-            <div className="workspace-surface-muted flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <p className="text-xs text-secondary-text">
-                {adminLocked ? t('settings.adminSaveLocked') : t('settings.adminSaveReady')}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="settings-secondary"
-                  className="border-border/50 bg-muted/30 hover:border-border/70"
-                  onClick={resetDraft}
-                  disabled={isLoading || isSaving || adminLocked}
-                >
-                  {t('settings.reset')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="settings-primary"
-                  onClick={handleSave}
-                  disabled={adminSaveDisabled}
-                  isLoading={isSaving}
-                  loadingText={t('settings.saving')}
-                >
-                  {isSaving ? t('settings.saving') : `${t('settings.save')}${dirtyCount ? ` (${dirtyCount})` : ''}`}
-                </Button>
-              </div>
-            </div>
-
             {saveError ? (
               <ApiErrorAlert
                 className="mt-4"
@@ -512,13 +473,11 @@ const SettingsPage: React.FC = () => {
                   stockListValue={
                     (activeItems.find((i) => i.key === 'STOCK_LIST')?.value as string) ?? ''
                   }
-                  configVersion={configVersion}
-                  maskToken={maskToken}
-                  onMerged={async () => {
+                  onMergeStockList={async (value) => {
                     if (adminLocked) {
                       return;
                     }
-                    await refreshAfterExternalSave(['STOCK_LIST']);
+                    await saveExternalItems([{ key: 'STOCK_LIST', value }], '自选股配置已更新');
                   }}
                   disabled={isSaving || isLoading || adminLocked}
                 />
@@ -531,13 +490,12 @@ const SettingsPage: React.FC = () => {
               >
                 <LLMChannelEditor
                   items={rawActiveItems}
-                  configVersion={configVersion}
-                  maskToken={maskToken}
-                  onSaved={async (updatedItems) => {
+                  adminUnlockToken={adminUnlockToken}
+                  onSaveItems={async (updatedItems, successMessage) => {
                     if (adminLocked) {
                       return;
                     }
-                    await refreshAfterExternalSave(updatedItems.map((item) => item.key));
+                    await saveExternalItems(updatedItems, successMessage);
                   }}
                   disabled={isSaving || isLoading || adminLocked}
                 />
@@ -569,8 +527,16 @@ const SettingsPage: React.FC = () => {
                 ))}
               </SettingsSectionCard>
             ) : (
-              <div className="settings-panel-muted rounded-[1.5rem] border p-5 text-sm text-secondary-text shadow-soft-card">
-                {t('settings.noItems')}
+              <div className="settings-panel-muted rounded-[1.5rem] border p-5 shadow-soft-card">
+                <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">
+                  {t('settings.currentCategory')}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {t('settings.noItems')}
+                </p>
+                <p className="mt-2 text-xs leading-6 text-muted-text">
+                  {getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc')}
+                </p>
               </div>
             )}
           </section>

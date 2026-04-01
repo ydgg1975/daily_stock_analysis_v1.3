@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agent';
-import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea } from '../components/common';
+import { ApiErrorAlert, Button, ConfirmDialog, ScrollArea, WorkspacePageHeader } from '../components/common';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
 import {
@@ -16,6 +16,7 @@ import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import { buildFollowUpPrompt, resolveChatFollowUpContext } from '../utils/chatFollowUp';
 import { isNearBottom } from '../utils/chatScroll';
 import { useShellRail } from '../components/layout/ShellRailContext';
+import { useShellRailSlot } from '../components/layout/useShellRailSlot';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
@@ -56,7 +57,6 @@ const ChatPage: React.FC = () => {
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [isFollowUpContextLoading, setIsFollowUpContextLoading] = useState(false);
   const [sendToast, setSendToast] = useState<{
@@ -71,7 +71,7 @@ const ChatPage: React.FC = () => {
   const followUpContextRef = useRef<ChatFollowUpContext | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
-  const { setRailContent, closeMobileRail, isConnected: hasShellRail } = useShellRail();
+  const { closeMobileRail } = useShellRail();
 
   // Set page title
   useEffect(() => {
@@ -183,22 +183,14 @@ const ChatPage: React.FC = () => {
     followUpContextRef.current = null;
     requestScrollToBottom('auto');
     useAgentChatStore.getState().startNewChat();
-    if (hasShellRail) {
-      closeMobileRail();
-    } else {
-      setSidebarOpen(false);
-    }
-  }, [closeMobileRail, hasShellRail, requestScrollToBottom]);
+    closeMobileRail();
+  }, [closeMobileRail, requestScrollToBottom]);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
     requestScrollToBottom('auto');
     switchSession(targetSessionId);
-    if (hasShellRail) {
-      closeMobileRail();
-    } else {
-      setSidebarOpen(false);
-    }
-  }, [closeMobileRail, hasShellRail, requestScrollToBottom, switchSession]);
+    closeMobileRail();
+  }, [closeMobileRail, requestScrollToBottom, switchSession]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteConfirmId) return;
@@ -503,38 +495,11 @@ const ChatPage: React.FC = () => {
     </div>
   ), [handleStartNewChat, handleSwitchSession, loadSessions, sessionId, sessionLoadError, sessions, sessionsLoading]);
 
-  useEffect(() => {
-    if (!hasShellRail) {
-      return undefined;
-    }
-    setRailContent(sidebarContent);
-    return () => setRailContent(null);
-  }, [hasShellRail, setRailContent, sidebarContent]);
+  useShellRailSlot(sidebarContent);
 
   return (
     <div data-testid="chat-workspace" className="workspace-page workspace-page--chat">
       <div className="workspace-chat-layout">
-        {!hasShellRail ? (
-          <div className="hidden h-full w-[var(--layout-context-rail-width)] flex-shrink-0 flex-col overflow-hidden md:flex">
-            {sidebarContent}
-          </div>
-        ) : null}
-
-        {!hasShellRail && sidebarOpen ? (
-          <div
-            className="fixed inset-0 z-40 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <div className="absolute inset-0 bg-black/60" />
-            <div
-              className="theme-sidebar-shell absolute bottom-0 left-0 top-0 flex w-[min(var(--layout-context-rail-width),88vw)] flex-col overflow-hidden rounded-none rounded-r-[1.35rem]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {sidebarContent}
-            </div>
-          </div>
-        ) : null}
-
         <ConfirmDialog
           isOpen={Boolean(deleteConfirmId)}
           title="删除对话"
@@ -547,34 +512,39 @@ const ChatPage: React.FC = () => {
         />
 
         <div className="workspace-chat-main">
-          <header className="workspace-header-panel mb-4 flex-shrink-0">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">WolfyStock Quant Research</p>
-                <h1 className="mb-2 mt-2 flex items-center gap-2 text-2xl font-bold text-foreground">
-                  {!hasShellRail ? (
-                    <button
-                      onClick={() => setSidebarOpen(true)}
-                      className="-ml-1 rounded-lg p-1.5 text-secondary-text transition-colors hover:bg-hover hover:text-foreground md:hidden"
-                      title="历史对话"
-                    >
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 6h16M4 12h16M4 18h16"
-                        />
-                      </svg>
-                    </button>
-                  ) : null}
+          <WorkspacePageHeader
+            className="mb-4 flex-shrink-0"
+            eyebrow="WolfyStock Quant Research"
+            title={(
+              <span className="mb-2 mt-2 flex items-center gap-2">
+                <svg
+                  className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+                <span>问股</span>
+              </span>
+            )}
+            titleClassName="text-2xl font-bold"
+            description="把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。"
+            actions={messages.length > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => downloadSession(messages)}
+                  className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
+                  title="导出会话为 Markdown 文件"
+                >
                   <svg
-                    className="h-6 w-6 text-[hsl(var(--accent-primary-hsl))]"
+                    className="h-4 w-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -583,24 +553,58 @@ const ChatPage: React.FC = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     />
                   </svg>
-                  问股
-                </h1>
-                <p className="text-sm leading-6 text-secondary-text">
-                  把这里当成股票研究助手工作台来用：先问结论，再追问风险、催化、仓位和执行计划。
-                </p>
-              </div>
-
-              {messages.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => downloadSession(messages)}
-                    className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                    title="导出会话为 Markdown 文件"
-                  >
+                  导出会话
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (sending) return;
+                    setSending(true);
+                    setSendToast(null);
+                    try {
+                      const content = formatSessionAsMarkdown(messages);
+                      await agentApi.sendChat(content);
+                      setSendToast({ type: 'success', message: '已发送到通知渠道' });
+                      setTimeout(() => setSendToast(null), 3000);
+                    } catch (err) {
+                      const parsed = getParsedApiError(err);
+                      setSendToast({
+                        type: 'error',
+                        message: parsed.message || '发送失败',
+                      });
+                      setTimeout(() => setSendToast(null), 5000);
+                    } finally {
+                      setSending(false);
+                    }
+                  }}
+                  disabled={sending}
+                  className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  title="发送到已配置的通知机器人/邮箱"
+                >
+                  {sending ? (
+                    <svg
+                      className="h-4 w-4 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                  ) : (
                     <svg
                       className="h-4 w-4"
                       fill="none"
@@ -611,83 +615,21 @@ const ChatPage: React.FC = () => {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
                       />
                     </svg>
-                    导出会话
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (sending) return;
-                      setSending(true);
-                      setSendToast(null);
-                      try {
-                        const content = formatSessionAsMarkdown(messages);
-                        await agentApi.sendChat(content);
-                        setSendToast({ type: 'success', message: '已发送到通知渠道' });
-                        setTimeout(() => setSendToast(null), 3000);
-                      } catch (err) {
-                        const parsed = getParsedApiError(err);
-                        setSendToast({
-                          type: 'error',
-                          message: parsed.message || '发送失败',
-                        });
-                        setTimeout(() => setSendToast(null), 5000);
-                      } finally {
-                        setSending(false);
-                      }
-                    }}
-                    disabled={sending}
-                    className="flex items-center gap-1.5 rounded-lg border border-border/70 px-3 py-1.5 text-sm text-secondary-text transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    title="发送到已配置的通知机器人/邮箱"
-                  >
-                    {sending ? (
-                      <svg
-                        className="h-4 w-4 animate-spin"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                        />
-                      </svg>
-                    )}
-                    发送
-                  </button>
-                  {sendToast ? (
-                    <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                      {sendToast.message}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </header>
+                  )}
+                  发送
+                </button>
+                {sendToast ? (
+                  <span className={`text-sm ${sendToast.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                    {sendToast.message}
+                  </span>
+                ) : null}
+              </>
+            ) : null}
+          >
+          </WorkspacePageHeader>
 
           <div className="workspace-surface relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem]">
           {skillsLoadError ? (

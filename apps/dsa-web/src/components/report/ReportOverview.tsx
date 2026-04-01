@@ -7,7 +7,6 @@ import { getReportText, normalizeReportLanguage } from '../../utils/reportLangua
 interface ReportOverviewProps {
   meta: ReportMeta;
   summary: ReportSummaryType;
-  isHistory?: boolean;
 }
 
 /**

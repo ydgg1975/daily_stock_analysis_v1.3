@@ -2,8 +2,7 @@ import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
-import { Card } from '../common';
-import { ApiErrorAlert } from '../common';
+import { ApiErrorAlert, Card, SupportPanel } from '../common';
 import { historyApi } from '../../api/history';
 import type { NewsIntelItem, ReportLanguage } from '../../types/analysis';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
@@ -83,14 +82,27 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
       )}
 
       {isLoading && !error && (
-        <div className="flex items-center gap-2 text-xs text-secondary-text">
-          {text.loadingNews}
-          <div className="home-spinner h-4 w-4 animate-spin border-2" />
-        </div>
+        <SupportPanel
+          title={text.loadingNews}
+          className="report-empty-state"
+          bodyClassName="mt-0"
+          body={(
+            <div className="flex items-center gap-2 text-xs text-secondary-text">
+              <span>正在整理最新资讯条目，请稍候。</span>
+              <div className="home-spinner h-4 w-4 animate-spin border-2" />
+            </div>
+          )}
+        />
       )}
 
       {!isLoading && !error && items.length === 0 && (
-        <div className="text-xs text-muted-text">{text.noNews}</div>
+        <SupportPanel
+          title={text.relatedNews}
+          body={text.noNews}
+          className="report-empty-state"
+          titleClassName="report-empty-state-title"
+          bodyClassName="report-empty-state-body"
+        />
       )}
 
       {!isLoading && !error && items.length > 0 && (

@@ -2,55 +2,13 @@ import apiClient from './index';
 import { toCamelCase } from './utils';
 import type {
   AnalysisRequest,
-  AnalysisResult,
-  AnalyzeResponse,
   AnalyzeAsyncResponse,
-  AnalysisReport,
-  TaskStatus,
   TaskListResponse,
 } from '../types/analysis';
-import { normalizeAnalysisReport } from './reportNormalizer';
 
 // ============ API Interfaces ============
 
 export const analysisApi = {
-  /**
-   * Trigger stock analysis.
-   * @param data Analysis request payload
-   * @returns Sync mode returns AnalysisResult; async mode returns accepted task payloads
-   */
-  analyze: async (data: AnalysisRequest): Promise<AnalyzeResponse> => {
-    const requestData = {
-      stock_code: data.stockCode,
-      stock_codes: data.stockCodes,
-      report_type: data.reportType || 'detailed',
-      force_refresh: data.forceRefresh || false,
-      async_mode: data.asyncMode || false,
-      stock_name: data.stockName,
-      original_query: data.originalQuery,
-      selection_source: data.selectionSource,
-    };
-
-    const response = await apiClient.post<Record<string, unknown>>(
-      '/api/v1/analysis/analyze',
-      requestData
-    );
-
-    const result = toCamelCase<AnalyzeResponse>(response.data);
-
-    // Ensure the sync analysis report payload is converted recursively.
-    if ('report' in result && result.report) {
-      result.report = normalizeAnalysisReport(toCamelCase<AnalysisReport>(result.report), {
-        queryId: result.queryId,
-        stockCode: result.stockCode,
-        stockName: result.stockName,
-        createdAt: result.createdAt,
-      });
-    }
-
-    return result;
-  },
-
   /**
    * Trigger analysis in async mode.
    * @param data Analysis request payload
@@ -89,33 +47,6 @@ export const analysisApi = {
     }
 
     return toCamelCase<AnalyzeAsyncResponse>(response.data);
-  },
-
-  /**
-   * Get async task status.
-   * @param taskId Task ID
-   */
-  getStatus: async (taskId: string): Promise<TaskStatus> => {
-    const response = await apiClient.get<Record<string, unknown>>(
-      `/api/v1/analysis/status/${taskId}`
-    );
-
-    const data = toCamelCase<TaskStatus>(response.data);
-
-    // Ensure nested result payloads are converted recursively.
-    if (data.result) {
-      data.result = toCamelCase<AnalysisResult>(data.result);
-      if (data.result.report) {
-        data.result.report = normalizeAnalysisReport(toCamelCase<AnalysisReport>(data.result.report), {
-          queryId: data.result.queryId,
-          stockCode: data.result.stockCode,
-          stockName: data.result.stockName,
-          createdAt: data.result.createdAt,
-        });
-      }
-    }
-
-    return data;
   },
 
   /**

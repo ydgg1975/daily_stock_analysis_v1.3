@@ -3,7 +3,8 @@ import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
-import { ApiErrorAlert, Badge, Button, Input, Select } from '../common';
+import type { SystemConfigUpdateItem } from '../../types/systemConfig';
+import { ApiErrorAlert, Badge, Button, Input, Select, SupportBanner, SupportPanel } from '../common';
 
 type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
 
@@ -156,9 +157,11 @@ interface RuntimeConfig {
 
 interface LLMChannelEditorProps {
   items: Array<{ key: string; value: string }>;
-  configVersion: string;
-  maskToken: string;
-  onSaved: (updatedItems: Array<{ key: string; value: string }>) => void | Promise<void>;
+  onSaveItems: (
+    updatedItems: SystemConfigUpdateItem[],
+    successMessage: string
+  ) => void | Promise<void>;
+  adminUnlockToken?: string | null;
   disabled?: boolean;
 }
 
@@ -321,7 +324,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             placeholder={preset?.placeholder || MODEL_PLACEHOLDERS[channel.protocol]}
           />
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-2 border-t settings-border-soft pt-3">
             <Button
               type="button"
               variant="gradient"
@@ -333,12 +336,12 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
               {testState?.status === 'loading' ? '测试中...' : '测试连接'}
             </Button>
             {testState?.text ? (
-              <span className={`text-xs ${
+              <span className={`rounded-full border px-2.5 py-1 text-xs ${
                 testState.status === 'success'
-                  ? 'text-success'
+                  ? 'border-success/25 bg-success/10 text-success'
                   : testState.status === 'error'
-                    ? 'text-danger'
-                    : 'text-muted-text'
+                    ? 'border-danger/25 bg-danger/10 text-danger'
+                    : 'border-warning/25 bg-warning/10 text-warning'
               }`}
               >
                 {testState.text}
@@ -600,9 +603,8 @@ function channelsAreEqual(left: ChannelConfig, right: ChannelConfig): boolean {
 
 export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   items,
-  configVersion,
-  maskToken,
-  onSaved,
+  onSaveItems,
+  adminUnlockToken,
   disabled = false,
 }) => {
   const initialChannels = useMemo(() => parseChannelsFromItems(items), [items]);
@@ -801,14 +803,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
     try {
       const updateItems = channelsToUpdateItems(channels, initialNames, runtimeConfig, managesRuntimeConfig);
-      await systemConfigApi.update({
-        configVersion,
-        maskToken,
-        reloadNow: true,
-        items: updateItems,
-      });
-      setSaveMessage({ type: 'success', text: managesRuntimeConfig ? 'AI 配置已保存' : '渠道配置已保存' });
-      await onSaved(updateItems);
+      const successMessage = managesRuntimeConfig ? 'AI 配置已保存' : '渠道配置已保存';
+      await onSaveItems(updateItems, successMessage);
+      setSaveMessage({ type: 'success', text: successMessage });
     } catch (error: unknown) {
       setSaveMessage({ type: 'error', error: getParsedApiError(error) });
     } finally {
@@ -830,7 +827,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
         apiKey: channel.apiKey,
         models: splitModels(channel.models),
         enabled: channel.enabled,
-      });
+      }, { adminUnlockToken });
 
       const text = result.success
         ? `连接成功${result.resolvedModel ? ` · ${result.resolvedModel}` : ''}${result.latencyMs ? ` · ${result.latencyMs} ms` : ''}`
@@ -884,7 +881,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     <div className="space-y-4">
       <button
         type="button"
-        className="flex w-full items-center justify-between rounded-[1.35rem] border settings-border settings-surface px-5 py-4 text-left transition-all duration-200 hover:settings-surface-hover"
+        className="flex w-full items-center justify-between rounded-[1.35rem] border settings-border settings-surface px-5 py-4 text-left shadow-soft-card transition-all duration-200 hover:settings-surface-hover"
         onClick={() => setIsCollapsed((previous) => !previous)}
       >
         <div className="space-y-1">
@@ -901,7 +898,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
       {!isCollapsed ? (
         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="settings-surface rounded-[1.35rem] border settings-border p-4">
+          <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-foreground">快速添加渠道</h4>
@@ -925,6 +922,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 className="flex-1"
               />
             </div>
+            <SupportPanel
+              className="mt-3 rounded-xl border settings-border-soft settings-surface-overlay-soft px-3 py-2"
+              body="渠道条目负责管理服务商连接信息；真正生效的主模型、Fallback、Vision 与 Temperature 会在下方统一保存。"
+              bodyClassName="text-muted-text"
+            />
           </div>
 
           <div className="space-y-2">
@@ -937,8 +939,8 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
             {channels.length === 0 ? (
               <div className="settings-surface-overlay-muted rounded-[1.35rem] border border-dashed border-border/28 px-4 py-10 text-center">
-                <p className="text-sm font-medium text-secondary-text">还没有渠道</p>
-                <p className="mt-1 text-xs text-muted-text">选择服务商预设后点击“添加渠道”即可开始配置。</p>
+                <p className="text-sm font-medium text-foreground">还没有渠道</p>
+                <p className="mt-1 text-xs leading-5 text-muted-text">选择服务商预设后点击“添加渠道”即可开始配置。</p>
               </div>
             ) : channels.map((channel, index) => (
               <ChannelRow
@@ -959,7 +961,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           </div>
 
           {managesRuntimeConfig ? (
-            <div className="settings-surface rounded-[1.35rem] border settings-border p-4">
+            <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">运行时参数</span>
@@ -988,9 +990,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               </div>
 
               {availableModels.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/30 bg-background/10 px-3 py-2 text-xs text-muted-text">
-                  先添加至少一个已启用渠道并填写模型，下面的主模型 / fallback / Vision 选项才会出现。
-                </div>
+                <SupportPanel
+                  className="rounded-xl border border-dashed settings-border-soft settings-surface-overlay-soft px-3 py-3"
+                  title="还没有可用模型"
+                  body="先添加至少一个已启用渠道并填写模型，下面的主模型、Fallback 和 Vision 选项才会出现。"
+                />
               ) : (
                 <div className="space-y-4">
                   <div>
@@ -1053,10 +1057,12 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               )}
             </div>
           ) : (
-            <div className="rounded-[1.35rem] border border-warning/25 bg-warning/10 px-4 py-3 text-xs text-warning">
-              当前已启用 `LITELLM_CONFIG`，主模型 / fallback / Vision / Temperature 继续在下方通用字段中管理；
-              这里仅保存渠道条目，不会覆盖 YAML 运行时选择。
-            </div>
+            <SupportBanner
+              tone="warning"
+              title="当前由 `LITELLM_CONFIG` 接管运行时选择"
+              body="主模型、Fallback、Vision 与 Temperature 继续在下方通用字段中管理；这里仅保存渠道条目，不会覆盖 YAML 运行时选择。"
+              className="rounded-[1.35rem] px-4"
+            />
           )}
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1073,15 +1079,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           </div>
 
           {saveMessage?.type === 'success' ? (
-            <div className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-              {saveMessage.text}
-            </div>
+            <SupportBanner tone="success" title={saveMessage.text} role="status" className="py-2" />
           ) : null}
 
           {saveMessage?.type === 'local-error' ? (
-            <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-              {saveMessage.text}
-            </div>
+            <SupportBanner tone="danger" title={saveMessage.text} role="alert" className="py-2" />
           ) : null}
 
           {saveMessage?.type === 'error' ? <ApiErrorAlert error={saveMessage.error} /> : null}

@@ -1,4 +1,12 @@
-import type { AnalysisReport, ReportMeta, ReportSummary, StandardReport } from '../types/analysis';
+import type {
+  AnalysisReport,
+  FrontendReportContractMeta,
+  ReportDetails,
+  ReportMeta,
+  ReportSummary,
+  ReportStandardSource,
+  StandardReport,
+} from '../types/analysis';
 
 interface ReportMetaFallback extends Partial<ReportMeta> {
   queryId?: string;
@@ -54,19 +62,34 @@ export const normalizeAnalysisReport = (
   const details = toRecord(report.details);
   const rawResult = toRecord(details?.rawResult);
   const dashboard = toRecord(rawResult?.dashboard);
-  const standardReport = (
-    toRecord(details?.standardReport) ??
-    toRecord((details as Record<string, unknown> | undefined)?.standard_report) ??
-    toRecord(rawResult?.standardReport) ??
-    toRecord(rawResult?.standard_report) ??
-    toRecord(dashboard?.standardReport) ??
-    toRecord(dashboard?.standard_report)
-  );
+
+  const standardReportCandidates: Array<{ source: ReportStandardSource; value: unknown }> = [
+    { source: 'details.standardReport', value: details?.standardReport },
+    { source: 'details.standard_report', value: (details as Record<string, unknown> | undefined)?.standard_report },
+    { source: 'details.rawResult.standardReport', value: rawResult?.standardReport },
+    { source: 'details.rawResult.standard_report', value: rawResult?.standard_report },
+    { source: 'details.rawResult.dashboard.standardReport', value: dashboard?.standardReport },
+    { source: 'details.rawResult.dashboard.standard_report', value: dashboard?.standard_report },
+  ];
+  const standardReportMatch = standardReportCandidates.find((candidate) => toRecord(candidate.value));
+  const standardReportSource = standardReportMatch?.source ?? 'none';
+  const standardReport = standardReportMatch ? toRecord(standardReportMatch.value) : undefined;
   const normalizedStandardReport = (
     standardReport ? camelizeDeep(standardReport) : undefined
   ) as StandardReport | undefined;
+  const payloadVariant: FrontendReportContractMeta['payloadVariant'] = normalizedStandardReport
+    ? 'standard_report'
+    : report.details
+      ? 'legacy_only'
+      : 'legacy_empty';
 
   const sentimentScore = toFiniteNumber(summary.sentimentScore) ?? DEFAULT_SENTIMENT_SCORE;
+  const normalizedDetails: ReportDetails | undefined = report.details
+    ? {
+        ...report.details,
+        standardReport: normalizedStandardReport,
+      }
+    : report.details;
 
   return {
     ...report,
@@ -85,11 +108,15 @@ export const normalizeAnalysisReport = (
       trendPrediction: summary.trendPrediction || '',
       sentimentScore,
     },
-    details: report.details
-      ? {
-          ...report.details,
-          standardReport: normalizedStandardReport,
-        }
-      : report.details,
+    details: normalizedDetails,
+    contractMeta: {
+      payloadVariant,
+      standardReportSource,
+    },
   };
 };
+
+export const normalizeFrontendReportContract = normalizeAnalysisReport;
+
+export const hasStandardReportContract = (report: AnalysisReport): boolean =>
+  Boolean(report.details?.standardReport);
