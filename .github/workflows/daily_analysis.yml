@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: '运行模式'
+        description: '运行模式'ac
         required: true
         default: 'full'
         type: choice
