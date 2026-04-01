@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧾 **完整 Markdown 报告结构去重与审计升级** — `report_markdown` 渲染改为严格四层：`Decision Summary -> Execution Plan -> Evidence -> Coverage / Audit`。决策层只保留“评分/建议/趋势 + 一句话结论”，执行信息合并到单一 `Execution Plan`，`Risks & Catalysts` 收敛为四组：`Bullish Factors`、`Risk Factors`、`Catalysts / Watch Conditions`、`Market Sentiment`，移除重复的 bullish/bearish/mixed 独立块。缺失字段展示同步改造为“表格内关键字段仅显示 `NA`、非关键缺失下沉到审计区”，并在审计区提供四类归因（`integrated_unavailable / not_integrated_yet / source_not_provided / not_applicable`）与 `High/Medium/Low` 接入优先级分组，提升 API 接入排期可执行性。
+
 - 🧭 **报告页信息架构重排为“四层决策流”并下沉冗余指标** — `StandardReportPanel` 调整为 `决策摘要 -> 图表/会话指标 -> 执行与风险 -> 深度附录`：首屏仅保留股票名/代码、最新价与涨跌、综合评分、操作建议、趋势判断和一句话结论；执行区收敛为“关键动作/关键风险/观察 Checklist”三块；大体量技术/财务表、评分拆解、催化与情绪等信息下沉到默认折叠的附录 disclosure，减少重复结论与首屏噪音，同时保持 `VITE_REPORT_LEGACY_FALLBACK=auto` 兼容路径不变。
 
 - 🛡️ **B3 受控弃用准备：报告渲染新增 legacy fallback 开关与契约观测** — Web 报告分支新增 `VITE_REPORT_LEGACY_FALLBACK`（`on/off/auto`）受控策略，`standard_report` 作为主路径，legacy 分支降级为兼容回退；同时补齐 `legacy_only` 契约测试、switch 分支测试与 fallback 观测日志（含 `payloadVariant / standardReportSource / mode`），为后续最终移除 legacy 路径提供可回滚保障。

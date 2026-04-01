@@ -4086,7 +4086,10 @@ def render(
             lstrip_blocks=True,
         )
         template = env.get_template(template_name)
-        return template.render(**context)
+        rendered = template.render(**context)
+        if platform == "markdown":
+            rendered = re.sub(r"\n{3,}", "\n\n", rendered).strip() + "\n"
+        return rendered
     except Exception as exc:
         logger.warning("Report render failed for %s: %s", template_name, exc)
         return None

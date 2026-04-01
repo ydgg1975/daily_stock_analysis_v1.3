@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { StandardReportPanel } from '../StandardReportPanel';
 import type { AnalysisReport } from '../../../types/analysis';
@@ -258,9 +258,8 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('report-price-chart')).toBeInTheDocument();
     expect(screen.getByTestId('execution-risk-layer')).toBeInTheDocument();
     expect(screen.getByTestId('key-actions-card')).toBeInTheDocument();
-    expect(screen.getByTestId('key-risks-card')).toBeInTheDocument();
     expect(screen.getByTestId('watch-checklist-card')).toBeInTheDocument();
-    expect(screen.getByText('执行与风险')).toBeInTheDocument();
+    expect(screen.getByText('执行计划与入场条件')).toBeInTheDocument();
     expect(screen.getAllByText('观望').length).toBe(1);
 
     const deepAppendix = screen.getByTestId('deep-appendix-disclosure');
@@ -272,29 +271,30 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('appendix-decision-disclosure')).toBeInTheDocument();
     expect(screen.getByTestId('appendix-sentiment-disclosure')).toBeInTheDocument();
     expect(screen.getByTestId('appendix-tables-disclosure')).toBeInTheDocument();
+    expect(screen.getByTestId('appendix-coverage-disclosure')).toBeInTheDocument();
 
     expect(screen.getByTestId('decision-execution-panel')).toBeInTheDocument();
     expect(screen.getByTestId('decision-board-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('risk-catalyst-panel')).toBeInTheDocument();
+    expect(screen.getAllByTestId('risk-catalyst-panel').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('coverage-audit-panel')).toBeInTheDocument();
     expect(screen.getByTestId('battle-plan-grid')).toBeInTheDocument();
 
     expect(screen.getAllByText('120-121').length).toBeGreaterThan(0);
     expect(screen.getAllByText('等待回踩后分两笔建立底仓').length).toBeGreaterThan(0);
     expect(screen.getAllByText('关键动作').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('关键风险').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('观察 / Checklist').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('入场前检查').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('核心风险').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('催化与观察条件').length).toBeGreaterThan(0);
     expect(screen.getAllByText('行情表').length).toBeGreaterThan(0);
     expect(screen.getAllByText('技术面表').length).toBeGreaterThan(0);
     expect(screen.getAllByText('基本面表').length).toBeGreaterThan(0);
     expect(screen.getAllByText('财报表').length).toBeGreaterThan(0);
-    expect(screen.getByText('催化、风险与情绪')).toBeInTheDocument();
+    expect(screen.getAllByText('催化、风险与情绪').length).toBeGreaterThan(0);
     expect(screen.getByText('作战计划')).toBeInTheDocument();
     expect(screen.getByText('Checklist 与评分')).toBeInTheDocument();
     expect(screen.getByText('评分拆解')).toBeInTheDocument();
-    expect(screen.getByText('看多因素')).toBeInTheDocument();
-    expect(screen.getByText('看空因素')).toBeInTheDocument();
-    expect(screen.getByText('中性 / 混合信号')).toBeInTheDocument();
-    expect(screen.getAllByText('最新关键更新').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('核心看多因素').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('市场情绪').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Checklist 状态').length).toBeGreaterThan(0);
     expect(screen.getByText('短线趋势')).toBeInTheDocument();
     expect(screen.getByText('变动原因')).toBeInTheDocument();
@@ -304,15 +304,74 @@ describe('StandardReportPanel', () => {
     expect(screen.getAllByText('数据中心需求回暖').length).toBeGreaterThan(0);
     expect(screen.getAllByText('估值仍偏高').length).toBeGreaterThan(0);
     expect(screen.getAllByText('上方前高压力仍在').length).toBeGreaterThan(0);
-    expect(screen.getByText('暂无新的公司级催化，短线更依赖技术结构确认。')).toBeInTheDocument();
     expect(screen.getAllByText('FMP API').length).toBeGreaterThan(0);
     expect(screen.getAllByText('若放量跌破支撑位，需立即收缩仓位').length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.getAllByText('会话指标').length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText('成交额').length).toBeGreaterThan(0);
-    expect(screen.queryByText('来源与覆盖')).not.toBeInTheDocument();
     expect(screen.queryByText('Report Block')).not.toBeInTheDocument();
     expect(screen.queryByText(/先看最重要的最新更新/)).not.toBeInTheDocument();
+  });
+
+  it('keeps extended-session NA fields out of main decision layers for A-share reports', () => {
+    const baseStandard = report.details?.standardReport;
+    if (!baseStandard) {
+      throw new Error('Missing standard report fixture');
+    }
+
+    const aShareReport: AnalysisReport = {
+      ...report,
+      meta: {
+        ...report.meta,
+        stockCode: '600519',
+        stockName: '贵州茅台',
+      },
+      details: {
+        ...report.details,
+        standardReport: {
+          ...baseStandard,
+          market: {
+            ...baseStandard.market,
+            displayFields: [
+              { label: '最新价', value: '123.40' },
+            ],
+            extendedFields: [
+              { label: '盘前成交额', value: 'NA（会话不适用）' },
+              { label: '盘后成交量', value: 'NA（当前市场不支持）' },
+            ],
+          },
+          highlights: {
+            ...baseStandard.highlights,
+            latestNews: [],
+            positiveCatalysts: [],
+            riskAlerts: [],
+            bullishFactors: [],
+            bearishFactors: [],
+            socialTone: '',
+            socialAttention: '',
+            socialNarrativeFocus: '',
+          },
+          reasonLayer: {
+            ...baseStandard.reasonLayer,
+            topRisk: '',
+            topCatalyst: '',
+            latestKeyUpdate: '',
+            sentimentSummary: '',
+          },
+          checklistItems: [
+            { status: 'pass', icon: '✅', text: '量价结构未破坏' },
+          ],
+        },
+      },
+    };
+
+    render(<StandardReportPanel report={aShareReport} chartFixtures={previewChartFixtures} />);
+
+    const executionLayer = screen.getByTestId('execution-risk-layer');
+    const marketSignalLayer = screen.getAllByTestId('risk-catalyst-panel')[0];
+
+    expect(within(executionLayer).queryByText(/盘前|盘后|extended/i)).not.toBeInTheDocument();
+    expect(within(marketSignalLayer).queryByText(/盘前|盘后|extended/i)).not.toBeInTheDocument();
   });
 });

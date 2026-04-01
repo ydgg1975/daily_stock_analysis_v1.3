@@ -1,12 +1,18 @@
 import type React from 'react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { historyApi } from '../../api/history';
 import { Drawer } from '../common/Drawer';
 import { SupportPanel } from '../common';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
-import type { ReportLanguage } from '../../types/analysis';
+import type { ReportLanguage, StandardReport } from '../../types/analysis';
+import {
+  buildMissingFieldAudit,
+  collectMissingFieldEntriesFromMarkdown,
+  collectMissingFieldEntriesFromStandardReport,
+  type MissingFieldCategory,
+} from './missingFieldAudit';
 
 interface ReportMarkdownProps {
   recordId: number;
@@ -14,6 +20,7 @@ interface ReportMarkdownProps {
   stockCode: string;
   onClose: () => void;
   reportLanguage?: ReportLanguage;
+  standardReport?: StandardReport;
 }
 
 /**
@@ -26,6 +33,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   stockCode,
   onClose,
   reportLanguage = 'zh',
+  standardReport,
 }) => {
   const text = getReportText(normalizeReportLanguage(reportLanguage));
   const loadReportFailedText = text.loadReportFailed;
@@ -33,6 +41,32 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
+
+  const coverageAudit = useMemo(() => {
+    const mergedEntries = [
+      ...collectMissingFieldEntriesFromStandardReport(standardReport),
+      ...collectMissingFieldEntriesFromMarkdown(content),
+    ];
+    return buildMissingFieldAudit(mergedEntries);
+  }, [content, standardReport]);
+
+  const coverageBuckets = coverageAudit.buckets.filter((bucket) => bucket.entries.length > 0);
+
+  const coverageCategoryLabel = useCallback((category: MissingFieldCategory): string => {
+    if (category === 'integrated_unavailable') {
+      return text.missingIntegratedUnavailable;
+    }
+    if (category === 'not_integrated_yet') {
+      return text.missingNotIntegratedYet;
+    }
+    if (category === 'source_not_provided') {
+      return text.missingSourceNotProvided;
+    }
+    if (category === 'not_applicable') {
+      return text.missingNotApplicable;
+    }
+    return text.missingOther;
+  }, [text]);
 
   // Handle close with animation
   const handleClose = useCallback(() => {
@@ -123,32 +157,66 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
           )}
         />
       ) : (
-        <SupportPanel className="px-4 py-4">
-          <div
-            className="home-markdown-prose prose prose-invert prose-sm max-w-none
-              prose-headings:text-foreground prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
-              prose-h1:text-xl
-              prose-h2:text-lg
-              prose-h3:text-base
-              prose-p:leading-relaxed prose-p:mb-3 prose-p:last:mb-0
-              prose-strong:text-foreground prose-strong:font-semibold
-              prose-ul:my-2 prose-ol:my-2 prose-li:my-1
-              prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-              prose-pre:border
-              prose-table:border-collapse
-              prose-th:border prose-th:px-3 prose-th:py-2
-              prose-td:border prose-td:px-3 prose-td:py-2
-              prose-hr:my-4
-              prose-a:no-underline hover:prose-a:underline
-              prose-blockquote:text-secondary-text
-              whitespace-pre-line break-words
-            "
+        <div className="space-y-4">
+          <SupportPanel
+            className="px-4 py-4"
+            title={text.coverageAuditTitle}
+            body={text.coverageAuditBody}
+            titleClassName="text-sm font-semibold"
           >
-            <Markdown remarkPlugins={[remarkGfm]}>
-              {content}
-            </Markdown>
-          </div>
-        </SupportPanel>
+            {coverageAudit.totalMissingFields > 0 ? (
+              <div className="space-y-3 text-xs text-secondary-text">
+                <p>{text.missingFieldsTotal}: {coverageAudit.totalMissingFields}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {coverageBuckets.map((bucket) => (
+                    <div key={bucket.category} className="rounded-lg border border-[var(--theme-panel-subtle-border)] bg-base/40 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-text">
+                        {coverageCategoryLabel(bucket.category)} ({bucket.entries.length})
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {bucket.entries.slice(0, 5).map((entry, index) => (
+                          <li key={`${entry.field}-${entry.reason}-${index}`}>
+                            <span className="font-medium text-foreground">{entry.field}</span>
+                            <span className="text-muted-text">: {entry.reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-text">{text.noMissingFields}</p>
+            )}
+          </SupportPanel>
+
+          <SupportPanel className="px-4 py-4">
+            <div
+              className="home-markdown-prose prose prose-invert prose-sm max-w-none
+                prose-headings:text-foreground prose-headings:font-semibold prose-headings:mt-5 prose-headings:mb-2
+                prose-h1:text-xl
+                prose-h2:text-lg
+                prose-h3:text-base
+                prose-p:leading-7 prose-p:my-2.5 prose-p:last:mb-0
+                prose-strong:text-foreground prose-strong:font-semibold
+                prose-ul:my-2.5 prose-ol:my-2.5 prose-li:my-1.5
+                prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+                prose-pre:border
+                prose-table:border-collapse
+                prose-th:border prose-th:px-3 prose-th:py-2
+                prose-td:border prose-td:px-3 prose-td:py-2
+                prose-hr:my-5
+                prose-a:no-underline hover:prose-a:underline
+                prose-blockquote:text-secondary-text
+                break-words
+              "
+            >
+              <Markdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </Markdown>
+            </div>
+          </SupportPanel>
+        </div>
       )}
 
       {/* Footer */}

@@ -1,12 +1,32 @@
 {# Shared macros for report templates #}
 
-{% macro render_field_group(fields) -%}
-{% if fields %}
-{% for item in fields %}
-- **{{ item.label }}**: {{ item.value }}
+{% macro render_field_group(fields, critical_keywords=[]) -%}
+{% set ns = namespace(lines=[]) %}
+{% for item in fields or [] %}
+{% set label = (item.label|string).strip() %}
+{% set value = (item.value|string).strip() %}
+{% set is_reasoned_na = value.startswith('NA（') and value.endswith('）') %}
+{% if is_reasoned_na %}
+{% set label_lower = label|lower %}
+{% set keep_na = namespace(value=false) %}
+{% for keyword in critical_keywords %}
+{% if keyword and keyword in label_lower %}
+{% set keep_na.value = true %}
+{% endif %}
+{% endfor %}
+{% if keep_na.value %}
+{% set ns.lines = ns.lines + ['- **' ~ label ~ '**: NA'] %}
+{% endif %}
+{% else %}
+{% set ns.lines = ns.lines + ['- **' ~ label ~ '**: ' ~ value] %}
+{% endif %}
+{% endfor %}
+{% if ns.lines %}
+{% for line in ns.lines %}
+{{ line }}
 {% endfor %}
 {% else %}
-- {{ na('接口未返回') }}
+- 详见 Coverage / Audit（当前区块无关键缺失字段）
 {% endif %}
 {%- endmacro %}
 

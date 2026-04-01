@@ -17,6 +17,13 @@ import type {
 import { Badge } from '../common';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
+import {
+  buildMissingFieldAudit,
+  collectMissingFieldEntriesFromStandardReport,
+  extractMissingReason,
+  type MissingFieldAuditSummary,
+  type MissingFieldCategory,
+} from './missingFieldAudit';
 
 interface StandardReportPanelProps {
   report: AnalysisReport;
@@ -25,6 +32,8 @@ interface StandardReportPanelProps {
 
 const solidCardClass =
   'theme-panel-solid rounded-[1.45rem] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+const chartLayerCardClass =
+  'theme-panel-solid rounded-[1.45rem] py-4 md:py-5 xl:py-6';
 const glassCardClass =
   'theme-panel-glass rounded-[1.55rem] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const subtlePanelClass = 'theme-panel-subtle rounded-[1rem] px-3.5 py-3';
@@ -52,14 +61,6 @@ const isMeaningfulText = (value?: string | null): value is string => {
   }
   const text = value.trim();
   return Boolean(text);
-};
-
-const extractMissingReason = (value?: string | null): string | undefined => {
-  const text = String(value || '').trim();
-  if (text.startsWith('NA（') && text.endsWith('）')) {
-    return text.slice(3, -1).trim();
-  }
-  return undefined;
 };
 
 const isMissingDisplayText = (value?: string | null): boolean => Boolean(extractMissingReason(value));
@@ -105,10 +106,18 @@ const uniqueMeaningfulItems = (
 
   items.forEach((item) => {
     const text = String(item || '').trim();
-    if (!text || seen.has(text)) {
+    if (!text || isMissingDisplayText(text)) {
       return;
     }
-    seen.add(text);
+    const normalizedKey = text
+      .toLowerCase()
+      .replace(/[\s.,，。!！?？:：;；、()（）【】'"“”‘’`]/g, '')
+      .replace(/[[\]]/g, '')
+      .trim();
+    if (!normalizedKey || seen.has(normalizedKey)) {
+      return;
+    }
+    seen.add(normalizedKey);
     normalized.push(text);
   });
 
@@ -181,6 +190,37 @@ const checklistLabel = (status: string): string => {
     return 'NA';
   }
   return ui('report.note');
+};
+
+const isPendingChecklistStatus = (status: string): boolean => ['warn', 'fail', 'na'].includes(status);
+
+const missingCategoryLabel = (category: MissingFieldCategory): string => {
+  if (category === 'integrated_unavailable') {
+    return ui('report.missingIntegratedUnavailable');
+  }
+  if (category === 'not_integrated_yet') {
+    return ui('report.missingNotIntegratedYet');
+  }
+  if (category === 'source_not_provided') {
+    return ui('report.missingSourceNotProvided');
+  }
+  if (category === 'not_applicable') {
+    return ui('report.missingNotApplicable');
+  }
+  return ui('report.missingOther');
+};
+
+const buildCoverageCompactSummary = (audit: MissingFieldAuditSummary): string | null => {
+  if (audit.totalMissingFields <= 0) {
+    return null;
+  }
+  const topBuckets = audit.buckets
+    .filter((bucket) => bucket.entries.length > 0)
+    .slice(0, 2)
+    .map((bucket) => `${bucket.entries.length}${ui('report.countUnit')}${missingCategoryLabel(bucket.category)}`);
+
+  const detail = topBuckets.length > 0 ? topBuckets.join(' / ') : ui('report.missingOther');
+  return `${audit.totalMissingFields}${ui('report.countUnit')}${ui('report.missingFields')}（${detail}）`;
 };
 
 const changeToneClass = (changePct?: string): string => {
@@ -540,30 +580,44 @@ const NarrativeBucketCard: React.FC<{
 const NewsRiskPanel: React.FC<{
   highlights?: StandardReportHighlights;
   reasonLayer?: StandardReportReasonLayer;
-}> = ({ highlights, reasonLayer }) => {
+  checklistItems: StandardReportChecklistItem[];
+  marketWarnings: string[];
+  battlePlan?: StandardReportBattlePlanCompact;
+}> = ({ highlights, reasonLayer, checklistItems, marketWarnings, battlePlan }) => {
   const latestNews = highlights?.latestNews || [];
   const bullishFactors = highlights?.bullishFactors || highlights?.positiveCatalysts || [];
   const bearishFactors = highlights?.bearishFactors || highlights?.riskAlerts || [];
-  const neutralFactors = highlights?.neutralFactors || [];
-  const latestUpdates = uniqueMeaningfulItems(
-    [reasonLayer?.latestKeyUpdate, ...latestNews],
-    3,
+  const pendingChecklist = checklistItems
+    .filter((item) => isPendingChecklistStatus(item.status))
+    .map((item) => item.text);
+
+  const bullish = uniqueMeaningfulItems(
+    [reasonLayer?.topCatalyst, ...bullishFactors],
+    4,
   );
-  const seenAcrossBuckets = new Set(latestUpdates.map((item) => item.toLowerCase()));
-  const pullUniqueBucket = (items: Array<string | null | undefined>, limit: number): string[] => {
-    const bucket = uniqueMeaningfulItems(items, limit * 2).filter((item) => {
-      const normalized = item.toLowerCase();
-      if (seenAcrossBuckets.has(normalized)) {
-        return false;
-      }
-      seenAcrossBuckets.add(normalized);
-      return true;
-    });
-    return bucket.slice(0, limit);
-  };
-  const bullish = pullUniqueBucket([reasonLayer?.topCatalyst, ...bullishFactors], 4);
-  const bearish = pullUniqueBucket([reasonLayer?.topRisk, ...bearishFactors], 4);
-  const neutral = pullUniqueBucket(neutralFactors, 4);
+  const risks = uniqueMeaningfulItems(
+    [reasonLayer?.topRisk, ...bearishFactors, ...(battlePlan?.warnings || []), ...marketWarnings],
+    5,
+  );
+  const catalystsAndWatch = uniqueMeaningfulItems(
+    [
+      reasonLayer?.latestKeyUpdate,
+      ...latestNews,
+      ...pendingChecklist,
+      isPresentValue(highlights?.earningsOutlook) ? `${ui('report.earningsOutlook')}：${softenMissingValue(highlights?.earningsOutlook)}` : undefined,
+    ],
+    5,
+  );
+  const sentimentItems = uniqueMeaningfulItems(
+    [
+      reasonLayer?.sentimentSummary,
+      highlights?.sentimentSummary,
+      isPresentValue(highlights?.socialTone) ? `${ui('report.retailTone')}：${softenMissingValue(highlights?.socialTone)}` : undefined,
+      isPresentValue(highlights?.socialAttention) ? `${ui('report.attention')}：${softenMissingValue(highlights?.socialAttention)}` : undefined,
+      isPresentValue(highlights?.socialNarrativeFocus) ? `${ui('report.narrativeFocus')}：${softenMissingValue(highlights?.socialNarrativeFocus)}` : undefined,
+    ],
+    4,
+  );
 
   return (
     <div className={cn(solidCardClass)} data-testid="risk-catalyst-panel">
@@ -571,25 +625,26 @@ const NewsRiskPanel: React.FC<{
 
       <div className="grid gap-3 xl:grid-cols-2">
         <NarrativeBucketCard
-          label={ui('report.latestUpdate')}
-          items={latestUpdates}
-          emptyText={ui('report.oneLineFallback')}
-        />
-        <NarrativeBucketCard
-          label={ui('report.bullishFactors')}
+          label={ui('report.coreBullishFactors')}
           items={bullish}
-          emptyText={ui('report.oneLineFallback')}
+          emptyText={ui('report.noFields')}
           tone="success"
         />
         <NarrativeBucketCard
-          label={ui('report.bearishFactors')}
-          items={bearish}
+          label={ui('report.coreRisks')}
+          items={risks}
           emptyText={ui('report.noFields')}
           tone="danger"
         />
         <NarrativeBucketCard
-          label={ui('report.neutralFactors')}
-          items={neutral}
+          label={ui('report.catalystsWatchConditions')}
+          items={catalystsAndWatch}
+          emptyText={ui('report.noFields')}
+          tone="info"
+        />
+        <NarrativeBucketCard
+          label={ui('report.marketSentiment')}
+          items={sentimentItems}
           emptyText={ui('report.noFields')}
           tone="info"
           footer={isMeaningfulText(reasonLayer?.sentimentSummary || highlights?.sentimentSummary) ? (
@@ -599,6 +654,88 @@ const NewsRiskPanel: React.FC<{
           ) : null}
         />
       </div>
+    </div>
+  );
+};
+
+const CoverageNoteList: React.FC<{ title: string; items: string[]; emptyText: string }> = ({
+  title,
+  items,
+  emptyText,
+}) => (
+  <div className={subtlePanelClass}>
+    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{title}</p>
+    {items.length > 0 ? (
+      <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
+        {items.map((item, index) => (
+          <li key={`${item}-${index}`} className="border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
+            {item}
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="mt-3 text-sm leading-6 text-muted-text">{emptyText}</p>
+    )}
+  </div>
+);
+
+const CoverageAuditPanel: React.FC<{
+  coverageNotes?: StandardReport['coverageNotes'];
+  missingFieldAudit: MissingFieldAuditSummary;
+}> = ({ coverageNotes, missingFieldAudit }) => {
+  const buckets = missingFieldAudit.buckets.filter((bucket) => bucket.entries.length > 0);
+
+  return (
+    <div className={cn(solidCardClass)} data-testid="coverage-audit-panel">
+      <SectionHeader title={ui('report.coverageAuditTitle')} description={ui('report.coverageAuditHint')} />
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <CoverageNoteList
+          title={ui('report.dataSources')}
+          items={uniqueMeaningfulItems(coverageNotes?.dataSources || [], 8)}
+          emptyText={ui('report.noExtraSourceNotes')}
+        />
+        <CoverageNoteList
+          title={ui('report.methods')}
+          items={uniqueMeaningfulItems(coverageNotes?.methodNotes || [], 8)}
+          emptyText={ui('report.noMethodNotes')}
+        />
+        <CoverageNoteList
+          title={ui('report.conflicts')}
+          items={uniqueMeaningfulItems(coverageNotes?.conflictNotes || [], 8)}
+          emptyText={ui('report.noConflictNotes')}
+        />
+        <CoverageNoteList
+          title={ui('report.coverageGaps')}
+          items={uniqueMeaningfulItems(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes || [], 8)}
+          emptyText={ui('report.noCoverageGaps')}
+        />
+      </div>
+
+      {missingFieldAudit.totalMissingFields > 0 ? (
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {buckets.map((bucket) => (
+            <div key={bucket.category} className={subtlePanelClass}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
+                  {missingCategoryLabel(bucket.category)}
+                </p>
+                <Badge variant="warning">{bucket.entries.length}</Badge>
+              </div>
+              <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
+                {bucket.entries.slice(0, 6).map((entry, index) => (
+                  <li key={`${entry.field}-${entry.reason}-${index}`} className="border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
+                    <span className="font-medium text-foreground">{entry.field}</span>
+                    <span className="text-muted-text">：{entry.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-muted-text">{ui('report.noMissingFieldAudit')}</p>
+      )}
     </div>
   );
 };
@@ -780,20 +917,28 @@ const DecisionSummaryHero: React.FC<{
   );
 };
 
-const ExecutionRiskLayer: React.FC<{
+const CoverageCompactHint: React.FC<{
+  audit: MissingFieldAuditSummary;
+}> = ({ audit }) => {
+  const summary = buildCoverageCompactSummary(audit);
+  if (!summary) {
+    return null;
+  }
+  return (
+    <p className="mt-3 text-xs leading-5 text-muted-text">
+      {ui('report.coverageCompactPrefix')} {summary}。{ui('report.coverageCompactSuffix')}
+    </p>
+  );
+};
+
+const ExecutionPlanLayer: React.FC<{
   decisionPanel?: StandardReportDecisionPanel;
-  reasonLayer?: StandardReportReasonLayer;
-  highlights?: StandardReportHighlights;
   checklistItems: StandardReportChecklistItem[];
-  marketWarnings: string[];
-  battlePlan?: StandardReportBattlePlanCompact;
+  missingFieldAudit: MissingFieldAuditSummary;
 }> = ({
   decisionPanel,
-  reasonLayer,
-  highlights,
   checklistItems,
-  marketWarnings,
-  battlePlan,
+  missingFieldAudit,
 }) => {
   const actionItems = uniqueMeaningfulItems([
     decisionPanel?.keyAction,
@@ -805,27 +950,18 @@ const ExecutionRiskLayer: React.FC<{
     decisionPanel?.positionSizing ? `${ui('report.positionSizing')}：${softenMissingValue(decisionPanel?.positionSizing)}` : undefined,
   ], 7);
 
-  const riskItems = uniqueMeaningfulItems([
-    reasonLayer?.topRisk,
-    ...(highlights?.riskAlerts || []),
-    ...(highlights?.bearishFactors || []),
-    ...(battlePlan?.warnings || []),
-    ...marketWarnings,
-  ], 7);
-
-  const watchItems = uniqueMeaningfulItems([
-    ...checklistItems.map((item) => `${checklistLabel(item.status)}：${item.text}`),
+  const pendingChecklist = uniqueMeaningfulItems([
+    ...checklistItems
+      .filter((item) => isPendingChecklistStatus(item.status))
+      .map((item) => item.text),
     ...(decisionPanel?.executionReminders || []),
-    isPresentValue(decisionPanel?.support) ? `${ui('report.keySupport')}：${softenMissingValue(decisionPanel?.support)}` : undefined,
-    isPresentValue(decisionPanel?.resistance) ? `${ui('report.keyResistance')}：${softenMissingValue(decisionPanel?.resistance)}` : undefined,
-    reasonLayer?.latestKeyUpdate ? `${ui('report.latestUpdate')}：${reasonLayer.latestKeyUpdate}` : undefined,
   ], 8);
 
   return (
     <section className={cn(solidCardClass)} data-testid="execution-risk-layer">
-      <SectionHeader title={ui('report.executionRiskLayerTitle')} description={ui('report.executionRiskLayerHint')} />
+      <SectionHeader title={ui('report.executionPlanTitle')} description={ui('report.executionPlanHint')} />
 
-      <div className="grid gap-3 xl:grid-cols-3">
+      <div className="grid gap-3 xl:grid-cols-2">
         <ExecutionListCard
           title={ui('report.keyAction')}
           tone="success"
@@ -835,26 +971,14 @@ const ExecutionRiskLayer: React.FC<{
         />
 
         <ExecutionListCard
-          title={ui('report.keyRisk')}
-          tone="danger"
-          items={riskItems}
-          emptyText={ui('report.noFields')}
-          testId="key-risks-card"
-          footer={isMeaningfulText(decisionPanel?.riskControlStrategy) ? (
-            <p className="text-xs leading-5 text-secondary-text">
-              {ui('report.riskControl')}: {softenMissingValue(decisionPanel?.riskControlStrategy)}
-            </p>
-          ) : null}
-        />
-
-        <ExecutionListCard
-          title={ui('report.watchChecklist')}
+          title={ui('report.entryChecklist')}
           tone="info"
-          items={watchItems}
-          emptyText={ui('report.noChecklist')}
+          items={pendingChecklist}
+          emptyText={ui('report.noPendingConditions')}
           testId="watch-checklist-card"
         />
       </div>
+      <CoverageCompactHint audit={missingFieldAudit} />
     </section>
   );
 };
@@ -886,12 +1010,13 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
   const fundamentalSection = buildSection(standardReport.tableSections?.fundamental, ui('report.evidence'), standardReport.fundamentalFields);
   const earningsSection = buildSection(standardReport.tableSections?.earnings, ui('report.sourceNotes'), standardReport.earningsFields);
   const warnings = standardReport.market?.consistencyWarnings || [];
+  const missingFieldAudit = buildMissingFieldAudit(collectMissingFieldEntriesFromStandardReport(standardReport));
 
   return (
     <div className="space-y-5 text-left md:space-y-6 xl:space-y-7" data-testid="standard-report-panel">
       <DecisionSummaryHero standardReport={standardReport} report={report} />
 
-      <section className={cn(solidCardClass)} data-testid="chart-context-layer">
+      <section className={cn(chartLayerCardClass)} data-testid="chart-context-layer">
         <ReportPriceChart
           stockCode={report.meta.stockCode}
           stockName={report.meta.stockName}
@@ -903,10 +1028,15 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
         />
       </section>
 
-      <ExecutionRiskLayer
+      <ExecutionPlanLayer
         decisionPanel={standardReport.decisionPanel}
-        reasonLayer={standardReport.reasonLayer}
+        checklistItems={standardReport.checklistItems || []}
+        missingFieldAudit={missingFieldAudit}
+      />
+
+      <NewsRiskPanel
         highlights={standardReport.highlights}
+        reasonLayer={standardReport.reasonLayer}
         checklistItems={standardReport.checklistItems || []}
         marketWarnings={warnings}
         battlePlan={standardReport.battlePlanCompact}
@@ -934,7 +1064,13 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
             </AppendixDisclosure>
 
             <AppendixDisclosure title={ui('report.appendixSentiment')} testId="appendix-sentiment-disclosure">
-              <NewsRiskPanel highlights={standardReport.highlights} reasonLayer={standardReport.reasonLayer} />
+              <NewsRiskPanel
+                highlights={standardReport.highlights}
+                reasonLayer={standardReport.reasonLayer}
+                checklistItems={standardReport.checklistItems || []}
+                marketWarnings={warnings}
+                battlePlan={standardReport.battlePlanCompact}
+              />
             </AppendixDisclosure>
 
             <AppendixDisclosure title={ui('report.appendixTables')} testId="appendix-tables-disclosure">
@@ -952,6 +1088,13 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
                   <DenseTable section={earningsSection} />
                 </div>
               </div>
+            </AppendixDisclosure>
+
+            <AppendixDisclosure title={ui('report.appendixCoverage')} testId="appendix-coverage-disclosure">
+              <CoverageAuditPanel
+                coverageNotes={standardReport.coverageNotes}
+                missingFieldAudit={missingFieldAudit}
+              />
             </AppendixDisclosure>
           </div>
         </details>

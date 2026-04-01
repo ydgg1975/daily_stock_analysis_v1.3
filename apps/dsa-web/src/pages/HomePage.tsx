@@ -50,7 +50,7 @@ const AnalysisStatusStrip: React.FC<{
   duplicateError,
   error,
 }) => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const descriptor = getAnalysisStageDescriptor(task, {
     isSubmitting: isAnalyzing,
     selectedReport,
@@ -76,9 +76,9 @@ const AnalysisStatusStrip: React.FC<{
       role="status"
       aria-live="polite"
     >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:items-start">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <span
               className={`workspace-status-badge ${
                 descriptor.key === 'failed'
@@ -91,21 +91,23 @@ const AnalysisStatusStrip: React.FC<{
               {descriptor.label}
             </span>
             {task ? (
-              <span className="text-sm font-medium text-foreground">
+              <span className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground">
                 {task.stockName || task.stockCode}
-                <span className="ml-2 text-xs font-normal text-muted-text">{task.stockCode}</span>
+                <span className="theme-task-meta-chip shrink-0 rounded-full px-2 py-0.5 text-[10px] font-normal uppercase tracking-[0.12em] text-muted-text">
+                  {task.stockCode}
+                </span>
               </span>
             ) : null}
             {selectedReport ? (
-              <span className="theme-inline-chip rounded-full px-3 py-1 text-[11px] text-muted-text">
+              <span className="theme-inline-chip min-w-0 rounded-full px-3 py-1 text-[11px] text-muted-text">
                 {t('home.currentViewing', { code: selectedReport.meta.stockCode })}
               </span>
             ) : null}
           </div>
 
-          <p className="mt-3 text-sm font-medium text-foreground">{descriptor.summary}</p>
+          <p className="mt-2.5 text-sm font-medium leading-6 text-foreground">{descriptor.summary}</p>
           {descriptor.detail ? (
-            <p className="mt-1.5 text-xs leading-5 text-secondary-text">{descriptor.detail}</p>
+            <p className="mt-1.5 text-sm leading-6 text-secondary-text">{descriptor.detail}</p>
           ) : null}
           {relationCopy ? (
             <p className="mt-2 text-xs leading-5 text-muted-text">{relationCopy}</p>
@@ -117,7 +119,7 @@ const AnalysisStatusStrip: React.FC<{
           ) : null}
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-6 xl:min-w-[34rem]">
+        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6 xl:justify-self-end xl:min-w-[30rem]">
           {ANALYSIS_STAGE_ORDER.map((item) => {
             const isComplete = descriptor.key !== 'failed'
               && ANALYSIS_STAGE_ORDER.indexOf(item) < ANALYSIS_STAGE_ORDER.indexOf(orderedStage);
@@ -141,7 +143,7 @@ const AnalysisStatusStrip: React.FC<{
                           : ''
                   }`}
                 />
-                <span className="truncate text-[11px] uppercase tracking-[0.14em]">
+                <span className={`truncate text-[11px] ${language === 'en' ? 'font-medium tracking-[0.04em]' : 'tracking-[0.1em]'}`}>
                   {t(`status.${item}`)}
                 </span>
               </div>
@@ -555,6 +557,7 @@ const HomePage: React.FC = () => {
           stockName={selectedReport.meta.stockName || ''}
           stockCode={selectedReport.meta.stockCode}
           reportLanguage={reportLanguage}
+          standardReport={selectedReport.details?.standardReport}
           onClose={closeMarkdownDrawer}
         />
       ) : null}

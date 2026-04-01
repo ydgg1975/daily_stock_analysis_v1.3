@@ -1395,6 +1395,7 @@ html[data-theme] :where(
   position: relative;
   display: flex;
   align-items: center;
+  min-height: 2rem;
   gap: 0.5rem;
   min-width: 0;
   border-radius: 999px;
@@ -1402,7 +1403,7 @@ html[data-theme] :where(
   border-style: var(--theme-border-style);
   border-color: var(--border-muted);
   background: var(--pill-bg);
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.72rem;
   color: var(--text-dim);
   clip-path: var(--theme-control-clip-path);
   transition:
@@ -2146,6 +2147,12 @@ html[data-theme="dos"] :is(
   overscroll-behavior: contain;
 }
 
+.theme-chart-frame {
+  --chart-frame-inline-gutter: clamp(0.68rem, 1.18vw, 0.96rem);
+  --chart-frame-block-gutter: clamp(0.52rem, 0.95vw, 0.82rem);
+  padding-inline: var(--chart-frame-inline-gutter);
+}
+
 .report-hero-chart {
   position: relative;
 }
@@ -2163,6 +2170,11 @@ html[data-theme="dos"] :is(
 .theme-chart-toolbar {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  --chart-toolbar-edge-gap: clamp(0.4rem, 0.72vw, 0.56rem);
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
   border-width: var(--theme-border-width);
   border-style: var(--theme-border-style);
   border-color: var(--border-muted);
@@ -2170,20 +2182,34 @@ html[data-theme="dos"] :is(
   background: color-mix(in srgb, var(--chart-toolbar-surface) 78%, transparent);
   background-image: var(--theme-panel-grid-overlay);
   padding: 0.2rem;
-  scrollbar-width: none;
-  padding-right: 0.35rem;
   overscroll-behavior: contain;
 }
 
-.theme-chart-toolbar::-webkit-scrollbar {
+.theme-chart-toolbar-track {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.theme-chart-toolbar-track::-webkit-scrollbar {
   display: none;
 }
 
+.theme-chart-toolbar-tabs {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: var(--chart-toolbar-edge-gap);
+}
+
 .theme-chart-toolbar-actions {
-  margin-left: 0.35rem;
+  flex: 0 0 auto;
+  margin-left: var(--chart-toolbar-edge-gap);
   border-left: 1px solid var(--border-muted);
-  padding-left: 0.35rem;
-  padding-right: 0.15rem;
+  padding-left: var(--chart-toolbar-edge-gap);
+  padding-right: var(--chart-toolbar-edge-gap);
 }
 
 .theme-chart-tab {
@@ -2234,7 +2260,7 @@ html[data-theme="dos"] :is(
   background:
     linear-gradient(180deg, hsl(var(--accent-primary-hsl) / 0.06), transparent),
     hsl(var(--bg-card-hsl) / 0.8);
-  padding: 0.4rem;
+  padding: var(--chart-frame-block-gutter);
   clip-path: var(--theme-panel-clip-path);
 }
 
@@ -2684,10 +2710,6 @@ html[data-theme="dos"] :is(
     min-width: 5.85rem;
     padding: 0.65rem 0.82rem;
   }
-
-  .theme-chart-canvas {
-    padding: 0.5rem;
-  }
 }
 
 @media (max-width: 767px) {
@@ -2712,6 +2734,11 @@ html[data-theme="dos"] :is(
     padding: 0.44rem 0.52rem;
   }
 
+  .theme-chart-frame {
+    --chart-frame-inline-gutter: 0.52rem;
+    --chart-frame-block-gutter: 0.46rem;
+  }
+
   .theme-chart-tab > span:last-child {
     font-size: 0.5rem;
     letter-spacing: 0.12em;
@@ -2724,10 +2751,6 @@ html[data-theme="dos"] :is(
   .theme-chart-legend-item {
     padding: 0.24rem 0.46rem;
     font-size: 0.62rem;
-  }
-
-  .theme-chart-canvas {
-    padding: 0.22rem;
   }
 
   .theme-chart-footnote {
@@ -3617,11 +3640,15 @@ textarea {
 
 .home-markdown-prose :where(h1) {
   border-bottom: 1px solid var(--home-prose-border);
-  padding-bottom: 0.5rem;
+  margin-top: 0;
+  padding-bottom: 0.58rem;
 }
 
 .home-markdown-prose :where(h2) {
-  color: hsl(var(--color-purple));
+  color: hsl(var(--foreground));
+  border-bottom: 1px solid var(--home-prose-border);
+  padding-bottom: 0.36rem;
+  margin-top: 1.28rem;
 }
 
 .home-markdown-prose :where(code) {
@@ -3634,6 +3661,7 @@ textarea {
 .home-markdown-prose :where(pre) {
   border: 1px solid var(--home-prose-border);
   background: hsl(var(--elevated) / 0.92);
+  margin: 0.85rem 0;
 }
 
 .home-markdown-prose :where(th, td) {
@@ -3647,10 +3675,29 @@ textarea {
 
 .home-markdown-prose :where(hr) {
   border-color: var(--home-prose-border);
+  margin: 1.1rem 0;
 }
 
 .home-markdown-prose :where(a) {
   color: hsl(var(--primary));
+}
+
+.home-markdown-prose :where(h3, h4) {
+  color: hsl(var(--foreground));
+  margin-top: 1rem;
+}
+
+.home-markdown-prose :where(p, ul, ol) {
+  margin-top: 0.55rem;
+  margin-bottom: 0.55rem;
+}
+
+.home-markdown-prose :where(ul, ol) {
+  padding-left: 1.1rem;
+}
+
+.home-markdown-prose :where(li + li) {
+  margin-top: 0.28rem;
 }
 
 .home-markdown-prose :where(blockquote) {

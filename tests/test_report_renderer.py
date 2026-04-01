@@ -136,12 +136,11 @@ class TestReportRenderer(unittest.TestCase):
         out = render("markdown", [_make_result()], summary_only=False)
         self.assertIsNotNone(out)
         assert out is not None
-        self.assertIn("### Top Overview", out)
-        self.assertIn("### Conclusion & Action Guidance", out)
-        self.assertIn("### Key Signals", out)
-        self.assertIn("### Risks & Catalysts", out)
-        self.assertIn("### Market / Technical / Fundamental Evidence", out)
-        self.assertIn("### Source / Coverage Notes", out)
+        self.assertIn("### Decision Summary", out)
+        self.assertIn("### Execution Plan", out)
+        self.assertIn("### Evidence", out)
+        self.assertIn("#### Risks & Catalysts", out)
+        self.assertIn("### Coverage / Audit", out)
 
     def test_channel_summary_drives_brief_and_discord_rendering(self) -> None:
         result = _make_result()
@@ -754,9 +753,9 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**MA5**: NA（样本不足）", out)
-        self.assertIn("**MA10**: NA（当前数据源未提供）", out)
-        self.assertIn("**乖离率(MA5)**: NA（样本不足）", out)
+        self.assertIn("**MA5**: NA", out)
+        self.assertIn("**MA10**: NA", out)
+        self.assertIn("**乖离率(MA5)**: NA", out)
         self.assertNotIn("**MA5**: 0.00", out)
         self.assertNotIn("**MA10**: 0.00", out)
         self.assertNotIn("**乖离率(MA5)**: 0.00%", out)
@@ -800,9 +799,9 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**Volume Ratio**: NA（当前数据源未提供）", out)
-        self.assertIn("**Turnover Rate**: NA（字段待接入）", out)
-        self.assertIn("**趋势强度**: NA（接口未返回）", out)
+        self.assertIn("**Volume Ratio**: NA", out)
+        self.assertIn("**Turnover Rate**: NA", out)
+        self.assertIn("**趋势强度**: NA", out)
         self.assertNotIn("**Volume Ratio**: 0.00", out)
         self.assertNotIn("**Turnover Rate**: 0.00%", out)
         self.assertNotIn("**趋势强度**: 0.00/100", out)
@@ -826,7 +825,7 @@ class TestReportRenderer(unittest.TestCase):
         )
         out = render("markdown", [r], summary_only=False)
         assert out is not None
-        self.assertIn("**Analysis Price**: NA（接口未返回）", out)
+        self.assertIn("**Analysis Price**: NA", out)
         self.assertIn("**Market Feed**: Upstream quote feed · intraday snapshot", out)
         self.assertNotIn("**Market Feed**: Finnhub", out)
 

@@ -818,7 +818,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
 
   const chartShellClass = integrated
     ? 'theme-chart-shell report-hero-chart'
-    : 'theme-chart-shell theme-panel-solid px-4 py-4 md:px-5 md:py-5';
+    : 'theme-chart-shell theme-panel-solid';
 
   const legendItems = useMemo(() => {
     const items = [
@@ -894,7 +894,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
 
   return (
     <div className={chartShellClass} data-testid="report-price-chart">
-      <div className={cn('flex flex-col gap-3', integrated ? 'pt-1' : '')}>
+      <div className={cn('theme-chart-frame flex flex-col gap-3', integrated ? 'pt-1' : 'py-4 md:py-5')}>
         <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{t('chart.title')}</p>
@@ -908,19 +908,21 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
             <p className="mt-2 hidden text-xs leading-5 text-muted-text md:block">{t('chart.dragHint')}</p>
           </div>
 
-          <div className="theme-chart-toolbar flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-            <div className="flex flex-nowrap items-center gap-2">
-              {VIEW_CONFIGS.map((view) => (
-                <button
-                  key={view.key}
-                  type="button"
-                  onClick={() => setActiveView(view.key)}
-                  className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
-                >
-                  <span className="font-medium">{t(view.labelKey)}</span>
-                  <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{t(view.descriptionKey)}</span>
-                </button>
-              ))}
+          <div className="theme-chart-toolbar w-full lg:ml-auto lg:w-auto lg:max-w-full">
+            <div className="theme-chart-toolbar-track">
+              <div className="theme-chart-toolbar-tabs">
+                {VIEW_CONFIGS.map((view) => (
+                  <button
+                    key={view.key}
+                    type="button"
+                    onClick={() => setActiveView(view.key)}
+                    className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
+                  >
+                    <span className="font-medium">{t(view.labelKey)}</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{t(view.descriptionKey)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="theme-chart-toolbar-actions flex flex-nowrap items-center gap-2">
               <button type="button" className="theme-chart-tab px-3" onClick={() => zoomWindow('in')} aria-label={t('chart.zoomIn')}>+</button>
@@ -945,16 +947,16 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
         </div>
         <div className="theme-chart-canvas">
           {activeBar ? (
-            <div className="mb-2.5 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.98fr)]">
+            <div className="mb-3 grid items-stretch gap-3.5 md:mb-3.5 md:grid-cols-2">
               <SupportPanel
-                className="px-3 py-2.5"
+                className="h-full px-3 py-2.5"
                 title={hoveredIndex != null ? t('chart.inspectBar') : t('chart.currentBar')}
                 titleClassName="text-[11px] uppercase tracking-[0.16em] text-muted-text"
               >
                 <p className="text-xs font-medium text-foreground sm:text-sm">{activeBar.label}</p>
-                <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                <div className="mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {inspectorRows.map((row) => (
-                    <div key={row.label} className="space-y-1">
+                    <div key={row.label} className="space-y-1.5">
                       <p className="text-[10px] uppercase tracking-[0.13em] text-muted-text">{row.label}</p>
                       <p className="text-[12px] font-medium text-secondary-text sm:text-sm">{row.value}</p>
                     </div>
@@ -962,7 +964,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                 </div>
               </SupportPanel>
               <SupportPanel
-                className="px-3 py-2.5"
+                className="h-full px-3 py-2.5"
                 title={t('chart.sessionMetrics')}
                 titleClassName="text-[11px] uppercase tracking-[0.16em] text-muted-text"
                 actions={(
@@ -972,7 +974,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                 )}
                 actionsClassName="mt-0 justify-end"
               >
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 xl:grid-cols-3">
+                <div className="grid grid-cols-2 gap-x-3.5 gap-y-2.5 xl:grid-cols-3">
                   {sessionMetricRows.map((row) => (
                     <div key={row.label} className="min-w-0">
                       <p className="text-[10px] uppercase tracking-[0.12em] text-muted-text">{row.label}</p>

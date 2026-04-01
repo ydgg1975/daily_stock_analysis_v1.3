@@ -25,39 +25,279 @@
 {% set reason = std.reason_layer %}
 {% set coverage = std.coverage_notes %}
 {% set summary = std.channel_summary %}
+{% set highlights = std.highlights if std.highlights is not none else {} %}
+{% set market_fields = std.market.display_fields or std.market.regular_fields %}
+{% set critical_na_keywords = [
+  'pe', '市盈率', 'revenue', '营收', 'net income', '净利润', 'roe', 'fcf', 'free cash flow', '自由现金流',
+  'vwap', 'avg price', '平均价', '均价', 'beta', '贝塔',
+  'analysis price', 'current price', '当前价', 'prev close', '昨收',
+  'ma5', 'ma10', 'ma20', 'ma60', 'rsi', 'volume ratio', 'turnover rate', '量比', '换手率', '趋势强度'
+] %}
+{% set evidence_groups = [market_fields, std.market.extended_fields, std.technical_fields, std.fundamental_fields, std.earnings_fields] %}
+{% set audit = namespace(entries=[]) %}
+{%- for fields in evidence_groups %}
+{%- for item in fields or [] %}
+{% set raw_value = (item.value|string).strip() %}
+{% if raw_value.startswith('NA（') and raw_value.endswith('）') %}
+{% set entry = {'field': (item.label|string).strip(), 'reason': raw_value[3:-1].strip()} %}
+{% if entry not in audit.entries %}
+{% set audit.entries = audit.entries + [entry] %}
+{% endif %}
+{% endif %}
+{%- endfor %}
+{%- endfor %}
+{%- for note in coverage.missing_field_notes or [] %}
+{% set normalized_note = (note|string).replace('：', ':') %}
+{% set field = '' %}
+{% set reason = '接口未返回' %}
+{% if ':' in normalized_note %}
+{% set parts = normalized_note.split(':', 1) %}
+{% set field = (parts[0]|string).strip() %}
+{% set reason = (parts[1]|string).strip() %}
+{% else %}
+{% set field = normalized_note.strip() %}
+{% endif %}
+{% if reason.startswith('NA（') and reason.endswith('）') %}
+{% set reason = reason[3:-1].strip() %}
+{% endif %}
+{% if field %}
+{% set entry = {'field': field, 'reason': reason} %}
+{% if entry not in audit.entries %}
+{% set audit.entries = audit.entries + [entry] %}
+{% endif %}
+{% endif %}
+{%- endfor %}
+{% set missing_by_reason = namespace(
+  integrated_unavailable=[],
+  not_integrated_yet=[],
+  source_not_provided=[],
+  not_applicable=[]
+) %}
+{% set missing_by_priority = namespace(high=[], medium=[], low=[], additional=[]) %}
+{%- for entry in audit.entries %}
+{% set reason_text = (entry.reason|string).strip() %}
+{% set reason_lower = reason_text|lower %}
+{% if '不适用' in reason_text
+  or '当前市场不支持' in reason_text
+  or '当前市场暂不支持' in reason_text
+  or '会话不适用' in reason_text
+  or 'not applicable' in reason_lower
+  or 'market not supported' in reason_lower
+  or 'session not applicable' in reason_lower %}
+{% set missing_by_reason.not_applicable = missing_by_reason.not_applicable + [entry] %}
+{% elif '字段待接入' in reason_text
+  or '待接入' in reason_text
+  or '未接入' in reason_text
+  or '未集成' in reason_text
+  or '待映射' in reason_text
+  or 'not integrated' in reason_lower
+  or 'integration pending' in reason_lower
+  or 'pending mapping' in reason_lower %}
+{% set missing_by_reason.not_integrated_yet = missing_by_reason.not_integrated_yet + [entry] %}
+{% elif '数据源未提供' in reason_text
+  or '当前数据源未提供' in reason_text
+  or '源未提供' in reason_text
+  or '供应商未提供' in reason_text
+  or 'source not provided' in reason_lower
+  or 'provider does not provide' in reason_lower
+  or 'provider limitation' in reason_lower %}
+{% set missing_by_reason.source_not_provided = missing_by_reason.source_not_provided + [entry] %}
+{% else %}
+{% set missing_by_reason.integrated_unavailable = missing_by_reason.integrated_unavailable + [entry] %}
+{% endif %}
+
+{% set field_text = (entry.field|string).strip() %}
+{% set field_lower = field_text|lower %}
+{% if '市盈率' in field_text
+  or field_lower == 'pe'
+  or field_lower.startswith('pe(')
+  or ' pe ' in (' ' ~ field_lower ~ ' ')
+  or 'p/e' in field_lower
+  or '营收' in field_text
+  or 'revenue' in field_lower
+  or '净利润' in field_text
+  or 'net income' in field_lower
+  or 'roe' in field_lower
+  or '自由现金流' in field_text
+  or 'fcf' in field_lower
+  or 'free cash flow' in field_lower %}
+{% if entry not in missing_by_priority.high %}
+{% set missing_by_priority.high = missing_by_priority.high + [entry] %}
+{% endif %}
+{% elif 'vwap' in field_lower
+  or 'avg price' in field_lower
+  or '平均价' in field_text
+  or '均价' in field_text
+  or 'beta' in field_lower
+  or '贝塔' in field_text %}
+{% if entry not in missing_by_priority.medium %}
+{% set missing_by_priority.medium = missing_by_priority.medium + [entry] %}
+{% endif %}
+{% elif '盘前' in field_text
+  or 'premarket' in field_lower
+  or 'pre-market' in field_lower
+  or '盘后' in field_text
+  or 'after-hours' in field_lower
+  or 'after hours' in field_lower
+  or 'extended' in field_lower %}
+{% if entry not in missing_by_priority.low %}
+{% set missing_by_priority.low = missing_by_priority.low + [entry] %}
+{% endif %}
+{% else %}
+{% if entry not in missing_by_priority.additional %}
+{% set missing_by_priority.additional = missing_by_priority.additional + [entry] %}
+{% endif %}
+{% endif %}
+{%- endfor %}
+{% set risks = namespace(bullish=[], risk=[], catalysts=[], sentiment=[]) %}
+{% if summary.top_bullish_factor and summary.top_bullish_factor != na('接口未返回') %}
+{% set risks.bullish = risks.bullish + [summary.top_bullish_factor] %}
+{% endif %}
+{% if summary.top_risk and summary.top_risk != na('接口未返回') %}
+{% set risks.risk = risks.risk + [summary.top_risk] %}
+{% endif %}
+{% for item in highlights.positive_catalysts or [] %}
+{% if item and item not in risks.bullish %}
+{% set risks.bullish = risks.bullish + [item] %}
+{% endif %}
+{% endfor %}
+{% for item in highlights.bullish_factors or [] %}
+{% if item and item not in risks.bullish %}
+{% set risks.bullish = risks.bullish + [item] %}
+{% endif %}
+{% endfor %}
+{% for item in highlights.risk_alerts or [] %}
+{% if item and item not in risks.risk %}
+{% set risks.risk = risks.risk + [item] %}
+{% endif %}
+{% endfor %}
+{% for item in highlights.bearish_factors or [] %}
+{% if item and item not in risks.risk %}
+{% set risks.risk = risks.risk + [item] %}
+{% endif %}
+{% endfor %}
+{% for item in highlights.neutral_factors or [] %}
+{% if item and item not in risks.catalysts %}
+{% set risks.catalysts = risks.catalysts + [item] %}
+{% endif %}
+{% endfor %}
+{% for item in highlights.latest_news or [] %}
+{% if item and item not in risks.catalysts %}
+{% set risks.catalysts = risks.catalysts + [item] %}
+{% endif %}
+{% endfor %}
+{% if summary.latest_key_update and summary.latest_key_update != na('接口未返回') and summary.latest_key_update not in risks.catalysts %}
+{% set risks.catalysts = risks.catalysts + [summary.latest_key_update] %}
+{% endif %}
+{% if highlights.sentiment_summary and highlights.sentiment_summary != na('接口未返回') %}
+{% set risks.sentiment = risks.sentiment + [highlights.sentiment_summary] %}
+{% endif %}
+{% if highlights.social_synthesis and highlights.social_synthesis != na('接口未返回') and highlights.social_synthesis not in risks.sentiment %}
+{% set risks.sentiment = risks.sentiment + [highlights.social_synthesis] %}
+{% endif %}
+{% if highlights.social_tone and highlights.social_tone not in risks.sentiment %}
+{% set risks.sentiment = risks.sentiment + ['Social tone: ' ~ highlights.social_tone] %}
+{% endif %}
+{% if highlights.social_attention and highlights.social_attention not in risks.sentiment %}
+{% set risks.sentiment = risks.sentiment + ['Social attention: ' ~ highlights.social_attention] %}
+{% endif %}
+{% if highlights.social_narrative_focus and highlights.social_narrative_focus not in risks.sentiment %}
+{% set risks.sentiment = risks.sentiment + ['Social narrative: ' ~ highlights.social_narrative_focus] %}
+{% endif %}
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
-### Top Overview
+### Decision Summary
 - **评分 / 建议 / 趋势**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
 - **一句话结论**: {{ summary.one_line_conclusion }}
 - **Analysis Price / 涨跌**: {{ summary.analysis_price }} | {{ summary.change_amount }} / {{ summary.change_pct }}
 - **价格口径 / 参考会话 / 更新时间**: {{ summary.price_basis }} / {{ summary.reference_session }} / {{ summary.snapshot_time }}
 - **报告生成时间**: {{ summary.report_generated_at }}
+
+### Execution Plan
+#### Current Action
+- **关键动作**: {{ summary.key_action }}
+- **关键支撑 / 关键压力**: {{ summary.support }} / {{ summary.resistance }}
 - **最新关键更新**: {{ summary.latest_key_update }}
 
-### Conclusion & Action Guidance
-- **关键动作**: {{ summary.key_action }}
+#### For New Positions
 - **理想买入点 / 次优买入点 / 止损位**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
 - **目标一区 / 目标二区 / 目标区间**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
-- **关键支撑 / 关键压力**: {{ summary.support }} / {{ summary.resistance }}
-- **空仓者建议 / 持仓者建议**: {{ summary.no_position_advice }} / {{ summary.holder_advice }}
+- **空仓者建议**: {{ summary.no_position_advice }}
+
+#### For Existing Positions
+- **持仓者建议**: {{ summary.holder_advice }}
 - **Checklist 摘要**: {{ summary.checklist_summary }}
 {% if summary.checklist_items %}
 {% for item in summary.checklist_items %}
 - {{ item }}
 {% endfor %}
 {% else %}
-- {{ na('字段待接入') }}
-{% endif %}
-{% if decision.execution_reminders %}
-- **执行提醒**: {{ decision.execution_reminders | join('；') }}
+- 无新增执行清单
 {% endif %}
 
-### Key Signals
+#### Conditions & Risk Control
 - **交易场景 / 置信度**: {{ decision.setup_type }} / {{ decision.confidence }}
 - **市场结构**: {{ decision.market_structure }}
 - **建仓策略 / 风控策略**: {{ decision.build_strategy }} / {{ decision.risk_control_strategy }}
 - **止损说明 / 目标说明**: {{ decision.stop_reason }} / {{ decision.target_reason }}
+{% if decision.execution_reminders %}
+- **执行提醒**: {{ decision.execution_reminders | join('；') }}
+{% endif %}
+
+### Evidence
+#### Market
+{{ render_field_group(market_fields, critical_na_keywords) }}
+{% if std.market.extended_fields %}
+{{ render_field_group(std.market.extended_fields, critical_na_keywords) }}
+{% endif %}
+
+#### Technical
+{{ render_field_group(std.technical_fields, critical_na_keywords) }}
+
+#### Fundamental
+{{ render_field_group(std.fundamental_fields, critical_na_keywords) }}
+
+#### Earnings
+{{ render_field_group(std.earnings_fields, critical_na_keywords) }}
+- **Earnings Outlook**: {{ highlights.earnings_outlook if highlights.earnings_outlook else na('接口未返回') }}
+
+#### Risks & Catalysts
+##### Bullish Factors
+{% if risks.bullish %}
+{% for item in risks.bullish %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+
+##### Risk Factors
+{% if risks.risk %}
+{% for item in risks.risk %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+
+##### Catalysts / Watch Conditions
+{% if risks.catalysts %}
+{% for item in risks.catalysts %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+
+##### Market Sentiment
+{% if risks.sentiment %}
+{% for item in risks.sentiment %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- {{ na('接口未返回') }}
+{% endif %}
+
 - **核心理由**:
 {% if reason.core_reasons %}
 {% for item in reason.core_reasons %}
@@ -67,40 +307,80 @@
   - {{ na('接口未返回') }}
 {% endif %}
 
-### Risks & Catalysts
-- **核心利好**: {{ summary.top_bullish_factor }}
-- **核心风险**: {{ summary.top_risk }}
-- **利好催化**: {{ std.highlights.positive_catalysts | join('；') if std.highlights.positive_catalysts else na('接口未返回') }}
-- **风险警报**: {{ std.highlights.risk_alerts | join('；') if std.highlights.risk_alerts else na('接口未返回') }}
-- **Bullish factors**: {{ std.highlights.bullish_factors | join('；') if std.highlights.bullish_factors else na('接口未返回') }}
-- **Bearish factors**: {{ std.highlights.bearish_factors | join('；') if std.highlights.bearish_factors else na('接口未返回') }}
-- **Mixed / neutral context**: {{ std.highlights.neutral_factors | join('；') if std.highlights.neutral_factors else na('接口未返回') }}
-- **情绪摘要 / 业绩预期**: {{ std.highlights.sentiment_summary }} / {{ std.highlights.earnings_outlook }}
-- **社交讨论综合判断**: {{ std.highlights.social_synthesis if std.highlights.social_synthesis else na('接口未返回') }}
-
-### Market / Technical / Fundamental Evidence
-#### Market
-{{ render_field_group(std.market.display_fields or std.market.regular_fields) }}
-{% if std.market.extended_fields %}
-#### Extended Session
-{{ render_field_group(std.market.extended_fields) }}
-{% endif %}
-
-#### Technicals
-{{ render_field_group(std.technical_fields) }}
-
-#### Fundamentals
-{{ render_field_group(std.fundamental_fields) }}
-
-#### Earnings
-{{ render_field_group(std.earnings_fields) }}
-
-### Source / Coverage Notes
+### Coverage / Audit
 - **数据来源**: {{ coverage.data_sources | join('；') if coverage.data_sources else na('接口未返回') }}
 - **覆盖缺口**: {{ coverage.coverage_gaps | join('；') if coverage.coverage_gaps else na('接口未返回') }}
 - **状态 / 冲突说明**: {{ coverage.conflict_notes | join('；') if coverage.conflict_notes else na('接口未返回') }}
-- **缺失字段说明**: {{ coverage.missing_field_notes | join('；') if coverage.missing_field_notes else na('接口未返回') }}
 - **方法说明**: {{ coverage.method_notes | join('；') if coverage.method_notes else na('接口未返回') }}
+
+#### Missing Field Audit (Full Truth)
+- **Missing fields total**: {{ audit.entries|length }}
+
+##### By Missing Cause
+- **integrated_unavailable**:
+{% if missing_by_reason.integrated_unavailable %}
+{% for item in missing_by_reason.integrated_unavailable %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+- **not_integrated_yet**:
+{% if missing_by_reason.not_integrated_yet %}
+{% for item in missing_by_reason.not_integrated_yet %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+- **source_not_provided**:
+{% if missing_by_reason.source_not_provided %}
+{% for item in missing_by_reason.source_not_provided %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+- **not_applicable**:
+{% if missing_by_reason.not_applicable %}
+{% for item in missing_by_reason.not_applicable %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+
+##### Integration Priority
+- **High Priority Missing** (PE / Revenue / Net Income / ROE / FCF):
+{% if missing_by_priority.high %}
+{% for item in missing_by_priority.high %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+- **Medium Priority Missing** (VWAP / Avg Price / Beta):
+{% if missing_by_priority.medium %}
+{% for item in missing_by_priority.medium %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+- **Low / Conditional Missing** (Premarket / After-hours):
+{% if missing_by_priority.low %}
+{% for item in missing_by_priority.low %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% else %}
+  - 无
+{% endif %}
+{% if missing_by_priority.additional %}
+- **Additional Missing Fields**:
+{% for item in missing_by_priority.additional %}
+  - {{ item.field }}: {{ item.reason }}
+{% endfor %}
+{% endif %}
 
 ---
 {% endfor %}
