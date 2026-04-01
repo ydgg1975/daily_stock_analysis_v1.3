@@ -113,6 +113,7 @@ const KNOWN_MODEL_PREFIXES = new Set([
   'gemini',
   'vertex_ai',
   'deepseek',
+  'minimax',
   'ollama',
   'cohere',
   'huggingface',
@@ -804,7 +805,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
         (model) => !availableModels.includes(model) && !usesDirectEnvProvider(model),
       );
       if (invalidFallbackModel) {
-        setSaveMessage({ type: 'local-error', text: '存在无效的 fallback 模型，请重新选择。' });
+        setSaveMessage({ type: 'local-error', text: '存在无效的备选模型，请重新选择。' });
         return;
       }
 
@@ -984,7 +985,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <span className="settings-accent-text text-xs font-medium uppercase tracking-wider">运行时参数</span>
-                  <p className="mt-1 text-[11px] text-muted-text">主模型、Fallback、Vision 与 Temperature 会直接写入运行时配置。</p>
+                  <p className="mt-1 text-[11px] text-muted-text">主模型、备选模型、Vision 与 Temperature 会直接写入运行时配置。</p>
                 </div>
                 <Badge variant="default" className="border-[var(--settings-border)] bg-[var(--settings-surface-hover)] text-muted-text">Runtime</Badge>
               </div>
@@ -1010,13 +1011,14 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
               {availableModels.length === 0 ? (
                 <div className="rounded-xl border border-dashed settings-border-strong settings-surface-overlay-soft px-3 py-2 text-xs text-muted-text">
-                  先添加至少一个已启用渠道并填写模型，下面的主模型 / fallback / Vision 选项才会出现。
+                  先添加至少一个已启用渠道并填写模型，下面的主模型 / 备选模型 / Vision 选项才会出现。
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">主模型</label>
+                    <label htmlFor="runtime-primary-model" className="mb-1 block text-xs text-muted-text">主模型</label>
                     <Select
+                      id="runtime-primary-model"
                       value={runtimeConfig.primaryModel}
                       onChange={setPrimaryModel}
                       options={buildModelOptions(availableModels, runtimeConfig.primaryModel, '自动（使用第一个可用模型）')}
@@ -1026,8 +1028,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">Agent 主模型</label>
+                    <label htmlFor="runtime-agent-primary-model" className="mb-1 block text-xs text-muted-text">Agent 主模型</label>
                     <Select
+                      id="runtime-agent-primary-model"
                       value={runtimeConfig.agentPrimaryModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({
                         ...previous,
@@ -1040,7 +1043,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs text-muted-text">Fallback 模型</label>
+                    <label className="mb-2 block text-xs text-muted-text">备选模型</label>
                     <div className="space-y-2 rounded-xl border settings-border-strong settings-surface-overlay-soft p-3">
                       {availableModels.map((model) => (
                         <label key={model} className="flex items-center gap-2 text-sm text-secondary-text">
@@ -1056,13 +1059,14 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                       ))}
                     </div>
                     <p className="mt-1 text-[11px] text-secondary-text">
-                      Fallback 只会在主模型失败时使用。主模型不会重复加入 fallback。
+                      备选模型只会在主模型失败时使用。主模型不会重复加入备选模型。
                     </p>
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs text-muted-text">Vision 模型</label>
+                    <label htmlFor="runtime-vision-model" className="mb-1 block text-xs text-muted-text">Vision 模型</label>
                     <Select
+                      id="runtime-vision-model"
                       value={runtimeConfig.visionModel}
                       onChange={(value) => setRuntimeConfig((previous) => ({ ...previous, visionModel: value }))}
                       options={buildModelOptions(availableModels, runtimeConfig.visionModel, '自动（跟随 Vision 默认逻辑）')}
@@ -1076,7 +1080,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           ) : (
             <InlineAlert
               variant="warning"
-              message="当前已启用 `LITELLM_CONFIG`，主模型 / fallback / Vision / Temperature 继续在下方通用字段中管理；这里仅保存渠道条目，不会覆盖 YAML 运行时选择。"
+              message="检测到已配置高级模型路由 YAML：此处仅管理渠道条目和基础连接信息。运行时主模型 / 备选模型 / Vision / Temperature 仍由下方通用字段决定；若 YAML 解析成功，则以其中的路由与可用模型声明为准，本配置不会覆盖 YAML 文件本身。"
               className="rounded-[1.35rem] px-4 py-3 text-xs shadow-none"
             />
           )}

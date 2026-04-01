@@ -450,6 +450,21 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertTrue(any(issue["key"] == "LITELLM_MODEL" and issue["code"] == "missing_runtime_source" for issue in validation["issues"]))
 
+    def test_validate_accepts_minimax_model_as_direct_env_provider(self) -> None:
+        """minimax is NOT a managed key provider; it uses LiteLLM direct-env routing."""
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "primary"},
+                {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
+                {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "minimax/MiniMax-M1"},
+                {"key": "LLM_PRIMARY_ENABLED", "value": "false"},
+                {"key": "LITELLM_MODEL", "value": "minimax/MiniMax-M1"},
+            ]
+        )
+
+        self.assertFalse(any(issue.get("key") == "LITELLM_MODEL" and issue["code"] == "missing_runtime_source" for issue in validation.get("issues", [])))
+
     def test_validate_reports_stale_agent_primary_model_when_all_channels_disabled(self) -> None:
         validation = self.service.validate(
             items=[
@@ -535,6 +550,18 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(response["success"])
         mock_reload_runtime_singletons.assert_called_once()
 
+    def test_update_with_reload_applies_updated_env_file_when_process_env_is_stale(self) -> None:
+        os.environ["STOCK_LIST"] = "600519,000001"
+
+        response = self.service.update(
+            config_version=self.manager.get_config_version(),
+            items=[{"key": "STOCK_LIST", "value": "300750,TSLA"}],
+            reload_now=True,
+        )
+
+        self.assertTrue(response["success"])
+        self.assertEqual(Config.get_instance().stock_list, ["300750", "TSLA"])
+
     def test_update_raises_conflict_for_stale_version(self) -> None:
         with self.assertRaises(ConfigConflictError):
             self.service.update(
@@ -570,6 +597,35 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertIn("MAX_WORKERS=1", joined)
         self.assertIn("reload_now=false", joined)
 
+    def test_update_appends_mode_specific_startup_warnings(self) -> None:
+        response = self.service.update(
+            config_version=self.manager.get_config_version(),
+            items=[
+                {"key": "RUN_IMMEDIATELY", "value": "false"},
+                {"key": "SCHEDULE_ENABLED", "value": "true"},
+                {"key": "SCHEDULE_RUN_IMMEDIATELY", "value": "true"},
+            ],
+            reload_now=True,
+        )
+
+        self.assertTrue(response["success"])
+        run_warning = next(
+            warning
+            for warning in response["warnings"]
+            if "RUN_IMMEDIATELY 已写入 .env" in warning
+        )
+        schedule_warning = next(
+            warning
+            for warning in response["warnings"]
+            if "SCHEDULE_ENABLED" in warning
+        )
+
+        self.assertIn("非 schedule 模式", run_warning)
+        self.assertNotIn("以 schedule 模式", run_warning)
+        self.assertIn("SCHEDULE_RUN_IMMEDIATELY", schedule_warning)
+        self.assertIn("不会自动重建 scheduler", schedule_warning)
+        self.assertIn("以 schedule 模式重新启动后生效", schedule_warning)
+        self.assertNotIn("它属于启动期单次运行配置", schedule_warning)
 
     def test_validate_rejects_comma_only_api_key(self) -> None:
         """Whitespace/comma-only api_key must fail validation (P2: parsed-segment check)."""
