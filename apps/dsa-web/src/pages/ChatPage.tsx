@@ -13,7 +13,13 @@ import {
   type Message,
   type ProgressStep,
 } from '../stores/agentChatStore';
-import { downloadSession, formatSessionAsMarkdown } from '../utils/chatExport';
+import {
+  downloadSession,
+  downloadSessionAsHtml,
+  formatSessionAsMarkdown,
+  downloadMessageAsMarkdown,
+  downloadMessageAsHtml,
+} from '../utils/chatExport';
 import type { ChatFollowUpContext } from '../utils/chatFollowUp';
 import {
   buildFollowUpPrompt,
@@ -52,6 +58,7 @@ const ChatPage: React.FC = () => {
   } | null>(null);
   const [copiedMessages, setCopiedMessages] = useState<Set<string>>(new Set());
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'md' | 'html'>('md');
   const copyResetTimerRef = useRef<Partial<Record<string, number>>>({});
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -328,19 +335,26 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const downloadMessageAsMarkdown = useCallback((msg: Message) => {
-    const heading = msg.role === 'user' ? '# 用户消息' : `# AI 回复${msg.skillName ? ` · ${msg.skillName}` : ''}`;
-    const content = [heading, '', msg.content].join('\n');
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${msg.role === 'user' ? 'user' : 'assistant'}-message-${msg.id}.md`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  }, []);
+  const handleSingleMessageExport = (e: React.ChangeEvent<HTMLSelectElement>, msg: Message) => {
+    const format = e.target.value as 'md' | 'html';
+    if (format === 'html') {
+      downloadMessageAsHtml(msg);
+    } else {
+      downloadMessageAsMarkdown(msg);
+    }
+  };
+
+  const handleExportFormatChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const format = e.target.value as 'md' | 'html';
+    setExportFormat(format);
+    if (format === 'html') {
+      downloadSessionAsHtml(messages);
+    } else {
+      downloadSession(messages);
+    }
+    // Reset to md after download for next use
+    setTimeout(() => setExportFormat('md'), 100);
+  };
 
   const getCurrentStage = (steps: ProgressStep[]): string => {
     if (steps.length === 0) return '正在连接...';
@@ -610,13 +624,12 @@ const ChatPage: React.FC = () => {
             </h1>
             {messages.length > 0 && (
               <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                <Tooltip content="导出会话为 Markdown 文件">
-                  <span className="inline-flex">
+                <Tooltip content="选择导出格式">
+                  <span className="inline-flex relative">
                     <Button
                       variant="action-primary"
                       size="sm"
-                      onClick={() => downloadSession(messages)}
-                      aria-label="导出会话为 Markdown 文件"
+                      aria-label="导出会话"
                     >
                       <svg
                         className="w-4 h-4"
@@ -632,7 +645,29 @@ const ChatPage: React.FC = () => {
                         />
                       </svg>
                       导出会话
+                      <svg
+                        className="w-3 h-3 ml-1"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
                     </Button>
+                    <select
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      value={exportFormat}
+                      onChange={handleExportFormatChange}
+                      aria-label="选择导出格式"
+                    >
+                      <option value="md">Markdown (.md)</option>
+                      <option value="html">HTML (.html)</option>
+                    </select>
                   </span>
                 </Tooltip>
                 <Tooltip content="发送到已配置的通知机器人/邮箱">
@@ -817,14 +852,36 @@ const ChatPage: React.FC = () => {
                           >
                             {copiedMessages.has(msg.id) ? text.copied : text.copy}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => downloadMessageAsMarkdown(msg)}
-                            className="chat-copy-btn"
-                            aria-label="导出此条消息为 Markdown"
-                          >
-                            导出
-                          </button>
+                          <span className="relative inline-flex">
+                            <button
+                              type="button"
+                              className="chat-copy-btn"
+                              aria-label="导出此条消息"
+                            >
+                              导出
+                              <svg
+                                className="w-3 h-3 ml-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </button>
+                            <select
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              aria-label="选择导出格式"
+                              onChange={(e) => handleSingleMessageExport(e, msg)}
+                            >
+                              <option value="md">Markdown (.md)</option>
+                              <option value="html">HTML (.html)</option>
+                            </select>
+                          </span>
                         </div>
                         <div className="chat-prose pr-20 sm:pr-24">
                           <Markdown remarkPlugins={[remarkGfm]}>

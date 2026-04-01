@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "libsodium-wrappers": "^0.8.2"
+  }
+}
