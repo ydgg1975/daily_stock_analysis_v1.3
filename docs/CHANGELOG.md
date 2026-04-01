@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧭 **报告页信息架构重排为“四层决策流”并下沉冗余指标** — `StandardReportPanel` 调整为 `决策摘要 -> 图表/会话指标 -> 执行与风险 -> 深度附录`：首屏仅保留股票名/代码、最新价与涨跌、综合评分、操作建议、趋势判断和一句话结论；执行区收敛为“关键动作/关键风险/观察 Checklist”三块；大体量技术/财务表、评分拆解、催化与情绪等信息下沉到默认折叠的附录 disclosure，减少重复结论与首屏噪音，同时保持 `VITE_REPORT_LEGACY_FALLBACK=auto` 兼容路径不变。
+
 - 🛡️ **B3 受控弃用准备：报告渲染新增 legacy fallback 开关与契约观测** — Web 报告分支新增 `VITE_REPORT_LEGACY_FALLBACK`（`on/off/auto`）受控策略，`standard_report` 作为主路径，legacy 分支降级为兼容回退；同时补齐 `legacy_only` 契约测试、switch 分支测试与 fallback 观测日志（含 `payloadVariant / standardReportSource / mode`），为后续最终移除 legacy 路径提供可回滚保障。
 
 - 🧭 **三主题侧栏语言重构 + 壳层间距与交互动效再抛光** — Web 端新增侧栏专用 token（nav 几何、icon 容器、激活指示、分隔线、品牌块边框/阴影、rail framing），并在 `Dark Terminal / Cyberpunk / Geek(DOS)` 里分别落地为交易终端、赛博控制轨、单色 DOS 控制台三种侧栏语言，不再是同构侧栏仅换色。`Shell` 与 workspace split/chat 布局同时改为独立 `layout-shell-gap/layout-content-gap`，提高侧栏与主内容之间的结构间距，减少“贴边拥挤”感；导航项/图标容器/激活条与主区卡片的 hover/active 过渡也统一到 motion token，交互更平滑而不拖慢响应。
