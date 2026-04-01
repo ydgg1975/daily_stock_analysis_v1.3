@@ -159,16 +159,37 @@ const HomePage: React.FC = () => {
               </svg>
             </button>
             <div className="relative min-w-0 flex-1">
-              <StockAutocomplete
-                value={query}
-                onChange={setQuery}
-                onSubmit={(stockCode, stockName, selectionSource) => {
-                  handleSubmitAnalysis(stockCode, stockName, selectionSource);
-                }}
-                placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
-                disabled={isAnalyzing}
-                className={inputError ? 'border-danger/50' : undefined}
-              />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <StockAutocomplete
+                    value={query}
+                    onChange={setQuery}
+                    onSubmit={(stockCode, stockName, selectionSource) => {
+                      handleSubmitAnalysis(stockCode, stockName, selectionSource);
+                    }}
+                    placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
+                    disabled={isAnalyzing}
+                    className={inputError ? 'border-danger/50' : undefined}
+                  />
+                  {inputError ? (
+                    <p className="absolute -bottom-5 left-0 text-xs text-danger">{inputError}</p>
+                  ) : null}
+                  {duplicateError ? (
+                    <p className="absolute -bottom-5 left-0 text-xs text-warning">{duplicateError}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/market')}
+                  className="btn-primary flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap"
+                  title="大盘复盘"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                  <span className="hidden sm:inline">大盘</span>
+                </button>
+              </div>
             </div>
             <label className="flex h-10 flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-subtle bg-surface/60 px-3 text-xs text-secondary-text select-none transition-colors hover:border-subtle-hover hover:text-foreground">
               <input
