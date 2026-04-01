@@ -54,8 +54,10 @@
 | 類型 | 支援 |
 |------|------|
 | AI 模型 | Gemini（免費）、OpenAI 兼容、DeepSeek、通義千問、Claude、Ollama |
-| 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance |
+| 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股兜底） |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
+
+> **長橋：** 於 YFinance 資料不完整時補全量比、換手率、PE 等（美股/港股）。詳見 `.env.example` 與 [完整指南](docs/full-guide.md)。
 
 ### 內建交易紀律
 
@@ -137,6 +139,17 @@
 | `SEARXNG_BASE_URLS` | SearXNG 自建實例（無配額兜底，需在 settings.yml 啟用 format: json）；留空時預設自動發現公共實例 | 可選 |
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 為空時自動從 `searx.space` 取得公共實例（預設 `true`） | 可選 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可選 |
+| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（美股/港股量比、換手率、PE 等欄位兜底） | 可選 |
+| `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | 可選 |
+| `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | 可選 |
+| `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | 長橋 `static_info` 進程內快取秒數，預設 `86400`；`0` 表示不快取 | 可選 |
+| `LONGBRIDGE_HTTP_URL` | HTTP 介面位址（預設 `https://openapi.longbridge.com`） | 可選 |
+| `LONGBRIDGE_QUOTE_WS_URL` | 行情 WebSocket 位址（預設 `wss://openapi-quote.longbridge.com/v2`） | 可選 |
+| `LONGBRIDGE_TRADE_WS_URL` | 交易 WebSocket 位址（預設 `wss://openapi-trade.longbridge.com/v2`） | 可選 |
+| `LONGBRIDGE_REGION` | 覆寫接入點；SDK 會依網路自動選擇，預設 `hk`，若判斷不正確可設定（如 `cn`、`hk`） | 可選 |
+| `LONGBRIDGE_ENABLE_OVERNIGHT` | 是否開啟夜盤行情 `true` / `false`，預設 `false` | 可選 |
+| `LONGBRIDGE_PUSH_CANDLESTICK_MODE` | K 線推送模式：`realtime` 或 `confirmed`（預設 `realtime`） | 可選 |
+| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | 連線時是否列印行情包（預設 `false`） | 可選 |
 | `AGENT_MODE` | 啟用 Agent 策略問股模式（內部統一命名為 skill，`true`/`false`，預設 `false`） | 可選 |
 | `AGENT_LITELLM_MODEL` | Agent 專用主模型（可選）；留空時繼承 `LITELLM_MODEL`，無 provider 前綴時按 `openai/<model>` 解析 | 可選 |
 | `AGENT_MAX_STEPS` | Agent 最大推理步數（預設 `10`） | 可選 |
