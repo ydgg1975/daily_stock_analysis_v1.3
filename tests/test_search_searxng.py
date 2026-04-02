@@ -23,7 +23,9 @@ class TestSearXNGSearchProvider(unittest.TestCase):
 
     def setUp(self) -> None:
         SearXNGSearchProvider.reset_public_instance_cache()
-        SearXNGSearchProvider._penalized_instances.clear()
+        # Clear penalized-instance state if the provider implements it.
+        if hasattr(SearXNGSearchProvider, "_penalized_instances"):
+            SearXNGSearchProvider._penalized_instances.clear()
 
     def _create_provider(
         self,
