@@ -49,6 +49,62 @@ def _static_info_ttl_seconds() -> int:
         return _DEFAULT_STATIC_INFO_TTL
 
 
+_REGION_URL_MAP: Dict[str, Dict[str, str]] = {
+    "cn": {
+        "http_url": "https://openapi.longbridge.cn",
+        "quote_ws_url": "wss://openapi-quote.longbridge.cn/v2",
+        "trade_ws_url": "wss://openapi-trade.longbridge.cn/v2",
+    },
+    "hk": {
+        "http_url": "https://openapi.longbridge.com",
+        "quote_ws_url": "wss://openapi-quote.longbridge.com/v2",
+        "trade_ws_url": "wss://openapi-trade.longbridge.com/v2",
+    },
+}
+
+
+def _sanitize_longbridge_env() -> None:
+    """Remove empty-string LONGBRIDGE_*_URL env vars.
+
+    GitHub Actions sets ``LONGBRIDGE_HTTP_URL: ${{ vars.X || secrets.X }}``
+    which resolves to an empty string ``""`` when neither var nor secret is
+    configured.  The Rust SDK's ``Config.from_apikey()`` auto-reads these
+    env vars, and an empty string is *not* the same as "unset" — it causes
+    the SDK to use a blank URL, which breaks the WebSocket handshake and
+    results in "context dropped" / "Client is closed" within milliseconds.
+
+    Also mirrors ``LONGBRIDGE_REGION`` → ``LONGPORT_REGION`` because the
+    Rust SDK's internal ``is_cn()`` function only checks ``LONGPORT_REGION``
+    (not ``LONGBRIDGE_REGION``) when deciding which default endpoints to use.
+    """
+    for key in (
+        "LONGBRIDGE_HTTP_URL",
+        "LONGBRIDGE_QUOTE_WS_URL",
+        "LONGBRIDGE_TRADE_WS_URL",
+    ):
+        val = os.environ.get(key)
+        if val is not None and val.strip() == "":
+            del os.environ[key]
+            logger.debug("[Longbridge] 删除空环境变量 %s", key)
+
+    region = (os.getenv("LONGBRIDGE_REGION") or "").strip().lower()
+    if region:
+        if not os.environ.get("LONGPORT_REGION"):
+            os.environ["LONGPORT_REGION"] = region
+            logger.debug("[Longbridge] 同步 LONGPORT_REGION=%s", region)
+
+        urls = _REGION_URL_MAP.get(region, {})
+        for env_name, default_url in (
+            ("LONGBRIDGE_HTTP_URL", urls.get("http_url")),
+            ("LONGBRIDGE_QUOTE_WS_URL", urls.get("quote_ws_url")),
+            ("LONGBRIDGE_TRADE_WS_URL", urls.get("trade_ws_url")),
+        ):
+            if default_url and not os.environ.get(env_name):
+                os.environ[env_name] = default_url
+                logger.debug("[Longbridge] 根据 REGION=%s 设置 %s=%s",
+                             region, env_name, default_url)
+
+
 def _longbridge_config_kwargs() -> Dict[str, Any]:
     """Optional kwargs for ``Config.from_apikey`` (Longbridge OpenAPI SDK)."""
     try:
@@ -66,7 +122,7 @@ def _longbridge_config_kwargs() -> Dict[str, Any]:
 
     if "enable_print_quote_packages" in params:
         raw = os.getenv("LONGBRIDGE_PRINT_QUOTE_PACKAGES", "").strip().lower()
-        kw["enable_print_quote_packages"] = raw in ("1", "true", "yes")
+        kw["enable_print_quote_packages"] = raw not in ("0", "false", "no")
 
     for pname, envname in (
         ("http_url", "LONGBRIDGE_HTTP_URL"),
@@ -235,6 +291,10 @@ class LongbridgeFetcher(BaseFetcher):
             try:
                 from longbridge.openapi import QuoteContext, Config
 
+                # ── 1. Clean up empty URL env vars & apply REGION mapping ──
+                _sanitize_longbridge_env()
+
+                # ── 2. Ensure credentials are available in env ──
                 try:
                     from src.config import config as app_config
                     app_key = app_config.longbridge_app_key
@@ -245,39 +305,34 @@ class LongbridgeFetcher(BaseFetcher):
                     app_secret = os.getenv("LONGBRIDGE_APP_SECRET")
                     access_token = os.getenv("LONGBRIDGE_ACCESS_TOKEN")
 
-                # Ensure credentials are in env so Config.from_env() can read them.
-                _env_defaults = {
+                for k, v in {
                     "LONGBRIDGE_APP_KEY": app_key,
                     "LONGBRIDGE_APP_SECRET": app_secret,
                     "LONGBRIDGE_ACCESS_TOKEN": access_token,
-                }
-                for k, v in _env_defaults.items():
+                }.items():
                     if v and not os.environ.get(k):
                         os.environ[k] = v
 
-                # Set optional env vars that from_env() reads but our code
-                # previously only passed as kwargs to from_apikey().
+                # ── 3. Build Config ──
                 extra_kw = _longbridge_config_kwargs()
-                _env_mapping = {
-                    "log_path": "LONGBRIDGE_LOG_PATH",
-                }
-                for kw_name, env_name in _env_mapping.items():
-                    val = extra_kw.get(kw_name)
-                    if val and not os.environ.get(env_name):
-                        os.environ[env_name] = str(val)
-
                 lb_config = None
 
-                # Prefer from_env(): it reads LONGBRIDGE_REGION, all URLs, and
-                # optional settings from env vars — from_apikey() does NOT read
-                # LONGBRIDGE_REGION, which causes "Client is closed" when the
-                # SDK connects to the wrong regional endpoint.
-                if hasattr(Config, "from_env"):
+                # Prefer from_apikey_env() — reads all LONGBRIDGE_* env vars
+                # (credentials + URLs + options) including .env files.
+                # Available in longbridge >= 4.x.  from_env() only exists on
+                # the unreleased master branch.
+                for factory_name in ("from_apikey_env", "from_env"):
+                    factory = getattr(Config, factory_name, None)
+                    if factory is None:
+                        continue
                     try:
-                        lb_config = Config.from_env()
-                        logger.debug("[Longbridge] Config.from_env() 成功")
+                        lb_config = factory()
+                        logger.info("[Longbridge] Config.%s() 成功", factory_name)
+                        break
                     except Exception as e:
-                        logger.debug("[Longbridge] Config.from_env() 失败，回退到 from_apikey: %s", e)
+                        logger.debug(
+                            "[Longbridge] Config.%s() 失败: %s", factory_name, e
+                        )
 
                 if lb_config is None:
                     lb_config = Config.from_apikey(
@@ -286,13 +341,23 @@ class LongbridgeFetcher(BaseFetcher):
                         access_token,
                         **extra_kw,
                     )
+                    logger.info("[Longbridge] Config.from_apikey() 创建成功")
+
+                # Diagnostic logging
+                region = os.getenv("LONGBRIDGE_REGION") or os.getenv("LONGPORT_REGION") or "(auto)"
+                logger.info(
+                    "[Longbridge] 配置: region=%s, http=%s, quote_ws=%s",
+                    region,
+                    os.getenv("LONGBRIDGE_HTTP_URL", "(default)"),
+                    os.getenv("LONGBRIDGE_QUOTE_WS_URL", "(default)"),
+                )
 
                 self._config = lb_config
                 self._ctx = QuoteContext(lb_config)
                 logger.info("[Longbridge] QuoteContext 初始化成功")
                 return self._ctx
             except Exception as e:
-                logger.warning(f"[Longbridge] QuoteContext 初始化失败: {e}")
+                logger.warning("[Longbridge] QuoteContext 初始化失败: %s", e)
                 self._available = False
                 return None
 
