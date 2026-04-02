@@ -57,7 +57,7 @@
 | 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股首選數據源） |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
-> **長橋優先策略**：設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 後，美股與港股的日線數據和即時行情均以 **Longbridge 為首選數據源**，YFinance / AkShare 作為兜底與欄位補充；未設定時保持 YFinance（美股）/ AkShare（港股）為首選，Longbridge 僅用於補充缺失欄位。A 股不受影響。詳見 `.env.example` 與 [完整指南](docs/full-guide.md)。
+> **長橋優先策略**：設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 後，美股與港股的日線數據和即時行情均以 **Longbridge 為首選數據源**，YFinance / AkShare 作為兜底與欄位補充；未設定時保持 YFinance（美股）/ AkShare（港股）為首選，Longbridge 僅用於補充缺失欄位。A 股不受影響。詳見 `.env.example` 與 [完整指南](./full-guide.md)。
 
 ### 內建交易紀律
 
