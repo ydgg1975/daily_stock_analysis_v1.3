@@ -182,13 +182,26 @@ class LongbridgeFetcher(BaseFetcher):
     name = "LongbridgeFetcher"
     priority = int(os.getenv("LONGBRIDGE_PRIORITY", "5"))
 
+    _CONNECTION_ERRORS = ("client is closed", "context closed", "connection closed")
+
     def __init__(self):
         self._ctx = None
+        self._config = None
         self._ctx_lock = threading.Lock()
         self._available = None
         # {symbol: (StaticInfo, timestamp)}
         self._static_cache: Dict[str, Any] = {}
         self._static_cache_lock = threading.Lock()
+
+    def _is_connection_error(self, exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return any(s in msg for s in self._CONNECTION_ERRORS)
+
+    def _invalidate_ctx(self):
+        """Reset cached context so the next call rebuilds the connection."""
+        with self._ctx_lock:
+            self._ctx = None
+            self._config = None
 
     def _is_available(self) -> bool:
         """Check if Longbridge credentials are configured."""
@@ -232,16 +245,49 @@ class LongbridgeFetcher(BaseFetcher):
                     app_secret = os.getenv("LONGBRIDGE_APP_SECRET")
                     access_token = os.getenv("LONGBRIDGE_ACCESS_TOKEN")
 
-                # Rust-backed Config: must use factory (direct Config(...) raises
-                # Optional URL/language/overnight/log 等与官方文档一致：
-                # https://open.longbridge.com/zh-CN/docs/getting-started#环境变量
-                # LONGBRIDGE_REGION
-                lb_config = Config.from_apikey(
-                    app_key,
-                    app_secret,
-                    access_token,
-                    **_longbridge_config_kwargs(),
-                )
+                # Ensure credentials are in env so Config.from_env() can read them.
+                _env_defaults = {
+                    "LONGBRIDGE_APP_KEY": app_key,
+                    "LONGBRIDGE_APP_SECRET": app_secret,
+                    "LONGBRIDGE_ACCESS_TOKEN": access_token,
+                }
+                for k, v in _env_defaults.items():
+                    if v and not os.environ.get(k):
+                        os.environ[k] = v
+
+                # Set optional env vars that from_env() reads but our code
+                # previously only passed as kwargs to from_apikey().
+                extra_kw = _longbridge_config_kwargs()
+                _env_mapping = {
+                    "log_path": "LONGBRIDGE_LOG_PATH",
+                }
+                for kw_name, env_name in _env_mapping.items():
+                    val = extra_kw.get(kw_name)
+                    if val and not os.environ.get(env_name):
+                        os.environ[env_name] = str(val)
+
+                lb_config = None
+
+                # Prefer from_env(): it reads LONGBRIDGE_REGION, all URLs, and
+                # optional settings from env vars — from_apikey() does NOT read
+                # LONGBRIDGE_REGION, which causes "Client is closed" when the
+                # SDK connects to the wrong regional endpoint.
+                if hasattr(Config, "from_env"):
+                    try:
+                        lb_config = Config.from_env()
+                        logger.debug("[Longbridge] Config.from_env() 成功")
+                    except Exception as e:
+                        logger.debug("[Longbridge] Config.from_env() 失败，回退到 from_apikey: %s", e)
+
+                if lb_config is None:
+                    lb_config = Config.from_apikey(
+                        app_key,
+                        app_secret,
+                        access_token,
+                        **extra_kw,
+                    )
+
+                self._config = lb_config
                 self._ctx = QuoteContext(lb_config)
                 logger.info("[Longbridge] QuoteContext 初始化成功")
                 return self._ctx
@@ -277,6 +323,8 @@ class LongbridgeFetcher(BaseFetcher):
                 return info
         except Exception as e:
             logger.debug(f"[Longbridge] static_info({symbol}) 失败: {e}")
+            if self._is_connection_error(e):
+                self._invalidate_ctx()
         return None
 
     # ------------------------------------------------------------------
@@ -312,8 +360,8 @@ class LongbridgeFetcher(BaseFetcher):
                 Period.Day,
                 AdjustType.NoAdjust,
                 False,  # direction=False => towards historical
-                6,
                 datetime.now(),
+                6,
             )
             if not candles or len(candles) < 2:
                 return None
@@ -362,6 +410,9 @@ class LongbridgeFetcher(BaseFetcher):
             q = quotes[0]
         except Exception as e:
             logger.info(f"[Longbridge] quote({symbol}) 失败: {e}")
+            if self._is_connection_error(e):
+                logger.warning("[Longbridge] 检测到连接已断开，将在下次调用时重建连接")
+                self._invalidate_ctx()
             return None
 
         price = safe_float(getattr(q, "last_done", None))
@@ -481,13 +532,19 @@ class LongbridgeFetcher(BaseFetcher):
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-        candles = ctx.history_candlesticks_by_date(
-            symbol,
-            Period.Day,
-            AdjustType.ForwardAdjust,
-            start_dt,
-            end_dt,
-        )
+        try:
+            candles = ctx.history_candlesticks_by_date(
+                symbol,
+                Period.Day,
+                AdjustType.ForwardAdjust,
+                start_dt,
+                end_dt,
+            )
+        except Exception as e:
+            if self._is_connection_error(e):
+                logger.warning("[Longbridge] 检测到连接已断开，将在下次调用时重建连接")
+                self._invalidate_ctx()
+            raise
 
         if not candles:
             return pd.DataFrame()

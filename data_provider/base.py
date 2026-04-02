@@ -887,7 +887,7 @@ class DataFetcherManager:
         total_fetchers = len(fetchers)
         request_start = time.time()
 
-        # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher
+        # 快速路径：美股指数与美股股票 YfinanceFetcher 为主 -> LongbridgeFetcher 兜底
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
             for attempt, fetcher in enumerate(fetchers, start=1):
                 if fetcher.name == "YfinanceFetcher":
@@ -920,7 +920,40 @@ class DataFetcherManager:
                         )
                         errors.append(error_msg)
                     break
-            # YfinanceFetcher failed or not found
+
+            # YfinanceFetcher 失败或未找到 -> LongbridgeFetcher 兜底
+            for attempt, fetcher in enumerate(fetchers, start=1):
+                if fetcher.name == "LongbridgeFetcher":
+                    try:
+                        logger.info(
+                            f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] "
+                            f"美股/美股指数 {stock_code} Longbridge 兜底..."
+                        )
+                        df = self._call_fetcher_method(
+                            fetcher,
+                            "get_daily_data",
+                            stock_code=stock_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                            days=days,
+                        )
+                        if df is not None and not df.empty:
+                            elapsed = time.time() - request_start
+                            logger.info(
+                                f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
+                                f"rows={len(df)}, elapsed={elapsed:.2f}s"
+                            )
+                            return df, fetcher.name
+                    except Exception as e:
+                        error_type, error_reason = summarize_exception(e)
+                        error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
+                        logger.warning(
+                            f"[数据源失败 {attempt}/{total_fetchers}] [{fetcher.name}] {stock_code}: "
+                            f"error_type={error_type}, reason={error_reason}"
+                        )
+                        errors.append(error_msg)
+                    break
+
             error_summary = f"美股/美股指数 {stock_code} 获取失败:\n" + "\n".join(errors)
             elapsed = time.time() - request_start
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
