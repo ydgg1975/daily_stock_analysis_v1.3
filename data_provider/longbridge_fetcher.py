@@ -93,6 +93,10 @@ def _sanitize_longbridge_env() -> None:
             del os.environ[key]
             logger.debug("[Longbridge] 删除空环境变量 %s", key)
 
+    # App default for SDK (from_apikey_env reads env): quiet unless user sets 1/true/yes.
+    if "LONGBRIDGE_PRINT_QUOTE_PACKAGES" not in os.environ:
+        os.environ["LONGBRIDGE_PRINT_QUOTE_PACKAGES"] = "false"
+
     if not os.environ.get("LONGBRIDGE_LOG_PATH"):
         try:
             log_dir = (os.getenv("LOG_DIR") or "./logs").strip() or "./logs"
@@ -138,11 +142,13 @@ def _longbridge_config_kwargs() -> Dict[str, Any]:
     kw: Dict[str, Any] = {}
 
     if "enable_print_quote_packages" in params:
+        # Unset / empty → False (quiet); SDK default would be verbose — we opt in explicitly.
         raw = os.getenv("LONGBRIDGE_PRINT_QUOTE_PACKAGES")
-        if raw is not None:
-            raw_norm = raw.strip().lower()
-            if raw_norm:
-                kw["enable_print_quote_packages"] = raw_norm not in ("0", "false", "no")
+        if raw is None or not str(raw).strip():
+            kw["enable_print_quote_packages"] = False
+        else:
+            raw_norm = str(raw).strip().lower()
+            kw["enable_print_quote_packages"] = raw_norm not in ("0", "false", "no")
 
     for pname, envname in (
         ("http_url", "LONGBRIDGE_HTTP_URL"),

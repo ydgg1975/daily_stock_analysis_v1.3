@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Live smoke test for Longbridge integration.
+Manual smoke script for Longbridge integration (NOT run by pytest — no test_ prefix).
 
 Usage:
     # 1. Copy .env.example -> .env and fill LONGBRIDGE_* (.env.example is never loaded by the app)
     # 2. Or set env vars in the shell, e.g. set LONGBRIDGE_APP_KEY=...
 
     # 3. Run (Python 3.10+), from repo root or tests/ both OK
-    python tests/test_longbridge_live.py
+    python tests/longbridge_live_smoke.py
 
     # 4. Test with specific stock
-    python tests/test_longbridge_live.py TSLA
+    python tests/longbridge_live_smoke.py TSLA
 
     # 5. One-off credentials (prefer .env; args may appear in shell history)
-    python tests/test_longbridge_live.py AAPL --lb-app-key ... --lb-app-secret ... --lb-access-token ...
+    python tests/longbridge_live_smoke.py AAPL --lb-app-key ... --lb-app-secret ... --lb-access-token ...
 
-Tests three levels:
+Runs three levels:
     Level 1: LongbridgeFetcher standalone  (does LB API work?)
     Level 2: DataFetcherManager supplement  (does yfinance + LB merge work?)
     Level 3: Full pipeline quote            (does get_realtime_quote return filled data?)
@@ -51,8 +51,8 @@ def _print_field(label: str, value, ok_if_not_none=True):
         print(f"     {label:20s}: {value}")
 
 
-def test_level1_standalone(stock_code: str):
-    """Test LongbridgeFetcher in isolation."""
+def run_level1_standalone(stock_code: str):
+    """LongbridgeFetcher in isolation."""
     _print_header(f"Level 1: LongbridgeFetcher standalone ({stock_code})")
 
     from data_provider.longbridge_fetcher import LongbridgeFetcher
@@ -89,8 +89,8 @@ def test_level1_standalone(stock_code: str):
     return filled >= 2
 
 
-def test_level2_supplement(stock_code: str):
-    """Test yfinance + Longbridge supplement flow."""
+def run_level2_supplement(stock_code: str):
+    """YFinance + Longbridge supplement flow."""
     _print_header(f"Level 2: YFinance + Longbridge supplement ({stock_code})")
 
     from data_provider.base import DataFetcherManager
@@ -151,8 +151,8 @@ def test_level2_supplement(stock_code: str):
     return True
 
 
-def test_level3_full_pipeline(stock_code: str):
-    """Test the full get_realtime_quote path."""
+def run_level3_full_pipeline(stock_code: str):
+    """Full get_realtime_quote path."""
     _print_header(f"Level 3: Full DataFetcherManager.get_realtime_quote ({stock_code})")
 
     from data_provider.base import DataFetcherManager
@@ -235,9 +235,9 @@ def main():
     print(f"Credentials: {'configured' if has_creds else 'NOT configured'}")
 
     results = {}
-    results["L1"] = test_level1_standalone(stock)
-    results["L2"] = test_level2_supplement(stock)
-    results["L3"] = test_level3_full_pipeline(stock)
+    results["L1"] = run_level1_standalone(stock)
+    results["L2"] = run_level2_supplement(stock)
+    results["L3"] = run_level3_full_pipeline(stock)
 
     _print_header("Summary")
     for level, passed in results.items():
