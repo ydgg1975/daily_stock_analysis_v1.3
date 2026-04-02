@@ -20,8 +20,11 @@ on:
       force_run:
         description: '强制运行（跳过交易日检查）'
         required: false
-        default: false
-        type: boolean
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 # 并发控制：同一时间只运行一个分析任务
 concurrency:
