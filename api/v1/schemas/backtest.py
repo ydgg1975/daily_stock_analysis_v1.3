@@ -27,6 +27,7 @@ class BacktestRunResponse(BaseModel):
 class BacktestResultItem(BaseModel):
     analysis_history_id: int
     code: str
+    skill_id: Optional[str] = None
     analysis_date: Optional[str] = None
     eval_window_days: int
     engine_version: str
@@ -53,6 +54,7 @@ class BacktestResultItem(BaseModel):
     simulated_exit_price: Optional[float] = None
     simulated_exit_reason: Optional[str] = None
     simulated_return_pct: Optional[float] = None
+    parameter_warnings: Optional[List[str]] = None
 
 
 class BacktestResultsResponse(BaseModel):
@@ -65,6 +67,7 @@ class BacktestResultsResponse(BaseModel):
 class PerformanceMetrics(BaseModel):
     scope: str
     code: Optional[str] = None
+    skill_id: Optional[str] = None
     eval_window_days: int
     engine_version: str
     computed_at: Optional[str] = None

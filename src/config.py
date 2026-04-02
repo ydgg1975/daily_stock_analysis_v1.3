@@ -631,9 +631,14 @@ class Config:
     # === 回测配置 ===
     backtest_enabled: bool = True
     backtest_eval_window_days: int = 10
-    backtest_min_age_days: int = 14
+    backtest_min_age_days: int = 5
     backtest_engine_version: str = "v1"
     backtest_neutral_band_pct: float = 2.0
+    backtest_slippage_bps: int = 10  # 滑点: 10 bps ≈ 0.1%
+    backtest_commission_pct: float = 0.001  # 单边佣金: 0.1%
+    backtest_neutral_band_a: float = 3.0  # A股中性带（波动大）
+    backtest_neutral_band_hk: float = 2.0  # 港股中性带
+    backtest_neutral_band_us: float = 1.5  # 美股中性带（波动小）
     
     # === 日志配置 ===
     log_dir: str = "./logs"  # 日志文件目录
@@ -1229,12 +1234,42 @@ class Config:
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
             backtest_eval_window_days=parse_env_int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS'), 10, field_name='BACKTEST_EVAL_WINDOW_DAYS', minimum=1),
-            backtest_min_age_days=parse_env_int(os.getenv('BACKTEST_MIN_AGE_DAYS'), 14, field_name='BACKTEST_MIN_AGE_DAYS', minimum=1),
+            backtest_min_age_days=parse_env_int(os.getenv('BACKTEST_MIN_AGE_DAYS'), 5, field_name='BACKTEST_MIN_AGE_DAYS', minimum=1),
             backtest_engine_version=os.getenv('BACKTEST_ENGINE_VERSION', 'v1'),
             backtest_neutral_band_pct=parse_env_float(
                 os.getenv('BACKTEST_NEUTRAL_BAND_PCT'),
                 2.0,
                 field_name='BACKTEST_NEUTRAL_BAND_PCT',
+                minimum=0.0,
+            ),
+            backtest_slippage_bps=parse_env_int(
+                os.getenv('BACKTEST_SLIPPAGE_BPS'),
+                10,
+                field_name='BACKTEST_SLIPPAGE_BPS',
+                minimum=0,
+            ),
+            backtest_commission_pct=parse_env_float(
+                os.getenv('BACKTEST_COMMISSION_PCT'),
+                0.001,
+                field_name='BACKTEST_COMMISSION_PCT',
+                minimum=0.0,
+            ),
+            backtest_neutral_band_a=parse_env_float(
+                os.getenv('BACKTEST_NEUTRAL_BAND_A'),
+                3.0,
+                field_name='BACKTEST_NEUTRAL_BAND_A',
+                minimum=0.0,
+            ),
+            backtest_neutral_band_hk=parse_env_float(
+                os.getenv('BACKTEST_NEUTRAL_BAND_HK'),
+                2.0,
+                field_name='BACKTEST_NEUTRAL_BAND_HK',
+                minimum=0.0,
+            ),
+            backtest_neutral_band_us=parse_env_float(
+                os.getenv('BACKTEST_NEUTRAL_BAND_US'),
+                1.5,
+                field_name='BACKTEST_NEUTRAL_BAND_US',
                 minimum=0.0,
             ),
             log_dir=os.getenv('LOG_DIR', './logs'),

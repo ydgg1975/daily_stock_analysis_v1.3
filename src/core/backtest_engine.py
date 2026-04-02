@@ -38,6 +38,7 @@ class BacktestResultLike(Protocol):
     first_hit: Optional[str]
     first_hit_trading_days: Optional[int]
     operation_advice: Optional[str]
+    skill_id: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,11 @@ class EvaluationConfig:
     eval_window_days: int
     neutral_band_pct: float = 2.0
     engine_version: str = "v1"
+    slippage_bps: int = 10  # 滑点: 10 bps ≈ 0.1%
+    commission_pct: float = 0.001  # 单边佣金: 0.1%
+    # Per-market neutral band: key is market id ("A"/"HK"/"US")，value is band_pct
+    neutral_band_pct_by_market: Optional[Dict[str, float]] = None
+    code: Optional[str] = None  # 股票代码，用于判断市场
 
 
 class BacktestEngine:
@@ -174,10 +180,18 @@ class BacktestEngine:
         direction_expected = cls.infer_direction_expected(operation_advice)
         position = cls.infer_position_recommendation(operation_advice)
 
+        # Resolve effective neutral_band_pct: per-market if configured
+        effective_neutral_band = config.neutral_band_pct
+        if config.neutral_band_pct_by_market:
+            market = cls._detect_market(config.code)
+            effective_neutral_band = config.neutral_band_pct_by_market.get(
+                market, config.neutral_band_pct
+            )
+
         outcome, direction_correct = cls._classify_outcome(
             stock_return_pct=stock_return_pct,
             direction_expected=direction_expected,
-            neutral_band_pct=config.neutral_band_pct,
+            neutral_band_pct=effective_neutral_band,
         )
 
         (
@@ -196,14 +210,28 @@ class BacktestEngine:
             end_close=end_close,
         )
 
-        simulated_entry_price = start_price if position == "long" else None
+        slippage_bps = config.slippage_bps
+        commission_pct = config.commission_pct
+
+        simulated_entry_price = start_price * (1 + slippage_bps / 10000) if position == "long" else None
         simulated_return_pct: Optional[float]
         if position != "long":
             simulated_return_pct = 0.0
         elif simulated_exit_price is None:
             simulated_return_pct = None
         else:
-            simulated_return_pct = (simulated_exit_price - start_price) / start_price * 100
+            # Apply slippage and commission to both entry and exit
+            entry_cost = start_price * (1 + slippage_bps / 10000 + commission_pct)
+            exit_received = simulated_exit_price * (1 - slippage_bps / 10000 - commission_pct)
+            simulated_return_pct = (exit_received - entry_cost) / entry_cost * 100
+
+        # Scheme B: 参数基础逻辑校验
+        parameter_warnings: List[str] = []
+        if position == "long":
+            if take_profit is not None and take_profit <= start_price:
+                parameter_warnings.append(f"tp_below_entry:TP={take_profit}<=entry={start_price}")
+            if stop_loss is not None and stop_loss >= start_price:
+                parameter_warnings.append(f"sl_above_entry:SL={stop_loss}>=entry={start_price}")
 
         return {
             "analysis_date": analysis_date,
@@ -231,6 +259,7 @@ class BacktestEngine:
             "simulated_exit_price": simulated_exit_price,
             "simulated_exit_reason": simulated_exit_reason,
             "simulated_return_pct": simulated_return_pct,
+            "parameter_warnings": parameter_warnings,
         }
 
     @classmethod
@@ -351,6 +380,30 @@ class BacktestEngine:
     @staticmethod
     def _normalize_text(value: Optional[str]) -> str:
         return str(value or "").strip().lower()
+
+    @classmethod
+    def _detect_market(cls, code: Optional[str]) -> str:
+        """Detect market from stock code.
+
+        - A shares: 6-digit codes starting with 6/0/3 (e.g., 600519, 000001, 300750)
+        - HK stocks: starts with 'hk' (hk00700) or ends with '.HK'
+        - US stocks: 1-5 uppercase letters (AAPL, TSLA, GOOGL)
+        - Default: 'A'
+        """
+        if not code:
+            return "A"
+        original = code.strip()
+        c = original.lower()
+        # HK: hk00700, 00700.HK, etc.
+        if c.startswith("hk") or c.endswith(".hk"):
+            return "HK"
+        # US: purely uppercase letters, 1-5 chars
+        if original.isalpha() and original.isupper() and len(original) <= 5:
+            return "US"
+        # A shares: 6-digit numeric
+        if c.isdigit() and len(c) == 6:
+            return "A"
+        return "A"  # default to A-share rules
 
     @classmethod
     def _matches_intent(cls, text: str, keywords: Sequence[str]) -> bool:

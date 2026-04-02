@@ -287,6 +287,9 @@ class BacktestResult(Base):
     code = Column(String(10), nullable=False, index=True)
     analysis_date = Column(Date, index=True)
 
+    # Skill 维度（从 context_snapshot 解析，report_type 回退）
+    skill_id = Column(String(32), nullable=True, index=True)
+
     # 回测参数
     eval_window_days = Column(Integer, nullable=False, default=10)
     engine_version = Column(String(16), nullable=False, default='v1')
@@ -326,6 +329,9 @@ class BacktestResult(Base):
     simulated_exit_reason = Column(String(24))  # stop_loss/take_profit/window_end/cash/ambiguous_stop_loss
     simulated_return_pct = Column(Float)
 
+    # 参数校验警告（如止盈<入场价、止损>入场价、入场价偏离理想买点等）
+    parameter_warnings = Column(Text)  # JSON list of warning strings
+
     __table_args__ = (
         UniqueConstraint(
             'analysis_history_id',
@@ -344,8 +350,9 @@ class BacktestSummary(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    scope = Column(String(16), nullable=False, index=True)  # overall/stock
+    scope = Column(String(16), nullable=False, index=True)  # overall/stock/skill
     code = Column(String(16), index=True)
+    skill_id = Column(String(32), nullable=True, index=True)
 
     eval_window_days = Column(Integer, nullable=False, default=10)
     engine_version = Column(String(16), nullable=False, default='v1')
@@ -385,9 +392,10 @@ class BacktestSummary(Base):
         UniqueConstraint(
             'scope',
             'code',
+            'skill_id',
             'eval_window_days',
             'engine_version',
-            name='uix_backtest_summary_scope_code_window_version',
+            name='uix_backtest_summary_scope_code_skill_window_version',
         ),
     )
 

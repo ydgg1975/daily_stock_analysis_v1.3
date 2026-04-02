@@ -132,6 +132,7 @@ class BacktestRepository:
                     and_(
                         BacktestSummary.scope == summary.scope,
                         BacktestSummary.code == summary.code,
+                        BacktestSummary.skill_id == summary.skill_id,
                         BacktestSummary.eval_window_days == summary.eval_window_days,
                         BacktestSummary.engine_version == summary.engine_version,
                     )
@@ -174,6 +175,7 @@ class BacktestRepository:
         *,
         scope: str,
         code: Optional[str],
+        skill_id: Optional[str] = None,
         eval_window_days: Optional[int] = None,
         engine_version: str,
     ) -> Optional[BacktestSummary]:
@@ -181,6 +183,7 @@ class BacktestRepository:
             conditions = [
                 BacktestSummary.scope == scope,
                 BacktestSummary.code == code,
+                BacktestSummary.skill_id == skill_id,
                 BacktestSummary.engine_version == engine_version,
             ]
             if eval_window_days is not None:

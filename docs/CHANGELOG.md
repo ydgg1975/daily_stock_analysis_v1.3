@@ -12,7 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
-- [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
+- [新功能] **回测策略参数校验增强** — 新增 `parameter_warnings` 字段，自动捕获两类异常：① 止盈/止损参数逻辑错误（TP ≤ 入场价 或 SL ≥ 入场价）；② 入场价偏离警告（实际入场价超出 AI 理想买点 5% 以上）。结果写入 `backtest_results.parameter_warnings`（JSON list），并通过 API (`BacktestResultItem.parameter_warnings`) 和 Agent 工具 (`get_stock_backtest_summary`) 暴露。
+- [改进] **回测数据积累加速** — `BACKTEST_MIN_AGE_DAYS` 默认值从 14 降至 5，使刚完成数天的分析即可参与回测。
+- [改进] **回测成本模型完善** — 收益计算加入滑点（默认 10 bps）和单边佣金（默认 0.1%），`simulated_return_pct` 更接近实盘。
+- [改进] **回测中性判断阈值市场差异化** — A股使用 3.0%、港股 2.0%、美股 1.5% 的中性带阈值，更准确反映各市场波动特征。
+- [新功能] **回测支持 Skill 维度** — `BacktestResult` / `BacktestSummary` 新增 `skill_id` 字段，支持按 skill 分组统计回测表现；`get_skill_summary` 从永远返回 None 改为真实查询。
+- [修复] **回测 N+1 查询问题** — `_recompute_summaries` 从每股票单独查询改为单次全量查询 + 内存分组，大幅减少数据库 round-trip。
+- [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报”未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
 
 ## [3.11.0] - 2026-03-27
 

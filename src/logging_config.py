@@ -98,7 +98,14 @@ def setup_logging(
     rel_formatter = RelativePathFormatter(
         LOG_FORMAT, LOG_DATE_FORMAT, relative_to=project_root
     )
-    # Handler 1: 控制台输出
+    # Handler 1: 控制台输出（强制 UTF-8，避免 Windows GBK 乱码）
+    # 在 Windows 上 sys.stdout 默认是 GBK 编码的 TextIOWrapper，
+    # 重置其 encoding 属性使 StreamHandler 写 UTF-8 字节到控制台
+    try:
+        if sys.stdout.encoding.lower() != 'utf-8':
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(rel_formatter)

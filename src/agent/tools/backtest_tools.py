@@ -188,6 +188,7 @@ def _handle_get_stock_backtest_summary(stock_code: str, eval_window_days: int = 
                 "simulated_return_pct": item.get("simulated_return_pct"),
                 "hit_stop_loss": item.get("hit_stop_loss"),
                 "hit_take_profit": item.get("hit_take_profit"),
+                "parameter_warnings": item.get("parameter_warnings"),
             }
             for item in items
         ]

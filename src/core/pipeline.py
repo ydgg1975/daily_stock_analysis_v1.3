@@ -39,6 +39,7 @@ from src.services.social_sentiment_service import SocialSentimentService
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import get_market_for_stock, is_market_open
+from src.core.stock_filter_pipeline import FilteredStock
 from data_provider.us_index_mapping import is_us_stock_code
 from bot.models import BotMessage
 
@@ -1213,6 +1214,57 @@ class StockAnalysisPipeline:
         # dry_run 仅做数据拉取，不需要名称预取，避免额外网络开销
         if not dry_run:
             self.fetcher_manager.prefetch_stock_names(stock_codes, use_bulk=False)
+
+        # === 选股过滤：三层过滤 + 复合评分 ===
+        # 根据配置决定是否启用（默认启用，可通过 STOCK_FILTER_ENABLED=false 关闭）
+        filter_enabled = getattr(self.config, "stock_filter_enabled", True)
+        filtered_stocks: List[FilteredStock] = []
+        market_env_result = None
+
+        if filter_enabled and not dry_run:
+            try:
+                from src.core.stock_filter_pipeline import StockFilterPipeline
+                filter_pipeline = StockFilterPipeline(self.fetcher_manager)
+                filtered_stocks, market_env_result = filter_pipeline.run(stock_codes)
+
+                if market_env_result:
+                    logger.info(
+                        f"[Filter] 大盘环境: {market_env_result.level} "
+                        f"(score={market_env_result.score}) "
+                        f"建议: {market_env_result.recommendation}"
+                    )
+                    logger.info(
+                        f"[Filter] 市场广度: 涨 {market_env_result.up_count} / "
+                        f"跌 {market_env_result.down_count} / "
+                        f"涨停 {market_env_result.limit_up_count}"
+                    )
+
+                if filtered_stocks:
+                    # 按复合评分排序，取评分最高的前N只（默认全部，也可配置上限）
+                    max_filtered = getattr(self.config, "stock_filter_max", 0)
+                    if max_filtered > 0 and len(filtered_stocks) > max_filtered:
+                        filtered_stocks = filtered_stocks[:max_filtered]
+
+                    passed_codes = [s.stock_code for s in filtered_stocks]
+                    skipped = set(stock_codes) - set(passed_codes)
+                    logger.info(f"[Filter] 通过过滤: {len(passed_codes)} 只")
+                    if skipped:
+                        skip_reasons = {
+                            s.stock_code: s.reason
+                            for s in filtered_stocks
+                            if s.recommendation == "skip"
+                        }
+                        for code in sorted(skipped):
+                            logger.info(f"[Filter] 跳过 {code}: {skip_reasons.get(code, '总分偏低')}")
+
+                    stock_codes = passed_codes
+                elif market_env_result and market_env_result.recommendation == "skip_all":
+                    logger.warning("[Filter] 大盘极弱，跳过本次分析")
+                    return []
+                else:
+                    logger.warning("[Filter] 无股票通过过滤，继续分析全部股票")
+            except Exception as e:
+                logger.warning(f"[Filter] 选股过滤异常: {e}，继续分析全部股票")
 
         # 单股推送模式（#55）：从配置读取
         single_stock_notify = getattr(self.config, 'single_stock_notify', False)

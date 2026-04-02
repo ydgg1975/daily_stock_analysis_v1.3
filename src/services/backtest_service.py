@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -45,12 +46,14 @@ class BacktestService:
 
         engine_version = getattr(config, "backtest_engine_version", "v1")
         neutral_band_pct = float(getattr(config, "backtest_neutral_band_pct", 2.0))
+        slippage_bps = int(getattr(config, "backtest_slippage_bps", 10))
+        commission_pct = float(getattr(config, "backtest_commission_pct", 0.001))
 
-        eval_config = EvaluationConfig(
-            eval_window_days=int(eval_window_days),
-            neutral_band_pct=neutral_band_pct,
-            engine_version=str(engine_version),
-        )
+        # Per-market neutral band mapping
+        neutral_band_a = float(getattr(config, "backtest_neutral_band_a", 3.0))
+        neutral_band_hk = float(getattr(config, "backtest_neutral_band_hk", 2.0))
+        neutral_band_us = float(getattr(config, "backtest_neutral_band_us", 1.5))
+        neutral_band_pct_by_market = {"A": neutral_band_a, "HK": neutral_band_hk, "US": neutral_band_us}
 
         candidates = self.repo.get_candidates(
             code=code,
@@ -66,12 +69,17 @@ class BacktestService:
         insufficient = 0
         errors = 0
         touched_codes: set[str] = set()
+        touched_skills: set[str] = set()
 
         results_to_save: List[BacktestResult] = []
 
         for analysis in candidates:
             processed += 1
             touched_codes.add(analysis.code)
+
+            skill_id = self._resolve_skill_id(analysis)
+            if skill_id:
+                touched_skills.add(skill_id)
 
             try:
                 analysis_date = self._resolve_analysis_date(analysis)
@@ -81,6 +89,7 @@ class BacktestService:
                         BacktestResult(
                             analysis_history_id=analysis.id,
                             code=analysis.code,
+                            skill_id=skill_id,
                             eval_window_days=int(eval_window_days),
                             engine_version=str(engine_version),
                             eval_status="error",
@@ -101,6 +110,7 @@ class BacktestService:
                         BacktestResult(
                             analysis_history_id=analysis.id,
                             code=analysis.code,
+                            skill_id=skill_id,
                             analysis_date=analysis_date,
                             eval_window_days=int(eval_window_days),
                             engine_version=str(engine_version),
@@ -132,8 +142,24 @@ class BacktestService:
                     forward_bars=forward_bars,
                     stop_loss=analysis.stop_loss,
                     take_profit=analysis.take_profit,
-                    config=eval_config,
+                    config=EvaluationConfig(
+                        eval_window_days=int(eval_window_days),
+                        neutral_band_pct=neutral_band_pct,
+                        engine_version=str(engine_version),
+                        slippage_bps=slippage_bps,
+                        commission_pct=commission_pct,
+                        neutral_band_pct_by_market=neutral_band_pct_by_market,
+                        code=analysis.code,
+                    ),
                 )
+
+                # Scheme A: 入场价偏离警告（实际入场 vs AI 理想买点）
+                entry_gap_warnings = evaluation.get("parameter_warnings") or []
+                if analysis.ideal_buy and float(start_daily.close) > analysis.ideal_buy * 1.05:
+                    gap_pct = (float(start_daily.close) - analysis.ideal_buy) / analysis.ideal_buy * 100
+                    entry_gap_warnings.append(f"entry_gap:actual={start_daily.close:.2f}>ideal={analysis.ideal_buy:.2f}(+{gap_pct:.1f}%)")
+                # 序列化到 DB 字段
+                evaluation["parameter_warnings"] = entry_gap_warnings
 
                 status = evaluation.get("eval_status")
                 if status == "insufficient_data":
@@ -147,6 +173,7 @@ class BacktestService:
                     BacktestResult(
                         analysis_history_id=analysis.id,
                         code=analysis.code,
+                        skill_id=skill_id,
                         analysis_date=evaluation.get("analysis_date"),
                         eval_window_days=int(evaluation.get("eval_window_days") or eval_window_days),
                         engine_version=str(evaluation.get("engine_version") or engine_version),
@@ -173,6 +200,7 @@ class BacktestService:
                         simulated_exit_price=evaluation.get("simulated_exit_price"),
                         simulated_exit_reason=evaluation.get("simulated_exit_reason"),
                         simulated_return_pct=evaluation.get("simulated_return_pct"),
+                        parameter_warnings=json.dumps(evaluation.get("parameter_warnings") or []),
                     )
                 )
 
@@ -183,6 +211,7 @@ class BacktestService:
                     BacktestResult(
                         analysis_history_id=analysis.id,
                         code=analysis.code,
+                        skill_id=skill_id,
                         analysis_date=self._resolve_analysis_date(analysis),
                         eval_window_days=int(eval_window_days),
                         engine_version=str(engine_version),
@@ -199,6 +228,7 @@ class BacktestService:
         if saved:
             self._recompute_summaries(
                 touched_codes=sorted(touched_codes),
+                touched_skills=sorted(touched_skills),
                 eval_window_days=int(eval_window_days),
                 engine_version=str(engine_version),
             )
@@ -244,14 +274,19 @@ class BacktestService:
         )
 
     def get_skill_summary(self, skill_id: str, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Return skill-like summary metrics for Agent memory consumers.
-
-        The current backtest storage layer only persists overall / per-stock rollups.
-        Re-using the overall rollup here would fabricate skill-specific performance
-        and mislead auto-weighting. Until real skill-tagged summaries exist, return
-        ``None`` so downstream callers fall back to neutral weighting.
-        """
-        return None
+        """Return skill-scoped summary metrics for Agent memory consumers."""
+        config = get_config()
+        engine_version = str(getattr(config, "backtest_engine_version", "v1"))
+        summary = self.repo.get_summary(
+            scope="skill",
+            code=None,
+            skill_id=skill_id,
+            eval_window_days=eval_window_days,
+            engine_version=engine_version,
+        )
+        if summary is None:
+            return None
+        return self._summary_to_dict(summary)
 
     def get_strategy_summary(self, strategy_id: str, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Compatibility wrapper for legacy strategy-based callers."""
@@ -269,6 +304,24 @@ class BacktestService:
         if getattr(analysis, "created_at", None):
             return analysis.created_at.date()
         logger.warning(f"无法确定分析日期，跳过记录: {analysis.code}#{getattr(analysis, 'id', '?')}")
+        return None
+
+    def _resolve_skill_id(self, analysis) -> Optional[str]:
+        """Parse skill_id from context_snapshot, fallback to report_type."""
+        try:
+            if analysis.context_snapshot:
+                import json as _json
+                payload = _json.loads(analysis.context_snapshot)
+                enhanced = payload.get("enhanced_context", {})
+                skill = enhanced.get("skill") or enhanced.get("skill_id")
+                if skill:
+                    return str(skill).strip()[:32] or None
+        except Exception:
+            pass
+        # Fallback to report_type as skill proxy
+        report_type = getattr(analysis, "report_type", None)
+        if report_type:
+            return str(report_type).strip()[:32] or None
         return None
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:
@@ -290,10 +343,17 @@ class BacktestService:
         except Exception as exc:
             logger.warning(f"补全日线数据失败({code}): {exc}")
 
-    def _recompute_summaries(self, *, touched_codes: List[str], eval_window_days: int, engine_version: str) -> None:
+    def _recompute_summaries(
+        self,
+        *,
+        touched_codes: List[str],
+        touched_skills: List[str],
+        eval_window_days: int,
+        engine_version: str,
+    ) -> None:
         with self.db.get_session() as session:
-            # overall
-            overall_rows = session.execute(
+            # Single query: fetch all results for this eval_window/engine_version combo
+            all_rows = session.execute(
                 select(BacktestResult).where(
                     and_(
                         BacktestResult.eval_window_days == eval_window_days,
@@ -301,8 +361,18 @@ class BacktestService:
                     )
                 )
             ).scalars().all()
+
+            # Group by code and skill_id in memory (avoid N queries)
+            by_code: defaultdict[str, list] = defaultdict(list)
+            by_skill: defaultdict[str, list] = defaultdict(list)
+            for row in all_rows:
+                by_code[row.code].append(row)
+                skill = row.skill_id or "__none__"
+                by_skill[skill].append(row)
+
+            # Overall summary from all rows
             overall_data = BacktestEngine.compute_summary(
-                results=overall_rows,
+                results=all_rows,
                 scope="overall",
                 code=OVERALL_SENTINEL_CODE,
                 eval_window_days=eval_window_days,
@@ -311,16 +381,11 @@ class BacktestService:
             overall_summary = self._build_summary_model(overall_data)
             self.repo.upsert_summary(overall_summary)
 
+            # Per-stock summaries from pre-grouped rows
             for code in touched_codes:
-                rows = session.execute(
-                    select(BacktestResult).where(
-                        and_(
-                            BacktestResult.code == code,
-                            BacktestResult.eval_window_days == eval_window_days,
-                            BacktestResult.engine_version == engine_version,
-                        )
-                    )
-                ).scalars().all()
+                rows = by_code.get(code, [])
+                if not rows:
+                    continue
                 data = BacktestEngine.compute_summary(
                     results=rows,
                     scope="stock",
@@ -331,11 +396,28 @@ class BacktestService:
                 summary = self._build_summary_model(data)
                 self.repo.upsert_summary(summary)
 
+            # Per-skill summaries from pre-grouped rows
+            for skill_id in touched_skills:
+                rows = by_skill.get(skill_id, [])
+                if not rows:
+                    continue
+                data = BacktestEngine.compute_summary(
+                    results=rows,
+                    scope="skill",
+                    code=None,
+                    eval_window_days=eval_window_days,
+                    engine_version=engine_version,
+                )
+                summary = self._build_summary_model(data)
+                summary.skill_id = skill_id
+                self.repo.upsert_summary(summary)
+
     @staticmethod
     def _build_summary_model(summary_data: Dict[str, Any]) -> BacktestSummary:
         return BacktestSummary(
             scope=summary_data.get("scope"),
             code=summary_data.get("code"),
+            skill_id=summary_data.get("skill_id"),
             eval_window_days=summary_data.get("eval_window_days"),
             engine_version=summary_data.get("engine_version"),
             computed_at=datetime.now(),
@@ -362,9 +444,16 @@ class BacktestService:
 
     @staticmethod
     def _result_to_dict(row: BacktestResult) -> Dict[str, Any]:
+        warnings = None
+        if row.parameter_warnings:
+            try:
+                warnings = json.loads(row.parameter_warnings)
+            except Exception:
+                warnings = [row.parameter_warnings]
         return {
             "analysis_history_id": row.analysis_history_id,
             "code": row.code,
+            "skill_id": row.skill_id,
             "analysis_date": row.analysis_date.isoformat() if row.analysis_date else None,
             "eval_window_days": row.eval_window_days,
             "engine_version": row.engine_version,
@@ -391,6 +480,7 @@ class BacktestService:
             "simulated_exit_price": row.simulated_exit_price,
             "simulated_exit_reason": row.simulated_exit_reason,
             "simulated_return_pct": row.simulated_return_pct,
+            "parameter_warnings": warnings,
         }
 
     @staticmethod
@@ -398,6 +488,7 @@ class BacktestService:
         return {
             "scope": row.scope,
             "code": None if row.code == OVERALL_SENTINEL_CODE else row.code,
+            "skill_id": row.skill_id,
             "eval_window_days": row.eval_window_days,
             "engine_version": row.engine_version,
             "computed_at": row.computed_at.isoformat() if row.computed_at else None,
