@@ -138,8 +138,11 @@ def _longbridge_config_kwargs() -> Dict[str, Any]:
     kw: Dict[str, Any] = {}
 
     if "enable_print_quote_packages" in params:
-        raw = os.getenv("LONGBRIDGE_PRINT_QUOTE_PACKAGES", "").strip().lower()
-        kw["enable_print_quote_packages"] = raw not in ("0", "false", "no")
+        raw = os.getenv("LONGBRIDGE_PRINT_QUOTE_PACKAGES")
+        if raw is not None:
+            raw_norm = raw.strip().lower()
+            if raw_norm:
+                kw["enable_print_quote_packages"] = raw_norm not in ("0", "false", "no")
 
     for pname, envname in (
         ("http_url", "LONGBRIDGE_HTTP_URL"),
