@@ -72,7 +72,7 @@
 | 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 | 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选） |
 
-> **长桥优先策略**：配置 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 后，美股与港股的日线数据和实时行情均以 **Longbridge 为首选数据源**，YFinance / AkShare 作为兜底与字段补充；未配置时保持 YFinance（美股）/ AkShare（港股）为首选，Longbridge 仅用于补充缺失字段。A 股不受影响，仍走 Efinance → AkShare → Tushare → Pytdx → Baostock 优先级链。详见 `.env.example` 与 [完整指南](docs/full-guide.md) 中长桥说明。
+> **长桥优先策略（仅美/港股）**：在配置 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 的前提下，美股与港股的 **日线 K 线** 与 **实时行情** 由 **Longbridge 优先拉取**；若长桥失败或部分字段缺失，再由 **YFinance（美股）/ AkShare（港股）** 兜底或合并补全字段。**未配置长桥凭据时不会调用 Longbridge**，美股/港股仍以 YFinance / AkShare 为主数据源（与未集成长桥前的行为一致）。**美股大盘指数**（如 SPX）始终以 YFinance 优先（长桥不提供指数行情）。**A 股**路由不变，仍为 Efinance → AkShare → Tushare → Pytdx → Baostock。详见 `.env.example` 与 [完整指南](docs/full-guide.md) 中长桥说明。
 
 ### 内置交易纪律
 

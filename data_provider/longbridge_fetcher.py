@@ -93,7 +93,7 @@ def _sanitize_longbridge_env() -> None:
             del os.environ[key]
             logger.debug("[Longbridge] 删除空环境变量 %s", key)
 
-    # App default for SDK (from_apikey_env reads env): quiet unless user sets 1/true/yes.
+    # App default: quiet (false). Matches README / docs/full-guide / .env.example; SDK alone may default verbose.
     if "LONGBRIDGE_PRINT_QUOTE_PACKAGES" not in os.environ:
         os.environ["LONGBRIDGE_PRINT_QUOTE_PACKAGES"] = "false"
 

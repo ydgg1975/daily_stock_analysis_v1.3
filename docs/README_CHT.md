@@ -20,7 +20,7 @@
 
 **零成本部署** · GitHub Actions 免費運行 · 無需伺服器
 
-[**功能特性**](#-功能特性) · [**快速開始**](#-快速開始) · [**推送效果**](#-推送效果) · [**完整指南**](full-guide.md) · [**常見問題**](FAQ.md) · [**更新日誌**](CHANGELOG.md)
+[**功能特性**](#-功能特性) · [**快速開始**](#-快速開始) · [**推送效果**](#-推送效果) · [**完整指南**](./full-guide.md) · [**常見問題**](./FAQ.md) · [**更新日誌**](./CHANGELOG.md)
 
  繁體中文 | [English](README_EN.md) | [简体中文](../README.md)
 
@@ -57,7 +57,7 @@
 | 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股首選數據源） |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
-> **長橋優先策略**：設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 後，美股與港股的日線數據和即時行情均以 **Longbridge 為首選數據源**，YFinance / AkShare 作為兜底與欄位補充；未設定時保持 YFinance（美股）/ AkShare（港股）為首選，Longbridge 僅用於補充缺失欄位。A 股不受影響。詳見 `.env.example` 與 [完整指南](./full-guide.md)。
+> **長橋優先策略（僅美／港股）**：在已設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 的前提下，美股與港股的 **日線** 與 **即時行情** 由 **Longbridge 優先**；長橋失敗或欄位不足時再由 **YFinance／AkShare** 兜底或合併補欄。**未設定長橋憑證時不會呼叫 Longbridge**，美／港股仍以 YFinance／AkShare 為主（與未整合長橋前一致）。**美股大盤指數**始終以 YFinance 優先（長橋不提供指數行情）。**A 股**路由不變。詳見 `.env.example` 與 [完整指南](./full-guide.md)。
 
 ### 內建交易紀律
 
@@ -124,7 +124,7 @@
 | `REPORT_LANGUAGE` | 報告輸出語言：`zh`(預設中文) / `en`(英文)；會同步影響 Prompt、Markdown 模板、通知 fallback 與 Web 報告頁固定文案 | 可選 |
 | `ANALYSIS_DELAY` | 個股分析和大盤分析之間的延遲（秒），避免API限流，如 `10` | 可選 |
 
-> 至少配置一個渠道，配置多個則同時推送。更多配置請參考 [完整指南](full-guide.md)
+> 至少配置一個渠道，配置多個則同時推送。更多配置請參考 [完整指南](./full-guide.md)
 
 </details>
 
@@ -170,11 +170,11 @@
 
 默認每個工作日 **18:00（北京時間）** 自動執行
 
-> 斷點續傳與 `--dry-run` 的資料存在性判斷，現在會按股票所屬市場的本地時區與交易日曆解析「最新可復用交易日」；週末 / 節假日會復用最近交易日，交易日盤中會復用上一個已完成交易日，盤後若當日資料已落庫則可直接跳過。詳細規則見 [完整配置指南](full-guide.md)。
+> 斷點續傳與 `--dry-run` 的資料存在性判斷，現在會按股票所屬市場的本地時區與交易日曆解析「最新可復用交易日」；週末 / 節假日會復用最近交易日，交易日盤中會復用上一個已完成交易日，盤後若當日資料已落庫則可直接跳過。詳細規則見 [完整配置指南](./full-guide.md)。
 
 ### 方式二：本地運行 / Docker 部署
 
-> 📖 本地運行、Docker 部署詳細步驟請參考 [完整配置指南](full-guide.md)
+> 📖 本地運行、Docker 部署詳細步驟請參考 [完整配置指南](./full-guide.md)
 
 ## 📱 推送效果
 
@@ -216,7 +216,7 @@
 
 ## 配置說明
 
-> 📖 完整環境變量、定時任務配置請參考 [完整配置指南](full-guide.md)
+> 📖 完整環境變量、定時任務配置請參考 [完整配置指南](./full-guide.md)
 
 ## 🧩 FastAPI Web 服務（可選）
 
