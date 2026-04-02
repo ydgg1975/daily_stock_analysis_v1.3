@@ -54,10 +54,10 @@
 | 類型 | 支援 |
 |------|------|
 | AI 模型 | Gemini（免費）、OpenAI 兼容、DeepSeek、通義千問、Claude、Ollama |
-| 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股兜底） |
+| 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股首選數據源） |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
-> **長橋：** 於 YFinance 資料不完整時補全量比、換手率、PE 等（美股/港股）。詳見 `.env.example` 與 [完整指南](docs/full-guide.md)。
+> **長橋優先策略**：設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 後，美股與港股的日線數據和即時行情均以 **Longbridge 為首選數據源**，YFinance / AkShare 作為兜底與欄位補充；未設定時保持 YFinance（美股）/ AkShare（港股）為首選，Longbridge 僅用於補充缺失欄位。A 股不受影響。詳見 `.env.example` 與 [完整指南](docs/full-guide.md)。
 
 ### 內建交易紀律
 
@@ -139,7 +139,7 @@
 | `SEARXNG_BASE_URLS` | SearXNG 自建實例（無配額兜底，需在 settings.yml 啟用 format: json）；留空時預設自動發現公共實例 | 可選 |
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 為空時自動從 `searx.space` 取得公共實例（預設 `true`） | 可選 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可選 |
-| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（美股/港股量比、換手率、PE 等欄位兜底） | 可選 |
+| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（設定後自動成為美股/港股首選數據源） | 可選 |
 | `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | 可選 |
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | 可選 |
 | `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | 長橋 `static_info` 進程內快取秒數，預設 `86400`；`0` 表示不快取 | 可選 |

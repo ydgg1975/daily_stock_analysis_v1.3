@@ -66,11 +66,11 @@
 | 类型 | 支持 |
 |------|------|
 | AI 模型 | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama 本地模型 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡）|
-| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股兜底） |
+| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股首选数据源） |
 | 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 | 社交舆情 | [Stock Sentiment API](https://api.adanos.org/docs)（Reddit / X / Polymarket，仅美股，可选） |
 
-> 注：美股历史数据与实时行情以 YFinance 为主；配置 Longbridge 后，量比、换手率、PE 等缺失字段会从长桥补充，港股同理。详见 `.env.example` 与 [完整指南](docs/full-guide.md) 中长桥说明。
+> **长桥优先策略**：配置 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 后，美股与港股的日线数据和实时行情均以 **Longbridge 为首选数据源**，YFinance / AkShare 作为兜底与字段补充；未配置时保持 YFinance（美股）/ AkShare（港股）为首选，Longbridge 仅用于补充缺失字段。A 股不受影响，仍走 Efinance → AkShare → Tushare → Pytdx → Baostock 优先级链。详见 `.env.example` 与 [完整指南](docs/full-guide.md) 中长桥说明。
 
 ### 内置交易纪律
 
@@ -186,7 +186,7 @@
 | `SOCIAL_SENTIMENT_API_URL` | 自定义社交舆情 API 地址（默认 `https://api.adanos.org`） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API Key（增强 A 股大盘复盘指数；若套餐支持标的池查询，也可增强市场统计） | 可选 |
-| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（美股/港股量比、换手率、PE 等字段兜底） | 可选 |
+| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（配置后自动成为美股/港股首选数据源） | 可选 |
 | `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | 可选 |
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | 可选 |
 | `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | 长桥 `static_info` 进程内缓存秒数，默认 `86400`；`0` 表示不缓存 | 可选 |

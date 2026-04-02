@@ -81,11 +81,28 @@ def _sanitize_longbridge_env() -> None:
         "LONGBRIDGE_HTTP_URL",
         "LONGBRIDGE_QUOTE_WS_URL",
         "LONGBRIDGE_TRADE_WS_URL",
+        "LONGBRIDGE_ENABLE_OVERNIGHT",
+        "LONGBRIDGE_PUSH_CANDLESTICK_MODE",
+        "LONGBRIDGE_PRINT_QUOTE_PACKAGES",
+        "LONGBRIDGE_REGION",
+        "LONGBRIDGE_STATIC_INFO_TTL_SECONDS",
+        "LONGBRIDGE_LOG_PATH",
     ):
         val = os.environ.get(key)
         if val is not None and val.strip() == "":
             del os.environ[key]
             logger.debug("[Longbridge] 删除空环境变量 %s", key)
+
+    if not os.environ.get("LONGBRIDGE_LOG_PATH"):
+        try:
+            log_dir = (os.getenv("LOG_DIR") or "./logs").strip() or "./logs"
+            p = Path(log_dir).expanduser()
+            p.mkdir(parents=True, exist_ok=True)
+            os.environ["LONGBRIDGE_LOG_PATH"] = str(p / "longbridge_sdk.log")
+            logger.debug("[Longbridge] 设置 LONGBRIDGE_LOG_PATH=%s",
+                         os.environ["LONGBRIDGE_LOG_PATH"])
+        except Exception:
+            pass
 
     region = (os.getenv("LONGBRIDGE_REGION") or "").strip().lower()
     if region:
@@ -393,6 +410,21 @@ class LongbridgeFetcher(BaseFetcher):
         return None
 
     # ------------------------------------------------------------------
+    # get_stock_name via static_info
+    # ------------------------------------------------------------------
+
+    def get_stock_name(self, stock_code: str) -> Optional[str]:
+        """Return stock name from Longbridge static_info (name_cn or name_en)."""
+        symbol = _to_longbridge_symbol(stock_code)
+        if symbol is None:
+            return None
+        info = self._get_static_info(symbol)
+        if info is None:
+            return None
+        name = getattr(info, "name_cn", "") or getattr(info, "name_en", "") or ""
+        return name.strip() or None
+
+    # ------------------------------------------------------------------
     # volume_ratio from history
     # ------------------------------------------------------------------
 
@@ -424,9 +456,9 @@ class LongbridgeFetcher(BaseFetcher):
                 symbol,
                 Period.Day,
                 AdjustType.NoAdjust,
-                False,  # direction=False => towards historical
-                datetime.now(),
+                False,
                 6,
+                datetime.now(),
             )
             if not candles or len(candles) < 2:
                 return None

@@ -54,10 +54,10 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Type | Supported |
 |------|----------|
 | LLMs | Gemini (free), OpenAI-compatible, DeepSeek, Qwen, Claude, Ollama |
-| Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, [Longbridge](https://open.longbridge.com/) (US/HK fallback) |
+| Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, [Longbridge](https://open.longbridge.com/) (primary for US/HK when configured) |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 
-> **Longbridge:** supplements volume ratio, turnover, PE, etc. when YFinance data is incomplete (US/HK). See `.env.example` and [full guide](docs/full-guide.md).
+> **Longbridge-first policy:** When `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` are configured, Longbridge becomes the **primary data source** for US & HK stocks (daily data + realtime quotes); YFinance / AkShare serve as fallback and field supplement. Without Longbridge credentials, YFinance (US) / AkShare (HK) remain primary. A-share routing is unaffected. See `.env.example` and [full guide](docs/full-guide.md).
 
 ### Built-in Trading Rules
 
@@ -143,7 +143,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Auto-discover public SearXNG instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `true`) | Optional |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key (CN market review index enhancement; breadth also uses TickFlow when the plan supports universe queries) | Optional |
-| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key (US/HK volume ratio, turnover rate, PE fallback) | Optional |
+| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key (becomes primary US/HK data source when configured) | Optional |
 | `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | Optional |
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | Optional |
 | `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | In-process `static_info` cache TTL in seconds (default `86400`; `0` = no cache) | Optional |
