@@ -895,22 +895,15 @@ class DataFetcherManager:
         is_us = is_us_index or is_us_stock_code(stock_code)
         is_hk = (not is_us) and _is_hk_market(stock_code)
 
-        if is_us or is_hk:
+        # 美股（含美股指数）使用 Longbridge/YFinance 特殊路由；港股走下方通用数据源循环
+        if is_us:
             prefer_lb = self._longbridge_preferred() and not is_us_index
-            if is_us:
-                source_order = (
-                    ["LongbridgeFetcher", "YfinanceFetcher"]
-                    if prefer_lb
-                    else ["YfinanceFetcher", "LongbridgeFetcher"]
-                )
-                market_label = "美股指数" if is_us_index else "美股"
-            else:
-                source_order = (
-                    ["LongbridgeFetcher", "YfinanceFetcher"]
-                    if prefer_lb
-                    else ["YfinanceFetcher", "LongbridgeFetcher"]
-                )
-                market_label = "港股"
+            source_order = (
+                ["LongbridgeFetcher", "YfinanceFetcher"]
+                if prefer_lb
+                else ["YfinanceFetcher", "LongbridgeFetcher"]
+            )
+            market_label = "美股指数" if is_us_index else "美股"
 
             for src_name in source_order:
                 for attempt, fetcher in enumerate(fetchers, start=1):
