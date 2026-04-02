@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
+- [新功能] AI 选股推荐：支持按市场（A股/港股/美股）和价格区间筛选候选股票，结合用户提供的舆情 URL、文件和补充说明，通过 LLM 分析推荐 3~5 只值得买入的股票，含推荐评分、理由和风险提示
+- [新功能] 选股推荐 Web 工作台：新增 /recommend 页面，支持表单提交推荐任务、实时进度轮询、推荐结果展示和历史记录查看
+- [新功能] 选股推荐 API：新增 POST /api/v1/recommendation/recommend（支持 multipart/form-data 文件上传）、GET status/{task_id}、GET history、GET {record_id} 四个端点
 
 ## [3.12.0] - 2026-04-01
 

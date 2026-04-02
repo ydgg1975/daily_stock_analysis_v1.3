@@ -591,6 +591,48 @@ class PortfolioFxRate(Base):
     )
 
 
+class RecommendationHistory(Base):
+    """推荐选股历史记录"""
+
+    __tablename__ = 'recommendation_history'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False, unique=True, index=True)
+    markets = Column(String(64), nullable=False)
+    price_min = Column(Float)
+    price_max = Column(Float)
+    urls = Column(Text)  # JSON array string
+    note = Column(Text)
+    result = Column(Text)  # JSON string of full result
+    model_used = Column(String(128))
+    status = Column(String(16), nullable=False, default='pending', index=True)
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    completed_at = Column(DateTime)
+
+    __table_args__ = (
+        Index('ix_recommendation_history_created', 'created_at'),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'markets': self.markets,
+            'price_min': self.price_min,
+            'price_max': self.price_max,
+            'urls': self.urls,
+            'note': self.note,
+            'result': self.result,
+            'model_used': self.model_used,
+            'status': self.status,
+            'error': self.error,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
 class ConversationMessage(Base):
     """
     Agent 对话历史记录表
