@@ -59,7 +59,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, [Longbridge](https://open.longbridge.com/) (primary for US/HK when configured) |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 
-> **Longbridge-first policy:** When `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` are configured, Longbridge becomes the **primary data source** for US & HK stocks (daily data + realtime quotes); YFinance / AkShare serve as fallback and field supplement. Without Longbridge credentials, YFinance (US) / AkShare (HK) remain primary. A-share routing is unaffected. See `.env.example` and [full guide](docs/full-guide.md).
+> **Longbridge-first policy:** When `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` are configured, Longbridge becomes the **primary data source** for US & HK stocks (daily data + realtime quotes); YFinance / AkShare serve as fallback and field supplement. Without Longbridge credentials, YFinance (US) / AkShare (HK) remain primary. A-share routing is unaffected. See `.env.example` and [full guide](full-guide_EN.md).
 
 ### Built-in Trading Rules
 
