@@ -151,7 +151,7 @@
 | `LONGBRIDGE_REGION` | 覆寫接入點；SDK 會依網路自動選擇，預設 `hk`，若判斷不正確可設定（如 `cn`、`hk`） | 可選 |
 | `LONGBRIDGE_ENABLE_OVERNIGHT` | 是否開啟夜盤行情 `true` / `false`，預設 `false` | 可選 |
 | `LONGBRIDGE_PUSH_CANDLESTICK_MODE` | K 線推送模式：`realtime` 或 `confirmed`（預設 `realtime`） | 可選 |
-| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | 連線時是否列印行情包（預設 `false`） | 可選 |
+| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | 連線時是否列印行情包（預設 `true`） | 可選 |
 | `AGENT_MODE` | 啟用 Agent 策略問股模式（內部統一命名為 skill，`true`/`false`，預設 `false`） | 可選 |
 | `AGENT_LITELLM_MODEL` | Agent 專用主模型（可選）；留空時繼承主模型，無 provider 前綴時按 `openai/<model>` 解析 | 可選 |
 | `AGENT_MAX_STEPS` | Agent 最大推理步數（預設 `10`） | 可選 |
