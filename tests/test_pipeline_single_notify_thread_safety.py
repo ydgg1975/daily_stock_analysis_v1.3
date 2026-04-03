@@ -67,7 +67,9 @@ class _CriticalSectionTrackingNotifier:
 class TestPipelineSingleNotifyThreadSafety(unittest.TestCase):
     def test_process_single_stock_serializes_direct_notification_path(self):
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
-        pipeline.fetch_and_save_stock_data = MagicMock(return_value=(True, None))
+        pipeline.fetch_and_save_stock_data = MagicMock(
+            side_effect=lambda code, **_: (True, None, code)
+        )
         pipeline.notifier = _CriticalSectionTrackingNotifier()
 
         notify_barrier = threading.Barrier(2)

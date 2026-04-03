@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 修复 5 位裸数字代码误路由：`normalize_stock_code` 保持纯语法处理，不再在规范化层自动补零；`DataFetcherManager.get_daily_data` 先按港股通道取数，若 5 位裸码在首轮仍无数据，再尝试补零后按 6 位 A 股码重试（如 02714→002714）。
 - [修复] 修复 5 位裸数字代码误路由（fixes #946）：`normalize_stock_code` 仅做纯语法清洗；`DataFetcherManager.get_daily_data` 对 5 位裸码只在该轮所有数据源均返回空数据时才补零为 A 股候选码后重试（如 `02714`→`002714`），避免真实港股（如 `02319`）被误路由。
 - [修复] 修复 5 位裸数字代码误路由（fixes #946）：`normalize_stock_code` 仅做纯语法清洗；`DataFetcherManager.get_daily_data` 不再对 `02714`、`02319` 这类 5 位裸码静默猜测市场并补零重试，而是在无数据时返回明确提示，要求用户改用 `002714` 这类 6 位 A 股代码或 `HK02714` / `02714.HK` 这类显式港股格式。
+- [修复] 修复 5 位裸数字代码误路由（fixes #946）：`normalize_stock_code` 仅做纯语法清洗；`DataFetcherManager.get_daily_data` 不再一律在调用前阻断 5 位裸数字，而是先按该裸码查询；只有在该裸码在所有渠道都无结果且无异常时，才按 `002714` 这类补零 A 股代码做兜底重试，并将实际落库代码向后续分析链路传递（避免 `02714` 与港股 `02714` 混用）。
 
 ## [3.12.0] - 2026-04-01
 

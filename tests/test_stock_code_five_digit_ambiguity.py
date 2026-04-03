@@ -128,8 +128,19 @@ class TestFiveDigitAmbiguity(unittest.TestCase):
         must NOT be padded to '002319' (which would be a wrong A-share code)."""
         self.assertEqual(normalize_stock_code("02319"), "02319")
 
-    def test_manager_returns_clear_error_for_ambiguous_bare_code(self):
-        """全空结果时不应静默补零改查其他市场，而应返回明确提示。"""
+    def test_manager_allows_bare_hk_code_to_enter_fetcher(self):
+        """港股裸码应能进入 fetcher，不再在调用前直接拦截。"""
+
+        fetcher = _MockDailyFetcher("AkshareFetcher", 1, lambda **_: _sample_df())
+        manager = DataFetcherManager(fetchers=[fetcher])
+        df, source = manager.get_daily_data("00700", start_date="2026-03-01", end_date="2026-03-02")
+
+        self.assertEqual(source, "AkshareFetcher")
+        self.assertTrue(df.equals(_sample_df()))
+        self.assertEqual(fetcher.calls, ["00700"])
+
+    def test_manager_retries_ashare_fallback_only_on_empty_hk_result(self):
+        """裸码在现有渠道返回空后，才尝试 `00{stock_code[1:]}` 的 A 股回退。"""
 
         fetcher = _MockDailyFetcher("AkshareFetcher", 1, lambda **_: None)
         manager = DataFetcherManager(fetchers=[fetcher])
@@ -137,12 +148,8 @@ class TestFiveDigitAmbiguity(unittest.TestCase):
         with self.assertRaises(DataFetchError) as context:
             manager.get_daily_data("02714", start_date="2026-03-01", end_date="2026-03-02")
 
-        self.assertEqual(fetcher.calls, ["02714"])
-        message = str(context.exception)
-        self.assertIn("02714", message)
-        self.assertIn("002714", message)
-        self.assertIn("HK02714", message)
-        self.assertIn("02714.HK", message)
+        self.assertEqual(fetcher.calls, ["02714", "002714"])
+        self.assertIn("所有数据源获取 02714 失败:", str(context.exception))
 
     def test_manager_no_fallback_when_exception_occurs(self):
         """出现异常时不应触发 5 位裸码补零兜底。"""
@@ -156,17 +163,16 @@ class TestFiveDigitAmbiguity(unittest.TestCase):
             manager.get_daily_data("02319", start_date="2026-03-01", end_date="2026-03-02")
         self.assertEqual(fetcher.calls, ["02319"])
 
-    def test_manager_does_not_retry_padded_for_real_hk_bare_code(self):
-        """真实港股裸码在全空结果下也不应被补零改查成 A 股。"""
+    def test_manager_no_fallback_for_real_hk_code_when_empty_result(self):
+        """真实港股裸码（02319）空结果时不应尝试补零到 002319。"""
 
         fetcher = _MockDailyFetcher("AkshareFetcher", 1, lambda **_: None)
         manager = DataFetcherManager(fetchers=[fetcher])
 
-        with self.assertRaises(DataFetchError) as context:
+        with self.assertRaises(DataFetchError):
             manager.get_daily_data("02319", start_date="2026-03-01", end_date="2026-03-02")
 
         self.assertEqual(fetcher.calls, ["02319"])
-        self.assertIn("002319", str(context.exception))
 
     def test_manager_does_not_retry_padded_for_explicit_hk_code(self):
         """显式 HK 代码不会触发 6 位补零兜底。"""

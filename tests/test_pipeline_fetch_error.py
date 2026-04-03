@@ -5,7 +5,10 @@ from datetime import date, datetime, timezone
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
 from src.core.pipeline import StockAnalysisPipeline
+from src.enums import ReportType
 
 
 class PipelineFetchErrorTestCase(unittest.TestCase):
@@ -61,6 +64,85 @@ class PipelineFetchErrorTestCase(unittest.TestCase):
             ["600519", "000001", "920748"],
         )
         self.assertEqual(mock_target.call_count, 3)
+
+    def test_fetch_and_save_stock_data_returns_resolved_code_when_requested(self):
+        pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+        pipeline.fetcher_manager = MagicMock()
+        pipeline.db = MagicMock()
+        pipeline.fetcher_manager.get_stock_name.return_value = "牧原股份"
+        pipeline.db.has_today_data.return_value = False
+        daily_df = pd.DataFrame(
+            [
+                {
+                    "date": "2026-03-01",
+                    "open": 1.0,
+                    "high": 1.0,
+                    "low": 1.0,
+                    "close": 1.0,
+                    "volume": 1,
+                    "amount": 1.0,
+                    "pct_chg": 0.0,
+                }
+            ]
+        )
+        pipeline.fetcher_manager.get_daily_data.return_value = (
+            daily_df,
+            "mock_fetcher",
+            "002714",
+        )
+        pipeline.db.save_daily_data.return_value = 1
+
+        success, error, resolved_code = pipeline.fetch_and_save_stock_data(
+            "02714",
+            return_resolved_code=True,
+        )
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertEqual(resolved_code, "002714")
+        pipeline.db.save_daily_data.assert_called_once_with(daily_df, "002714", "mock_fetcher")
+
+    def test_process_single_stock_uses_resolved_code_for_downstream_analysis(self):
+        pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+        pipeline.fetcher_manager = MagicMock()
+        pipeline.db = MagicMock()
+        pipeline.fetcher_manager.get_stock_name.return_value = "牧原股份"
+        pipeline.db.has_today_data.return_value = False
+        pipeline.fetcher_manager.get_daily_data.return_value = (
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2026-03-01",
+                        "open": 1.0,
+                        "high": 1.0,
+                        "low": 1.0,
+                        "close": 1.0,
+                        "volume": 1,
+                        "amount": 1.0,
+                        "pct_chg": 0.0,
+                    }
+                ]
+            ),
+            "mock_fetcher",
+            "002714",
+        )
+        pipeline.db.save_daily_data.return_value = 1
+        analysis_result = MagicMock(
+            success=True,
+            operation_advice="持有",
+            sentiment_score=50,
+        )
+        pipeline.analyze_stock = MagicMock(return_value=analysis_result)
+
+        pipeline.process_single_stock(
+            "02714",
+            single_stock_notify=False,
+            report_type=ReportType.SIMPLE,
+        )
+
+        args, _kwargs = pipeline.analyze_stock.call_args
+        self.assertEqual(args[0], "002714")
+        self.assertEqual(args[1], ReportType.SIMPLE)
 
 
 if __name__ == "__main__":

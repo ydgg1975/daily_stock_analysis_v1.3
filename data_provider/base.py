@@ -178,6 +178,29 @@ def _market_tag(code: str) -> str:
     return "cn"
 
 
+_KNOWN_HK_BARE_EXEMPTIONS = {
+    "00700",
+    "01810",
+    "02015",
+    "02319",
+    "00005",
+    "03690",
+}
+
+
+def _should_skip_ashare_fallback(stock_code: str) -> bool:
+    """判断是否应跳过 5 位裸码 A 股补零兜底。"""
+    return (
+        stock_code.isdigit()
+        and len(stock_code) == 5
+        and stock_code.startswith("0")
+        and (
+            stock_code in _KNOWN_HK_BARE_EXEMPTIONS
+            or bool(STOCK_NAME_MAP.get(stock_code))
+        )
+    )
+
+
 def is_bse_code(code: str) -> bool:
     """
     Check if the code is a Beijing Stock Exchange (BSE) A-share code.
@@ -868,8 +891,9 @@ class DataFetcherManager:
         stock_code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        days: int = 30
-    ) -> Tuple[pd.DataFrame, str]:
+        days: int = 30,
+        return_resolved_code: bool = False,
+    ) -> Tuple[pd.DataFrame, str] | Tuple[pd.DataFrame, str, str]:
         """
         获取日线数据（自动切换数据源）
         
@@ -887,7 +911,8 @@ class DataFetcherManager:
             days: 获取天数
             
         Returns:
-            Tuple[DataFrame, str]: (数据, 成功的数据源名称)
+            Tuple[DataFrame, str]: (数据, 成功的数据源名称)；
+            若 return_resolved_code=True，返回 (数据, 成功的数据源名称, 实际请求代码)
             
         Raises:
             DataFetchError: 所有数据源都失败时抛出
@@ -901,6 +926,18 @@ class DataFetcherManager:
         errors = []
         total_fetchers = len(fetchers)
         request_start = time.time()
+        ambiguous_five_digit_bare = (
+            stock_code.isdigit() and len(stock_code) == 5 and stock_code.startswith("0")
+        )
+        should_try_ashare_fallback = (
+            ambiguous_five_digit_bare and not _should_skip_ashare_fallback(stock_code)
+        )
+        fallback_ashare_code = f"00{stock_code[1:]}" if should_try_ashare_fallback else None
+
+        def _as_result(df_value: pd.DataFrame, source_value: str, used_code: str):
+            if return_resolved_code:
+                return df_value, source_value, used_code
+            return df_value, source_value
 
         # 快速路径：美股/港股使用专用数据源路由
         #   - 配置长桥凭据后: Longbridge 为首选, YFinance/AkShare 兜底
@@ -944,7 +981,7 @@ class DataFetcherManager:
                                 f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
                                 f"rows={len(df)}, elapsed={elapsed:.2f}s"
                             )
-                            return df, fetcher.name
+                            return _as_result(df, fetcher.name, stock_code)
                     except Exception as e:
                         error_type, error_reason = summarize_exception(e)
                         error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
@@ -960,7 +997,6 @@ class DataFetcherManager:
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
             raise DataFetchError(error_summary)
 
-        all_fetchers_no_data = True
         for attempt, fetcher in enumerate(fetchers, start=1):
             try:
                 logger.info(f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] 获取 {stock_code}...")
@@ -979,14 +1015,13 @@ class DataFetcherManager:
                         f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
                         f"rows={len(df)}, elapsed={elapsed:.2f}s"
                     )
-                    return df, fetcher.name
+                    return _as_result(df, fetcher.name, stock_code)
                 if df is None or df.empty:
                     logger.debug(
                         "[数据源无数据] %s 在 %s 中返回空结果，尝试下一个数据源",
                         stock_code,
                         fetcher.name,
                     )
-                    
             except Exception as e:
                 error_type, error_reason = summarize_exception(e)
                 error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
@@ -995,22 +1030,59 @@ class DataFetcherManager:
                     f"error_type={error_type}, reason={error_reason}"
                 )
                 errors.append(error_msg)
-                all_fetchers_no_data = False
                 if attempt < total_fetchers:
                     next_fetcher = fetchers[attempt]
                     logger.info(f"[数据源切换] {stock_code}: [{fetcher.name}] -> [{next_fetcher.name}]")
                 # 继续尝试下一个数据源
                 continue
-        
-        # 5-digit bare codes such as 02714 are ambiguous between HK tickers and
-        # zero-padded A-share symbols. Do not silently guess the market on empty
-        # results, otherwise real HK tickers like 02319 can be rewritten to a
-        # different A-share code.
-        if all_fetchers_no_data and stock_code.isdigit() and len(stock_code) == 5 and stock_code.startswith("0"):
-            raise DataFetchError(
-                f"未找到股票代码 {stock_code} 的数据。5 位裸数字代码存在市场歧义："
-                f"若为 A 股请使用 00{stock_code[1:]}，若为港股请使用 HK{stock_code} 或 {stock_code}.HK。"
+
+        # 对于 5 位裸数字（如 02714），当港股路径在现有源下均返回空值且无异常时，
+        # 再尝试按 A 股 6 位补零形式回退一次（如 002714）。
+        if fallback_ashare_code and not errors:
+            logger.info(
+                f"[数据源兜底] {stock_code} 全量尝试后无结果，尝试按 A 股补零码 {fallback_ashare_code}"
             )
+            for attempt, fetcher in enumerate(fetchers, start=1):
+                try:
+                    logger.info(
+                        f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] 获取 {fallback_ashare_code}..."
+                    )
+                    df = self._call_fetcher_method(
+                        fetcher,
+                        "get_daily_data",
+                        stock_code=fallback_ashare_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days
+                    )
+
+                    if df is not None and not df.empty:
+                        elapsed = time.time() - request_start
+                        logger.info(
+                            f"[数据源完成] {fallback_ashare_code} 使用 [{fetcher.name}] 获取成功: "
+                            f"rows={len(df)}, elapsed={elapsed:.2f}s"
+                        )
+                        return _as_result(df, fetcher.name, fallback_ashare_code)
+                    if df is None or df.empty:
+                        logger.debug(
+                            "[数据源无数据] %s 在 %s 中返回空结果，尝试下一个数据源",
+                            fallback_ashare_code,
+                            fetcher.name,
+                        )
+
+                except Exception as e:
+                    error_type, error_reason = summarize_exception(e)
+                    error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
+                    logger.warning(
+                        f"[数据源失败 {attempt}/{total_fetchers}] [{fetcher.name}] {fallback_ashare_code}: "
+                        f"error_type={error_type}, reason={error_reason}"
+                    )
+                    errors.append(error_msg)
+                    if attempt < total_fetchers:
+                        next_fetcher = fetchers[attempt]
+                        logger.info(f"[数据源切换] {fallback_ashare_code}: [{fetcher.name}] -> [{next_fetcher.name}]")
+                    # 继续尝试下一个数据源
+                    continue
 
         # 所有数据源都失败
         error_summary = f"所有数据源获取 {stock_code} 失败:\n" + "\n".join(errors)

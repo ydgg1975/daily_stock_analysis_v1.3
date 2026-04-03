@@ -123,7 +123,7 @@ class TestPipelineSingleStockNotify(unittest.TestCase):
 
     def test_process_single_stock_direct_path_keeps_notify_compatibility(self):
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
-        pipeline.fetch_and_save_stock_data = MagicMock(return_value=(True, None))
+        pipeline.fetch_and_save_stock_data = MagicMock(return_value=(True, None, "600519"))
         pipeline.analyze_stock = MagicMock(return_value=_make_result("600519"))
         pipeline.notifier = _TrackingNotifier()
 

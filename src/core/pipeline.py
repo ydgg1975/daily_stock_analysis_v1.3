@@ -142,7 +142,8 @@ class StockAnalysisPipeline:
         code: str,
         force_refresh: bool = False,
         current_time: Optional[datetime] = None,
-    ) -> Tuple[bool, Optional[str]]:
+        return_resolved_code: bool = False,
+    ) -> Tuple[bool, Optional[str]] | Tuple[bool, Optional[str], Optional[str]]:
         """
         获取并保存单只股票数据
         
@@ -157,7 +158,8 @@ class StockAnalysisPipeline:
             current_time: 本轮运行冻结的参考时间，用于统一断点续传目标交易日判断
             
         Returns:
-            Tuple[是否成功, 错误信息]
+            Tuple[是否成功, 错误信息]，
+            若 return_resolved_code=True，返回 (是否成功, 错误信息, 实际保存/分析代码)
         """
         stock_name = code
         try:
@@ -170,6 +172,8 @@ class StockAnalysisPipeline:
 
             # 断点续传检查：如果最新可复用交易日的数据已存在，则跳过
             if not force_refresh and self.db.has_today_data(code, target_date):
+                if return_resolved_code:
+                    return True, None, code
                 logger.info(
                     f"{stock_name}({code}) {target_date} 数据已存在，跳过获取（断点续传）"
                 )
@@ -177,20 +181,41 @@ class StockAnalysisPipeline:
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            daily_data_result = self.fetcher_manager.get_daily_data(
+                code,
+                days=30,
+                return_resolved_code=True,
+            )
+            if isinstance(daily_data_result, tuple) and len(daily_data_result) == 3:
+                df, source_name, resolved_code = daily_data_result
+            elif isinstance(daily_data_result, tuple) and len(daily_data_result) == 2:
+                # Backward compatibility for older mocks/manager implementations.
+                df, source_name = daily_data_result
+                resolved_code = code
+            else:
+                raise ValueError(
+                    "fetcher_manager.get_daily_data must return "
+                    "(df, source_name) or (df, source_name, resolved_code)"
+                )
 
             if df is None or df.empty:
                 return False, "获取数据为空"
 
             # 保存到数据库
-            saved_count = self.db.save_daily_data(df, code, source_name)
-            logger.info(f"{stock_name}({code}) 数据保存成功（来源: {source_name}，新增 {saved_count} 条）")
+            saved_count = self.db.save_daily_data(df, resolved_code, source_name)
+            logger.info(
+                f"{stock_name}({resolved_code}) 数据保存成功（来源: {source_name}，新增 {saved_count} 条）"
+            )
 
+            if return_resolved_code:
+                return True, None, resolved_code
             return True, None
 
         except Exception as e:
             error_msg = f"获取/保存数据失败: {str(e)}"
             logger.error(f"{stock_name}({code}) {error_msg}")
+            if return_resolved_code:
+                return False, error_msg, None
             return False, error_msg
     
     def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
@@ -1143,9 +1168,10 @@ class StockAnalysisPipeline:
         
         try:
             # Step 1: 获取并保存数据
-            success, error = self.fetch_and_save_stock_data(
-                code, current_time=current_time
+            success, error, resolved_code = self.fetch_and_save_stock_data(
+                code, current_time=current_time, return_resolved_code=True
             )
+            analysis_code = resolved_code or code
             
             if not success:
                 logger.warning(f"[{code}] 数据获取失败: {error}")
@@ -1156,8 +1182,8 @@ class StockAnalysisPipeline:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
                 return None
             
-            effective_query_id = analysis_query_id or self.query_id or uuid.uuid4().hex
-            result = self.analyze_stock(code, report_type, query_id=effective_query_id)
+            effective_query_id = analysis_query_id or getattr(self, "query_id", None) or uuid.uuid4().hex
+            result = self.analyze_stock(analysis_code, report_type, query_id=effective_query_id)
             
             if result:
                 if not result.success:
@@ -1175,7 +1201,7 @@ class StockAnalysisPipeline:
                     self._send_single_stock_notification(
                         result,
                         report_type=report_type,
-                        fallback_code=code,
+                        fallback_code=analysis_code,
                     )
             
             return result
