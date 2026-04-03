@@ -27,9 +27,144 @@ if TYPE_CHECKING:
     from asyncio import Queue as AsyncQueue
 
 from data_provider.base import canonical_stock_code, normalize_stock_code
+from src.services.execution_log_service import ExecutionLogService
 from src.utils.analysis_metadata import SELECTION_SOURCES
 
 logger = logging.getLogger(__name__)
+
+
+def _split_csv(value: Any) -> List[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def _parse_provider_from_model(model: Optional[str]) -> Optional[str]:
+    model_name = str(model or "").strip()
+    if "/" in model_name:
+        provider = model_name.split("/", 1)[0].strip()
+        return provider or None
+    return None
+
+
+def _build_configured_execution_summary() -> Dict[str, Any]:
+    """Build best-known in-progress execution state from current config."""
+    from src.config import get_config
+
+    config = get_config()
+
+    primary_model = str(getattr(config, "litellm_model", "") or "").strip() or None
+    fallback_models = [
+        str(item).strip()
+        for item in (getattr(config, "litellm_fallback_models", []) or [])
+        if str(item).strip()
+    ]
+    llm_channels = getattr(config, "llm_channels", []) or []
+    primary_channel = None
+    if llm_channels and isinstance(llm_channels[0], dict):
+        primary_channel = str(llm_channels[0].get("name") or "").strip() or None
+
+    market_route = _split_csv(getattr(config, "realtime_source_priority", ""))
+    market_source = market_route[0] if market_route else None
+
+    fundamentals_route: List[str] = []
+    if getattr(config, "fmp_api_keys", None):
+        fundamentals_route.append("fmp")
+    if getattr(config, "finnhub_api_keys", None):
+        fundamentals_route.append("finnhub")
+    if not fundamentals_route:
+        fundamentals_route.append("yfinance_fallback")
+
+    news_route: List[str] = []
+    if getattr(config, "gnews_api_keys", None):
+        news_route.append("gnews")
+    if getattr(config, "tavily_api_keys", None):
+        news_route.append("tavily")
+    if getattr(config, "finnhub_api_keys", None):
+        news_route.append("finnhub")
+
+    sentiment_route: List[str] = []
+    if getattr(config, "social_sentiment_api_key", None):
+        sentiment_route.append("social_sentiment_service")
+    elif getattr(config, "tavily_api_keys", None):
+        sentiment_route.append("tavily_filtered")
+    sentiment_route.append("local_inference")
+
+    notification_channels: List[str] = []
+    if getattr(config, "discord_webhook_url", None) or (
+        getattr(config, "discord_bot_token", None)
+        and getattr(config, "discord_main_channel_id", None)
+    ):
+        notification_channels.append("discord")
+    if getattr(config, "feishu_webhook_url", None):
+        notification_channels.append("feishu")
+    if getattr(config, "wechat_webhook_url", None):
+        notification_channels.append("wechat")
+    if getattr(config, "telegram_bot_token", None) and getattr(config, "telegram_chat_id", None):
+        notification_channels.append("telegram")
+    if getattr(config, "email_sender", None) and getattr(config, "email_receivers", None):
+        notification_channels.append("email")
+    if getattr(config, "pushplus_token", None):
+        notification_channels.append("pushplus")
+
+    return {
+        "ai": {
+            "model": primary_model,
+            "provider": _parse_provider_from_model(primary_model),
+            "gateway": primary_channel,
+            "model_truth": "inferred" if primary_model else "unavailable",
+            "provider_truth": "inferred" if primary_model else "unavailable",
+            "gateway_truth": "inferred" if primary_channel else "unavailable",
+            "fallback_occurred": False,
+            "fallback_truth": "unavailable",
+            "configured_primary_gateway": primary_channel,
+            "configured_backup_gateway": (llm_channels[1].get("name") if len(llm_channels) > 1 and isinstance(llm_channels[1], dict) else None),
+            "configured_primary_model": primary_model,
+            "configured_fallback_models": fallback_models,
+        },
+        "data": {
+            "market": {
+                "source": market_source,
+                "truth": "inferred" if market_source else "unavailable",
+                "fallback_occurred": False,
+                "status": "attempting" if market_source else "not_configured",
+                "source_chain": market_route,
+            },
+            "fundamentals": {
+                "source": fundamentals_route[0] if fundamentals_route else None,
+                "truth": "inferred",
+                "fallback_occurred": False,
+                "status": "attempting",
+                "source_chain": fundamentals_route,
+            },
+            "news": {
+                "source": news_route[0] if news_route else None,
+                "truth": "inferred" if news_route else "unavailable",
+                "fallback_occurred": False,
+                "status": "attempting" if news_route else "not_configured",
+                "source_chain": news_route,
+            },
+            "sentiment": {
+                "source": sentiment_route[0] if sentiment_route else None,
+                "truth": "inferred" if sentiment_route else "unavailable",
+                "fallback_occurred": False,
+                "status": "attempting" if sentiment_route else "not_configured",
+                "source_chain": sentiment_route,
+            },
+        },
+        "notification": {
+            "attempted": bool(notification_channels),
+            "status": "waiting" if notification_channels else "not_configured",
+            "success": None,
+            "channels": notification_channels,
+            "truth": "inferred" if notification_channels else "unavailable",
+        },
+        "steps": [
+            {"key": "data_fetch", "status": "partial"},
+            {"key": "ai_analysis", "status": "unknown"},
+            {"key": "notification", "status": "waiting" if notification_channels else "not_configured"},
+        ],
+    }
 
 
 def _dedupe_stock_code_key(stock_code: str) -> str:
@@ -71,6 +206,8 @@ class TaskInfo:
     completed_at: Optional[datetime] = None
     original_query: Optional[str] = None
     selection_source: Optional[str] = None
+    execution: Optional[Dict[str, Any]] = None
+    execution_session_id: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task info into an API-friendly dictionary."""
@@ -88,6 +225,8 @@ class TaskInfo:
             "error": self.error,
             "original_query": self.original_query,
             "selection_source": self.selection_source,
+            "execution": self.execution,
+            "execution_session_id": self.execution_session_id,
         }
     
     def copy(self) -> 'TaskInfo':
@@ -107,6 +246,8 @@ class TaskInfo:
             completed_at=self.completed_at,
             original_query=self.original_query,
             selection_source=self.selection_source,
+            execution=self.execution,
+            execution_session_id=self.execution_session_id,
         )
 
 
@@ -170,6 +311,7 @@ class AnalysisTaskQueue:
         
         # 任务历史保留数量（内存中）
         self._max_history = 100
+        self._execution_log_service = ExecutionLogService()
         
         self._initialized = True
         logger.info(f"[TaskQueue] 初始化完成，最大并发: {max_workers}")
@@ -513,8 +655,15 @@ class AnalysisTaskQueue:
                 return None
             task.status = TaskStatus.PROCESSING
             task.started_at = datetime.now()
-            task.message = "正在分析中..."
+            task.message = "正在拉取行情与数据..."
             task.progress = 10
+            task.execution = _build_configured_execution_summary()
+            task.execution_session_id = self._execution_log_service.start_session(
+                task_id=task_id,
+                stock_code=stock_code,
+                stock_name=task.stock_name,
+                configured_execution=task.execution,
+            )
         
         self._broadcast_event("task_started", task.to_dict())
         
@@ -532,6 +681,13 @@ class AnalysisTaskQueue:
             )
             
             if result:
+                query_id = None
+                if isinstance(result, dict):
+                    report = result.get("report")
+                    if isinstance(report, dict):
+                        meta = report.get("meta")
+                        if isinstance(meta, dict):
+                            query_id = str(meta.get("query_id") or "").strip() or None
                 # 更新任务状态为完成
                 with self._data_lock:
                     task = self._tasks.get(task_id)
@@ -540,6 +696,7 @@ class AnalysisTaskQueue:
                         task.progress = 100
                         task.completed_at = datetime.now()
                         task.result = result
+                        task.execution = result.get("runtime_execution") if isinstance(result, dict) else None
                         task.message = "分析完成"
                         task.stock_name = result.get("stock_name", task.stock_name)
                         
@@ -547,6 +704,15 @@ class AnalysisTaskQueue:
                         dedupe_key = _dedupe_stock_code_key(task.stock_code)
                         if dedupe_key in self._analyzing_stocks:
                             del self._analyzing_stocks[dedupe_key]
+
+                        if task.execution_session_id:
+                            self._execution_log_service.append_runtime_result(
+                                session_id=task.execution_session_id,
+                                runtime_execution=result.get("runtime_execution") if isinstance(result, dict) else None,
+                                notification_result=(result.get("notification_result") if isinstance(result, dict) else None),
+                                query_id=query_id,
+                                overall_status="completed",
+                            )
                 
                 self._broadcast_event("task_completed", task.to_dict())
                 logger.info(f"[TaskQueue] 任务完成: {task_id} ({stock_code})")
@@ -575,6 +741,12 @@ class AnalysisTaskQueue:
                     dedupe_key = _dedupe_stock_code_key(task.stock_code)
                     if dedupe_key in self._analyzing_stocks:
                         del self._analyzing_stocks[dedupe_key]
+                    if task.execution_session_id:
+                        self._execution_log_service.fail_session(
+                            session_id=task.execution_session_id,
+                            error_message=error_msg,
+                            query_id=None,
+                        )
             
             self._broadcast_event("task_failed", task.to_dict())
             

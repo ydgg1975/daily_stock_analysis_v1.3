@@ -32,7 +32,7 @@ describe('ReportMarkdown', () => {
       },
     };
 
-    vi.mocked(historyApi.getMarkdown).mockResolvedValueOnce(`## Full Markdown\n- 扩展交易数据：NA（当前市场不支持）\n| 字段 | 值 |\n| --- | --- |\n| 盘前成交额 | NA（会话不适用） |`);
+    vi.mocked(historyApi.getMarkdown).mockResolvedValueOnce(`## Decision Summary\n### Execution Plan\n#### Current Action\n- **Bullish Factors**: 数据中心需求回暖\n- 扩展交易数据：NA（当前市场不支持）\n| Field | Value | Basis |\n| --- | --- | --- |\n| 盘前成交额 | NA（会话不适用） | Session |`);
 
     render(
       <ReportMarkdown
@@ -45,15 +45,18 @@ describe('ReportMarkdown', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Coverage / Missing Fields Audit')).toBeInTheDocument();
+      expect(screen.getByText('覆盖与缺失字段审计')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('缺失字段总数: 5')).toBeInTheDocument();
+    expect(screen.getByText(/缺失字段总数[:：]\s*5/)).toBeInTheDocument();
     expect(screen.getAllByText(/字段待接入/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/已接入但本次记录未返回/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前数据源未提供/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/当前市场\/会话不适用/).length).toBeGreaterThan(0);
-    expect(screen.getByText('Full Markdown')).toBeInTheDocument();
+    expect(screen.getByText('决策摘要')).toBeInTheDocument();
+    expect(screen.getByText('执行计划')).toBeInTheDocument();
+    expect(screen.getByText('当前动作')).toBeInTheDocument();
+    expect(screen.getByText(/看多因素/)).toBeInTheDocument();
   });
 
   it('shows no-missing message when markdown and report have no NA fields', async () => {

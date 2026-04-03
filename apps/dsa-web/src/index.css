@@ -2406,9 +2406,10 @@ html[data-theme="dos"] :is(
 .report-hero-disclosure > summary {
   cursor: pointer;
   list-style: none;
-  padding: 0.9rem 1rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
+  padding: 0.82rem 1rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: hsl(var(--muted-text));
 }
@@ -2422,7 +2423,7 @@ html[data-theme="dos"] :is(
 }
 
 .report-hero-disclosure-body {
-  padding: 1rem;
+  padding: 0.95rem;
 }
 
 @media (min-width: 1280px) {
@@ -3641,14 +3642,20 @@ textarea {
 .home-markdown-prose :where(h1) {
   border-bottom: 1px solid var(--home-prose-border);
   margin-top: 0;
-  padding-bottom: 0.58rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.7rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
 }
 
 .home-markdown-prose :where(h2) {
   color: hsl(var(--foreground));
   border-bottom: 1px solid var(--home-prose-border);
-  padding-bottom: 0.36rem;
-  margin-top: 1.28rem;
+  padding-bottom: 0.45rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.8rem;
+  font-size: 1.28rem;
+  line-height: 1.28;
 }
 
 .home-markdown-prose :where(code) {
@@ -3661,21 +3668,28 @@ textarea {
 .home-markdown-prose :where(pre) {
   border: 1px solid var(--home-prose-border);
   background: hsl(var(--elevated) / 0.92);
-  margin: 0.85rem 0;
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
 }
 
 .home-markdown-prose :where(th, td) {
   border: 1px solid var(--home-prose-border-strong);
+  line-height: 1.55;
 }
 
 .home-markdown-prose :where(th) {
   background: hsl(var(--elevated) / 0.92);
   color: hsl(var(--foreground));
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .home-markdown-prose :where(hr) {
   border-color: var(--home-prose-border);
-  margin: 1.1rem 0;
+  margin: 1.5rem 0;
 }
 
 .home-markdown-prose :where(a) {
@@ -3688,23 +3702,28 @@ textarea {
 }
 
 .home-markdown-prose :where(p, ul, ol) {
-  margin-top: 0.55rem;
-  margin-bottom: 0.55rem;
+  margin-top: 0.8rem;
+  margin-bottom: 0.8rem;
 }
 
 .home-markdown-prose :where(ul, ol) {
-  padding-left: 1.1rem;
+  padding-left: 1.25rem;
 }
 
 .home-markdown-prose :where(li + li) {
-  margin-top: 0.28rem;
+  margin-top: 0.35rem;
+}
+
+.home-markdown-prose :where(li > p) {
+  margin: 0.35rem 0;
 }
 
 .home-markdown-prose :where(blockquote) {
   border-color: var(--home-prose-blockquote-border);
   background: var(--home-prose-blockquote-bg);
   border-radius: 0 0.75rem 0.75rem 0;
-  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
   color: var(--text-secondary-text);
 }
 .label-uppercase {

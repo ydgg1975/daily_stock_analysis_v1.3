@@ -16,7 +16,7 @@ import re
 import threading
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import List, Dict, Any, Optional, Tuple
@@ -128,6 +128,7 @@ class SearchResponse:
     success: bool = True
     error_message: Optional[str] = None
     search_time: float = 0.0  # 搜索耗时（秒）
+    attempts: List[Dict[str, Any]] = field(default_factory=list)
     
     def to_context(self, max_results: int = 5) -> str:
         """将搜索结果转换为可用于 AI 分析的上下文"""
@@ -2602,6 +2603,19 @@ class SearchService:
             target_per_dimension,
             provider_max_results,
         )
+
+        def classify_attempt_outcome(response: SearchResponse, filtered: SearchResponse) -> tuple[str, Optional[str]]:
+            if filtered.success and filtered.results:
+                return "succeeded", None
+            error_text = str(filtered.error_message or response.error_message or "").strip()
+            lowered = error_text.lower()
+            if "timeout" in lowered or "timed out" in lowered:
+                return "timeout", error_text or "provider timeout"
+            if response.success and not filtered.results:
+                return "empty_result", error_text or "no qualified results after filtering"
+            if "invalid" in lowered or "parse" in lowered or "json" in lowered:
+                return "invalid_response", error_text or "invalid provider response"
+            return "failed", error_text or "provider failed"
         
         for dim in search_dimensions:
             if search_count >= max_searches:
@@ -2620,9 +2634,20 @@ class SearchService:
             )
             final_response = last_response
             last_raw_count = 0
+            attempt_trace: List[Dict[str, Any]] = []
 
-            for provider in available_providers:
+            for provider_idx, provider in enumerate(available_providers):
                 logger.info(f"[情报搜索] {dim['desc']}: 尝试 {provider.name}")
+                attempt_trace.append(
+                    {
+                        "sequence": len(attempt_trace) + 1,
+                        "provider": provider.name,
+                        "dimension": dim["name"],
+                        "action": "attempting",
+                        "result": "attempting",
+                        "message": f"Attempting news provider {provider.name} for {dim['name']}.",
+                    }
+                )
                 if isinstance(provider, TavilySearchProvider) and dim.get('tavily_topic'):
                     response = provider.search(
                         dim['query'],
@@ -2661,16 +2686,58 @@ class SearchService:
 
                 last_response = filtered_response
                 last_raw_count = len(response.results)
+                outcome, reason = classify_attempt_outcome(response, filtered_response)
+                attempt_trace.append(
+                    {
+                        "sequence": len(attempt_trace) + 1,
+                        "provider": provider.name,
+                        "dimension": dim["name"],
+                        "action": "succeeded" if outcome == "succeeded" else "failed",
+                        "result": outcome,
+                        "reason": reason,
+                        "message": (
+                            f"{provider.name} succeeded for {dim['name']}."
+                            if outcome == "succeeded"
+                            else f"{provider.name} {outcome} for {dim['name']}."
+                        ),
+                    }
+                )
                 if filtered_response.success and filtered_response.results:
                     final_response = filtered_response
+                    if provider_idx < len(available_providers) - 1:
+                        for skipped in available_providers[provider_idx + 1:]:
+                            attempt_trace.append(
+                                {
+                                    "sequence": len(attempt_trace) + 1,
+                                    "provider": skipped.name,
+                                    "dimension": dim["name"],
+                                    "action": "skipped",
+                                    "result": "skipped_because_previous_succeeded",
+                                    "message": f"{skipped.name} skipped because previous provider already succeeded.",
+                                }
+                            )
                     break
 
                 if response.success and not filtered_response.results:
                     logger.info("[情报搜索] %s: %s 成功但过滤后无结果，继续尝试下一引擎", dim['desc'], provider.name)
                 else:
                     logger.warning("[情报搜索] %s: %s 失败 - %s", dim['desc'], provider.name, response.error_message)
+                if provider_idx < len(available_providers) - 1:
+                    next_provider = available_providers[provider_idx + 1].name
+                    attempt_trace.append(
+                        {
+                            "sequence": len(attempt_trace) + 1,
+                            "provider": next_provider,
+                            "dimension": dim["name"],
+                            "action": "switched_to_fallback",
+                            "result": "switched_to_fallback",
+                            "message": f"Switched fallback from {provider.name} to {next_provider}.",
+                        }
+                    )
 
                 final_response = filtered_response
+
+            final_response.attempts = attempt_trace
 
             results[dim['name']] = final_response
             search_count += 1

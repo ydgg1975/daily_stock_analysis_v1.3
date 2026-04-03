@@ -1,5 +1,5 @@
 import type React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from '../SettingsPage';
 
@@ -265,6 +265,27 @@ function buildSystemConfigState(overrides: ConfigOverride = {}) {
   };
 }
 
+function buildAiConfigItem(key: string, value: string) {
+  return {
+    key,
+    value,
+    rawValueExists: value.trim().length > 0,
+    isMasked: false,
+    schema: {
+      key,
+      category: 'ai_model',
+      dataType: 'string',
+      uiControl: 'text',
+      isSensitive: /KEY/i.test(key),
+      isRequired: false,
+      isEditable: true,
+      options: [],
+      validation: {},
+      displayOrder: 1,
+    },
+  };
+}
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -435,5 +456,224 @@ describe('SettingsPage', () => {
 
     expect(saveExternalItems).toHaveBeenCalledWith([{ key: 'LLM_CHANNELS', value: 'primary,backup' }], '渠道配置已保存');
     expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('enables primary AI gateway selector when one configured provider is detected', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('AIHUBMIX_KEY', 'masked-token'),
+          buildAiConfigItem('LLM_CHANNELS', ''),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+
+    const primaryGateway = combos[0] as HTMLSelectElement;
+    const backupGateway = combos[2] as HTMLSelectElement;
+
+    expect(primaryGateway).not.toBeDisabled();
+    expect(primaryGateway.querySelector('option[value="aihubmix"]')).not.toBeNull();
+    expect(backupGateway).toBeDisabled();
+    expect(screen.getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
+  });
+
+  it('uses configured providers as the source of truth for gateway selector options', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('AIHUBMIX_KEY', 'masked-token'),
+          buildAiConfigItem('GEMINI_API_KEY', 'masked-token'),
+          buildAiConfigItem('LLM_CHANNELS', ''),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+
+    const primaryGateway = combos[0] as HTMLSelectElement;
+    const backupGateway = combos[2] as HTMLSelectElement;
+
+    expect(primaryGateway).not.toBeDisabled();
+    expect(backupGateway).not.toBeDisabled();
+    expect(primaryGateway.querySelector('option[value="aihubmix"]')).not.toBeNull();
+    expect(primaryGateway.querySelector('option[value="gemini"]')).not.toBeNull();
+    expect(backupGateway.querySelector('option[value="aihubmix"]')).not.toBeNull();
+    expect(backupGateway.querySelector('option[value="gemini"]')).not.toBeNull();
+  });
+
+  it('does not enable AI gateway selectors from legacy LLM_CHANNELS alone', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('LLM_CHANNELS', 'gemini,aihubmix'),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+
+    const primaryGateway = combos[0] as HTMLSelectElement;
+    const backupGateway = combos[2] as HTMLSelectElement;
+
+    expect(primaryGateway).toBeDisabled();
+    expect(backupGateway).toBeDisabled();
+    expect(screen.getByText(/至少一个 AI Provider 凭据/)).toBeInTheDocument();
+    expect(screen.getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
+  });
+
+  it('saves primary-only AI route and keeps legacy channel list stable', async () => {
+    saveExternalItems.mockResolvedValue(undefined);
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('GEMINI_API_KEY', 'masked-token'),
+          buildAiConfigItem('LLM_CHANNELS', 'legacy'),
+          buildAiConfigItem('LITELLM_MODEL', ''),
+          buildAiConfigItem('LITELLM_FALLBACK_MODELS', 'legacy/fallback'),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+    const primaryGateway = combos[0] as HTMLSelectElement;
+    const primaryModel = combos[1] as HTMLSelectElement;
+
+    fireEvent.change(primaryGateway, { target: { value: 'gemini' } });
+    fireEvent.change(primaryModel, { target: { value: 'gemini/gemini-2.5-flash' } });
+    fireEvent.click(within(aiSection as HTMLElement).getByRole('button', { name: '保存优先顺序' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith([
+        { key: 'AI_PRIMARY_GATEWAY', value: 'gemini' },
+        { key: 'AI_PRIMARY_MODEL', value: 'gemini/gemini-2.5-flash' },
+        { key: 'AI_BACKUP_GATEWAY', value: '' },
+        { key: 'AI_BACKUP_MODEL', value: '' },
+        { key: 'LLM_CHANNELS', value: 'legacy' },
+        { key: 'LITELLM_MODEL', value: 'gemini/gemini-2.5-flash' },
+        { key: 'LITELLM_FALLBACK_MODELS', value: '' },
+      ], expect.stringContaining('主路由'));
+    });
+  });
+
+  it('blocks save with clear error when primary model is missing', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('GEMINI_API_KEY', 'masked-token'),
+          buildAiConfigItem('LLM_CHANNELS', ''),
+          buildAiConfigItem('LITELLM_MODEL', ''),
+          buildAiConfigItem('LITELLM_FALLBACK_MODELS', ''),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+
+    fireEvent.change(combos[0] as HTMLSelectElement, { target: { value: 'gemini' } });
+    const customButtons = within(aiSection as HTMLElement).getAllByRole('button', { name: '自定义 ID' });
+    fireEvent.click(customButtons[0] as HTMLButtonElement);
+    const primaryCustomModelInput = within(aiSection as HTMLElement).getByLabelText('自定义模型 ID') as HTMLInputElement;
+    fireEvent.change(primaryCustomModelInput, { target: { value: '' } });
+    fireEvent.click(within(aiSection as HTMLElement).getByRole('button', { name: '保存优先顺序' }));
+
+    expect(saveExternalItems).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('主路由必须同时配置网关和模型。')).toBeInTheDocument();
+    });
+  });
+
+  it('blocks save when backup route is partially filled', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('AIHUBMIX_KEY', 'masked-token'),
+          buildAiConfigItem('GEMINI_API_KEY', 'masked-token'),
+          buildAiConfigItem('LLM_CHANNELS', ''),
+          buildAiConfigItem('LITELLM_MODEL', ''),
+          buildAiConfigItem('LITELLM_FALLBACK_MODELS', ''),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', ''),
+          buildAiConfigItem('AI_PRIMARY_MODEL', ''),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '当前生效 AI 配置' }).closest('section');
+    expect(aiSection).not.toBeNull();
+    const combos = within(aiSection as HTMLElement).getAllByRole('combobox');
+    const primaryGateway = combos[0] as HTMLSelectElement;
+    const primaryModel = combos[1] as HTMLSelectElement;
+    const backupGateway = combos[2] as HTMLSelectElement;
+    fireEvent.change(primaryGateway, { target: { value: 'aihubmix' } });
+    fireEvent.change(primaryModel, { target: { value: 'openai/gpt-4.1-mini' } });
+    fireEvent.change(backupGateway, { target: { value: 'gemini' } });
+
+    const customButtons = within(aiSection as HTMLElement).getAllByRole('button', { name: '自定义 ID' });
+    fireEvent.click(customButtons[1] as HTMLButtonElement);
+    const backupCustomModelInput = within(aiSection as HTMLElement).getByLabelText('自定义模型 ID') as HTMLInputElement;
+    fireEvent.change(backupCustomModelInput, { target: { value: '' } });
+    fireEvent.click(within(aiSection as HTMLElement).getByRole('button', { name: '保存优先顺序' }));
+
+    expect(saveExternalItems).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('备用路由配置不完整：请同时设置网关和模型，或同时清空。')).toBeInTheDocument();
+    });
   });
 });

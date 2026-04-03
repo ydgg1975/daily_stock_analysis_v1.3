@@ -458,6 +458,7 @@ def get_task_list(
             error=t.error,
             original_query=t.original_query,
             selection_source=t.selection_source,
+            execution=t.execution,
         )
         for t in all_tasks
     ]

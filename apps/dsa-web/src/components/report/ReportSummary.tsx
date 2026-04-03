@@ -6,11 +6,14 @@ import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
 import { StandardReportPanel } from './StandardReportPanel';
 import { SupportPanel } from '../common';
+import { ExecutionSummaryCard } from '../runtime/ExecutionSummaryCard';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { decideReportRenderPath } from './reportRenderPolicy';
+import { buildReportExecutionSummary } from '../../utils/runtimeExecution';
 
 interface ReportSummaryProps {
   data: AnalysisResult | AnalysisReport;
+  showExecutionSummary?: boolean;
 }
 
 interface StandardOnlyCompatibilityPanelProps {
@@ -86,7 +89,7 @@ const StandardOnlyCompatibilityPanel: React.FC<StandardOnlyCompatibilityPanelPro
  * 完整报告展示组件
  * 整合概览、策略、资讯、详情四个区域
  */
-export const ReportSummary: React.FC<ReportSummaryProps> = ({ data }) => {
+export const ReportSummary: React.FC<ReportSummaryProps> = ({ data, showExecutionSummary = true }) => {
   // 兼容 AnalysisResult 和 AnalysisReport 两种数据格式
   const originalReport: AnalysisReport = 'report' in data ? data.report : data;
   const {
@@ -109,6 +112,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({ data }) => {
   const shouldShowModel = Boolean(
     modelUsed && !['unknown', 'error', 'none', 'null', 'n/a'].includes(modelUsed.toLowerCase()),
   );
+  const runtimeSummary = buildReportExecutionSummary(report);
 
   useEffect(() => {
     if (!isLegacyFallback) {
@@ -144,6 +148,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({ data }) => {
 
   return (
     <div className="space-y-5 pb-8 animate-fade-in">
+      {showExecutionSummary ? <ExecutionSummaryCard summary={runtimeSummary} /> : null}
       {isStandardOnlyNonStandard ? (
         <StandardOnlyCompatibilityPanel report={report} mode={fallbackMode} />
       ) : renderPath === 'standard' ? (

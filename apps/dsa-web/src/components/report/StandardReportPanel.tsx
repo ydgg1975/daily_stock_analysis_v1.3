@@ -17,10 +17,12 @@ import type {
 import { Badge } from '../common';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
+import { localizeReportHeadingLabel, localizeReportTermLabel } from '../../utils/reportTerminology';
 import {
   buildMissingFieldAudit,
   collectMissingFieldEntriesFromStandardReport,
   extractMissingReason,
+  normalizeMissingFieldSemanticKey,
   type MissingFieldAuditSummary,
   type MissingFieldCategory,
 } from './missingFieldAudit';
@@ -40,6 +42,17 @@ const subtlePanelClass = 'theme-panel-subtle rounded-[1rem] px-3.5 py-3';
 const rowGridClass = 'grid gap-4 lg:grid-cols-2';
 
 const ui = translateForCurrentLanguage;
+const isEnglishUi = (): boolean => /^[A-Za-z]/.test(ui('report.score'));
+const localeColon = (): string => (isEnglishUi() ? ': ' : '：');
+const joinLabelValue = (label: string, value: string): string => {
+  return `${label}${localeColon()}${value}`;
+};
+const renderGroupLabelClass = (): string => (
+  isEnglishUi()
+    ? 'text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-text'
+    : 'text-[12px] font-semibold tracking-[0.08em] text-muted-text'
+);
+const groupHeadingClass = 'text-[1.02rem] font-semibold leading-6 tracking-tight text-foreground md:text-[1.06rem]';
 
 const parseNumericValue = (value?: string | number): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -124,12 +137,171 @@ const uniqueMeaningfulItems = (
   return normalized.slice(0, limit);
 };
 
+const normalizeComparableText = (value: string): string => value
+  .toLowerCase()
+  .replace(/[\s.,，。!！?？:：;；、()（）【】'"“”‘’`/|_-]/g, '')
+  .replace(/[[\]]/g, '')
+  .trim();
+
+const extractLeadingLabel = (value: string): string | null => {
+  const normalized = value.trim();
+  const match = normalized.match(/^([^:：]{1,24})[:：]/);
+  if (!match?.[1]) {
+    return null;
+  }
+  const label = normalizeComparableText(match[1]);
+  return label || null;
+};
+
+const hasNearDuplicateText = (left: string, right: string): boolean => {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  const minLength = Math.min(left.length, right.length);
+  if (minLength < 8) {
+    return false;
+  }
+  return left.includes(right) || right.includes(left);
+};
+
+const executionSemanticKey = (text: string): string => {
+  const normalized = normalizeComparableText(text);
+  const label = extractLeadingLabel(text);
+  if (label) {
+    return `label:${label}`;
+  }
+  if (/(等待|观望|回踩|确认|wait|watch|confirm|pullback)/i.test(text)) {
+    return 'intent:wait_confirmation';
+  }
+  if (/(持仓|holder|holding)/i.test(text)) {
+    return 'intent:holder';
+  }
+  if (/(收缩仓位|减仓|降低仓位|风控|riskcontrol|reduceposition|trimposition|de-?risk)/i.test(normalized)) {
+    return 'intent:risk_control';
+  }
+  if (/(止损|stoploss|breaksupport|跌破)/i.test(normalized)) {
+    return 'intent:stop_loss';
+  }
+  if (/(目标二区|targettwo|target2)/i.test(normalized)) {
+    return 'intent:target_two';
+  }
+  if (/(目标一区|targetone|target1)/i.test(normalized)) {
+    return 'intent:target_one';
+  }
+  if (/(目标区间|targetzone)/i.test(normalized)) {
+    return 'intent:target_zone';
+  }
+  if (/(建仓|加仓|分批|试仓|buildstrategy|entry|scalein)/i.test(normalized)) {
+    return 'intent:entry_strategy';
+  }
+  return `text:${normalized}`;
+};
+
+const narrativeSemanticKey = (text: string): string => {
+  const normalized = normalizeComparableText(text);
+  const label = extractLeadingLabel(text);
+  if (label) {
+    return `label:${label}`;
+  }
+  return `text:${normalized}`;
+};
+
+const coverageFieldSemanticKey = (text: string): string => {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const labelMatch = trimmed.match(/^([^:：]{1,120})[:：]/);
+  const candidate = labelMatch?.[1]?.trim() || trimmed;
+  const semantic = normalizeMissingFieldSemanticKey(candidate);
+  return semantic || normalizeComparableText(candidate);
+};
+
+const localizeSectionTitle = (title: string): string => {
+  const normalized = normalizeComparableText(title);
+  if (!normalized) {
+    return title;
+  }
+  if (['行情表', '行情数据', 'markettable', 'marketdata'].some((token) => normalized.includes(normalizeComparableText(token)))) {
+    return ui('report.marketDataTable');
+  }
+  if (['技术面表', '技术数据', 'technicaltable', 'technicaldata'].some((token) => normalized.includes(normalizeComparableText(token)))) {
+    return ui('report.technicalDataTable');
+  }
+  if (['基本面表', '基本面数据', 'fundamentaltable', 'fundamentaldata'].some((token) => normalized.includes(normalizeComparableText(token)))) {
+    return ui('report.fundamentalDataTable');
+  }
+  if (['财报表', '财报数据', 'earningstable', 'earningsdata'].some((token) => normalized.includes(normalizeComparableText(token)))) {
+    return ui('report.earningsDataTable');
+  }
+  return title;
+};
+
+const collectDedupedItems = ({
+  items,
+  limit,
+  keyResolver,
+  seenKeys,
+  blockedTexts,
+}: {
+  items: Array<string | null | undefined>;
+  limit: number;
+  keyResolver: (text: string) => string;
+  seenKeys?: Set<string>;
+  blockedTexts?: Array<string | null | undefined>;
+}): string[] => {
+  const accepted: string[] = [];
+  const localNormalized: string[] = [];
+  const blockedNormalized = (blockedTexts || [])
+    .map((item) => normalizeComparableText(String(item || '').trim()))
+    .filter(Boolean);
+  const globalSeen = seenKeys || new Set<string>();
+
+  items.forEach((item) => {
+    if (accepted.length >= limit) {
+      return;
+    }
+    const text = String(item || '').trim();
+    if (!text || isMissingDisplayText(text)) {
+      return;
+    }
+    const normalized = normalizeComparableText(text);
+    if (!normalized) {
+      return;
+    }
+    if (blockedNormalized.some((blocked) => hasNearDuplicateText(normalized, blocked))) {
+      return;
+    }
+    if (localNormalized.some((existing) => hasNearDuplicateText(normalized, existing))) {
+      return;
+    }
+    if (globalSeen.has(`text:${normalized}`)) {
+      return;
+    }
+
+    const semanticKey = keyResolver(text);
+    if (globalSeen.has(semanticKey)) {
+      return;
+    }
+
+    accepted.push(text);
+    localNormalized.push(normalized);
+    globalSeen.add(semanticKey);
+    globalSeen.add(`text:${normalized}`);
+  });
+
+  return accepted;
+};
+
 const buildSection = (
   section?: StandardReportTableSection,
   fallbackTitle?: string,
   fallbackFields?: StandardReportField[],
 ): StandardReportTableSection => ({
-  title: section?.title || fallbackTitle || ui('report.evidence'),
+  title: localizeSectionTitle(section?.title || fallbackTitle || ui('report.evidence')),
   fields: section?.fields || fallbackFields || [],
   note: section?.note,
 });
@@ -210,19 +382,6 @@ const missingCategoryLabel = (category: MissingFieldCategory): string => {
   return ui('report.missingOther');
 };
 
-const buildCoverageCompactSummary = (audit: MissingFieldAuditSummary): string | null => {
-  if (audit.totalMissingFields <= 0) {
-    return null;
-  }
-  const topBuckets = audit.buckets
-    .filter((bucket) => bucket.entries.length > 0)
-    .slice(0, 2)
-    .map((bucket) => `${bucket.entries.length}${ui('report.countUnit')}${missingCategoryLabel(bucket.category)}`);
-
-  const detail = topBuckets.length > 0 ? topBuckets.join(' / ') : ui('report.missingOther');
-  return `${audit.totalMissingFields}${ui('report.countUnit')}${ui('report.missingFields')}（${detail}）`;
-};
-
 const changeToneClass = (changePct?: string): string => {
   const numeric = parseNumericValue(changePct);
   if (numeric === undefined) {
@@ -237,14 +396,36 @@ const changeToneClass = (changePct?: string): string => {
   return 'text-secondary-text';
 };
 
-const SectionHeader: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
-  <div className="mb-4 flex items-start justify-between gap-3">
-    <div>
-      <h3 className="text-lg font-semibold tracking-tight text-foreground">{title}</h3>
-    </div>
-    {isMeaningfulText(description) ? (
-      <p className="max-w-xs text-right text-xs leading-5 text-muted-text">{description}</p>
+const SectionHeader: React.FC<{
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  level?: 2 | 3 | 4;
+}> = ({ eyebrow, title, description, level = 3 }) => (
+  <div className="mb-4 space-y-2">
+    {isMeaningfulText(eyebrow) ? (
+      <p className={cn(renderGroupLabelClass(), 'tracking-[0.16em]')}>
+        {eyebrow}
+      </p>
     ) : null}
+    <div className="flex items-start justify-between gap-3">
+      {level === 2 ? (
+        <h2 className="min-w-0 text-[1.28rem] font-semibold tracking-tight text-foreground md:text-[1.48rem]">
+          {title}
+        </h2>
+      ) : level === 4 ? (
+        <h4 className="min-w-0 text-[1.01rem] font-semibold tracking-tight text-foreground">
+          {title}
+        </h4>
+      ) : (
+        <h3 className="min-w-0 text-[1.08rem] font-semibold tracking-tight text-foreground">
+          {title}
+        </h3>
+      )}
+      {isMeaningfulText(description) ? (
+        <p className="max-w-xs text-right text-xs leading-5 text-muted-text">{description}</p>
+      ) : null}
+    </div>
   </div>
 );
 
@@ -254,7 +435,7 @@ const HeroStat: React.FC<{ label: string; value?: string | number; accent?: 'sco
   accent = 'default',
 }) => (
   <div className="theme-panel-subtle rounded-[1rem] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
-    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
+    <p className={renderGroupLabelClass()}>{label}</p>
     <p
       className={cn(
         'mt-2 font-semibold tracking-tight',
@@ -275,8 +456,8 @@ const ExecutionListCard: React.FC<{
   testId?: string;
 }> = ({ title, tone = 'default', items, emptyText, footer, testId }) => (
   <div className={cn(subtlePanelClass, 'h-full')} data-testid={testId}>
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{title}</p>
+    <div className="flex items-start justify-between gap-3 border-b border-[var(--theme-panel-subtle-border)] pb-2.5">
+      <p className={groupHeadingClass}>{title}</p>
       <Badge variant={tone}>
         {tone === 'danger'
           ? ui('report.risk')
@@ -288,7 +469,7 @@ const ExecutionListCard: React.FC<{
       </Badge>
     </div>
     {items.length > 0 ? (
-      <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary-text">
+      <ul className="mt-3.5 space-y-2 text-sm leading-6 text-secondary-text">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="flex items-start gap-2.5 border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
             <span className="mt-2 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent-primary)]" />
@@ -345,24 +526,24 @@ const DenseTable: React.FC<{
                 )}
               >
                 <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.field')}</p>
-                  <p className="text-sm font-medium leading-6 text-foreground break-words">{field.label}</p>
+                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.field')}</p>
+                  <p className="text-sm font-medium leading-6 text-foreground break-words">{localizeReportTermLabel(field.label, isEnglishUi() ? 'en' : 'zh')}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.value')}</p>
+                  <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.value')}</p>
                   <p className={cn('text-sm leading-6 break-words', isMissingDisplayText(field.value) ? 'text-muted-text' : 'text-secondary-text')}>
                     {softenMissingValue(field.value)}
                   </p>
                 </div>
                 {showSource ? (
                   <div className="space-y-1">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.source')}</p>
+                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.source')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.source) ? field.source : '—'}</p>
                   </div>
                 ) : null}
                 {showStatus ? (
                   <div className="space-y-1">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-text md:hidden">{ui('report.status')}</p>
+                    <p className={cn(renderGroupLabelClass(), 'md:hidden')}>{ui('report.status')}</p>
                     <p className="text-xs leading-5 text-muted-text break-words">{isMeaningfulMetaText(field.status) ? field.status : '—'}</p>
                   </div>
                 ) : null}
@@ -383,7 +564,7 @@ const DenseTable: React.FC<{
 
 const CompactDecisionMetric: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
   <div className="space-y-1">
-    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
+    <p className={renderGroupLabelClass()}>{label}</p>
     <p className="text-sm leading-5 text-secondary-text">{softenMissingValue(value)}</p>
   </div>
 );
@@ -392,7 +573,7 @@ const DecisionExecutionPanel: React.FC<{
   decisionPanel?: StandardReportDecisionPanel;
 }> = ({ decisionPanel }) => (
   <section className={cn(solidCardClass)} data-testid="decision-execution-panel">
-    <SectionHeader title={ui('report.tradeExecution')} />
+    <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.tradeExecution')} />
 
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
@@ -400,7 +581,7 @@ const DecisionExecutionPanel: React.FC<{
           <Badge variant="info">{softenMissingValue(decisionPanel?.setupType)}</Badge>
           <Badge variant="history">{ui('report.confidenceLabel')} {softenMissingValue(decisionPanel?.confidence)}</Badge>
         </div>
-        <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.executionSummary')}</p>
+        <p className={cn('mt-3', renderGroupLabelClass())}>{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
           {softenMissingValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
         </p>
@@ -413,7 +594,7 @@ const DecisionExecutionPanel: React.FC<{
       </div>
 
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.structureSnapshot')}</p>
+        <p className={renderGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
           {softenMissingValue(decisionPanel?.marketStructure)}
         </p>
@@ -438,7 +619,7 @@ const ScoreBreakdownList: React.FC<{ items: StandardReportScoreBreakdownItem[] }
       {items.map((item, index) => (
         <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[0.95rem] px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-foreground">{item.label}</p>
+            <p className="text-sm font-medium text-foreground">{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
             <Badge variant={badgeTone(item.tone)} className="min-w-[3.5rem]">
               {item.score ?? 'NA'}
             </Badge>
@@ -467,7 +648,7 @@ const ChecklistPanel: React.FC<{ items: StandardReportChecklistItem[] }> = ({ it
               <span>{checklistLabel(item.status)}</span>
             </span>
           </Badge>
-          <p className="min-w-0 flex-1 text-sm leading-5 text-secondary-text">{item.text}</p>
+          <p className="min-w-0 flex-1 text-sm leading-5 text-secondary-text">{localizeReportHeadingLabel(item.text, isEnglishUi() ? 'en' : 'zh')}</p>
         </div>
       ))}
     </div>
@@ -478,63 +659,110 @@ const DecisionBoardPanel: React.FC<{
   decisionContext?: StandardReportDecisionContext;
   checklistItems: StandardReportChecklistItem[];
   reasonLayer?: StandardReportReasonLayer;
-}> = ({ decisionContext, checklistItems, reasonLayer }) => (
-  <div className={cn(solidCardClass)} data-testid="decision-board-panel">
-    <SectionHeader title={ui('report.checklistAndScore')} />
+  decisionPanel?: StandardReportDecisionPanel;
+  highlights?: StandardReportHighlights;
+  summaryOneLine?: string;
+}> = ({
+  decisionContext,
+  checklistItems,
+  reasonLayer,
+  decisionPanel,
+  highlights,
+  summaryOneLine,
+}) => {
+  const rationaleBlockedTexts = [
+    summaryOneLine,
+    decisionPanel?.keyAction,
+    decisionPanel?.noPositionAdvice,
+    decisionPanel?.holderAdvice,
+    decisionContext?.shortTermView,
+    decisionContext?.compositeView,
+    reasonLayer?.topRisk,
+    reasonLayer?.topCatalyst,
+    reasonLayer?.latestKeyUpdate,
+    reasonLayer?.sentimentSummary,
+    ...(highlights?.bullishFactors || []),
+    ...(highlights?.bearishFactors || []),
+    ...(highlights?.latestNews || []),
+    ...(highlights?.positiveCatalysts || []),
+    ...(highlights?.riskAlerts || []),
+  ];
+  const rationaleItems = collectDedupedItems({
+    items: reasonLayer?.coreReasons || [],
+    limit: 2,
+    keyResolver: narrativeSemanticKey,
+    blockedTexts: rationaleBlockedTexts,
+  });
+  const synthesizedRationaleItems = collectDedupedItems({
+    items: [
+      decisionContext?.changeReason,
+      decisionContext?.adjustmentReason,
+      reasonLayer?.checklistSummary,
+    ],
+    limit: 2,
+    keyResolver: narrativeSemanticKey,
+    blockedTexts: rationaleBlockedTexts,
+  });
+  const finalRationaleItems = rationaleItems.length > 0 ? rationaleItems : synthesizedRationaleItems;
 
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-      <div className="grid gap-4">
-        <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.topReasons')}</p>
-          {reasonLayer?.coreReasons?.length ? (
-            <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
-              {reasonLayer.coreReasons.slice(0, 3).map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-muted-text">{ui('report.noReasons')}</p>
-          )}
-        </div>
+  return (
+    <div className={cn(solidCardClass)} data-testid="decision-board-panel">
+      <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.checklistAndScore')} />
 
-        <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.checklistState')}</p>
-          <div className="mt-2.5">
-            <ChecklistPanel items={checklistItems} />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+        <div className="grid gap-4">
+          <div className={subtlePanelClass}>
+            <p className={cn(groupHeadingClass, 'mb-0.5')}>{ui('report.topReasons')}</p>
+            {finalRationaleItems.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
+                {finalRationaleItems.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-muted-text">{ui('report.noReasons')}</p>
+            )}
+          </div>
+
+          <div className={subtlePanelClass}>
+            <p className={cn(groupHeadingClass, 'mb-0.5')}>{ui('report.checklistState')}</p>
+            <div className="mt-2.5">
+              <ChecklistPanel items={checklistItems} />
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-4">
-        <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.scoreBreakdown')}</p>
-          <div className="mt-2.5">
-            <ScoreBreakdownList items={decisionContext?.scoreBreakdown || []} />
+        <div className="grid gap-4">
+          <div className={subtlePanelClass}>
+            <p className={cn(groupHeadingClass, 'mb-0.5')}>{ui('report.scoreBreakdown')}</p>
+            <div className="mt-2.5">
+              <ScoreBreakdownList items={decisionContext?.scoreBreakdown || []} />
+            </div>
           </div>
-        </div>
 
-        <div className={subtlePanelClass}>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{ui('report.scoreNotes')}</p>
-          <div className="mt-2.5 grid gap-x-4 gap-y-3 sm:grid-cols-2">
-            <CompactDecisionMetric label={ui('report.shortTermView')} value={decisionContext?.shortTermView || ui('report.noFields')} />
-            <CompactDecisionMetric label={ui('report.compositeView')} value={decisionContext?.compositeView || ui('report.noFields')} />
-            <CompactDecisionMetric label={ui('report.checklistSummary')} value={reasonLayer?.checklistSummary || ui('report.noFields')} />
-            <CompactDecisionMetric label={ui('report.changeReason')} value={decisionContext?.changeReason || decisionContext?.adjustmentReason || ui('report.noFields')} />
-            {isMeaningfulText(decisionContext?.adjustmentReason) ? (
-              <CompactDecisionMetric label={ui('report.adjustmentReason')} value={decisionContext?.adjustmentReason} />
-            ) : null}
-            {decisionContext?.previousScore ? (
-              <CompactDecisionMetric label={ui('report.previousScore')} value={decisionContext?.previousScore} />
-            ) : null}
-            {decisionContext?.scoreChange ? (
-              <CompactDecisionMetric label={ui('report.scoreChange')} value={decisionContext?.scoreChange} />
-            ) : null}
+          <div className={subtlePanelClass}>
+            <p className={cn(groupHeadingClass, 'mb-0.5')}>{ui('report.scoreNotes')}</p>
+            <div className="mt-2.5 grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <CompactDecisionMetric label={ui('report.shortTermView')} value={decisionContext?.shortTermView || ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.compositeView')} value={decisionContext?.compositeView || ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.checklistSummary')} value={reasonLayer?.checklistSummary || ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.changeReason')} value={decisionContext?.changeReason || decisionContext?.adjustmentReason || ui('report.noFields')} />
+              {isMeaningfulText(decisionContext?.adjustmentReason) ? (
+                <CompactDecisionMetric label={ui('report.adjustmentReason')} value={decisionContext?.adjustmentReason} />
+              ) : null}
+              {decisionContext?.previousScore ? (
+                <CompactDecisionMetric label={ui('report.previousScore')} value={decisionContext?.previousScore} />
+              ) : null}
+              {decisionContext?.scoreChange ? (
+                <CompactDecisionMetric label={ui('report.scoreChange')} value={decisionContext?.scoreChange} />
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const NarrativeBucketCard: React.FC<{
   label: string;
@@ -550,8 +778,8 @@ const NarrativeBucketCard: React.FC<{
   footer,
 }) => (
   <div className={subtlePanelClass}>
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{label}</p>
+    <div className="flex items-start justify-between gap-3 border-b border-[var(--theme-panel-subtle-border)] pb-2.5">
+      <p className={groupHeadingClass}>{label}</p>
       <Badge variant={tone} className="min-w-[4rem]">
         {tone === 'success'
           ? ui('report.bull')
@@ -563,10 +791,10 @@ const NarrativeBucketCard: React.FC<{
       </Badge>
     </div>
     {items.length > 0 ? (
-      <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
+      <ul className="mt-3.5 space-y-2 text-sm leading-6 text-secondary-text">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
-            {item}
+            {localizeReportHeadingLabel(item, isEnglishUi() ? 'en' : 'zh')}
           </li>
         ))}
       </ul>
@@ -580,48 +808,68 @@ const NarrativeBucketCard: React.FC<{
 const NewsRiskPanel: React.FC<{
   highlights?: StandardReportHighlights;
   reasonLayer?: StandardReportReasonLayer;
-  checklistItems: StandardReportChecklistItem[];
-  marketWarnings: string[];
-  battlePlan?: StandardReportBattlePlanCompact;
-}> = ({ highlights, reasonLayer, checklistItems, marketWarnings, battlePlan }) => {
+}> = ({ highlights, reasonLayer }) => {
   const latestNews = highlights?.latestNews || [];
   const bullishFactors = highlights?.bullishFactors || highlights?.positiveCatalysts || [];
   const bearishFactors = highlights?.bearishFactors || highlights?.riskAlerts || [];
-  const pendingChecklist = checklistItems
-    .filter((item) => isPendingChecklistStatus(item.status))
-    .map((item) => item.text);
+  const canonicalLatestUpdate = collectDedupedItems({
+    items: [reasonLayer?.latestKeyUpdate, ...latestNews],
+    limit: 1,
+    keyResolver: narrativeSemanticKey,
+  });
+  const narrativeSeen = new Set<string>();
 
-  const bullish = uniqueMeaningfulItems(
-    [reasonLayer?.topCatalyst, ...bullishFactors],
-    4,
-  );
-  const risks = uniqueMeaningfulItems(
-    [reasonLayer?.topRisk, ...bearishFactors, ...(battlePlan?.warnings || []), ...marketWarnings],
-    5,
-  );
-  const catalystsAndWatch = uniqueMeaningfulItems(
-    [
-      reasonLayer?.latestKeyUpdate,
-      ...latestNews,
-      ...pendingChecklist,
-      isPresentValue(highlights?.earningsOutlook) ? `${ui('report.earningsOutlook')}：${softenMissingValue(highlights?.earningsOutlook)}` : undefined,
+  const bullish = collectDedupedItems({
+    items: [...bullishFactors, ...(highlights?.positiveCatalysts || [])],
+    limit: 4,
+    keyResolver: narrativeSemanticKey,
+    seenKeys: narrativeSeen,
+    blockedTexts: canonicalLatestUpdate,
+  });
+  const risks = collectDedupedItems({
+    items: [reasonLayer?.topRisk, ...bearishFactors, ...(highlights?.riskAlerts || [])],
+    limit: 5,
+    keyResolver: narrativeSemanticKey,
+    seenKeys: narrativeSeen,
+    blockedTexts: canonicalLatestUpdate,
+  });
+  const catalystsAndWatch = collectDedupedItems({
+    items: [
+      ...canonicalLatestUpdate,
+      reasonLayer?.topCatalyst,
+      ...(highlights?.neutralFactors || []),
+      isPresentValue(highlights?.earningsOutlook) ? joinLabelValue(ui('report.earningsOutlook'), softenMissingValue(highlights?.earningsOutlook)) : undefined,
     ],
-    5,
-  );
-  const sentimentItems = uniqueMeaningfulItems(
-    [
+    limit: 5,
+    keyResolver: narrativeSemanticKey,
+    seenKeys: narrativeSeen,
+  });
+  const narrativeSentimentItems = collectDedupedItems({
+    items: [
+      highlights?.socialSynthesis,
       reasonLayer?.sentimentSummary,
       highlights?.sentimentSummary,
-      isPresentValue(highlights?.socialTone) ? `${ui('report.retailTone')}：${softenMissingValue(highlights?.socialTone)}` : undefined,
-      isPresentValue(highlights?.socialAttention) ? `${ui('report.attention')}：${softenMissingValue(highlights?.socialAttention)}` : undefined,
-      isPresentValue(highlights?.socialNarrativeFocus) ? `${ui('report.narrativeFocus')}：${softenMissingValue(highlights?.socialNarrativeFocus)}` : undefined,
     ],
-    4,
-  );
+    limit: 2,
+    keyResolver: narrativeSemanticKey,
+    seenKeys: narrativeSeen,
+  });
+  const structuredSentimentFallback = collectDedupedItems({
+    items: [
+      isPresentValue(highlights?.socialTone) ? joinLabelValue(ui('report.retailTone'), softenMissingValue(highlights?.socialTone)) : undefined,
+      isPresentValue(highlights?.socialAttention) ? joinLabelValue(ui('report.attention'), softenMissingValue(highlights?.socialAttention)) : undefined,
+      isPresentValue(highlights?.socialNarrativeFocus) ? joinLabelValue(ui('report.narrativeFocus'), softenMissingValue(highlights?.socialNarrativeFocus)) : undefined,
+    ],
+    limit: 1,
+    keyResolver: narrativeSemanticKey,
+    seenKeys: narrativeSeen,
+    blockedTexts: narrativeSentimentItems,
+  });
+  const sentimentItems = narrativeSentimentItems.length > 0 ? narrativeSentimentItems : structuredSentimentFallback;
 
   return (
     <div className={cn(solidCardClass)} data-testid="risk-catalyst-panel">
-      <SectionHeader title={ui('report.riskCatalystSentiment')} />
+      <SectionHeader eyebrow={ui('report.evidence')} title={ui('report.riskCatalystSentiment')} />
 
       <div className="grid gap-3 xl:grid-cols-2">
         <NarrativeBucketCard
@@ -647,11 +895,39 @@ const NewsRiskPanel: React.FC<{
           items={sentimentItems}
           emptyText={ui('report.noFields')}
           tone="info"
-          footer={isMeaningfulText(reasonLayer?.sentimentSummary || highlights?.sentimentSummary) ? (
-            <p className="text-sm leading-5 text-secondary-text">
-              {softenMissingValue(reasonLayer?.sentimentSummary || highlights?.sentimentSummary)}
-            </p>
-          ) : null}
+        />
+      </div>
+    </div>
+  );
+};
+
+const SentimentAppendixPanel: React.FC<{
+  highlights?: StandardReportHighlights;
+  reasonLayer?: StandardReportReasonLayer;
+}> = ({ highlights, reasonLayer }) => {
+  const sourceItems = uniqueMeaningfulItems(highlights?.socialSources || [], 6);
+  const coverageContextItems = collectDedupedItems({
+    items: [
+      reasonLayer?.newsValueTier,
+      highlights?.newsValueGrade,
+    ],
+    limit: 2,
+    keyResolver: narrativeSemanticKey,
+  });
+
+  return (
+    <div className={cn(solidCardClass)}>
+      <SectionHeader eyebrow={ui('report.coverage')} title={ui('report.marketSentiment')} level={4} />
+      <div className="grid gap-3 xl:grid-cols-2">
+        <CoverageNoteList
+          title={ui('report.socialSources')}
+          items={sourceItems}
+          emptyText={ui('report.noFields')}
+        />
+        <CoverageNoteList
+          title={ui('report.sourceNotes')}
+          items={coverageContextItems}
+          emptyText={ui('report.noFields')}
         />
       </div>
     </div>
@@ -664,12 +940,12 @@ const CoverageNoteList: React.FC<{ title: string; items: string[]; emptyText: st
   emptyText,
 }) => (
   <div className={subtlePanelClass}>
-    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{title}</p>
+    <p className={cn(groupHeadingClass, 'border-b border-[var(--theme-panel-subtle-border)] pb-2.5')}>{title}</p>
     {items.length > 0 ? (
-      <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
+      <ul className="mt-3.5 space-y-2 text-sm leading-6 text-secondary-text">
         {items.map((item, index) => (
           <li key={`${item}-${index}`} className="border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
-            {item}
+            {localizeReportHeadingLabel(item, isEnglishUi() ? 'en' : 'zh')}
           </li>
         ))}
       </ul>
@@ -684,10 +960,26 @@ const CoverageAuditPanel: React.FC<{
   missingFieldAudit: MissingFieldAuditSummary;
 }> = ({ coverageNotes, missingFieldAudit }) => {
   const buckets = missingFieldAudit.buckets.filter((bucket) => bucket.entries.length > 0);
+  const missingFieldSemanticKeys = new Set(
+    buckets
+      .flatMap((bucket) => bucket.entries.map((entry) => coverageFieldSemanticKey(entry.field)))
+      .filter((token) => token.length > 0),
+  );
+  const coverageGapItems = collectDedupedItems({
+    items: coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes || [],
+    limit: 8,
+    keyResolver: (text) => `field:${coverageFieldSemanticKey(text) || narrativeSemanticKey(text)}`,
+  }).filter((item) => {
+    const semantic = coverageFieldSemanticKey(item);
+    if (!semantic || semantic.length < 3) {
+      return true;
+    }
+    return !missingFieldSemanticKeys.has(semantic);
+  });
 
   return (
     <div className={cn(solidCardClass)} data-testid="coverage-audit-panel">
-      <SectionHeader title={ui('report.coverageAuditTitle')} description={ui('report.coverageAuditHint')} />
+      <SectionHeader eyebrow={ui('report.coverage')} title={ui('report.coverageAuditTitle')} description={ui('report.coverageAuditHint')} />
 
       <div className="grid gap-3 xl:grid-cols-2">
         <CoverageNoteList
@@ -707,7 +999,7 @@ const CoverageAuditPanel: React.FC<{
         />
         <CoverageNoteList
           title={ui('report.coverageGaps')}
-          items={uniqueMeaningfulItems(coverageNotes?.coverageGaps || coverageNotes?.missingFieldNotes || [], 8)}
+          items={coverageGapItems}
           emptyText={ui('report.noCoverageGaps')}
         />
       </div>
@@ -717,7 +1009,7 @@ const CoverageAuditPanel: React.FC<{
           {buckets.map((bucket) => (
             <div key={bucket.category} className={subtlePanelClass}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
+                <p className={renderGroupLabelClass()}>
                   {missingCategoryLabel(bucket.category)}
                 </p>
                 <Badge variant="warning">{bucket.entries.length}</Badge>
@@ -725,8 +1017,8 @@ const CoverageAuditPanel: React.FC<{
               <ul className="mt-3 space-y-2 text-sm leading-5 text-secondary-text">
                 {bucket.entries.slice(0, 6).map((entry, index) => (
                   <li key={`${entry.field}-${entry.reason}-${index}`} className="border-b border-[var(--theme-panel-subtle-border)] pb-2 last:border-b-0 last:pb-0">
-                    <span className="font-medium text-foreground">{entry.field}</span>
-                    <span className="text-muted-text">：{entry.reason}</span>
+                    <span className="font-medium text-foreground">{localizeReportTermLabel(entry.field, isEnglishUi() ? 'en' : 'zh')}</span>
+                    <span className="text-muted-text">{localeColon()}{localizeReportHeadingLabel(entry.reason, isEnglishUi() ? 'en' : 'zh')}</span>
                   </li>
                 ))}
               </ul>
@@ -767,7 +1059,7 @@ const BattlePlanPanel: React.FC<{
 
   return (
     <div className={cn(solidCardClass)} data-testid="battle-plan-panel">
-      <SectionHeader title={ui('report.battlePlan')} />
+      <SectionHeader eyebrow={ui('report.execution')} title={ui('report.battlePlan')} />
 
       {topGridItems.length > 0 || lowerNotes.length > 0 ? (
         <div className="space-y-4">
@@ -779,7 +1071,7 @@ const BattlePlanPanel: React.FC<{
               {topGridItems.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-3.5 py-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{item.label}</p>
+                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'buy'
                         ? ui('report.planBuy')
@@ -801,7 +1093,7 @@ const BattlePlanPanel: React.FC<{
               {lowerNotes.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="theme-panel-subtle rounded-[1rem] px-4 py-3.5">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{item.label}</p>
+                    <p className={renderGroupLabelClass()}>{localizeReportHeadingLabel(item.label, isEnglishUi() ? 'en' : 'zh')}</p>
                     <Badge variant={badgeTone(item.tone)} className="min-w-[3.75rem]">
                       {item.tone === 'position'
                         ? ui('report.planPosition')
@@ -826,7 +1118,7 @@ const BattlePlanPanel: React.FC<{
         <div
           className="mt-4 rounded-[1rem] border border-[hsl(var(--accent-danger-hsl)/0.24)] bg-[hsl(var(--accent-danger-hsl)/0.12)] px-4 py-3"
         >
-          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--accent-danger)]">{ui('report.reminders')}</p>
+          <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-danger)]')}>{ui('report.reminders')}</p>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-danger-hsl)/0.9)]">
             {battlePlan.warnings.map((warning, index) => (
               <li key={`${warning}-${index}`}>{warning}</li>
@@ -844,7 +1136,7 @@ const MarketWarnings: React.FC<{ warnings: string[] }> = ({ warnings }) => {
   }
   return (
     <div className="rounded-[1rem] border border-[hsl(var(--accent-warning-hsl)/0.46)] bg-[hsl(var(--accent-warning-hsl)/0.14)] px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--accent-warning)]">{ui('report.basisNotes')}</p>
+      <p className={cn(renderGroupLabelClass(), 'text-[var(--accent-warning)]')}>{ui('report.basisNotes')}</p>
       <ul className="mt-3 space-y-2 text-sm leading-6 text-[hsl(var(--accent-warning-hsl)/0.9)]">
         {warnings.map((warning, index) => (
           <li key={`${warning}-${index}`}>{warning}</li>
@@ -874,7 +1166,7 @@ const DecisionSummaryHero: React.FC<{
 
   return (
     <section className={cn(glassCardClass)} data-testid="hero-summary-card">
-      <SectionHeader title={ui('report.topOverview')} description={compactMetaLine} />
+    <SectionHeader level={2} title={ui('report.topOverview')} description={compactMetaLine} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <div className="min-w-0">
@@ -917,68 +1209,107 @@ const DecisionSummaryHero: React.FC<{
   );
 };
 
-const CoverageCompactHint: React.FC<{
-  audit: MissingFieldAuditSummary;
-}> = ({ audit }) => {
-  const summary = buildCoverageCompactSummary(audit);
-  if (!summary) {
-    return null;
-  }
-  return (
-    <p className="mt-3 text-xs leading-5 text-muted-text">
-      {ui('report.coverageCompactPrefix')} {summary}。{ui('report.coverageCompactSuffix')}
-    </p>
-  );
-};
-
 const ExecutionPlanLayer: React.FC<{
   decisionPanel?: StandardReportDecisionPanel;
   checklistItems: StandardReportChecklistItem[];
-  missingFieldAudit: MissingFieldAuditSummary;
 }> = ({
   decisionPanel,
   checklistItems,
-  missingFieldAudit,
 }) => {
-  const actionItems = uniqueMeaningfulItems([
-    decisionPanel?.keyAction,
-    isPresentValue(decisionPanel?.idealEntry) ? `${ui('report.idealEntry')}：${softenMissingValue(decisionPanel?.idealEntry)}` : undefined,
-    isPresentValue(decisionPanel?.backupEntry) ? `${ui('report.backupEntry')}：${softenMissingValue(decisionPanel?.backupEntry)}` : undefined,
-    isPresentValue(decisionPanel?.stopLoss) ? `${ui('report.stopLoss')}：${softenMissingValue(decisionPanel?.stopLoss)}` : undefined,
-    isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? `${ui('report.targetOne')}：${softenMissingValue(decisionPanel?.targetOne || decisionPanel?.target)}` : undefined,
-    isPresentValue(decisionPanel?.targetTwo) ? `${ui('report.targetTwo')}：${softenMissingValue(decisionPanel?.targetTwo)}` : undefined,
-    decisionPanel?.positionSizing ? `${ui('report.positionSizing')}：${softenMissingValue(decisionPanel?.positionSizing)}` : undefined,
-  ], 7);
-
-  const pendingChecklist = uniqueMeaningfulItems([
-    ...checklistItems
-      .filter((item) => isPendingChecklistStatus(item.status))
-      .map((item) => item.text),
-    ...(decisionPanel?.executionReminders || []),
-  ], 8);
+  const executionSeen = new Set<string>();
+  const currentActionItems = collectDedupedItems({
+    items: [decisionPanel?.keyAction || decisionPanel?.noPositionAdvice],
+    limit: 1,
+    keyResolver: executionSemanticKey,
+    seenKeys: executionSeen,
+  });
+  const newPositionItems = collectDedupedItems({
+    items: [
+      decisionPanel?.noPositionAdvice,
+      isPresentValue(decisionPanel?.idealEntry) ? joinLabelValue(ui('report.idealEntry'), softenMissingValue(decisionPanel?.idealEntry)) : undefined,
+      isPresentValue(decisionPanel?.backupEntry) ? joinLabelValue(ui('report.backupEntry'), softenMissingValue(decisionPanel?.backupEntry)) : undefined,
+      decisionPanel?.buildStrategy ? joinLabelValue(ui('report.buildStrategy'), softenMissingValue(decisionPanel?.buildStrategy)) : undefined,
+    ],
+    limit: 4,
+    keyResolver: executionSemanticKey,
+    seenKeys: executionSeen,
+  });
+  const existingPositionItems = collectDedupedItems({
+    items: [
+      decisionPanel?.holderAdvice,
+      decisionPanel?.positionSizing ? joinLabelValue(ui('report.positionSizing'), softenMissingValue(decisionPanel?.positionSizing)) : undefined,
+    ],
+    limit: 3,
+    keyResolver: executionSemanticKey,
+    seenKeys: executionSeen,
+  });
+  const baseConditionsAndRiskControl = collectDedupedItems({
+    items: [
+      ...checklistItems
+        .filter((item) => isPendingChecklistStatus(item.status))
+        .map((item) => item.text),
+      isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenMissingValue(decisionPanel?.stopLoss)) : undefined,
+      isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenMissingValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
+      isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenMissingValue(decisionPanel?.targetTwo)) : undefined,
+      decisionPanel?.riskControlStrategy ? joinLabelValue(ui('report.riskControl'), softenMissingValue(decisionPanel?.riskControlStrategy)) : undefined,
+    ],
+    limit: 6,
+    keyResolver: executionSemanticKey,
+    seenKeys: executionSeen,
+  });
+  const compressedReminder = collectDedupedItems({
+    items: decisionPanel?.executionReminders || [],
+    limit: 1,
+    keyResolver: executionSemanticKey,
+    seenKeys: executionSeen,
+    blockedTexts: [
+      ...currentActionItems,
+      ...newPositionItems,
+      ...existingPositionItems,
+      ...baseConditionsAndRiskControl,
+    ],
+  });
+  const conditionsAndRiskControl = [...baseConditionsAndRiskControl, ...compressedReminder].slice(0, 6);
 
   return (
     <section className={cn(solidCardClass)} data-testid="execution-risk-layer">
-      <SectionHeader title={ui('report.executionPlanTitle')} description={ui('report.executionPlanHint')} />
+      <SectionHeader eyebrow={ui('report.executionRiskLayerTitle')} title={ui('report.executionPlanTitle')} />
 
       <div className="grid gap-3 xl:grid-cols-2">
         <ExecutionListCard
-          title={ui('report.keyAction')}
+          title={ui('report.currentAction')}
           tone="success"
-          items={actionItems}
+          items={currentActionItems}
           emptyText={ui('report.noFields')}
           testId="key-actions-card"
         />
 
         <ExecutionListCard
-          title={ui('report.entryChecklist')}
+          title={ui('report.forNewPositions')}
           tone="info"
-          items={pendingChecklist}
+          items={newPositionItems}
+          emptyText={ui('report.noFields')}
+          testId="new-positions-card"
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <ExecutionListCard
+          title={ui('report.forExistingPositions')}
+          tone="info"
+          items={existingPositionItems}
+          emptyText={ui('report.noFields')}
+          testId="existing-positions-card"
+        />
+
+        <ExecutionListCard
+          title={ui('report.conditionsRiskControl')}
+          tone="info"
+          items={conditionsAndRiskControl}
           emptyText={ui('report.noPendingConditions')}
           testId="watch-checklist-card"
         />
       </div>
-      <CoverageCompactHint audit={missingFieldAudit} />
     </section>
   );
 };
@@ -1031,15 +1362,11 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
       <ExecutionPlanLayer
         decisionPanel={standardReport.decisionPanel}
         checklistItems={standardReport.checklistItems || []}
-        missingFieldAudit={missingFieldAudit}
       />
 
       <NewsRiskPanel
         highlights={standardReport.highlights}
         reasonLayer={standardReport.reasonLayer}
-        checklistItems={standardReport.checklistItems || []}
-        marketWarnings={warnings}
-        battlePlan={standardReport.battlePlanCompact}
       />
 
       <section className={cn(solidCardClass)} data-testid="deep-appendix-layer">
@@ -1060,16 +1387,16 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
                 decisionContext={standardReport.decisionContext}
                 checklistItems={standardReport.checklistItems || []}
                 reasonLayer={standardReport.reasonLayer}
+                decisionPanel={standardReport.decisionPanel}
+                highlights={standardReport.highlights}
+                summaryOneLine={standardReport.summaryPanel?.oneSentence || report.summary.analysisSummary}
               />
             </AppendixDisclosure>
 
             <AppendixDisclosure title={ui('report.appendixSentiment')} testId="appendix-sentiment-disclosure">
-              <NewsRiskPanel
+              <SentimentAppendixPanel
                 highlights={standardReport.highlights}
                 reasonLayer={standardReport.reasonLayer}
-                checklistItems={standardReport.checklistItems || []}
-                marketWarnings={warnings}
-                battlePlan={standardReport.battlePlanCompact}
               />
             </AppendixDisclosure>
 

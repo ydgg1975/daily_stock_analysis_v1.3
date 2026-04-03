@@ -2,6 +2,8 @@ import type React from 'react';
 import type { TaskInfo } from '../../types/analysis';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { inferAnalysisStage } from '../../utils/analysisStatus';
+import { buildTaskExecutionSummary } from '../../utils/runtimeExecution';
+import { ExecutionSummaryCard } from '../runtime/ExecutionSummaryCard';
 
 const STATUS_TONE_CLASS: Record<string, string> = {
   queued: 'theme-task-status theme-task-status--queued',
@@ -15,9 +17,10 @@ const STATUS_TONE_CLASS: Record<string, string> = {
 
 interface TaskItemProps {
   task: TaskInfo;
+  showExecutionSummary?: boolean;
 }
 
-const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, showExecutionSummary = true }) => {
   const { language, t } = useI18n();
   const stage = inferAnalysisStage(task, { isSubmitting: false }) || 'queued';
   const timeFormatter = new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
@@ -61,6 +64,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
           {stateLabel}
         </span>
       </div>
+      {showExecutionSummary ? <ExecutionSummaryCard summary={buildTaskExecutionSummary(task)} compact /> : null}
     </div>
   );
 };
@@ -71,6 +75,10 @@ interface TaskPanelProps {
   title?: string;
   className?: string;
   embedded?: boolean;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
+  hasRunningTasks?: boolean;
+  showExecutionSummary?: boolean;
 }
 
 export const TaskPanel: React.FC<TaskPanelProps> = ({
@@ -79,6 +87,10 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
   title,
   className = '',
   embedded = false,
+  onRefresh,
+  isRefreshing = false,
+  hasRunningTasks = false,
+  showExecutionSummary = true,
 }) => {
   const { t } = useI18n();
 
@@ -109,9 +121,23 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-text">
+          {hasRunningTasks ? <span>{t('tasks.autoRefreshing')}</span> : null}
           {processingCount > 0 ? <span>{processingCount} {t('tasks.processing')}</span> : null}
           {completedCount > 0 ? <span>{completedCount} {t('tasks.completed')}</span> : null}
           {failedCount > 0 ? <span>{failedCount} {t('tasks.failed')}</span> : null}
+          {onRefresh ? (
+            <button
+              type="button"
+              onClick={() => void onRefresh()}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[11px] text-secondary-text hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <svg className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{isRefreshing ? t('tasks.refreshing') : t('tasks.refresh')}</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -122,7 +148,7 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
       ) : (
         <div className={embedded ? 'max-h-36 grid grid-cols-1 gap-1.5 overflow-y-auto px-3 pb-3 pt-3' : 'max-h-64 grid grid-cols-1 gap-1.5 overflow-y-auto p-2 lg:grid-cols-2'}>
           {tasks.map((task) => (
-            <TaskItem key={task.taskId} task={task} />
+            <TaskItem key={task.taskId} task={task} showExecutionSummary={showExecutionSummary} />
           ))}
         </div>
       )}

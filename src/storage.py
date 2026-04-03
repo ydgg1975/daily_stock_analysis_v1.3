@@ -40,6 +40,7 @@ from sqlalchemy import (
     or_,
     delete,
     desc,
+    asc,
     func,
 )
 from sqlalchemy.orm import (
@@ -269,6 +270,66 @@ class AnalysisHistory(Base):
             'take_profit': self.take_profit,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class ExecutionLogSession(Base):
+    """
+    管理员可观测执行会话（D2）。
+
+    每次分析任务对应一个会话，存储执行总体状态与关联信息。
+    """
+
+    __tablename__ = 'execution_log_sessions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), nullable=False, unique=True, index=True)
+    task_id = Column(String(64), index=True)
+    query_id = Column(String(64), index=True)
+    analysis_history_id = Column(Integer, ForeignKey('analysis_history.id'), index=True)
+    code = Column(String(10), index=True)
+    name = Column(String(50))
+    overall_status = Column(String(32), nullable=False, default='running', index=True)
+    truth_level = Column(String(16), nullable=False, default='mixed')
+    summary_json = Column(Text)
+    started_at = Column(DateTime, default=datetime.now, index=True)
+    ended_at = Column(DateTime, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index('ix_exec_session_code_started', 'code', 'started_at'),
+        Index('ix_exec_session_query_started', 'query_id', 'started_at'),
+    )
+
+
+class ExecutionLogEvent(Base):
+    """
+    执行会话的结构化事件流（D2）。
+
+    phase 示例：
+    - ai
+    - data.market / data.fundamentals / data.news / data.sentiment
+    - notification
+    """
+
+    __tablename__ = 'execution_log_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    event_at = Column(DateTime, default=datetime.now, index=True)
+    phase = Column(String(48), nullable=False, index=True)
+    step = Column(String(48), index=True)
+    target = Column(String(128), index=True)
+    status = Column(String(32), nullable=False, index=True)
+    truth_level = Column(String(16), nullable=False, default='inferred', index=True)
+    message = Column(Text)
+    error_code = Column(String(64))
+    detail_json = Column(Text)
+
+    __table_args__ = (
+        Index('ix_exec_event_session_time', 'session_id', 'event_at'),
+        Index('ix_exec_event_phase_status', 'phase', 'status'),
+    )
 
 
 class BacktestResult(Base):
@@ -1267,6 +1328,292 @@ class DatabaseManager:
                 .limit(1)
             ).scalars().first()
             return result
+
+    def create_execution_log_session(
+        self,
+        *,
+        session_id: str,
+        task_id: Optional[str] = None,
+        query_id: Optional[str] = None,
+        code: Optional[str] = None,
+        name: Optional[str] = None,
+        overall_status: str = "running",
+        truth_level: str = "mixed",
+        summary: Optional[Dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
+    ) -> None:
+        """Create or update an execution log session."""
+        if not session_id:
+            return
+        now = datetime.now()
+        with self.session_scope() as session:
+            row = session.execute(
+                select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
+            ).scalars().first()
+            if row is None:
+                row = ExecutionLogSession(
+                    session_id=session_id,
+                    task_id=task_id,
+                    query_id=query_id,
+                    code=code,
+                    name=name,
+                    overall_status=overall_status,
+                    truth_level=truth_level,
+                    summary_json=self._safe_json_dumps(summary or {}),
+                    started_at=started_at or now,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.task_id = task_id or row.task_id
+                row.query_id = query_id or row.query_id
+                row.code = code or row.code
+                row.name = name or row.name
+                row.overall_status = overall_status or row.overall_status
+                row.truth_level = truth_level or row.truth_level
+                if summary is not None:
+                    row.summary_json = self._safe_json_dumps(summary)
+                if started_at is not None:
+                    row.started_at = started_at
+                row.updated_at = now
+
+    def append_execution_log_event(
+        self,
+        *,
+        session_id: str,
+        phase: str,
+        status: str,
+        step: Optional[str] = None,
+        target: Optional[str] = None,
+        truth_level: str = "inferred",
+        message: Optional[str] = None,
+        error_code: Optional[str] = None,
+        detail: Optional[Dict[str, Any]] = None,
+        event_at: Optional[datetime] = None,
+    ) -> None:
+        """Append a structured event into execution logs."""
+        if not session_id or not phase:
+            return
+        row = ExecutionLogEvent(
+            session_id=session_id,
+            event_at=event_at or datetime.now(),
+            phase=str(phase).strip(),
+            step=str(step).strip() if step else None,
+            target=str(target).strip() if target else None,
+            status=str(status or "unknown").strip(),
+            truth_level=str(truth_level or "inferred").strip(),
+            message=(str(message).strip() or None) if message is not None else None,
+            error_code=(str(error_code).strip() or None) if error_code is not None else None,
+            detail_json=self._safe_json_dumps(detail or {}),
+        )
+        with self.session_scope() as session:
+            session.add(row)
+
+    def finalize_execution_log_session(
+        self,
+        *,
+        session_id: str,
+        overall_status: str,
+        truth_level: str = "mixed",
+        query_id: Optional[str] = None,
+        analysis_history_id: Optional[int] = None,
+        summary: Optional[Dict[str, Any]] = None,
+        ended_at: Optional[datetime] = None,
+    ) -> None:
+        """Finalize a session status and enrich linkage fields."""
+        if not session_id:
+            return
+        now = datetime.now()
+        with self.session_scope() as session:
+            row = session.execute(
+                select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
+            ).scalars().first()
+            if row is None:
+                return
+            row.overall_status = str(overall_status or row.overall_status).strip()
+            row.truth_level = str(truth_level or row.truth_level).strip()
+            if query_id:
+                row.query_id = query_id
+            if analysis_history_id is not None:
+                row.analysis_history_id = int(analysis_history_id)
+            if summary is not None:
+                row.summary_json = self._safe_json_dumps(summary)
+            row.ended_at = ended_at or now
+            row.updated_at = now
+
+    def attach_execution_session_to_query(
+        self,
+        *,
+        session_id: str,
+        query_id: Optional[str],
+    ) -> None:
+        """Attach query_id/history_id linkage once history is persisted."""
+        if not session_id:
+            return
+        with self.session_scope() as session:
+            row = session.execute(
+                select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
+            ).scalars().first()
+            if row is None:
+                return
+            if query_id:
+                row.query_id = query_id
+                latest = session.execute(
+                    select(AnalysisHistory)
+                    .where(AnalysisHistory.query_id == query_id)
+                    .order_by(desc(AnalysisHistory.created_at))
+                    .limit(1)
+                ).scalars().first()
+                if latest is not None:
+                    row.analysis_history_id = latest.id
+            row.updated_at = datetime.now()
+
+    def list_execution_log_sessions(
+        self,
+        *,
+        stock_code: Optional[str] = None,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        channel: Optional[str] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """List execution sessions with optional event-level filtering."""
+        with self.get_session() as session:
+            session_filters = []
+            if stock_code:
+                session_filters.append(ExecutionLogSession.code == stock_code)
+            if status:
+                session_filters.append(ExecutionLogSession.overall_status == status)
+            if date_from:
+                session_filters.append(ExecutionLogSession.started_at >= date_from)
+            if date_to:
+                session_filters.append(ExecutionLogSession.started_at <= date_to)
+
+            event_filters = []
+            if category:
+                event_filters.append(ExecutionLogEvent.phase == category)
+            if provider:
+                event_filters.append(ExecutionLogEvent.target.ilike(f"%{provider}%"))
+            if model:
+                event_filters.append(
+                    and_(
+                        ExecutionLogEvent.phase.in_(["ai", "ai_model"]),
+                        ExecutionLogEvent.target.ilike(f"%{model}%"),
+                    )
+                )
+            if channel:
+                event_filters.append(and_(ExecutionLogEvent.phase == "notification", ExecutionLogEvent.target.ilike(f"%{channel}%")))
+
+            where_clause = and_(*session_filters) if session_filters else True
+            if event_filters:
+                event_where = and_(*event_filters)
+                matched_session_ids = session.execute(
+                    select(ExecutionLogEvent.session_id).where(event_where).distinct()
+                ).scalars().all()
+                if not matched_session_ids:
+                    return [], 0
+                where_clause = and_(where_clause, ExecutionLogSession.session_id.in_(matched_session_ids))
+
+            total = session.execute(
+                select(func.count(ExecutionLogSession.id)).where(where_clause)
+            ).scalar() or 0
+
+            rows = session.execute(
+                select(ExecutionLogSession)
+                .where(where_clause)
+                .order_by(desc(ExecutionLogSession.started_at))
+                .offset(max(0, int(offset)))
+                .limit(max(1, min(int(limit), 200)))
+            ).scalars().all()
+
+            items: List[Dict[str, Any]] = []
+            for row in rows:
+                summary = {}
+                try:
+                    summary = json.loads(row.summary_json or "{}")
+                except Exception:
+                    summary = {}
+                items.append(
+                    {
+                        "session_id": row.session_id,
+                        "task_id": row.task_id,
+                        "query_id": row.query_id,
+                        "analysis_history_id": row.analysis_history_id,
+                        "code": row.code,
+                        "name": row.name,
+                        "overall_status": row.overall_status,
+                        "truth_level": row.truth_level,
+                        "started_at": row.started_at.isoformat() if row.started_at else None,
+                        "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+                        "summary": summary if isinstance(summary, dict) else {},
+                    }
+                )
+            return items, int(total)
+
+    def get_execution_log_session_detail(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Return one execution session with its event timeline."""
+        if not session_id:
+            return None
+        with self.get_session() as session:
+            row = session.execute(
+                select(ExecutionLogSession).where(ExecutionLogSession.session_id == session_id)
+            ).scalars().first()
+            if row is None:
+                return None
+
+            event_rows = session.execute(
+                select(ExecutionLogEvent)
+                .where(ExecutionLogEvent.session_id == session_id)
+                .order_by(asc(ExecutionLogEvent.event_at), asc(ExecutionLogEvent.id))
+            ).scalars().all()
+            events: List[Dict[str, Any]] = []
+            for event in event_rows:
+                detail = {}
+                try:
+                    detail = json.loads(event.detail_json or "{}")
+                except Exception:
+                    detail = {}
+                events.append(
+                    {
+                        "id": event.id,
+                        "event_at": event.event_at.isoformat() if event.event_at else None,
+                        "phase": event.phase,
+                        "step": event.step,
+                        "target": event.target,
+                        "status": event.status,
+                        "truth_level": event.truth_level,
+                        "message": event.message,
+                        "error_code": event.error_code,
+                        "detail": detail if isinstance(detail, dict) else {},
+                    }
+                )
+
+            summary = {}
+            try:
+                summary = json.loads(row.summary_json or "{}")
+            except Exception:
+                summary = {}
+
+            return {
+                "session_id": row.session_id,
+                "task_id": row.task_id,
+                "query_id": row.query_id,
+                "analysis_history_id": row.analysis_history_id,
+                "code": row.code,
+                "name": row.name,
+                "overall_status": row.overall_status,
+                "truth_level": row.truth_level,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+                "summary": summary if isinstance(summary, dict) else {},
+                "events": events,
+            }
     
     def get_data_range(
         self, 

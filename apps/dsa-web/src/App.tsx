@@ -9,6 +9,8 @@ import NotFoundPage from './pages/NotFoundPage';
 import ChatPage from './pages/ChatPage';
 import PortfolioPage from './pages/PortfolioPage';
 import PreviewReportPage from './pages/PreviewReportPage';
+import PreviewFullReportDrawerPage from './pages/PreviewFullReportDrawerPage';
+import AdminLogsPage from './pages/AdminLogsPage';
 import { ApiErrorAlert, BrandedLoadingScreen, Shell } from './components/common';
 import { PreviewShell } from './components/layout/PreviewShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -101,6 +103,7 @@ const AppContent: React.FC = () => {
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/backtest" element={<BacktestPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/admin/logs" element={<AdminLogsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="/login" element={<LoginPage />} />
@@ -127,6 +130,7 @@ const PreviewRoutes: React.FC = () => (
   <PreviewShell>
     <Routes>
       <Route path="/__preview/report" element={<PreviewReportPage />} />
+      <Route path="/__preview/full-report" element={<PreviewFullReportDrawerPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   </PreviewShell>

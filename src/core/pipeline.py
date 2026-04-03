@@ -331,6 +331,15 @@ class StockAnalysisPipeline:
                 "fundamentals_status": "unknown",
                 "earnings_status": "unknown",
                 "sentiment_status": "unknown",
+                "search_enabled": bool(self.search_service.is_available),
+                "news_status": "unknown",
+                "news_provider": None,
+                "news_provider_chain": [],
+                "news_attempt_chain": [],
+                "news_fallback_triggered": False,
+                "sentiment_provider": None,
+                "market_source_chain": [],
+                "ai_attempt_chain": [],
                 "failure_reasons": [],
             }
 
@@ -338,6 +347,14 @@ class StockAnalysisPipeline:
             realtime_quote = None
             try:
                 realtime_quote = self.fetcher_manager.get_realtime_quote(code)
+                market_source_chain = (
+                    self.fetcher_manager.get_last_realtime_quote_trace()
+                    if hasattr(self.fetcher_manager, "get_last_realtime_quote_trace")
+                    else []
+                )
+                diagnostics["market_source_chain"] = (
+                    market_source_chain if isinstance(market_source_chain, list) else []
+                )
                 if realtime_quote:
                     diagnostics["realtime_source"] = (
                         realtime_quote.source.value if hasattr(realtime_quote, "source") else "unknown"
@@ -468,6 +485,28 @@ class StockAnalysisPipeline:
                     total_results = sum(
                         len(r.results) for r in intel_results.values() if r.success
                     )
+                    provider_chain: List[str] = []
+                    news_attempt_chain: List[Dict[str, Any]] = []
+                    for response in intel_results.values():
+                        if response and isinstance(getattr(response, "attempts", None), list):
+                            for attempt in getattr(response, "attempts", []) or []:
+                                if isinstance(attempt, dict):
+                                    news_attempt_chain.append(dict(attempt))
+                        if not response or not getattr(response, "success", False):
+                            continue
+                        provider_name = str(getattr(response, "provider", "") or "").strip()
+                        if not provider_name:
+                            continue
+                        normalized_provider = provider_name.lower()
+                        if normalized_provider in {"none", "filtered"}:
+                            continue
+                        if provider_name not in provider_chain:
+                            provider_chain.append(provider_name)
+                    diagnostics["news_provider_chain"] = provider_chain
+                    diagnostics["news_attempt_chain"] = news_attempt_chain
+                    diagnostics["news_provider"] = provider_chain[0] if provider_chain else None
+                    diagnostics["news_fallback_triggered"] = len(provider_chain) > 1
+                    diagnostics["news_status"] = "ok" if total_results > 0 else "configured_not_used"
                     logger.info(f"{stock_name}({code}) 情报搜索完成: 共 {total_results} 条结果")
                     logger.debug(f"{stock_name}({code}) 情报搜索结果:\n{news_context}")
 
@@ -487,6 +526,7 @@ class StockAnalysisPipeline:
                     except Exception as e:
                         logger.warning(f"{stock_name}({code}) 保存新闻情报失败: {e}")
             else:
+                diagnostics["news_status"] = "not_configured"
                 logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
 
             # Step 4.5: Social sentiment intelligence (US stocks only)
@@ -494,6 +534,7 @@ class StockAnalysisPipeline:
                 try:
                     social_context = self.social_sentiment_service.get_social_context(code)
                     if social_context:
+                        diagnostics["sentiment_provider"] = "social_sentiment_service"
                         logger.info(f"{stock_name}({code}) Social sentiment data retrieved")
                         if news_context:
                             news_context = news_context + "\n\n" + social_context
@@ -501,6 +542,8 @@ class StockAnalysisPipeline:
                             news_context = social_context
                 except Exception as e:
                     logger.warning(f"{stock_name}({code}) Social sentiment fetch failed: {e}")
+            if not diagnostics.get("sentiment_provider"):
+                diagnostics["sentiment_provider"] = diagnostics.get("news_provider")
 
             # Step 5: 获取分析上下文（技术面数据）
             context = self.db.get_analysis_context(code)
@@ -663,6 +706,8 @@ class StockAnalysisPipeline:
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             result = self.analyzer.analyze(enhanced_context, news_context=news_context)
             if result:
+                ai_attempt_chain = getattr(result, "ai_attempt_chain", [])
+                diagnostics["ai_attempt_chain"] = ai_attempt_chain if isinstance(ai_attempt_chain, list) else []
                 self._inject_structured_blocks_into_result(result, enhanced_context)
 
             # Step 7.5: 填充分析时的价格信息到 result
@@ -683,6 +728,11 @@ class StockAnalysisPipeline:
                     code=code,
                     query_id=query_id,
                     result=result,
+                )
+                result.runtime_execution = self._build_runtime_execution_summary(
+                    result=result,
+                    enhanced_context=enhanced_context,
+                    diagnostics=diagnostics,
                 )
 
             # Step 8: 保存分析历史记录
@@ -755,6 +805,249 @@ class StockAnalysisPipeline:
             intel.setdefault("social_context", enhanced_context.get("social_context"))
         dashboard["intelligence"] = intel
         result.dashboard = dashboard
+
+    @staticmethod
+    def _runtime_truth(value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"actual", "inferred", "unavailable"}:
+            return normalized
+        return "unavailable"
+
+    @staticmethod
+    def _first_non_empty(items: List[Any]) -> Optional[str]:
+        for item in items:
+            text = str(item).strip() if item is not None else ""
+            if text:
+                return text
+        return None
+
+    @staticmethod
+    def _safe_runtime_status(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {
+            "ok",
+            "partial",
+            "failed",
+            "unknown",
+            "skipped",
+            "not_configured",
+            "configured_not_used",
+            "used_unrecorded",
+        }:
+            return normalized
+        return "unknown"
+
+    @staticmethod
+    def _pick_success_provider_from_chain(chain: Any) -> tuple[Optional[str], bool]:
+        if not isinstance(chain, list):
+            return None, False
+        ordered = [item for item in chain if isinstance(item, dict)]
+        if not ordered:
+            return None, False
+        success_idx = -1
+        success_provider: Optional[str] = None
+        for idx, item in enumerate(ordered):
+            action = str(item.get("action") or "").strip().lower()
+            if action in {"selected", "switched", "switched_to_fallback", "skipped"}:
+                continue
+            result = str(item.get("result") or item.get("status") or item.get("outcome") or "").strip().lower()
+            provider = str(item.get("provider") or item.get("source") or item.get("target") or "").strip()
+            if result in {"ok", "success", "partial", "succeeded", "completed", "partial_success"} and provider:
+                success_idx = idx
+                success_provider = provider
+                break
+        if success_provider:
+            return success_provider, success_idx > 0
+        first_provider = (
+            str(ordered[0].get("provider") or ordered[0].get("source") or ordered[0].get("target") or "").strip()
+            or None
+        )
+        return first_provider, len(ordered) > 1
+
+    @staticmethod
+    def _parse_provider_from_model(model: Optional[str]) -> Optional[str]:
+        model_name = str(model or "").strip()
+        if "/" in model_name:
+            provider = model_name.split("/", 1)[0].strip()
+            return provider or None
+        return None
+
+    @staticmethod
+    def _extract_final_reason_from_chain(chain: Any) -> Optional[str]:
+        if not isinstance(chain, list):
+            return None
+        for item in reversed(chain):
+            if not isinstance(item, dict):
+                continue
+            for key in ("reason", "message", "note"):
+                value = str(item.get(key) or "").strip()
+                if value:
+                    return value
+        return None
+
+    def _build_runtime_execution_summary(
+        self,
+        *,
+        result: AnalysisResult,
+        enhanced_context: Dict[str, Any],
+        diagnostics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        model_used = str(getattr(result, "model_used", "") or "").strip()
+        provider = self._parse_provider_from_model(model_used)
+        llm_channels = getattr(self.config, "llm_channels", []) or []
+        primary_gateway = None
+        backup_gateway = None
+        if llm_channels and isinstance(llm_channels[0], dict):
+            primary_gateway = str(llm_channels[0].get("name") or "").strip() or None
+        if len(llm_channels) > 1 and isinstance(llm_channels[1], dict):
+            backup_gateway = str(llm_channels[1].get("name") or "").strip() or None
+        configured_primary = str(getattr(self.config, "litellm_model", "") or "").strip()
+        configured_fallbacks = {
+            str(item).strip()
+            for item in (getattr(self.config, "litellm_fallback_models", []) or [])
+            if str(item).strip()
+        }
+
+        ai_fallback_occurred = False
+        ai_fallback_truth = "unavailable"
+        if model_used:
+            ai_fallback_truth = "inferred"
+            ai_fallback_occurred = bool(
+                configured_fallbacks and model_used in configured_fallbacks
+            ) or (
+                configured_primary
+                and configured_primary != model_used
+                and model_used in configured_fallbacks
+            )
+
+        realtime_context = enhanced_context.get("realtime") if isinstance(enhanced_context.get("realtime"), dict) else {}
+        market_source_chain = diagnostics.get("market_source_chain")
+        if not isinstance(market_source_chain, list):
+            market_source_chain = []
+        market_source, market_fallback = self._pick_success_provider_from_chain(market_source_chain)
+        if not market_source:
+            market_source = str(realtime_context.get("source") or "").strip() or None
+            market_fallback = bool(
+                market_source and "fallback" in market_source.lower()
+            ) or bool(diagnostics.get("realtime_fallback_triggered"))
+
+        fundamental_context = enhanced_context.get("fundamental_context")
+        fundamental_chain = []
+        if isinstance(fundamental_context, dict):
+            fundamental_chain = fundamental_context.get("source_chain") or []
+        fundamental_source, fundamental_fallback = self._pick_success_provider_from_chain(fundamental_chain)
+
+        sentiment_block = enhanced_context.get("sentiment_analysis") if isinstance(enhanced_context.get("sentiment_analysis"), dict) else {}
+        sentiment_status = self._safe_runtime_status(sentiment_block.get("status"))
+        sentiment_provider = self._first_non_empty([
+            diagnostics.get("sentiment_provider"),
+            ((enhanced_context.get("data_quality") or {}).get("provider_notes") or {}).get("sentiment")
+            if isinstance((enhanced_context.get("data_quality") or {}), dict) else None,
+        ])
+
+        fundamentals_block = enhanced_context.get("fundamentals") if isinstance(enhanced_context.get("fundamentals"), dict) else {}
+        fundamentals_status = self._safe_runtime_status(fundamentals_block.get("status"))
+        news_provider = self._first_non_empty([
+            diagnostics.get("news_provider"),
+            ((enhanced_context.get("data_quality") or {}).get("provider_notes") or {}).get("news")
+            if isinstance((enhanced_context.get("data_quality") or {}), dict) else None,
+        ])
+        news_provider_chain = diagnostics.get("news_provider_chain")
+        if not isinstance(news_provider_chain, list):
+            news_provider_chain = []
+        news_attempt_chain = diagnostics.get("news_attempt_chain")
+        if not isinstance(news_attempt_chain, list):
+            news_attempt_chain = []
+        if news_attempt_chain:
+            picked_news_provider, picked_news_fallback = self._pick_success_provider_from_chain(news_attempt_chain)
+            if picked_news_provider:
+                news_provider = picked_news_provider
+                news_provider_chain = news_attempt_chain
+                if picked_news_fallback:
+                    diagnostics["news_fallback_triggered"] = True
+        news_status = self._safe_runtime_status(diagnostics.get("news_status"))
+        if news_status == "unknown":
+            if diagnostics.get("search_enabled"):
+                news_status = "configured_not_used"
+            else:
+                news_status = "not_configured"
+        if sentiment_status == "unknown":
+            sentiment_status = "configured_not_used" if diagnostics.get("search_enabled") else "not_configured"
+        news_truth = "actual" if news_provider else ("inferred" if diagnostics.get("search_enabled") else "unavailable")
+        sentiment_truth = "actual" if sentiment_provider else ("inferred" if diagnostics.get("search_enabled") else "unavailable")
+        ai_attempt_chain = diagnostics.get("ai_attempt_chain")
+        if not isinstance(ai_attempt_chain, list):
+            ai_attempt_chain = []
+
+        return {
+            "ai": {
+                "model": model_used or None,
+                "provider": provider,
+                "gateway": primary_gateway,
+                "model_truth": "actual" if model_used else "unavailable",
+                "provider_truth": "inferred" if provider else "unavailable",
+                "gateway_truth": "inferred" if primary_gateway else "unavailable",
+                "fallback_occurred": ai_fallback_occurred,
+                "fallback_truth": ai_fallback_truth,
+                "configured_primary_gateway": primary_gateway,
+                "configured_backup_gateway": backup_gateway,
+                "configured_primary_model": configured_primary or None,
+                "attempt_chain": ai_attempt_chain,
+            },
+            "data": {
+                "market": {
+                    "source": market_source,
+                    "truth": "actual" if market_source else "unavailable",
+                    "fallback_occurred": market_fallback,
+                    "status": "ok" if market_source else "unknown",
+                    "source_chain": market_source_chain,
+                    "final_reason": self._extract_final_reason_from_chain(market_source_chain),
+                },
+                "fundamentals": {
+                    "source": fundamental_source,
+                    "truth": "actual" if fundamental_source else "unavailable",
+                    "fallback_occurred": fundamental_fallback,
+                    "status": fundamentals_status,
+                    "source_chain": fundamental_chain if isinstance(fundamental_chain, list) else [],
+                    "final_reason": self._extract_final_reason_from_chain(fundamental_chain),
+                },
+                "news": {
+                    "source": news_provider,
+                    "truth": self._runtime_truth(news_truth),
+                    "fallback_occurred": bool(diagnostics.get("news_fallback_triggered")),
+                    "status": news_status,
+                    "source_chain": news_provider_chain,
+                    "final_reason": self._extract_final_reason_from_chain(news_provider_chain),
+                },
+                "sentiment": {
+                    "source": sentiment_provider,
+                    "truth": self._runtime_truth(sentiment_truth),
+                    "fallback_occurred": False,
+                    "status": sentiment_status,
+                    "final_reason": self._first_non_empty([
+                        diagnostics.get("sentiment_reason"),
+                        sentiment_block.get("reason") if isinstance(sentiment_block, dict) else None,
+                    ]),
+                },
+            },
+            "notification": getattr(result, "notification_result", None),
+            "steps": [
+                {
+                    "key": "data_fetch",
+                    "status": "ok" if market_source else "unknown",
+                },
+                {
+                    "key": "ai_analysis",
+                    "status": "ok" if model_used else "unknown",
+                },
+                {
+                    "key": "notification",
+                    "status": self._safe_runtime_status(
+                        (getattr(result, "notification_result", {}) or {}).get("status")
+                    ),
+                },
+            ],
+        }
 
     @staticmethod
     def _load_raw_result_payload(raw_result: Any) -> Dict[str, Any]:
@@ -3502,25 +3795,108 @@ class StockAnalysisPipeline:
                     )
                 
                 # 单股推送模式（#55）：每分析完一只股票立即推送
-                if single_stock_notify and self.notifier.is_available():
+                if single_stock_notify:
+                    available_channels = []
                     try:
-                        # 根据报告类型选择生成方法
-                        if report_type == ReportType.FULL:
-                            report_content = self.notifier.generate_dashboard_report([result])
-                            logger.info(f"[{code}] 使用完整报告格式")
-                        elif report_type == ReportType.BRIEF:
-                            report_content = self.notifier.generate_brief_report([result])
-                            logger.info(f"[{code}] 使用简洁报告格式")
-                        else:
-                            report_content = self.notifier.generate_single_stock_report(result)
-                            logger.info(f"[{code}] 使用精简报告格式")
-                        
-                        if self.notifier.send(report_content, email_stock_codes=[code]):
-                            logger.info(f"[{code}] 单股推送成功")
-                        else:
-                            logger.warning(f"[{code}] 单股推送失败")
-                    except Exception as e:
-                        logger.error(f"[{code}] 单股推送异常: {e}")
+                        available_channels = [
+                            channel.value for channel in (self.notifier.get_available_channels() or [])
+                        ] if self.notifier.is_available() else []
+                    except Exception:
+                        available_channels = []
+
+                    notification_result: Dict[str, Any] = {
+                        "attempted": False,
+                        "status": "not_configured" if not self.notifier.is_available() else "unknown",
+                        "success": None,
+                        "channels": available_channels,
+                        "truth": "actual",
+                        "attempts": [],
+                    }
+
+                    if self.notifier.is_available():
+                        try:
+                            # 根据报告类型选择生成方法
+                            if report_type == ReportType.FULL:
+                                report_content = self.notifier.generate_dashboard_report([result])
+                                logger.info(f"[{code}] 使用完整报告格式")
+                            elif report_type == ReportType.BRIEF:
+                                report_content = self.notifier.generate_brief_report([result])
+                                logger.info(f"[{code}] 使用简洁报告格式")
+                            else:
+                                report_content = self.notifier.generate_single_stock_report(result)
+                                logger.info(f"[{code}] 使用精简报告格式")
+
+                            push_ok = self.notifier.send(report_content, email_stock_codes=[code])
+                            notification_result.update(
+                                {
+                                    "attempted": True,
+                                    "status": "ok" if push_ok else "failed",
+                                    "success": bool(push_ok),
+                                    "attempts": [
+                                        {
+                                            "sequence": 1,
+                                            "channel": (available_channels[0] if available_channels else "notification"),
+                                            "action": "succeeded" if push_ok else "failed",
+                                            "result": "succeeded" if push_ok else "failed",
+                                            "message": (
+                                                f"Notification sent via {(available_channels[0] if available_channels else 'notification')}."
+                                                if push_ok
+                                                else f"Notification failed via {(available_channels[0] if available_channels else 'notification')}."
+                                            ),
+                                        }
+                                    ],
+                                }
+                            )
+                            if push_ok:
+                                logger.info(f"[{code}] 单股推送成功")
+                            else:
+                                logger.warning(f"[{code}] 单股推送失败")
+                        except Exception as e:
+                            notification_result.update(
+                                {
+                                    "attempted": True,
+                                    "status": "failed",
+                                    "success": False,
+                                    "error": str(e),
+                                    "attempts": [
+                                        {
+                                            "sequence": 1,
+                                            "channel": (available_channels[0] if available_channels else "notification"),
+                                            "action": "failed",
+                                            "result": "timeout" if "timeout" in str(e).lower() else "failed",
+                                            "reason": str(e),
+                                            "message": f"Notification exception via {(available_channels[0] if available_channels else 'notification')}: {e}",
+                                        }
+                                    ],
+                                }
+                            )
+                            logger.error(f"[{code}] 单股推送异常: {e}")
+                    result.notification_result = notification_result
+                else:
+                    result.notification_result = {
+                        "attempted": False,
+                        "status": "skipped",
+                        "success": None,
+                        "channels": [],
+                        "truth": "actual",
+                        "attempts": [],
+                    }
+
+                try:
+                    from src.services.execution_log_service import classify_notification_state
+                    if isinstance(result.notification_result, dict):
+                        result.notification_result["delivery_classification"] = classify_notification_state(result.notification_result)
+                except Exception:
+                    pass
+
+                if isinstance(getattr(result, "runtime_execution", None), dict):
+                    result.runtime_execution["notification"] = result.notification_result
+                    steps = result.runtime_execution.get("steps")
+                    if isinstance(steps, list):
+                        for step in steps:
+                            if isinstance(step, dict) and step.get("key") == "notification":
+                                step["status"] = str((result.notification_result or {}).get("status") or "unknown")
+                                break
             
             return result
             

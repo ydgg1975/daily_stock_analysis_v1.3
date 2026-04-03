@@ -387,6 +387,10 @@ class AnalysisResult:
     # ========== 历史对比（Report Engine P0）==========
     query_id: Optional[str] = None  # 本次分析 query_id，用于历史对比时排除本次记录
 
+    # ========== 运行透明度（Phase D1）==========
+    runtime_execution: Optional[Dict[str, Any]] = None  # 运行期执行摘要（AI/数据源/通知/步骤）
+    notification_result: Optional[Dict[str, Any]] = None  # 通知发送结果（若可用）
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -423,6 +427,8 @@ class AnalysisResult:
             'current_price': self.current_price,
             'change_pct': self.change_pct,
             'model_used': self.model_used,
+            'runtime_execution': self.runtime_execution,
+            'notification_result': self.notification_result,
         }
 
     def get_core_conclusion(self) -> str:
@@ -764,7 +770,7 @@ class GeminiAnalyzer:
         generation_config: dict,
         *,
         system_prompt: Optional[str] = None,
-    ) -> Tuple[str, str, Dict[str, Any]]:
+    ) -> Tuple[str, str, Dict[str, Any], List[Dict[str, Any]]]:
         """Call LLM via litellm with fallback across configured models.
 
         When channels/YAML are configured, every model goes through the Router
@@ -777,7 +783,7 @@ class GeminiAnalyzer:
             generation_config: Dict with optional keys: temperature, max_output_tokens, max_tokens.
 
         Returns:
-            Tuple of (response text, model_used, usage). On success model_used is the full model
+            Tuple of (response text, model_used, usage, attempt_trace). On success model_used is the full model
             name and usage is a dict with prompt_tokens, completion_tokens, total_tokens.
         """
         config = get_config()
@@ -794,10 +800,20 @@ class GeminiAnalyzer:
         use_channel_router = self._has_channel_config(config)
 
         last_error = None
+        attempt_trace: List[Dict[str, Any]] = []
         effective_system_prompt = system_prompt or self.SYSTEM_PROMPT
-        for model in models_to_try:
+        for index, model in enumerate(models_to_try):
             try:
                 model_short = model.split("/")[-1] if "/" in model else model
+                attempt_trace.append(
+                    {
+                        "sequence": len(attempt_trace) + 1,
+                        "model": model,
+                        "action": "attempting",
+                        "result": "attempting",
+                        "message": f"Attempting AI model {model}.",
+                    }
+                )
                 call_kwargs: Dict[str, Any] = {
                     "model": model,
                     "messages": [
@@ -836,11 +852,62 @@ class GeminiAnalyzer:
                             "completion_tokens": response.usage.completion_tokens or 0,
                             "total_tokens": response.usage.total_tokens or 0,
                         }
-                    return (response.choices[0].message.content, model, usage)
+                    attempt_trace.append(
+                        {
+                            "sequence": len(attempt_trace) + 1,
+                            "model": model,
+                            "action": "succeeded",
+                            "result": "succeeded",
+                            "message": f"AI model {model} succeeded.",
+                        }
+                    )
+                    if index < len(models_to_try) - 1:
+                        for skipped_model in models_to_try[index + 1:]:
+                            attempt_trace.append(
+                                {
+                                    "sequence": len(attempt_trace) + 1,
+                                    "model": skipped_model,
+                                    "action": "skipped",
+                                    "result": "skipped_because_previous_succeeded",
+                                    "message": f"Model {skipped_model} skipped because a previous model already succeeded.",
+                                }
+                            )
+                    return (response.choices[0].message.content, model, usage, attempt_trace)
                 raise ValueError("LLM returned empty response")
 
             except Exception as e:
                 logger.warning(f"[LiteLLM] {model} failed: {e}")
+                message = str(e or "").strip()
+                lowered = message.lower()
+                if "timeout" in lowered or "timed out" in lowered:
+                    result = "timeout"
+                elif "empty response" in lowered:
+                    result = "empty_result"
+                elif "invalid" in lowered or "parse" in lowered:
+                    result = "invalid_response"
+                else:
+                    result = "failed"
+                attempt_trace.append(
+                    {
+                        "sequence": len(attempt_trace) + 1,
+                        "model": model,
+                        "action": "failed",
+                        "result": result,
+                        "reason": message or type(e).__name__,
+                        "message": f"AI model {model} failed: {message or type(e).__name__}",
+                    }
+                )
+                if index < len(models_to_try) - 1:
+                    next_model = models_to_try[index + 1]
+                    attempt_trace.append(
+                        {
+                            "sequence": len(attempt_trace) + 1,
+                            "model": next_model,
+                            "action": "switched_to_fallback",
+                            "result": "switched_to_fallback",
+                            "message": f"Switched fallback model from {model} to {next_model}.",
+                        }
+                    )
                 last_error = e
                 continue
 
@@ -872,7 +939,7 @@ class GeminiAnalyzer:
                 generation_config={"max_tokens": max_tokens, "temperature": temperature},
             )
             if isinstance(result, tuple):
-                text, model_used, usage = result
+                text, model_used, usage, _attempt_trace = result
                 persist_llm_usage(usage, model_used, call_type="market_review")
                 return text
             return result
@@ -970,7 +1037,7 @@ class GeminiAnalyzer:
 
             while True:
                 start_time = time.time()
-                response_text, model_used, llm_usage = self._call_litellm(
+                response_text, model_used, llm_usage, llm_attempt_trace = self._call_litellm(
                     current_prompt,
                     generation_config,
                     system_prompt=system_prompt,
@@ -995,6 +1062,7 @@ class GeminiAnalyzer:
                 result.market_snapshot = self._build_market_snapshot(context)
                 result.model_used = model_used
                 result.report_language = report_language
+                result.ai_attempt_chain = llm_attempt_trace
 
                 # 内容完整性校验（可选）
                 if not config.report_integrity_enabled:

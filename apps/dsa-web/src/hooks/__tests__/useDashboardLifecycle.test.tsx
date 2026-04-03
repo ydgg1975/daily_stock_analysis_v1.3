@@ -60,17 +60,19 @@ describe('useDashboardLifecycle', () => {
     });
 
     expect(refreshHistory).toHaveBeenCalledTimes(2);
+    expect(hydrateRecentTasks).toHaveBeenCalledTimes(2);
   });
 
   it('refreshes history when a task completes and forwards task updates', () => {
     const refreshHistory = vi.fn().mockResolvedValue(undefined);
+    const hydrateRecentTasks = vi.fn().mockResolvedValue(undefined);
     const syncTaskUpdated = vi.fn();
 
     renderHook(() =>
       useDashboardLifecycle({
         loadInitialHistory: vi.fn().mockResolvedValue(undefined),
         refreshHistory,
-        hydrateRecentTasks: vi.fn().mockResolvedValue(undefined),
+        hydrateRecentTasks,
         syncTaskCreated: vi.fn(),
         syncTaskUpdated,
         syncTaskFailed: vi.fn(),
@@ -85,6 +87,7 @@ describe('useDashboardLifecycle', () => {
     });
 
     expect(syncTaskUpdated).toHaveBeenCalledWith(createTask());
+    expect(hydrateRecentTasks).toHaveBeenCalled();
     expect(refreshHistory).toHaveBeenCalledWith(true);
   });
 });

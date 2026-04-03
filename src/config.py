@@ -937,6 +937,22 @@ class Config:
             else:
                 litellm_fallback_models = []
 
+        # Admin UI explicit AI route override (D3).
+        # Keep backward compatibility: explicit AI_* keys override inferred/default routing,
+        # then we still mirror final effective values into legacy fields.
+        ai_primary_gateway = os.getenv('AI_PRIMARY_GATEWAY', '').strip().lower()
+        ai_primary_model = os.getenv('AI_PRIMARY_MODEL', '').strip()
+        ai_backup_gateway = os.getenv('AI_BACKUP_GATEWAY', '').strip().lower()
+        ai_backup_model = os.getenv('AI_BACKUP_MODEL', '').strip()
+
+        if ai_primary_model:
+            litellm_model = ai_primary_model
+        if ai_backup_model:
+            litellm_fallback_models = [
+                ai_backup_model,
+                *[model for model in litellm_fallback_models if model != ai_backup_model],
+            ]
+
         # === LLM Channels + YAML config ===
         litellm_config_path = os.getenv('LITELLM_CONFIG', '').strip() or None
         llm_models_source = "legacy_env"
@@ -952,6 +968,14 @@ class Config:
         # Priority 2: LLM_CHANNELS (env var based channel config)
         if not llm_model_list:
             _channels_str = os.getenv('LLM_CHANNELS', '').strip()
+            if not _channels_str and (ai_primary_gateway or ai_backup_gateway):
+                _channels_str = ",".join(
+                    [
+                        channel
+                        for channel in [ai_primary_gateway, ai_backup_gateway]
+                        if channel
+                    ]
+                )
             if _channels_str:
                 llm_channels = cls._parse_llm_channels(_channels_str)
                 llm_model_list = cls._channels_to_model_list(llm_channels)

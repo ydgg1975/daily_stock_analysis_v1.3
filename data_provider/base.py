@@ -505,6 +505,7 @@ class DataFetcherManager:
         self._fundamental_cache_lock = RLock()
         self._fundamental_timeout_worker_limit = 8
         self._fundamental_timeout_slots = BoundedSemaphore(self._fundamental_timeout_worker_limit)
+        self._last_realtime_quote_trace: List[Dict[str, Any]] = []
 
     def _get_tickflow_fetcher(self):
         """Lazily create a TickFlow fetcher for market-review-only calls."""
@@ -574,6 +575,45 @@ class DataFetcherManager:
         except Exception:
             # Best-effort cleanup during interpreter shutdown.
             pass
+
+    def _set_last_realtime_quote_trace(self, entries: List[Dict[str, Any]]) -> None:
+        normalized: List[Dict[str, Any]] = []
+        for idx, item in enumerate(entries or []):
+            if not isinstance(item, dict):
+                continue
+            provider = str(item.get("provider") or "").strip()
+            action = str(item.get("action") or "").strip().lower() or "attempting"
+            outcome = str(item.get("outcome") or "").strip().lower() or "unknown"
+            status = str(item.get("status") or "").strip().lower()
+            normalized.append(
+                {
+                    "sequence": idx + 1,
+                    "provider": provider or f"source_{idx + 1}",
+                    "action": action,
+                    "outcome": outcome,
+                    "status": status or outcome,
+                    "reason": str(item.get("reason") or "").strip() or None,
+                    "message": str(item.get("message") or "").strip() or None,
+                }
+            )
+        self._last_realtime_quote_trace = normalized
+
+    def get_last_realtime_quote_trace(self) -> List[Dict[str, Any]]:
+        return [dict(item) for item in (self._last_realtime_quote_trace or [])]
+
+    @staticmethod
+    def _classify_provider_error(exc: Exception) -> tuple[str, str]:
+        message = str(exc or "").strip()
+        msg_lower = message.lower()
+        if isinstance(exc, TimeoutError) or "timeout" in msg_lower or "timed out" in msg_lower:
+            return "timeout", message or "provider timed out"
+        if "empty" in msg_lower or "no data" in msg_lower or "not found" in msg_lower:
+            return "empty_result", message or "provider returned empty result"
+        if "invalid" in msg_lower or "parse" in msg_lower or "json" in msg_lower:
+            return "invalid_response", message or "provider returned invalid response"
+        if "insufficient" in msg_lower or "missing" in msg_lower:
+            return "insufficient_fields", message or "provider returned insufficient fields"
+        return "failed", message or type(exc).__name__
 
     def _get_fundamental_cache_key(self, stock_code: str, budget_seconds: Optional[float] = None) -> str:
         """生成基本面缓存 key（包含预算分桶以避免低预算结果污染高预算请求）。"""
@@ -1007,6 +1047,27 @@ class DataFetcherManager:
         """
         # Normalize code (strip SH/SZ prefix etc.)
         stock_code = normalize_stock_code(stock_code)
+        trace_entries: List[Dict[str, Any]] = []
+
+        def append_trace(
+            *,
+            provider: str,
+            action: str,
+            outcome: str,
+            reason: Optional[str] = None,
+            message: Optional[str] = None,
+            status: Optional[str] = None,
+        ) -> None:
+            trace_entries.append(
+                {
+                    "provider": provider,
+                    "action": action,
+                    "outcome": outcome,
+                    "status": status or outcome,
+                    "reason": reason,
+                    "message": message,
+                }
+            )
 
         from .akshare_fetcher import _is_us_code
         from .us_index_mapping import is_us_index_code
@@ -1017,75 +1078,234 @@ class DataFetcherManager:
         # 如果实时行情功能被禁用，直接返回 None
         if not config.enable_realtime_quote:
             logger.debug(f"[实时行情] 功能已禁用，跳过 {stock_code}")
+            append_trace(
+                provider="market_realtime",
+                action="skipped",
+                outcome="not_configured",
+                reason="enable_realtime_quote_disabled",
+                message="Realtime quote is disabled by config.",
+            )
+            self._set_last_realtime_quote_trace(trace_entries)
             return None
 
         # 美股指数由 YfinanceFetcher 处理（在美股股票检查之前）
         if is_us_index_code(stock_code):
+            append_trace(
+                provider="market_route",
+                action="selected",
+                outcome="ok",
+                message="US index route selected: yfinance only.",
+            )
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
+                        append_trace(
+                            provider="yfinance",
+                            action="attempting",
+                            outcome="unknown",
+                            message=f"Attempting realtime quote from yfinance for {stock_code}.",
+                        )
                         try:
                             quote = fetcher.get_realtime_quote(stock_code)
                             if quote is not None:
                                 source = getattr(getattr(quote, "source", None), "value", "yfinance")
                                 logger.info(f"[实时行情] 美股指数 {stock_code} 成功获取 (来源: {source})")
+                                append_trace(
+                                    provider=str(source).lower(),
+                                    action="succeeded",
+                                    outcome="ok",
+                                    message=f"Realtime quote accepted from {source}.",
+                                )
+                                self._set_last_realtime_quote_trace(trace_entries)
                                 return quote
+                            append_trace(
+                                provider="yfinance",
+                                action="failed",
+                                outcome="empty_result",
+                                reason="provider_returned_none",
+                                message="Provider returned no realtime quote.",
+                            )
                         except Exception as e:
+                            outcome, reason = self._classify_provider_error(e)
                             logger.warning(f"[实时行情] 美股指数 {stock_code} 获取失败: {e}")
+                            append_trace(
+                                provider="yfinance",
+                                action="failed",
+                                outcome=outcome,
+                                reason=reason,
+                                message=f"Realtime quote failed on yfinance: {reason}",
+                            )
                     break
             logger.warning(f"[实时行情] 美股指数 {stock_code} 无可用数据源")
+            append_trace(
+                provider="market_realtime",
+                action="completed",
+                outcome="failed",
+                reason="all_providers_failed",
+                message="No available provider returned realtime quote.",
+            )
+            self._set_last_realtime_quote_trace(trace_entries)
             return None
 
         # 美股单独处理，使用 YfinanceFetcher
         if _is_us_code(stock_code):
+            append_trace(
+                provider="market_route",
+                action="selected",
+                outcome="ok",
+                message="US stock route selected: yfinance only.",
+            )
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
+                        append_trace(
+                            provider="yfinance",
+                            action="attempting",
+                            outcome="unknown",
+                            message=f"Attempting realtime quote from yfinance for {stock_code}.",
+                        )
                         try:
                             quote = fetcher.get_realtime_quote(stock_code)
                             if quote is not None:
                                 source = getattr(getattr(quote, "source", None), "value", "yfinance")
                                 logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: {source})")
+                                append_trace(
+                                    provider=str(source).lower(),
+                                    action="succeeded",
+                                    outcome="ok",
+                                    message=f"Realtime quote accepted from {source}.",
+                                )
+                                self._set_last_realtime_quote_trace(trace_entries)
                                 return quote
+                            append_trace(
+                                provider="yfinance",
+                                action="failed",
+                                outcome="empty_result",
+                                reason="provider_returned_none",
+                                message="Provider returned no realtime quote.",
+                            )
                         except Exception as e:
+                            outcome, reason = self._classify_provider_error(e)
                             logger.warning(f"[实时行情] 美股 {stock_code} 获取失败: {e}")
+                            append_trace(
+                                provider="yfinance",
+                                action="failed",
+                                outcome=outcome,
+                                reason=reason,
+                                message=f"Realtime quote failed on yfinance: {reason}",
+                            )
                     break
             logger.warning(f"[实时行情] 美股 {stock_code} 无可用数据源")
+            append_trace(
+                provider="market_realtime",
+                action="completed",
+                outcome="failed",
+                reason="all_providers_failed",
+                message="No available provider returned realtime quote.",
+            )
+            self._set_last_realtime_quote_trace(trace_entries)
             return None
 
         # 港股实时行情只走港股专用入口，避免按 A 股 source_priority
         # 反复触发同一个 ak.stock_hk_spot_em() 接口。
         if _is_hk_market(stock_code):
+            append_trace(
+                provider="market_route",
+                action="selected",
+                outcome="ok",
+                message="HK route selected: akshare_hk only.",
+            )
             for fetcher in self._fetchers:
                 if fetcher.name != "AkshareFetcher":
                     continue
                 if not hasattr(fetcher, 'get_realtime_quote'):
                     break
+                append_trace(
+                    provider="akshare_hk",
+                    action="attempting",
+                    outcome="unknown",
+                    message=f"Attempting realtime quote from akshare_hk for {stock_code}.",
+                )
                 try:
                     quote = fetcher.get_realtime_quote(stock_code, source="hk")
                     if quote is not None and quote.has_basic_data():
                         logger.info(f"[实时行情] 港股 {stock_code} 成功获取 (来源: akshare_hk)")
+                        append_trace(
+                            provider="akshare_hk",
+                            action="succeeded",
+                            outcome="ok",
+                            message="Realtime quote accepted from akshare_hk.",
+                        )
+                        self._set_last_realtime_quote_trace(trace_entries)
                         return quote
+                    if quote is None:
+                        append_trace(
+                            provider="akshare_hk",
+                            action="failed",
+                            outcome="empty_result",
+                            reason="provider_returned_none",
+                            message="Provider returned no realtime quote.",
+                        )
+                    else:
+                        append_trace(
+                            provider="akshare_hk",
+                            action="failed",
+                            outcome="insufficient_fields",
+                            reason="basic_fields_missing",
+                            message="Provider returned quote but basic fields were insufficient.",
+                        )
                 except Exception as e:
+                    outcome, reason = self._classify_provider_error(e)
                     logger.warning(f"[实时行情] 港股 {stock_code} 获取失败: {e}")
+                    append_trace(
+                        provider="akshare_hk",
+                        action="failed",
+                        outcome=outcome,
+                        reason=reason,
+                        message=f"Realtime quote failed on akshare_hk: {reason}",
+                    )
                 break
 
             logger.warning(f"[实时行情] 港股 {stock_code} 无可用数据源")
+            append_trace(
+                provider="market_realtime",
+                action="completed",
+                outcome="failed",
+                reason="all_providers_failed",
+                message="No available provider returned realtime quote.",
+            )
+            self._set_last_realtime_quote_trace(trace_entries)
             return None
         
         # 获取配置的数据源优先级
         source_priority = config.realtime_source_priority.split(',')
+        append_trace(
+            provider="market_route",
+            action="selected",
+            outcome="ok",
+            message=f"CN market route selected: {' -> '.join([item.strip() for item in source_priority if item.strip()])}",
+        )
         
         errors = []
         # primary_quote holds the first successful result; we may supplement
         # missing fields (volume_ratio, turnover_rate, etc.) from later sources.
         primary_quote = None
+        primary_source = None
+        supplement_attempts = 0
         
         for source in source_priority:
             source = source.strip().lower()
+            if not source:
+                continue
             
             try:
                 quote = None
+                append_trace(
+                    provider=source,
+                    action="attempting",
+                    outcome="unknown",
+                    message=f"Attempting realtime quote from {source}.",
+                )
                 
                 if source == "efinance":
                     # 尝试 EfinanceFetcher
@@ -1126,39 +1346,116 @@ class DataFetcherManager:
                             if hasattr(fetcher, 'get_realtime_quote'):
                                 quote = fetcher.get_realtime_quote(stock_code)
                             break
-                
+
                 if quote is not None and quote.has_basic_data():
                     if primary_quote is None:
                         # First successful source becomes primary
                         primary_quote = quote
+                        primary_source = source
                         logger.info(f"[实时行情] {stock_code} 成功获取 (来源: {source})")
+                        append_trace(
+                            provider=source,
+                            action="succeeded",
+                            outcome="ok",
+                            message=f"Realtime quote accepted from {source}.",
+                        )
                         # If all key supplementary fields are present, return early
                         if not self._quote_needs_supplement(primary_quote):
+                            append_trace(
+                                provider=source,
+                                action="completed",
+                                outcome="ok",
+                                message=f"Final market source accepted: {source}.",
+                            )
+                            self._set_last_realtime_quote_trace(trace_entries)
                             return primary_quote
                         # Otherwise, continue to try later sources for missing fields
                         logger.debug(f"[实时行情] {stock_code} 部分字段缺失，尝试从后续数据源补充")
-                        supplement_attempts = 0
+                        append_trace(
+                            provider=source,
+                            action="succeeded",
+                            outcome="partial",
+                            reason="supplement_required",
+                            message=f"Primary source {source} succeeded but supplementary fields are missing.",
+                        )
                     else:
                         # Supplement missing fields from this source (limit attempts)
                         supplement_attempts += 1
                         if supplement_attempts > 1:
                             logger.debug(f"[实时行情] {stock_code} 补充尝试已达上限，停止继续")
+                            append_trace(
+                                provider=source,
+                                action="skipped",
+                                outcome="ok",
+                                reason="supplement_attempt_limit",
+                                message="Skipped because supplement attempt limit was reached.",
+                            )
                             break
                         merged = self._merge_quote_fields(primary_quote, quote)
                         if merged:
                             logger.info(f"[实时行情] {stock_code} 从 {source} 补充了缺失字段: {merged}")
+                            append_trace(
+                                provider=source,
+                                action="succeeded",
+                                outcome="partial",
+                                message=f"Supplemented fields from {source}: {', '.join(merged)}",
+                            )
+                        else:
+                            append_trace(
+                                provider=source,
+                                action="failed",
+                                outcome="insufficient_fields",
+                                reason="no_missing_fields_filled",
+                                message=f"{source} returned data but did not fill missing supplementary fields.",
+                            )
                         # Stop supplementing once all key fields are filled
                         if not self._quote_needs_supplement(primary_quote):
                             break
+                elif quote is None:
+                    append_trace(
+                        provider=source,
+                        action="failed",
+                        outcome="empty_result",
+                        reason="provider_returned_none",
+                        message=f"{source} returned no realtime quote.",
+                    )
+                else:
+                    append_trace(
+                        provider=source,
+                        action="failed",
+                        outcome="insufficient_fields",
+                        reason="basic_fields_missing",
+                        message=f"{source} returned quote but basic fields were insufficient.",
+                    )
                     
             except Exception as e:
                 error_msg = f"[{source}] 失败: {str(e)}"
                 logger.warning(error_msg)
                 errors.append(error_msg)
+                outcome, reason = self._classify_provider_error(e)
+                append_trace(
+                    provider=source,
+                    action="failed",
+                    outcome=outcome,
+                    reason=reason,
+                    message=f"{source} failed: {reason}",
+                )
                 continue
-        
+
         # Return primary even if some fields are still missing
         if primary_quote is not None:
+            append_trace(
+                provider=primary_source or "market_realtime",
+                action="completed",
+                outcome="ok",
+                reason="accepted_with_partial_fields" if self._quote_needs_supplement(primary_quote) else None,
+                message=(
+                    f"Final market source accepted: {primary_source} (partial fields)."
+                    if self._quote_needs_supplement(primary_quote)
+                    else f"Final market source accepted: {primary_source}."
+                ),
+            )
+            self._set_last_realtime_quote_trace(trace_entries)
             return primary_quote
 
         # 所有数据源都失败，返回 None（降级兜底）
@@ -1166,6 +1463,14 @@ class DataFetcherManager:
             logger.warning(f"[实时行情] {stock_code} 所有数据源均失败，降级处理: {'; '.join(errors)}")
         else:
             logger.warning(f"[实时行情] {stock_code} 无可用数据源")
+        append_trace(
+            provider="market_realtime",
+            action="completed",
+            outcome="failed",
+            reason="all_providers_failed",
+            message="All configured market providers failed.",
+        )
+        self._set_last_realtime_quote_trace(trace_entries)
         
         return None
 

@@ -273,6 +273,8 @@ class TaskInfo(BaseModel):
         description="选择来源",
         pattern=SELECTION_SOURCE_PATTERN,
     )
+    execution: Optional[Any] = Field(None, description="运行执行摘要（AI/数据源/通知）")
+    execution_session_id: Optional[str] = Field(None, description="管理员执行日志会话 ID")
     
     class Config:
         json_schema_extra = {
@@ -289,7 +291,8 @@ class TaskInfo(BaseModel):
                 "completed_at": None,
                 "error": None,
                 "original_query": "茅台",
-                "selection_source": "autocomplete"
+                "selection_source": "autocomplete",
+                "execution": None
             }
         }
 

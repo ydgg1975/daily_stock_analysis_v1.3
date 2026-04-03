@@ -10,6 +10,7 @@ type UseDashboardLifecycleOptions = {
   syncTaskUpdated: (task: TaskInfo) => void;
   syncTaskFailed: (task: TaskInfo) => void;
   enabled?: boolean;
+  hasRunningTasks?: boolean;
 };
 
 export function useDashboardLifecycle({
@@ -20,6 +21,7 @@ export function useDashboardLifecycle({
   syncTaskUpdated,
   syncTaskFailed,
   enabled = true,
+  hasRunningTasks = false,
 }: UseDashboardLifecycleOptions): void {
   useEffect(() => {
     if (!enabled) {
@@ -43,6 +45,18 @@ export function useDashboardLifecycle({
   }, [enabled, refreshHistory]);
 
   useEffect(() => {
+    if (!enabled || !hasRunningTasks) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void hydrateRecentTasks();
+    }, 6000);
+
+    return () => window.clearInterval(intervalId);
+  }, [enabled, hasRunningTasks, hydrateRecentTasks]);
+
+  useEffect(() => {
     if (!enabled) {
       return;
     }
@@ -50,22 +64,31 @@ export function useDashboardLifecycle({
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         void refreshHistory(true);
+        void hydrateRecentTasks();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [enabled, refreshHistory]);
+  }, [enabled, hydrateRecentTasks, refreshHistory]);
 
   useTaskStream({
-    onTaskCreated: syncTaskCreated,
-    onTaskStarted: syncTaskUpdated,
+    onTaskCreated: (task) => {
+      syncTaskCreated(task);
+      void hydrateRecentTasks();
+    },
+    onTaskStarted: (task) => {
+      syncTaskUpdated(task);
+      void hydrateRecentTasks();
+    },
     onTaskCompleted: (task) => {
       syncTaskUpdated(task);
+      void hydrateRecentTasks();
       void refreshHistory(true);
     },
     onTaskFailed: (task) => {
       syncTaskFailed(task);
+      void hydrateRecentTasks();
     },
     onError: () => {
       console.warn('SSE connection disconnected, reconnecting...');

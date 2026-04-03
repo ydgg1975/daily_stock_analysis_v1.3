@@ -51,4 +51,32 @@ describe('missingFieldAudit', () => {
     const notIntegratedBucket = audit.buckets.find((bucket) => bucket.category === 'not_integrated_yet');
     expect(notIntegratedBucket?.entries).toHaveLength(1);
   });
+
+  it('normalizes equivalent field names into one audit entry with a single category', () => {
+    const entries = collectMissingFieldEntriesFromMarkdown(`
+VWAP: NA（字段待接入）
+Avg Price: NA（当前数据源未提供）
+均价: NA（接口未返回）
+`);
+    const audit = buildMissingFieldAudit(entries);
+
+    expect(audit.totalMissingFields).toBe(1);
+    const notIntegratedBucket = audit.buckets.find((bucket) => bucket.category === 'not_integrated_yet');
+    expect(notIntegratedBucket?.entries).toHaveLength(1);
+    expect(notIntegratedBucket?.entries[0]?.field).toBe('VWAP');
+  });
+
+  it('ignores diagnostic/meta labels in missing-field buckets', () => {
+    const entries = collectMissingFieldEntriesFromMarkdown(`
+状态: NA（接口未返回）
+冲突说明: NA（接口未返回）
+VWAP: NA（字段待接入）
+`);
+    const audit = buildMissingFieldAudit(entries);
+
+    expect(audit.totalMissingFields).toBe(1);
+    const onlyEntry = audit.buckets.flatMap((bucket) => bucket.entries);
+    expect(onlyEntry).toHaveLength(1);
+    expect(onlyEntry[0]?.field).toBe('VWAP');
+  });
 });

@@ -259,7 +259,7 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('execution-risk-layer')).toBeInTheDocument();
     expect(screen.getByTestId('key-actions-card')).toBeInTheDocument();
     expect(screen.getByTestId('watch-checklist-card')).toBeInTheDocument();
-    expect(screen.getByText('执行计划与入场条件')).toBeInTheDocument();
+    expect(screen.getByText('执行计划')).toBeInTheDocument();
     expect(screen.getAllByText('观望').length).toBe(1);
 
     const deepAppendix = screen.getByTestId('deep-appendix-disclosure');
@@ -281,31 +281,40 @@ describe('StandardReportPanel', () => {
 
     expect(screen.getAllByText('120-121').length).toBeGreaterThan(0);
     expect(screen.getAllByText('等待回踩后分两笔建立底仓').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('关键动作').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('入场前检查').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('当前动作').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('新开仓策略').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已持仓策略').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('条件与风控').length).toBeGreaterThan(0);
     expect(screen.getAllByText('核心风险').length).toBeGreaterThan(0);
     expect(screen.getAllByText('催化与观察条件').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('行情表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('技术面表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('基本面表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('财报表').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('催化、风险与情绪').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('行情数据').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('技术数据').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('基本面数据').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('财报数据').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('风险、催化与情绪').length).toBeGreaterThan(0);
     expect(screen.getByText('作战计划')).toBeInTheDocument();
-    expect(screen.getByText('Checklist 与评分')).toBeInTheDocument();
+    expect(screen.getByText('评分依据与检查项')).toBeInTheDocument();
     expect(screen.getByText('评分拆解')).toBeInTheDocument();
     expect(screen.getAllByText('核心看多因素').length).toBeGreaterThan(0);
     expect(screen.getAllByText('市场情绪').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Checklist 状态').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('检查清单状态').length).toBeGreaterThan(0);
     expect(screen.getByText('短线趋势')).toBeInTheDocument();
     expect(screen.getByText('变动原因')).toBeInTheDocument();
     expect(screen.getAllByText('短线技术偏弱，等待均线重新收敛。').length).toBeGreaterThan(0);
     expect(screen.getAllByText('MA5/10/20/60 已补齐，并保留基本面缓冲。').length).toBeGreaterThan(0);
-    expect(screen.getByText('技术指标补齐导致')).toBeInTheDocument();
+    expect(screen.getAllByText('技术指标补齐导致').length).toBeGreaterThan(0);
     expect(screen.getAllByText('数据中心需求回暖').length).toBeGreaterThan(0);
     expect(screen.getAllByText('估值仍偏高').length).toBeGreaterThan(0);
     expect(screen.getAllByText('上方前高压力仍在').length).toBeGreaterThan(0);
     expect(screen.getAllByText('FMP API').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('若放量跌破支撑位，需立即收缩仓位').length).toBeGreaterThan(0);
+    expect(
+      within(screen.getByTestId('execution-risk-layer')).queryAllByText('若放量跌破支撑位，需立即收缩仓位').length,
+    ).toBeLessThanOrEqual(1);
+    expect(screen.getAllByText('公司发布新品并强化生态合作')).toHaveLength(1);
+    expect(screen.queryByText('散户讨论')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('risk-catalyst-panel')).toHaveLength(1);
+    expect(within(screen.getByTestId('decision-board-panel')).queryByText('等待回踩确认后分批试仓')).not.toBeInTheDocument();
+    expect(screen.queryByText(/数据完整性提示/)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getAllByText('会话指标').length).toBeGreaterThan(0);
     });

@@ -35,6 +35,14 @@ const CATEGORY_ORDER: MissingFieldCategory[] = [
   'other_missing',
 ];
 
+const CATEGORY_PRIORITY: Record<MissingFieldCategory, number> = {
+  not_integrated_yet: 0,
+  source_not_provided: 1,
+  integrated_unavailable: 2,
+  not_applicable: 3,
+  other_missing: 4,
+};
+
 const normalizeForKey = (value: string): string =>
   value
     .toLowerCase()
@@ -47,6 +55,44 @@ const normalizeFieldLabel = (value: string): string =>
     .replace(/[`*#>]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+const NON_DATA_FIELD_LABEL_KEYS = new Set([
+  '状态',
+  '字段状态',
+  'status',
+  'fieldstatus',
+  '冲突说明',
+  '冲突备注',
+  'conflictnote',
+  'conflictnotes',
+  'diagnostic',
+  'diagnosticnote',
+  'diagnosticnotes',
+]);
+
+const isAuditableFieldLabel = (value: string): boolean => {
+  const normalized = normalizeForKey(value);
+  if (!normalized) {
+    return false;
+  }
+  return !NON_DATA_FIELD_LABEL_KEYS.has(normalized);
+};
+
+export const normalizeMissingFieldSemanticKey = (value: string): string => {
+  const normalized = normalizeForKey(value);
+  if (!normalized) {
+    return '';
+  }
+
+  if (
+    ['vwap', 'avgprice', 'averageprice', 'avgtradeprice', '均价', '平均价', '成交均价']
+      .some((token) => normalized.includes(token))
+  ) {
+    return 'vwap';
+  }
+
+  return normalized;
+};
 
 const includesAny = (target: string, keywords: string[]): boolean =>
   keywords.some((keyword) => target.includes(keyword));
@@ -76,13 +122,17 @@ const pushMissingFieldEntries = (
   section: string,
 ) => {
   (fields || []).forEach((field) => {
+    const normalizedField = normalizeFieldLabel(field.label || section);
+    if (!isAuditableFieldLabel(normalizedField)) {
+      return;
+    }
     const reason = extractMissingReason(field.value);
     if (!reason) {
       return;
     }
 
     entries.push({
-      field: normalizeFieldLabel(field.label || section),
+      field: normalizedField,
       reason,
       category: classifyMissingReason(reason),
       source: 'standard_report',
@@ -169,6 +219,9 @@ export const collectMissingFieldEntriesFromStandardReport = (
     if (!parsed) {
       return;
     }
+    if (!isAuditableFieldLabel(parsed.field)) {
+      return;
+    }
     entries.push({
       field: normalizeFieldLabel(parsed.field),
       reason: parsed.reason,
@@ -204,6 +257,9 @@ export const collectMissingFieldEntriesFromMarkdown = (markdown: string): Missin
         }
 
         const field = normalizeFieldLabel(cells[Math.max(0, cellIndex - 1)] || `Markdown#${index + 1}`);
+        if (!isAuditableFieldLabel(field) || extractMissingReason(field)) {
+          return;
+        }
         entries.push({
           field,
           reason,
@@ -226,6 +282,9 @@ export const collectMissingFieldEntriesFromMarkdown = (markdown: string): Missin
     );
 
     const field = normalizeFieldLabel(colonLabelMatch?.[1] || `Markdown#${index + 1}`);
+    if (!isAuditableFieldLabel(field) || extractMissingReason(field)) {
+      return;
+    }
 
     entries.push({
       field,
@@ -244,7 +303,11 @@ export const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): Missing
   const seen = new Set<string>();
 
   entries.forEach((entry) => {
-    const key = [normalizeForKey(entry.field), normalizeForKey(entry.reason), entry.category].join('|');
+    const key = [
+      normalizeMissingFieldSemanticKey(entry.field) || normalizeForKey(entry.field),
+      normalizeForKey(entry.reason),
+      entry.category,
+    ].join('|');
     if (seen.has(key)) {
       return;
     }
@@ -257,13 +320,35 @@ export const dedupeMissingFieldEntries = (entries: MissingFieldEntry[]): Missing
 
 export const buildMissingFieldAudit = (entries: MissingFieldEntry[]): MissingFieldAuditSummary => {
   const dedupedEntries = dedupeMissingFieldEntries(entries);
+  const groupedByField = new Map<string, MissingFieldEntry[]>();
+
+  dedupedEntries.forEach((entry) => {
+    const key = normalizeMissingFieldSemanticKey(entry.field);
+    const current = groupedByField.get(key) || [];
+    current.push(entry);
+    groupedByField.set(key, current);
+  });
+
+  const consolidatedEntries: MissingFieldEntry[] = [];
+  groupedByField.forEach((fieldEntries) => {
+    const category = fieldEntries
+      .map((entry) => entry.category)
+      .sort((a, b) => CATEGORY_PRIORITY[a] - CATEGORY_PRIORITY[b])[0] || 'other_missing';
+    const prioritized = fieldEntries.find((entry) => entry.category === category) || fieldEntries[0];
+
+    consolidatedEntries.push({
+      ...prioritized,
+      category,
+    });
+  });
+
   const bucketMap = new Map<MissingFieldCategory, MissingFieldEntry[]>();
 
   CATEGORY_ORDER.forEach((category) => {
     bucketMap.set(category, []);
   });
 
-  dedupedEntries.forEach((entry) => {
+  consolidatedEntries.forEach((entry) => {
     const current = bucketMap.get(entry.category);
     if (!current) {
       bucketMap.set(entry.category, [entry]);
@@ -273,7 +358,7 @@ export const buildMissingFieldAudit = (entries: MissingFieldEntry[]): MissingFie
   });
 
   return {
-    totalMissingFields: dedupedEntries.length,
+    totalMissingFields: consolidatedEntries.length,
     buckets: CATEGORY_ORDER.map((category) => ({
       category,
       entries: bucketMap.get(category) || [],

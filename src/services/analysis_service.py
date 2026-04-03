@@ -177,4 +177,5 @@ class AnalysisService:
             "stock_code": result.code,
             "stock_name": stock_name,
             "report": report,
+            "runtime_execution": getattr(result, "runtime_execution", None),
         }

@@ -12,6 +12,7 @@ import { useI18n } from '../contexts/UiLanguageContext';
 import { useDashboardLifecycle } from '../hooks';
 import { useStockPoolStore } from '../stores';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { systemConfigApi } from '../api/systemConfig';
 import type { AnalysisReport, TaskInfo } from '../types/analysis';
 import { cn } from '../utils/cn';
 import {
@@ -166,6 +167,8 @@ const HomePage: React.FC = () => {
   const highlightTimeoutRef = useRef<number | null>(null);
   const [latestReportOpenState, setLatestReportOpenState] = useState<LatestReportOpenState | null>(null);
   const [latestReportToast, setLatestReportToast] = useState<LatestReportToast | null>(null);
+  const [isTaskRefreshing, setIsTaskRefreshing] = useState(false);
+  const [showRuntimeExecutionSummary, setShowRuntimeExecutionSummary] = useState(false);
 
   const {
     query,
@@ -207,7 +210,37 @@ const HomePage: React.FC = () => {
   useEffect(() => {
     document.title = t('home.documentTitle');
   }, [t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadVisibility = async () => {
+      try {
+        const config = await systemConfigApi.getConfig(false);
+        const value = config.items.find((item) => item.key === 'SHOW_RUNTIME_EXECUTION_SUMMARY')?.value;
+        const normalized = String(value || '').trim().toLowerCase();
+        const enabled = normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+        if (!cancelled) {
+          setShowRuntimeExecutionSummary(enabled);
+        }
+      } catch {
+        if (!cancelled) {
+          setShowRuntimeExecutionSummary(false);
+        }
+      }
+    };
+    void loadVisibility();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const reportLanguage = normalizeReportLanguage(selectedReport?.meta.reportLanguage);
+
+  const selectedIds = useMemo(() => new Set(selectedHistoryIds), [selectedHistoryIds]);
+  const primaryTask = useMemo(() => selectPrimaryTask(activeTasks), [activeTasks]);
+  const hasRunningTasks = useMemo(
+    () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
+    [activeTasks],
+  );
 
   useDashboardLifecycle({
     loadInitialHistory,
@@ -216,10 +249,18 @@ const HomePage: React.FC = () => {
     syncTaskCreated,
     syncTaskUpdated,
     syncTaskFailed,
+    hasRunningTasks,
   });
 
-  const selectedIds = useMemo(() => new Set(selectedHistoryIds), [selectedHistoryIds]);
-  const primaryTask = useMemo(() => selectPrimaryTask(activeTasks), [activeTasks]);
+  const handleRefreshTasks = useCallback(async () => {
+    setIsTaskRefreshing(true);
+    try {
+      await hydrateRecentTasks();
+      await refreshHistory(true);
+    } finally {
+      setIsTaskRefreshing(false);
+    }
+  }, [hydrateRecentTasks, refreshHistory]);
 
   const sidebarContent = useMemo(
     () => (
@@ -476,6 +517,10 @@ const HomePage: React.FC = () => {
             tasks={activeTasks}
             title={t('tasks.activeTitle')}
             className="mt-4"
+            onRefresh={handleRefreshTasks}
+            isRefreshing={isTaskRefreshing}
+            hasRunningTasks={hasRunningTasks}
+            showExecutionSummary={showRuntimeExecutionSummary}
           />
         ) : null}
         {latestReportOpenState?.status === 'fallback' ? (
@@ -530,7 +575,7 @@ const HomePage: React.FC = () => {
                 className={selectedReport.details?.standardReport ? 'w-full min-w-0 pb-8' : 'max-w-5xl pb-8'}
               >
                 <div key={selectedReport.meta.id ?? selectedReport.meta.queryId} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <ReportSummary data={selectedReport} />
+                  <ReportSummary data={selectedReport} showExecutionSummary={showRuntimeExecutionSummary} />
                 </div>
               </div>
             ) : (

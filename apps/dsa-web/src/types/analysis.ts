@@ -315,6 +315,48 @@ export interface ReportDetails {
   dividendMetrics?: Record<string, unknown>;
 }
 
+export interface RuntimeExecutionStep {
+  key: string;
+  status: string;
+  detail?: string;
+}
+
+export interface RuntimeExecutionField {
+  source?: string | null;
+  truth?: 'actual' | 'inferred' | 'unavailable' | string;
+  fallbackOccurred?: boolean;
+  status?: string;
+}
+
+export interface RuntimeExecutionSummary {
+  ai?: {
+    model?: string | null;
+    provider?: string | null;
+    gateway?: string | null;
+    modelTruth?: 'actual' | 'inferred' | 'unavailable' | string;
+    providerTruth?: 'actual' | 'inferred' | 'unavailable' | string;
+    gatewayTruth?: 'actual' | 'inferred' | 'unavailable' | string;
+    fallbackOccurred?: boolean;
+    fallbackTruth?: 'actual' | 'inferred' | 'unavailable' | string;
+    configuredPrimaryModel?: string | null;
+  };
+  data?: {
+    market?: RuntimeExecutionField;
+    fundamentals?: RuntimeExecutionField & { sourceChain?: Array<Record<string, unknown>> };
+    news?: RuntimeExecutionField;
+    sentiment?: RuntimeExecutionField;
+  };
+  notification?: {
+    attempted?: boolean;
+    status?: string;
+    success?: boolean | null;
+    channels?: string[];
+    truth?: 'actual' | 'inferred' | 'unavailable' | string;
+    error?: string;
+  } | null;
+  steps?: RuntimeExecutionStep[];
+}
+
 export type ReportStandardSource =
   | 'details.standardReport'
   | 'details.standard_report'
@@ -412,6 +454,8 @@ export interface TaskInfo {
   error?: string;
   originalQuery?: string;
   selectionSource?: string;
+  execution?: RuntimeExecutionSummary | null;
+  executionSessionId?: string;
 }
 
 /** Task list response */
