@@ -1,18 +1,23 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-LongbridgeFetcher - 长桥兜底数据源 (Priority 5)
+LongbridgeFetcher - 长桥 OpenAPI（美股 / 港股）
 ===================================
 
 数据来源：长桥 OpenAPI (https://open.longbridge.com)
-特点：覆盖美股 + 港股，可计算量比/换手率/PE 等 yfinance 缺失字段
-定位：美股/港股最后兜底数据源
+特点：覆盖美股 + 港股，可计算量比/换手率/PE 等常见缺失字段
+
+定位（与 `DataFetcherManager` 一致）：**已配置 `LONGBRIDGE_*` 时**，美股/港股日线与实时行情 **优先走长桥**；
+长桥失败或字段不足时由 YFinance / AkShare **补全或降级**。**未配置凭据时不建立连接、不参与上述路由。**
+`priority=5` 仅影响通用 fetcher 列表排序；美/港股的实际先后顺序由管理器内 **专用路由** 决定，勿将本类简单理解为「全局最后兜底」。
 
 关键策略：
 1. 组合 quote + static_info 接口计算 turnover_rate / pe_ratio / total_mv
 2. 通过 history_candlesticks 计算 volume_ratio（近5日均量比）
 3. 懒加载 QuoteContext，首次调用时才建立连接
 4. static_info 进程内短缓存，减少重复请求（默认 24h，可调；见 LONGBRIDGE_STATIC_INFO_TTL_SECONDS）
+5. **账户安全检测**：首次连接后调用 stock_positions，按 `account_channel` 区分模拟盘与实盘；实盘则延迟导入 NotificationService 推送一次安全提醒
+6. **自选分组**：`fetch_stock_codes_for_watchlist_group_names` 按分组名从 `watchlist` 拉取证券，供分析入口与 `STOCK_LIST` 合并（不写入持久配置）
 
 凭证：`LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN`。
 可选：`LONGBRIDGE_STATIC_INFO_TTL_SECONDS`；SDK `language` 取自 `REPORT_LANGUAGE`，`log_path` 为 `{LOG_DIR}/longbridge_sdk.log`；
@@ -25,7 +30,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import pandas as pd
 
@@ -248,14 +253,87 @@ def _to_longbridge_symbol(stock_code: str) -> Optional[str]:
     return None
 
 
+def from_longbridge_symbol_to_stock_code(symbol: str) -> Optional[str]:
+    """将长桥行情代码转为系统内代码（与 normalize_stock_code / STOCK_LIST 风格一致）。"""
+    from data_provider.base import normalize_stock_code
+
+    s = (symbol or "").strip().upper()
+    if not s:
+        return None
+    if s.endswith(".US"):
+        base = s[:-3].strip()
+        return base if base else None
+    return normalize_stock_code(s)
+
+
+def fetch_stock_codes_for_watchlist_group_names(
+    group_names: List[str],
+    *,
+    fetcher: Optional["LongbridgeFetcher"] = None,
+) -> List[str]:
+    """
+    拉取长桥自选分组（GET /v1/watchlist/groups，SDK: QuoteContext.watchlist），
+    按分组名（逗号分隔配置见 LONGBRIDGE_WATCHLIST_GROUPS）汇总证券代码并转为系统代码。
+
+    分组名先精确匹配 trim 后的 name，再忽略大小写匹配。
+    """
+    names = [str(n).strip() for n in group_names if n and str(n).strip()]
+    if not names:
+        return []
+    lb = fetcher or LongbridgeFetcher()
+    ctx = lb._get_ctx()
+    if ctx is None:
+        logger.warning("[Longbridge] 凭证未配置或 QuoteContext 不可用，跳过自选分组股票同步")
+        return []
+    try:
+        groups = ctx.watchlist()
+    except Exception as e:
+        logger.warning("[Longbridge] watchlist() 失败，跳过自选分组同步: %s", e)
+        return []
+
+    by_exact = {getattr(g, "name", "").strip(): g for g in (groups or [])}
+    by_fold: Dict[str, Any] = {}
+    for g in groups or []:
+        key = getattr(g, "name", "").strip().casefold()
+        if key and key not in by_fold:
+            by_fold[key] = g
+
+    out: List[str] = []
+    seen_local: set = set()
+    for raw in names:
+        w = raw.strip()
+        g = by_exact.get(w) or by_fold.get(w.casefold())
+        if g is None:
+            available = [getattr(x, "name", "") for x in (groups or [])]
+            logger.warning(
+                "[Longbridge] 未找到自选分组 %r，当前分组: %s",
+                w,
+                available,
+            )
+            continue
+        for sec in getattr(g, "securities", None) or []:
+            sym = getattr(sec, "symbol", None)
+            if sym is None:
+                continue
+            code = from_longbridge_symbol_to_stock_code(str(sym))
+            if not code:
+                logger.debug("[Longbridge] 跳过无法映射的代码: %s", sym)
+                continue
+            if code in seen_local:
+                continue
+            seen_local.add(code)
+            out.append(code)
+    return out
+
+
 class LongbridgeFetcher(BaseFetcher):
     """
     长桥 OpenAPI 数据源实现
 
-    优先级: 5（最低，作为美股/港股最后兜底）
-    数据来源: Longbridge OpenAPI
+    `priority` 默认 5：在通用数据源链中的序号；美股/港股是否 **首选** 长桥由
+    `DataFetcherManager` 根据是否配置 `LONGBRIDGE_*` 单独路由（与 README「长桥优先策略」一致）。
 
-    通过组合多个 API 计算 yfinance 缺失的指标:
+    通过组合多个 API 计算常见行情侧缺失的指标:
     - turnover_rate = volume / circulating_shares * 100
     - volume_ratio = today_volume / avg_5day_volume
     - pe_ratio = price / eps_ttm
@@ -264,33 +342,112 @@ class LongbridgeFetcher(BaseFetcher):
     name = "LongbridgeFetcher"
     priority = int(os.getenv("LONGBRIDGE_PRIORITY", "5"))
 
-    _CONNECTION_ERRORS = ("client is closed", "context closed", "connection closed")
 
     def __init__(self):
         self._ctx = None
         self._config = None
         self._ctx_lock = threading.Lock()
         self._available = None
+        # 首次连接后通过 Trade stock_positions 探测；True=模拟盘 lb_papertrading，False=非模拟，None=未探测或失败
+        self._paper_trading_account: Optional[bool] = None
+        # 实盘安全提醒已发送（invalidate 后重置，便于换令牌后再提醒）
+        self._lb_non_paper_warn_sent = False
+        self._lb_warn_lock = threading.Lock()
         # {symbol: (StaticInfo, timestamp)}
         self._static_cache: Dict[str, Any] = {}
         self._static_cache_lock = threading.Lock()
 
-    def _is_connection_error(self, exc: Exception) -> bool:
-        msg = str(exc).lower()
-        return any(s in msg for s in self._CONNECTION_ERRORS)
+    def _send_longbridge_real_account_security_warning(self) -> None:
+        """确认为非模拟盘时向已配置渠道推送一次安全风险提醒。"""
+        with self._lb_warn_lock:
+            if self._lb_non_paper_warn_sent:
+                return
+            try:
+                # 延迟导入，避免 data_provider 被任意引用时拉取 analyzer/litellm 全链路
+                from src.notification import NotificationService
 
-    def _invalidate_ctx(self):
-        """Reset cached context so the next call rebuilds the connection."""
-        with self._ctx_lock:
-            self._ctx = None
-            self._config = None
+                content = (
+                    "## ⚠️ 长桥 API 安全提醒\n\n"
+                    "当前长桥 OpenAPI 凭证对应 **实盘账户**（持仓接口返回的 "
+                    "`account_channel` 不为 `lb_papertrading`）。\n\n"
+                    "- 本系统会将该凭证用于行情等 OpenAPI 调用；若令牌具备交易类权限，存在账户与资产安全风险。\n"
+                    "- 建议用于分析、测试或自动化实验时改用 **模拟盘** 专用令牌（模拟盘对应 `lb_papertrading`）。\n"
+                    "- 请勿在不可信环境暴露 `.env` 或 CI 密钥；如怀疑泄露请在长桥侧 **重置 / 轮换** "
+                    "App Key 与 Access Token。\n\n"
+                    "（本提醒在每次成功建立长桥连接并识别为实盘后发送一次。）"
+                )
+                ok = NotificationService().send(content, email_send_to_all=True)
+                if ok:
+                    self._lb_non_paper_warn_sent = True
+                else:
+                    logger.warning(
+                        "[Longbridge] 实盘账户安全提醒未送出（通知渠道不可用或全部失败）"
+                    )
+            except Exception as e:
+                logger.warning("[Longbridge] 实盘账户安全提醒推送异常: %s", e)
+
+    def _probe_paper_trading_account(self, lb_config: Any) -> None:
+        """
+        QuoteContext 就绪后请求一次 GET /v1/asset/stock（SDK: stock_positions），
+        根据返回中每条持仓分组的 account_channel 判断是否模拟盘。
+        官方文档：https://open.longbridge.com/docs/trade/asset/stock
+        （HTTP JSON 为 data.list[].account_channel；Python SDK 为 channels[].account_channel）
+        """
+        try:
+            from longbridge.openapi import TradeContext
+
+            tctx = TradeContext(lb_config)
+            resp = tctx.stock_positions()
+            channels = getattr(resp, "channels", None) or []
+            if not channels:
+                self._paper_trading_account = None
+                logger.info(
+                    "[Longbridge] stock_positions 返回空 channels，无法判断实盘/模拟盘"
+                )
+            else:
+                paper = any(
+                    getattr(ch, "account_channel", "") == "lb_papertrading"
+                    for ch in channels
+                )
+                self._paper_trading_account = paper
+                chs = [getattr(ch, "account_channel", "?") for ch in channels]
+                logger.info(
+                    "[Longbridge] stock_positions 已探测 account_channel=%s -> 模拟盘=%s",
+                    chs,
+                    paper,
+                )
+                if self._paper_trading_account is False:
+                    self._send_longbridge_real_account_security_warning()
+        except Exception as e:
+            logger.debug("[Longbridge] stock_positions 探测失败（可能无交易类权限）: %s", e)
+            self._paper_trading_account = None
+
+    @property
+    def paper_trading_account(self) -> Optional[bool]:
+        """长桥是否为模拟盘账户；None 表示尚未成功探测。"""
+        return self._paper_trading_account
 
     def _is_available(self) -> bool:
         """Check if Longbridge credentials are configured."""
         if self._available is not None:
             return self._available
+        # Config 单例尚未就绪时禁止调用 get_config()，否则 _load_from_env 会递归死锁
+        try:
+            from src.config import Config
+
+            if getattr(Config, "_instance", None) is None:
+                has_creds = bool(
+                    os.getenv("LONGBRIDGE_APP_KEY")
+                    and os.getenv("LONGBRIDGE_APP_SECRET")
+                    and os.getenv("LONGBRIDGE_ACCESS_TOKEN")
+                )
+                self._available = has_creds
+                return has_creds
+        except Exception:
+            pass
         try:
             from src.config import get_config
+
             config = get_config()
             has_creds = bool(
                 config.longbridge_app_key
@@ -315,6 +472,7 @@ class LongbridgeFetcher(BaseFetcher):
                 return self._ctx
             if not self._is_available():
                 return None
+            probe_config: Optional[Any] = None
             try:
                 from longbridge.openapi import QuoteContext, Config
 
@@ -383,11 +541,16 @@ class LongbridgeFetcher(BaseFetcher):
                 self._config = lb_config
                 self._ctx = QuoteContext(lb_config)
                 logger.info("[Longbridge] QuoteContext 初始化成功")
-                return self._ctx
+                probe_config = lb_config
             except Exception as e:
                 logger.warning("[Longbridge] QuoteContext 初始化失败: %s", e)
                 self._available = False
                 return None
+        # 在锁外调用交易接口，避免阻塞其它只读行情调用
+        if probe_config is not None:
+            self._probe_paper_trading_account(probe_config)
+        with self._ctx_lock:
+            return self._ctx
 
     # ------------------------------------------------------------------
     # static_info with cache
@@ -416,8 +579,6 @@ class LongbridgeFetcher(BaseFetcher):
                 return info
         except Exception as e:
             logger.debug(f"[Longbridge] static_info({symbol}) 失败: {e}")
-            if self._is_connection_error(e):
-                self._invalidate_ctx()
         return None
 
     # ------------------------------------------------------------------
@@ -514,17 +675,20 @@ class LongbridgeFetcher(BaseFetcher):
         try:
             quotes = ctx.quote([symbol])
             if not quotes:
+                logger.warning("[Longbridge] quote(%s) 返回空列表", symbol)
                 return None
             q = quotes[0]
         except Exception as e:
-            logger.info(f"[Longbridge] quote({symbol}) 失败: {e}")
-            if self._is_connection_error(e):
-                logger.warning("[Longbridge] 检测到连接已断开，将在下次调用时重建连接")
-                self._invalidate_ctx()
+            logger.warning("[Longbridge] quote(%s) 失败: %s", symbol, e)
             return None
 
         price = safe_float(getattr(q, "last_done", None))
         if price is None or price <= 0:
+            logger.warning(
+                "[Longbridge] quote(%s) 价格无效 last_done=%r，跳过",
+                symbol,
+                getattr(q, "last_done", None),
+            )
             return None
 
         prev_close = safe_float(getattr(q, "prev_close", None))
@@ -649,9 +813,6 @@ class LongbridgeFetcher(BaseFetcher):
                 end_dt,
             )
         except Exception as e:
-            if self._is_connection_error(e):
-                logger.warning("[Longbridge] 检测到连接已断开，将在下次调用时重建连接")
-                self._invalidate_ctx()
             raise
 
         if not candles:

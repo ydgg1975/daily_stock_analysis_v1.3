@@ -240,6 +240,18 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | Variable | Description | Default | Required |
 |--------|------|--------|:----:|
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | Optional |
+| `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key; when set, US/HK daily bars and realtime quotes prefer Longbridge (see README “Longbridge-first”). | - | Optional |
+| `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | - | Optional |
+| `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | - | Optional |
+| `LONGBRIDGE_WATCHLIST_GROUPS` | Comma-separated watchlist group names in the Longbridge app; at analysis time merged with `STOCK_LIST` (deduped; persisted `STOCK_LIST` unchanged); requires `LONGBRIDGE_*` | - | Optional |
+| `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | In-process `static_info` cache TTL in seconds (default `86400`; `0` = no cache) | - | Optional |
+| `LONGBRIDGE_HTTP_URL` | HTTP API base URL (default `https://openapi.longbridge.com`) | - | Optional |
+| `LONGBRIDGE_QUOTE_WS_URL` | Quote WebSocket URL (default `wss://openapi-quote.longbridge.com/v2`) | - | Optional |
+| `LONGBRIDGE_TRADE_WS_URL` | Trade WebSocket URL (default `wss://openapi-trade.longbridge.com/v2`) | - | Optional |
+| `LONGBRIDGE_REGION` | Override region endpoint; SDK auto-selects by network (default `hk`); set if wrong (e.g. `cn`, `hk`) | - | Optional |
+| `LONGBRIDGE_ENABLE_OVERNIGHT` | Overnight session quotes: `true` / `false` (default `false`) | - | Optional |
+| `LONGBRIDGE_PUSH_CANDLESTICK_MODE` | Candlestick push mode: `realtime` or `confirmed` (default `realtime`) | - | Optional |
+| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | Whether to print quote packages on connect (default `false` when unset; set `1`/`true`/`yes` to enable) | - | Optional |
 | `TICKFLOW_API_KEY` | TickFlow API key; CN market review indices prefer TickFlow when configured, and market breadth does so only when the plan supports universe queries | - | Optional |
 | `ENABLE_REALTIME_QUOTE` | Enable real-time quotes (if disabled, uses historical closing prices for analysis) | `true` | Optional |
 | `ENABLE_REALTIME_TECHNICAL_INDICATORS` | Intraday real-time technicals: Calculate MA5/MA10/MA20 and bull trends using real-time prices when enabled (Issue #234); uses yesterday's close if disabled. | `true` | Optional |
@@ -252,6 +264,8 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `FUNDAMENTAL_RETRY_MAX` | Retry count for fundamental capabilities (including the first attempt) | `1` | Optional |
 | `FUNDAMENTAL_CACHE_TTL_SECONDS` | Fundamental aggregation cache TTL (seconds), short cache to reduce repeated API pulling. | `120` | Optional |
 | `FUNDAMENTAL_CACHE_MAX_ENTRIES` | Maximum entries for fundamental cache (evicted by time within TTL) | `256` | Optional |
+
+> **GitHub Actions:** The bundled `daily_analysis.yml` maps `LONGBRIDGE_*` into the job environment. If `LONGBRIDGE_APP_KEY`, `LONGBRIDGE_APP_SECRET`, and `LONGBRIDGE_ACCESS_TOKEN` are not configured under **Settings → Secrets and variables → Actions**, CI will not call Longbridge (logs usually show no `[Longbridge]` quote lines). Optional endpoint variables such as `LONGBRIDGE_REGION` may be stored in **Variables** or **Secrets**.
 
 > **Behavior Notes:**
 > - **A-shares**: Returns aggregated capabilities by `valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards`.
@@ -619,6 +633,12 @@ System defaults to AkShare (free), also supports other data sources:
 - Free, no configuration needed
 - Supports US/HK stock data
 - US stock historical and real-time data both use YFinance exclusively to avoid technical indicator errors from akshare's US stock adjustment issues
+
+### Longbridge
+- **Routing**: With `LONGBRIDGE_*` configured, US/HK daily bars and realtime quotes **prefer Longbridge**; YFinance / AkShare **fallback** or **merge fields** on failure or incomplete data. **If Longbridge is not configured, it is not called.** **A-share** routing does not use Longbridge.
+- **Account safety check (optional)**: After the first quote connection, the app requests positions and uses `account_channel` to distinguish paper trading (`lb_papertrading`) from a **live** account; if live, a **one-time security notice** is sent via configured notification channels (may repeat after a connection reset).
+- **Watchlist groups in analysis (optional)**: Set `LONGBRIDGE_WATCHLIST_GROUPS` to comma-separated group names from the Longbridge app. Analysis uses `get_stock_codes_for_analysis()` to **merge and dedupe** symbols from those groups with `STOCK_LIST`, **without** rewriting persisted `STOCK_LIST` in `.env`.
+- **Credentials**: Obtain `LONGBRIDGE_APP_KEY`, `LONGBRIDGE_APP_SECRET`, `LONGBRIDGE_ACCESS_TOKEN` from [open.longbridge.com](https://open.longbridge.com/). Optional endpoints: `LONGBRIDGE_HTTP_URL`, `LONGBRIDGE_QUOTE_WS_URL`, `LONGBRIDGE_TRADE_WS_URL`, `LONGBRIDGE_REGION`; see the official docs for [environment variables](https://open.longbridge.com/docs/getting-started#environment-variables).
 
 ---
 

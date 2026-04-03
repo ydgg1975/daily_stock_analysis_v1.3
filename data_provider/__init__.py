@@ -25,7 +25,7 @@
 4. TushareFetcher (Priority 2) - 来自 tushare 库（不可用）
 5. BaostockFetcher (Priority 3) - 来自 baostock 库
 6. YfinanceFetcher (Priority 4) - 来自 yfinance 库
-7. LongbridgeFetcher (Priority 5) - 长桥 OpenAPI（美股/港股兜底）
+7. LongbridgeFetcher (Priority 5) - 长桥 OpenAPI（美股/港股；配置 `LONGBRIDGE_*` 后由管理器优先选用，失败时再走 YFinance/AkShare）
 
 提示：优先级数字越小越优先，同优先级按初始化顺序排列
 """

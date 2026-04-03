@@ -803,7 +803,7 @@ class DataFetcherManager:
           2. TushareFetcher (Priority 2)
           3. BaostockFetcher (Priority 3)
           4. YfinanceFetcher (Priority 4)
-          5. LongbridgeFetcher (Priority 5) - 长桥（美股/港股兜底）
+          5. LongbridgeFetcher (Priority 5) - 长桥（美股/港股；配置后由专用路由优先，见 `_longbridge_preferred`）
         """
         from .efinance_fetcher import EfinanceFetcher
         from .akshare_fetcher import AkshareFetcher
@@ -819,7 +819,7 @@ class DataFetcherManager:
         pytdx = PytdxFetcher()      # 通达信数据源（可配 PYTDX_HOST/PYTDX_PORT）
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
-        longbridge = LongbridgeFetcher()  # 长桥（美股/港股兜底，懒加载）
+        longbridge = LongbridgeFetcher()  # 长桥（美股/港股专用路由，配置后优先；懒加载）
 
         # 初始化数据源列表
         self._ensure_concurrency_guards()

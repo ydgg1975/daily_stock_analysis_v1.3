@@ -441,6 +441,8 @@ class Config:
     longbridge_app_key: Optional[str] = None
     longbridge_app_secret: Optional[str] = None
     longbridge_access_token: Optional[str] = None
+    # 长桥 App 内自选分组名称（来自 LONGBRIDGE_WATCHLIST_GROUPS，逗号分隔）；分析时用 get_stock_codes_for_analysis() 与 stock_list 合并，不写入 stock_list
+    longbridge_watchlist_groups: List[str] = field(default_factory=list)
 
     # === AI 分析配置 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-2.5-flash)
@@ -764,6 +766,7 @@ class Config:
     _WEBUI_RUNTIME_ENV_FILE_PRIORITY_KEYS = frozenset(
         {
             "STOCK_LIST",
+            "LONGBRIDGE_WATCHLIST_GROUPS",
             "RUN_IMMEDIATELY",
             "SCHEDULE_ENABLED",
             "SCHEDULE_TIME",
@@ -890,7 +893,16 @@ class Config:
         # 如果没有配置，使用默认的示例股票
         if not stock_list:
             stock_list = ['600519', '000001', '300750']
-        
+
+        lb_wl_raw = cls._resolve_env_value(
+            "LONGBRIDGE_WATCHLIST_GROUPS",
+            default="",
+            prefer_env_file=True,
+        ) or ""
+        longbridge_watchlist_groups = [
+            x.strip() for x in lb_wl_raw.split(",") if x.strip()
+        ]
+
         # === LiteLLM multi-key parsing ===
         # GEMINI_API_KEYS (comma-separated) > GEMINI_API_KEY (single)
         _gemini_keys_raw = os.getenv('GEMINI_API_KEYS', '')
@@ -1103,6 +1115,7 @@ class Config:
             longbridge_app_key=os.getenv('LONGBRIDGE_APP_KEY') or None,
             longbridge_app_secret=os.getenv('LONGBRIDGE_APP_SECRET') or None,
             longbridge_access_token=os.getenv('LONGBRIDGE_ACCESS_TOKEN') or None,
+            longbridge_watchlist_groups=longbridge_watchlist_groups,
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
@@ -1937,7 +1950,64 @@ class Config:
             stock_list = ['000001']
 
         self.stock_list = stock_list
-    
+
+        lb_wl_raw = type(self)._resolve_env_value(
+            "LONGBRIDGE_WATCHLIST_GROUPS",
+            default="",
+            prefer_env_file=True,
+        ) or ""
+        self.longbridge_watchlist_groups = [
+            x.strip() for x in lb_wl_raw.split(",") if x.strip()
+        ]
+
+    def get_stock_codes_for_analysis(self) -> List[str]:
+        """
+        运行分析时使用的股票代码列表。
+
+        在仅含 STOCK_LIST 的 ``stock_list`` 基础上，若配置了 LONGBRIDGE_WATCHLIST_GROUPS，
+        则临时拉取长桥自选分组证券并合并去重（不修改 ``stock_list``，避免将分组证券持久进配置）。
+        """
+        base = list(self.stock_list)
+        raw = type(self)._resolve_env_value(
+            "LONGBRIDGE_WATCHLIST_GROUPS",
+            default="",
+            prefer_env_file=True,
+        ) or ""
+        group_names = [x.strip() for x in raw.split(",") if x.strip()]
+        if not group_names:
+            return base
+        try:
+            from data_provider.longbridge_fetcher import (
+                fetch_stock_codes_for_watchlist_group_names,
+            )
+
+            extra = fetch_stock_codes_for_watchlist_group_names(group_names)
+        except Exception as e:
+            logger.warning("LONGBRIDGE_WATCHLIST_GROUPS 展开失败: %s", e)
+            return base
+        if not extra:
+            return base
+        return type(self)._dedupe_stock_list_merge_base_first(base, extra)
+
+    @staticmethod
+    def _dedupe_stock_list_merge_base_first(base: List[str], extra: List[str]) -> List[str]:
+        """先保留 base 顺序，再追加 extra 中未出现的代码（按 normalize_stock_code 去重）。"""
+        from data_provider.base import normalize_stock_code
+
+        seen: set = set()
+        out: List[str] = []
+        for part in (base, extra):
+            for c in part:
+                raw = (c or "").strip()
+                if not raw:
+                    continue
+                key = normalize_stock_code(raw.upper())
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(key)
+        return out
+
     def validate_structured(self) -> List[ConfigIssue]:
         """Return structured validation issues with severity levels.
 

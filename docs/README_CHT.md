@@ -57,7 +57,9 @@
 | 行情數據 | AkShare、Tushare、Pytdx、Baostock、YFinance、[Longbridge](https://open.longbridge.com/)（美股/港股首選數據源） |
 | 新聞搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
-> **長橋優先策略（僅美／港股）**：在已設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 的前提下，美股與港股的 **日線** 與 **即時行情** 由 **Longbridge 優先**；長橋失敗或欄位不足時再由 **YFinance／AkShare** 兜底或合併補欄。**未設定長橋憑證時不會呼叫 Longbridge**，美／港股仍以 YFinance／AkShare 為主（與未整合長橋前一致）。**美股大盤指數**始終以 YFinance 優先（長橋不提供指數行情）。**A 股**路由不變。詳見 `.env.example` 與 [完整指南](./full-guide.md)。
+> **長橋優先策略（僅美／港股）**：在已設定 `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` 的前提下，美股與港股的 **日線** 與 **即時行情** 由 **Longbridge 優先**；長橋失敗或欄位不足時再由 **YFinance／AkShare** 兜底或合併補欄。**未設定長橋憑證時不會呼叫 Longbridge**，美／港股仍以 YFinance／AkShare 為主（與未整合長橋前一致）。**美股大盤指數**始終以 YFinance 優先（長橋不提供指數行情）。**A 股**路由不變。
+>
+> **長橋擴展（可選）**：連線建立後會做 **實盤／模擬盤檢測**；若為實盤，將向已配置渠道 **推送一次安全提示**。設定 `LONGBRIDGE_WATCHLIST_GROUPS` 可將長橋 App **自選分組** 內證券在 **分析時** 自動納入（與 `STOCK_LIST` 合併去重，不修改持久自選股）。詳見 `.env.example` 與 [完整指南](./full-guide.md)。
 
 ### 內建交易紀律
 
@@ -144,6 +146,7 @@
 | `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key（設定後自動成為美股/港股首選數據源） | 可選 |
 | `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | 可選 |
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | 可選 |
+| `LONGBRIDGE_WATCHLIST_GROUPS` | 長橋 App 自選分組名（逗號分隔）；分析時自動納入分組證券（與 `STOCK_LIST` 合併去重，不改寫 `STOCK_LIST`）；需 `LONGBRIDGE_*` | 可選 |
 | `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | 長橋 `static_info` 進程內快取秒數，預設 `86400`；`0` 表示不快取 | 可選 |
 | `LONGBRIDGE_HTTP_URL` | HTTP 介面位址（預設 `https://openapi.longbridge.com`） | 可選 |
 | `LONGBRIDGE_QUOTE_WS_URL` | 行情 WebSocket 位址（預設 `wss://openapi-quote.longbridge.com/v2`） | 可選 |

@@ -24,6 +24,8 @@ from data_provider.longbridge_fetcher import (
     _to_longbridge_symbol,
     _is_us_code,
     _is_hk_code,
+    from_longbridge_symbol_to_stock_code,
+    fetch_stock_codes_for_watchlist_group_names,
 )
 from data_provider.realtime_types import UnifiedRealtimeQuote, RealtimeSource
 
@@ -63,6 +65,53 @@ class TestSymbolConversion(unittest.TestCase):
         self.assertTrue(_is_hk_code("HK00700"))
         self.assertTrue(_is_hk_code("00700"))
         self.assertFalse(_is_hk_code("AAPL"))
+
+
+class TestFromLongbridgeSymbolToStockCode(unittest.TestCase):
+    """Longbridge ticker -> internal code (STOCK_LIST style)."""
+
+    def test_us_hk_cn(self):
+        self.assertEqual(from_longbridge_symbol_to_stock_code("AAPL.US"), "AAPL")
+        self.assertEqual(from_longbridge_symbol_to_stock_code("700.HK"), "HK00700")
+        self.assertEqual(from_longbridge_symbol_to_stock_code("600519.SH"), "600519")
+
+    def test_empty(self):
+        self.assertIsNone(from_longbridge_symbol_to_stock_code(""))
+        self.assertIsNone(from_longbridge_symbol_to_stock_code("   "))
+
+
+class TestFetchWatchlistGroupNames(unittest.TestCase):
+    """Watchlist group name -> stock codes (mocked QuoteContext)."""
+
+    def test_resolves_group_and_maps_symbols(self):
+        fetcher = LongbridgeFetcher()
+        fetcher._available = True
+        mock_ctx = MagicMock()
+        g1 = MagicMock()
+        g1.name = "自选"
+        s1 = MagicMock()
+        s1.symbol = "AAPL.US"
+        s2 = MagicMock()
+        s2.symbol = "700.HK"
+        g1.securities = [s1, s2]
+        mock_ctx.watchlist.return_value = [g1]
+        fetcher._ctx = mock_ctx
+        out = fetch_stock_codes_for_watchlist_group_names(["自选"], fetcher=fetcher)
+        self.assertEqual(out, ["AAPL", "HK00700"])
+
+    def test_case_insensitive_group_name(self):
+        fetcher = LongbridgeFetcher()
+        fetcher._available = True
+        mock_ctx = MagicMock()
+        g1 = MagicMock()
+        g1.name = "MyList"
+        s1 = MagicMock()
+        s1.symbol = "TSLA.US"
+        g1.securities = [s1]
+        mock_ctx.watchlist.return_value = [g1]
+        fetcher._ctx = mock_ctx
+        out = fetch_stock_codes_for_watchlist_group_names(["mylist"], fetcher=fetcher)
+        self.assertEqual(out, ["TSLA"])
 
 
 class TestLongbridgeFetcherNoCredentials(unittest.TestCase):

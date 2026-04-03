@@ -56,8 +56,8 @@ class BatchCommand(BotCommand):
         
         config = get_config()
         config.refresh_stock_list()
-        
-        stock_list = config.stock_list
+
+        stock_list = config.get_stock_codes_for_analysis()
         
         if not stock_list:
             return BotResponse.error_response(

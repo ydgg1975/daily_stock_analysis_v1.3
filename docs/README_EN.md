@@ -60,7 +60,9 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, [Longbridge](https://open.longbridge.com/) (primary for US/HK when configured) |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 
-> **Longbridge-first (US/HK only):** With `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` set, **daily bars and realtime quotes** for US & HK stocks are fetched from **Longbridge first**; **YFinance / AkShare** are used for **fallback** or **field merge** when Longbridge fails or returns incomplete fields. **If Longbridge is not configured, it is not called** — US/HK still use YFinance / AkShare as before. **US market indices** (e.g. SPX) always prefer **YFinance** (indices are not supported on Longbridge). **A-share** routing is unchanged. See `.env.example` and the [full guide](./full-guide_EN.md).
+> **Longbridge-first (US/HK only):** With `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` set, **daily bars and realtime quotes** for US & HK stocks are fetched from **Longbridge first**; **YFinance / AkShare** are used for **fallback** or **field merge** when Longbridge fails or returns incomplete fields. **If Longbridge is not configured, it is not called** — US/HK still use YFinance / AkShare as before. **US market indices** (e.g. SPX) always prefer **YFinance** (indices are not supported on Longbridge). **A-share** routing is unchanged.
+>
+> **Longbridge extras (optional):** After the quote connection is established, the app runs a **paper vs live account check**; if the account is **live**, a **one-time security notice** is sent to configured notification channels. Set `LONGBRIDGE_WATCHLIST_GROUPS` to **auto-include** securities from named Longbridge app watchlist groups in **analysis** (merged with `STOCK_LIST`, deduped; does **not** rewrite persisted `STOCK_LIST`). See `.env.example` and the [full guide](./full-guide_EN.md).
 
 ### Built-in Trading Rules
 
@@ -149,6 +151,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `LONGBRIDGE_APP_KEY` | [Longbridge OpenAPI](https://open.longbridge.com/) App Key (becomes primary US/HK data source when configured) | Optional |
 | `LONGBRIDGE_APP_SECRET` | Longbridge App Secret | Optional |
 | `LONGBRIDGE_ACCESS_TOKEN` | Longbridge Access Token | Optional |
+| `LONGBRIDGE_WATCHLIST_GROUPS` | Comma-separated watchlist group names in the Longbridge app; at analysis time their symbols are merged with `STOCK_LIST` (deduped; `STOCK_LIST` in `.env` is unchanged); requires `LONGBRIDGE_*` | Optional |
 | `LONGBRIDGE_STATIC_INFO_TTL_SECONDS` | In-process `static_info` cache TTL in seconds (default `86400`; `0` = no cache) | Optional |
 | `LONGBRIDGE_HTTP_URL` | HTTP API base URL (default `https://openapi.longbridge.com`) | Optional |
 | `LONGBRIDGE_QUOTE_WS_URL` | Quote WebSocket URL (default `wss://openapi-quote.longbridge.com/v2`) | Optional |
