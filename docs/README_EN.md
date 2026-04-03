@@ -20,7 +20,7 @@ Analyze your watchlist daily → generate a decision dashboard → push to multi
 
 **Zero-cost deployment** · Runs on GitHub Actions · No server required
 
-[**Quick Start**](#-quick-start) · [**Key Features**](#-key-features) · [**Sample Output**](#-sample-output) · [**Full Guide**](full-guide_EN.md) · [**FAQ**](FAQ_EN.md) · [**Contributing**](CONTRIBUTING_EN.md) · [**All Docs**](INDEX_EN.md)
+[**Quick Start**](#-quick-start) · [**Key Features**](#-key-features) · [**Sample Output**](#-sample-output) · [**Full Guide**](./full-guide_EN.md) · [**FAQ**](./FAQ_EN.md) · [**Contributing**](./CONTRIBUTING_EN.md) · [**All Docs**](./INDEX_EN.md)
 
 English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 
@@ -44,10 +44,12 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Market | Global Markets | A-shares, Hong Kong stocks, US stocks |
 | Search | Smart Autocomplete (MVP) | **[Beta]** Home search supports code/name/pinyin/aliases; the local index now covers A-shares, Hong Kong, and US stocks and can be refreshed from Tushare or AkShare data |
 | Review | Market Review | Daily overview, sectors, northbound capital flow |
-| Backtest | AI Backtest Validation | Auto-evaluate historical analysis accuracy, direction win rate, SL/TP hit rates |
+| Backtest | AI Backtest Validation | Auto-evaluate historical analysis accuracy, with a 1-day next-session validation view for AI prediction vs actual move and accuracy |
 | Agent Q&A | Strategy Chat | Multi-turn strategy chat with 11 built-in trading strategies (internally loaded as skills) (Web/Bot/API) |
 | Notifications | Multi-channel Push | Telegram, Discord, Slack, Email, WeChat Work, Feishu, etc. |
 | Automation | Scheduled Runs | GitHub Actions scheduled execution, no server required |
+
+> The Backtest page now includes a 1-day next-session validation view. You can filter by stock code and analysis date range to compare the original AI prediction with the next trading day close and inspect the filtered accuracy rate. This is based on historical analysis plus `eval_window_days=1` backtest data, not real trade execution logs.
 
 ### Tech Stack & Data Sources
 
@@ -57,7 +59,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, [Longbridge](https://open.longbridge.com/) (primary for US/HK when configured) |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 
-> **Longbridge-first policy:** When `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` are configured, Longbridge becomes the **primary data source** for US & HK stocks (daily data + realtime quotes); YFinance / AkShare serve as fallback and field supplement. Without Longbridge credentials, YFinance (US) / AkShare (HK) remain primary. A-share routing is unaffected. See `.env.example` and [full guide](docs/full-guide.md).
+> **Longbridge-first (US/HK only):** With `LONGBRIDGE_APP_KEY` / `LONGBRIDGE_APP_SECRET` / `LONGBRIDGE_ACCESS_TOKEN` set, **daily bars and realtime quotes** for US & HK stocks are fetched from **Longbridge first**; **YFinance / AkShare** are used for **fallback** or **field merge** when Longbridge fails or returns incomplete fields. **If Longbridge is not configured, it is not called** — US/HK still use YFinance / AkShare as before. **US market indices** (e.g. SPX) always prefer **YFinance** (indices are not supported on Longbridge). **A-share** routing is unchanged. See `.env.example` and the [full guide](./full-guide_EN.md).
 
 ### Built-in Trading Rules
 
@@ -84,7 +86,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 
 **AI Model Configuration (Choose one)**
 
-> For detailed configuration, see [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md) (three-tier config, channels, Vision, Agent, troubleshooting).
+> For detailed configuration, see [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md). The default path is: pick a provider, add the API key, then optionally pin a primary model. Use channels only when you need multi-provider routing or fallbacks; advanced YAML routing is optional for expert setups.
 
 | Secret Name | Description | Required |
 |------------|------|:----:|
@@ -153,10 +155,10 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `LONGBRIDGE_REGION` | Override region endpoint; the SDK auto-selects by network (default `hk`); set if wrong (e.g. `cn`, `hk`) | Optional |
 | `LONGBRIDGE_ENABLE_OVERNIGHT` | Overnight session quotes: `true` / `false` (default `false`) | Optional |
 | `LONGBRIDGE_PUSH_CANDLESTICK_MODE` | Candlestick push mode: `realtime` or `confirmed` (default `realtime`) | Optional |
-| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | Whether to print quote packages on connect (default `false`) | Optional |
+| `LONGBRIDGE_PRINT_QUOTE_PACKAGES` | Whether to print quote packages on connect (default `false` when unset; set `1`/`true`/`yes` to enable) | Optional |
 | `WECHAT_MSG_TYPE` | WeChat Work message type, default `markdown`, set to `text` for plain markdown text | Optional |
 | `AGENT_MODE` | Enable Agent strategy chat mode (internally normalized as `skill`, `true`/`false`, default `false`) | Optional |
-| `AGENT_LITELLM_MODEL` | Optional Agent-only primary model; when empty it inherits `LITELLM_MODEL`, and bare names are normalized to `openai/<model>` | Optional |
+| `AGENT_LITELLM_MODEL` | Optional Agent-only primary model; when empty it inherits the primary model, and bare names are normalized to `openai/<model>` | Optional |
 | `AGENT_MAX_STEPS` | Max reasoning steps for Agent mode (default `10`) | Optional |
 | `AGENT_SKILLS` | Comma-separated active strategy-skill ids. Leave empty to use the primary default strategy skill declared in metadata (built-in default: `bull_trend`); use `all` to activate every loaded strategy skill. | Optional |
 | `AGENT_SKILL_DIR` | Custom strategy-skill directory (default built-in `strategies/` compatibility path) | Optional |
@@ -185,7 +187,7 @@ The system will:
 - Send analysis reports to all configured channels
 - Save reports locally
 
-> Resume fetch and `--dry-run` data-existence checks now resolve the "latest reusable trading day" from each market's local timezone and trading calendar. Weekends and holidays reuse the most recent trading day, intraday runs reuse the last completed trading day, and after market close the run skips only if the current trading day's data is already stored. See [Full Guide](full-guide_EN.md) for the exact rules.
+> Resume fetch and `--dry-run` data-existence checks now resolve the "latest reusable trading day" from each market's local timezone and trading calendar. Weekends and holidays reuse the most recent trading day, intraday runs reuse the last completed trading day, and after market close the run skips only if the current trading day's data is already stored. See [Full Guide](./full-guide_EN.md) for the exact rules.
 
 ---
 
@@ -476,7 +478,7 @@ Enable the FastAPI service for configuration management and triggering analysis 
 
 > Note: `POST /api/v1/analysis/analyze` supports only one stock when `async_mode=false`; batch `stock_codes` requires `async_mode=true`. The async `202` response returns a single `task_id` for one stock, or an `accepted` / `duplicates` summary for batch requests.
 
-> For detailed instructions, see [Full Guide - API Service](full-guide_EN.md#fastapi-api-service)
+> For detailed instructions, see [Full Guide - API Service](./full-guide_EN.md#fastapi-api-service)
 
 ---
 
@@ -496,8 +498,8 @@ The home analysis input now behaves more like a search box, reducing the need to
 
 ## 📖 Documentation
 
-- [Complete Configuration Guide](full-guide_EN.md)
-- [FAQ](FAQ_EN.md)
+- [Complete Configuration Guide](./full-guide_EN.md)
+- [FAQ](./FAQ_EN.md)
 - [Deployment Guide](DEPLOY_EN.md)
 - [Bot Command Reference](bot-command.md)
 - [Feishu Bot Setup](bot/feishu-bot-config.md)

@@ -2,7 +2,7 @@
 """
 Unit tests for LongbridgeFetcher integration.
 
-Real API / credentials: use ``tests/test_longbridge_live.py`` (not this file).
+Real API / credentials: use ``tests/longbridge_live_smoke.py`` (not this file).
 
 Verifies:
 1. Symbol conversion logic (AAPL -> AAPL.US, HK00700 -> 0700.HK)
