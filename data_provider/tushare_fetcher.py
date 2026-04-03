@@ -367,9 +367,14 @@ class TushareFetcher(BaseFetcher):
         if _is_us_code(raw_code):
             raise DataFetchError(f"TushareFetcher 不支持美股 {raw_code}，请使用 AkshareFetcher 或 YfinanceFetcher")
 
-        # HK stocks are not supported by Tushare
+        # 港股：直接构造 Tushare HK 格式代码（例如 00700.HK）
         if _is_hk_market(raw_code):
-            raise DataFetchError(f"TushareFetcher 不支持港股 {raw_code}，请使用 AkshareFetcher")
+            # 提取末尾数字部分，补齐 5 位（Tushare 港股代码为 5 位数字）
+            digits = re.sub(r"\D", "", raw_code)
+            if not digits:
+                raise DataFetchError(f"无法识别港股代码 {raw_code}")
+            code = digits[-5:].rjust(5, "0")
+            return f"{code}.HK"
 
         code = normalize_stock_code(raw_code)
         exchange_hint = self._detect_exchange_hint(raw_code)
@@ -429,10 +434,6 @@ class TushareFetcher(BaseFetcher):
         # US stocks not supported
         if _is_us_code(stock_code):
             raise DataFetchError(f"TushareFetcher 不支持美股 {stock_code}，请使用 AkshareFetcher 或 YfinanceFetcher")
-
-        # HK stocks not supported
-        if _is_hk_market(stock_code):
-            raise DataFetchError(f"TushareFetcher 不支持港股 {stock_code}，请使用 AkshareFetcher")
         
         # Rate-limit check
         self._check_rate_limit()
@@ -444,12 +445,26 @@ class TushareFetcher(BaseFetcher):
         ts_start = start_date.replace('-', '')
         ts_end = end_date.replace('-', '')
         
+        # 判断是否为 ETF / 港股，以选择不同接口
         is_etf = _is_etf_code(stock_code)
-        api_name = "fund_daily" if is_etf else "daily"
+        is_hk = _is_hk_market(stock_code) or ts_code.endswith(".HK")
+
+        if is_hk:
+            api_name = "hk_daily"
+        else:
+            api_name = "fund_daily" if is_etf else "daily"
+
         logger.debug(f"调用 Tushare {api_name}({ts_code}, {ts_start}, {ts_end})")
         
         try:
-            if is_etf:
+            if is_hk:
+                # 港股使用 hk_daily 接口
+                df = self._api.hk_daily(
+                    ts_code=ts_code,
+                    start_date=ts_start,
+                    end_date=ts_end,
+                )
+            elif is_etf:
                 # ETF uses fund_daily interface
                 df = self._api.fund_daily(
                     ts_code=ts_code,
@@ -457,7 +472,7 @@ class TushareFetcher(BaseFetcher):
                     end_date=ts_end,
                 )
             else:
-                # Regular stocks use daily interface
+                # Regular A-share stocks use daily interface
                 df = self._api.daily(
                     ts_code=ts_code,
                     start_date=ts_start,
@@ -535,10 +550,6 @@ class TushareFetcher(BaseFetcher):
             logger.warning("Tushare API 未初始化，无法获取股票名称")
             return None
 
-        # HK stocks not supported by Tushare stock_basic
-        if _is_hk_market(stock_code):
-            return None
-
         # 检查缓存
         if hasattr(self, '_stock_name_cache') and stock_code in self._stock_name_cache:
             return self._stock_name_cache[stock_code]
@@ -553,14 +564,22 @@ class TushareFetcher(BaseFetcher):
             
             # 转换代码格式
             ts_code = self._convert_stock_code(stock_code)
-            
-            # ETF uses fund_basic, regular stocks use stock_basic
-            if _is_etf_code(stock_code):
+
+            # 根据市场/类型选择基础信息接口
+            if _is_hk_market(stock_code) or ts_code.endswith(".HK"):
+                # 港股：使用 hk_basic
+                df = self._api.hk_basic(
+                    ts_code=ts_code,
+                    fields='ts_code,name'
+                )
+            elif _is_etf_code(stock_code):
+                # ETF：使用 fund_basic
                 df = self._api.fund_basic(
                     ts_code=ts_code,
                     fields='ts_code,name'
                 )
             else:
+                # A 股股票：使用 stock_basic
                 df = self._api.stock_basic(
                     ts_code=ts_code,
                     fields='ts_code,name'
@@ -593,26 +612,51 @@ class TushareFetcher(BaseFetcher):
         try:
             # 速率限制检查
             self._check_rate_limit()
+
+            frames = []
             
-            # 调用 stock_basic 接口获取所有股票
-            df = self._api.stock_basic(
-                exchange='',
-                list_status='L',
-                fields='ts_code,name,industry,area,market'
-            )
+            # 1. A 股列表
+            try:
+                df_cn = self._api.stock_basic(
+                    exchange='',
+                    list_status='L',
+                    fields='ts_code,name,industry,area,market'
+                )
+                if df_cn is not None and not df_cn.empty:
+                    frames.append(df_cn)
+            except Exception as e:
+                logger.warning(f"Tushare 获取 A 股股票列表失败: {e}")
+
+            # 2. 港股列表（不含行业/地区信息，使用空字符串占位）
+            try:
+                df_hk = self._api.hk_basic(
+                    list_status='L',
+                    fields='ts_code,name,market'
+                )
+                if df_hk is not None and not df_hk.empty:
+                    df_hk = df_hk.copy()
+                    df_hk['industry'] = ''
+                    df_hk['area'] = ''
+                    frames.append(df_hk)
+            except Exception as e:
+                logger.warning(f"Tushare 获取港股股票列表失败: {e}")
+
+            if not frames:
+                return None
+
+            df_all = pd.concat(frames, ignore_index=True)
+
+            # 转换 ts_code 为标准代码格式
+            df_all['code'] = df_all['ts_code'].apply(lambda x: x.split('.')[0])
             
-            if df is not None and not df.empty:
-                # 转换 ts_code 为标准代码格式
-                df['code'] = df['ts_code'].apply(lambda x: x.split('.')[0])
-                
-                # 更新缓存
-                if not hasattr(self, '_stock_name_cache'):
-                    self._stock_name_cache = {}
-                for _, row in df.iterrows():
-                    self._stock_name_cache[row['code']] = row['name']
-                
-                logger.info(f"Tushare 获取股票列表成功: {len(df)} 条")
-                return df[['code', 'name', 'industry', 'area', 'market']]
+            # 更新缓存
+            if not hasattr(self, '_stock_name_cache'):
+                self._stock_name_cache = {}
+            for _, row in df_all.iterrows():
+                self._stock_name_cache[row['code']] = row['name']
+            
+            logger.info(f"Tushare 获取股票列表成功: {len(df_all)} 条")
+            return df_all[['code', 'name', 'industry', 'area', 'market']]
             
         except Exception as e:
             logger.warning(f"Tushare 获取股票列表失败: {e}")
