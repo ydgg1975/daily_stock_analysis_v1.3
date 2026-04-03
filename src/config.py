@@ -1968,12 +1968,9 @@ class Config:
         则临时拉取长桥自选分组证券并合并去重（不修改 ``stock_list``，避免将分组证券持久进配置）。
         """
         base = list(self.stock_list)
-        raw = type(self)._resolve_env_value(
-            "LONGBRIDGE_WATCHLIST_GROUPS",
-            default="",
-            prefer_env_file=True,
-        ) or ""
-        group_names = [x.strip() for x in raw.split(",") if x.strip()]
+        group_names = [
+            x.strip() for x in self.longbridge_watchlist_groups if (x or "").strip()
+        ]
         if not group_names:
             return base
         try:
