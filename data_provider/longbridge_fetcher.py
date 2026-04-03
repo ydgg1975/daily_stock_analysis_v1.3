@@ -350,13 +350,22 @@ class LongbridgeFetcher(BaseFetcher):
         self._available = None
         # 首次连接后通过 Trade stock_positions 探测；True=模拟盘 lb_papertrading，False=非模拟，None=未探测或失败
         self._paper_trading_account: Optional[bool] = None
-        # 实盘安全提醒已发送（invalidate 后重置，便于换令牌后再提醒）
+        # 实盘安全提醒已发送；在显式重建/失效 Longbridge 上下文时通过 _reset_longbridge_context_state 重置
         self._lb_non_paper_warn_sent = False
         self._lb_warn_lock = threading.Lock()
         # {symbol: (StaticInfo, timestamp)}
         self._static_cache: Dict[str, Any] = {}
         self._static_cache_lock = threading.Lock()
 
+    def _reset_longbridge_context_state(self) -> None:
+        """显式清理 Longbridge 连接与账户探测状态，供上下文重建前调用。"""
+        with self._ctx_lock:
+            self._ctx = None
+            self._config = None
+            self._available = None
+        with self._lb_warn_lock:
+            self._paper_trading_account = None
+            self._lb_non_paper_warn_sent = False
     def _send_longbridge_real_account_security_warning(self) -> None:
         """确认为非模拟盘时向已配置渠道推送一次安全风险提醒。"""
         with self._lb_warn_lock:
