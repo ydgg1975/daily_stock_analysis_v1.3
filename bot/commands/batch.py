@@ -9,6 +9,7 @@
 
 import logging
 import threading
+import uuid
 from typing import List
 
 from bot.commands.base import BotCommand
@@ -51,7 +52,7 @@ class BatchCommand(BotCommand):
     
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         """执行批量分析命令"""
-        from config import get_config
+        from src.config import get_config
         
         config = get_config()
         config.refresh_stock_list()
@@ -98,13 +99,18 @@ class BatchCommand(BotCommand):
     def _run_batch_analysis(self, stock_list: List[str], message: BotMessage) -> None:
         """后台执行批量分析"""
         try:
-            from config import get_config
+            from src.config import get_config
             from main import StockAnalysisPipeline
             
             config = get_config()
             
             # 创建分析管道
-            pipeline = StockAnalysisPipeline(config=config)
+            pipeline = StockAnalysisPipeline(
+                config=config,
+                source_message=message,
+                query_id=uuid.uuid4().hex,
+                query_source="bot"
+            )
             
             # 执行分析（会自动推送汇总报告）
             results = pipeline.run(
