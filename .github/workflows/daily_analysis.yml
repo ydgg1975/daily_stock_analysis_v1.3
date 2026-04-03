@@ -51,6 +51,47 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          
+      # 可选：在仓库 Settings → Secrets and variables 中配置 ACTIONS_HTTP_PROXY / ACTIONS_HTTPS_PROXY（或 ACTIONS_ALL_PROXY）。
+      # 仓库侧使用 ACTIONS_* 前缀，避免与进程环境标准名 HTTP_PROXY 等混淆（应用层仍见 src/config.py 读取 HTTP_PROXY）。
+      # 本步骤会把代理写入 GITHUB_ENV 为标准 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY，供 setup-python、pip、main.py 使用。
+      # ACTIONS_NO_PROXY 为追加片段；默认已排除 GitHub 相关域名。兼容旧 Secret 名 HTTP_PROXY / HTTPS_PROXY / …（无 ACTIONS_ 前缀）。
+      - name: 设置代理（可选）
+        env:
+          _HTTP: ${{ secrets.ACTIONS_HTTP_PROXY || vars.ACTIONS_HTTP_PROXY || secrets.HTTP_PROXY || vars.HTTP_PROXY }}
+          _HTTPS: ${{ secrets.ACTIONS_HTTPS_PROXY || vars.ACTIONS_HTTPS_PROXY || secrets.HTTPS_PROXY || vars.HTTPS_PROXY }}
+          _ALL: ${{ secrets.ACTIONS_ALL_PROXY || vars.ACTIONS_ALL_PROXY || secrets.ALL_PROXY || vars.ALL_PROXY }}
+          _NO_PROXY_EXTRA: ${{ secrets.ACTIONS_NO_PROXY || vars.ACTIONS_NO_PROXY || secrets.NO_PROXY || vars.NO_PROXY }}
+        run: |
+          set -e
+          DEFAULT_NO="localhost,127.0.0.1,::1,.local,github.com,.github.com,.githubusercontent.com,actions.githubusercontent.com"
+          if [ -n "$_HTTP" ]; then
+            echo "HTTP_PROXY=$_HTTP" >> "$GITHUB_ENV"
+            echo "http_proxy=$_HTTP" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$_HTTPS" ]; then
+            echo "HTTPS_PROXY=$_HTTPS" >> "$GITHUB_ENV"
+            echo "https_proxy=$_HTTPS" >> "$GITHUB_ENV"
+          elif [ -n "$_HTTP" ]; then
+            echo "HTTPS_PROXY=$_HTTP" >> "$GITHUB_ENV"
+            echo "https_proxy=$_HTTP" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$_ALL" ]; then
+            echo "ALL_PROXY=$_ALL" >> "$GITHUB_ENV"
+            echo "all_proxy=$_ALL" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$_HTTP" ] || [ -n "$_HTTPS" ] || [ -n "$_ALL" ]; then
+            if [ -n "$_NO_PROXY_EXTRA" ]; then
+              echo "NO_PROXY=${DEFAULT_NO},${_NO_PROXY_EXTRA}" >> "$GITHUB_ENV"
+              echo "no_proxy=${DEFAULT_NO},${_NO_PROXY_EXTRA}" >> "$GITHUB_ENV"
+            else
+              echo "NO_PROXY=$DEFAULT_NO" >> "$GITHUB_ENV"
+              echo "no_proxy=$DEFAULT_NO" >> "$GITHUB_ENV"
+            fi
+            echo "✅ 已启用代理（后续步骤将使用 HTTP(S)_PROXY / ALL_PROXY）"
+          else
+            echo "ℹ️ 未配置 ACTIONS_HTTP_PROXY / ACTIONS_HTTPS_PROXY / ACTIONS_ALL_PROXY（或兼容旧名），跳过代理"
+          fi
       
       - name: 创建必要目录
         run: |
