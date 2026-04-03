@@ -102,6 +102,7 @@ class StockAnalysisPipeline:
         
         # 初始化搜索服务
         self.search_service = SearchService(
+            anspire_keys=self.config.anspire_api_keys,
             bocha_keys=self.config.bocha_api_keys,
             tavily_keys=self.config.tavily_api_keys,
             brave_keys=self.config.brave_api_keys,
