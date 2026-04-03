@@ -49,6 +49,45 @@ def _set_random_user_agent():
     requests.utils.default_headers = lambda: {"User-Agent": ua}
 
 
+# ---------- 新浪/腾讯批量接口（不依赖东方财富） ----------
+_SINA_ENDPOINT = "hq.sinajs.cn/list"
+_TENCENT_ENDPOINT = "qt.gtimg.cn/q"
+
+# A 股代码列表缓存
+_code_list_cache: Optional[Dict] = None
+_CODE_LIST_TTL = 3600  # 1 小时
+
+
+def _to_sina_symbol(stock_code: str) -> str:
+    """将 6 位股票代码转换为新浪/腾讯格式 (sh/sz 前缀)"""
+    code = stock_code.strip().split(".")[0] if "." in stock_code else stock_code.strip()
+    if code.startswith(("6", "5", "90")):
+        return f"sh{code}"
+    return f"sz{code}"
+
+
+def _get_all_a_share_codes() -> List[str]:
+    """获取全部 A 股代码列表（基于交易所官网，不依赖东方财富）"""
+    global _code_list_cache
+    if _code_list_cache and time.time() - _code_list_cache["ts"] < _CODE_LIST_TTL:
+        return _code_list_cache["codes"]
+
+    try:
+        import akshare as ak
+        df = ak.stock_info_a_code_name()
+        if df is not None and not df.empty:
+            col = "code" if "code" in df.columns else df.columns[0]
+            codes = df[col].astype(str).str.zfill(6).tolist()
+            if codes:
+                logger.info("[选股筛选] 获取 A 股代码列表成功 (akshare)，共 %d 只", len(codes))
+                _code_list_cache = {"codes": codes, "ts": time.time()}
+                return codes
+    except Exception as e:
+        logger.warning("[选股筛选] akshare 获取代码列表失败: %s", e)
+
+    return []
+
+
 def _get_cached_snapshot(market_key: str) -> Optional[pd.DataFrame]:
     """读取快照缓存"""
     entry = _snapshot_cache.get(market_key)
@@ -68,17 +107,31 @@ def _set_cached_snapshot(market_key: str, df: pd.DataFrame):
 # ================================================================
 
 def _fetch_a_share_snapshot() -> Optional[pd.DataFrame]:
-    """efinance 优先 + akshare fallback 获取 A 股全市场快照"""
+    """efinance 优先 + akshare fallback + 新浪/腾讯 fallback 获取 A 股全市场快照"""
     cached = _get_cached_snapshot("a_share")
     if cached is not None:
         return cached
 
+    # 1. efinance（东方财富 push2）
     df = _fetch_a_share_via_efinance()
     if df is not None and not df.empty:
         _set_cached_snapshot("a_share", df)
         return df
 
+    # 2. akshare EM（东方财富 push2）
     df = _fetch_a_share_via_akshare()
+    if df is not None and not df.empty:
+        _set_cached_snapshot("a_share", df)
+        return df
+
+    # 3. 新浪批量接口（不依赖东方财富）
+    df = _fetch_a_share_via_sina_batch()
+    if df is not None and not df.empty:
+        _set_cached_snapshot("a_share", df)
+        return df
+
+    # 4. 腾讯批量接口（不依赖东方财富）
+    df = _fetch_a_share_via_tencent_batch()
     if df is not None and not df.empty:
         _set_cached_snapshot("a_share", df)
         return df
@@ -158,6 +211,177 @@ def _fetch_a_share_via_akshare() -> Optional[pd.DataFrame]:
             time.sleep(min(2 ** attempt, 5))
 
     logger.error("[选股筛选] akshare A 股行情最终失败: %s", last_error)
+    return None
+
+
+# ================================================================
+#  A 股快照 fallback：新浪批量接口（不依赖东方财富）
+# ================================================================
+
+def _fetch_a_share_via_sina_batch() -> Optional[pd.DataFrame]:
+    """通过新浪财经批量接口获取 A 股全市场快照（不依赖东方财富）
+
+    接口: http://hq.sinajs.cn/list=sh600519,sz000001,...
+    字段: [0]名称 [1]今开 [2]昨收 [3]最新价 [4]最高 [5]最低 [8]成交量(股) [9]成交额(元)
+    """
+    import requests
+
+    codes = _get_all_a_share_codes()
+    if not codes:
+        logger.warning("[选股筛选] 无法获取 A 股代码列表，跳过新浪批量获取")
+        return None
+
+    logger.info("[选股筛选] 新浪批量获取 A 股行情... (共 %d 只)", len(codes))
+    t0 = time.time()
+
+    symbols = [_to_sina_symbol(c) for c in codes]
+    all_rows: list = []
+    batch_size = 800
+
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i : i + batch_size]
+        url = f"http://{_SINA_ENDPOINT}={','.join(batch)}"
+        headers = {
+            "Referer": "http://finance.sina.com.cn",
+            "User-Agent": random.choice(_USER_AGENTS),
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.encoding = "gbk"
+            if resp.status_code != 200:
+                logger.warning("[选股筛选] 新浪批量请求失败 (batch %d): HTTP %d", i // batch_size, resp.status_code)
+                continue
+
+            for line in resp.text.strip().split("\n"):
+                if not line or '=""' in line:
+                    continue
+                try:
+                    var_part, data_part = line.split('="', 1)
+                    symbol_str = var_part.split("_")[-1]  # sh600519
+                    code = symbol_str[2:]  # 600519
+                    data_str = data_part.rstrip('";')
+                    fields = data_str.split(",")
+                    if len(fields) < 10:
+                        continue
+
+                    price = _safe_float(fields[3])
+                    pre_close = _safe_float(fields[2])
+                    amount = _safe_float(fields[9])
+                    if not price or price <= 0:
+                        continue
+
+                    change_pct = None
+                    if price and pre_close and pre_close > 0:
+                        change_pct = (price - pre_close) / pre_close * 100
+
+                    all_rows.append({
+                        "代码": code,
+                        "名称": fields[0],
+                        "最新价": price,
+                        "涨跌幅": change_pct,
+                        "成交额": amount,
+                        "成交量": _safe_float(fields[8]),
+                    })
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning("[选股筛选] 新浪批量请求异常 (batch %d): %s", i // batch_size, e)
+            continue
+
+    elapsed = time.time() - t0
+    if all_rows:
+        df = pd.DataFrame(all_rows)
+        logger.info("[选股筛选] 新浪批量获取成功，共 %d 只有效行情，耗时 %.2fs", len(df), elapsed)
+        return df
+
+    logger.warning("[选股筛选] 新浪批量获取失败，无有效数据 (耗时 %.2fs)", elapsed)
+    return None
+
+
+# ================================================================
+#  A 股快照 fallback：腾讯批量接口（不依赖东方财富）
+# ================================================================
+
+def _fetch_a_share_via_tencent_batch() -> Optional[pd.DataFrame]:
+    """通过腾讯财经批量接口获取 A 股全市场快照（不依赖东方财富）
+
+    接口: http://qt.gtimg.cn/q=sh600519,sz000001,...
+    字段(~分隔): [1]名称 [2]代码 [3]最新价 [4]昨收 [5]今开 [6]成交量(手)
+    [32]涨跌幅(%) [37]成交额(万) [39]市盈率 [45]总市值(亿)
+    """
+    import requests
+
+    codes = _get_all_a_share_codes()
+    if not codes:
+        logger.warning("[选股筛选] 无法获取 A 股代码列表，跳过腾讯批量获取")
+        return None
+
+    logger.info("[选股筛选] 腾讯批量获取 A 股行情... (共 %d 只)", len(codes))
+    t0 = time.time()
+
+    symbols = [_to_sina_symbol(c) for c in codes]
+    all_rows: list = []
+    batch_size = 500
+
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i : i + batch_size]
+        url = f"http://{_TENCENT_ENDPOINT}={','.join(batch)}"
+        headers = {
+            "Referer": "http://finance.qq.com",
+            "User-Agent": random.choice(_USER_AGENTS),
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.encoding = "gbk"
+            if resp.status_code != 200:
+                logger.warning("[选股筛选] 腾讯批量请求失败 (batch %d): HTTP %d", i // batch_size, resp.status_code)
+                continue
+
+            for line in resp.text.strip().split("\n"):
+                if not line or '=""' in line:
+                    continue
+                try:
+                    data_start = line.find('"')
+                    data_end = line.rfind('"')
+                    if data_start == -1 or data_end <= data_start:
+                        continue
+                    data_str = line[data_start + 1 : data_end]
+                    fields = data_str.split("~")
+                    if len(fields) < 45:
+                        continue
+
+                    price = _safe_float(fields[3])
+                    if not price or price <= 0:
+                        continue
+
+                    volume_shou = _safe_float(fields[6])
+                    amount_wan = _safe_float(fields[37])
+                    total_mv_yi = _safe_float(fields[45])
+                    pe = _safe_float(fields[39]) if len(fields) > 39 else None
+
+                    all_rows.append({
+                        "代码": fields[2],
+                        "名称": fields[1],
+                        "最新价": price,
+                        "涨跌幅": _safe_float(fields[32]),
+                        "成交额": amount_wan * 10000 if amount_wan else None,
+                        "成交量": volume_shou * 100 if volume_shou else None,
+                        "市盈率-动态": pe,
+                        "总市值": total_mv_yi * 100000000 if total_mv_yi else None,
+                    })
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning("[选股筛选] 腾讯批量请求异常 (batch %d): %s", i // batch_size, e)
+            continue
+
+    elapsed = time.time() - t0
+    if all_rows:
+        df = pd.DataFrame(all_rows)
+        logger.info("[选股筛选] 腾讯批量获取成功，共 %d 只有效行情，耗时 %.2fs", len(df), elapsed)
+        return df
+
+    logger.warning("[选股筛选] 腾讯批量获取失败，无有效数据 (耗时 %.2fs)", elapsed)
     return None
 
 
