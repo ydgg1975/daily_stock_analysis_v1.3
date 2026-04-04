@@ -68,84 +68,64 @@ class _FakeResponse:
 class TestAnspireConfigLoading(unittest.TestCase):
     """Test Anspire configuration loading from environment variables."""
     
-    @classmethod
-    def setUpClass(cls):
-        """临时重命名 .env 文件"""
-        cls.env_path = Path(__file__).parent.parent / '.env'
-        cls.env_backup_path = Path(__file__).parent.parent / '.env.test.backup'
-        
-        # 如果 .env 存在，临时重命名
-        if cls.env_path.exists():
-            cls.env_path.rename(cls.env_backup_path)
-            cls._env_existed = True
-        else:
-            cls._env_existed = False
-    
-    @classmethod
-    def tearDownClass(cls):
-        """恢复 .env 文件"""
-        if cls._env_existed and cls.env_backup_path.exists():
-            cls.env_backup_path.rename(cls.env_path)
-        elif cls.env_backup_path.exists():
-            cls.env_backup_path.unlink()
-
     def setUp(self):
-        """Reset config before each test."""
+        """保存并清除环境变量（不操作 .env 文件）"""
+        # ✅ 保存原始值，测试后恢复
+        self._original_anspire_keys = os.environ.get('ANSPIRE_API_KEYS')
+        
         # 清除环境变量
         if 'ANSPIRE_API_KEYS' in os.environ:
             del os.environ['ANSPIRE_API_KEYS']
+        
         # 重置 Config 单例
         Config._Config__instance = None
         reset_search_service()
 
     def tearDown(self):
-        """Clean up environment variables."""
-        if 'ANSPIRE_API_KEYS' in os.environ:
+        """恢复原始环境变量"""
+        # ✅ 恢复原始值
+        if self._original_anspire_keys is not None:
+            os.environ['ANSPIRE_API_KEYS'] = self._original_anspire_keys
+        elif 'ANSPIRE_API_KEYS' in os.environ:
             del os.environ['ANSPIRE_API_KEYS']
+        
         # 重置 Config 单例
         Config._Config__instance = None
+        reset_search_service()
 
     def test_anspire_keys_loaded_from_env(self):
         """Test that ANSPIRE_API_KEYS is correctly parsed from environment."""
-        # 确保在设置环境变量后再获取配置
-        os.environ['ANSPIRE_API_KEYS'] = 'key1,key2,key3'
-        # 强制重新创建 Config 实例，直接从环境变量加载 (不读取 .env 文件)
-        Config._Config__instance = None
-        config = Config._load_from_env()
-        
-        self.assertEqual(len(config.anspire_api_keys), 3)
-        self.assertIn('key1', config.anspire_api_keys)
-        self.assertIn('key2', config.anspire_api_keys)
-        self.assertIn('key3', config.anspire_api_keys)
+        # ✅ 使用 patch.dict 临时设置，测试后自动恢复
+        with patch.dict(os.environ, {'ANSPIRE_API_KEYS': 'key1,key2,key3'}):
+            config = Config._load_from_env()
+            
+            self.assertEqual(len(config.anspire_api_keys), 3)
+            self.assertIn('key1', config.anspire_api_keys)
+            self.assertIn('key2', config.anspire_api_keys)
+            self.assertIn('key3', config.anspire_api_keys)
 
     def test_anspire_keys_single_key(self):
         """Test single API Key parsing."""
-        os.environ['ANSPIRE_API_KEYS'] = 'single_key_test'
-        # 强制重新创建 Config 实例
-        Config._Config__instance = None
-        config = Config._load_from_env()
-        
-        self.assertEqual(len(config.anspire_api_keys), 1)
-        self.assertEqual(config.anspire_api_keys[0], 'single_key_test')
+        with patch.dict(os.environ, {'ANSPIRE_API_KEYS': 'single_key_test'}):
+            config = Config._load_from_env()
+            
+            self.assertEqual(len(config.anspire_api_keys), 1)
+            self.assertEqual(config.anspire_api_keys[0], 'single_key_test')
 
     def test_anspire_keys_empty_env(self):
         """Test empty environment variable handling."""
-        os.environ['ANSPIRE_API_KEYS'] = ''
-        # 强制重新创建 Config 实例
-        Config._Config__instance = None
-        config = Config._load_from_env()
-        
-        self.assertEqual(len(config.anspire_api_keys), 0)
+        with patch.dict(os.environ, {'ANSPIRE_API_KEYS': ''}):
+            config = Config._load_from_env()
+            
+            self.assertEqual(len(config.anspire_api_keys), 0)
 
     def test_anspire_keys_whitespace_handling(self):
         """Test whitespace trimming in API Keys."""
-        os.environ['ANSPIRE_API_KEYS'] = ' key1 , key2 , key3 '
-        # 强制重新创建 Config 实例
-        Config._Config__instance = None
-        config = Config._load_from_env()
-        
-        self.assertEqual(len(config.anspire_api_keys), 3)
-        self.assertEqual(config.anspire_api_keys, ['key1', 'key2', 'key3'])
+        with patch.dict(os.environ, {'ANSPIRE_API_KEYS': ' key1 , key2 , key3 '}):
+            config = Config._load_from_env()
+            
+            self.assertEqual(len(config.anspire_api_keys), 3)
+            self.assertEqual(config.anspire_api_keys, ['key1', 'key2', 'key3'])
 
 
 class TestAnspireSearchProvider(unittest.TestCase):
@@ -153,7 +133,8 @@ class TestAnspireSearchProvider(unittest.TestCase):
     
     def setUp(self):
         """测试前准备"""
-        self.test_api_key = "sk-DCOuaof0EKjzr5F0qG5t0dLzJsVxI16f"
+        # ✅ 使用明确的测试占位符，不是真实密钥形态
+        self.test_api_key = "sk-test-anspire-placeholder-key-12345"
         self.provider = AnspireSearchProvider([self.test_api_key])
         # 保存原始 requests 模块
         self._original_requests = sys.modules.get('requests')
@@ -163,7 +144,6 @@ class TestAnspireSearchProvider(unittest.TestCase):
         # 恢复原始 requests 模块
         if self._original_requests is not None:
             sys.modules['requests'] = self._original_requests
-        pass
     
     def test_provider_initialization(self):
         """测试 Provider 初始化"""

@@ -2119,9 +2119,9 @@ class SearchService:
 
     def __init__(
         self,
-        anspire_keys: Optional[List[str]] = None,
         bocha_keys: Optional[List[str]] = None,
         tavily_keys: Optional[List[str]] = None,
+        anspire_keys: Optional[List[str]] = None,
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
@@ -2134,9 +2134,9 @@ class SearchService:
         初始化搜索服务
 
         Args:
-            anspire_keys: Anspire Search API Key 列表
             bocha_keys: 博查搜索 API Key 列表
             tavily_keys: Tavily API Key 列表
+            anspire_keys: Anspire Search API Key 列表
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
@@ -2164,11 +2164,6 @@ class SearchService:
         )
 
         # 初始化搜索引擎（按优先级排序）
-        # 0. Anspire Search（实时智能搜索优化）
-        if anspire_keys:
-            self._providers.insert(0, AnspireSearchProvider(anspire_keys))
-            logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
-
         # 1. Bocha 优先（中文搜索优化，AI摘要）
         if bocha_keys:
             self._providers.append(BochaSearchProvider(bocha_keys))
@@ -2206,6 +2201,11 @@ class SearchService:
             else:
                 logger.info("已启用 SearXNG 公共实例自动发现模式")
 
+        # 7. Anspire Search（实时智能搜索优化）
+        if anspire_keys:
+            self._providers.insert(0, AnspireSearchProvider(anspire_keys))
+            logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
+            
         if not self._providers:
             logger.warning("未配置任何搜索能力，新闻搜索功能将不可用")
 
@@ -3436,9 +3436,9 @@ def get_search_service() -> SearchService:
                 config = get_config()
                 
                 _search_service = SearchService(
-                    anspire_keys=config.anspire_api_keys,
                     bocha_keys=config.bocha_api_keys,
                     tavily_keys=config.tavily_api_keys,
+                    anspire_keys=config.anspire_api_keys,
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,

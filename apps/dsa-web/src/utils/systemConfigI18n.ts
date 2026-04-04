@@ -25,9 +25,9 @@ const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
 const fieldTitleMap: Record<string, string> = {
   STOCK_LIST: '自选股列表',
   TUSHARE_TOKEN: 'Tushare Token',
-  ANSPIRE_API_KEYS: 'Anspire API Keys',
   BOCHA_API_KEYS: 'Bocha API Keys',
   TAVILY_API_KEYS: 'Tavily API Keys',
+  ANSPIRE_API_KEYS: 'Anspire API Keys',
   SERPAPI_API_KEYS: 'SerpAPI API Keys',
   BRAVE_API_KEYS: 'Brave API Keys',
   SEARXNG_BASE_URLS: 'SearXNG Base URLs',
@@ -82,9 +82,9 @@ const fieldTitleMap: Record<string, string> = {
 const fieldDescriptionMap: Record<string, string> = {
   STOCK_LIST: '使用逗号分隔股票代码，例如：600519,300750。',
   TUSHARE_TOKEN: '用于接入 Tushare Pro 数据服务的凭据。',
-  ANSPIRE_API_KEYS: '用于新闻检索的 Anspire 密钥，支持逗号分隔多个(优先推荐)。',
   BOCHA_API_KEYS: '用于新闻检索的 Bocha 密钥，支持逗号分隔多个（最高优先级）。',
   TAVILY_API_KEYS: '用于新闻检索的 Tavily 密钥，支持逗号分隔多个。',
+  ANSPIRE_API_KEYS: '用于新闻检索的 Anspire 密钥，支持逗号分隔多个。',
   SERPAPI_API_KEYS: '用于新闻检索的 SerpAPI 密钥，支持逗号分隔多个。',
   BRAVE_API_KEYS: '用于新闻检索的 Brave Search 密钥，支持逗号分隔多个。',
   SEARXNG_BASE_URLS: 'SearXNG 自建实例地址（逗号分隔，无配额兜底，需在 settings.yml 启用 format: json）。',
