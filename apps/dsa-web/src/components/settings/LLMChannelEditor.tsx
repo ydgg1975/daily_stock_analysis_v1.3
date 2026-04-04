@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
 import { getParsedApiError } from '../../api/error';
@@ -163,6 +163,10 @@ interface LLMChannelEditorProps {
   ) => void | Promise<void>;
   adminUnlockToken?: string | null;
   disabled?: boolean;
+  providerScopeName?: string;
+  focusChannelName?: string;
+  externalCreatePreset?: string | null;
+  onExternalCreateHandled?: () => void;
 }
 
 interface ChannelRowProps {
@@ -469,6 +473,34 @@ function usesDirectEnvProvider(model: string): boolean {
   return Boolean(provider) && !MANAGED_PROVIDERS.has(provider);
 }
 
+function providerHasLegacyApiKey(provider: string, itemMap: Map<string, string>): boolean {
+  const normalized = provider.trim().toLowerCase();
+  if (!normalized) return false;
+  const hasAny = (keys: string[]): boolean => keys.some((key) => Boolean((itemMap.get(key) || '').trim()));
+  if (normalized === 'gemini' || normalized === 'vertex_ai') {
+    return hasAny(['GEMINI_API_KEYS', 'GEMINI_API_KEY']);
+  }
+  if (normalized === 'anthropic') {
+    return hasAny(['ANTHROPIC_API_KEYS', 'ANTHROPIC_API_KEY']);
+  }
+  if (normalized === 'deepseek') {
+    return hasAny(['DEEPSEEK_API_KEYS', 'DEEPSEEK_API_KEY']);
+  }
+  if (normalized === 'openai') {
+    return hasAny(['OPENAI_API_KEYS', 'OPENAI_API_KEY', 'AIHUBMIX_KEY', 'AIHUBMIX_KEYS']);
+  }
+  return false;
+}
+
+function hasRuntimeSourceForModel(model: string, availableModels: string[], itemMap: Map<string, string>): boolean {
+  const normalized = (model || '').trim();
+  if (!normalized) return true;
+  if (availableModels.includes(normalized)) return true;
+  if (usesDirectEnvProvider(normalized)) return true;
+  const provider = normalized.includes('/') ? normalized.split('/', 1)[0].trim().toLowerCase() : 'openai';
+  return providerHasLegacyApiKey(provider, itemMap);
+}
+
 function resolveTemperatureFromItems(itemMap: Map<string, string>): string {
   const unified = itemMap.get('LLM_TEMPERATURE');
   if (unified) return unified;
@@ -601,12 +633,33 @@ function channelsAreEqual(left: ChannelConfig, right: ChannelConfig): boolean {
   );
 }
 
+function normalizeProviderScopeName(value?: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function resolveChannelScopeName(channelName: string): string {
+  const normalizedName = normalizeProviderScopeName(channelName);
+  if (!normalizedName) {
+    return '';
+  }
+  const baseName = normalizedName.replace(/\d+$/, '');
+  return CHANNEL_PRESETS[baseName] ? baseName : normalizedName;
+}
+
 export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   items,
   onSaveItems,
   adminUnlockToken,
   disabled = false,
+  providerScopeName = '',
+  focusChannelName = '',
+  externalCreatePreset = null,
+  onExternalCreateHandled,
 }) => {
+  const normalizedScopeName = normalizeProviderScopeName(providerScopeName);
+  const scopedPreset = normalizedScopeName ? CHANNEL_PRESETS[normalizedScopeName] : null;
+  const providerScopedMode = Boolean(normalizedScopeName && scopedPreset);
+  const rawItemMap = useMemo(() => new Map(items.map((item) => [item.key, item.value])), [items]);
   const initialChannels = useMemo(() => parseChannelsFromItems(items), [items]);
   const initialNames = useMemo(() => initialChannels.map((channel) => channel.name), [initialChannels]);
   const initialRuntimeConfig = useMemo(() => parseRuntimeConfigFromItems(items), [items]);
@@ -632,10 +685,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   const [testStates, setTestStates] = useState<Record<number, ChannelTestState>>({});
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [addPreset, setAddPreset] = useState('aihubmix');
+  const [addPreset, setAddPreset] = useState(normalizedScopeName || 'aihubmix');
 
   const prevChannelsRef = useRef(channelsFingerprint);
   const prevRuntimeRef = useRef(runtimeFingerprint);
+  const channelRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   useEffect(() => {
     if (prevChannelsRef.current === channelsFingerprint && prevRuntimeRef.current === runtimeFingerprint) {
@@ -651,6 +705,13 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setSaveMessage(null);
     setIsCollapsed(false);
   }, [channelsFingerprint, runtimeFingerprint, initialChannels, initialRuntimeConfig]);
+
+  useEffect(() => {
+    if (!providerScopedMode) {
+      return;
+    }
+    setAddPreset(normalizedScopeName);
+  }, [normalizedScopeName, providerScopedMode]);
 
   const availableModels = useMemo(() => {
     if (!managesRuntimeConfig) {
@@ -687,6 +748,17 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     }
     return channels.some((channel, index) => !channelsAreEqual(channel, initialChannels[index]));
   }, [channels, initialChannels, initialRuntimeConfig, runtimeConfig]);
+
+  const visibleChannelEntries = useMemo(() => {
+    return channels
+      .map((channel, index) => ({ channel, index }))
+      .filter((entry) => {
+        if (!providerScopedMode) {
+          return true;
+        }
+        return resolveChannelScopeName(entry.channel.name) === normalizedScopeName;
+      });
+  }, [channels, normalizedScopeName, providerScopedMode]);
 
   const busy = disabled || isSaving;
 
@@ -728,17 +800,20 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     setExpandedRows({});
   };
 
-  const addChannel = () => {
-    const preset = CHANNEL_PRESETS[addPreset] || CHANNEL_PRESETS.custom;
+  const addChannel = useCallback((presetKey?: string) => {
+    const nextPresetKey = presetKey || addPreset;
+    const preset = CHANNEL_PRESETS[nextPresetKey] || CHANNEL_PRESETS.custom;
+    const baseName = nextPresetKey === 'custom' ? 'custom' : nextPresetKey;
+    let nextIndex = 0;
     setChannels((previous) => {
       const existingNames = new Set(previous.map((channel) => channel.name));
-      const baseName = addPreset === 'custom' ? 'custom' : addPreset;
       let nextName = baseName;
       let counter = 2;
       while (existingNames.has(nextName)) {
         nextName = `${baseName}${counter}`;
         counter += 1;
       }
+      nextIndex = previous.length;
 
       return [
         ...previous,
@@ -753,9 +828,30 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       ];
     });
     setTestStates({});
-    setExpandedRows((prev) => ({ ...prev, [channels.length]: true }));
+    setExpandedRows((prev) => ({ ...prev, [nextIndex]: true }));
     setIsCollapsed(false);
-  };
+    window.setTimeout(() => {
+      channelRowRefs.current[nextIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }, [addPreset]);
+  useEffect(() => {
+    const requestedPreset = String(externalCreatePreset || '').trim().toLowerCase();
+    if (!requestedPreset) return;
+    setAddPreset(requestedPreset);
+    addChannel(requestedPreset);
+    onExternalCreateHandled?.();
+  }, [addChannel, externalCreatePreset, onExternalCreateHandled]);
+  useEffect(() => {
+    const targetName = String(focusChannelName || '').trim().toLowerCase();
+    if (!targetName) return;
+    const targetIndex = channels.findIndex((channel) => channel.name.trim().toLowerCase() === targetName);
+    if (targetIndex < 0) return;
+    setIsCollapsed(false);
+    setExpandedRows((prev) => ({ ...prev, [targetIndex]: true }));
+    window.setTimeout(() => {
+      channelRowRefs.current[targetIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }, [channels, focusChannelName]);
 
   const handleSave = async () => {
     const hasEmptyName = channels.some((channel) => !channel.name.trim());
@@ -766,32 +862,32 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
 
     if (managesRuntimeConfig && availableModels.length > 0) {
       const invalidPrimaryModel = runtimeConfig.primaryModel
-        && !availableModels.includes(runtimeConfig.primaryModel)
-        && !usesDirectEnvProvider(runtimeConfig.primaryModel);
+        && !hasRuntimeSourceForModel(runtimeConfig.primaryModel, availableModels, rawItemMap);
       if (invalidPrimaryModel) {
         setSaveMessage({ type: 'local-error', text: '当前主模型不在已启用渠道的模型列表中，请重新选择。' });
         return;
       }
 
       const invalidAgentPrimaryModel = runtimeConfig.agentPrimaryModel
-        && !availableModels.includes(runtimeConfig.agentPrimaryModel)
-        && !usesDirectEnvProvider(runtimeConfig.agentPrimaryModel);
+        && !hasRuntimeSourceForModel(runtimeConfig.agentPrimaryModel, availableModels, rawItemMap);
       if (invalidAgentPrimaryModel) {
         setSaveMessage({ type: 'local-error', text: '当前 Agent 主模型不在已启用渠道的模型列表中，请重新选择。' });
         return;
       }
 
       const invalidFallbackModel = runtimeConfig.fallbackModels.some(
-        (model) => !availableModels.includes(model) && !usesDirectEnvProvider(model),
+        (model) => !hasRuntimeSourceForModel(model, availableModels, rawItemMap),
       );
       if (invalidFallbackModel) {
-        setSaveMessage({ type: 'local-error', text: '存在无效的 fallback 模型，请重新选择。' });
+        setSaveMessage({
+          type: 'local-error',
+          text: 'Fallback 仅支持当前运行时可访问模型（已启用渠道声明或可用直连 Provider Key）。跨 Provider 失败切换请在任务层备用路由中配置。',
+        });
         return;
       }
 
       const invalidVisionModel = runtimeConfig.visionModel
-        && !availableModels.includes(runtimeConfig.visionModel)
-        && !usesDirectEnvProvider(runtimeConfig.visionModel);
+        && !hasRuntimeSourceForModel(runtimeConfig.visionModel, availableModels, rawItemMap);
       if (invalidVisionModel) {
         setSaveMessage({ type: 'local-error', text: '当前 Vision 模型不在已启用渠道的模型列表中，请重新选择。' });
         return;
@@ -886,11 +982,15 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       >
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-foreground">AI 模型配置</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              {providerScopedMode && scopedPreset ? `${scopedPreset.label} 高级配置` : 'AI 模型配置'}
+            </h3>
             <Badge variant="info" className="settings-accent-badge">渠道管理</Badge>
           </div>
           <p className="text-xs text-muted-text">
-            添加服务商渠道，填入 API Key 和模型名称即可。配置会自动同步到 .env 文件。
+            {providerScopedMode && scopedPreset
+              ? `只管理 ${scopedPreset.label} 的高级渠道。配置会自动同步到 .env 文件。`
+              : '添加服务商渠道，填入 API Key 和模型名称即可。配置会自动同步到 .env 文件。'}
           </p>
         </div>
         <span className="text-xs text-muted-text">{isCollapsed ? '▶ 展开' : '▼ 收起'}</span>
@@ -901,66 +1001,102 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-foreground">快速添加渠道</h4>
-                <p className="mt-1 text-xs text-secondary-text">先选择预设服务商，再一键创建配置草稿。</p>
+                <h4 className="text-sm font-medium text-foreground">
+                  {providerScopedMode ? '新增当前 Provider 渠道' : '快速添加渠道'}
+                </h4>
+                <p className="mt-1 text-xs text-secondary-text">
+                  {providerScopedMode && scopedPreset
+                    ? `只创建 ${scopedPreset.label} 渠道草稿。`
+                    : '先选择预设服务商，再一键创建配置草稿。'}
+                </p>
               </div>
-              <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">{channels.length} 个渠道</Badge>
+              <Badge variant="default" className="settings-border settings-surface-hover text-muted-text">
+                {visibleChannelEntries.length} 个渠道
+              </Badge>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="gradient" className="whitespace-nowrap" disabled={busy} onClick={addChannel}>
+              <Button
+                type="button"
+                variant="gradient"
+                className="whitespace-nowrap"
+                disabled={busy}
+                onClick={() => addChannel(providerScopedMode ? normalizedScopeName : undefined)}
+              >
                 + 添加渠道
               </Button>
-              <Select
-                value={addPreset}
-                onChange={setAddPreset}
-                options={Object.entries(CHANNEL_PRESETS).map(([value, preset]) => ({
-                  value,
-                  label: preset.label,
-                }))}
-                disabled={busy}
-                placeholder="选择服务商"
-                className="flex-1"
-              />
+              {providerScopedMode && scopedPreset ? (
+                <div className="flex-1 rounded-xl border border-border/50 bg-base/40 px-3 py-2 text-sm font-medium text-secondary-text">
+                  {scopedPreset.label}
+                </div>
+              ) : (
+                <Select
+                  value={addPreset}
+                  onChange={setAddPreset}
+                  options={Object.entries(CHANNEL_PRESETS).map(([value, preset]) => ({
+                    value,
+                    label: preset.label,
+                  }))}
+                  disabled={busy}
+                  placeholder="选择服务商"
+                  className="flex-1"
+                />
+              )}
             </div>
-            <SupportPanel
-              className="mt-3 rounded-xl border settings-border-soft settings-surface-overlay-soft px-3 py-2"
-              body="渠道条目负责管理服务商连接信息；真正生效的主模型、Fallback、Vision 与 Temperature 会在下方统一保存。"
-              bodyClassName="text-muted-text"
-            />
+            {!providerScopedMode ? (
+              <SupportPanel
+                className="mt-3 rounded-xl border settings-border-soft settings-surface-overlay-soft px-3 py-2"
+                body="渠道条目负责管理服务商连接信息；真正生效的主模型、Fallback、Vision 与 Temperature 会在下方统一保存。"
+                bodyClassName="text-muted-text"
+              />
+            ) : null}
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-text">渠道列表</span>
-              {channels.length > 0 ? (
-                <span className="text-[10px] text-muted-text">{channels.filter((c) => c.enabled).length}/{channels.length} 已启用</span>
+              {visibleChannelEntries.length > 0 ? (
+                <span className="text-[10px] text-muted-text">
+                  {visibleChannelEntries.filter((entry) => entry.channel.enabled).length}/{visibleChannelEntries.length} 已启用
+                </span>
               ) : null}
             </div>
 
-            {channels.length === 0 ? (
+            {visibleChannelEntries.length === 0 ? (
               <div className="settings-surface-overlay-muted rounded-[1.35rem] border border-dashed border-border/28 px-4 py-10 text-center">
-                <p className="text-sm font-medium text-foreground">还没有渠道</p>
-                <p className="mt-1 text-xs leading-5 text-muted-text">选择服务商预设后点击“添加渠道”即可开始配置。</p>
+                <p className="text-sm font-medium text-foreground">
+                  {providerScopedMode && scopedPreset ? `还没有 ${scopedPreset.label} 渠道` : '还没有渠道'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-text">
+                  {providerScopedMode
+                    ? '点击“添加渠道”即可为当前 Provider 创建高级渠道。'
+                    : '选择服务商预设后点击“添加渠道”即可开始配置。'}
+                </p>
               </div>
-            ) : channels.map((channel, index) => (
-              <ChannelRow
+            ) : visibleChannelEntries.map(({ channel, index }) => (
+              <div
                 key={index}
-                channel={channel}
-                index={index}
-                busy={busy}
-                visibleKey={Boolean(visibleKeys[index])}
-                expanded={Boolean(expandedRows[index])}
-                testState={testStates[index]}
-                onUpdate={updateChannel}
-                onRemove={removeChannel}
-                onToggleExpand={toggleExpand}
-                onToggleKeyVisibility={toggleKeyVisibility}
-                onTest={(ch, idx) => void handleTest(ch, idx)}
-              />
+                ref={(node) => {
+                  channelRowRefs.current[index] = node;
+                }}
+              >
+                <ChannelRow
+                  channel={channel}
+                  index={index}
+                  busy={busy}
+                  visibleKey={Boolean(visibleKeys[index])}
+                  expanded={Boolean(expandedRows[index])}
+                  testState={testStates[index]}
+                  onUpdate={updateChannel}
+                  onRemove={removeChannel}
+                  onToggleExpand={toggleExpand}
+                  onToggleKeyVisibility={toggleKeyVisibility}
+                  onTest={(ch, idx) => void handleTest(ch, idx)}
+                />
+              </div>
             ))}
           </div>
 
-          {managesRuntimeConfig ? (
+          {!providerScopedMode && managesRuntimeConfig ? (
             <div className="settings-surface rounded-[1.35rem] border settings-border p-4 shadow-soft-card">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -1039,7 +1175,8 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                       ))}
                     </div>
                     <p className="mt-1 text-[11px] text-secondary-text">
-                      Fallback 只会在主模型失败时使用。主模型不会重复加入 fallback。
+                      Fallback 只会在主模型失败时使用，且仅接受当前运行时可访问模型（渠道声明或可用直连 Provider Key）。
+                      跨 Provider 的任务级容灾请在上层任务路由的“备用路由”配置。
                     </p>
                   </div>
 
@@ -1056,7 +1193,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          ) : providerScopedMode ? null : (
             <SupportBanner
               tone="warning"
               title="当前由 `LITELLM_CONFIG` 接管运行时选择"
@@ -1073,7 +1210,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               disabled={busy || !hasChanges}
               onClick={() => void handleSave()}
             >
-              {isSaving ? '保存中...' : managesRuntimeConfig ? '保存 AI 配置' : '保存渠道配置'}
+              {isSaving ? '保存中...' : providerScopedMode || !managesRuntimeConfig ? '保存渠道配置' : '保存 AI 配置'}
             </Button>
             {!hasChanges ? <span className="text-xs text-muted-text">当前没有未保存的改动</span> : null}
           </div>

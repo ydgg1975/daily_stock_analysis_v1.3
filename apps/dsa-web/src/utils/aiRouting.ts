@@ -26,6 +26,10 @@ export const KNOWN_GATEWAY_MODEL_PRESETS: GatewayPresetMap = {
     'deepseek/deepseek-chat',
     'deepseek/deepseek-reasoner',
   ],
+  zhipu: [
+    'zhipu/glm-4-flash',
+    'zhipu/glm-4-plus',
+  ],
 };
 
 export const GATEWAY_READINESS_NOTES: Record<string, string> = {
@@ -33,6 +37,7 @@ export const GATEWAY_READINESS_NOTES: Record<string, string> = {
   gemini: 'gemini_multi_model_single_key',
   openai: 'openai_compatible_dynamic',
   openrouter: 'openai_compatible_dynamic',
+  zhipu: 'openai_compatible_dynamic',
 };
 
 export function normalizeGatewayKey(value: string): string {
@@ -65,42 +70,57 @@ export function supportsCustomModelId(gateway: string): boolean {
   return true;
 }
 
+export function getModelIdentityForms(model: string): string[] {
+  const normalized = String(model || '').trim().toLowerCase();
+  if (!normalized) return [];
+  const suffix = normalized.includes('/') ? normalized.split('/').slice(1).join('/') : normalized;
+  return uniqueValues([normalized, suffix]);
+}
+
+function isTrustedSavedModel(
+  gateway: string,
+  model: string,
+  trustedOptions: string[],
+): boolean {
+  const normalizedGateway = normalizeGatewayKey(gateway);
+  const normalizedModel = String(model || '').trim();
+  if (!normalizedGateway || !normalizedModel) return false;
+
+  const modelForms = new Set(getModelIdentityForms(normalizedModel));
+  const hasTrustedIdentityMatch = trustedOptions.some((option) => (
+    getModelIdentityForms(option).some((candidate) => modelForms.has(candidate))
+  ));
+  if (hasTrustedIdentityMatch) {
+    return true;
+  }
+
+  const modelGateway = parseGatewayFromModel(normalizedModel);
+  if (modelGateway && normalizedGateway !== 'aihubmix' && modelGateway !== normalizedGateway) {
+    return false;
+  }
+
+  return false;
+}
+
 export function getGatewayModelOptions(
   gateway: string,
   inferredByGateway: Map<string, string[]>,
-  globalModels: string[],
+  _globalModels: string[],
   savedModels: string[],
 ): string[] {
   const normalized = normalizeGatewayKey(gateway);
-  const isGatewayLikeModel = (model: string): boolean => {
-    const normalizedModel = String(model || '').trim().toLowerCase();
-    if (!normalized || !normalizedModel) return false;
-    if (normalized === 'aihubmix') return true;
-    if (normalizedModel.includes(`${normalized}/`)) return true;
-    if (normalizedModel.startsWith(`${normalized}-`)) return true;
-    return normalizedModel.includes(normalized);
-  };
-  const inferred = normalized ? (inferredByGateway.get(normalized) || []) : [];
+  if (!normalized) return [];
+
+  const declared = inferredByGateway.get(normalized) || [];
   const presets = normalized ? (KNOWN_GATEWAY_MODEL_PRESETS[normalized] || []) : [];
-  const savedScoped = savedModels.filter((model) => {
-    if (!normalized) return true;
-    const modelGateway = parseGatewayFromModel(model);
-    if (!modelGateway) return isGatewayLikeModel(model);
-    if (normalized === 'aihubmix') return true;
-    return modelGateway === normalized;
-  });
-  const fallbackByPrefix = normalized
-    ? globalModels.filter((model) => {
-      const modelGateway = parseGatewayFromModel(model);
-      if (!modelGateway) return false;
-      if (normalized === 'aihubmix') return true;
-      return modelGateway === normalized;
-    })
-    : globalModels;
-  if (!normalized) {
-    return uniqueValues([...savedScoped, ...fallbackByPrefix]);
-  }
-  return uniqueValues([...presets, ...inferred, ...savedScoped, ...fallbackByPrefix]);
+  const trustedBaseOptions = uniqueValues([...presets, ...declared]);
+  const savedStillValid = savedModels.filter((model) => isTrustedSavedModel(
+    normalized,
+    model,
+    trustedBaseOptions,
+  ));
+
+  return uniqueValues([...trustedBaseOptions, ...savedStillValid]);
 }
 
 export function isGatewayModelCompatible(gateway: string, model: string, options: string[]): boolean {
@@ -108,6 +128,10 @@ export function isGatewayModelCompatible(gateway: string, model: string, options
   const normalizedModel = String(model || '').trim();
   if (!normalizedGateway || !normalizedModel) return true;
   if (options.includes(normalizedModel)) return true;
+  const modelForms = new Set(getModelIdentityForms(normalizedModel));
+  if (options.some((option) => getModelIdentityForms(option).some((form) => modelForms.has(form)))) {
+    return true;
+  }
   if (normalizedGateway === 'aihubmix') return true;
   const modelGateway = parseGatewayFromModel(normalizedModel);
   if (!modelGateway) return true;

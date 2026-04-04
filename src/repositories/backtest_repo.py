@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, delete, desc, func, select
 
-from src.storage import BacktestResult, BacktestSummary, DatabaseManager, AnalysisHistory
+from src.storage import BacktestResult, BacktestRun, BacktestSummary, DatabaseManager, AnalysisHistory
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,127 @@ class BacktestRepository:
             rows = session.execute(query).scalars().all()
             return list(rows)
 
+    def save_run(self, run: BacktestRun) -> BacktestRun:
+        with self.db.get_session() as session:
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+    def get_runs_paginated(
+        self,
+        *,
+        code: Optional[str] = None,
+        offset: int,
+        limit: int,
+    ) -> Tuple[List[BacktestRun], int]:
+        with self.db.get_session() as session:
+            conditions = []
+            if code:
+                conditions.append(BacktestRun.code == code)
+            where_clause = and_(*conditions) if conditions else True
+
+            total = session.execute(select(func.count(BacktestRun.id)).where(where_clause)).scalar() or 0
+            rows = session.execute(
+                select(BacktestRun)
+                .where(where_clause)
+                .order_by(desc(BacktestRun.run_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
+
+    def get_run(self, run_id: int) -> Optional[BacktestRun]:
+        with self.db.get_session() as session:
+            return session.execute(
+                select(BacktestRun).where(BacktestRun.id == run_id).limit(1)
+            ).scalar_one_or_none()
+
+    def delete_runs_by_code(self, *, code: str) -> int:
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(BacktestRun).where(BacktestRun.code == code)
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def delete_results_by_code(self, *, code: str) -> int:
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(BacktestResult).where(BacktestResult.code == code)
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def delete_results_by_analysis_ids(self, analysis_ids: List[int]) -> int:
+        if not analysis_ids:
+            return 0
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(analysis_ids))
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def delete_summaries_by_code(self, *, code: str) -> int:
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(BacktestSummary).where(
+                    and_(
+                        BacktestSummary.scope == "stock",
+                        BacktestSummary.code == code,
+                    )
+                )
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def delete_all_summaries_for_window(self, *, eval_window_days: int, engine_version: str) -> int:
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(BacktestSummary).where(
+                    and_(
+                        BacktestSummary.eval_window_days == eval_window_days,
+                        BacktestSummary.engine_version == engine_version,
+                    )
+                )
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def list_backtest_codes(self, *, eval_window_days: int, engine_version: str) -> List[str]:
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(BacktestResult.code)
+                .where(
+                    and_(
+                        BacktestResult.eval_window_days == eval_window_days,
+                        BacktestResult.engine_version == engine_version,
+                    )
+                )
+                .distinct()
+            ).scalars().all()
+            return [str(code) for code in rows if code]
+
+    def count_analysis_history(
+        self,
+        *,
+        code: Optional[str] = None,
+        created_before: Optional[datetime] = None,
+    ) -> int:
+        """Count analysis history rows matching optional filters."""
+        with self.db.get_session() as session:
+            conditions = []
+            if code:
+                conditions.append(AnalysisHistory.code == code)
+            if created_before is not None:
+                conditions.append(AnalysisHistory.created_at <= created_before)
+
+            query = select(func.count(AnalysisHistory.id))
+            if conditions:
+                query = query.where(and_(*conditions))
+            return int(session.execute(query).scalar() or 0)
+
     def save_result(self, result: BacktestResult) -> None:
         with self.db.get_session() as session:
             session.add(result)
@@ -97,6 +218,7 @@ class BacktestRepository:
         *,
         code: Optional[str],
         eval_window_days: Optional[int] = None,
+        run_id: Optional[int] = None,
         days: Optional[int],
         offset: int,
         limit: int,
@@ -107,6 +229,13 @@ class BacktestRepository:
                 conditions.append(BacktestResult.code == code)
             if eval_window_days is not None:
                 conditions.append(BacktestResult.eval_window_days == eval_window_days)
+            if run_id is not None:
+                run = session.execute(
+                    select(BacktestRun).where(BacktestRun.id == run_id).limit(1)
+                ).scalar_one_or_none()
+                if run is None:
+                    return [], 0
+                conditions.append(BacktestResult.evaluated_at == run.completed_at)
             if days:
                 cutoff = datetime.now() - timedelta(days=int(days))
                 conditions.append(BacktestResult.evaluated_at >= cutoff)
@@ -122,6 +251,30 @@ class BacktestRepository:
                 .limit(limit)
             ).scalars().all()
             return list(rows), int(total)
+
+    def get_sample_rows(self, *, code: str) -> List[AnalysisHistory]:
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(AnalysisHistory)
+                .where(AnalysisHistory.query_id.like(f"bt-sample:{code}:%"))
+                .order_by(desc(AnalysisHistory.created_at))
+            ).scalars().all()
+            return list(rows)
+
+    def delete_sample_rows(self, *, code: str) -> int:
+        with self.db.get_session() as session:
+            analysis_rows = session.execute(
+                select(AnalysisHistory.id).where(AnalysisHistory.query_id.like(f"bt-sample:{code}:%"))
+            ).scalars().all()
+            if analysis_rows:
+                session.execute(delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(analysis_rows)))
+                deleted = session.execute(
+                    delete(AnalysisHistory).where(AnalysisHistory.id.in_(analysis_rows))
+                ).rowcount or 0
+            else:
+                deleted = 0
+            session.commit()
+            return int(deleted)
 
     def upsert_summary(self, summary: BacktestSummary) -> None:
         """Insert or replace summary row by unique key."""

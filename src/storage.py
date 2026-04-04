@@ -455,6 +455,126 @@ class BacktestSummary(Base):
     )
 
 
+class BacktestRun(Base):
+    """One persisted backtest execution."""
+
+    __tablename__ = 'backtest_runs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    code = Column(String(16), index=True)
+    eval_window_days = Column(Integer, nullable=False, default=10, index=True)
+    min_age_days = Column(Integer, nullable=False, default=14)
+    force = Column(Boolean, nullable=False, default=False)
+
+    run_at = Column(DateTime, default=datetime.now, index=True)
+    completed_at = Column(DateTime, index=True)
+
+    processed = Column(Integer, default=0)
+    saved = Column(Integer, default=0)
+    completed = Column(Integer, default=0)
+    insufficient = Column(Integer, default=0)
+    errors = Column(Integer, default=0)
+    candidate_count = Column(Integer, default=0)
+
+    result_count = Column(Integer, default=0)
+    no_result_reason = Column(String(64))
+    no_result_message = Column(Text)
+    status = Column(String(16), nullable=False, default='completed', index=True)
+
+    total_evaluations = Column(Integer, default=0)
+    completed_count = Column(Integer, default=0)
+    insufficient_count = Column(Integer, default=0)
+    long_count = Column(Integer, default=0)
+    cash_count = Column(Integer, default=0)
+    win_count = Column(Integer, default=0)
+    loss_count = Column(Integer, default=0)
+    neutral_count = Column(Integer, default=0)
+    win_rate_pct = Column(Float)
+    avg_stock_return_pct = Column(Float)
+    avg_simulated_return_pct = Column(Float)
+    direction_accuracy_pct = Column(Float)
+    summary_json = Column(Text)
+
+    __table_args__ = (
+        Index('ix_backtest_run_code_time', 'code', 'run_at'),
+    )
+
+
+class RuleBacktestRun(Base):
+    """Persisted AI-assisted rule backtest run."""
+
+    __tablename__ = 'rule_backtest_runs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(16), nullable=False, index=True)
+    strategy_text = Column(Text, nullable=False)
+    parsed_strategy_json = Column(Text, nullable=False)
+    strategy_hash = Column(String(64), nullable=False, index=True)
+
+    timeframe = Column(String(16), nullable=False, default='daily')
+    lookback_bars = Column(Integer, nullable=False, default=252)
+    initial_capital = Column(Float, nullable=False, default=100000.0)
+    fee_bps = Column(Float, nullable=False, default=0.0)
+
+    parsed_confidence = Column(Float)
+    needs_confirmation = Column(Boolean, nullable=False, default=False)
+    warnings_json = Column(Text)
+
+    run_at = Column(DateTime, default=datetime.now, index=True)
+    completed_at = Column(DateTime, index=True)
+    status = Column(String(16), nullable=False, default='completed', index=True)
+    no_result_reason = Column(String(64))
+    no_result_message = Column(Text)
+
+    trade_count = Column(Integer, default=0)
+    win_count = Column(Integer, default=0)
+    loss_count = Column(Integer, default=0)
+    total_return_pct = Column(Float)
+    win_rate_pct = Column(Float)
+    avg_trade_return_pct = Column(Float)
+    max_drawdown_pct = Column(Float)
+    avg_holding_days = Column(Float)
+    final_equity = Column(Float)
+
+    summary_json = Column(Text)
+    ai_summary = Column(Text)
+    equity_curve_json = Column(Text)
+
+    __table_args__ = (
+        Index('ix_rule_backtest_run_code_time', 'code', 'run_at'),
+        Index('ix_rule_backtest_run_code_status', 'code', 'status'),
+    )
+
+
+class RuleBacktestTrade(Base):
+    """Persisted trade row for a rule backtest run."""
+
+    __tablename__ = 'rule_backtest_trades'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey('rule_backtest_runs.id'), nullable=False, index=True)
+    trade_index = Column(Integer, nullable=False, default=0)
+    code = Column(String(16), nullable=False, index=True)
+
+    entry_date = Column(Date, index=True)
+    exit_date = Column(Date, index=True)
+    entry_price = Column(Float)
+    exit_price = Column(Float)
+    entry_signal = Column(Text)
+    exit_signal = Column(Text)
+    return_pct = Column(Float)
+    holding_days = Column(Integer)
+    entry_rule_json = Column(Text)
+    exit_rule_json = Column(Text)
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index('ix_rule_backtest_trade_run_index', 'run_id', 'trade_index'),
+        Index('ix_rule_backtest_trade_code_date', 'code', 'entry_date'),
+    )
+
+
 class PortfolioAccount(Base):
     """Portfolio account metadata."""
 

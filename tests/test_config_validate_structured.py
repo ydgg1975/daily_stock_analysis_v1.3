@@ -223,6 +223,28 @@ class TestValidateStructuredLLM:
         issues = cfg.validate_structured()
         assert any(i.severity == "error" and i.field == "LITELLM_MODEL" for i in issues)
 
+    def test_configured_primary_model_can_match_channel_alias_by_suffix(self):
+        cfg = _make_config(
+            llm_model_list=[
+                {
+                    "model_name": "openai/glm-4",
+                    "litellm_params": {
+                        "model": "openai/glm-4",
+                        "api_key": "zhipu-secret-key",
+                        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+                    },
+                },
+            ],
+            litellm_model="glm-4",
+            gemini_api_keys=[],
+            anthropic_api_keys=[],
+            openai_api_keys=[],
+            deepseek_api_keys=[],
+        )
+
+        issues = cfg.validate_structured()
+        assert not any(i.severity == "error" and i.field == "LITELLM_MODEL" for i in issues)
+
     def test_configured_agent_primary_model_missing_from_channels_is_error(self):
         cfg = _make_config(
             llm_model_list=[

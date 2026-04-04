@@ -290,6 +290,50 @@ def get_configured_llm_models(model_list: List[Dict[str, Any]]) -> List[str]:
     return models
 
 
+def get_llm_model_identity_forms(model: str) -> set[str]:
+    """Return canonical comparison forms for one model ID.
+
+    A channel may expose ``glm-4`` while protocol normalization stores
+    ``openai/glm-4``.  Route/save validation should treat these as the same
+    model identity when the suffix matches.
+    """
+    normalized_model = (model or "").strip()
+    if not normalized_model:
+        return set()
+    forms = {normalized_model}
+    if "/" in normalized_model:
+        suffix = normalized_model.split("/", 1)[1].strip()
+        if suffix:
+            forms.add(suffix)
+    else:
+        forms.add(f"openai/{normalized_model}")
+    return forms
+
+
+def resolve_configured_llm_model_alias(
+    model: str,
+    configured_models: Optional[set[str]] = None,
+) -> str:
+    """Map a selected model to the configured router alias when equivalent."""
+    normalized_model = (model or "").strip()
+    if not normalized_model:
+        return ""
+    if not configured_models:
+        return normalized_model
+
+    candidate_forms = get_llm_model_identity_forms(normalized_model)
+    matches = [
+        configured_model
+        for configured_model in configured_models
+        if get_llm_model_identity_forms(configured_model) & candidate_forms
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if normalized_model in configured_models:
+        return normalized_model
+    return normalized_model
+
+
 def resolve_unified_llm_temperature(model: str) -> float:
     """Resolve the unified LLM temperature with backward-compatible fallbacks."""
     llm_temperature_raw = os.getenv("LLM_TEMPERATURE")
@@ -346,7 +390,7 @@ def normalize_agent_litellm_model(
     configured_models: Optional[set[str]] = None,
 ) -> str:
     """Normalize AGENT_LITELLM_MODEL while preserving configured router aliases."""
-    normalized_model = (model or "").strip()
+    normalized_model = resolve_configured_llm_model_alias(model, configured_models)
     if not normalized_model:
         return ""
     if "/" not in normalized_model:
@@ -1012,9 +1056,22 @@ class Config:
                 if m not in _seen and not _seen.add(m)  # type: ignore[func-returns-value]
             ]
 
+        configured_router_model_set = set(get_configured_llm_models(llm_model_list))
+        litellm_model = resolve_configured_llm_model_alias(
+            litellm_model,
+            configured_models=configured_router_model_set,
+        )
+        litellm_fallback_models = [
+            resolve_configured_llm_model_alias(
+                model,
+                configured_models=configured_router_model_set,
+            )
+            for model in (litellm_fallback_models or [])
+        ]
+
         agent_litellm_model = normalize_agent_litellm_model(
             os.getenv('AGENT_LITELLM_MODEL', ''),
-            configured_models=set(get_configured_llm_models(llm_model_list)),
+            configured_models=configured_router_model_set,
         )
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
@@ -1936,6 +1993,17 @@ class Config:
         available_router_models = get_configured_llm_models(self.llm_model_list)
         available_router_model_set = set(available_router_models)
 
+        def _is_configured_router_model(model: str) -> bool:
+            if not model:
+                return False
+            return (
+                resolve_configured_llm_model_alias(
+                    model,
+                    configured_models=available_router_model_set,
+                )
+                in available_router_model_set
+            )
+
         def _has_runtime_source_for_model(model: str) -> bool:
             if not model or _uses_direct_env_provider(model):
                 return True
@@ -1957,7 +2025,7 @@ class Config:
             if (
                 self.litellm_model
                 and not _uses_direct_env_provider(self.litellm_model)
-                and self.litellm_model not in available_router_model_set
+                and not _is_configured_router_model(self.litellm_model)
             ):
                 issues.append(ConfigIssue(
                     severity="error",
@@ -1972,7 +2040,7 @@ class Config:
                 configured_agent_primary_model
                 and effective_agent_primary_model
                 and not _uses_direct_env_provider(effective_agent_primary_model)
-                and effective_agent_primary_model not in available_router_model_set
+                and not _is_configured_router_model(effective_agent_primary_model)
             ):
                 issues.append(ConfigIssue(
                     severity="error",
@@ -1985,7 +2053,7 @@ class Config:
 
             invalid_fallbacks = [
                 model for model in (self.litellm_fallback_models or [])
-                if model and model not in available_router_model_set
+                if model and not _is_configured_router_model(model)
                 and not _uses_direct_env_provider(model)
             ]
             if invalid_fallbacks:
@@ -2001,7 +2069,7 @@ class Config:
             if (
                 self.vision_model
                 and not _uses_direct_env_provider(self.vision_model)
-                and self.vision_model not in available_router_model_set
+                and not _is_configured_router_model(self.vision_model)
             ):
                 issues.append(ConfigIssue(
                     severity="warning",

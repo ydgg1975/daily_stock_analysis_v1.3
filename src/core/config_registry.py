@@ -109,6 +109,20 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {},
         "display_order": 2,
     },
+    "BACKTEST_LITELLM_MODEL": {
+        "title": "Backtesting Model Override",
+        "description": "Optional Backtesting-only model in provider/model format. When empty, Backtesting inherits the Analysis primary model.",
+        "category": "ai_model",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 3,
+    },
     "LITELLM_FALLBACK_MODELS": {
         "title": "Fallback Models (LiteLLM)",
         "description": "Comma-separated fallback models tried when the primary model fails (e.g. anthropic/claude-3-5-sonnet-20241022,openai/gpt-4o-mini). Enables cross-provider redundancy.",
@@ -428,6 +442,20 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {},
         "display_order": 53,
     },
+    "CUSTOM_DATA_SOURCE_LIBRARY": {
+        "title": "Custom Data Source Library",
+        "description": "JSON array of custom data sources managed from Settings. Each entry stores name, credential, optional base URL, description, capabilities, and validation state.",
+        "category": "data_source",
+        "data_type": "string",
+        "ui_control": "textarea",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "[]",
+        "options": [],
+        "validation": {},
+        "display_order": 54,
+    },
     "ENABLE_REALTIME_QUOTE": {
         "title": "Enable Realtime Quote",
         "description": "Enable realtime market quotes. Disable to only use historical close prices.",
@@ -637,6 +665,34 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 41,
+    },
+    "ZHIPU_API_KEY": {
+        "title": "Zhipu API Key",
+        "description": "GLM / Zhipu API key (direct provider path). Use channel settings for custom endpoint/protocol/model declaration.",
+        "category": "ai_model",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 42,
+    },
+    "ZHIPU_API_KEYS": {
+        "title": "Zhipu API Keys (Multi)",
+        "description": "Comma-separated GLM / Zhipu API keys for load balancing.",
+        "category": "ai_model",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {"multi_value": True, "delimiter": ","},
+        "display_order": 43,
     },
     "OPENAI_BASE_URL": {
         "title": "OpenAI Base URL",
@@ -1900,7 +1956,7 @@ def _infer_category(key: str) -> str:
         return "base"
     if key.startswith("BACKTEST_"):
         return "backtest"
-    if key.startswith(("GEMINI_", "OPENAI_", "ANTHROPIC_", "LITELLM_", "AIHUBMIX_", "DEEPSEEK_", "LLM_")):
+    if key.startswith(("GEMINI_", "OPENAI_", "ANTHROPIC_", "LITELLM_", "AIHUBMIX_", "DEEPSEEK_", "ZHIPU_", "LLM_")):
         return "ai_model"
     if key.endswith("_PRIORITY") or key.startswith(
         (

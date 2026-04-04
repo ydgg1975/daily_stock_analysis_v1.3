@@ -3,6 +3,7 @@ import axios from 'axios';
 export type ApiErrorCategory =
   | 'agent_disabled'
   | 'missing_params'
+  | 'validation_error'
   | 'analysis_conflict'
   | 'llm_not_configured'
   | 'model_tool_incompatible'

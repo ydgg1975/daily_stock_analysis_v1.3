@@ -163,6 +163,21 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
+    def test_validate_accepts_bare_glm_model_when_zhipu_channel_declares_it(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "zhipu"},
+                {"key": "LLM_ZHIPU_PROTOCOL", "value": "openai"},
+                {"key": "LLM_ZHIPU_BASE_URL", "value": "https://open.bigmodel.cn/api/paas/v4"},
+                {"key": "LLM_ZHIPU_API_KEY", "value": "zhipu-secret-key"},
+                {"key": "LLM_ZHIPU_MODELS", "value": "glm-4"},
+                {"key": "LITELLM_MODEL", "value": "glm-4"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
     @patch.object(
         Config,
         "_parse_litellm_yaml",
@@ -355,6 +370,72 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
+    def test_validate_allows_gemini_primary_with_direct_key_when_other_channels_exist(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "primary"},
+                {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
+                {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-4o-mini"},
+                {"key": "GEMINI_API_KEY", "value": "gemini-legacy-key"},
+                {"key": "LITELLM_MODEL", "value": "gemini/gemini-3-flash-preview"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
+    def test_validate_allows_gemini_fallback_with_direct_key_when_other_channels_exist(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "primary"},
+                {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
+                {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-4o-mini"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-4o-mini"},
+                {"key": "GEMINI_API_KEY", "value": "gemini-legacy-key"},
+                {"key": "LITELLM_FALLBACK_MODELS", "value": "gemini/gemini-3-flash-preview"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
+    def test_validate_allows_fallback_model_declared_by_enabled_channels(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "primary,gemini"},
+                {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
+                {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-4o-mini"},
+                {"key": "LLM_GEMINI_PROTOCOL", "value": "gemini"},
+                {"key": "LLM_GEMINI_API_KEY", "value": "gemini-channel-key"},
+                {"key": "LLM_GEMINI_MODELS", "value": "gemini/gemini-3-flash-preview"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-4o-mini"},
+                {"key": "LITELLM_FALLBACK_MODELS", "value": "gemini/gemini-3-flash-preview"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
+    def test_validate_rejects_fallback_without_channel_or_legacy_key(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "primary"},
+                {"key": "LLM_PRIMARY_PROTOCOL", "value": "openai"},
+                {"key": "LLM_PRIMARY_API_KEY", "value": "sk-test-value"},
+                {"key": "LLM_PRIMARY_MODELS", "value": "gpt-4o-mini"},
+                {"key": "LITELLM_MODEL", "value": "openai/gpt-4o-mini"},
+                {"key": "LITELLM_FALLBACK_MODELS", "value": "anthropic/claude-3-5-sonnet-20241022"},
+            ]
+        )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(any(issue["key"] == "LITELLM_FALLBACK_MODELS" for issue in validation["issues"]))
+        fallback_issue = next(issue for issue in validation["issues"] if issue["key"] == "LITELLM_FALLBACK_MODELS")
+        self.assertIn("use task backup route for cross-provider failover", fallback_issue["message"])
+
     @patch("litellm.completion")
     def test_test_llm_channel_returns_success_payload(self, mock_completion) -> None:
         mock_completion.return_value = type(
@@ -376,6 +457,52 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_protocol"], "openai")
         self.assertEqual(payload["resolved_model"], "openai/deepseek-chat")
+
+    @patch("litellm.completion")
+    def test_test_llm_channel_glm4_success_path_stays_working(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [type("Choice", (), {"message": type("Message", (), {"content": "OK"})(), "finish_reason": "stop"})()],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="zhipu",
+            protocol="openai",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            api_key="zhipu-test-key",
+            models=["glm-4-flash"],
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["resolved_protocol"], "openai")
+        self.assertEqual(payload["resolved_model"], "openai/glm-4-flash")
+
+    @patch("litellm.completion")
+    def test_test_llm_channel_empty_response_returns_actionable_error(self, mock_completion) -> None:
+        mock_completion.return_value = type(
+            "MockResponse",
+            (),
+            {
+                "choices": [type("Choice", (), {"message": type("Message", (), {"content": ""})(), "finish_reason": "stop"})()],
+            },
+        )()
+
+        payload = self.service.test_llm_channel(
+            name="zhipu",
+            protocol="openai",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            api_key="zhipu-test-key",
+            models=["glm-5"],
+        )
+
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["message"], "LLM channel returned empty content")
+        self.assertIn("empty response body", payload["error"].lower())
+        self.assertIn("unsupported model", payload["error"].lower())
+        self.assertIn("protocol", payload["error"].lower())
 
     @patch.object(SystemConfigService, "_reload_runtime_singletons")
     def test_update_with_reload_resets_runtime_singletons(

@@ -21,6 +21,7 @@ from src.config import (
     normalize_news_strategy_profile,
     normalize_llm_channel_model,
     parse_env_bool,
+    resolve_configured_llm_model_alias,
     resolve_news_window_days,
     resolve_llm_channel_protocol,
     setup_env,
@@ -252,15 +253,20 @@ class SystemConfigService:
             started_at = time.perf_counter()
             response = litellm.completion(**call_kwargs)
             latency_ms = int((time.perf_counter() - started_at) * 1000)
-            content = ""
-            if response and getattr(response, "choices", None):
-                content = str(response.choices[0].message.content or "").strip()
+            content = self._extract_llm_response_text(response)
 
             if not content:
+                finish_reason = ""
+                if response and getattr(response, "choices", None):
+                    finish_reason = str(getattr(response.choices[0], "finish_reason", "") or "").strip()
                 return {
                     "success": False,
-                    "message": "LLM channel returned an empty response",
-                    "error": "Empty response",
+                    "message": "LLM channel returned empty content",
+                    "error": self._build_llm_empty_response_hint(
+                        resolved_protocol=resolved_protocol,
+                        resolved_model=resolved_model,
+                        finish_reason=finish_reason,
+                    ),
                     "resolved_protocol": resolved_protocol or None,
                     "resolved_model": resolved_model,
                     "latency_ms": latency_ms,
@@ -276,14 +282,119 @@ class SystemConfigService:
             }
         except Exception as exc:
             logger.warning("LLM channel test failed for %s: %s", channel_name, exc)
+            classified_message, classified_error = self._classify_llm_test_exception(
+                exc=exc,
+                resolved_protocol=resolved_protocol,
+                resolved_model=resolved_model,
+            )
             return {
                 "success": False,
-                "message": "LLM channel test failed",
-                "error": str(exc),
+                "message": classified_message,
+                "error": classified_error,
                 "resolved_protocol": resolved_protocol or None,
                 "resolved_model": resolved_model,
                 "latency_ms": None,
             }
+
+    @staticmethod
+    def _extract_llm_response_text(response: Any) -> str:
+        """Extract plain text content from heterogeneous LiteLLM response shapes."""
+        if not response or not getattr(response, "choices", None):
+            return ""
+        first_choice = response.choices[0]
+        message = getattr(first_choice, "message", None)
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            fragments: List[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = str(item.get("text") or item.get("content") or "").strip()
+                else:
+                    text = str(getattr(item, "text", "") or getattr(item, "content", "") or "").strip()
+                if text:
+                    fragments.append(text)
+            return " ".join(fragments).strip()
+        if content is None:
+            delta = getattr(first_choice, "delta", None)
+            if isinstance(delta, dict):
+                return str(delta.get("content") or "").strip()
+            if delta is not None:
+                return str(getattr(delta, "content", "") or "").strip()
+        return str(content or "").strip()
+
+    @staticmethod
+    def _build_llm_empty_response_hint(
+        *,
+        resolved_protocol: str,
+        resolved_model: str,
+        finish_reason: str,
+    ) -> str:
+        """Return actionable hint for empty-content channel test failures."""
+        parts = [
+            (
+                "Provider returned an empty response body; no content could be extracted from the test call."
+            ),
+            (
+                "Possible causes: unsupported model, missing model entitlement, protocol mismatch, "
+                "or provider response format not parseable by current adapter."
+            ),
+            f"Model={resolved_model or 'unknown'}, protocol={resolved_protocol or 'unknown'}.",
+        ]
+        if finish_reason:
+            parts.append(f"finish_reason={finish_reason}.")
+        parts.append("Try a known-supported model first, then verify entitlement/protocol in advanced channel testing.")
+        return " ".join(parts)
+
+    @staticmethod
+    def _classify_llm_test_exception(
+        *,
+        exc: Exception,
+        resolved_protocol: str,
+        resolved_model: str,
+    ) -> Tuple[str, str]:
+        """Map provider errors to actionable channel-test diagnostics."""
+        raw_error = str(exc).strip()
+        lowered = raw_error.lower()
+        if any(token in lowered for token in ["auth", "unauthorized", "invalid api key", "401", "forbidden", "permission denied"]):
+            return (
+                "LLM channel authentication failed",
+                (
+                    "Authentication failed for this provider key. "
+                    "Verify API key/tenant permissions and endpoint settings."
+                ),
+            )
+        if any(token in lowered for token in ["model not found", "unknown model", "unsupported model", "not support", "does not exist"]):
+            return (
+                "LLM channel model is unavailable",
+                (
+                    "The selected model may be unsupported for this provider/account. "
+                    f"Model={resolved_model or 'unknown'} protocol={resolved_protocol or 'unknown'}. "
+                    "Try a known-supported model or check model entitlement."
+                ),
+            )
+        if any(token in lowered for token in ["empty response", "no content", "blank response"]):
+            return (
+                "LLM channel returned empty content",
+                SystemConfigService._build_llm_empty_response_hint(
+                    resolved_protocol=resolved_protocol,
+                    resolved_model=resolved_model,
+                    finish_reason="",
+                ),
+            )
+        if "timeout" in lowered:
+            return (
+                "LLM channel test timed out",
+                "Request timed out before provider returned a usable response. Retry with a smaller model or longer timeout.",
+            )
+        return (
+            "LLM channel test failed",
+            (
+                "Provider call failed. Check protocol/base URL/model settings and advanced channel test details. "
+                f"Raw error: {raw_error[:240]}"
+            ),
+        )
 
     def update(
         self,
@@ -822,6 +933,17 @@ class SystemConfigService:
         return SystemConfigService._has_legacy_key_for_provider(provider, effective_map)
 
     @staticmethod
+    def _is_model_declared_by_channels(model: str, available_model_set: Set[str]) -> bool:
+        """Compare a selected model against configured aliases using suffix-aware identity."""
+        if not model:
+            return False
+        resolved_alias = resolve_configured_llm_model_alias(
+            model,
+            configured_models=available_model_set,
+        )
+        return resolved_alias in available_model_set
+
+    @staticmethod
     def _validate_llm_runtime_selection(effective_map: Dict[str, str]) -> List[Dict[str, Any]]:
         """Validate selected primary/fallback/vision models against configured channels."""
         issues: List[Dict[str, Any]] = []
@@ -922,17 +1044,22 @@ class SystemConfigService:
             return issues
 
         primary_model = (effective_map.get("LITELLM_MODEL") or "").strip()
-        if primary_model and primary_model not in available_model_set and not _uses_direct_env_provider(primary_model):
+        if (
+            primary_model
+            and not SystemConfigService._is_model_declared_by_channels(primary_model, available_model_set)
+            and not SystemConfigService._has_runtime_source_for_model(primary_model, effective_map)
+        ):
             issues.append(
                 {
                     "key": "LITELLM_MODEL",
                     "code": "unknown_model",
                     "message": (
-                        "LITELLM_MODEL is not declared by the current enabled channels. "
+                        "LITELLM_MODEL is not declared by the current enabled channels "
+                        "and has no matching legacy API key. "
                         f"Available models: {', '.join(available_models[:6])}"
                     ),
                     "severity": "error",
-                    "expected": "one configured channel model",
+                    "expected": "one configured channel model or matching legacy API key",
                     "actual": primary_model,
                 }
             )
@@ -945,19 +1072,26 @@ class SystemConfigService:
         if (
             configured_agent_model_raw
             and configured_agent_model
-            and configured_agent_model not in available_model_set
-            and not _uses_direct_env_provider(configured_agent_model)
+            and not SystemConfigService._is_model_declared_by_channels(
+                configured_agent_model,
+                available_model_set,
+            )
+            and not SystemConfigService._has_runtime_source_for_model(
+                configured_agent_model,
+                effective_map,
+            )
         ):
             issues.append(
                 {
                     "key": "AGENT_LITELLM_MODEL",
                     "code": "unknown_model",
                     "message": (
-                        "AGENT_LITELLM_MODEL is not declared by the current enabled channels. "
+                        "AGENT_LITELLM_MODEL is not declared by the current enabled channels "
+                        "and has no matching legacy API key. "
                         f"Available models: {', '.join(available_models[:6])}"
                     ),
                     "severity": "error",
-                    "expected": "one configured channel model",
+                    "expected": "one configured channel model or matching legacy API key",
                     "actual": configured_agent_model,
                 }
             )
@@ -969,7 +1103,10 @@ class SystemConfigService:
         ]
         invalid_fallbacks = [
             model for model in fallback_models
-            if model not in available_model_set and not _uses_direct_env_provider(model)
+            if (
+                not SystemConfigService._is_model_declared_by_channels(model, available_model_set)
+                and not SystemConfigService._has_runtime_source_for_model(model, effective_map)
+            )
         ]
         if invalid_fallbacks:
             issues.append(
@@ -977,25 +1114,32 @@ class SystemConfigService:
                     "key": "LITELLM_FALLBACK_MODELS",
                     "code": "unknown_model",
                     "message": (
-                        "LITELLM_FALLBACK_MODELS contains models that are not declared by the current enabled channels"
+                        "LITELLM_FALLBACK_MODELS contains models without enabled channels "
+                        "or matching legacy API keys. This fallback field only accepts runtime-accessible models; "
+                        "use task backup route for cross-provider failover."
                     ),
                     "severity": "error",
-                    "expected": ",".join(available_models[:6]),
+                    "expected": "configured channel models or matching legacy API keys",
                     "actual": ", ".join(invalid_fallbacks[:3]),
                 }
             )
 
         vision_model = (effective_map.get("VISION_MODEL") or "").strip()
-        if vision_model and vision_model not in available_model_set and not _uses_direct_env_provider(vision_model):
+        if (
+            vision_model
+            and not SystemConfigService._is_model_declared_by_channels(vision_model, available_model_set)
+            and not SystemConfigService._has_runtime_source_for_model(vision_model, effective_map)
+        ):
             issues.append(
                 {
                     "key": "VISION_MODEL",
                     "code": "unknown_model",
                     "message": (
-                        "VISION_MODEL is not declared by the current enabled channels"
+                        "VISION_MODEL is not declared by the current enabled channels "
+                        "and has no matching legacy API key"
                     ),
                     "severity": "warning",
-                    "expected": ",".join(available_models[:6]),
+                    "expected": "configured channel models or matching legacy API keys",
                     "actual": vision_model,
                 }
             )

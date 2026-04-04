@@ -1,0 +1,100 @@
+# -*- coding: utf-8 -*-
+"""Repository helpers for AI-assisted rule backtests."""
+
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy import and_, delete, desc, func, select
+
+from src.storage import DatabaseManager, RuleBacktestRun, RuleBacktestTrade
+
+
+class RuleBacktestRepository:
+    """Database access for rule backtest runs and trades."""
+
+    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+        self.db = db_manager or DatabaseManager.get_instance()
+
+    def save_run(self, run: RuleBacktestRun) -> RuleBacktestRun:
+        with self.db.get_session() as session:
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+    def save_trades(self, trades: List[RuleBacktestTrade]) -> int:
+        if not trades:
+            return 0
+        with self.db.get_session() as session:
+            session.add_all(trades)
+            session.commit()
+            return len(trades)
+
+    def get_run(self, run_id: int) -> Optional[RuleBacktestRun]:
+        with self.db.get_session() as session:
+            return session.execute(
+                select(RuleBacktestRun).where(RuleBacktestRun.id == run_id).limit(1)
+            ).scalar_one_or_none()
+
+    def get_runs_paginated(
+        self,
+        *,
+        code: Optional[str] = None,
+        offset: int,
+        limit: int,
+    ) -> Tuple[List[RuleBacktestRun], int]:
+        with self.db.get_session() as session:
+            conditions = []
+            if code:
+                conditions.append(RuleBacktestRun.code == code)
+            where_clause = and_(*conditions) if conditions else True
+
+            total = session.execute(
+                select(func.count(RuleBacktestRun.id)).where(where_clause)
+            ).scalar() or 0
+            rows = session.execute(
+                select(RuleBacktestRun)
+                .where(where_clause)
+                .order_by(desc(RuleBacktestRun.run_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
+
+    def get_trades_by_run(self, run_id: int) -> List[RuleBacktestTrade]:
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(RuleBacktestTrade)
+                .where(RuleBacktestTrade.run_id == run_id)
+                .order_by(RuleBacktestTrade.trade_index.asc())
+            ).scalars().all()
+            return list(rows)
+
+    def delete_runs_by_code(self, *, code: str) -> int:
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(RuleBacktestRun).where(RuleBacktestRun.code == code)
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def delete_trades_by_run_ids(self, run_ids: List[int]) -> int:
+        if not run_ids:
+            return 0
+        with self.db.get_session() as session:
+            deleted = session.execute(
+                delete(RuleBacktestTrade).where(RuleBacktestTrade.run_id.in_(run_ids))
+            ).rowcount or 0
+            session.commit()
+            return int(deleted)
+
+    def _json_or_none(self, value: Optional[str]) -> Dict[str, Any]:
+        if not value:
+            return {}
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
