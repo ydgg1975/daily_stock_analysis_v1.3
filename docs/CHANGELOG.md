@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
-- [改进] Tushare `get_stock_list` 对港股 `hk_basic` 返回的 `ts_code`（如 `00700.HK`）经 `normalize_stock_code` 归一为系统约定的 `HK00700` 形式，并与名称缓存键一致。
 - [修复] **MiniMax-M2.7 模型连接测试支持** — 修复 LLM 通道连接测试在 MiniMax-M2.7 模型下返回 "Empty response" 的问题；增加了 `max_tokens` 上限（8→256）以容纳 MiniMax 思考过程，并添加 `content_blocks` 格式解析逻辑统一处理 MiniMax 响应格式差异。
 - [修复] 移除 `HistoryItem` 与 `ReportSummary` 响应 Schema 中 `sentiment_score` 的 `ge=0/le=100` 约束（fixes #942）——历史库中存储的超范围负值或大于 100 的情绪评分不再触发 Pydantic ValidationError，历史列表与详情接口恢复正常返回。
 - [改进] Agent IntelAgent 新增公司公告搜索维度（上交所/深交所/cninfo）与主力资金流工具（get_capital_flow），修复 Agent 模式下公告和资金流数据经常缺失的问题
@@ -25,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 新功能
 
-- 🎨 **tushare支持港股查询** — 配置了tushare凭证的用户可以获取高质量的港股数据
+- 🎨 **tushare支持港股查询** — 配置了tushare凭证的用户会调用hk_daily接口获取数据，如果用户tushae权限不够依然会出现数据查询异常的情况，和改造前直接抛出不支持的异常流程相同。
 
 ## [3.12.0] - 2026-04-01
 

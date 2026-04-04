@@ -600,8 +600,7 @@ class TushareFetcher(BaseFetcher):
         """
         获取股票列表
         
-        使用 Tushare 的 stock_basic 获取 A 股列表，hk_basic 获取港股列表。
-        code 列统一经 normalize_stock_code 归一：A 股为 6 位数字，港股为 HK+5 位数字（如 00700.HK -> HK00700）。
+        使用 Tushare 的 stock_basic 接口获取 A 股列表（不含港股）。
         
         Returns:
             包含 code, name, industry, area, market 列的 DataFrame，失败返回 None
@@ -611,57 +610,31 @@ class TushareFetcher(BaseFetcher):
             return None
         
         try:
-            # 速率限制检查
             self._check_rate_limit()
 
-            frames = []
-            
-            # 1. A 股列表
-            try:
-                df_cn = self._api.stock_basic(
-                    exchange='',
-                    list_status='L',
-                    fields='ts_code,name,industry,area,market'
-                )
-                if df_cn is not None and not df_cn.empty:
-                    frames.append(df_cn)
-            except Exception as e:
-                logger.warning(f"Tushare 获取 A 股股票列表失败: {e}")
+            df = self._api.stock_basic(
+                exchange='',
+                list_status='L',
+                fields='ts_code,name,industry,area,market'
+            )
 
-            # 2. 港股列表（不含行业/地区信息，使用空字符串占位）
-            try:
-                df_hk = self._api.hk_basic(
-                    list_status='L',
-                    fields='ts_code,name,market'
-                )
-                if df_hk is not None and not df_hk.empty:
-                    df_hk = df_hk.copy()
-                    df_hk['industry'] = ''
-                    df_hk['area'] = ''
-                    frames.append(df_hk)
-            except Exception as e:
-                logger.warning(f"Tushare 获取港股股票列表失败: {e}")
-
-            if not frames:
+            if df is None or df.empty:
                 return None
 
-            df_all = pd.concat(frames, ignore_index=True)
+            df = df.copy()
+            df['code'] = df['ts_code'].astype(str).str.split('.').str[0]
 
-            # ts_code 与系统约定对齐：A 股去交易所后缀；港股 .HK 后缀转为 HK 前缀形式（见 normalize_stock_code）
-            df_all["code"] = df_all["ts_code"].astype(str).map(normalize_stock_code)
-            
-            # 更新缓存
             if not hasattr(self, '_stock_name_cache'):
                 self._stock_name_cache = {}
-            for _, row in df_all.iterrows():
+            for _, row in df.iterrows():
                 self._stock_name_cache[row['code']] = row['name']
-            
-            logger.info(f"Tushare 获取股票列表成功: {len(df_all)} 条")
-            return df_all[['code', 'name', 'industry', 'area', 'market']]
-            
+
+            logger.info(f"Tushare 获取股票列表成功: {len(df)} 条")
+            return df[['code', 'name', 'industry', 'area', 'market']]
+
         except Exception as e:
             logger.warning(f"Tushare 获取股票列表失败: {e}")
-        
+
         return None
     
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:

@@ -60,7 +60,7 @@ class TestTushareFetcherGetStockList(unittest.TestCase):
         fetcher.priority = 2
         return fetcher
 
-    def test_get_stock_list_merges_a_share_and_hk(self) -> None:
+    def test_get_stock_list_a_share_only(self) -> None:
         fetcher = self._make_fetcher()
 
         fetcher._api.stock_basic.return_value = pd.DataFrame(
@@ -70,13 +70,6 @@ class TestTushareFetcherGetStockList(unittest.TestCase):
                 "industry": ["白酒", "银行"],
                 "area": ["贵州", "深圳"],
                 "market": ["主板", "主板"],
-            }
-        )
-        fetcher._api.hk_basic.return_value = pd.DataFrame(
-            {
-                "ts_code": ["00700.HK"],
-                "name": ["腾讯控股"],
-                "market": ["主板"],
             }
         )
 
@@ -89,43 +82,16 @@ class TestTushareFetcherGetStockList(unittest.TestCase):
             set(df.columns.tolist()),
             {"code", "name", "industry", "area", "market"},
         )
-        self.assertEqual(len(df), 3)
-        self.assertEqual(set(df["code"].tolist()), {"600519", "000001", "HK00700"})
-
-        hk_row = df.loc[df["code"] == "HK00700"].iloc[0]
-        self.assertEqual(hk_row["industry"], "")
-        self.assertEqual(hk_row["area"], "")
-        self.assertEqual(fetcher._stock_name_cache.get("HK00700"), "腾讯控股")
+        self.assertEqual(len(df), 2)
+        self.assertEqual(set(df["code"].tolist()), {"600519", "000001"})
+        self.assertEqual(fetcher._stock_name_cache.get("600519"), "贵州茅台")
 
         fetcher._api.stock_basic.assert_called_once()
-        fetcher._api.hk_basic.assert_called_once()
+        self.assertFalse(fetcher._api.hk_basic.called)
 
-    def test_get_stock_list_cn_only_when_hk_fails(self) -> None:
-        fetcher = self._make_fetcher()
-
-        fetcher._api.stock_basic.return_value = pd.DataFrame(
-            {
-                "ts_code": ["600519.SH"],
-                "name": ["贵州茅台"],
-                "industry": ["白酒"],
-                "area": ["贵州"],
-                "market": ["主板"],
-            }
-        )
-        fetcher._api.hk_basic.side_effect = Exception("permission")
-
-        with patch.object(fetcher, "_check_rate_limit"):
-            df = fetcher.get_stock_list()
-
-        self.assertIsNotNone(df)
-        assert df is not None
-        self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]["code"], "600519")
-
-    def test_get_stock_list_returns_none_when_both_empty(self) -> None:
+    def test_get_stock_list_returns_none_when_empty(self) -> None:
         fetcher = self._make_fetcher()
         fetcher._api.stock_basic.return_value = pd.DataFrame()
-        fetcher._api.hk_basic.return_value = pd.DataFrame()
 
         with patch.object(fetcher, "_check_rate_limit"):
             df = fetcher.get_stock_list()
