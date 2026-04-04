@@ -435,6 +435,7 @@ class Config:
 
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
+    zhitu_api_token: Optional[str] = None
     tickflow_api_key: Optional[str] = None
 
     # === AI 分析配置 ===
@@ -660,6 +661,10 @@ class Config:
     market_review_region: str = "cn"
     # 交易日检查：默认启用，非交易日跳过执行；设为 false 或 --force-run 可强制执行（Issue #373）
     trading_day_check_enabled: bool = True
+
+    # === 选股过滤配置 ===
+    stock_filter_enabled: bool = True        # 是否启用选股过滤（Hard Gate + 动态权重）
+    stock_filter_max: int = 0                # 最多分析股票数量（0=不限制）
 
     # === 实时行情增强数据配置 ===
     # 实时行情开关（关闭后使用历史收盘价进行分析）
@@ -1071,6 +1076,7 @@ class Config:
             feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
+            zhitu_api_token=os.getenv('ZHITU_API_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
@@ -1288,6 +1294,8 @@ class Config:
                 os.getenv('MARKET_REVIEW_REGION', 'cn')
             ),
             trading_day_check_enabled=os.getenv('TRADING_DAY_CHECK_ENABLED', 'true').lower() != 'false',
+            stock_filter_enabled=os.getenv('STOCK_FILTER_ENABLED', 'true').lower() == 'true',
+            stock_filter_max=int(os.getenv('STOCK_FILTER_MAX', '0') or '0'),
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=parse_env_int(os.getenv('WEBUI_PORT'), 8000, field_name='WEBUI_PORT', minimum=1, maximum=65535),
