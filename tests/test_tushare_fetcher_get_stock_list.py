@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for TushareFetcher.get_stock_list().
+"""Unit tests for TushareFetcher.get_stock_list() and _fetch_raw_data().
 
 This test file is intentionally isolated from other test modules.
 It loads repo-root `.env` and stubs optional runtime deps so it can run
@@ -39,6 +39,7 @@ if not json_repair_available and "json_repair" not in sys.modules:
 if "fake_useragent" not in sys.modules:
     sys.modules["fake_useragent"] = MagicMock()
 
+from data_provider.base import DataFetchError, RateLimitError
 from data_provider.tushare_fetcher import TushareFetcher
 
 try:
@@ -130,6 +131,91 @@ class TestTushareFetcherGetStockList(unittest.TestCase):
             df = fetcher.get_stock_list()
 
         self.assertIsNone(df)
+
+
+class TestTushareFetcherFetchRawData(unittest.TestCase):
+    """TushareFetcher._fetch_raw_data: API routing and error handling."""
+
+    @staticmethod
+    def _make_fetcher() -> TushareFetcher:
+        with patch.object(TushareFetcher, "_init_api", return_value=None):
+            fetcher = TushareFetcher()
+        fetcher._api = MagicMock()
+        fetcher.priority = 2
+        return fetcher
+
+    def test_fetch_raw_data_a_share_uses_daily(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.daily.return_value = pd.DataFrame({"trade_date": ["20260101"]})
+
+        with patch.object(fetcher, "_check_rate_limit"):
+            out = fetcher._fetch_raw_data("600519", "2026-01-01", "2026-01-05")
+
+        self.assertIsNotNone(out)
+        fetcher._api.daily.assert_called_once_with(
+            ts_code="600519.SH",
+            start_date="20260101",
+            end_date="20260105",
+        )
+        fetcher._api.fund_daily.assert_not_called()
+        fetcher._api.hk_daily.assert_not_called()
+
+    def test_fetch_raw_data_etf_uses_fund_daily(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.fund_daily.return_value = pd.DataFrame({"trade_date": ["20260101"]})
+
+        with patch.object(fetcher, "_check_rate_limit"):
+            out = fetcher._fetch_raw_data("510050", "20260101", "20260105")
+
+        self.assertIsNotNone(out)
+        fetcher._api.fund_daily.assert_called_once_with(
+            ts_code="510050.SH",
+            start_date="20260101",
+            end_date="20260105",
+        )
+        fetcher._api.daily.assert_not_called()
+        fetcher._api.hk_daily.assert_not_called()
+
+    def test_fetch_raw_data_hk_uses_hk_daily(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.hk_daily.return_value = pd.DataFrame({"trade_date": ["20260102"]})
+
+        with patch.object(fetcher, "_check_rate_limit"):
+            out = fetcher._fetch_raw_data("HK00700", "2026-01-01", "2026-01-05")
+
+        self.assertIsNotNone(out)
+        fetcher._api.hk_daily.assert_called_once_with(
+            ts_code="00700.HK",
+            start_date="20260101",
+            end_date="20260105",
+        )
+        fetcher._api.daily.assert_not_called()
+        fetcher._api.fund_daily.assert_not_called()
+
+    def test_fetch_raw_data_us_raises(self) -> None:
+        fetcher = self._make_fetcher()
+        with patch.object(fetcher, "_check_rate_limit"):
+            with self.assertRaises(DataFetchError) as ctx:
+                fetcher._fetch_raw_data("AAPL", "2026-01-01", "2026-01-05")
+        self.assertIn("不支持美股", str(ctx.exception))
+        fetcher._api.daily.assert_not_called()
+
+    def test_fetch_raw_data_api_unconfigured_raises(self) -> None:
+        with patch.object(TushareFetcher, "_init_api", return_value=None):
+            fetcher = TushareFetcher()
+        # __init__ leaves _api None when _init_api is a no-op mock
+        self.assertIsNone(fetcher._api)
+        with self.assertRaises(DataFetchError) as ctx:
+            fetcher._fetch_raw_data("600519", "2026-01-01", "2026-01-05")
+        self.assertIn("未初始化", str(ctx.exception))
+
+    def test_fetch_raw_data_quota_exception_becomes_rate_limit(self) -> None:
+        fetcher = self._make_fetcher()
+        fetcher._api.daily.side_effect = Exception("quota exceeded")
+
+        with patch.object(fetcher, "_check_rate_limit"):
+            with self.assertRaises(RateLimitError):
+                fetcher._fetch_raw_data("600519", "20260101", "20260105")
 
 
 if __name__ == "__main__":
