@@ -600,10 +600,11 @@ class TushareFetcher(BaseFetcher):
         """
         获取股票列表
         
-        使用 Tushare 的 stock_basic 接口获取全部股票列表
+        使用 Tushare 的 stock_basic 获取 A 股列表，hk_basic 获取港股列表。
+        code 列统一经 normalize_stock_code 归一：A 股为 6 位数字，港股为 HK+5 位数字（如 00700.HK -> HK00700）。
         
         Returns:
-            包含 code, name 列的 DataFrame，失败返回 None
+            包含 code, name, industry, area, market 列的 DataFrame，失败返回 None
         """
         if self._api is None:
             logger.warning("Tushare API 未初始化，无法获取股票列表")
@@ -646,8 +647,8 @@ class TushareFetcher(BaseFetcher):
 
             df_all = pd.concat(frames, ignore_index=True)
 
-            # 转换 ts_code 为标准代码格式
-            df_all['code'] = df_all['ts_code'].apply(lambda x: x.split('.')[0])
+            # ts_code 与系统约定对齐：A 股去交易所后缀；港股 .HK 后缀转为 HK 前缀形式（见 normalize_stock_code）
+            df_all["code"] = df_all["ts_code"].astype(str).map(normalize_stock_code)
             
             # 更新缓存
             if not hasattr(self, '_stock_name_cache'):
