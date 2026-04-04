@@ -183,6 +183,17 @@ class TestTushareFetcherFetchRawData(unittest.TestCase):
             with self.assertRaises(RateLimitError):
                 fetcher._fetch_raw_data("600519", "20260101", "20260105")
 
+    def test_convert_stock_code_normalizes(self) -> None:
+        fetcher = self._make_fetcher()
+        self.assertEqual(fetcher._convert_stock_code("HK00700"), "HK00700")
+    
+
+    def test_convert_stock_code_for_tushare_normalizes_hk(self) -> None:
+        fetcher = self._make_fetcher()
+        self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("HK00700"), "00700.HK")
+        self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("00700.HK"), "00700.HK")
+        self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("600519"), "600519.SH")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -341,19 +341,19 @@ class TushareFetcher(BaseFetcher):
     
     def _convert_stock_code(self, stock_code: str) -> str:
         """
-        转换股票代码为 Tushare 格式
-        
-        Tushare 要求的格式：
+        转换 A 股 / ETF / 北交所等为 Tushare ts_code（不含港股逻辑）。
+
+        Tushare 要求的格式示例：
         - 沪市股票：600519.SH
         - 深市股票：000001.SZ
-        - 沪市 ETF：510050.SH, 563230.SH
+        - 沪市 ETF：510050.SH
         - 深市 ETF：159919.SZ
-        
+
         Args:
             stock_code: 原始代码，如 '600519', '000001', '563230'
-            
+
         Returns:
-            Tushare 格式代码，如 '600519.SH', '000001.SZ', '563230.SH'
+            Tushare 格式代码，如 '600519.SH', '000001.SZ'
         """
         raw_code = stock_code.strip()
         
@@ -367,14 +367,9 @@ class TushareFetcher(BaseFetcher):
         if _is_us_code(raw_code):
             raise DataFetchError(f"TushareFetcher 不支持美股 {raw_code}，请使用 AkshareFetcher 或 YfinanceFetcher")
 
-        # 港股：直接构造 Tushare HK 格式代码（例如 00700.HK）
         if _is_hk_market(raw_code):
-            # 提取末尾数字部分，补齐 5 位（Tushare 港股代码为 5 位数字）
-            digits = re.sub(r"\D", "", raw_code)
-            if not digits:
-                raise DataFetchError(f"无法识别港股代码 {raw_code}")
-            code = digits[-5:].rjust(5, "0")
-            return f"{code}.HK"
+            #raise DataFetchError(f"TushareFetcher 不支持港股 {raw_code}，请使用 AkshareFetcher")
+            return normalize_stock_code(raw_code)
 
         code = normalize_stock_code(raw_code)
         exchange_hint = self._detect_exchange_hint(raw_code)
@@ -406,7 +401,29 @@ class TushareFetcher(BaseFetcher):
         else:
             logger.warning(f"无法确定股票 {code} 的市场，默认使用深市")
             return f"{code}.SZ"
-    
+
+    def _convert_hk_stock_code_for_tushare(self, stock_code: str) -> str:
+        """
+        将用户输入转为 Tushare Pro 接口所需的 ts_code（含港股 nnnnn.HK）。
+
+        - 非港股：委托 _convert_stock_code（A 股 / ETF / 北交所等）。
+        - 港股：从 HK00700、00700、00700.HK 等形式归一为 5 位数字 + .HK。
+        """
+        raw_code = stock_code.strip()
+        if _is_hk_market(raw_code):
+            if "." in raw_code:
+                ts_code = raw_code.upper()
+                if ts_code.endswith(".SS"):
+                    return f"{ts_code[:-3]}.SH"
+                if ts_code.endswith(".HK"):
+                    return ts_code
+            digits = re.sub(r"\D", "", raw_code)
+            if not digits:
+                raise DataFetchError(f"无法识别港股代码 {raw_code}")
+            code = digits[-5:].rjust(5, "0")
+            return f"{code}.HK"
+        return self._convert_stock_code(stock_code)
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -438,21 +455,21 @@ class TushareFetcher(BaseFetcher):
         # Rate-limit check
         self._check_rate_limit()
         
-        # Convert code format
-        ts_code = self._convert_stock_code(stock_code)
+        is_hk = _is_hk_market(stock_code)
+         # 判断是否为 ETF / 港股，以选择不同接口
+        is_etf = _is_etf_code(stock_code)
+        if is_hk:
+            ts_code = self._convert_hk_stock_code_for_tushare(stock_code)
+            api_name = "hk_daily"
+        else:
+            ts_code = self._convert_stock_code(stock_code)
+            api_name = "fund_daily" if is_etf else "daily"
         
         # Convert date format (Tushare requires YYYYMMDD)
         ts_start = start_date.replace('-', '')
         ts_end = end_date.replace('-', '')
         
-        # 判断是否为 ETF / 港股，以选择不同接口
-        is_etf = _is_etf_code(stock_code)
-        is_hk = _is_hk_market(stock_code) or ts_code.endswith(".HK")
-
-        if is_hk:
-            api_name = "hk_daily"
-        else:
-            api_name = "fund_daily" if is_etf else "daily"
+       
 
         logger.debug(f"调用 Tushare {api_name}({ts_code}, {ts_start}, {ts_end})")
         
@@ -562,23 +579,24 @@ class TushareFetcher(BaseFetcher):
             # 速率限制检查
             self._check_rate_limit()
             
-            # 转换代码格式
-            ts_code = self._convert_stock_code(stock_code)
 
             # 根据市场/类型选择基础信息接口
-            if _is_hk_market(stock_code) or ts_code.endswith(".HK"):
+            if _is_hk_market(stock_code):
+                ts_code = self._convert_hk_stock_code_for_tushare(stock_code)
                 # 港股：使用 hk_basic
                 df = self._api.hk_basic(
                     ts_code=ts_code,
                     fields='ts_code,name'
                 )
             elif _is_etf_code(stock_code):
+                ts_code = self._convert_stock_code(stock_code)
                 # ETF：使用 fund_basic
                 df = self._api.fund_basic(
                     ts_code=ts_code,
                     fields='ts_code,name'
                 )
             else:
+                ts_code = self._convert_stock_code(stock_code)
                 # A 股股票：使用 stock_basic
                 df = self._api.stock_basic(
                     ts_code=ts_code,
