@@ -512,14 +512,21 @@ class TushareFetcher(BaseFetcher):
         """
         标准化 Tushare 数据
         
-        Tushare daily 返回的列名：
+        Tushare daily / fund_daily 返回的列名：
         ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount
         
         需要映射到标准列名：
         date, open, high, low, close, volume, amount, pct_chg
+
+        单位缩放仅适用于 A 股（及 ETF 等使用同一套单位的接口）：
+        - vol 按「手」计，乘以 100 转为「股」
+        - amount 按「千元」计，乘以 1000 转为「元」
+
+        港股 hk_daily 返回的 vol / amount 已是可直接使用的量级，不做上述缩放。
         """
         df = df.copy()
-        
+        is_hk = _is_hk_market(stock_code)
+
         # 列名映射
         column_mapping = {
             'trade_date': 'date',
@@ -533,12 +540,11 @@ class TushareFetcher(BaseFetcher):
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
         
-        # 成交量单位转换（Tushare 的 vol 单位是手，需要转换为股）
-        if 'volume' in df.columns:
+        # 成交量 / 成交额：仅 A 股类接口做单位换算（港股 hk_daily 不换算）
+        if 'volume' in df.columns and not is_hk:
             df['volume'] = df['volume'] * 100
         
-        # 成交额单位转换（Tushare 的 amount 单位是千元，转换为元）
-        if 'amount' in df.columns:
+        if 'amount' in df.columns and not is_hk:
             df['amount'] = df['amount'] * 1000
         
         # 添加股票代码列

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for TushareFetcher.get_stock_list() and _fetch_raw_data().
+"""Unit tests for TushareFetcher.get_stock_list(), _fetch_raw_data(), and _normalize_data().
 
 This test file is intentionally isolated from other test modules.
 It loads repo-root `.env` and stubs optional runtime deps so it can run
@@ -193,6 +193,59 @@ class TestTushareFetcherFetchRawData(unittest.TestCase):
         self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("HK00700"), "00700.HK")
         self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("00700.HK"), "00700.HK")
         self.assertEqual(fetcher._convert_hk_stock_code_for_tushare("600519"), "600519.SH")
+
+
+class TestTushareFetcherNormalizeData(unittest.TestCase):
+    """TushareFetcher._normalize_data: A-share vol/amount scaling vs HK passthrough."""
+
+    @staticmethod
+    def _make_fetcher() -> TushareFetcher:
+        with patch.object(TushareFetcher, "_init_api", return_value=None):
+            fetcher = TushareFetcher()
+        fetcher._api = MagicMock()
+        fetcher.priority = 2
+        return fetcher
+
+    @staticmethod
+    def _sample_daily_frame() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "trade_date": ["20260102"],
+                "open": [10.0],
+                "high": [11.0],
+                "low": [9.5],
+                "close": [10.5],
+                "vol": [100.0],
+                "amount": [50.0],
+                "pct_chg": [1.0],
+            }
+        )
+
+    def test_normalize_data_a_share_multiplies_volume_and_amount(self) -> None:
+        fetcher = self._make_fetcher()
+        out = fetcher._normalize_data(self._sample_daily_frame(), "600519")
+        self.assertEqual(out.iloc[0]["volume"], 10000.0)
+        self.assertEqual(out.iloc[0]["amount"], 50000.0)
+        self.assertEqual(out.iloc[0]["code"], "600519")
+
+    def test_normalize_data_hk_skips_volume_amount_scaling(self) -> None:
+        fetcher = self._make_fetcher()
+        out = fetcher._normalize_data(self._sample_daily_frame(), "HK00700")
+        self.assertEqual(out.iloc[0]["volume"], 100.0)
+        self.assertEqual(out.iloc[0]["amount"], 50.0)
+        self.assertEqual(out.iloc[0]["code"], "HK00700")
+
+    def test_normalize_data_hk_suffix_skips_scaling(self) -> None:
+        fetcher = self._make_fetcher()
+        out = fetcher._normalize_data(self._sample_daily_frame(), "00700.HK")
+        self.assertEqual(out.iloc[0]["volume"], 100.0)
+        self.assertEqual(out.iloc[0]["amount"], 50.0)
+
+    def test_normalize_data_etf_scales_like_a_share(self) -> None:
+        fetcher = self._make_fetcher()
+        out = fetcher._normalize_data(self._sample_daily_frame(), "510050")
+        self.assertEqual(out.iloc[0]["volume"], 10000.0)
+        self.assertEqual(out.iloc[0]["amount"], 50000.0)
 
 
 if __name__ == "__main__":
