@@ -1117,7 +1117,7 @@ class TushareFetcher(BaseFetcher):
         数据来源：ts.pro_api().cyq_chips()
         包含：获利比例、平均成本、筹码集中度
         
-        注意：ETF/指数没有筹码分布数据，会直接返回 None
+        注意：ETF/指数没有筹码分布数据，会直接返回 None；港股不支持，直接返回 None。
         5000积分以下每天访问15次,每小时访问5次
         
         Args:
@@ -1133,6 +1133,10 @@ class TushareFetcher(BaseFetcher):
         
         if _is_etf_code(stock_code):
             logger.warning(f"[Tushare] TushareFetcher 不支持 ETF {stock_code} 的筹码分布")
+            return None
+
+        if _is_hk_market(stock_code):
+            logger.warning(f"[Tushare] TushareFetcher 不支持港股 {stock_code} 的筹码分布")
             return None
         
         try:
