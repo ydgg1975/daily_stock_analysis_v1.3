@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 集成 Longbridge OpenAPI 作为美股/港股可选数据源；配置 `LONGBRIDGE_*` 后优先使用长桥获取日线与实时行情，YFinance / AkShare 兜底；未配置时行为与此前一致。长桥联调请使用 `tests/longbridge_live_smoke.py`（手动脚本，不参与 pytest 收集）。
 - [文档] 澄清 README（中/英/繁）中长桥「首选 / 兜底 / 未配置不调用」的边界；`docs/README_EN.md` / `docs/README_CHT.md` 顶部导航与完整指南链接改为 `./` 相对路径，避免在文档子目录下解析错误；`LONGBRIDGE_PRINT_QUOTE_PACKAGES` 与代码及 `.env.example` 对齐为未设置时默认关闭。
 
-- [新功能] tushare支持港股查询 — 配置了tushare凭证的用户会调用hk_daily接口获取数据，如果用户tushae权限不够依然会出现数据查询异常的情况，和改造前直接抛出不支持的异常流程相同。
+- [新功能] tushare支持港股查询 — 配置了tushare凭证的用户会调用hk_daily接口获取数据，如果用户tushare权限不够依然会出现数据查询异常的情况，和改造前直接抛出不支持的异常流程相同。
 
 ## [3.12.0] - 2026-04-01
 
