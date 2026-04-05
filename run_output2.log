@@ -1,0 +1,630 @@
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.2.0)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+2026-04-06 01:08:30 | INFO     | src\logging_config.py:160 | 日志系统初始化完成，日志目录: logs
+2026-04-06 01:08:30 | INFO     | src\logging_config.py:161 | 常规日志: logs\stock_analysis_20260406.log
+2026-04-06 01:08:30 | INFO     | src\logging_config.py:162 | 调试日志: logs\stock_analysis_debug_20260406.log
+2026-04-06 01:08:30 | INFO     | main.py:535 | ============================================================
+2026-04-06 01:08:30 | INFO     | main.py:536 | A股自选股智能分析系统 启动
+2026-04-06 01:08:30 | INFO     | main.py:537 | 运行时间: 2026-04-06 01:08:30
+2026-04-06 01:08:30 | INFO     | main.py:538 | ============================================================
+2026-04-06 01:08:30 | WARNING  | main.py:543 | 未配置通知渠道，将不发送推送通知
+2026-04-06 01:08:30 | INFO     | main.py:549 | 使用命令行指定的股票列表: ['600428', '300014', '300497', '002361']
+2026-04-06 01:08:30 | INFO     | src\webui_frontend.py:157 | 检测到可直接复用的前端静态产物，跳过运行时自动构建: E:\Study\Python\daily_stock_analysis\static\index.html
+2026-04-06 01:08:30 | INFO     | main.py:469 | FastAPI 服务已启动: http://127.0.0.1:8000
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\asyncio\proactor_events.py:633 | Using proactor: IocpProactor
+2026-04-06 01:08:30 | INFO     | src\storage.py:683 | 数据库初始化完成: sqlite:///C:\Users\A\AppData\Local\Temp\dsa_db\stock_analysis.db
+2026-04-06 01:08:30 | DEBUG    | data_provider\tushare_fetcher.py:182 | Tushare API client configured for direct HTTP calls
+2026-04-06 01:08:30 | INFO     | data_provider\tushare_fetcher.py:169 | Tushare API 初始化成功
+2026-04-06 01:08:30 | INFO     | data_provider\tushare_fetcher.py:200 | ✅ 检测到 TUSHARE_TOKEN 且 API 初始化成功，Tushare 数据源优先级提升为最高 (Priority -1)
+2026-04-06 01:08:30 | INFO     | data_provider\base.py:789 | 已初始化 7 个数据源（按优先级）: TushareFetcher(P-1), EfinanceFetcher(P0), AkshareFetcher(P1), PytdxFetcher(P2), BaostockFetcher(P3), YfinanceFetcher(P4), ZhituFetcher(P5)
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5570 - checking potential_model_names in litellm.model_cost: {'split_model': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'combined_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'stripped_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'combined_stripped_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'custom_llm_provider': None}
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5570 | checking potential_model_names in litellm.model_cost: {'split_model': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'combined_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'stripped_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'combined_stripped_model_name': '36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20', 'custom_llm_provider': None}
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5853 - Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5853 | Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:2884 - added/updated model=36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20 in litellm.model_cost: 36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:2884 | added/updated model=36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20 in litellm.model_cost: 36a98cf5ec6161421d21d566068f5adebaa68ff93a275643c35cb8250431ab20
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5570 - checking potential_model_names in litellm.model_cost: {'split_model': 'deepseek-chat', 'combined_model_name': 'openai/deepseek-chat', 'stripped_model_name': 'openai/deepseek-chat', 'combined_stripped_model_name': 'openai/deepseek-chat', 'custom_llm_provider': 'openai'}
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5570 | checking potential_model_names in litellm.model_cost: {'split_model': 'deepseek-chat', 'combined_model_name': 'openai/deepseek-chat', 'stripped_model_name': 'openai/deepseek-chat', 'combined_stripped_model_name': 'openai/deepseek-chat', 'custom_llm_provider': 'openai'}
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5853 - Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5853 | Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:2884 - added/updated model=openai/deepseek-chat in litellm.model_cost: openai/deepseek-chat
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:2884 | added/updated model=openai/deepseek-chat in litellm.model_cost: openai/deepseek-chat
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5570 - checking potential_model_names in litellm.model_cost: {'split_model': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'combined_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'stripped_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'combined_stripped_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'custom_llm_provider': None}
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5570 | checking potential_model_names in litellm.model_cost: {'split_model': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'combined_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'stripped_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'combined_stripped_model_name': '1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb', 'custom_llm_provider': None}
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5853 - Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5853 | Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:2884 - added/updated model=1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb in litellm.model_cost: 1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:2884 | added/updated model=1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb in litellm.model_cost: 1775412f185097100de2640d7eb4141dc0a7212eaced6f6322bbe68c71025dfb
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5570 - checking potential_model_names in litellm.model_cost: {'split_model': 'deepseek-reasoner', 'combined_model_name': 'openai/deepseek-reasoner', 'stripped_model_name': 'openai/deepseek-reasoner', 'combined_stripped_model_name': 'openai/deepseek-reasoner', 'custom_llm_provider': 'openai'}
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5570 | checking potential_model_names in litellm.model_cost: {'split_model': 'deepseek-reasoner', 'combined_model_name': 'openai/deepseek-reasoner', 'stripped_model_name': 'openai/deepseek-reasoner', 'combined_stripped_model_name': 'openai/deepseek-reasoner', 'custom_llm_provider': 'openai'}
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:5853 - Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:5853 | Error getting model info: This model isn't mapped yet. Add it here - https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
+[92m01:08:30 - LiteLLM:DEBUG[0m: utils.py:2884 - added/updated model=openai/deepseek-reasoner in litellm.model_cost: openai/deepseek-reasoner
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\utils.py:2884 | added/updated model=openai/deepseek-reasoner in litellm.model_cost: openai/deepseek-reasoner
+[92m01:08:30 - LiteLLM Router:DEBUG[0m: router.py:6877 - 
+Initialized Model List ['openai/deepseek-chat', 'openai/deepseek-reasoner']
+2026-04-06 01:08:30 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\router.py:6877 | 
+Initialized Model List ['openai/deepseek-chat', 'openai/deepseek-reasoner']
+[92m01:08:30 - LiteLLM Router:INFO[0m: router.py:784 - Routing strategy: simple-shuffle
+2026-04-06 01:08:30 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\litellm\router.py:784 | Routing strategy: simple-shuffle
+2026-04-06 01:08:30 | INFO     | src\analyzer.py:948 | Analyzer LLM: Router initialized from channels/YAML — 2 deployment(s), models: ['openai/deepseek-chat', 'openai/deepseek-reasoner']
+2026-04-06 01:08:30 | WARNING  | src\notification.py:169 | 未配置有效的通知渠道，将不发送推送通知
+2026-04-06 01:08:30 | INFO     | src\search_service.py:1688 | 已配置 Bocha 搜索，共 1 个 API Key
+2026-04-06 01:08:30 | INFO     | src\search_service.py:1720 | 已启用 SearXNG 公共实例自动发现模式
+2026-04-06 01:08:30 | INFO     | src\search_service.py:1729 | 新闻时效策略已启用: profile=short, profile_days=3, NEWS_MAX_AGE_DAYS=3, effective_window=3
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:106 | 调度器初始化完成，最大并发数: 3
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:107 | 已启用技术分析引擎（均线/趋势/量价指标）
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:110 | 实时行情已启用 (优先级: tushare,tencent,akshare_sina,efinance,akshare_em)
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:114 | 筹码分布分析已启用
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:118 | 搜索服务已启用
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:1202 | ===== 开始分析 4 只股票 =====
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:1203 | 股票列表: 600428, 300014, 300497, 002361
+2026-04-06 01:08:30 | INFO     | src\core\pipeline.py:1204 | 并发数: 3, 模式: 完整分析
+2026-04-06 01:08:30 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 1/80
+2026-04-06 01:08:30 | WARNING  | data_provider\tushare_fetcher.py:576 | Tushare 获取股票名称失败 600428: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:08:31 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\server.py:92 | Started server process [37120]
+2026-04-06 01:08:31 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\lifespan\on.py:48 | Waiting for application startup.
+2026-04-06 01:08:31 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\lifespan\on.py:62 | Application startup complete.
+2026-04-06 01:08:31 | ERROR    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\server.py:180 | [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000): 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。
+2026-04-06 01:08:31 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\lifespan\on.py:67 | Waiting for application shutdown.
+2026-04-06 01:08:31 | INFO     | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\lifespan\on.py:76 | Application shutdown complete.
+2026-04-06 01:08:35 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+2026-04-06 01:09:06 | DEBUG    | data_provider\pytdx_fetcher.py:202 | Pytdx 连接已断开
+2026-04-06 01:09:06 | WARNING  | data_provider\pytdx_fetcher.py:403 | Pytdx 获取股票名称失败 600428: Pytdx 无法连接任何服务器
+login success!
+2026-04-06 01:09:06 | DEBUG    | data_provider\baostock_fetcher.py:110 | Baostock 登录成功
+2026-04-06 01:09:06 | DEBUG    | data_provider\baostock_fetcher.py:313 | Baostock 获取股票名称成功: 600428 -> 中远海特
+logout success!
+2026-04-06 01:09:06 | DEBUG    | data_provider\baostock_fetcher.py:119 | Baostock 登出成功
+2026-04-06 01:09:06 | INFO     | data_provider\base.py:1318 | [股票名称] 从 BaostockFetcher 获取: 600428 -> 中远海特
+2026-04-06 01:09:06 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 2/80
+2026-04-06 01:09:06 | WARNING  | data_provider\tushare_fetcher.py:576 | Tushare 获取股票名称失败 300014: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:09:11 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+2026-04-06 01:09:41 | DEBUG    | data_provider\pytdx_fetcher.py:202 | Pytdx 连接已断开
+2026-04-06 01:09:41 | WARNING  | data_provider\pytdx_fetcher.py:403 | Pytdx 获取股票名称失败 300014: Pytdx 无法连接任何服务器
+login success!
+2026-04-06 01:09:42 | DEBUG    | data_provider\baostock_fetcher.py:110 | Baostock 登录成功
+2026-04-06 01:09:42 | DEBUG    | data_provider\baostock_fetcher.py:313 | Baostock 获取股票名称成功: 300014 -> 亿纬锂能
+logout success!
+2026-04-06 01:09:42 | DEBUG    | data_provider\baostock_fetcher.py:119 | Baostock 登出成功
+2026-04-06 01:09:42 | INFO     | data_provider\base.py:1318 | [股票名称] 从 BaostockFetcher 获取: 300014 -> 亿纬锂能
+2026-04-06 01:09:42 | DEBUG    | data_provider\tushare_fetcher.py:234 | 速率限制计数器已重置
+2026-04-06 01:09:42 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 1/80
+2026-04-06 01:09:43 | WARNING  | data_provider\tushare_fetcher.py:576 | Tushare 获取股票名称失败 300497: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:09:48 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+2026-04-06 01:10:18 | DEBUG    | data_provider\pytdx_fetcher.py:202 | Pytdx 连接已断开
+2026-04-06 01:10:18 | WARNING  | data_provider\pytdx_fetcher.py:403 | Pytdx 获取股票名称失败 300497: Pytdx 无法连接任何服务器
+login success!
+2026-04-06 01:10:18 | DEBUG    | data_provider\baostock_fetcher.py:110 | Baostock 登录成功
+2026-04-06 01:10:19 | DEBUG    | data_provider\baostock_fetcher.py:313 | Baostock 获取股票名称成功: 300497 -> 富祥药业
+logout success!
+2026-04-06 01:10:19 | DEBUG    | data_provider\baostock_fetcher.py:119 | Baostock 登出成功
+2026-04-06 01:10:19 | INFO     | data_provider\base.py:1318 | [股票名称] 从 BaostockFetcher 获取: 300497 -> 富祥药业
+2026-04-06 01:10:19 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 2/80
+2026-04-06 01:10:19 | WARNING  | data_provider\tushare_fetcher.py:576 | Tushare 获取股票名称失败 002361: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:24 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+2026-04-06 01:10:54 | DEBUG    | data_provider\pytdx_fetcher.py:202 | Pytdx 连接已断开
+2026-04-06 01:10:54 | WARNING  | data_provider\pytdx_fetcher.py:403 | Pytdx 获取股票名称失败 002361: Pytdx 无法连接任何服务器
+login success!
+2026-04-06 01:10:54 | DEBUG    | data_provider\baostock_fetcher.py:110 | Baostock 登录成功
+2026-04-06 01:10:55 | DEBUG    | data_provider\baostock_fetcher.py:313 | Baostock 获取股票名称成功: 002361 -> 神剑股份
+logout success!
+2026-04-06 01:10:55 | DEBUG    | data_provider\baostock_fetcher.py:119 | Baostock 登出成功
+2026-04-06 01:10:55 | INFO     | data_provider\base.py:1318 | [股票名称] 从 BaostockFetcher 获取: 002361 -> 神剑股份
+2026-04-06 01:10:55 | INFO     | src\core\stock_filter_pipeline.py:1066 | [FilterPipeline] 开始过滤 4 只股票
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:234 | 速率限制计数器已重置
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 1/80
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 上证指数 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 深证成指 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 创业板指 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 科创50 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 上证50 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | DEBUG    | data_provider\tushare_fetcher.py:788 | Tushare 获取指数 沪深300 失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:10:55 | WARNING  | data_provider\tushare_fetcher.py:794 | [Tushare] 未获取到指数行情数据
+2026-04-06 01:10:56 | DEBUG    | data_provider\efinance_fetcher.py:301 | 设置 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0...
+2026-04-06 01:10:56 | DEBUG    | data_provider\base.py:466 | 随机休眠 1.79 秒...
+2026-04-06 01:10:57 | INFO     | data_provider\efinance_fetcher.py:821 | [API调用] ef.stock.get_realtime_quotes(['沪深系列指数']) 获取指数行情...
+2026-04-06 01:10:57 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:10:57 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:10:57 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:10:57 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:10:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:10:58 | ERROR    | data_provider\efinance_fetcher.py:874 | [efinance] 获取指数行情失败: HTTPConnectionPool(host='push2.eastmoney.com', port=80): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A1+s%3A2%2Cm%3A0+t%3A5&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:10:58 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36...
+2026-04-06 01:10:58 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.82 秒...
+  0%|          | 0/8 [00:00<?, ?it/s] 12%|����        | 1/8 [00:00<00:00,  8.39it/s] 25%|������       | 2/8 [00:00<00:00,  8.43it/s] 38%|��������      | 3/8 [00:00<00:00,  8.47it/s] 50%|����������     | 4/8 [00:00<00:00,  8.70it/s] 62%|��������������   | 5/8 [00:00<00:00,  8.35it/s] 75%|����������������  | 6/8 [00:00<00:00,  8.40it/s] 88%|������������������ | 7/8 [00:00<00:00,  8.33it/s]                                             2026-04-06 01:11:02 | INFO     | data_provider\base.py:1451 | [AkshareFetcher] 获取指数行情成功
+2026-04-06 01:11:02 | INFO     | data_provider\tushare_fetcher.py:811 | [Tushare] ts.pro_api() 获取市场统计...
+2026-04-06 01:11:02 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 2/80
+2026-04-06 01:11:02 | ERROR    | data_provider\tushare_fetcher.py:878 | [Tushare] 获取市场统计失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:11:02 | DEBUG    | data_provider\efinance_fetcher.py:301 | 设置 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap...
+2026-04-06 01:11:02 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.61 秒...
+2026-04-06 01:11:04 | INFO     | data_provider\efinance_fetcher.py:894 | [API调用] ef.stock.get_realtime_quotes() 获取市场统计...
+2026-04-06 01:11:04 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:04 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:04 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:04 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:04 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:04 | ERROR    | data_provider\efinance_fetcher.py:905 | [efinance] 获取市场统计失败: HTTPConnectionPool(host='push2.eastmoney.com', port=80): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A0+t%3A6%2Cm%3A0+t%3A80%2Cm%3A1+t%3A2%2Cm%3A1+t%3A23%2Cm%3A0+t%3A81+s%3A2048&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:11:04 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-04-06 01:11:04 | DEBUG    | data_provider\base.py:466 | 随机休眠 3.10 秒...
+2026-04-06 01:11:08 | INFO     | data_provider\akshare_fetcher.py:1602 | [API调用] ak.stock_zh_a_spot_em() 获取市场统计...
+2026-04-06 01:11:13 | WARNING  | data_provider\akshare_fetcher.py:1607 | [Akshare] 东财接口获取市场统计失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))，尝试新浪接口
+2026-04-06 01:11:13 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-04-06 01:11:13 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.70 秒...
+2026-04-06 01:11:16 | INFO     | data_provider\akshare_fetcher.py:1614 | [API调用] ak.stock_zh_a_spot() 获取市场统计(新浪)...
+Please wait for a moment:   0%|          | 0/69 [00:00<?, ?it/s]Please wait for a moment:   1%|��         | 1/69 [00:00<00:08,  7.83it/s]Please wait for a moment:   3%|��         | 2/69 [00:00<00:08,  7.81it/s]Please wait for a moment:   4%|��         | 3/69 [00:00<00:08,  7.83it/s]Please wait for a moment:   6%|��         | 4/69 [00:00<00:19,  3.35it/s]Please wait for a moment:   7%|��         | 5/69 [00:01<00:25,  2.51it/s]Please wait for a moment:   9%|��         | 6/69 [00:01<00:19,  3.25it/s]Please wait for a moment:  10%|��         | 7/69 [00:02<00:22,  2.78it/s]Please wait for a moment:  12%|����        | 8/69 [00:02<00:26,  2.34it/s]Please wait for a moment:  13%|����        | 9/69 [00:02<00:19,  3.04it/s]Please wait for a moment:  14%|����        | 10/69 [00:03<00:22,  2.57it/s]Please wait for a moment:  16%|����        | 11/69 [00:03<00:22,  2.54it/s]Please wait for a moment:  17%|����        | 12/69 [00:03<00:17,  3.20it/s]Please wait for a moment:  19%|����        | 13/69 [00:04<00:20,  2.69it/s]Please wait for a moment:  20%|����        | 14/69 [00:04<00:21,  2.53it/s]Please wait for a moment:  22%|������       | 15/69 [00:04<00:16,  3.21it/s]Please wait for a moment:  23%|������       | 16/69 [00:05<00:21,  2.45it/s]Please wait for a moment:  25%|������       | 17/69 [00:05<00:16,  3.10it/s]Please wait for a moment:  26%|������       | 18/69 [00:05<00:13,  3.82it/s]Please wait for a moment:  28%|������       | 19/69 [00:06<00:17,  2.88it/s]Please wait for a moment:  29%|������       | 20/69 [00:06<00:19,  2.52it/s]Please wait for a moment:  30%|������       | 21/69 [00:06<00:15,  3.18it/s]Please wait for a moment:  32%|��������      | 22/69 [00:07<00:12,  3.90it/s]Please wait for a moment:  33%|��������      | 23/69 [00:07<00:15,  3.05it/s]Please wait for a moment:  35%|��������      | 24/69 [00:08<00:18,  2.47it/s]Please wait for a moment:  36%|��������      | 25/69 [00:08<00:19,  2.27it/s]Please wait for a moment:  38%|��������      | 26/69 [00:08<00:14,  2.90it/s]Please wait for a moment:  39%|��������      | 27/69 [00:08<00:11,  3.55it/s]Please wait for a moment:  41%|��������      | 28/69 [00:09<00:14,  2.89it/s]Please wait for a moment:  42%|����������     | 29/69 [00:09<00:11,  3.55it/s]Please wait for a moment:  43%|����������     | 30/69 [00:09<00:09,  4.28it/s]Please wait for a moment:  45%|����������     | 31/69 [00:09<00:07,  4.89it/s]Please wait for a moment:  46%|����������     | 32/69 [00:09<00:06,  5.63it/s]Please wait for a moment:  48%|����������     | 33/69 [00:10<00:09,  3.64it/s]Please wait for a moment:  49%|����������     | 34/69 [00:10<00:08,  4.37it/s]Please wait for a moment:  51%|����������     | 35/69 [00:10<00:06,  5.11it/s]Please wait for a moment:  52%|������������    | 36/69 [00:10<00:05,  5.84it/s]Please wait for a moment:  54%|������������    | 37/69 [00:11<00:09,  3.22it/s]Please wait for a moment:  55%|������������    | 38/69 [00:11<00:11,  2.67it/s]Please wait for a moment:  57%|������������    | 39/69 [00:12<00:12,  2.47it/s]Please wait for a moment:  58%|������������    | 40/69 [00:12<00:12,  2.29it/s]Please wait for a moment:  59%|������������    | 41/69 [00:13<00:09,  2.92it/s]Please wait for a moment:  61%|������������    | 42/69 [00:13<00:07,  3.57it/s]Please wait for a moment:  62%|��������������   | 43/69 [00:13<00:06,  4.25it/s]Please wait for a moment:  64%|��������������   | 44/69 [00:13<00:05,  4.98it/s]Please wait for a moment:  65%|��������������   | 45/69 [00:14<00:07,  3.29it/s]Please wait for a moment:  67%|��������������   | 46/69 [00:14<00:09,  2.53it/s]Please wait for a moment:  68%|��������������   | 47/69 [00:15<00:09,  2.34it/s]Please wait for a moment:  70%|��������������   | 48/69 [00:15<00:07,  2.99it/s]Please wait for a moment:  71%|��������������   | 49/69 [00:15<00:07,  2.64it/s]Please wait for a moment:  72%|����������������  | 50/69 [00:16<00:07,  2.46it/s]Please wait for a moment:  74%|����������������  | 51/69 [00:16<00:07,  2.37it/s]Please wait for a moment:  75%|����������������  | 52/69 [00:16<00:05,  2.99it/s]Please wait for a moment:  77%|����������������  | 53/69 [00:16<00:04,  3.72it/s]Please wait for a moment:  78%|����������������  | 54/69 [00:17<00:03,  4.43it/s]Please wait for a moment:  80%|����������������  | 55/69 [00:17<00:02,  5.10it/s]Please wait for a moment:  81%|����������������  | 56/69 [00:17<00:02,  5.78it/s]Please wait for a moment:  83%|������������������ | 57/69 [00:17<00:01,  6.35it/s]Please wait for a moment:  84%|������������������ | 58/69 [00:17<00:01,  6.79it/s]Please wait for a moment:  86%|������������������ | 59/69 [00:17<00:01,  7.12it/s]Please wait for a moment:  87%|������������������ | 60/69 [00:17<00:01,  7.28it/s]Please wait for a moment:  88%|������������������ | 61/69 [00:17<00:01,  7.47it/s]Please wait for a moment:  90%|������������������ | 62/69 [00:18<00:00,  7.67it/s]Please wait for a moment:  91%|��������������������| 63/69 [00:18<00:01,  4.09it/s]Please wait for a moment:  93%|��������������������| 64/69 [00:19<00:01,  3.06it/s]Please wait for a moment:  94%|��������������������| 65/69 [00:19<00:01,  2.70it/s]Please wait for a moment:  96%|��������������������| 66/69 [00:19<00:01,  2.51it/s]Please wait for a moment:  97%|��������������������| 67/69 [00:20<00:00,  2.27it/s]Please wait for a moment:  99%|��������������������| 68/69 [00:21<00:00,  2.02it/s]Please wait for a moment: 100%|��������������������| 69/69 [00:21<00:00,  2.01it/s]                                                                         2026-04-06 01:11:38 | INFO     | data_provider\base.py:1474 | [AkshareFetcher] 获取市场统计成功
+2026-04-06 01:11:38 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 3/80
+2026-04-06 01:11:38 | WARNING  | data_provider\base.py:2287 | [TushareFetcher] 获取板块排行失败: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:11:38 | DEBUG    | data_provider\efinance_fetcher.py:301 | 设置 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap...
+2026-04-06 01:11:38 | DEBUG    | data_provider\base.py:466 | 随机休眠 1.57 秒...
+2026-04-06 01:11:39 | INFO     | data_provider\efinance_fetcher.py:1007 | [API调用] ef.stock.get_realtime_quotes(['行业板块']) 获取板块行情...
+2026-04-06 01:11:39 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:39 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:39 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:40 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:40 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297
+2026-04-06 01:11:40 | ERROR    | data_provider\efinance_fetcher.py:1033 | [efinance] 获取板块排行失败: HTTPConnectionPool(host='push2.eastmoney.com', port=80): Max retries exceeded with url: /api/qt/clist/get?pn=1&pz=200&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m%3A90+t%3A2+f%3A%2150&fields=f12%2Cf14%2Cf3%2Cf2%2Cf15%2Cf16%2Cf17%2Cf4%2Cf8%2Cf10%2Cf9%2Cf5%2Cf6%2Cf18%2Cf20%2Cf21%2Cf13%2Cf124%2Cf297 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:11:40 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0...
+2026-04-06 01:11:40 | DEBUG    | data_provider\base.py:466 | 随机休眠 4.13 秒...
+2026-04-06 01:11:44 | INFO     | data_provider\akshare_fetcher.py:1745 | [API调用] ak.stock_board_industry_name_em() 获取板块排行...
+2026-04-06 01:11:50 | WARNING  | data_provider\akshare_fetcher.py:1753 | [Akshare] 东财接口获取行业板块排行失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))，尝试新浪接口
+2026-04-06 01:11:50 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36...
+2026-04-06 01:11:50 | DEBUG    | data_provider\base.py:466 | 随机休眠 4.61 秒...
+2026-04-06 01:11:55 | INFO     | data_provider\akshare_fetcher.py:1760 | [API调用] ak.stock_sector_spot() 获取行业板块排行(新浪)...
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:2263 | [AkshareFetcher] 获取板块排行成功
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:873 | [数据源尝试 1/7] [TushareFetcher] 获取 000300...
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:363 | [TushareFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:11:55 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 4/80
+2026-04-06 01:11:55 | DEBUG    | data_provider\tushare_fetcher.py:449 | 调用 Tushare daily(000300.SZ, 20260225, 20260406)
+2026-04-06 01:11:55 | WARNING  | data_provider\tushare_fetcher.py:474 | Tushare 配额可能超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:11:55 | ERROR    | data_provider\base.py:391 | [TushareFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=Exception, elapsed=0.09s, reason=Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:11:55 | WARNING  | data_provider\base.py:892 | [数据源失败 1/7] [TushareFetcher] 000300: error_type=Exception, reason=[TushareFetcher] 000300: Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [TushareFetcher] -> [EfinanceFetcher]
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:873 | [数据源尝试 2/7] [EfinanceFetcher] 获取 000300...
+2026-04-06 01:11:55 | INFO     | data_provider\base.py:363 | [EfinanceFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:11:55 | DEBUG    | data_provider\efinance_fetcher.py:301 | 设置 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap...
+2026-04-06 01:11:55 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.74 秒...
+2026-04-06 01:11:58 | INFO     | data_provider\efinance_fetcher.py:389 | [API调用] ef.stock.get_quote_history(stock_codes=000300, beg=20260225, end=20260406, klt=101, fqt=1)
+2026-04-06 01:11:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:11:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:11:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:11:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:11:58 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:11:58 | ERROR    | data_provider\efinance_fetcher.py:443 | Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260225~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.48s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:11:58 | ERROR    | data_provider\base.py:391 | [EfinanceFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=ProtocolError, elapsed=3.23s, reason=efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260225~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.48s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:11:58 | WARNING  | data_provider\base.py:892 | [数据源失败 2/7] [EfinanceFetcher] 000300: error_type=ProtocolError, reason=[EfinanceFetcher] 000300: efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260225~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.48s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:11:58 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [EfinanceFetcher] -> [AkshareFetcher]
+2026-04-06 01:11:58 | INFO     | data_provider\base.py:873 | [数据源尝试 3/7] [AkshareFetcher] 获取 000300...
+2026-04-06 01:11:58 | INFO     | data_provider\base.py:363 | [AkshareFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:11:58 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 东方财富 获取 000300...
+2026-04-06 01:11:58 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap...
+2026-04-06 01:11:58 | DEBUG    | data_provider\base.py:466 | 随机休眠 3.29 秒...
+2026-04-06 01:12:01 | INFO     | data_provider\akshare_fetcher.py:406 | [API调用] ak.stock_zh_a_hist(symbol=000300, ...)
+2026-04-06 01:12:01 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 东方财富 获取失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2026-04-06 01:12:01 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 新浪财经 获取 000300...
+2026-04-06 01:12:01 | DEBUG    | data_provider\akshare_fetcher.py:315 | 补充休眠 1.79 秒
+2026-04-06 01:12:03 | DEBUG    | data_provider\base.py:466 | 随机休眠 3.27 秒...
+2026-04-06 01:12:07 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\asyncio\proactor_events.py:633 | Using proactor: IocpProactor
+2026-04-06 01:12:07 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 新浪财经 获取失败: 'date'
+2026-04-06 01:12:07 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 腾讯财经 获取 000300...
+2026-04-06 01:12:07 | DEBUG    | data_provider\akshare_fetcher.py:315 | 补充休眠 1.58 秒
+2026-04-06 01:12:09 | DEBUG    | data_provider\base.py:466 | 随机休眠 3.24 秒...
+2026-04-06 01:12:12 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 腾讯财经 获取失败: list index out of range
+2026-04-06 01:12:12 | ERROR    | data_provider\base.py:391 | [AkshareFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=DataFetchError, elapsed=14.41s, reason=Akshare 所有渠道获取失败: list index out of range
+2026-04-06 01:12:12 | WARNING  | data_provider\base.py:892 | [数据源失败 3/7] [AkshareFetcher] 000300: error_type=DataFetchError, reason=[AkshareFetcher] 000300: Akshare 所有渠道获取失败: list index out of range
+2026-04-06 01:12:12 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [AkshareFetcher] -> [PytdxFetcher]
+2026-04-06 01:12:12 | INFO     | data_provider\base.py:873 | [数据源尝试 4/7] [PytdxFetcher] 获取 000300...
+2026-04-06 01:12:12 | INFO     | data_provider\base.py:363 | [PytdxFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:12:12 | DEBUG    | data_provider\pytdx_fetcher.py:297 | 调用 Pytdx get_security_bars(market=0, code=000300, count=38)
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2852, family=2, type=1, proto=0, laddr=('0.0.0.0', 53319), raddr=('119.147.212.81', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+2026-04-06 01:12:17 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2804, family=2, type=1, proto=0, laddr=('172.18.180.72', 53320), raddr=('112.74.214.43', 7727)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=3032, family=2, type=1, proto=0, laddr=('0.0.0.0', 53321), raddr=('221.231.141.60', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2804, family=2, type=1, proto=0, laddr=('0.0.0.0', 53323), raddr=('101.227.73.20', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=3032, family=2, type=1, proto=0, laddr=('0.0.0.0', 53528), raddr=('101.227.77.254', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2804, family=2, type=1, proto=0, laddr=('0.0.0.0', 53529), raddr=('14.215.128.18', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=3000, family=2, type=1, proto=0, laddr=('0.0.0.0', 59434), raddr=('59.173.18.140', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+2026-04-06 01:12:48 | DEBUG    | data_provider\pytdx_fetcher.py:202 | Pytdx 连接已断开
+2026-04-06 01:12:48 | ERROR    | data_provider\base.py:391 | [PytdxFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=DataFetchError, elapsed=35.12s, reason=Pytdx 无法连接任何服务器
+2026-04-06 01:12:48 | WARNING  | data_provider\base.py:892 | [数据源失败 4/7] [PytdxFetcher] 000300: error_type=DataFetchError, reason=[PytdxFetcher] 000300: Pytdx 无法连接任何服务器
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [PytdxFetcher] -> [BaostockFetcher]
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:873 | [数据源尝试 5/7] [BaostockFetcher] 获取 000300...
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:363 | [BaostockFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:12:48 | DEBUG    | data_provider\baostock_fetcher.py:204 | 调用 Baostock query_history_k_data_plus(sz.000300, 2026-02-25, 2026-04-06)
+login success!
+2026-04-06 01:12:48 | DEBUG    | data_provider\baostock_fetcher.py:110 | Baostock 登录成功
+logout success!
+2026-04-06 01:12:48 | DEBUG    | data_provider\baostock_fetcher.py:119 | Baostock 登出成功
+2026-04-06 01:12:48 | ERROR    | data_provider\base.py:391 | [BaostockFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=DataFetchError, elapsed=0.30s, reason=Baostock 未查询到 000300 的数据
+2026-04-06 01:12:48 | WARNING  | data_provider\base.py:892 | [数据源失败 5/7] [BaostockFetcher] 000300: error_type=DataFetchError, reason=[BaostockFetcher] 000300: Baostock 未查询到 000300 的数据
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [BaostockFetcher] -> [YfinanceFetcher]
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:873 | [数据源尝试 6/7] [YfinanceFetcher] 获取 000300...
+2026-04-06 01:12:48 | INFO     | data_provider\base.py:363 | [YfinanceFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:12:48 | DEBUG    | data_provider\yfinance_fetcher.py:175 | 调用 yfinance.download(000300.SZ, 2026-02-25, 2026-04-06)
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 | Entering download()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\multi.py:105 | Disabling multithreading because DEBUG logging enabled
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |  Entering history()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\peewee.py:3349 | ('CREATE TABLE IF NOT EXISTS "_tz_kv" ("key" VARCHAR(255) NOT NULL PRIMARY KEY, "value" VARCHAR(255)) WITHOUT ROWID', [])
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\peewee.py:3349 | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['000300.SZ', 1, 0])
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |   Entering _fetch_ticker_tz()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |    Entering get()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |     Entering _make_request()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:398 | url=https://query2.finance.yahoo.com/v8/finance/chart/000300.SZ
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:399 | params=frozendict.frozendict({'range': '1d', 'interval': '1d'})
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |      Entering _get_cookie_and_crumb()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:354 | cookie_mode = 'basic'
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |       Entering _get_cookie_and_crumb_basic()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |        Entering _get_cookie_basic()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |         Entering _load_cookie_curlCffi()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\peewee.py:3349 | ('CREATE TABLE IF NOT EXISTS "_cookieschema" ("strategy" VARCHAR(255) NOT NULL PRIMARY KEY, "fetch_date" DATETIME NOT NULL, "cookie_bytes" BLOB NOT NULL) WITHOUT ROWID', [])
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\peewee.py:3349 | ('SELECT "t1"."strategy", "t1"."fetch_date", "t1"."cookie_bytes" FROM "_cookieschema" AS "t1" WHERE ("t1"."strategy" = ?) LIMIT ? OFFSET ?', ['curlCffi', 1, 0])
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |         Exiting _load_cookie_curlCffi()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:193 | reusing persistent cookie
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |        Exiting _get_cookie_basic()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |        Entering _get_crumb_basic()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |         Entering _get_cookie_basic()
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:190 | reusing cookie
+2026-04-06 01:12:48 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |         Exiting _get_cookie_basic()
+2026-04-06 01:12:49 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:239 | crumb = '<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="utf-8">
+    <title>Yahoo</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimal-ui">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <style>
+html {
+  height: 100%;
+}
+body {
+  background: #fafafc url(https://s.yimg.com/nn/img/sad-panda-201402200631.png) 50% 50%;
+  background-size: cover;
+  height: 100%;
+  text-align: center;
+  font: 300 16px "helvetica neue", helvetica, verdana, tahoma, arial, sans-serif;
+}
+#message {
+  text-align: left;
+  font-weight: 400;
+  color: #1A1A1A;
+}
+#message a {
+  padding: 0 3px;
+}
+#container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  padding: 0 30px;
+  margin-right: -50%;
+  transform: translate(-50%, -50%);
+  max-width: 40em;
+  _width: 40em;
+}
+#container img {
+  width: 174px;
+  height: auto;
+}
+#switcher a {
+  font-weight: 400;
+}
+#switcher a.active {
+  color: #000;
+  text-decoration: none;
+  cursor: default;
+}
+    </style>
+</head>
+<body>
+  <div id="container">
+    <img src="https://s.yimg.com/rz/p/yahoo_homepage_en-US_s_f_p_bestfit_homepage_2x.png" alt="Yahoo Logo">
+    <div id="switcher">
+      <a data-lang="en" class="active" href='#'>English</a> |
+      <a data-lang="zh-Hant" href='#'>繁體中文</a> |
+      <a data-lang="zh-Hans" href='#'>简体中文</a>
+    </div>
+    <div id="message">
+      <p>As of November 1st, 2021 Yahoo’s suite of services will no longer be accessible from mainland China. Yahoo products and services remain unaffected in all other global locations. We thank you for your support and readership.</p>
+    </div>
+  </div>
+<script>
+const Msg = {
+  'en': '<p>As of November 1st, 2021 Yahoo’s suite of services will no longer be accessible from mainland China. Yahoo products and services remain unaffected in all other global locations. We thank you for your support and readership.</p>',
+  'zh-Hant': '<p>2021 年 11 月 1 日起，用戶將無法從中國大陸使用 Yahoo 的產品與服務。這並不影響 Yahoo 在全球其他地方的產品及服務。我們感謝您一直以來的支持。</p>',
+  'zh-Hans': '<p>2021 年 11 月 1 日起，用户将无法从中国大陆使用 Yahoo 的产品与服务。这并不影响 Yahoo 在全球其他地方的产品及服务。我们感谢你一直以來的支持。</p>'
+};
+
+const message = document.querySelector('#message');
+
+const switchLang = function (lang) {
+  message.innerHTML = Msg[lang] ? Msg[lang] : Msg.en;
+  const oldE = document.querySelector('#switcher .active');
+  const newE = document.querySelector(`#switcher a[data-lang=${lang}]`);
+  oldE.className = '';
+  newE.className = 'active';
+}
+
+const detectLang = function() {
+  const langs = window.navigator.languages ? window.navigator.languages : [window.navigator.language];
+  const availableLangs = langs.map(l => l.toLowerCase()).filter(l => /^en/.test(l) || /^zh/.test(l));
+  const selectedLang = availableLangs.length ? availableLangs[0] : 'en';
+  const prefLang =  /^en/.test(selectedLang) ? 'en' :
+      (selectedLang === 'zh-tw' || selectedLang === 'zh-hk') ? 'zh-Hant' : 'zh-Hans';
+  switchLang(prefLang);
+}
+
+const switcher = document.querySelector('#switcher');
+switcher.addEventListener('click', (e) => {
+  const lang = e.target.getAttribute('data-lang');
+  if (lang) {
+    switchLang(lang);
+  }
+});
+
+detectLang();
+
+</script>
+</body></html>
+'
+2026-04-06 01:12:49 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |        Exiting _get_crumb_basic()
+2026-04-06 01:12:49 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |       Exiting _get_cookie_and_crumb_basic()
+2026-04-06 01:12:49 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |      Exiting _get_cookie_and_crumb()
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\collections\__init__.py:598: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2844, family=2, type=1, proto=0, laddr=('0.0.0.0', 50691), raddr=('180.153.39.51', 7709)>
+  super().__init__()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:437 | response code=429
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:132 | toggling cookie strategy basic -> csrf
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |      Entering _get_cookie_and_crumb()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:354 | cookie_mode = 'csrf'
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |       Entering _get_crumb_csrf()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |        Entering _get_cookie_csrf()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:92 |         Entering _load_cookie_curlCffi()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\peewee.py:3349 | ('SELECT "t1"."strategy", "t1"."fetch_date", "t1"."cookie_bytes" FROM "_cookieschema" AS "t1" WHERE ("t1"."strategy" = ?) LIMIT ? OFFSET ?', ['curlCffi', 1, 0])
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |         Exiting _load_cookie_curlCffi()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:255 | reusing persistent cookie
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |        Exiting _get_cookie_csrf()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:347 | crumb = '<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="utf-8">
+    <title>Yahoo</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimal-ui">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <style>
+html {
+  height: 100%;
+}
+body {
+  background: #fafafc url(https://s.yimg.com/nn/img/sad-panda-201402200631.png) 50% 50%;
+  background-size: cover;
+  height: 100%;
+  text-align: center;
+  font: 300 16px "helvetica neue", helvetica, verdana, tahoma, arial, sans-serif;
+}
+#message {
+  text-align: left;
+  font-weight: 400;
+  color: #1A1A1A;
+}
+#message a {
+  padding: 0 3px;
+}
+#container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  padding: 0 30px;
+  margin-right: -50%;
+  transform: translate(-50%, -50%);
+  max-width: 40em;
+  _width: 40em;
+}
+#container img {
+  width: 174px;
+  height: auto;
+}
+#switcher a {
+  font-weight: 400;
+}
+#switcher a.active {
+  color: #000;
+  text-decoration: none;
+  cursor: default;
+}
+    </style>
+</head>
+<body>
+  <div id="container">
+    <img src="https://s.yimg.com/rz/p/yahoo_homepage_en-US_s_f_p_bestfit_homepage_2x.png" alt="Yahoo Logo">
+    <div id="switcher">
+      <a data-lang="en" class="active" href='#'>English</a> |
+      <a data-lang="zh-Hant" href='#'>繁體中文</a> |
+      <a data-lang="zh-Hans" href='#'>简体中文</a>
+    </div>
+    <div id="message">
+      <p>As of November 1st, 2021 Yahoo’s suite of services will no longer be accessible from mainland China. Yahoo products and services remain unaffected in all other global locations. We thank you for your support and readership.</p>
+    </div>
+  </div>
+<script>
+const Msg = {
+  'en': '<p>As of November 1st, 2021 Yahoo’s suite of services will no longer be accessible from mainland China. Yahoo products and services remain unaffected in all other global locations. We thank you for your support and readership.</p>',
+  'zh-Hant': '<p>2021 年 11 月 1 日起，用戶將無法從中國大陸使用 Yahoo 的產品與服務。這並不影響 Yahoo 在全球其他地方的產品及服務。我們感謝您一直以來的支持。</p>',
+  'zh-Hans': '<p>2021 年 11 月 1 日起，用户将无法从中国大陆使用 Yahoo 的产品与服务。这并不影响 Yahoo 在全球其他地方的产品及服务。我们感谢你一直以來的支持。</p>'
+};
+
+const message = document.querySelector('#message');
+
+const switchLang = function (lang) {
+  message.innerHTML = Msg[lang] ? Msg[lang] : Msg.en;
+  const oldE = document.querySelector('#switcher .active');
+  const newE = document.querySelector(`#switcher a[data-lang=${lang}]`);
+  oldE.className = '';
+  newE.className = 'active';
+}
+
+const detectLang = function() {
+  const langs = window.navigator.languages ? window.navigator.languages : [window.navigator.language];
+  const availableLangs = langs.map(l => l.toLowerCase()).filter(l => /^en/.test(l) || /^zh/.test(l));
+  const selectedLang = availableLangs.length ? availableLangs[0] : 'en';
+  const prefLang =  /^en/.test(selectedLang) ? 'en' :
+      (selectedLang === 'zh-tw' || selectedLang === 'zh-hk') ? 'zh-Hant' : 'zh-Hans';
+  switchLang(prefLang);
+}
+
+const switcher = document.querySelector('#switcher');
+switcher.addEventListener('click', (e) => {
+  const lang = e.target.getAttribute('data-lang');
+  if (lang) {
+    switchLang(lang);
+  }
+});
+
+detectLang();
+
+</script>
+</body></html>
+'
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |       Exiting _get_crumb_csrf()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 |      Exiting _get_cookie_and_crumb()
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py:447 | response code=429
+2026-04-06 01:12:50 | ERROR    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\multi.py:176 | 
+1 Failed download:
+2026-04-06 01:12:50 | ERROR    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\multi.py:189 | ['000300.SZ']: YFRateLimitError('Too Many Requests. Rate limited. Try after a while.')
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\multi.py:201 | ['000300.SZ']: Traceback (most recent call last):
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\multi.py", line 275, in _download_one
+    data = Ticker(ticker).history(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py", line 95, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 129, in history
+    return self._lazy_load_price_history().history(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 135, in _lazy_load_price_history
+    self._price_history = PriceHistory(self._data, self.ticker, self._get_ticker_tz(timeout=10))
+                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 150, in _get_ticker_tz
+    tz = self._fetch_ticker_tz(timeout)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py", line 95, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 182, in _fetch_ticker_tz
+    data = self._data.cache_get(url=url, params=params, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py", line 46, in wrapped
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py", line 458, in cache_get
+    return self.get(url, params, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py", line 95, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py", line 375, in get
+    response = self._make_request(url, request_method = self._session.get, params=params, timeout=timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py", line 95, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\data.py", line 451, in _make_request
+    raise YFRateLimitError()
+yfinance.exceptions.YFRateLimitError: Too Many Requests. Rate limited. Try after a while.
+
+2026-04-06 01:12:50 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\utils.py:97 | Exiting download()
+2026-04-06 01:12:50 | ERROR    | data_provider\base.py:391 | [YfinanceFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=DataFetchError, elapsed=2.28s, reason=Yahoo Finance 未查询到 000300 的数据
+2026-04-06 01:12:50 | WARNING  | data_provider\base.py:892 | [数据源失败 6/7] [YfinanceFetcher] 000300: error_type=DataFetchError, reason=[YfinanceFetcher] 000300: Yahoo Finance 未查询到 000300 的数据
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [YfinanceFetcher] -> [ZhituFetcher]
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:873 | [数据源尝试 7/7] [ZhituFetcher] 获取 000300...
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:363 | [ZhituFetcher] 开始获取 000300 日线数据: 范围=2026-02-25 ~ 2026-04-06
+2026-04-06 01:12:50 | ERROR    | data_provider\base.py:391 | [ZhituFetcher] 000300 获取失败: 范围=2026-02-25 ~ 2026-04-06, error_type=DataFetchError, elapsed=0.30s, reason=获取日线数据失败: 无数据返回: 000300
+2026-04-06 01:12:50 | WARNING  | data_provider\base.py:892 | [数据源失败 7/7] [ZhituFetcher] 000300: error_type=DataFetchError, reason=[ZhituFetcher] 000300: 获取日线数据失败: 无数据返回: 000300
+2026-04-06 01:12:50 | ERROR    | data_provider\base.py:906 | [数据源终止] 000300 获取失败: elapsed=55.75s
+所有数据源获取 000300 失败:
+[TushareFetcher] (Exception) [TushareFetcher] 000300: Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+[EfinanceFetcher] (ProtocolError) [EfinanceFetcher] 000300: efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260225~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.48s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+[AkshareFetcher] (DataFetchError) [AkshareFetcher] 000300: Akshare 所有渠道获取失败: list index out of range
+[PytdxFetcher] (DataFetchError) [PytdxFetcher] 000300: Pytdx 无法连接任何服务器
+[BaostockFetcher] (DataFetchError) [BaostockFetcher] 000300: Baostock 未查询到 000300 的数据
+[YfinanceFetcher] (DataFetchError) [YfinanceFetcher] 000300: Yahoo Finance 未查询到 000300 的数据
+[ZhituFetcher] (DataFetchError) [ZhituFetcher] 000300: 获取日线数据失败: 无数据返回: 000300
+2026-04-06 01:12:50 | DEBUG    | src\core\stock_filter_pipeline.py:216 | [MarketEnv] 均线计算失败: 所有数据源获取 000300 失败:
+[TushareFetcher] (Exception) [TushareFetcher] 000300: Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+[EfinanceFetcher] (ProtocolError) [EfinanceFetcher] 000300: efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260225~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.48s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260225&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+[AkshareFetcher] (DataFetchError) [AkshareFetcher] 000300: Akshare 所有渠道获取失败: list index out of range
+[PytdxFetcher] (DataFetchError) [PytdxFetcher] 000300: Pytdx 无法连接任何服务器
+[BaostockFetcher] (DataFetchError) [BaostockFetcher] 000300: Baostock 未查询到 000300 的数据
+[YfinanceFetcher] (DataFetchError) [YfinanceFetcher] 000300: Yahoo Finance 未查询到 000300 的数据
+[ZhituFetcher] (DataFetchError) [ZhituFetcher] 000300: 获取日线数据失败: 无数据返回: 000300
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:873 | [数据源尝试 1/7] [TushareFetcher] 获取 000300...
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:363 | [TushareFetcher] 开始获取 000300 日线数据: 范围=2026-03-27 ~ 2026-04-06
+2026-04-06 01:12:50 | DEBUG    | data_provider\tushare_fetcher.py:234 | 速率限制计数器已重置
+2026-04-06 01:12:50 | DEBUG    | data_provider\tushare_fetcher.py:255 | Tushare 当前分钟调用次数: 1/80
+2026-04-06 01:12:50 | DEBUG    | data_provider\tushare_fetcher.py:449 | 调用 Tushare daily(000300.SZ, 20260327, 20260406)
+2026-04-06 01:12:50 | WARNING  | data_provider\tushare_fetcher.py:474 | Tushare 配额可能超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:12:50 | ERROR    | data_provider\base.py:391 | [TushareFetcher] 000300 获取失败: 范围=2026-03-27 ~ 2026-04-06, error_type=Exception, elapsed=0.08s, reason=Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:12:50 | WARNING  | data_provider\base.py:892 | [数据源失败 1/7] [TushareFetcher] 000300: error_type=Exception, reason=[TushareFetcher] 000300: Tushare 配额超限: 抱歉，您没有接口访问权限，权限的具体详情访问：https://tushare.pro/document/1?doc_id=108。
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [TushareFetcher] -> [EfinanceFetcher]
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:873 | [数据源尝试 2/7] [EfinanceFetcher] 获取 000300...
+2026-04-06 01:12:50 | INFO     | data_provider\base.py:363 | [EfinanceFetcher] 开始获取 000300 日线数据: 范围=2026-03-27 ~ 2026-04-06
+2026-04-06 01:12:50 | DEBUG    | data_provider\efinance_fetcher.py:301 | 设置 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap...
+2026-04-06 01:12:50 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.23 秒...
+2026-04-06 01:12:53 | INFO     | data_provider\efinance_fetcher.py:389 | [API调用] ef.stock.get_quote_history(stock_codes=000300, beg=20260327, end=20260406, klt=101, fqt=1)
+2026-04-06 01:12:53 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:12:53 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:12:53 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:12:53 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:12:53 | WARNING  | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\urllib3\connectionpool.py:868 | Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'RemoteDisconnected('Remote end closed connection without response')': /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1
+2026-04-06 01:12:53 | ERROR    | data_provider\efinance_fetcher.py:443 | Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260327~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.43s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:12:53 | ERROR    | data_provider\base.py:391 | [EfinanceFetcher] 000300 获取失败: 范围=2026-03-27 ~ 2026-04-06, error_type=ProtocolError, elapsed=2.66s, reason=efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260327~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.43s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:12:53 | WARNING  | data_provider\base.py:892 | [数据源失败 2/7] [EfinanceFetcher] 000300: error_type=ProtocolError, reason=[EfinanceFetcher] 000300: efinance 获取数据失败: Eastmoney 历史K线接口失败: endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, stock_code=000300, market_type=stock, range=20260327~20260406, category=remote_disconnect, error_type=ConnectionError, elapsed=0.43s, detail=HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11%2Cf12%2Cf13&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&beg=20260327&end=20260406&rtntype=6&secid=1.000300&klt=101&fqt=1 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))
+2026-04-06 01:12:53 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [EfinanceFetcher] -> [AkshareFetcher]
+2026-04-06 01:12:53 | INFO     | data_provider\base.py:873 | [数据源尝试 3/7] [AkshareFetcher] 获取 000300...
+2026-04-06 01:12:53 | INFO     | data_provider\base.py:363 | [AkshareFetcher] 开始获取 000300 日线数据: 范围=2026-03-27 ~ 2026-04-06
+2026-04-06 01:12:53 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 东方财富 获取 000300...
+2026-04-06 01:12:53 | DEBUG    | data_provider\akshare_fetcher.py:297 | 设置 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0...
+2026-04-06 01:12:53 | DEBUG    | data_provider\base.py:466 | 随机休眠 4.51 秒...
+2026-04-06 01:12:58 | INFO     | data_provider\akshare_fetcher.py:406 | [API调用] ak.stock_zh_a_hist(symbol=000300, ...)
+2026-04-06 01:12:58 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 东方财富 获取失败: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+2026-04-06 01:12:58 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 新浪财经 获取 000300...
+2026-04-06 01:12:58 | DEBUG    | data_provider\akshare_fetcher.py:315 | 补充休眠 1.76 秒
+2026-04-06 01:13:00 | DEBUG    | data_provider\base.py:466 | 随机休眠 3.81 秒...
+2026-04-06 01:13:04 | DEBUG    | C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\asyncio\proactor_events.py:633 | Using proactor: IocpProactor
+2026-04-06 01:13:04 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 新浪财经 获取失败: 'date'
+2026-04-06 01:13:04 | INFO     | data_provider\akshare_fetcher.py:379 | [数据源] 尝试使用 腾讯财经 获取 000300...
+2026-04-06 01:13:04 | DEBUG    | data_provider\akshare_fetcher.py:315 | 补充休眠 1.25 秒
+2026-04-06 01:13:05 | DEBUG    | data_provider\base.py:466 | 随机休眠 2.32 秒...
+2026-04-06 01:13:08 | WARNING  | data_provider\akshare_fetcher.py:387 | [数据源] 腾讯财经 获取失败: list index out of range
+2026-04-06 01:13:08 | ERROR    | data_provider\base.py:391 | [AkshareFetcher] 000300 获取失败: 范围=2026-03-27 ~ 2026-04-06, error_type=DataFetchError, elapsed=15.33s, reason=Akshare 所有渠道获取失败: list index out of range
+2026-04-06 01:13:08 | WARNING  | data_provider\base.py:892 | [数据源失败 3/7] [AkshareFetcher] 000300: error_type=DataFetchError, reason=[AkshareFetcher] 000300: Akshare 所有渠道获取失败: list index out of range
+2026-04-06 01:13:08 | INFO     | data_provider\base.py:899 | [数据源切换] 000300: [AkshareFetcher] -> [PytdxFetcher]
+2026-04-06 01:13:08 | INFO     | data_provider\base.py:873 | [数据源尝试 4/7] [PytdxFetcher] 获取 000300...
+2026-04-06 01:13:08 | INFO     | data_provider\base.py:363 | [PytdxFetcher] 开始获取 000300 日线数据: 范围=2026-03-27 ~ 2026-04-06
+2026-04-06 01:13:08 | DEBUG    | data_provider\pytdx_fetcher.py:297 | 调用 Pytdx get_security_bars(market=0, code=000300, count=30)
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2696, family=2, type=1, proto=0, laddr=('0.0.0.0', 60482), raddr=('119.147.212.81', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+2026-04-06 01:13:14 | DEBUG    | data_provider\pytdx_fetcher.py:190 | Pytdx 连接 112.74.214.43:7727 失败: head_buf is not 0x10 : b''
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2788, family=2, type=1, proto=0, laddr=('172.18.180.72', 61170), raddr=('112.74.214.43', 7727)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2936, family=2, type=1, proto=0, laddr=('0.0.0.0', 61171), raddr=('221.231.141.60', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\A\AppData\Local\Programs\Python\Python311\Lib\site-packages\pytdx\base_socket_client.py:166: ResourceWarning: unclosed <pytdx.base_socket_client.TrafficStatSocket fd=2756, family=2, type=1, proto=0, laddr=('0.0.0.0', 54376), raddr=('101.227.73.20', 7709)>
+  self.client = TrafficStatSocket(socket.AF_INET, socket.SOCK_STREAM)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback

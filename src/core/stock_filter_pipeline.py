@@ -394,29 +394,38 @@ class MarketEnvironmentFilter:
 
 @dataclass
 class PositionResult:
-    """股票位置评估结果"""
+    """股票位置评估结果（Layer 2）"""
     stock_code: str
     score: int                      # 总分（0-100）
-    position_pct: float             # 当前价在近1年高低点区间中的位置（%）
-    ma_status: str                  # 均线状态：bullish / neutral / bearish
-    relative_strength: float         # 相对大盘的超额收益（%）
-    # 明细
+
+    # 四项子分
+    ma20_slope_score: int = 0       # MA20斜率分（满分40）
+    price_ma20_dist_score: int = 0  # 价格相对MA20距离分（满分30）
+    ma60_direction_score: int = 0   # MA60方向分（满分20）
+    rel_strength_score: int = 0      # 20日相对强弱分（满分10）
+
+    # 原始数据（供参考）
+    relative_strength: float = 0.0  # 近20日相对大盘超额收益（%）
+    ma20_slope: float = 0.0         # MA20斜率（日均变化率%）
+    ma60_direction: str = ""        # MA60方向：up / flat / down
+    price_ma20_distance_pct: float = 0.0  # 价格相对MA20的距离%（正=在MA20之上）
+    current_price: float = 0.0
+    ma20: float = 0.0
+    ma60: float = 0.0
+    position_pct: float = 0.0       # 当前价在1年高低点区间位置（%）
     price_1y_high: float = 0.0
     price_1y_low: float = 0.0
-    current_price: float = 0.0
-    ma5: float = 0.0
-    ma10: float = 0.0
-    ma20: float = 0.0
 
 
 class StockPositionScorer:
     """
-    第二层：股票位置评估
+    第二层：股票位置评估（Layer 2）
 
-    基于近1年日线数据，评估：
-    1. 当前价在历史高低点区间的位置（估值位置）
-    2. 均线排列状态（趋势方向）
-    3. 相对大盘的超额收益（相对强弱）
+    评分体系（满分100）：
+    - MA20 斜率（40）：趋势强度与方向
+    - 价格相对MA20距离（30）：是否过热
+    - MA60 方向（20）：中期趋势
+    - 近20日相对强弱（10）：相对大盘超额收益
     """
 
     def __init__(self, fetcher_manager: DataFetcherManager):
@@ -437,38 +446,51 @@ class StockPositionScorer:
         # 获取指数日线（同期）
         df_index = self._fetch_daily_data(index_code, days=250)
 
-        # 计算各项分
-        position_pct = self._calc_position_pct(df_stock)
-        position_score = self._calc_position_score(position_pct)
+        # ---- 四项子分 ----
+        ma20_slope = self._calc_ma20_slope(df_stock)
+        ma20_slope_score = self._calc_ma20_slope_score(ma20_slope)
 
-        ma_status, ma5, ma10, ma20 = self._calc_ma_status(df_stock)
-        ma_score = self._calc_ma_score(ma_status)
+        ma20, ma60, price_ma20_dist = self._calc_price_ma20_distance(df_stock)
+        price_ma20_dist_score = self._calc_price_ma20_dist_score(price_ma20_dist)
+
+        ma60_direction = self._calc_ma60_direction(df_stock, ma60)
+        ma60_dir_score = self._calc_ma60_direction_score(ma60_direction)
 
         rel_strength = self._calc_relative_strength(df_stock, df_index)
-        rel_score = self._calc_rel_score(rel_strength)
+        rel_score = self._calc_rel_strength_score(rel_strength)
 
-        total = position_score + ma_score + rel_score
+        total = ma20_slope_score + price_ma20_dist_score + ma60_dir_score + rel_score
 
         current_price = float(df_stock["close"].iloc[-1]) if not df_stock.empty else 0.0
+        position_pct = self._calc_position_pct(df_stock)
 
         result = PositionResult(
             stock_code=stock_code,
             score=total,
-            position_pct=position_pct,
-            ma_status=ma_status,
+            ma20_slope_score=ma20_slope_score,
+            price_ma20_dist_score=price_ma20_dist_score,
+            ma60_direction_score=ma60_dir_score,
+            rel_strength_score=rel_score,
             relative_strength=rel_strength,
+            ma20_slope=ma20_slope,
+            ma60_direction=ma60_direction,
+            price_ma20_distance_pct=price_ma20_dist,
+            current_price=current_price,
+            ma20=ma20,
+            ma60=ma60,
+            position_pct=position_pct,
             price_1y_high=float(df_stock["high"].max()) if not df_stock.empty else 0.0,
             price_1y_low=float(df_stock["low"].min()) if not df_stock.empty else 0.0,
-            current_price=current_price,
-            ma5=ma5,
-            ma10=ma10,
-            ma20=ma20,
         )
 
         elapsed = time.time() - t0
         logger.debug(
-            f"[Position] {stock_code} score={total} pos_pct={position_pct:.1f}% "
-            f"ma={ma_status} rel={rel_strength:.2f}% elapsed={elapsed:.2f}s"
+            f"[Position] {stock_code} score={total} "
+            f"(slope={ma20_slope_score} dist={price_ma20_dist_score} "
+            f"ma60={ma60_dir_score} rel={rel_score}) "
+            f"slope={ma20_slope:.4f} dist={price_ma20_dist:.2f}% "
+            f"ma60={ma60_direction} rel={rel_strength:.2f}% "
+            f"elapsed={elapsed:.2f}s"
         )
         return result
 
@@ -482,7 +504,7 @@ class StockPositionScorer:
         return pd.DataFrame()
 
     def _calc_position_pct(self, df: pd.DataFrame) -> float:
-        """计算当前价在近1年高低点区间的位置%"""
+        """当前价在近1年高低点区间的位置%"""
         if df.empty or "close" not in df.columns:
             return 50.0
         current = float(df["close"].iloc[-1])
@@ -492,73 +514,160 @@ class StockPositionScorer:
             return 50.0
         return (current - low) / (high - low) * 100.0
 
-    def _calc_position_score(self, position_pct: float) -> int:
-        """估值位置分（满分30）"""
-        if position_pct < 20:
+    def _calc_ma20_slope(self, df: pd.DataFrame) -> float:
+        """
+        计算 MA20 斜率（日均变化率%）
+
+        使用近20日MA20值做线性回归，得到每日平均变化率。
+        正值=上升趋势，负值=下降趋势。
+        """
+        if df.empty or "ma20" not in df.columns:
+            return 0.0
+        ma20_series = df["ma20"].dropna()
+        if len(ma20_series) < 5:
+            return 0.0
+        # 取最近20个MA20值（不够则全部）
+        n = min(20, len(ma20_series))
+        ma20_vals = ma20_series.iloc[-n:].values
+        # 简单斜率：(最后值-第一值) / 第一值 / 天数 * 100 = 日均变化率%
+        if ma20_vals[0] == 0:
+            return 0.0
+        slope = (ma20_vals[-1] - ma20_vals[0]) / ma20_vals[0] / n * 100
+        return float(slope)
+
+    def _calc_ma20_slope_score(self, slope: float) -> int:
+        """
+        MA20斜率分（满分40）
+
+        阈值说明（基于日均变化率%）：
+        - >0.05%/日：强势上升 → 40
+        - >0.02%/日：温和上升 → 30
+        - >0%/日：   轻微上升 → 20
+        - 0%/日：    横盘     → 10
+        - <0%/日：   下降趋势 → 0
+        """
+        if slope > 0.05:
+            return 40
+        elif slope > 0.02:
             return 30
-        elif position_pct < 35:
-            return 25
-        elif position_pct < 50:
+        elif slope > 0:
             return 20
-        elif position_pct < 65:
-            return 12
-        elif position_pct < 80:
-            return 6
-        else:
-            return 0  # 高位股不给分
-
-    def _calc_ma_status(self, df: pd.DataFrame) -> Tuple[str, float, float, float]:
-        """计算均线状态"""
-        if df.empty or len(df) < 20:
-            return "neutral", 0.0, 0.0, 0.0
-        ma5 = float(df["ma5"].iloc[-1]) if "ma5" in df.columns else 0.0
-        ma10 = float(df["ma10"].iloc[-1]) if "ma10" in df.columns else 0.0
-        ma20 = float(df["ma20"].iloc[-1]) if "ma20" in df.columns else 0.0
-        current = float(df["close"].iloc[-1])
-
-        if current > ma20 and ma5 > ma10 > ma20:
-            status = "bullish"
-        elif current < ma20 and ma5 < ma10 < ma20:
-            status = "bearish"
-        elif current > ma20:
-            status = "neutral"
-        else:
-            status = "neutral"
-        return status, ma5, ma10, ma20
-
-    def _calc_ma_score(self, ma_status: str) -> int:
-        """均线分（满分30）"""
-        if ma_status == "bullish":
-            return 30
-        elif ma_status == "neutral":
-            return 15
+        elif slope > -0.02:
+            return 10
         else:
             return 0
 
-    def _calc_relative_strength(self, df_stock: pd.DataFrame, df_index: pd.DataFrame) -> float:
-        """计算相对大盘的超额收益（N日，一般取20日）"""
+    def _calc_price_ma20_distance(
+        self, df: pd.DataFrame
+    ) -> Tuple[float, float, float]:
+        """
+        计算价格与MA20的距离
+
+        Returns:
+            Tuple(ma20, ma60, 距离%)
+            距离% = (当前价 - MA20) / MA20 * 100，正=在MA20之上
+        """
+        if df.empty or "ma20" not in df.columns:
+            return 0.0, 0.0, 0.0
+        ma20_col = df["ma20"].dropna()
+        if ma20_col.empty:
+            return 0.0, 0.0, 0.0
+        ma20 = float(ma20_col.iloc[-1])
+        current = float(df["close"].iloc[-1])
+
+        ma60 = 0.0
+        if "ma60" in df.columns:
+            ma60_col = df["ma60"].dropna()
+            if not ma60_col.empty:
+                ma60 = float(ma60_col.iloc[-1])
+
+        if ma20 == 0:
+            distance_pct = 0.0
+        else:
+            distance_pct = (current - ma20) / ma20 * 100.0
+
+        return ma20, ma60, float(distance_pct)
+
+    def _calc_price_ma20_dist_score(self, dist_pct: float) -> int:
+        """
+        价格相对MA20距离分（满分30）
+
+        原则：价格在MA20之上5%内最健康（顺势但不过热），过远则回调风险大
+        - 0%~5%：最佳，低位启动或回调确认 → 30
+        - 5%~10%：正常，趋势健康 → 25
+        - 0%~-3%：略低于MA20，弱势但未破坏 → 20
+        - 10%~15%：偏热，谨慎 → 15
+        - >15%：过热，回调风险高 → 5
+        - <-3%：跌破MA20，趋势破坏 → 0
+        """
+        if dist_pct < -3:
+            return 0
+        elif dist_pct < 0:
+            return 20
+        elif dist_pct <= 5:
+            return 30
+        elif dist_pct <= 10:
+            return 25
+        elif dist_pct <= 15:
+            return 15
+        else:
+            return 5
+
+    def _calc_ma60_direction(self, df: pd.DataFrame, ma60: float) -> str:
+        """
+        MA60方向：up / flat / down
+
+        通过近20日MA60变化率判断。
+        """
+        if df.empty or "ma60" not in df.columns or ma60 == 0:
+            return "flat"
+        ma60_col = df["ma60"].dropna()
+        if len(ma60_col) < 20:
+            return "flat"
+        ma60_20d_ago = float(ma60_col.iloc[-20])
+        if ma60_20d_ago == 0:
+            return "flat"
+        change_pct = (ma60 - ma60_20d_ago) / ma60_20d_ago * 100
+        if change_pct > 1:
+            return "up"
+        elif change_pct < -1:
+            return "down"
+        return "flat"
+
+    def _calc_ma60_direction_score(self, direction: str) -> int:
+        """MA60方向分（满分20）"""
+        if direction == "up":
+            return 20
+        elif direction == "flat":
+            return 10
+        return 0
+
+    def _calc_relative_strength(
+        self, df_stock: pd.DataFrame, df_index: pd.DataFrame
+    ) -> float:
+        """近20日相对大盘超额收益（%）"""
         if df_stock.empty or df_index.empty:
             return 0.0
         n = min(20, len(df_stock), len(df_index))
         if n < 5:
             return 0.0
-
-        stock_ret = (float(df_stock["close"].iloc[-1]) / float(df_stock["close"].iloc[-n]) - 1) * 100
-        index_ret = (float(df_index["close"].iloc[-1]) / float(df_index["close"].iloc[-n]) - 1) * 100
+        stock_ret = (
+            float(df_stock["close"].iloc[-1]) / float(df_stock["close"].iloc[-n]) - 1
+        ) * 100
+        index_ret = (
+            float(df_index["close"].iloc[-1]) / float(df_index["close"].iloc[-n]) - 1
+        ) * 100
         return stock_ret - index_ret
 
-    def _calc_rel_score(self, rel_strength: float) -> int:
-        """相对强弱分（满分40）"""
-        if rel_strength > 8:
-            return 40
-        elif rel_strength > 3:
-            return 30
-        elif rel_strength > 0:
-            return 20
-        elif rel_strength > -5:
+    def _calc_rel_strength_score(self, rel_strength: float) -> int:
+        """近20日相对强弱分（满分10）"""
+        if rel_strength > 5:
             return 10
-        else:
-            return 0
+        elif rel_strength > 0:
+            return 7
+        elif rel_strength > -5:
+            return 3
+        return 0
 
 
 # =============================================================================
@@ -567,178 +676,312 @@ class StockPositionScorer:
 
 @dataclass
 class SignalResult:
-    """技术信号评估结果"""
+    """技术信号评估结果（Layer 3）"""
     stock_code: str
     score: int                      # 总分（0-100）
-    volume_price_score: int         # 量价配合分（0-30）
-    sector_score: int               # 板块催化剂分（0-30）
-    turnover_score: int             # 换手率分（0-20）
-    fundamental_score: int          # 基本面信号分（0-20）
-    # 明细
+
+    # 四项子分
+    sector_strength_score: int = 0   # 板块强度分（0-40）
+    volume_price_score: int = 0     # 量价行为分（0-40）
+    turnover_score: int = 0         # 换手率分（0-20）
+    restart_score: int = 0          # 再启动结构分（0-20）
+
+    # 原始数据
     volume_ratio: float = 0.0
     change_pct: float = 0.0
+    zdf60: float = 0.0              # 60日涨跌幅（%），板块动量代理指标
     turnover_rate: float = 0.0
-    sector_name: str = ""
-    sector_change_pct: float = 0.0
-    pe: float = 0.0
-    pb: float = 0.0
+    close_strength_pct: float = 0.0  # 收盘强度：close在高点的%
+    ma20_slope: float = 0.0         # MA20斜率（日均变化率%）
+    ma20_crossed: bool = False      # 近期是否上穿MA20
+    volume_spike: bool = False       # 近期是否放量
 
 
 class TechnicalSignalScorer:
     """
-    第三层：技术面 + 催化剂筛选
+    第三层：技术面评估（Layer 3）
 
-    基于实时行情 + 板块排名，评估：
-    1. 量价配合（放量上涨是强势信号）
-    2. 板块催化剂（是否在强势板块）
-    3. 换手率与股性
-    4. 基本面信号（PE/PB位置）
+    评分体系（满分100）：
+    1. 板块强度（40）：是否处于强势板块
+    2. 量价行为（40）：放量、上涨、收盘强
+    3. 换手率（20）：5%-15% 最健康
+    4. 再启动结构（20）：近期是否出现启动信号
     """
 
     def __init__(self, fetcher_manager: DataFetcherManager):
         self.fm = fetcher_manager
 
     def run(self, stock_code: str, top_sectors: List[Dict] = None) -> SignalResult:
-        """
-        执行技术信号评估
-        """
+        """执行技术信号评估"""
         t0 = time.time()
 
         # 获取实时行情
         quote = self._fetch_realtime_quote(stock_code)
-        # 板块信息：通过实时行情的 name 字段关联（简化版，不做额外 API 调用）
-        sector = getattr(quote, "name", "") or ""
 
-        # 计算各项分
-        vol_score, vol_ratio, chg_pct = self._calc_volume_price_score(quote)
-        sec_score, sec_name, sec_chg = self._calc_sector_score(sector, top_sectors or [])
+        # 获取日线数据（用于再启动结构判断）
+        df = self._fetch_daily_data(stock_code, days=30)
+
+        # ---- 四项子分 ----
+        # change_60d 可能来自 ZhituFetcher（直接），也可能为 0（用 Tushare 等）
+        zdf60_from_quote = float(getattr(quote, "change_60d", 0.0) or 0.0)
+        if zdf60_from_quote == 0.0:
+            # DataFetcherManager 未使用 ZhituFetcher，降级尝试直接调 Zhitu
+            zdf60 = self._fetch_zdf60(stock_code)
+        else:
+            zdf60 = zdf60_from_quote
+        sec_score = self._calc_sector_strength(quote, top_sectors or [], zdf60)
+
+        vp_score, vol_ratio, chg_pct, close_str = self._calc_volume_price_score(quote)
         turn_score, turn_rate = self._calc_turnover_score(quote)
-        fund_score, pe, pb = self._calc_fundamental_score(quote)
+        restart_score, ma20_slope, ma20_crossed, vol_spike = self._calc_restart_structure(df, quote)
 
-        total = vol_score + sec_score + turn_score + fund_score
+        total = sec_score + vp_score + turn_score + restart_score
 
         result = SignalResult(
             stock_code=stock_code,
             score=total,
-            volume_price_score=vol_score,
-            sector_score=sec_score,
+            sector_strength_score=sec_score,
+            volume_price_score=vp_score,
             turnover_score=turn_score,
-            fundamental_score=fund_score,
+            restart_score=restart_score,
             volume_ratio=vol_ratio,
             change_pct=chg_pct,
+            zdf60=zdf60,
             turnover_rate=turn_rate,
-            sector_name=sec_name,
-            sector_change_pct=sec_chg,
-            pe=pe,
-            pb=pb,
+            close_strength_pct=close_str,
+            ma20_slope=ma20_slope,
+            ma20_crossed=ma20_crossed,
+            volume_spike=vol_spike,
         )
 
         elapsed = time.time() - t0
         logger.debug(
             f"[Signal] {stock_code} score={total} "
-            f"(vol={vol_score} sec={sec_score} turn={turn_score} fund={fund_score}) "
+            f"(sec={sec_score} vp={vp_score} turn={turn_score} restart={restart_score}) "
             f"elapsed={elapsed:.2f}s"
         )
         return result
 
     def _fetch_realtime_quote(self, code: str):
-        """获取实时行情"""
+        """获取实时行情（通过 DataFetcherManager）"""
         try:
             quote = self.fm.get_realtime_quote(code)
             if quote is not None:
                 return quote
         except Exception as e:
             logger.warning(f"[Signal] get_realtime_quote({code}) failed: {e}")
-        # 返回一个空壳对象，所有 getattr 调用会走默认值
         from data_provider.realtime_types import UnifiedRealtimeQuote
         return UnifiedRealtimeQuote(code=code)
 
-    def _calc_volume_price_score(self, quote) -> Tuple[int, float, float]:
-        """量价配合分（满分30）"""
-        vol_ratio = float(getattr(quote, "volume_ratio", 1.0) or 1.0)
+    def _fetch_zdf60(self, code: str) -> float:
+        """
+        通过 ZhituFetcher 直接获取 60 日涨跌幅（zdf60）。
+
+        原因：DataFetcherManager 可能优先使用 TushareFetcher，
+        而 Tushare 不提供此字段。ZhituFetcher 提供 zdf60，
+        可作为板块动量的代理指标。
+        """
+        try:
+            from data_provider.zhitu_fetcher import ZhituFetcher
+            zhitu = ZhituFetcher()
+            quote = zhitu.get_realtime_quote(code)
+            if quote is not None:
+                zdf60 = float(getattr(quote, "change_60d", 0.0) or 0.0)
+                if zdf60 != 0.0:
+                    return zdf60
+        except Exception:
+            pass
+        return 0.0
+
+    def _fetch_daily_data(self, code: str, days: int) -> pd.DataFrame:
+        """获取日线数据"""
+        try:
+            df, _ = self.fm.get_daily_data(code, days=days)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            logger.debug(f"[Signal] get_daily_data({code}) failed: {e}")
+        return pd.DataFrame()
+
+    # -------------------------------------------------------------------------
+    # 子项 1：板块强度（40）
+    # -------------------------------------------------------------------------
+    def _calc_sector_strength(
+        self, quote, top_sectors: List[Dict], zdf60: float
+    ) -> int:
+        """
+        板块强度分（满分40）
+
+        数据来源：智图实时行情的 zdf60（60日涨跌幅），作为板块动量的代理指标。
+
+        原理：
+        - 强势板块的成分股在60日内普遍有较高涨幅
+        - 若某只股票zdf60排名靠前，且市场整体板块动量也强，则该股大概率处于主线上
+
+        评分逻辑：
+        - 主线（40）：zdf60 > 15% 且 领涨板块涨幅 > 3%
+        - 次主线（25）：zdf60 > 8% 且 领涨板块涨幅 > 1.5%
+        - 轮动（10）：zdf60 > 0%，或 领涨板块涨幅 > 3%（但zdf60一般）
+        - 其他（0）：zdf60 ≤ 0
+        """
         chg_pct = float(getattr(quote, "change_pct", 0.0) or 0.0)
 
-        score = 15  # 基准分
+        # 领涨板块的平均涨幅（衡量市场整体板块动量）
+        if top_sectors:
+            top_avg_chg = sum(float(s.get("change_pct", 0.0)) for s in top_sectors) / len(top_sectors)
+        else:
+            top_avg_chg = 0.0
+        top_best_chg = float(top_sectors[0].get("change_pct", 0.0)) if top_sectors else 0.0
 
-        # 放量且上涨
-        if vol_ratio > 1.5 and chg_pct > 2:
-            score = 30
-        elif vol_ratio > 1.5 and chg_pct > 0:
+        strong_market = top_best_chg > 3.0    # 市场主线明确
+        active_market = top_avg_chg > 1.5     # 板块轮动活跃
+
+        # ---- 主线判断 ----
+        if strong_market and zdf60 > 15:
+            return 40
+        if active_market and zdf60 > 8:
+            return 40
+
+        # ---- 次主线判断 ----
+        if strong_market and zdf60 > 5:
+            return 25
+        if active_market and zdf60 > 3:
+            return 25
+
+        # ---- 轮动判断 ----
+        # 有板块行情（即使股票自身zdf60一般，说明在参与板块轮动）
+        if (strong_market or active_market) and zdf60 > 0:
+            return 10
+
+        # 股票自身有趋势（但不依赖板块）
+        if zdf60 > 10:
+            return 10
+
+        return 0
+
+    # -------------------------------------------------------------------------
+    # 子项 2：量价行为（40）
+    # -------------------------------------------------------------------------
+    def _calc_volume_price_score(
+        self, quote
+    ) -> Tuple[int, float, float, float]:
+        """
+        量价行为分（满分40）
+
+        三个条件（每个满足得1分）：
+        1. 放量上涨：vol_ratio > 1.5 且 chg_pct > 1
+        2. 收盘强：close 在日内高点的 97% 以上（收盘价距高点 < 3%）
+        3. 涨幅合理：0 < chg_pct < 9%（不过热不衰退）
+
+        得分：3项→40，2项→25，1项→10，0项→0
+        """
+        vol_ratio = float(getattr(quote, "volume_ratio", 1.0) or 1.0)
+        chg_pct = float(getattr(quote, "change_pct", 0.0) or 0.0)
+        price = float(getattr(quote, "price", 0.0) or 0.0)
+        high = float(getattr(quote, "high", 0.0) or 0.0)
+
+        # 收盘强度
+        close_strength_pct = 0.0
+        if high > 0 and price > 0:
+            close_strength_pct = (price / high) * 100.0
+
+        cond1 = vol_ratio > 1.5 and chg_pct > 1      # 放量上涨
+        cond2 = close_strength_pct >= 97.0              # 收盘强
+        cond3 = 0 < chg_pct < 9                        # 涨幅合理
+
+        n_met = sum([cond1, cond2, cond3])
+
+        if n_met >= 3:
+            score = 40
+        elif n_met == 2:
             score = 25
-        elif vol_ratio > 1.2 and chg_pct > 2:
-            score = 25
-        elif vol_ratio > 1.2 and chg_pct > 0:
-            score = 20
-        # 缩量上涨（警惕）
-        elif vol_ratio < 0.8 and chg_pct > 0:
+        elif n_met == 1:
             score = 10
-        # 放量下跌（不参与）
-        elif vol_ratio > 1.5 and chg_pct < -2:
+        else:
             score = 0
-        # 下跌
-        elif chg_pct < -2:
-            score = 0
-        elif chg_pct < 0:
-            score = 5
 
-        return score, vol_ratio, chg_pct
+        return score, vol_ratio, chg_pct, close_strength_pct
 
-    def _calc_sector_score(self, sector: str, top_sectors: List[Dict]) -> Tuple[int, str, float]:
-        """板块催化剂分（满分30）"""
-        if not top_sectors:
-            return 15, sector, 0.0
-
-        # top_sectors 里每项是 dict，包含 name 和 change_pct
-        # 领涨板块的 change_pct 是正数，可以用来给全局股票做参考
-        best_sector_change = float(top_sectors[0].get("change_pct", 0.0)) if top_sectors else 0.0
-
-        score = 15  # 基准分
-
-        # 全市场领涨板块涨幅大，说明市场情绪好，提高整体分数
-        if best_sector_change > 3:
-            score = 25
-        elif best_sector_change > 1.5:
-            score = 20
-
-        return score, sector, best_sector_change
-
+    # -------------------------------------------------------------------------
+    # 子项 3：换手率（20）
+    # -------------------------------------------------------------------------
     def _calc_turnover_score(self, quote) -> Tuple[int, float]:
-        """换手率分（满分20）"""
+        """
+        换手率分（满分20）
+
+        - 5%–15%：最健康，量价配合良好 → 20
+        - 3%–5% 或 15%–25%：偏弱或偏强 → 10
+        - 其他 → 0
+        """
         turnover = float(getattr(quote, "turnover_rate", 0.0) or 0.0)
 
-        if 3 <= turnover <= 10:
+        if 5.0 <= turnover <= 15.0:
             score = 20
-        elif 1 <= turnover < 3:
-            score = 15
-        elif turnover > 10:
-            score = 10  # 过于活跃
+        elif (3.0 <= turnover < 5.0) or (15.0 < turnover <= 25.0):
+            score = 10
         else:
-            score = 5   # 不活跃
+            score = 0
 
         return score, turnover
 
-    def _calc_fundamental_score(self, quote) -> Tuple[int, float, float]:
-        """基本面信号分（满分20）"""
-        pe = float(getattr(quote, "pe_ratio", 0.0) or 0.0)
-        pb = float(getattr(quote, "pb_ratio", 0.0) or 0.0)
+    # -------------------------------------------------------------------------
+    # 子项 4：再启动结构（20）
+    # -------------------------------------------------------------------------
+    def _calc_restart_structure(
+        self, df: pd.DataFrame, quote
+    ) -> Tuple[int, float, bool, bool]:
+        """
+        再启动结构分（满分20）
 
-        score = 10  # 基准分
+        信号条件（满足任一即算启动确认）：
+        1. 价格上穿 MA20：今日收盘 > MA20，且昨日收盘 < MA20
+        2. MA20 拐头向上：近5日 MA20 斜率由负转正
 
-        if pe > 0:
-            if pe < 15:
-                score += 10
-            elif pe < 25:
-                score += 5
-            elif pe > 60:
-                score -= 5
+        注意：此接口仅用于判断结构，不重复 Layer 2 的斜率评分。
+        """
+        if df.empty or "ma20" not in df.columns:
+            return 0, 0.0, False, False
 
-        if pb > 0:
-            if pb < 2:
-                score += 5
-            elif pb > 8:
-                score -= 5
+        ma20_col = df["ma20"].dropna()
+        if len(ma20_col) < 5:
+            return 0, 0.0, False, False
 
-        return max(0, min(20, score)), pe, pb
+        price = float(getattr(quote, "price", 0.0) or 0.0)
+        close_series = df["close"]
+
+        # MA20 值
+        ma20_vals = ma20_col.iloc[-5:].values  # 最近5个MA20值
+        ma20_now = float(ma20_col.iloc[-1])
+        ma20_1d_ago = float(ma20_col.iloc[-2]) if len(ma20_col) >= 2 else ma20_now
+        ma20_5d_ago = float(ma20_col.iloc[-5]) if len(ma20_col) >= 5 else ma20_now
+        close_now = float(close_series.iloc[-1])
+        close_1d_ago = float(close_series.iloc[-2]) if len(close_series) >= 2 else close_now
+
+        # 收盘价相对MA20
+        price_above_ma20 = close_now > ma20_now
+        price_was_below_ma20 = close_1d_ago <= ma20_1d_ago
+        ma20_crossed = price_above_ma20 and price_was_below_ma20
+
+        # 近5日MA20斜率（判断是否拐头向上）
+        if ma20_5d_ago == 0:
+            ma20_slope = 0.0
+        else:
+            ma20_slope = (ma20_now - ma20_5d_ago) / ma20_5d_ago * 100.0
+        ma20_turning_up = ma20_slope > 0 and ma20_1d_ago <= ma20_5d_ago
+
+        # 放量信号（近3日平均成交量 > 近20日平均的1.5倍）
+        vol_spike = False
+        if "volume" in df.columns and len(df) >= 20:
+            vol_recent = float(df["volume"].iloc[-3:].mean())
+            vol_ma20 = float(df["volume"].iloc[-20:].mean())
+            if vol_ma20 > 0 and vol_recent / vol_ma20 > 1.5:
+                vol_spike = True
+
+        # 任一启动信号 → 20分
+        if ma20_crossed or (ma20_turning_up and vol_spike):
+            return 20, ma20_slope, ma20_crossed, vol_spike
+
+        return 0, ma20_slope, ma20_crossed, vol_spike
 
 
 # =============================================================================
@@ -771,7 +1014,8 @@ class FilteredStock:
 
     # 各层明细
     position_pct: float = 0.0       # 位置%
-    ma_status: str = ""
+    ma20_slope: float = 0.0        # MA20日均变化率%
+    ma60_direction: str = ""       # MA60方向：up / flat / down
     relative_strength: float = 0.0
     volume_ratio: float = 0.0
     sector_name: str = ""
@@ -881,16 +1125,17 @@ class StockFilterPipeline:
         gate_results = {}
         gate_reason = ""
 
-        # Gate 1: 大盘分 >= 50
-        gate_results["gate1_market"] = market_result.score >= 50
-        if not gate_results["gate1_market"]:
-            gate_reason = f"Gate1:大盘分不足({market_result.score}<50)"
+        # Gate 1: 大盘环境可接受（非 skip_all 或 strong_bear）
+        gate1_pass = market_result.recommendation not in ("skip_all",)
+        gate_results["gate1_market"] = gate1_pass
+        if not gate1_pass:
+            gate_reason = f"Gate1:大盘极弱({market_result.level} score={market_result.score})"
 
-        # Gate 2: MA20趋势向上（需要先获取位置分）
+        # Gate 2: MA20趋势向上
         pos = self.position_scorer.run(code, index_code)
-        gate_results["gate2_ma20"] = pos.ma_status != "bearish"
+        gate_results["gate2_ma20"] = pos.ma20_slope >= 0
         if not gate_results["gate2_ma20"]:
-            gate_reason = f"Gate2:MA20向下({pos.ma_status})"
+            gate_reason = f"Gate2:MA20向下(slope={pos.ma20_slope:.4f}%)"
 
         # Gate 3: 回调结构健康（通过位置和技术信号判断）
         gate3_passed, gate3_reason = self._check_callback_structure(pos, market_result)
@@ -909,7 +1154,8 @@ class StockFilterPipeline:
                 signal_score=0,
                 composite_score=0.0,
                 position_pct=round(pos.position_pct, 1),
-                ma_status=pos.ma_status,
+                ma20_slope=pos.ma20_slope,
+                ma60_direction=pos.ma60_direction,
                 relative_strength=round(pos.relative_strength, 2),
                 gate_passed=False,
                 gate_results=gate_results,
@@ -943,11 +1189,11 @@ class StockFilterPipeline:
             signal_score=sig.score,
             composite_score=round(composite, 1),
             position_pct=round(pos.position_pct, 1),
-            ma_status=pos.ma_status,
             relative_strength=round(pos.relative_strength, 2),
             volume_ratio=round(sig.volume_ratio, 2),
-            sector_name=sig.sector_name,
+            sector_name="",
             change_pct=round(sig.change_pct, 2),
+            ma60_direction=pos.ma60_direction,
             gate_passed=True,
             gate_results=gate_results,
             weights=weights,

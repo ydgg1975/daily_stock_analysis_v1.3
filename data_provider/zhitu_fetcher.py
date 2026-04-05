@@ -255,6 +255,7 @@ class ZhituFetcher(BaseFetcher):
                 open_price=safe_float(item.get('o', 0)),
                 pe_ratio=safe_float(item.get('pe', 0)),
                 pb_ratio=safe_float(item.get('sjl', 0)),
+                change_60d=safe_float(item.get('zdf60', 0)),  # 60日涨跌幅
                 source=RealtimeSource.ZHITU,
             )
 
@@ -329,12 +330,15 @@ class ZhituFetcher(BaseFetcher):
 
     def get_daily_data_with_indicators(self, stock_code: str, days: int = 30) -> Optional[pd.DataFrame]:
         """
-        获取带技术指标的历史数据
+        获取指数带技术指标的历史数据（MA/MACD/KDJ/BOLL）
 
-        这个是智图的特色接口，可以直接获取 MA/MACD/KDJ 等指标
+        这是智图的特色接口，通过 /hz/history/ma 等端点获取指数技术指标。
+
+        URL 格式（已修复）：/hz/history/ma/{index_code}/d
+        - 注意：此接口仅适用于标准指数代码（如 000300.SH），不适用于股票代码
 
         Args:
-            stock_code: 股票代码
+            stock_code: 标准指数代码（如 "000300.SH"），不接受股票代码
             days: 天数
 
         Returns:
@@ -345,10 +349,11 @@ class ZhituFetcher(BaseFetcher):
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = (datetime.now() - timedelta(days=days * 2)).strftime('%Y%m%d')
 
-        code, market = self._convert_stock_code(stock_code)
+        # 不再经过 _convert_stock_code，直接使用传入的代码
+        # 因为 /hz/history/ma/{code}/d 接口只接受标准指数代码（如 000300.SH）
+        index_code = stock_code.strip().upper()
 
-        # 获取 MA 数据
-        url = f"{ZHITU_HZ_BASE_URL}/history/ma/{code}/{market}/d/n"
+        url = f"{ZHITU_HZ_BASE_URL}/history/ma/{index_code}/d"
 
         try:
             data = self._get(url, params={'st': start_date, 'et': end_date}, timeout=30)
@@ -359,22 +364,18 @@ class ZhituFetcher(BaseFetcher):
                 # 重命名列
                 df = df.rename(columns={
                     't': 'date',
-                    'o': 'open',
-                    'h': 'high',
-                    'l': 'low',
-                    'c': 'close',
-                    'v': 'volume',
-                    'a': 'amount',
                 })
 
                 # 转换日期
                 if 'date' in df.columns:
                     df['date'] = pd.to_datetime(df['date'], format='mixed', errors='coerce')
 
-                # 数值转换
-                for col in ['open', 'high', 'low', 'close', 'volume', 'amount']:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                # 数值转换（MA 指标列）
+                ma_cols = ['ma3', 'ma5', 'ma10', 'ma15', 'ma20', 'ma30',
+                           'ma60', 'ma120', 'ma200', 'ma250']
+                for col in df.columns:
+                    if col != 'date':
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
 
                 # 按日期排序
                 df = df.sort_values('date')
@@ -382,6 +383,82 @@ class ZhituFetcher(BaseFetcher):
                 return df
 
         except Exception as e:
-            logger.debug(f"[Zhitu] 获取技术指标数据失败 {stock_code}: {e}")
+            logger.debug(f"[Zhitu] get_daily_data_with_indicators({stock_code}) 失败: {e}")
 
+        return None
+
+    # =========================================================================
+    # 市场统计与板块排行
+    # =========================================================================
+
+    def get_market_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        获取市场涨跌统计
+
+        数据来源：
+        - 涨停股池 (/hs/pool/ztgc/{date})
+        - 跌停股池 (/hs/pool/dtgc/{date})
+
+        注意：智图 API 不提供直接的涨跌家数和成交额数据，
+        故 up_count/down_count/flat_count/total_amount 返回 None。
+
+        Returns:
+            Dict: 包含:
+                - up_count: 上涨家数 (None，不可得)
+                - down_count: 下跌家数 (None，不可得)
+                - flat_count: 平盘家数 (None，不可得)
+                - limit_up_count: 涨停家数
+                - limit_down_count: 跌停家数
+                - total_amount: 两市成交额 (None，不可得)
+        """
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        limit_up_count = 0
+        limit_down_count = 0
+
+        # 获取涨停股池
+        try:
+            url = f"{ZHITU_HS_BASE_URL}/pool/ztgc/{today}"
+            data = self._get(url, timeout=15)
+            if isinstance(data, list):
+                limit_up_count = len(data)
+            elif isinstance(data, dict) and 'data' in data:
+                limit_up_count = len(data['data'])
+        except Exception as e:
+            logger.debug(f"[Zhitu] get_market_stats: 涨停股池失败: {e}")
+
+        # 获取跌停股池
+        try:
+            url = f"{ZHITU_HS_BASE_URL}/pool/dtgc/{today}"
+            data = self._get(url, timeout=15)
+            if isinstance(data, list):
+                limit_down_count = len(data)
+            elif isinstance(data, dict) and 'data' in data:
+                limit_down_count = len(data['data'])
+        except Exception as e:
+            logger.debug(f"[Zhitu] get_market_stats: 跌停股池失败: {e}")
+
+        return {
+            "up_count": None,
+            "down_count": None,
+            "flat_count": None,
+            "limit_up_count": limit_up_count,
+            "limit_down_count": limit_down_count,
+            "total_amount": None,
+        }
+
+    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+        """
+        获取板块涨跌榜
+
+        智图 API 不提供板块指数的实时行情数据（/hz/real/ssjy/{code} 对板块代码返回 404），
+        因此无法通过智图实现板块排行，返回 None 触发 fallback 到其他数据源。
+
+        Args:
+            n: 返回前n个
+
+        Returns:
+            None - 智图不支持此接口
+        """
+        logger.debug("[Zhitu] get_sector_rankings: 智图 API 不支持板块指数实时行情，返回 None")
         return None
