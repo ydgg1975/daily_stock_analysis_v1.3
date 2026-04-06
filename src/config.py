@@ -498,7 +498,7 @@ class Config:
     vision_provider_priority: str = "gemini,anthropic,openai"
 
     # === 搜索引擎配置（支持多 Key 负载均衡）===
-    anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys (优先使用)
+    anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys
     bocha_api_keys: List[str] = field(default_factory=list)  # Bocha API Keys
     minimax_api_keys: List[str] = field(default_factory=list)  # MiniMax API Keys
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
@@ -1020,7 +1020,7 @@ class Config:
         )
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
-        # Anspire Search (优先使用)
+        # Anspire Search
         anspire_keys_str = os.getenv('ANSPIRE_API_KEYS', '')
         anspire_api_keys = [k.strip() for k in anspire_keys_str.split(',') if k.strip()]
 

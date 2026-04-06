@@ -29,6 +29,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -455,6 +456,7 @@ class TestAnspireIntegration(unittest.TestCase):
         not os.environ.get("ANSPIRE_API_KEYS"),
         "未设置 ANSPIRE_API_KEYS 环境变量，跳过集成测试"
     )
+    @pytest.mark.network
     def test_real_api_call_stock_news(self):
         """真实 API 调用测试 - 股票新闻搜索"""
         # 确保服务已重置
@@ -496,6 +498,7 @@ class TestAnspireIntegration(unittest.TestCase):
         not os.environ.get("ANSPIRE_API_KEYS"),
         "未设置 ANSPIRE_API_KEYS 环境变量，跳过集成测试"
     )
+    @pytest.mark.network
     def test_real_api_call_general_search(self):
         """真实 API 调用测试 - 通用搜索"""
         reset_search_service()
