@@ -80,3 +80,18 @@ static/
 /apps/dsa-desktop/node_modules/
 .cache/
 .codex-artifacts/
+
+# local market data cache
+local_market_data/
+
+# local watchlists
+watchlist_cn.txt
+watchlist_us.txt
+
+# temporary test scripts
+scripts/batch_fetch_cn_watchlist.py
+scripts/fetch_one_cn_test.py
+scripts/fetch_one_us_stooq.py
+scripts/fetch_one_us_test.py
+scripts/fetch_us_stooq_watchlist.py
+scripts/fetch_us_watchlist.py
