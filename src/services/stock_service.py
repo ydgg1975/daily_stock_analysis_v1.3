@@ -11,10 +11,12 @@
 
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 import pandas as pd
 
+from data_provider.us_index_mapping import is_us_stock_code
 from src.repositories.stock_repo import StockRepository
 
 logger = logging.getLogger(__name__)
@@ -120,7 +122,14 @@ class StockService:
             elif period == "yearly":
                 fetch_days = max(days, 365 * 5)
 
-            df, source = manager.get_daily_data(stock_code, days=fetch_days)
+            df: Optional[pd.DataFrame] = None
+            if is_us_stock_code(stock_code):
+                df = self._load_local_us_history(stock_code, days=fetch_days)
+                if df is None:
+                    logger.info("US history API fallback for %s", stock_code)
+
+            if df is None:
+                df, source = manager.get_daily_data(stock_code, days=fetch_days)
             
             if df is None or df.empty:
                 logger.warning(f"获取 {stock_code} 历史数据失败")
@@ -168,6 +177,30 @@ class StockService:
         except Exception as e:
             logger.error(f"获取历史数据失败: {e}", exc_info=True)
             return {"stock_code": stock_code, "period": period, "data": []}
+
+    def _get_local_us_history_path(self, stock_code: str) -> Path:
+        return Path("/root/us_test/data/normalized/us") / f"{stock_code.upper()}.parquet"
+
+    def _load_local_us_history(self, stock_code: str, days: int = 30) -> Optional[pd.DataFrame]:
+        path = self._get_local_us_history_path(stock_code)
+        if not path.exists():
+            return None
+        try:
+            df = pd.read_parquet(path)
+            if df is None or df.empty or "trade_date" not in df.columns:
+                logger.warning("US local parquet invalid for %s: %s", stock_code, path)
+                return None
+            df = df.sort_values("trade_date").tail(days).copy()
+            df = df.rename(columns={"trade_date": "date"})
+            if "amount" not in df.columns:
+                df["amount"] = None
+            if "pct_chg" not in df.columns:
+                df["pct_chg"] = None
+            logger.info("US local parquet hit for %s: %s", stock_code, path)
+            return df
+        except Exception as e:
+            logger.warning("US local parquet load failed for %s: %s (%s)", stock_code, path, e)
+            return None
 
     def get_intraday_data(
         self,
