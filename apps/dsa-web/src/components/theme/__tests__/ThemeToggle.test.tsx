@@ -20,7 +20,7 @@ beforeAll(() => {
 });
 
 describe('ThemeToggle', () => {
-  it('opens the theme menu and switches theme presets', async () => {
+  it('opens the theme menu and keeps the single workspace shell preset active', async () => {
     render(
       <ThemeProvider>
         <ThemeToggle />
@@ -30,16 +30,16 @@ describe('ThemeToggle', () => {
     fireEvent.click(screen.getByRole('button', { name: '切换主题' }));
 
     expect(await screen.findByRole('menu', { name: '主题模式' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemradio', { name: /深黑终端/ })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemradio', { name: /赛博朋克/ })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemradio', { name: /Geek \/ DOS/ })).toBeInTheDocument();
+    const spacexOption = screen.getByRole('menuitemradio', { name: /Workspace Shell/ });
+    expect(spacexOption).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('menuitemradio', { name: /Geek \/ DOS/ }));
+    fireEvent.click(spacexOption);
 
     await waitFor(() => {
-      expect(document.documentElement.dataset.theme).toBe('dos');
-      expect(document.body.dataset.theme).toBe('dos');
-      expect(window.localStorage.getItem('dsa-theme-style')).toBe('hacker');
+      expect(document.documentElement.dataset.theme).toBe('spacex');
+      expect(document.body.dataset.theme).toBe('spacex');
+      expect(window.localStorage.getItem('dsa-theme-style')).toBe('spacex');
     });
   });
 

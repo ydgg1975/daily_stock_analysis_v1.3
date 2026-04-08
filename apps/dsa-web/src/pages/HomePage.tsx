@@ -1,26 +1,22 @@
+/**
+ * SpaceX live refactor: keeps the existing dashboard task/SSE/report behavior intact
+ * while rebuilding the homepage into a top-only 2/3 + 1/3 workspace split.
+ * The upper desktop region now holds workflow + decision summary on the left and
+ * history on the right, with every lower report module returning to full-width flow.
+ */
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiErrorAlert, ConfirmDialog, Button, WorkspacePageHeader } from '../components/common';
-import { StockAutocomplete } from '../components/StockAutocomplete';
-import { HistoryList } from '../components/history';
-import { ReportMarkdown, ReportSummary } from '../components/report';
-import { TaskPanel } from '../components/tasks';
-import { useShellRail } from '../components/layout/ShellRailContext';
-import { useShellRailSlot } from '../components/layout/useShellRailSlot';
+import { ApiErrorAlert, Button, ConfirmDialog } from '../components/common';
+import { ProgressiveReportGeneration, ReportMarkdown, ReportSummary } from '../components/report';
+import { CommandBar, HistoryPanel, StatusBlocks } from '../components/home';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useDashboardLifecycle } from '../hooks';
 import { useStockPoolStore } from '../stores';
-import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import { systemConfigApi } from '../api/systemConfig';
-import type { AnalysisReport, TaskInfo } from '../types/analysis';
+import type { TaskInfo } from '../types/analysis';
 import { cn } from '../utils/cn';
-import {
-  ANALYSIS_STAGE_ORDER,
-  getAnalysisStageDescriptor,
-  getStatusRelationCopy,
-  inferAnalysisStage,
-} from '../utils/analysisStatus';
 import { normalizeReportLanguage } from '../utils/reportLanguage';
 import { selectCompletedTasksByRecency, selectPrimaryTask } from '../utils/taskQueue';
 
@@ -38,136 +34,16 @@ type LatestReportToast = {
   stockName?: string;
 };
 
-const AnalysisStatusStrip: React.FC<{
-  task: TaskInfo | null;
-  isAnalyzing: boolean;
-  selectedReport: AnalysisReport | null;
-  duplicateError: string | null;
-  error: ParsedApiError | null;
-}> = ({
-  task,
-  isAnalyzing,
-  selectedReport,
-  duplicateError,
-  error,
-}) => {
-  const { language, t } = useI18n();
-  const descriptor = getAnalysisStageDescriptor(task, {
-    isSubmitting: isAnalyzing,
-    selectedReport,
-    globalError: error,
-    duplicateError,
-  });
-
-  if (!descriptor) {
-    return null;
-  }
-
-  const stage = inferAnalysisStage(task, { isSubmitting: isAnalyzing }) || descriptor.key;
-  const orderedStage = stage === 'failed' ? 'generating' : stage;
-  const taskError = descriptor.key === 'failed'
-    ? getParsedApiError(task?.error || error || duplicateError || t('status.failed'))
-    : null;
-  const relationCopy = getStatusRelationCopy(task, selectedReport);
-
-  return (
-    <div
-      className="workspace-status-strip mt-4 animate-in fade-in slide-in-from-top-1 duration-200"
-      data-testid="analysis-status-strip"
-      role="status"
-      aria-live="polite"
-    >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:items-start">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-            <span
-              className={`workspace-status-badge ${
-                descriptor.key === 'failed'
-                  ? 'workspace-status-badge--failed'
-                  : descriptor.key === 'completed'
-                    ? 'workspace-status-badge--completed'
-                    : 'workspace-status-badge--active'
-              }`}
-            >
-              {descriptor.label}
-            </span>
-            {task ? (
-              <span className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground">
-                {task.stockName || task.stockCode}
-                <span className="theme-task-meta-chip shrink-0 rounded-full px-2 py-0.5 text-[10px] font-normal uppercase tracking-[0.12em] text-muted-text">
-                  {task.stockCode}
-                </span>
-              </span>
-            ) : null}
-            {selectedReport ? (
-              <span className="theme-inline-chip min-w-0 rounded-full px-3 py-1 text-[11px] text-muted-text">
-                {t('home.currentViewing', { code: selectedReport.meta.stockCode })}
-              </span>
-            ) : null}
-          </div>
-
-          <p className="mt-2.5 text-sm font-medium leading-6 text-foreground">{descriptor.summary}</p>
-          {descriptor.detail ? (
-            <p className="mt-1.5 text-sm leading-6 text-secondary-text">{descriptor.detail}</p>
-          ) : null}
-          {relationCopy ? (
-            <p className="mt-2 text-xs leading-5 text-muted-text">{relationCopy}</p>
-          ) : null}
-          {taskError && descriptor.key === 'failed' ? (
-            <p className="workspace-status-error mt-2 text-xs leading-5">
-              {taskError.message}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6 xl:justify-self-end xl:min-w-[30rem]">
-          {ANALYSIS_STAGE_ORDER.map((item) => {
-            const isComplete = descriptor.key !== 'failed'
-              && ANALYSIS_STAGE_ORDER.indexOf(item) < ANALYSIS_STAGE_ORDER.indexOf(orderedStage);
-            const isActive = descriptor.key !== 'failed' && item === orderedStage;
-            return (
-              <div
-                key={item}
-                className="workspace-status-step"
-                data-active={isActive}
-                data-complete={isComplete}
-                data-failed={descriptor.key === 'failed' && item === orderedStage}
-              >
-                <span
-                  className={`workspace-status-dot ${
-                    descriptor.key === 'failed' && item === orderedStage
-                      ? 'workspace-status-dot--failed'
-                      : isComplete
-                        ? 'workspace-status-dot--complete'
-                        : isActive
-                          ? 'workspace-status-dot--active'
-                          : ''
-                  }`}
-                />
-                <span className={`truncate text-[11px] ${language === 'en' ? 'font-medium tracking-[0.04em]' : 'tracking-[0.1em]'}`}>
-                  {t(`status.${item}`)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const HomePage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { closeMobileRail } = useShellRail();
-  const resultRegionRef = useRef<HTMLDivElement | null>(null);
+  const resultRegionRef = useRef<HTMLElement | null>(null);
   const handledCompletedTaskIdsRef = useRef<Set<string>>(new Set());
   const openingCompletedTaskIdsRef = useRef<Set<string>>(new Set());
   const highlightTimeoutRef = useRef<number | null>(null);
   const [latestReportOpenState, setLatestReportOpenState] = useState<LatestReportOpenState | null>(null);
   const [latestReportToast, setLatestReportToast] = useState<LatestReportToast | null>(null);
-  const [isTaskRefreshing, setIsTaskRefreshing] = useState(false);
   const [showRuntimeExecutionSummary, setShowRuntimeExecutionSummary] = useState(false);
 
   const {
@@ -228,12 +104,13 @@ const HomePage: React.FC = () => {
         }
       }
     };
+
     void loadVisibility();
+
     return () => {
       cancelled = true;
     };
   }, []);
-  const reportLanguage = normalizeReportLanguage(selectedReport?.meta.reportLanguage);
 
   const selectedIds = useMemo(() => new Set(selectedHistoryIds), [selectedHistoryIds]);
   const primaryTask = useMemo(() => selectPrimaryTask(activeTasks), [activeTasks]);
@@ -241,6 +118,33 @@ const HomePage: React.FC = () => {
     () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
     [activeTasks],
   );
+  const liveCompletedReport = useMemo(() => {
+    const liveReport = primaryTask?.result?.report;
+    return liveReport ? normalizeFrontendReportContract(liveReport) : null;
+  }, [primaryTask]);
+  const displayReport = selectedReport ?? liveCompletedReport;
+  const reportLanguage = normalizeReportLanguage(displayReport?.meta.reportLanguage);
+  const openingFinalReport = Boolean(
+    primaryTask?.status === 'completed'
+    && !selectedReport
+    && !liveCompletedReport,
+  );
+  const progressiveTask = useMemo(() => {
+    if (!primaryTask) {
+      return null;
+    }
+
+    if (
+      primaryTask.status === 'pending'
+      || primaryTask.status === 'processing'
+      || primaryTask.status === 'failed'
+      || openingFinalReport
+    ) {
+      return primaryTask;
+    }
+
+    return null;
+  }, [openingFinalReport, primaryTask]);
 
   useDashboardLifecycle({
     loadInitialHistory,
@@ -252,63 +156,26 @@ const HomePage: React.FC = () => {
     hasRunningTasks,
   });
 
-  const handleRefreshTasks = useCallback(async () => {
-    setIsTaskRefreshing(true);
-    try {
-      await hydrateRecentTasks();
-      await refreshHistory(true);
-    } finally {
-      setIsTaskRefreshing(false);
-    }
-  }, [hydrateRecentTasks, refreshHistory]);
+  const handleRetryTask = useCallback((task: TaskInfo) => {
+    const retrySelectionSource = task.selectionSource === 'autocomplete'
+      || task.selectionSource === 'import'
+      || task.selectionSource === 'image'
+      || task.selectionSource === 'manual'
+      ? task.selectionSource
+      : 'manual';
 
-  const sidebarContent = useMemo(
-    () => (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <HistoryList
-          items={historyItems}
-          isLoading={isLoadingHistory}
-          isLoadingMore={isLoadingMore}
-          hasMore={hasMore}
-          selectedId={selectedReport?.meta.id}
-          highlightedId={highlightedHistoryId}
-          selectedIds={selectedIds}
-          isDeleting={isDeletingHistory}
-          onItemClick={(recordId) => {
-            void selectHistoryItem(recordId);
-            closeMobileRail();
-          }}
-          onLoadMore={() => void loadMoreHistory()}
-          onToggleItemSelection={toggleHistorySelection}
-          onToggleSelectAll={toggleSelectAllVisible}
-          onDeleteSelected={() => setShowDeleteConfirm(true)}
-          className="min-h-0 h-full overflow-hidden"
-          embedded
-        />
-      </div>
-    ),
-    [
-      hasMore,
-      historyItems,
-      highlightedHistoryId,
-      isDeletingHistory,
-      isLoadingHistory,
-      isLoadingMore,
-      loadMoreHistory,
-      selectedIds,
-      selectedReport?.meta.id,
-      selectHistoryItem,
-      closeMobileRail,
-      toggleHistorySelection,
-      toggleSelectAllVisible,
-    ],
-  );
-
-  useShellRailSlot(sidebarContent);
+    void submitAnalysis({
+      stockCode: task.stockCode,
+      stockName: task.stockName,
+      originalQuery: task.originalQuery || task.stockCode,
+      selectionSource: retrySelectionSource,
+    });
+  }, [submitAnalysis]);
 
   useEffect(() => {
     const handledTaskIds = handledCompletedTaskIdsRef.current;
     const openingTaskIds = openingCompletedTaskIdsRef.current;
+
     return () => {
       if (highlightTimeoutRef.current) {
         window.clearTimeout(highlightTimeoutRef.current);
@@ -322,9 +189,11 @@ const HomePage: React.FC = () => {
     if (!latestReportToast) {
       return undefined;
     }
+
     const timer = window.setTimeout(() => {
       setLatestReportToast(null);
     }, 3200);
+
     return () => window.clearTimeout(timer);
   }, [latestReportToast]);
 
@@ -420,51 +289,104 @@ const HomePage: React.FC = () => {
     });
   }, [activeTasks, attemptOpenLatestReport]);
 
+  const decisionSummaryBlock = useMemo(() => {
+    if (displayReport) {
+      return {
+        eyebrow: t('home.decision.eyebrow'),
+        title: displayReport.meta.stockName || displayReport.meta.stockCode,
+        code: displayReport.meta.stockCode,
+        body: displayReport.summary.analysisSummary || displayReport.summary.operationAdvice || t('home.emptyBody'),
+        metrics: [
+          {
+            label: t('home.decision.action'),
+            value: displayReport.summary.operationAdvice || '--',
+          },
+          {
+            label: t('home.decision.trend'),
+            value: displayReport.summary.trendPrediction || '--',
+          },
+          {
+            label: t('home.decision.score'),
+            value: String(displayReport.summary.sentimentScore ?? '--'),
+          },
+        ],
+      };
+    }
+
+    if (progressiveTask) {
+      const localizedTaskStatus = progressiveTask.status === 'pending'
+        ? t('tasks.queued')
+        : progressiveTask.status === 'processing'
+          ? t('tasks.processing')
+          : progressiveTask.status === 'completed'
+            ? t('tasks.completed')
+            : progressiveTask.status === 'failed'
+              ? t('tasks.failed')
+              : progressiveTask.status;
+
+      return {
+        eyebrow: t('home.decision.eyebrow'),
+        title: progressiveTask.stockName || progressiveTask.stockCode,
+        code: progressiveTask.stockCode,
+        body: progressiveTask.message || t('home.decision.liveDraftBody'),
+        metrics: [
+          {
+            label: t('home.decision.status'),
+            value: localizedTaskStatus,
+          },
+          {
+            label: t('home.decision.progress'),
+            value: `${Math.min(progressiveTask.progress || 0, 100)}%`,
+          },
+          {
+            label: t('home.decision.task'),
+            value: progressiveTask.taskId,
+          },
+        ],
+      };
+    }
+
+    return {
+      eyebrow: t('home.decision.eyebrow'),
+      title: t('home.emptyTitle'),
+      code: null,
+      body: t('home.emptyBody'),
+      metrics: [
+        {
+          label: t('home.decision.action'),
+          value: t('home.decision.awaitingTarget'),
+        },
+        {
+          label: t('home.decision.trend'),
+          value: t('home.decision.pendingAnalysis'),
+        },
+        {
+          label: t('home.decision.state'),
+          value: t('home.decision.ready'),
+        },
+      ],
+    };
+  }, [displayReport, progressiveTask, t]);
+
   return (
     <div data-testid="home-dashboard" className="workspace-page workspace-page--home">
-      <WorkspacePageHeader
-        className="overflow-hidden"
-        eyebrow={t('home.eyebrow')}
-        title={t('home.title')}
-        description={t('home.subtitle')}
-        actions={selectedReport ? (
-          <>
-            <Button
-              variant="home-action-ai"
-              size="sm"
-              disabled={selectedReport.meta.id === undefined}
-              onClick={() => {
-                const code = selectedReport.meta.stockCode;
-                const name = selectedReport.meta.stockName;
-                const rid = selectedReport.meta.id!;
-                navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
-              }}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              {t('home.followAi')}
-            </Button>
-            <Button
-              variant="home-action-report"
-              size="sm"
-              disabled={selectedReport.meta.id === undefined}
-              onClick={openMarkdownDrawer}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {t('home.viewFullReport')}
-            </Button>
-          </>
-        ) : null}
-      >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-          <div className="space-y-2">
-            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="min-w-0">
-                <StockAutocomplete
+      <section className="home-workspace-shell">
+        <header className="home-workspace-intro workspace-header">
+          <p className="home-workspace-intro__eyebrow workspace-header__eyebrow">{t('home.eyebrow')}</p>
+          <h1 className="home-workspace-intro__title workspace-header__title">{t('home.title')}</h1>
+          <p className="home-workspace-intro__body workspace-header__body">{t('home.subtitle')}</p>
+        </header>
+
+        <section className="home-dashboard-layout" data-testid="home-dashboard-layout">
+          <div className="home-dashboard-primary">
+            <section className="home-workflow-strip" data-layout="workflow" data-testid="home-workflow-strip">
+              <div className="home-workflow-strip__command">
+                <CommandBar
+                  label={t('home.commandLabel')}
                   value={query}
+                  placeholder={t('home.placeholder')}
+                  disabled={isAnalyzing}
+                  inputError={inputError}
                   onChange={setQuery}
                   onSubmit={(stockCode, stockName, selectionSource) => {
                     void submitAnalysis({
@@ -474,135 +396,175 @@ const HomePage: React.FC = () => {
                       selectionSource: selectionSource ?? 'manual',
                     });
                   }}
-                  placeholder={t('home.placeholder')}
-                  disabled={isAnalyzing}
-                  className={inputError ? 'border-danger/50' : undefined}
+                  onFollowUp={() => {
+                    if (!displayReport?.meta.id) {
+                      return;
+                    }
+                    const code = displayReport.meta.stockCode;
+                    const name = displayReport.meta.stockName;
+                    const rid = displayReport.meta.id;
+                    navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
+                  }}
+                  onViewReport={openMarkdownDrawer}
+                  canFollowUp={displayReport?.meta.id !== undefined}
+                  canViewReport={displayReport?.meta.id !== undefined}
+                  analyzeText={t('home.analyze')}
+                  analyzingText={t('home.analyzing')}
+                  followUpText={t('home.followAi')}
+                  reportText={t('home.viewFullReport')}
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => void submitAnalysis()}
-                disabled={!query || isAnalyzing}
-                className="btn-primary flex min-w-[7rem] flex-shrink-0 items-center justify-center gap-1.5 whitespace-nowrap"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                    {t('home.analyzing')}
-                  </>
-                ) : (
-                  t('home.analyze')
-                )}
-              </button>
-            </div>
-            {inputError ? (
-              <p className="text-xs text-danger">{inputError}</p>
-            ) : null}
-          </div>
 
-        </div>
-
-        <AnalysisStatusStrip
-          task={primaryTask}
-          isAnalyzing={isAnalyzing}
-          selectedReport={selectedReport}
-          duplicateError={duplicateError}
-          error={isAnalyzing || activeTasks.length > 0 || Boolean(duplicateError) ? error : null}
-        />
-        {activeTasks.length > 0 ? (
-          <TaskPanel
-            tasks={activeTasks}
-            title={t('tasks.activeTitle')}
-            className="mt-4"
-            onRefresh={handleRefreshTasks}
-            isRefreshing={isTaskRefreshing}
-            hasRunningTasks={hasRunningTasks}
-            showExecutionSummary={showRuntimeExecutionSummary}
-          />
-        ) : null}
-        {latestReportOpenState?.status === 'fallback' ? (
-          <div
-            className={cn(
-              'theme-inline-banner theme-inline-banner--warning mt-4 px-4 py-3 transition-colors',
-            )}
-            data-testid="latest-report-status"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
-                  {t('home.latestPendingTitle')}
-                </p>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {latestReportOpenState.stockName || latestReportOpenState.stockCode}
-                  <span className="ml-2 text-xs font-normal text-muted-text">{latestReportOpenState.stockCode}</span>
-                </p>
-                <p className="mt-1 text-xs leading-5 text-secondary-text">
-                  {t('home.latestPendingBody')}
-                </p>
-              </div>
-              <Button
-                variant="home-action-report"
-                size="sm"
-                onClick={() => void attemptOpenLatestReport(latestReportOpenState, 4, true)}
-              >
-                {t('home.viewLatestReport')}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </WorkspacePageHeader>
-
-      <div className="workspace-split-layout workspace-split-layout--main-only">
-        <section className="workspace-split-main overflow-x-hidden">
-            {error ? (
-              <ApiErrorAlert
-                error={error}
-                className="mb-4"
-                onDismiss={clearError}
+              <StatusBlocks
+                task={primaryTask}
+                isAnalyzing={isAnalyzing}
+                selectedReport={displayReport}
+                duplicateError={duplicateError}
+                error={isAnalyzing || activeTasks.length > 0 || Boolean(duplicateError) ? error : null}
+                layout="workflow"
               />
-            ) : null}
-            {isLoadingReport ? (
-              <div className="flex min-h-[20rem] flex-col items-center justify-center">
-                <div className="home-spinner h-10 w-10 animate-spin border-3" />
-                <p className="mt-3 text-sm text-secondary-text">{t('home.loadingReport')}</p>
+            </section>
+
+            <section className="home-decision-summary" aria-label={decisionSummaryBlock.eyebrow} data-testid="home-decision-summary">
+              <div className="home-decision-summary__header">
+                <div>
+                  <p className="home-decision-summary__eyebrow">{decisionSummaryBlock.eyebrow}</p>
+                  <h2 className="home-decision-summary__title">
+                    {decisionSummaryBlock.title}
+                    {decisionSummaryBlock.code ? (
+                      <span className="home-decision-summary__code">{decisionSummaryBlock.code}</span>
+                    ) : null}
+                  </h2>
+                </div>
+                {displayReport ? (
+                  <Button
+                    variant="home-action-report"
+                    size="sm"
+                    onClick={openMarkdownDrawer}
+                    className="home-decision-summary__button"
+                  >
+                    {t('home.viewFullReport')}
+                  </Button>
+                ) : null}
               </div>
-            ) : selectedReport ? (
-              <div
-                ref={resultRegionRef}
-                className={selectedReport.details?.standardReport ? 'w-full min-w-0 pb-8' : 'max-w-5xl pb-8'}
-              >
-                <div key={selectedReport.meta.id ?? selectedReport.meta.queryId} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <ReportSummary data={selectedReport} showExecutionSummary={showRuntimeExecutionSummary} />
+
+              <p className="home-decision-summary__body">{decisionSummaryBlock.body}</p>
+
+              <div className="home-decision-summary__metrics">
+                {decisionSummaryBlock.metrics.map((metric) => (
+                  <div key={metric.label} className="home-decision-summary__metric">
+                    <p className="home-decision-summary__metric-label">{metric.label}</p>
+                    <p className="home-decision-summary__metric-value">{metric.value}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <aside className="home-dashboard-history" data-column="history" data-testid="home-history-column">
+            <HistoryPanel
+              items={historyItems}
+              isLoading={isLoadingHistory}
+              isLoadingMore={isLoadingMore}
+              hasMore={hasMore}
+              selectedId={displayReport?.meta.id}
+              highlightedId={highlightedHistoryId}
+              selectedIds={selectedIds}
+              isDeleting={isDeletingHistory}
+              onItemClick={(recordId) => {
+                void selectHistoryItem(recordId);
+              }}
+              onLoadMore={() => void loadMoreHistory()}
+              onToggleItemSelection={toggleHistorySelection}
+              onToggleSelectAll={toggleSelectAllVisible}
+              onDeleteSelected={() => setShowDeleteConfirm(true)}
+            />
+          </aside>
+        </section>
+
+        <section className="home-workspace-flow" data-layout="report-flow" data-testid="home-report-flow">
+          {latestReportOpenState?.status === 'fallback' ? (
+            <div
+              className={cn(
+                'theme-inline-banner theme-inline-banner--warning home-latest-report-banner px-4 py-3 transition-colors',
+              )}
+              data-testid="latest-report-status"
+            >
+              <div className="home-latest-report-banner__content">
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">
+                    {t('home.latestPendingTitle')}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {latestReportOpenState.stockName || latestReportOpenState.stockCode}
+                    <span className="ml-2 text-xs font-normal text-muted-text">{latestReportOpenState.stockCode}</span>
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-secondary-text">
+                    {t('home.latestPendingBody')}
+                  </p>
+                </div>
+                <Button
+                  variant="home-action-report"
+                  size="sm"
+                  onClick={() => void attemptOpenLatestReport(latestReportOpenState, 4, true)}
+                >
+                  {t('home.viewLatestReport')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? (
+            <ApiErrorAlert
+              error={error}
+              className="home-report-error"
+              onDismiss={clearError}
+            />
+          ) : null}
+
+          <section className="home-report-stage" ref={resultRegionRef}>
+            {progressiveTask ? (
+              <ProgressiveReportGeneration
+                task={progressiveTask}
+                openingFinalReport={openingFinalReport}
+                onRetry={progressiveTask.status === 'failed' ? () => handleRetryTask(progressiveTask) : undefined}
+              />
+            ) : isLoadingReport ? (
+              <div className="report-generation-stage">
+                <div className="report-generation-stage__header">
+                  <p className="report-generation-stage__eyebrow">{t('home.loadingReport')}</p>
+                  <h2 className="report-generation-stage__title">{t('home.loadingTitle')}</h2>
+                  <p className="report-generation-stage__body">{t('home.loadingBody')}</p>
+                </div>
+              </div>
+            ) : displayReport ? (
+              <div className={cn('home-report-stage__surface', 'w-full min-w-0')}>
+                <div key={displayReport.meta.id ?? displayReport.meta.queryId}>
+                  <ReportSummary
+                    data={displayReport}
+                    showExecutionSummary={showRuntimeExecutionSummary}
+                    leadSummaryMode="compact-home"
+                  />
                 </div>
               </div>
             ) : (
-              <div className="flex min-h-[22rem] items-center justify-center py-8">
-                <div className="theme-panel-solid w-full max-w-4xl rounded-[1.35rem] px-6 py-10 text-center">
-                  <div className="theme-panel-subtle mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl">
-                    <svg className="h-7 w-7 text-muted-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold text-foreground">{t('home.emptyTitle')}</h3>
-                  <p className="mx-auto max-w-xl text-sm leading-6 text-secondary-text">
-                    {t('home.emptyBody')}
-                  </p>
-                </div>
+              <div className="home-report-stage__empty">
+                <p className="home-report-stage__empty-eyebrow">{t('home.emptyEyebrow')}</p>
+                <h2 className="home-report-stage__empty-title">{t('home.emptyTitle')}</h2>
+                <p className="home-report-stage__empty-body">{t('home.emptyBody')}</p>
               </div>
             )}
+          </section>
         </section>
-      </div>
+      </section>
 
-      {markdownDrawerOpen && selectedReport?.meta.id ? (
+      {markdownDrawerOpen && displayReport?.meta.id ? (
         <ReportMarkdown
-          recordId={selectedReport.meta.id}
-          stockName={selectedReport.meta.stockName || ''}
-          stockCode={selectedReport.meta.stockCode}
+          recordId={displayReport.meta.id}
+          stockName={displayReport.meta.stockName || ''}
+          stockCode={displayReport.meta.stockCode}
           reportLanguage={reportLanguage}
-          standardReport={selectedReport.details?.standardReport}
+          standardReport={displayReport.details?.standardReport}
           onClose={closeMarkdownDrawer}
         />
       ) : null}
@@ -632,7 +594,7 @@ const HomePage: React.FC = () => {
           aria-live="polite"
           data-testid="latest-report-toast"
         >
-          <div className="theme-inline-banner theme-inline-banner--success px-4 py-3 shadow-[0_18px_38px_rgba(0,0,0,0.28)]">
+          <div className="theme-inline-banner theme-inline-banner--success px-4 py-3">
             <p className="theme-inline-banner-title text-[11px] uppercase tracking-[0.16em]">{t('home.toastTitle')}</p>
             <p className="mt-1 text-sm font-medium text-foreground">
               {latestReportToast.stockName || latestReportToast.stockCode}

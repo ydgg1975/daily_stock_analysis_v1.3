@@ -3,7 +3,7 @@
 
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -31,7 +31,8 @@ class _FakeResponse:
 class SearchProviderFallbacksTestCase(unittest.TestCase):
     @patch("src.search_service.requests.get")
     def test_search_stock_news_uses_finnhub_company_news(self, mock_get) -> None:
-        published_ts = int(datetime(2026, 3, 27, 13, 0, tzinfo=timezone.utc).timestamp())
+        published_at = datetime.now(timezone.utc) - timedelta(hours=6)
+        published_ts = int(published_at.timestamp())
         mock_get.return_value = _FakeResponse(
             [
                 {
@@ -54,10 +55,12 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         self.assertTrue(resp.success)
         self.assertEqual(resp.provider, "Finnhub")
         self.assertEqual(len(resp.results), 1)
-        self.assertEqual(resp.results[0].published_date, "2026-03-27")
+        self.assertEqual(resp.results[0].published_date, published_at.date().isoformat())
 
     @patch("src.search_service.requests.get")
     def test_search_stock_news_falls_back_from_finnhub_to_gnews(self, mock_get) -> None:
+        published_at = (datetime.now(timezone.utc) - timedelta(hours=3)).replace(microsecond=0)
+
         def _side_effect(url, params=None, headers=None, timeout=10):
             if "finnhub.io" in url:
                 return _FakeResponse([])
@@ -69,7 +72,7 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
                                 "title": "Oracle signs major cloud deal",
                                 "description": "New enterprise cloud order announced.",
                                 "url": "https://example.com/orcl-cloud",
-                                "publishedAt": "2026-03-27T09:10:00Z",
+                                "publishedAt": published_at.isoformat().replace("+00:00", "Z"),
                                 "source": {"name": "GNewsSource"},
                             }
                         ]
@@ -90,7 +93,7 @@ class SearchProviderFallbacksTestCase(unittest.TestCase):
         self.assertTrue(resp.success)
         self.assertEqual(resp.provider, "GNews")
         self.assertEqual(len(resp.results), 1)
-        self.assertEqual(resp.results[0].published_date, "2026-03-27")
+        self.assertEqual(resp.results[0].published_date, published_at.date().isoformat())
 
     def test_search_comprehensive_intel_tries_next_provider_for_dimension(self) -> None:
         service = SearchService(searxng_public_instances_enabled=False)

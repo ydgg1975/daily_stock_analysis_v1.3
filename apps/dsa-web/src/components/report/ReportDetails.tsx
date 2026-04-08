@@ -11,7 +11,7 @@ interface ReportDetailsProps {
 }
 
 /**
- * 透明度与追溯区组件 - 终端风格
+ * 透明度与追溯区组件 - 产品工作台风格
  */
 export const ReportDetails: React.FC<ReportDetailsProps> = ({
   details,
@@ -83,7 +83,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         >
           {copiedPanels[panel] ? text.copied : text.copy}
         </button>
-        <pre className="text-xs text-secondary-text font-mono overflow-x-auto p-3 bg-base rounded-lg max-h-80 overflow-y-auto text-left w-0 min-w-full">
+        <pre className="max-h-80 w-0 min-w-full overflow-x-auto overflow-y-auto rounded-[var(--cohere-radius-small)] border border-[var(--theme-panel-subtle-border)] bg-[var(--theme-panel-subtle-bg)] p-3 text-left font-mono text-xs text-secondary-text">
           {jsonStr}
         </pre>
       </div>
@@ -94,7 +94,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
     <Card variant="bordered" padding="md" className="home-panel-card report-support-card text-left">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">{text.transparency}</span>
-        <h3 className="mt-0.5 text-base font-semibold text-foreground">{text.traceability}</h3>
+        <h3 className="mt-0.5 text-[1.1rem] font-normal tracking-[-0.02em] text-foreground">{text.traceability}</h3>
       </div>
       <p className="report-support-note">{contextualNote}</p>
 
@@ -102,7 +102,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
       {recordId && (
         <div className="home-divider mb-3 flex items-center gap-2 border-b pb-3 text-xs text-muted-text">
           <span>{text.recordId}:</span>
-          <code className="rounded-full border border-white/6 bg-white/[0.04] px-1.5 py-0.5 font-mono text-xs text-secondary-text">
+          <code className="theme-inline-chip px-2 py-0.5 font-mono text-[11px]">
             {recordId}
           </code>
         </div>
@@ -116,9 +116,9 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowRaw(!showRaw)}
-              className="theme-panel-subtle flex w-full items-center justify-between p-2.5"
+              className="theme-panel-subtle flex w-full items-center justify-between rounded-[var(--cohere-radius-medium)] p-3"
             >
-              <span className="text-xs text-foreground">{text.rawResult}</span>
+              <span className="label-uppercase text-foreground">{text.rawResult}</span>
               <svg
                 className={`w-3.5 h-3.5 text-muted-text transition-transform ${showRaw ? 'rotate-180' : ''}`}
                 fill="none"
@@ -142,9 +142,9 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
             <button
               type="button"
               onClick={() => setShowSnapshot(!showSnapshot)}
-              className="theme-panel-subtle flex w-full items-center justify-between p-2.5"
+              className="theme-panel-subtle flex w-full items-center justify-between rounded-[var(--cohere-radius-medium)] p-3"
             >
-              <span className="text-xs text-foreground">{text.analysisSnapshot}</span>
+              <span className="label-uppercase text-foreground">{text.analysisSnapshot}</span>
               <svg
                 className={`w-3.5 h-3.5 text-muted-text transition-transform ${showSnapshot ? 'rotate-180' : ''}`}
                 fill="none"

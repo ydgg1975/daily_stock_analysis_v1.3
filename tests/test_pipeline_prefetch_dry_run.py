@@ -16,6 +16,7 @@ from tests.litellm_stub import ensure_litellm_stub
 ensure_litellm_stub()
 
 from src.core.pipeline import StockAnalysisPipeline
+from src.enums import ReportType
 
 
 class TestPipelinePrefetchBehavior(unittest.TestCase):
@@ -50,6 +51,35 @@ class TestPipelinePrefetchBehavior(unittest.TestCase):
 
         pipeline.fetcher_manager.prefetch_stock_names.assert_called_once_with(
             ["000001"], use_bulk=False
+        )
+
+    def test_run_maps_detailed_report_type_to_full(self):
+        pipeline = self._build_pipeline(process_result=SimpleNamespace(code="000001"))
+        pipeline.config.report_type = "detailed"
+
+        pipeline.run(stock_codes=["000001"], dry_run=False, send_notification=False)
+
+        self.assertEqual(
+            pipeline.process_single_stock.call_args.kwargs["report_type"],
+            ReportType.FULL,
+        )
+
+    def test_process_single_stock_forwards_force_refresh_to_data_fetch(self):
+        pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+        pipeline.fetch_and_save_stock_data = MagicMock(return_value=(True, None))
+        pipeline.analyze_stock = MagicMock()
+
+        result = StockAnalysisPipeline.process_single_stock(
+            pipeline,
+            "000001",
+            skip_analysis=True,
+            force_refresh=True,
+        )
+
+        self.assertIsNone(result)
+        pipeline.fetch_and_save_stock_data.assert_called_once_with(
+            "000001",
+            force_refresh=True,
         )
 
 

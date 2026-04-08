@@ -1,3 +1,8 @@
+/**
+ * SpaceX live refactor: preserves page-range behavior while reducing pagination
+ * controls to compact spectral chips with quieter inactive states and clearer
+ * uppercase labeling consistent with the rest of the shell.
+ */
 import type React from 'react';
 import { cn } from '../../utils/cn';
 
@@ -13,7 +18,7 @@ const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onCli
   const isEllipsis = page === '...';
 
   if (isEllipsis) {
-    return <span className="px-3 py-2 text-muted-text">...</span>;
+    return <span className="pagination__ellipsis">...</span>;
   }
 
   return (
@@ -22,10 +27,11 @@ const PageButton: React.FC<PageButtonProps> = ({ page, isActive, disabled, onCli
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'inline-flex h-10 min-w-[2.5rem] items-center justify-center rounded-xl border px-3 text-sm font-medium transition-all duration-200',
+        'pagination__button',
+        'inline-flex h-10 min-w-[2.75rem] items-center justify-center rounded-[var(--theme-button-radius)] border px-3 text-[0.76rem] font-normal uppercase tracking-[0.14em] transition-all duration-200',
         isActive
-          ? 'border-[hsl(var(--border-strong-hsl)/0.62)] bg-[var(--button-bg)] text-[var(--text-primary)] shadow-[var(--glow-soft)]'
-          : 'border-border/60 bg-elevated text-secondary-text hover:bg-hover hover:text-foreground',
+          ? 'border-[var(--border-selected)] bg-[var(--overlay-selected)] text-foreground'
+          : 'border-[var(--theme-panel-subtle-border)] bg-transparent text-secondary-text hover:border-[var(--border-default)] hover:bg-[var(--overlay-hover)] hover:text-foreground',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
       )}
     >
@@ -41,9 +47,6 @@ interface PaginationProps {
   className?: string;
 }
 
-/**
- * Pagination component with terminal-inspired styling.
- */
 export const Pagination: React.FC<PaginationProps> = ({
   currentPage,
   totalPages,
@@ -73,7 +76,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   };
 
   return (
-    <div className={cn('flex items-center justify-center gap-2', className)}>
+    <div className={cn('pagination flex items-center justify-center gap-2', className)}>
       {/* Previous page */}
       <PageButton
         page="prev"

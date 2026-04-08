@@ -54,33 +54,91 @@ class ParsedStrategy:
 
 
 @dataclass
+class ExecutionAssumptions:
+    """Explicit execution assumptions for deterministic rule backtests."""
+
+    timeframe: str
+    indicator_price_basis: str
+    signal_evaluation_timing: str
+    entry_fill_timing: str
+    exit_fill_timing: str
+    default_fill_price_basis: str
+    position_sizing: str
+    fee_model: str
+    fee_bps_per_side: float
+    slippage_model: str
+    slippage_bps_per_side: float
+    benchmark_method: str
+    benchmark_price_basis: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class RuleBacktestTrade:
     code: str
+    entry_signal_date: date
+    exit_signal_date: date
     entry_date: date
     exit_date: date
     entry_price: float
     exit_price: float
     entry_signal: str
     exit_signal: str
+    entry_trigger: str
+    exit_trigger: str
     return_pct: float
     holding_days: int
+    holding_bars: int
+    holding_calendar_days: int
     entry_rule_json: Dict[str, Any]
     exit_rule_json: Dict[str, Any]
+    entry_indicators: Dict[str, Any]
+    exit_indicators: Dict[str, Any]
+    entry_fill_basis: str
+    exit_fill_basis: str
+    signal_price_basis: str
+    price_basis: str
+    fee_bps: float
+    slippage_bps: float
+    entry_fee_amount: float = 0.0
+    exit_fee_amount: float = 0.0
+    entry_slippage_amount: float = 0.0
+    exit_slippage_amount: float = 0.0
     notes: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": self.code,
+            "entry_signal_date": self.entry_signal_date.isoformat(),
+            "exit_signal_date": self.exit_signal_date.isoformat(),
             "entry_date": self.entry_date.isoformat(),
             "exit_date": self.exit_date.isoformat(),
             "entry_price": round(self.entry_price, 6),
             "exit_price": round(self.exit_price, 6),
             "entry_signal": self.entry_signal,
             "exit_signal": self.exit_signal,
+            "entry_trigger": self.entry_trigger,
+            "exit_trigger": self.exit_trigger,
             "return_pct": round(self.return_pct, 4),
             "holding_days": self.holding_days,
+            "holding_bars": self.holding_bars,
+            "holding_calendar_days": self.holding_calendar_days,
             "entry_rule": self.entry_rule_json,
             "exit_rule": self.exit_rule_json,
+            "entry_indicators": self.entry_indicators,
+            "exit_indicators": self.exit_indicators,
+            "entry_fill_basis": self.entry_fill_basis,
+            "exit_fill_basis": self.exit_fill_basis,
+            "signal_price_basis": self.signal_price_basis,
+            "price_basis": self.price_basis,
+            "fee_bps": round(self.fee_bps, 4),
+            "slippage_bps": round(self.slippage_bps, 4),
+            "entry_fee_amount": round(self.entry_fee_amount, 6),
+            "exit_fee_amount": round(self.exit_fee_amount, 6),
+            "entry_slippage_amount": round(self.entry_slippage_amount, 6),
+            "exit_slippage_amount": round(self.exit_slippage_amount, 6),
             "notes": self.notes,
         }
 
@@ -104,6 +162,7 @@ class RuleBacktestPoint:
 @dataclass
 class RuleBacktestResult:
     parsed_strategy: ParsedStrategy
+    execution_assumptions: ExecutionAssumptions
     trades: List[RuleBacktestTrade]
     equity_curve: List[RuleBacktestPoint]
     metrics: Dict[str, Any]
@@ -114,6 +173,7 @@ class RuleBacktestResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "parsed_strategy": self.parsed_strategy.to_dict(),
+            "execution_assumptions": self.execution_assumptions.to_dict(),
             "trades": [trade.to_dict() for trade in self.trades],
             "equity_curve": [point.to_dict() for point in self.equity_curve],
             "metrics": self.metrics,
@@ -121,6 +181,14 @@ class RuleBacktestResult:
             "no_result_message": self.no_result_message,
             "warnings": self.warnings or [],
         }
+
+
+@dataclass
+class PendingOrder:
+    signal_date: date
+    trigger: str
+    rule_json: Dict[str, Any]
+    indicators: Dict[str, Any]
 
 
 class RuleBacktestParser:
@@ -581,12 +649,19 @@ class RuleBacktestEngine:
         bars: Sequence[Any],
         initial_capital: float = 100000.0,
         fee_bps: float = 0.0,
+        slippage_bps: float = 0.0,
         lookback_bars: int = 252,
     ) -> RuleBacktestResult:
+        assumptions = self._build_execution_assumptions(
+            timeframe=parsed_strategy.timeframe,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+        )
         ordered_bars = list(bars)
         if not ordered_bars:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
                 metrics=self._empty_metrics(initial_capital, lookback_bars),
@@ -599,6 +674,7 @@ class RuleBacktestEngine:
         if any(price is None for price in closes):
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
                 metrics=self._empty_metrics(initial_capital, lookback_bars),
@@ -613,17 +689,17 @@ class RuleBacktestEngine:
         equity_curve: List[RuleBacktestPoint] = []
 
         position = False
-        shares = 0.0
         cash = float(initial_capital)
-        entry_index = -1
-        entry_date = None
-        entry_price = None
-        entry_rule = ""
         entry_node = parsed_strategy.entry
         exit_node = parsed_strategy.exit
         fee_rate = max(0.0, float(fee_bps)) / 10000.0
+        slippage_rate = max(0.0, float(slippage_bps)) / 10000.0
         peak_equity = float(initial_capital)
         trade_entry_signals = 0
+        shares = 0.0
+        active_position: Dict[str, Any] = {}
+        pending_entry: Optional[PendingOrder] = None
+        pending_exit: Optional[PendingOrder] = None
 
         for idx, bar in enumerate(ordered_bars):
             price = closes[idx]
@@ -632,49 +708,90 @@ class RuleBacktestEngine:
             if idx < start_index:
                 continue
 
-            exit_signal = position and self._evaluate_node(exit_node, idx, ordered_bars, warmup_cache)
-            entry_signal = (not position) and self._evaluate_node(entry_node, idx, ordered_bars, warmup_cache)
-            exited_today = False
-
-            if position and exit_signal:
-                exit_price = price * (1.0 - fee_rate)
-                cash = shares * exit_price
-                holding_days = max(1, idx - entry_index + 1)
-                trade_return = ((exit_price - entry_price) / entry_price * 100.0) if entry_price else 0.0
+            if pending_exit is not None and position:
+                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                exit_execution = self._apply_exit_execution(
+                    shares=shares,
+                    base_fill_price=fill_price,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                )
+                cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+                exit_date = getattr(bar, "date")
+                entry_date = active_position["entry_date"]
+                holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
+                holding_calendar_days = max(1, (exit_date - entry_date).days)
+                entry_total_cost = float(active_position["entry_total_cost"])
+                trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
                 trades.append(
                     RuleBacktestTrade(
                         code=code,
+                        entry_signal_date=active_position["entry_signal_date"],
+                        exit_signal_date=pending_exit.signal_date,
                         entry_date=entry_date,
-                        exit_date=getattr(bar, "date"),
-                        entry_price=float(entry_price),
-                        exit_price=float(exit_price),
-                        entry_signal=entry_rule,
-                        exit_signal=self._format_node(exit_node),
+                        exit_date=exit_date,
+                        entry_price=float(active_position["entry_price"]),
+                        exit_price=float(exit_execution["effective_price"]),
+                        entry_signal=active_position["entry_signal_text"],
+                        exit_signal=pending_exit.trigger,
+                        entry_trigger=active_position["entry_trigger"],
+                        exit_trigger=pending_exit.trigger,
                         return_pct=round(trade_return, 4),
-                        holding_days=holding_days,
-                        entry_rule_json=entry_node,
-                        exit_rule_json=exit_node,
-                        notes="exit_signal",
+                        holding_days=holding_bars,
+                        holding_bars=holding_bars,
+                        holding_calendar_days=holding_calendar_days,
+                        entry_rule_json=active_position["entry_rule_json"],
+                        exit_rule_json=pending_exit.rule_json,
+                        entry_indicators=active_position["entry_indicators"],
+                        exit_indicators=pending_exit.indicators,
+                        entry_fill_basis=active_position["entry_fill_basis"],
+                        exit_fill_basis=fill_basis,
+                        signal_price_basis="close",
+                        price_basis="close",
+                        fee_bps=float(fee_bps),
+                        slippage_bps=float(slippage_bps),
+                        entry_fee_amount=float(active_position["entry_fee_amount"]),
+                        exit_fee_amount=float(exit_execution["fee_amount"]),
+                        entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                        exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        notes="exit_signal_next_bar_open",
                     )
                 )
-                position = False
+                pending_exit = None
+                active_position = {}
                 shares = 0.0
-                entry_index = -1
-                entry_date = None
-                entry_price = None
-                entry_rule = ""
-                exited_today = True
+                position = False
 
-            if not position and entry_signal and not exited_today:
-                entry_price = price * (1.0 + fee_rate)
-                shares = cash / entry_price if entry_price else 0.0
-                position = True
-                entry_index = idx
-                entry_date = getattr(bar, "date")
-                entry_rule = self._format_node(entry_node)
-                trade_entry_signals += 1
+            if pending_entry is not None and not position:
+                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                entry_execution = self._apply_entry_execution(
+                    cash=cash,
+                    base_fill_price=fill_price,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                )
+                if entry_execution["shares"] > 0:
+                    shares = entry_execution["shares"]
+                    cash = entry_execution["cash_remaining"]
+                    position = True
+                    active_position = {
+                        "entry_signal_date": pending_entry.signal_date,
+                        "entry_date": getattr(bar, "date"),
+                        "entry_fill_index": idx,
+                        "entry_price": float(entry_execution["effective_price"]),
+                        "entry_total_cost": float(entry_execution["total_cost"]),
+                        "entry_fee_amount": float(entry_execution["fee_amount"]),
+                        "entry_slippage_amount": float(entry_execution["slippage_amount"]),
+                        "entry_signal_text": pending_entry.trigger,
+                        "entry_trigger": pending_entry.trigger,
+                        "entry_rule_json": pending_entry.rule_json,
+                        "entry_indicators": pending_entry.indicators,
+                        "entry_fill_basis": fill_basis,
+                        "cash_buffer": float(entry_execution["cash_remaining"]),
+                    }
+                pending_entry = None
 
-            equity = cash if not position else shares * price
+            equity = cash if not position else cash + shares * price
             peak_equity = max(peak_equity, equity)
             drawdown_pct = 0.0 if peak_equity <= 0 else ((equity / peak_equity) - 1.0) * 100.0
             equity_curve.append(
@@ -686,27 +803,80 @@ class RuleBacktestEngine:
                 )
             )
 
-        if position and entry_date is not None and entry_price is not None:
+            if idx >= len(ordered_bars) - 1:
+                continue
+
+            if position and self._evaluate_node(exit_node, idx, ordered_bars, warmup_cache):
+                pending_exit = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=self._format_node(exit_node),
+                    rule_json=exit_node,
+                    indicators=self._collect_indicator_snapshot(exit_node, idx, ordered_bars, warmup_cache),
+                )
+                continue
+
+            if not position and self._evaluate_node(entry_node, idx, ordered_bars, warmup_cache):
+                trade_entry_signals += 1
+                pending_entry = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=self._format_node(entry_node),
+                    rule_json=entry_node,
+                    indicators=self._collect_indicator_snapshot(entry_node, idx, ordered_bars, warmup_cache),
+                )
+
+        if position and active_position:
             last_bar = ordered_bars[-1]
-            last_price = closes[-1] or entry_price
-            exit_price = last_price * (1.0 - fee_rate)
-            cash = shares * exit_price
-            holding_days = max(1, len(ordered_bars) - entry_index)
-            trade_return = ((exit_price - entry_price) / entry_price * 100.0) if entry_price else 0.0
+            last_price = closes[-1] or float(active_position["entry_price"])
+            fill_price, fill_basis = self._resolve_fill_price(last_bar, close_price=last_price, preferred="close")
+            exit_execution = self._apply_exit_execution(
+                shares=shares,
+                base_fill_price=fill_price,
+                fee_rate=fee_rate,
+                slippage_rate=slippage_rate,
+            )
+            cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+            exit_signal_date = pending_exit.signal_date if pending_exit is not None else getattr(last_bar, "date")
+            exit_trigger = pending_exit.trigger if pending_exit is not None else "END_OF_WINDOW"
+            holding_bars = max(1, len(ordered_bars) - 1 - int(active_position["entry_fill_index"]) + 1)
+            holding_calendar_days = max(1, (getattr(last_bar, "date") - active_position["entry_date"]).days)
+            entry_total_cost = float(active_position["entry_total_cost"])
+            trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
             trades.append(
                 RuleBacktestTrade(
                     code=code,
-                    entry_date=entry_date,
+                    entry_signal_date=active_position["entry_signal_date"],
+                    exit_signal_date=exit_signal_date,
+                    entry_date=active_position["entry_date"],
                     exit_date=getattr(last_bar, "date"),
-                    entry_price=float(entry_price),
-                    exit_price=float(exit_price),
-                    entry_signal=entry_rule,
-                    exit_signal="eod_close",
+                    entry_price=float(active_position["entry_price"]),
+                    exit_price=float(exit_execution["effective_price"]),
+                    entry_signal=active_position["entry_signal_text"],
+                    exit_signal=exit_trigger,
+                    entry_trigger=active_position["entry_trigger"],
+                    exit_trigger=exit_trigger,
                     return_pct=round(trade_return, 4),
-                    holding_days=holding_days,
-                    entry_rule_json=entry_node,
-                    exit_rule_json=exit_node,
-                    notes="forced_close",
+                    holding_days=holding_bars,
+                    holding_bars=holding_bars,
+                    holding_calendar_days=holding_calendar_days,
+                    entry_rule_json=active_position["entry_rule_json"],
+                    exit_rule_json=pending_exit.rule_json if pending_exit is not None else exit_node,
+                    entry_indicators=active_position["entry_indicators"],
+                    exit_indicators=(
+                        pending_exit.indicators
+                        if pending_exit is not None
+                        else self._collect_indicator_snapshot(exit_node, len(ordered_bars) - 1, ordered_bars, warmup_cache)
+                    ),
+                    entry_fill_basis=active_position["entry_fill_basis"],
+                    exit_fill_basis=fill_basis,
+                    signal_price_basis="close",
+                    price_basis="close",
+                    fee_bps=float(fee_bps),
+                    slippage_bps=float(slippage_bps),
+                    entry_fee_amount=float(active_position["entry_fee_amount"]),
+                    exit_fee_amount=float(exit_execution["fee_amount"]),
+                    entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                    exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                    notes="forced_close_at_window_end",
                 )
             )
             equity_curve[-1] = RuleBacktestPoint(
@@ -721,10 +891,13 @@ class RuleBacktestEngine:
             equity_curve=equity_curve,
             initial_capital=float(initial_capital),
             trade_entry_signals=trade_entry_signals,
+            benchmark_metrics=self._build_benchmark_metrics(ordered_bars[start_index:]),
+            lookback_bars=int(lookback_bars),
         )
         no_result_reason, no_result_message = self._detect_no_result_reason(metrics, parsed_strategy)
         return RuleBacktestResult(
             parsed_strategy=parsed_strategy,
+            execution_assumptions=assumptions,
             trades=trades,
             equity_curve=equity_curve,
             metrics=metrics,
@@ -735,7 +908,10 @@ class RuleBacktestEngine:
 
     def _build_indicator_cache(self, bars: Sequence[Any], parsed_strategy: ParsedStrategy) -> Dict[Tuple[str, int], List[Optional[float]]]:
         closes = [self._safe_price(getattr(bar, "close", None)) for bar in bars]
-        requirements = self._collect_requirements(parsed_strategy.entry) | self._collect_requirements(parsed_strategy.exit)
+        requirements = self._collect_requirements(parsed_strategy.entry)
+        exit_requirements = self._collect_requirements(parsed_strategy.exit)
+        for indicator, periods in exit_requirements.items():
+            requirements.setdefault(indicator, set()).update(periods)
         cache: Dict[Tuple[str, int], List[Optional[float]]] = {}
         for indicator, periods in requirements.items():
             for period in sorted(periods):
@@ -804,6 +980,109 @@ class RuleBacktestEngine:
             return None
         return series[index]
 
+    @staticmethod
+    def _build_execution_assumptions(*, timeframe: str, fee_bps: float, slippage_bps: float) -> ExecutionAssumptions:
+        return ExecutionAssumptions(
+            timeframe=str(timeframe or "daily"),
+            indicator_price_basis="close",
+            signal_evaluation_timing="evaluate rules on each bar close",
+            entry_fill_timing="next_bar_open",
+            exit_fill_timing="next_bar_open; last openless bar falls back to same-bar close",
+            default_fill_price_basis="open",
+            position_sizing="single_position_full_notional",
+            fee_model="bps_per_side",
+            fee_bps_per_side=float(fee_bps),
+            slippage_model="bps_per_side",
+            slippage_bps_per_side=float(slippage_bps),
+            benchmark_method="buy_and_hold_same_window",
+            benchmark_price_basis="close",
+        )
+
+    def _resolve_fill_price(self, bar: Any, *, close_price: float, preferred: str) -> Tuple[float, str]:
+        if preferred == "open":
+            open_price = self._safe_price(getattr(bar, "open", None))
+            if open_price is not None:
+                return float(open_price), "open"
+            return float(close_price), "close_fallback"
+        return float(close_price), "close"
+
+    @staticmethod
+    def _apply_entry_execution(
+        *,
+        cash: float,
+        base_fill_price: float,
+        fee_rate: float,
+        slippage_rate: float,
+    ) -> Dict[str, float]:
+        effective_price = float(base_fill_price) * (1.0 + slippage_rate)
+        per_share_cost = effective_price * (1.0 + fee_rate)
+        shares = float(cash) / per_share_cost if per_share_cost > 0 else 0.0
+        gross_notional = shares * effective_price
+        fee_amount = gross_notional * fee_rate
+        total_cost = gross_notional + fee_amount
+        slippage_amount = shares * max(0.0, effective_price - float(base_fill_price))
+        cash_remaining = max(0.0, float(cash) - total_cost)
+        return {
+            "shares": float(shares),
+            "effective_price": float(effective_price),
+            "fee_amount": float(fee_amount),
+            "slippage_amount": float(slippage_amount),
+            "total_cost": float(total_cost),
+            "cash_remaining": float(cash_remaining),
+        }
+
+    @staticmethod
+    def _apply_exit_execution(
+        *,
+        shares: float,
+        base_fill_price: float,
+        fee_rate: float,
+        slippage_rate: float,
+    ) -> Dict[str, float]:
+        effective_price = float(base_fill_price) * (1.0 - slippage_rate)
+        gross_proceeds = float(shares) * effective_price
+        fee_amount = gross_proceeds * fee_rate
+        net_proceeds = gross_proceeds - fee_amount
+        slippage_amount = float(shares) * max(0.0, float(base_fill_price) - effective_price)
+        return {
+            "effective_price": float(effective_price),
+            "fee_amount": float(fee_amount),
+            "slippage_amount": float(slippage_amount),
+            "net_proceeds": float(net_proceeds),
+        }
+
+    def _collect_indicator_snapshot(
+        self,
+        node: Dict[str, Any],
+        index: int,
+        bars: Sequence[Any],
+        cache: Dict[Tuple[str, int], List[Optional[float]]],
+    ) -> Dict[str, Any]:
+        labels = self._collect_indicator_labels(node)
+        snapshot: Dict[str, Any] = {}
+        for label, operand in labels.items():
+            value = self._resolve_operand(operand, index, bars, cache)
+            snapshot[label] = _round_pct(value) if operand.get("indicator") == "return_pct" else (round(float(value), 6) if value is not None else None)
+        close_value = self._safe_price(getattr(bars[index], "close", None))
+        snapshot.setdefault("Close", round(float(close_value), 6) if close_value is not None else None)
+        return snapshot
+
+    def _collect_indicator_labels(self, node: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        labels: Dict[str, Dict[str, Any]] = {}
+        if not node:
+            return labels
+        if node.get("type") == "group":
+            for child in node.get("rules", []) or []:
+                labels.update(self._collect_indicator_labels(child))
+            return labels
+        if node.get("type") == "comparison":
+            for side in ("left", "right"):
+                operand = node.get(side) or {}
+                if operand.get("kind") != "indicator":
+                    continue
+                labels[self._format_operand(operand)] = operand
+        return labels
+
     def _collect_requirements(self, node: Dict[str, Any]) -> Dict[str, set]:
         requirements: Dict[str, set] = {"ma": set(), "ema": set(), "rsi": set(), "return_pct": set()}
         if not node:
@@ -836,6 +1115,9 @@ class RuleBacktestEngine:
             window.append(float(price))
             if len(window) > period:
                 window.pop(0)
+            if len(window) < period:
+                series.append(None)
+                continue
             series.append(sum(window) / len(window))
         return series
 
@@ -946,15 +1228,22 @@ class RuleBacktestEngine:
             "initial_capital": float(initial_capital),
             "final_equity": float(initial_capital),
             "total_return_pct": 0.0,
+            "buy_and_hold_return_pct": 0.0,
+            "excess_return_vs_buy_and_hold_pct": 0.0,
             "trade_count": 0,
+            "entry_signal_count": 0,
             "win_count": 0,
             "loss_count": 0,
             "win_rate_pct": 0.0,
             "avg_trade_return_pct": 0.0,
             "max_drawdown_pct": 0.0,
             "avg_holding_days": 0.0,
+            "avg_holding_bars": 0.0,
+            "avg_holding_calendar_days": 0.0,
             "bars_used": 0,
             "lookback_bars": int(lookback_bars),
+            "period_start": None,
+            "period_end": None,
         }
 
     def _build_metrics(
@@ -964,17 +1253,24 @@ class RuleBacktestEngine:
         equity_curve: List[RuleBacktestPoint],
         initial_capital: float,
         trade_entry_signals: int,
+        benchmark_metrics: Dict[str, Any],
+        lookback_bars: int,
     ) -> Dict[str, Any]:
         final_equity = equity_curve[-1].equity if equity_curve else initial_capital
         returns = [trade.return_pct for trade in trades]
         win_count = sum(1 for trade in trades if trade.return_pct > 0)
         loss_count = sum(1 for trade in trades if trade.return_pct < 0)
         max_drawdown = min((point.drawdown_pct for point in equity_curve), default=0.0)
-        holding_days = [trade.holding_days for trade in trades]
+        holding_bars = [trade.holding_bars for trade in trades]
+        holding_calendar_days = [trade.holding_calendar_days for trade in trades]
+        total_return_pct = round(((final_equity / initial_capital) - 1.0) * 100.0, 4) if initial_capital else 0.0
+        buy_and_hold_return_pct = float(benchmark_metrics.get("buy_and_hold_return_pct") or 0.0)
         metrics = {
             "initial_capital": float(initial_capital),
             "final_equity": round(float(final_equity), 6),
-            "total_return_pct": round(((final_equity / initial_capital) - 1.0) * 100.0, 4) if initial_capital else 0.0,
+            "total_return_pct": total_return_pct,
+            "buy_and_hold_return_pct": buy_and_hold_return_pct,
+            "excess_return_vs_buy_and_hold_pct": round(total_return_pct - buy_and_hold_return_pct, 4),
             "trade_count": len(trades),
             "entry_signal_count": trade_entry_signals,
             "win_count": win_count,
@@ -982,10 +1278,34 @@ class RuleBacktestEngine:
             "win_rate_pct": round((win_count / len(trades)) * 100.0, 4) if trades else 0.0,
             "avg_trade_return_pct": round(mean(returns), 4) if returns else 0.0,
             "max_drawdown_pct": round(abs(max_drawdown), 4) if equity_curve else 0.0,
-            "avg_holding_days": round(mean(holding_days), 4) if holding_days else 0.0,
+            "avg_holding_days": round(mean(holding_bars), 4) if holding_bars else 0.0,
+            "avg_holding_bars": round(mean(holding_bars), 4) if holding_bars else 0.0,
+            "avg_holding_calendar_days": round(mean(holding_calendar_days), 4) if holding_calendar_days else 0.0,
             "bars_used": len(equity_curve),
+            "lookback_bars": int(lookback_bars),
+            "period_start": benchmark_metrics.get("period_start"),
+            "period_end": benchmark_metrics.get("period_end"),
         }
         return metrics
+
+    def _build_benchmark_metrics(self, bars: Sequence[Any]) -> Dict[str, Any]:
+        if not bars:
+            return {
+                "buy_and_hold_return_pct": 0.0,
+                "period_start": None,
+                "period_end": None,
+            }
+        first_close = self._safe_price(getattr(bars[0], "close", None))
+        last_close = self._safe_price(getattr(bars[-1], "close", None))
+        if first_close is None or last_close is None or first_close <= 0:
+            buy_and_hold_return = 0.0
+        else:
+            buy_and_hold_return = round(((last_close / first_close) - 1.0) * 100.0, 4)
+        return {
+            "buy_and_hold_return_pct": buy_and_hold_return,
+            "period_start": getattr(bars[0], "date").isoformat() if getattr(bars[0], "date", None) else None,
+            "period_end": getattr(bars[-1], "date").isoformat() if getattr(bars[-1], "date", None) else None,
+        }
 
     def _detect_no_result_reason(
         self,

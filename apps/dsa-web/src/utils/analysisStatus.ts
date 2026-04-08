@@ -19,6 +19,9 @@ export type AnalysisStageDescriptor = {
   detail?: string;
 };
 
+export type StatusRailState = 'waiting' | 'active' | 'completed' | 'failed';
+type TranslateFn = (key: string, vars?: Record<string, string | number | undefined>) => string;
+
 export const ANALYSIS_STAGE_ORDER: AnalysisStageKey[] = [
   'submitted',
   'queued',
@@ -27,6 +30,20 @@ export const ANALYSIS_STAGE_ORDER: AnalysisStageKey[] = [
   'notifying',
   'completed',
 ];
+
+export function getWorkflowStageShortLabel(
+  stage: AnalysisStageKey,
+  translate: TranslateFn = translateForCurrentLanguage,
+): string {
+  return translate(`status.board.stageShort.${stage}`);
+}
+
+export function getStatusRailStateLabel(
+  state: StatusRailState,
+  translate: TranslateFn = translateForCurrentLanguage,
+): string {
+  return translate(`status.board.railState.${state}`);
+}
 
 function inferProcessingStage(task: TaskInfo): AnalysisStageKey {
   const message = String(task.message || '').trim().toLowerCase();
@@ -102,15 +119,18 @@ export function getAnalysisStageDescriptor(
     selectedReport?: AnalysisReport | null;
     globalError?: ParsedApiError | null;
     duplicateError?: string | null;
+    translate?: TranslateFn;
   } = {},
 ): AnalysisStageDescriptor | null {
+  const translate = options.translate ?? translateForCurrentLanguage;
   const stage = inferAnalysisStage(task, { isSubmitting: options.isSubmitting });
+  const fallbackName = task?.stockName || task?.stockCode || translate('status.currentTarget');
 
   if (options.duplicateError) {
     return {
       key: 'failed',
-      label: translateForCurrentLanguage('status.conflict'),
-      summary: translateForCurrentLanguage('status.conflict'),
+      label: translate('status.conflict'),
+      summary: translate('status.conflict'),
       detail: options.duplicateError,
     };
   }
@@ -118,7 +138,7 @@ export function getAnalysisStageDescriptor(
   if (options.globalError && !task) {
     return {
       key: 'failed',
-      label: '分析失败',
+      label: translate('status.failed'),
       summary: options.globalError.title,
       detail: options.globalError.message,
     };
@@ -131,53 +151,53 @@ export function getAnalysisStageDescriptor(
   if (stage === 'submitted') {
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.submitted'),
-      summary: translateForCurrentLanguage('status.submittedSummary'),
-      detail: translateForCurrentLanguage('status.submittedDetail'),
+      label: translate('status.submitted'),
+      summary: translate('status.submittedSummary'),
+      detail: translate('status.submittedDetail'),
     };
   }
 
   if (stage === 'queued') {
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.queued'),
-      summary: translateForCurrentLanguage('status.queuedSummary', {
-        name: task?.stockName || task?.stockCode || '当前标的',
+      label: translate('status.queued'),
+      summary: translate('status.queuedSummary', {
+        name: fallbackName,
       }),
-      detail: task?.message || translateForCurrentLanguage('status.queuedDetail'),
+      detail: task?.message || translate('status.queuedDetail'),
     };
   }
 
   if (stage === 'fetching') {
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.fetching'),
-      summary: translateForCurrentLanguage('status.fetchingSummary', {
-        name: task?.stockName || task?.stockCode || '当前标的',
+      label: translate('status.fetching'),
+      summary: translate('status.fetchingSummary', {
+        name: fallbackName,
       }),
-      detail: task?.message || translateForCurrentLanguage('status.fetchingDetail'),
+      detail: task?.message || translate('status.fetchingDetail'),
     };
   }
 
   if (stage === 'generating') {
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.generating'),
-      summary: translateForCurrentLanguage('status.generatingSummary', {
-        name: task?.stockName || task?.stockCode || '当前标的',
+      label: translate('status.generating'),
+      summary: translate('status.generatingSummary', {
+        name: fallbackName,
       }),
-      detail: task?.message || translateForCurrentLanguage('status.generatingDetail'),
+      detail: task?.message || translate('status.generatingDetail'),
     };
   }
 
   if (stage === 'notifying') {
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.notifying'),
-      summary: translateForCurrentLanguage('status.notifyingSummary', {
-        name: task?.stockName || task?.stockCode || '当前标的',
+      label: translate('status.notifying'),
+      summary: translate('status.notifyingSummary', {
+        name: fallbackName,
       }),
-      detail: task?.message || translateForCurrentLanguage('status.notifyingDetail'),
+      detail: task?.message || translate('status.notifyingDetail'),
     };
   }
 
@@ -185,22 +205,22 @@ export function getAnalysisStageDescriptor(
     const isShowingLatestResult = options.selectedReport?.meta?.stockCode === task?.stockCode;
     return {
       key: stage,
-      label: translateForCurrentLanguage('status.completed'),
-      summary: translateForCurrentLanguage('status.completedSummary', {
-        name: task?.stockName || task?.stockCode || '当前标的',
+      label: translate('status.completed'),
+      summary: translate('status.completedSummary', {
+        name: fallbackName,
       }),
       detail: isShowingLatestResult
-        ? translateForCurrentLanguage('status.completedDetailOpen')
+        ? translate('status.completedDetailOpen')
         : options.selectedReport
-          ? translateForCurrentLanguage('status.completedDetailStale')
-          : translateForCurrentLanguage('status.completedDetailDefault'),
+          ? translate('status.completedDetailStale')
+          : translate('status.completedDetailDefault'),
     };
   }
 
-  const parsedFailure = getParsedApiError(task?.error || options.globalError || '分析失败');
+  const parsedFailure = getParsedApiError(task?.error || options.globalError || translate('status.failed'));
   return {
     key: 'failed',
-    label: translateForCurrentLanguage('status.failed'),
+    label: translate('status.failed'),
     summary: parsedFailure.title,
     detail: parsedFailure.message,
   };
@@ -209,6 +229,7 @@ export function getAnalysisStageDescriptor(
 export function getStatusRelationCopy(
   task: TaskInfo | null | undefined,
   selectedReport?: AnalysisReport | null,
+  translate: TranslateFn = translateForCurrentLanguage,
 ): string | null {
   if (!task || !selectedReport?.meta?.stockCode) {
     return null;
@@ -216,12 +237,12 @@ export function getStatusRelationCopy(
 
   if (selectedReport.meta.stockCode === task.stockCode) {
     if (task.status === 'completed') {
-      return translateForCurrentLanguage('status.relationLatest');
+      return translate('status.relationLatest');
     }
-    return translateForCurrentLanguage('status.relationStale');
+    return translate('status.relationStale');
   }
 
-  return translateForCurrentLanguage('status.relationCross', {
+  return translate('status.relationCross', {
     selected: selectedReport.meta.stockCode,
     task: task.stockCode,
   });

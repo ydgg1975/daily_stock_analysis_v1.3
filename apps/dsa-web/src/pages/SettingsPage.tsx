@@ -4,8 +4,8 @@ import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
 import { ApiErrorAlert, Button, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
-import { useThemeStyle, type ThemeStylePreset } from '../components/theme/ThemeProvider';
 import { useI18n } from '../contexts/UiLanguageContext';
+import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import { useAuth, useSystemConfig } from '../hooks';
 import type { SystemConfigCategory } from '../types/systemConfig';
 import {
@@ -29,6 +29,7 @@ import {
   SettingsLoading,
   SettingsSectionCard,
 } from '../components/settings';
+import type { MarketColorConvention } from '../utils/marketColors';
 
 type SettingsDomain = 'ai_models' | 'data_sources' | 'notifications' | 'advanced';
 type RoutingTier = 'primary' | 'backup' | 'fallback';
@@ -527,32 +528,27 @@ const credentialEntryCount = (value: string, rawValueExists: boolean): number =>
   return rawValueExists ? 1 : 0;
 };
 
-const THEME_OPTIONS: Array<{
-  value: ThemeStylePreset;
+const MARKET_COLOR_OPTIONS: Array<{
+  value: MarketColorConvention;
   labelKey: string;
   descriptionKey: string;
 }> = [
   {
-    value: 'terminal',
-    labelKey: 'theme.terminal',
-    descriptionKey: 'theme.terminalDesc',
+    value: 'redDownGreenUp',
+    labelKey: 'settings.marketColorConventional',
+    descriptionKey: 'settings.marketColorConventionalDesc',
   },
   {
-    value: 'cyber',
-    labelKey: 'theme.cyber',
-    descriptionKey: 'theme.cyberDesc',
-  },
-  {
-    value: 'hacker',
-    labelKey: 'theme.hacker',
-    descriptionKey: 'theme.hackerDesc',
+    value: 'redUpGreenDown',
+    labelKey: 'settings.marketColorCn',
+    descriptionKey: 'settings.marketColorCnDesc',
   },
 ];
 
 const SettingsPage: React.FC = () => {
   const { language, setLanguage, t } = useI18n();
   const { passwordChangeable, setupState } = useAuth();
-  const { themeStyle, setThemeStyle } = useThemeStyle();
+  const { marketColorConvention, setMarketColorConvention } = useUiPreferences();
 
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
@@ -2517,16 +2513,16 @@ const SettingsPage: React.FC = () => {
           </div>
 
           <div className="settings-surface rounded-[1rem] border settings-border px-4 py-4">
-            <p className="text-sm font-semibold text-foreground">{t('settings.themeTitle')}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.themeDesc')}</p>
+            <p className="text-sm font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.marketColorDesc')}</p>
             <div className="mt-3 space-y-2">
-              {THEME_OPTIONS.map((option) => {
-                const active = themeStyle === option.value;
+              {MARKET_COLOR_OPTIONS.map((option) => {
+                const active = marketColorConvention === option.value;
                 return (
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => setThemeStyle(option.value)}
+                    onClick={() => setMarketColorConvention(option.value)}
                     className={active
                       ? 'w-full rounded-xl border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
                       : 'w-full rounded-xl border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-left hover:border-[var(--border-strong)]'}

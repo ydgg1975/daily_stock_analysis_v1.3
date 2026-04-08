@@ -1,4 +1,29 @@
 {% from '_macros.j2' import render_field_group with context %}
+{% set news_published_label = 'News Published (BJT)' if report_language == 'en' else '新闻发布时间（北京时间）' %}
+{% set score_recommendation_trend_label = 'Score / Recommendation / Trend' if report_language == 'en' else '评分 / 建议 / 趋势' %}
+{% set one_line_conclusion_label = 'One-line Conclusion' if report_language == 'en' else '一句话结论' %}
+{% set price_contract_label = 'Price Basis / Reference Session / Updated' if report_language == 'en' else '价格口径 / 参考会话 / 更新时间' %}
+{% set generated_at_label = 'Report Generated' if report_language == 'en' else '报告生成时间' %}
+{% set key_action_label = 'Key Action' if report_language == 'en' else '关键动作' %}
+{% set support_resistance_label = 'Support / Resistance' if report_language == 'en' else '关键支撑 / 关键压力' %}
+{% set latest_update_label = 'Latest Key Update' if report_language == 'en' else '最新关键更新' %}
+{% set entry_triplet_label = 'Ideal Entry / Backup Entry / Stop Loss' if report_language == 'en' else '理想买入点 / 次优买入点 / 止损位' %}
+{% set target_triplet_label = 'Target 1 / Target 2 / Target Zone' if report_language == 'en' else '目标一区 / 目标二区 / 目标区间' %}
+{% set no_position_advice_label = 'Advice Without Position' if report_language == 'en' else '空仓者建议' %}
+{% set holder_advice_label = 'Advice With Position' if report_language == 'en' else '持仓者建议' %}
+{% set checklist_summary_label = 'Checklist Summary' if report_language == 'en' else 'Checklist 摘要' %}
+{% set no_checklist_label = 'No additional checklist items' if report_language == 'en' else '无新增执行清单' %}
+{% set setup_confidence_label = 'Setup / Confidence' if report_language == 'en' else '交易场景 / 置信度' %}
+{% set market_structure_label = 'Market Structure' if report_language == 'en' else '市场结构' %}
+{% set entry_risk_control_label = 'Entry Plan / Risk Control' if report_language == 'en' else '建仓策略 / 风控策略' %}
+{% set stop_target_reason_label = 'Stop-loss Rationale / Target Rationale' if report_language == 'en' else '止损说明 / 目标说明' %}
+{% set execution_reminders_label = 'Execution Reminders' if report_language == 'en' else '执行提醒' %}
+{% set core_reasons_label = 'Core Reasons' if report_language == 'en' else '核心理由' %}
+{% set data_sources_label = 'Data Sources' if report_language == 'en' else '数据来源' %}
+{% set coverage_gaps_label = 'Coverage Gaps' if report_language == 'en' else '覆盖缺口' %}
+{% set conflicts_label = 'Status / Conflicts' if report_language == 'en' else '状态 / 冲突说明' %}
+{% set method_notes_label = 'Method Notes' if report_language == 'en' else '方法说明' %}
+{% set none_label = 'None' if report_language == 'en' else '无' %}
 # 🎯 {{ report_date }} {{ labels.dashboard_title }}
 
 > {{ labels.analyzed_prefix }} **{{ results|length }}** {{ labels.stock_unit }} | 🟢{{ labels.buy_label }}:{{ buy_count }} 🟡{{ labels.watch_label }}:{{ hold_count }} 🔴{{ labels.sell_label }}:{{ sell_count }}
@@ -7,7 +32,7 @@
 > Updated: `{{ market_timestamp_bjt or na('接口未返回') }}`
 > Session: `{{ market_session_date or na('接口未返回') }}`
 > Price basis: `{{ price_basis or na('接口未返回') }}`
-> 新闻发布时间（北京时间）: `{{ news_published_at_bjt or na('接口未返回') }}`
+> {{ news_published_label }}: `{{ news_published_at_bjt or na('接口未返回') }}`
 
 ## 📊 {{ labels.summary_heading }}
 
@@ -207,41 +232,41 @@
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
 ### Decision Summary
-- **评分 / 建议 / 趋势**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
-- **一句话结论**: {{ summary.one_line_conclusion }}
+- **{{ score_recommendation_trend_label }}**: {{ summary.score if summary.score is not none else na('接口未返回') }} / {{ summary.recommendation }} / {{ summary.trend }}
+- **{{ one_line_conclusion_label }}**: {{ summary.one_line_conclusion }}
 - **Analysis Price / 涨跌**: {{ summary.analysis_price }} | {{ summary.change_amount }} / {{ summary.change_pct }}
-- **价格口径 / 参考会话 / 更新时间**: {{ summary.price_basis }} / {{ summary.reference_session }} / {{ summary.snapshot_time }}
-- **报告生成时间**: {{ summary.report_generated_at }}
+- **{{ price_contract_label }}**: {{ summary.price_basis }} / {{ summary.reference_session }} / {{ summary.snapshot_time }}
+- **{{ generated_at_label }}**: {{ summary.report_generated_at }}
 
 ### Execution Plan
 #### Current Action
-- **关键动作**: {{ summary.key_action }}
-- **关键支撑 / 关键压力**: {{ summary.support }} / {{ summary.resistance }}
-- **最新关键更新**: {{ summary.latest_key_update }}
+- **{{ key_action_label }}**: {{ summary.key_action }}
+- **{{ support_resistance_label }}**: {{ summary.support }} / {{ summary.resistance }}
+- **{{ latest_update_label }}**: {{ summary.latest_key_update }}
 
 #### For New Positions
-- **理想买入点 / 次优买入点 / 止损位**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
-- **目标一区 / 目标二区 / 目标区间**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
-- **空仓者建议**: {{ summary.no_position_advice }}
+- **{{ entry_triplet_label }}**: {{ summary.ideal_entry }} / {{ summary.backup_entry }} / {{ summary.stop_loss }}
+- **{{ target_triplet_label }}**: {{ summary.target_one }} / {{ summary.target_two }} / {{ summary.target_zone }}
+- **{{ no_position_advice_label }}**: {{ summary.no_position_advice }}
 
 #### For Existing Positions
-- **持仓者建议**: {{ summary.holder_advice }}
-- **Checklist 摘要**: {{ summary.checklist_summary }}
+- **{{ holder_advice_label }}**: {{ summary.holder_advice }}
+- **{{ checklist_summary_label }}**: {{ summary.checklist_summary }}
 {% if summary.checklist_items %}
 {% for item in summary.checklist_items %}
 - {{ item }}
 {% endfor %}
 {% else %}
-- 无新增执行清单
+- {{ no_checklist_label }}
 {% endif %}
 
 #### Conditions & Risk Control
-- **交易场景 / 置信度**: {{ decision.setup_type }} / {{ decision.confidence }}
-- **市场结构**: {{ decision.market_structure }}
-- **建仓策略 / 风控策略**: {{ decision.build_strategy }} / {{ decision.risk_control_strategy }}
-- **止损说明 / 目标说明**: {{ decision.stop_reason }} / {{ decision.target_reason }}
+- **{{ setup_confidence_label }}**: {{ decision.setup_type }} / {{ decision.confidence }}
+- **{{ market_structure_label }}**: {{ decision.market_structure }}
+- **{{ entry_risk_control_label }}**: {{ decision.build_strategy }} / {{ decision.risk_control_strategy }}
+- **{{ stop_target_reason_label }}**: {{ decision.stop_reason }} / {{ decision.target_reason }}
 {% if decision.execution_reminders %}
-- **执行提醒**: {{ decision.execution_reminders | join('；') }}
+- **{{ execution_reminders_label }}**: {{ decision.execution_reminders | join('；') }}
 {% endif %}
 
 ### Evidence
@@ -298,7 +323,7 @@
 - {{ na('接口未返回') }}
 {% endif %}
 
-- **核心理由**:
+- **{{ core_reasons_label }}**:
 {% if reason.core_reasons %}
 {% for item in reason.core_reasons %}
   - {{ item }}
@@ -308,10 +333,10 @@
 {% endif %}
 
 ### Coverage / Audit
-- **数据来源**: {{ coverage.data_sources | join('；') if coverage.data_sources else na('接口未返回') }}
-- **覆盖缺口**: {{ coverage.coverage_gaps | join('；') if coverage.coverage_gaps else na('接口未返回') }}
-- **状态 / 冲突说明**: {{ coverage.conflict_notes | join('；') if coverage.conflict_notes else na('接口未返回') }}
-- **方法说明**: {{ coverage.method_notes | join('；') if coverage.method_notes else na('接口未返回') }}
+- **{{ data_sources_label }}**: {{ coverage.data_sources | join('；') if coverage.data_sources else na('接口未返回') }}
+- **{{ coverage_gaps_label }}**: {{ coverage.coverage_gaps | join('；') if coverage.coverage_gaps else na('接口未返回') }}
+- **{{ conflicts_label }}**: {{ coverage.conflict_notes | join('；') if coverage.conflict_notes else na('接口未返回') }}
+- **{{ method_notes_label }}**: {{ coverage.method_notes | join('；') if coverage.method_notes else na('接口未返回') }}
 
 #### Missing Field Audit (Full Truth)
 - **Missing fields total**: {{ audit.entries|length }}
@@ -323,7 +348,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 - **not_integrated_yet**:
 {% if missing_by_reason.not_integrated_yet %}
@@ -331,7 +356,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 - **source_not_provided**:
 {% if missing_by_reason.source_not_provided %}
@@ -339,7 +364,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 - **not_applicable**:
 {% if missing_by_reason.not_applicable %}
@@ -347,7 +372,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 
 ##### Integration Priority
@@ -357,7 +382,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 - **Medium Priority Missing** (VWAP / Avg Price / Beta):
 {% if missing_by_priority.medium %}
@@ -365,7 +390,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 - **Low / Conditional Missing** (Premarket / After-hours):
 {% if missing_by_priority.low %}
@@ -373,7 +398,7 @@
   - {{ item.field }}: {{ item.reason }}
 {% endfor %}
 {% else %}
-  - 无
+  - {{ none_label }}
 {% endif %}
 {% if missing_by_priority.additional %}
 - **Additional Missing Fields**:

@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, delete, desc, func, select
 
@@ -23,6 +22,19 @@ class RuleBacktestRepository:
             session.commit()
             session.refresh(run)
             return run
+
+    def update_run(self, run_id: int, **fields: Any) -> Optional[RuleBacktestRun]:
+        with self.db.get_session() as session:
+            row = session.execute(
+                select(RuleBacktestRun).where(RuleBacktestRun.id == run_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            for key, value in fields.items():
+                setattr(row, key, value)
+            session.commit()
+            session.refresh(row)
+            return row
 
     def save_trades(self, trades: List[RuleBacktestTrade]) -> int:
         if not trades:
@@ -89,12 +101,3 @@ class RuleBacktestRepository:
             ).rowcount or 0
             session.commit()
             return int(deleted)
-
-    def _json_or_none(self, value: Optional[str]) -> Dict[str, Any]:
-        if not value:
-            return {}
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}

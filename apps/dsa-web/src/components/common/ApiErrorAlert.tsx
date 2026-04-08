@@ -56,7 +56,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
           {onDismiss ? (
             <button
               type="button"
-              className="shrink-0 rounded-md border border-danger/25 bg-danger/5 px-2 py-1 text-[11px] text-danger transition hover:bg-danger/12"
+              className="shrink-0 rounded-[var(--theme-button-radius)] border border-[var(--state-danger-border)] bg-[var(--state-danger-bg)] px-2.5 py-1 text-[11px] uppercase tracking-[0.14em] text-[var(--state-danger-text)] transition hover:bg-[var(--state-danger-bg-strong)]"
               onClick={onDismiss}
             >
               {dismissLabel}
@@ -71,15 +71,15 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
       role="alert"
     >
       {showDetails ? (
-        <details className="mt-3 rounded-lg border border-subtle bg-surface-2 px-3 py-2">
-          <summary className="cursor-pointer text-xs text-danger opacity-90">查看详情</summary>
+        <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] px-3 py-3">
+          <summary className="label-uppercase cursor-pointer text-danger opacity-90">查看详情</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-danger opacity-85">
             {error.rawMessage}
           </pre>
         </details>
       ) : null}
       {guidance.length > 0 ? (
-        <ul className="mt-3 space-y-1.5 rounded-lg border border-subtle bg-surface-2 px-3 py-2 text-[11px] leading-5 text-secondary-text">
+        <ul className="theme-panel-subtle mt-3 space-y-1.5 rounded-[var(--cohere-radius-medium)] px-3 py-3 text-[11px] leading-5 text-secondary-text">
           {guidance.map((entry) => (
             <li key={entry}>• {entry}</li>
           ))}

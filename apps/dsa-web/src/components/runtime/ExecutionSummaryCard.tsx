@@ -89,68 +89,68 @@ export const ExecutionSummaryCard: React.FC<ExecutionSummaryCardProps> = ({ summ
   }
 
   return (
-    <section className="theme-panel-solid rounded-[1rem] border border-border/60 p-4" data-testid="runtime-execution-summary">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">{t('runtime.title')}</h3>
-        <span className="text-[11px] text-muted-text">{t('runtime.subtitle')}</span>
+    <section className="execution-summary theme-panel-solid" data-testid="runtime-execution-summary">
+      <div className="execution-summary__header">
+        <h3 className="execution-summary__title">{t('runtime.title')}</h3>
+        <span className="execution-summary__subtitle">{t('runtime.subtitle')}</span>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-muted-text">{t('runtime.aiLabel')}</p>
-          <p className="mt-1 text-sm text-foreground">{aiModel}</p>
-          <p className="mt-1 text-xs text-secondary-text">{t('runtime.provider')}: {aiProvider}</p>
-          <p className="text-xs text-secondary-text">{t('runtime.gateway')}: {aiGateway}</p>
-          <p className={`mt-1 text-[11px] ${TRUTH_TONE_CLASS[aiTruth]}`}>{t(`runtime.truth.${aiTruth}`)}</p>
+      <div className="execution-summary__grid">
+        <div className="execution-summary__panel">
+          <p className="execution-summary__kicker">{t('runtime.aiLabel')}</p>
+          <p className="execution-summary__value">{aiModel}</p>
+          <p className="execution-summary__meta">{t('runtime.provider')}: {aiProvider}</p>
+          <p className="execution-summary__meta">{t('runtime.gateway')}: {aiGateway}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[aiTruth]}`}>{t(`runtime.truth.${aiTruth}`)}</p>
         </div>
 
-        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-muted-text">{t('runtime.marketSource')}</p>
-          <p className="mt-1 text-sm text-foreground">{marketSource}</p>
-          <p className={`mt-1 text-[11px] ${TRUTH_TONE_CLASS[marketTruth]}`}>{t(`runtime.truth.${marketTruth}`)}</p>
+        <div className="execution-summary__panel">
+          <p className="execution-summary__kicker">{t('runtime.marketSource')}</p>
+          <p className="execution-summary__value">{marketSource}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[marketTruth]}`}>{t(`runtime.truth.${marketTruth}`)}</p>
           {summary?.data?.market?.fallbackOccurred ? (
-            <p className="mt-1 text-[11px] text-[hsl(var(--accent-warning-hsl))]">{t('runtime.fallbackOccurred')}</p>
+            <p className="execution-summary__truth text-[hsl(var(--accent-warning-hsl))]">{t('runtime.fallbackOccurred')}</p>
           ) : null}
         </div>
 
-        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-muted-text">{t('runtime.fundamentalSource')}</p>
-          <p className="mt-1 text-sm text-foreground">{fundamentalSource}</p>
-          <p className="mt-1 text-xs text-secondary-text">
+        <div className="execution-summary__panel">
+          <p className="execution-summary__kicker">{t('runtime.fundamentalSource')}</p>
+          <p className="execution-summary__value">{fundamentalSource}</p>
+          <p className="execution-summary__meta">
             {t('runtime.newsSource')}: {newsSource}
             <span className={`ml-1 ${STATUS_TONE_CLASS[newsStatus] || STATUS_TONE_CLASS.unknown}`}>
               ({t(`runtime.status.${newsStatus}`)})
             </span>
           </p>
-          <p className="text-xs text-secondary-text">
+          <p className="execution-summary__meta">
             {t('runtime.sentimentSource')}: {sentimentSource}
             <span className={`ml-1 ${STATUS_TONE_CLASS[sentimentStatus] || STATUS_TONE_CLASS.unknown}`}>
               ({t(`runtime.status.${sentimentStatus}`)})
             </span>
           </p>
-          <p className={`mt-1 text-[11px] ${TRUTH_TONE_CLASS[newsTruth]}`}>{t('runtime.newsSource')} {t(`runtime.truth.${newsTruth}`)}</p>
-          <p className={`text-[11px] ${TRUTH_TONE_CLASS[sentimentTruth]}`}>{t('runtime.sentimentSource')} {t(`runtime.truth.${sentimentTruth}`)}</p>
-          <p className={`mt-1 text-[11px] ${TRUTH_TONE_CLASS[fundamentalsTruth]}`}>{t(`runtime.truth.${fundamentalsTruth}`)}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[newsTruth]}`}>{t('runtime.newsSource')} {t(`runtime.truth.${newsTruth}`)}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[sentimentTruth]}`}>{t('runtime.sentimentSource')} {t(`runtime.truth.${sentimentTruth}`)}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[fundamentalsTruth]}`}>{t(`runtime.truth.${fundamentalsTruth}`)}</p>
         </div>
 
-        <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.08em] text-muted-text">{t('runtime.notificationLabel')}</p>
-          <p className={`mt-1 text-sm ${STATUS_TONE_CLASS[notificationStatus] || STATUS_TONE_CLASS.unknown}`}>
+        <div className="execution-summary__panel">
+          <p className="execution-summary__kicker">{t('runtime.notificationLabel')}</p>
+          <p className={`execution-summary__value ${STATUS_TONE_CLASS[notificationStatus] || STATUS_TONE_CLASS.unknown}`}>
             {t(`runtime.status.${notificationStatus}`)}
           </p>
-          <p className="mt-1 text-xs text-secondary-text">{t('runtime.channels')}: {notificationChannels}</p>
-          <p className={`mt-1 text-[11px] ${TRUTH_TONE_CLASS[notificationTruth]}`}>{t(`runtime.truth.${notificationTruth}`)}</p>
+          <p className="execution-summary__meta">{t('runtime.channels')}: {notificationChannels}</p>
+          <p className={`execution-summary__truth ${TRUTH_TONE_CLASS[notificationTruth]}`}>{t(`runtime.truth.${notificationTruth}`)}</p>
         </div>
       </div>
 
       {(summary?.steps || []).length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="execution-summary__steps">
           {(summary?.steps || []).map((step) => {
             const status = String(step.status || 'unknown').toLowerCase();
             return (
               <span
                 key={`${step.key}-${status}`}
-                className="rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-[11px] text-secondary-text"
+                className="execution-summary__step"
               >
                 {t(`runtime.step.${step.key}`)}: <span className={STATUS_TONE_CLASS[status] || STATUS_TONE_CLASS.unknown}>{t(`runtime.status.${status}`)}</span>
               </span>
@@ -158,7 +158,7 @@ export const ExecutionSummaryCard: React.FC<ExecutionSummaryCardProps> = ({ summ
           })}
         </div>
       ) : (
-        <p className="mt-3 text-xs text-muted-text">{fallbackText}</p>
+        <p className="execution-summary__empty">{fallbackText}</p>
       )}
     </section>
   );

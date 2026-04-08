@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi, DuplicateTaskError } from '../../api/analysis';
 import { historyApi } from '../../api/history';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import { ShellRailHarness } from '../../test-utils/ShellRailHarness';
 import { useStockPoolStore } from '../../stores';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
@@ -103,13 +104,17 @@ describe('HomePage', () => {
     expect(dashboard).toBeInTheDocument();
     expect(dashboard.className).toContain('workspace-page');
     expect(dashboard.className).toContain('workspace-page--home');
+    expect(screen.getByTestId('home-dashboard-layout')).toBeInTheDocument();
+    expect(screen.getByTestId('home-workflow-strip')).toBeInTheDocument();
+    expect(screen.getByTestId('home-history-column')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('输入股票代码或名称，如 600519、贵州茅台、AAPL')).toBeInTheDocument();
-    expect(await screen.findByText('趋势维持强势')).toBeInTheDocument();
+    const decisionSummary = screen.getByTestId('home-decision-summary');
+    expect(within(decisionSummary).getByText('趋势维持强势')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', {
+      screen.getAllByRole('button', {
         name: getReportText(normalizeReportLanguage(historyReport.meta.reportLanguage)).fullReport,
-      }),
-    ).toBeInTheDocument();
+      }).length,
+    ).toBeGreaterThan(0);
   });
 
   it('shows the empty report workspace when history is empty', async () => {
@@ -128,11 +133,34 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('开始分析')).toBeInTheDocument();
-    expect(
-      screen.getByText('输入股票代码进行分析，或从左侧历史列表中选择已有报告。主内容区会按总览、行情、技术、基本面、财报和作战计划顺序展开。'),
-    ).toBeInTheDocument();
+    expect((await screen.findAllByText('开始分析')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('home-decision-summary')).toBeInTheDocument();
     expect(await screen.findByText('暂无历史分析记录')).toBeInTheDocument();
+  });
+
+  it('renders the shared English workspace copy when the UI language is English', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <UiLanguageProvider>
+          <ShellRailHarness>
+            <HomePage />
+          </ShellRailHarness>
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Decision Brief')).toBeInTheDocument();
+    expect(screen.getByText('Research Status')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter a stock code or company name, for example 600519, Kweichow Moutai, AAPL')).toBeInTheDocument();
+    expect(screen.getByText('No analysis history yet')).toBeInTheDocument();
   });
 
   it('surfaces duplicate task warnings from dashboard submission', async () => {
@@ -159,7 +187,7 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '分析' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/股票 600519 正在分析中/)).toBeInTheDocument();
+      expect(screen.getAllByText(/股票 600519 正在分析中/).length).toBeGreaterThan(0);
     });
   });
 
@@ -191,6 +219,37 @@ describe('HomePage', () => {
     expect(await screen.findByTestId('analysis-status-strip')).toBeInTheDocument();
     expect(screen.getAllByText('排队中').length).toBeGreaterThan(0);
     expect(screen.getByText(/600519 已进入分析队列/)).toBeInTheDocument();
+  });
+
+  it('shows a progressive research draft scaffold immediately after analysis starts', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
+      taskId: 'task-streaming',
+      status: 'pending',
+      message: '任务已加入队列',
+    });
+
+    render(
+      <MemoryRouter>
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
+      </MemoryRouter>,
+    );
+
+    const input = await screen.findByPlaceholderText('输入股票代码或名称，如 600519、贵州茅台、AAPL');
+    fireEvent.change(input, { target: { value: '600519' } });
+    fireEvent.click(screen.getByRole('button', { name: '分析' }));
+
+    expect(await screen.findByTestId('report-generation-preview')).toBeInTheDocument();
+    expect(screen.getByText('研究报告草稿')).toBeInTheDocument();
+    expect(screen.getAllByText('决策摘要').length).toBeGreaterThan(0);
+    expect(screen.getByText('市场上下文')).toBeInTheDocument();
   });
 
   it('navigates to chat with report context when asking a follow-up question', async () => {

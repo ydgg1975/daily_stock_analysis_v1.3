@@ -795,15 +795,30 @@ python main.py --debug
 
 ## 回测功能
 
-回测模块自动对历史 AI 分析记录进行事后验证，评估分析建议的准确性。
+当前回测域拆分为两个语义明确的模块：
+
+1. **历史分析评估（Historical Analysis Evaluation）**
+   对 `AnalysisHistory` 中的历史 AI 分析记录做事后验证，评估方向判断、止盈止损命中和模拟收益。
+2. **确定性规则策略回测（Deterministic Rule Strategy Backtest）**
+   将自然语言策略先解析为结构化规则，再按显式执行假设运行真正的规则交易回放。
 
 ### 工作原理
 
-1. 选取已过冷却期（默认 14 天）的 `AnalysisHistory` 记录
-2. 获取分析日之后的日线数据（前向 K 线）
+#### A. 历史分析评估
+
+1. 选取已过成熟期（默认 14 个 calendar days）的 `AnalysisHistory` 记录
+2. 获取分析日之后的日线数据（前向 trading bars）
 3. 根据操作建议推断预期方向，与实际走势对比
 4. 评估止盈/止损命中情况，模拟执行收益
 5. 汇总为整体和单股两个维度的表现指标
+
+#### B. 确定性规则策略回测
+
+1. 解析自然语言策略为标准化 entry / exit 规则
+2. 统一加载标的历史行情，优先复用本地美股 parquet（如适用）
+3. 按显式执行假设运行规则：信号评估时点、成交时点、价格口径、仓位、手续费、滑点全部固定
+4. 生成 trade audit、权益曲线、buy-and-hold 基准和超额收益
+5. 默认异步提交任务，并通过 run id 查询状态与最终结果
 
 ### 操作建议映射
 
@@ -821,10 +836,11 @@ python main.py --debug
 | 变量 | 默认值 | 说明 |
 |------|-------|------|
 | `BACKTEST_ENABLED` | `true` | 是否在每日分析后自动运行回测 |
-| `BACKTEST_EVAL_WINDOW_DAYS` | `10` | 评估窗口（交易日数） |
-| `BACKTEST_MIN_AGE_DAYS` | `14` | 仅回测 N 天前的记录，避免数据不完整 |
+| `BACKTEST_EVAL_WINDOW_DAYS` | `10` | 历史分析评估窗口（trading bars） |
+| `BACKTEST_MIN_AGE_DAYS` | `14` | 历史分析样本成熟期（calendar days，`0` 表示不限） |
 | `BACKTEST_ENGINE_VERSION` | `v1` | 引擎版本号，升级逻辑时用于区分结果 |
 | `BACKTEST_NEUTRAL_BAND_PCT` | `2.0` | 中性区间阈值（%），±2% 内视为震荡 |
+| `US_STOCK_PARQUET_DIR` | `/root/us_test/data/normalized/us` | 本地美股 parquet 根目录；stock history、历史分析评估和规则回测会统一优先读取 |
 
 ### 自动运行
 
@@ -840,6 +856,19 @@ python main.py --debug
 | `avg_simulated_return_pct` | 平均模拟执行收益率（含止盈止损退出） |
 | `stop_loss_trigger_rate` | 止损触发率（仅统计配置了止损的记录） |
 | `take_profit_trigger_rate` | 止盈触发率（仅统计配置了止盈的记录） |
+
+### 规则回测执行假设
+
+确定性规则回测会在结果中显式返回以下假设，避免语义含糊：
+
+- `timeframe`：当前规则周期（默认 `daily`）
+- `price_basis`：信号计算价格口径（当前为 `close`）
+- `signal_evaluation_timing`：信号在 bar close 评估
+- `entry_fill_timing`：默认在 next bar open 成交
+- `exit_fill_timing`：默认在 next bar open 离场；最后一根 bar 可强制按 close 结束
+- `position_sizing`：有仓时使用 100% 资金，否则为空仓
+- `fee_bps_per_side` / `slippage_bps_per_side`：单边手续费与滑点
+- `benchmark_method`：与同窗口 buy-and-hold 对比
 
 ---
 
@@ -859,7 +888,7 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 - 📝 **配置管理** - 查看/修改自选股列表
 - 🚀 **快速分析** - 通过 API 接口触发分析
 - 📊 **实时进度** - 分析任务状态实时更新，支持多任务并行
-- 📈 **回测验证** - 评估历史分析准确率，查询方向胜率与模拟收益
+- 📈 **回测验证** - 历史分析评估 + 确定性规则策略回测，支持 run status、交易审计和 buy-and-hold 基准
 - 🔗 **API 文档** - 访问 `/docs` 查看 Swagger UI
 
 ### API 接口
@@ -870,10 +899,16 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 | `/api/v1/analysis/tasks` | GET | 查询任务列表 |
 | `/api/v1/analysis/status/{task_id}` | GET | 查询任务状态 |
 | `/api/v1/history` | GET | 查询分析历史 |
-| `/api/v1/backtest/run` | POST | 触发回测 |
-| `/api/v1/backtest/results` | GET | 查询回测结果（分页） |
-| `/api/v1/backtest/performance` | GET | 获取整体回测表现 |
-| `/api/v1/backtest/performance/{code}` | GET | 获取单股回测表现 |
+| `/api/v1/backtest/run` | POST | 触发历史分析评估 |
+| `/api/v1/backtest/prepare-samples` | POST | 按股票代码准备历史分析评估样本 |
+| `/api/v1/backtest/sample-status` | GET | 查询历史分析评估样本状态 |
+| `/api/v1/backtest/results` | GET | 查询历史分析评估结果（分页） |
+| `/api/v1/backtest/performance` | GET | 获取整体历史分析评估表现 |
+| `/api/v1/backtest/performance/{code}` | GET | 获取单股历史分析评估表现 |
+| `/api/v1/backtest/rule/parse` | POST | 解析规则策略文本 |
+| `/api/v1/backtest/rule/run` | POST | 提交或同步执行确定性规则回测 |
+| `/api/v1/backtest/rule/runs` | GET | 查询规则回测历史 |
+| `/api/v1/backtest/rule/runs/{run_id}` | GET | 查询规则回测详情 |
 | `/api/v1/stocks/extract-from-image` | POST | 从图片提取股票代码（multipart，超时 60s） |
 | `/api/v1/stocks/parse-import` | POST | 解析 CSV/Excel/剪贴板（multipart file 或 JSON `{"text":"..."}`，文件≤2MB，文本≤100KB） |
 | `/api/health` | GET | 健康检查 |
@@ -894,24 +929,37 @@ curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
 # 查询任务状态
 curl http://127.0.0.1:8000/api/v1/analysis/status/<task_id>
 
-# 触发回测（全部股票）
+# 触发历史分析评估（全部股票）
 curl -X POST http://127.0.0.1:8000/api/v1/backtest/run \
   -H 'Content-Type: application/json' \
   -d '{"force": false}'
 
-# 触发回测（指定股票）
+# 触发历史分析评估（指定股票）
 curl -X POST http://127.0.0.1:8000/api/v1/backtest/run \
   -H 'Content-Type: application/json' \
-  -d '{"code": "600519", "force": false}'
+  -d '{"code": "600519", "force": false, "eval_window_days": 10, "min_age_days": 14}'
 
-# 查询整体回测表现
+# 准备历史分析评估样本
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/prepare-samples \
+  -H 'Content-Type: application/json' \
+  -d '{"code": "AAPL", "sample_count": 60, "eval_window_days": 10, "min_age_days": 14}'
+
+# 查询整体历史分析评估表现
 curl http://127.0.0.1:8000/api/v1/backtest/performance
 
-# 查询单股回测表现
+# 查询单股历史分析评估表现
 curl http://127.0.0.1:8000/api/v1/backtest/performance/600519
 
-# 分页查询回测结果
+# 分页查询历史分析评估结果
 curl "http://127.0.0.1:8000/api/v1/backtest/results?page=1&limit=20"
+
+# 异步提交规则回测（推荐）
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/run \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"AAPL","strategy_text":"Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.","lookback_bars":252,"fee_bps":0,"slippage_bps":0,"confirmed":true,"wait_for_completion":false}'
+
+# 查询规则回测详情
+curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123
 ```
 
 ### 自定义配置
@@ -939,6 +987,12 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 - 分析完成后自动推送通知到配置的渠道
 - 此功能在 GitHub Actions 环境中会自动禁用
 - 另见 [openclaw Skill 集成指南](openclaw-skill-integration.md)
+
+### Web 产品体验说明
+
+- Web 端现在使用统一的产品壳层与设计系统：登录页、启动加载、侧边导航、首页、持仓、回测和管理员日志共享同一套排版、留白、表面层级和状态反馈语言。
+- 回测页会继续保留“历史分析评估”与“确定性规则策略回测”的语义区分，但首屏信息结构已收紧，详细审计与执行假设更多通过折叠区和下层结果区查看。
+- 移动端会统一通过抽屉导航进入各个工作区，加载态优先使用结构化骨架/状态面板，而不是分散的随机 spinner。
 
 ---
 

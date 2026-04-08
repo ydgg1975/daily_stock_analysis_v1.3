@@ -23,20 +23,20 @@ function getAdminUnlockToken(): string | null {
 }
 
 const STATUS_CLASS: Record<string, string> = {
-  running: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  completed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  failed: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-  success: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  partial_success: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  timeout_unknown: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
-  not_configured: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
-  failed_runtime: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-  empty_result: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
-  invalid_response: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-  insufficient_fields: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  switched_to_fallback: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  succeeded: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  timed_out: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  running: 'theme-log-status theme-log-status--running',
+  completed: 'theme-log-status theme-log-status--success',
+  failed: 'theme-log-status theme-log-status--danger',
+  success: 'theme-log-status theme-log-status--success',
+  partial_success: 'theme-log-status theme-log-status--warning',
+  timeout_unknown: 'theme-log-status theme-log-status--warning',
+  not_configured: 'theme-log-status',
+  failed_runtime: 'theme-log-status theme-log-status--danger',
+  empty_result: 'theme-log-status',
+  invalid_response: 'theme-log-status theme-log-status--danger',
+  insufficient_fields: 'theme-log-status theme-log-status--warning',
+  switched_to_fallback: 'theme-log-status theme-log-status--info',
+  succeeded: 'theme-log-status theme-log-status--success',
+  timed_out: 'theme-log-status theme-log-status--warning',
 };
 
 function sourceText(value?: string | null): string {
@@ -177,13 +177,13 @@ const AdminLogsPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <input
-              className="rounded-md border border-border bg-base px-2 py-1 text-sm"
+              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.stockFilter')}
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
             />
             <select
-              className="rounded-md border border-border bg-base px-2 py-1 text-sm"
+              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -198,13 +198,13 @@ const AdminLogsPage: React.FC = () => {
               <option value="system">{t('adminLogs.category.system')}</option>
             </select>
             <input
-              className="rounded-md border border-border bg-base px-2 py-1 text-sm"
+              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.keywordFilter')}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
             />
             <select
-              className="rounded-md border border-border bg-base px-2 py-1 text-sm"
+              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >

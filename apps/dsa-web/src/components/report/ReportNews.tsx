@@ -14,11 +14,14 @@ interface ReportNewsProps {
 }
 
 /**
- * 资讯区组件 - 终端风格
+ * 资讯区组件 - 产品工作台风格
  */
 export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'zh' }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
+  const loadingCopy = reportLanguage === 'en'
+    ? 'Refreshing the latest news items for this record. Please wait a moment.'
+    : '正在整理最新资讯条目，请稍候。';
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState<NewsIntelItem[]>([]);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -56,7 +59,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
           <span className="label-uppercase">{text.newsFeed}</span>
-          <h3 className="text-base font-semibold text-foreground">{text.relatedNews}</h3>
+          <h3 className="text-[1.1rem] font-normal tracking-[-0.02em] text-foreground">{text.relatedNews}</h3>
         </div>
         <div className="flex items-center gap-2">
           {isLoading && (
@@ -88,7 +91,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
           bodyClassName="mt-0"
           body={(
             <div className="flex items-center gap-2 text-xs text-secondary-text">
-              <span>正在整理最新资讯条目，请稍候。</span>
+              <span>{loadingCopy}</span>
               <div className="home-spinner h-4 w-4 animate-spin border-2" />
             </div>
           )}
@@ -114,7 +117,7 @@ export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, lan
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium leading-6 text-foreground text-left">
+                  <p className="text-[0.98rem] font-normal leading-6 tracking-[-0.01em] text-foreground text-left">
                     {item.title}
                   </p>
                   {item.snippet && (

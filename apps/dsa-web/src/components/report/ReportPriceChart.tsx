@@ -893,7 +893,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
   }, [market?.regularMetrics, summary?.changeAmount, summary?.changePct, summary?.currentPrice, t]);
 
   return (
-    <div className={chartShellClass} data-testid="report-price-chart">
+    <div className={chartShellClass} data-testid="report-price-chart" data-language={language}>
       <div className={cn('theme-chart-frame flex flex-col gap-3', integrated ? 'pt-1' : 'py-4 md:py-5')}>
         <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
@@ -908,7 +908,7 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
             <p className="mt-2 hidden text-xs leading-5 text-muted-text md:block">{t('chart.dragHint')}</p>
           </div>
 
-          <div className="theme-chart-toolbar w-full lg:ml-auto lg:w-auto lg:max-w-full">
+          <div className="theme-chart-toolbar w-full lg:ml-auto lg:w-auto lg:max-w-full" data-language={language}>
             <div className="theme-chart-toolbar-track">
               <div className="theme-chart-toolbar-tabs">
                 {VIEW_CONFIGS.map((view) => (
@@ -918,8 +918,8 @@ export const ReportPriceChart: React.FC<ReportPriceChartProps> = ({
                     onClick={() => setActiveView(view.key)}
                     className={cn('theme-chart-tab', activeView === view.key ? 'is-active' : '')}
                   >
-                    <span className="font-medium">{t(view.labelKey)}</span>
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-muted-text">{t(view.descriptionKey)}</span>
+                    <span className="theme-chart-tab__primary">{t(view.labelKey)}</span>
+                    <span className="theme-chart-tab__secondary">{t(view.descriptionKey)}</span>
                   </button>
                 ))}
               </div>

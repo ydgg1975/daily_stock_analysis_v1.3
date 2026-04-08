@@ -10,6 +10,7 @@ export type SSEEventType =
   | 'connected'
   | 'task_created'
   | 'task_started'
+  | 'task_updated'
   | 'task_completed'
   | 'task_failed'
   | 'heartbeat';
@@ -31,6 +32,8 @@ export interface UseTaskStreamOptions {
   onTaskCreated?: (task: TaskInfo) => void;
   /** Task started callback */
   onTaskStarted?: (task: TaskInfo) => void;
+  /** Task updated callback */
+  onTaskUpdated?: (task: TaskInfo) => void;
   /** Task completed callback */
   onTaskCompleted?: (task: TaskInfo) => void;
   /** Task failed callback */
@@ -66,6 +69,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
   const {
     onTaskCreated,
     onTaskStarted,
+    onTaskUpdated,
     onTaskCompleted,
     onTaskFailed,
     onConnected,
@@ -84,6 +88,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
   const callbacksRef = useRef({
     onTaskCreated,
     onTaskStarted,
+    onTaskUpdated,
     onTaskCompleted,
     onTaskFailed,
     onConnected,
@@ -95,6 +100,7 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
     callbacksRef.current = {
       onTaskCreated,
       onTaskStarted,
+      onTaskUpdated,
       onTaskCompleted,
       onTaskFailed,
       onConnected,
@@ -139,6 +145,12 @@ export function useTaskStream(options: UseTaskStreamOptions = {}): UseTaskStream
     eventSource.addEventListener('task_started', (e) => {
       const task = parseEventData(e.data);
       if (task) callbacksRef.current.onTaskStarted?.(task);
+    });
+
+    // Task updated event
+    eventSource.addEventListener('task_updated', (e) => {
+      const task = parseEventData(e.data);
+      if (task) callbacksRef.current.onTaskUpdated?.(task);
     });
 
     // Task completed event

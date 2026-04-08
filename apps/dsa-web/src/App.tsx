@@ -72,16 +72,18 @@ const AppContent: React.FC = () => {
   if (loadError) {
     content = (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-base px-4">
-        <div className="w-full max-w-lg">
+        <div className="theme-panel-glass w-full max-w-xl px-5 py-5">
           <ApiErrorAlert error={loadError} />
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void refreshStatus()}
+            >
+              {t('app.retry')}
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => void refreshStatus()}
-        >
-          {t('app.retry')}
-        </button>
       </div>
     );
   } else if (!isLoading && authEnabled && !loggedIn) {

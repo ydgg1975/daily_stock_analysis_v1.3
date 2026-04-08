@@ -8,10 +8,10 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { ThemeProvider as NextThemesProvider } from 'next-themes';
+import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes';
 
-export type ThemeStylePreset = 'terminal' | 'cyber' | 'hacker';
-type RootThemeName = 'terminal' | 'cyberpunk' | 'dos';
+export type ThemeStylePreset = 'spacex';
+type RootThemeName = 'spacex';
 
 type ThemeStyleContextValue = {
   themeStyle: ThemeStylePreset;
@@ -23,28 +23,17 @@ type ThemeProviderProps = {
 };
 
 const THEME_STYLE_STORAGE_KEY = 'dsa-theme-style';
-const DEFAULT_THEME_STYLE: ThemeStylePreset = 'terminal';
+const DEFAULT_THEME_STYLE: ThemeStylePreset = 'spacex';
 
 const ThemeStyleContext = createContext<ThemeStyleContextValue | null>(null);
 
-function isThemeStylePreset(value: string | null): value is ThemeStylePreset {
-  return value === 'terminal' || value === 'cyber' || value === 'hacker';
-}
-
 function toRootThemeName(style: ThemeStylePreset): RootThemeName {
-  if (style === 'cyber') return 'cyberpunk';
-  if (style === 'hacker') return 'dos';
-  return 'terminal';
+  return style;
 }
 
 const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeStyle, setThemeStyleState] = useState<ThemeStylePreset>(() => {
-    if (typeof window === 'undefined') {
-      return DEFAULT_THEME_STYLE;
-    }
-    const storedValue = window.localStorage.getItem(THEME_STYLE_STORAGE_KEY);
-    return isThemeStylePreset(storedValue) ? storedValue : DEFAULT_THEME_STYLE;
-  });
+  const { setTheme } = useTheme();
+  const [themeStyle] = useState<ThemeStylePreset>(DEFAULT_THEME_STYLE);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -52,14 +41,18 @@ const ThemeStyleController: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const rootTheme = toRootThemeName(themeStyle);
+    const colorMode = 'dark';
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.add('dark');
     document.documentElement.dataset.theme = rootTheme;
     document.body.dataset.theme = rootTheme;
+    document.documentElement.dataset.colorMode = colorMode;
+    document.body.dataset.colorMode = colorMode;
     window.localStorage.setItem(THEME_STYLE_STORAGE_KEY, themeStyle);
-  }, [themeStyle]);
+    void setTheme(colorMode);
+  }, [setTheme, themeStyle]);
 
-  const setThemeStyle = useCallback((value: ThemeStylePreset) => {
-    setThemeStyleState(value);
-  }, []);
+  const setThemeStyle = useCallback(() => undefined, []);
 
   const contextValue = useMemo(
     () => ({

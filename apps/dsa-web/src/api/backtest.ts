@@ -39,6 +39,8 @@ export const backtestApi = {
     if (params.lookbackBars != null) requestData.lookback_bars = params.lookbackBars;
     if (params.initialCapital != null) requestData.initial_capital = params.initialCapital;
     if (params.feeBps != null) requestData.fee_bps = params.feeBps;
+    if (params.slippageBps != null) requestData.slippage_bps = params.slippageBps;
+    if (params.waitForCompletion != null) requestData.wait_for_completion = params.waitForCompletion;
 
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/backtest/rule/run',
@@ -71,10 +73,10 @@ export const backtestApi = {
   run: async (params: BacktestRunRequest = {}): Promise<BacktestRunResponse> => {
     const requestData: Record<string, unknown> = {};
     if (params.code) requestData.code = params.code;
-    if (params.force) requestData.force = params.force;
-    if (params.evalWindowDays) requestData.eval_window_days = params.evalWindowDays;
+    if (params.force != null) requestData.force = params.force;
+    if (params.evalWindowDays != null) requestData.eval_window_days = params.evalWindowDays;
     if (params.minAgeDays != null) requestData.min_age_days = params.minAgeDays;
-    if (params.limit) requestData.limit = params.limit;
+    if (params.limit != null) requestData.limit = params.limit;
 
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/backtest/run',

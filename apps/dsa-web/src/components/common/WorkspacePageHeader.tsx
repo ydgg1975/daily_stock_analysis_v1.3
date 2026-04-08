@@ -28,13 +28,13 @@ export const WorkspacePageHeader: React.FC<WorkspacePageHeaderProps> = ({
     <div className={cn('workspace-header-layout', contentClassName)}>
       <div className="workspace-header-copy">
         {eyebrow ? (
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-text">{eyebrow}</p>
+          <p className="workspace-header-eyebrow">{eyebrow}</p>
         ) : null}
-        <h1 className={cn('mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl', titleClassName)}>
+        <h1 className={cn('workspace-header-title', titleClassName)}>
           {title}
         </h1>
         {description ? (
-          <p className={cn('mt-2 text-sm leading-6 text-secondary-text', descriptionClassName)}>
+          <p className={cn('workspace-header-description', descriptionClassName)}>
             {description}
           </p>
         ) : null}
@@ -45,6 +45,6 @@ export const WorkspacePageHeader: React.FC<WorkspacePageHeaderProps> = ({
         </div>
       ) : null}
     </div>
-    {children ? <div className="mt-4 space-y-4">{children}</div> : null}
+    {children ? <div className="mt-5 space-y-4 md:mt-6">{children}</div> : null}
   </header>
 );

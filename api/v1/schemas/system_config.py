@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, ClassVar, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -125,6 +125,8 @@ class ValidateSystemConfigResponse(BaseModel):
 
 class TestLLMChannelRequest(BaseModel):
     """Request payload for testing one LLM channel."""
+
+    __test__: ClassVar[bool] = False
 
     name: str = "channel"
     protocol: str = "openai"

@@ -18,6 +18,7 @@ try:
     from api.app import create_app
     from api.v1.endpoints.analysis import (
         trigger_analysis,
+        _handle_sync_analysis,
         _build_analysis_report,
         _load_sync_fundamental_sources,
         _format_sse_event,
@@ -25,6 +26,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency environments
     create_app = None
     trigger_analysis = None
+    _handle_sync_analysis = None
     _build_analysis_report = None
     _load_sync_fundamental_sources = None
     _format_sse_event = None
@@ -51,6 +53,48 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(
             pipeline_instance.process_single_stock.call_args.kwargs["report_type"],
             ReportType.FULL,
+        )
+
+    def test_analyze_stock_forwards_progress_callback_to_pipeline(self) -> None:
+        service = object.__new__(AnalysisService)
+        pipeline_instance = MagicMock()
+        pipeline_instance.process_single_stock.return_value = None
+        progress_callback = MagicMock()
+
+        with patch("src.config.get_config", return_value=SimpleNamespace()), \
+             patch("src.core.pipeline.StockAnalysisPipeline", return_value=pipeline_instance):
+            AnalysisService.analyze_stock(
+                service,
+                "600519",
+                report_type="detailed",
+                query_id="q-progress",
+                send_notification=False,
+                progress_callback=progress_callback,
+            )
+
+        self.assertIs(
+            pipeline_instance.process_single_stock.call_args.kwargs["progress_callback"],
+            progress_callback,
+        )
+
+    def test_analyze_stock_forwards_force_refresh_to_pipeline(self) -> None:
+        service = object.__new__(AnalysisService)
+        pipeline_instance = MagicMock()
+        pipeline_instance.process_single_stock.return_value = None
+
+        with patch("src.config.get_config", return_value=SimpleNamespace()), \
+             patch("src.core.pipeline.StockAnalysisPipeline", return_value=pipeline_instance):
+            AnalysisService.analyze_stock(
+                service,
+                "600519",
+                report_type="detailed",
+                force_refresh=True,
+                query_id="q-force-refresh",
+                send_notification=False,
+            )
+
+        self.assertTrue(
+            pipeline_instance.process_single_stock.call_args.kwargs["force_refresh"]
         )
 
     def test_report_type_full_is_preserved_in_response_metadata(self) -> None:
@@ -146,6 +190,37 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             response["report"]["details"]["standard_report"]["summary_panel"]["ticker"],
             "NVDA",
         )
+
+    def test_build_analysis_response_promotes_query_and_notification_artifacts(self) -> None:
+        service = AnalysisService()
+        notification_result = {"attempted": True, "status": "ok", "success": True}
+        response = service._build_analysis_response(
+            SimpleNamespace(
+                code="NVDA",
+                name="NVIDIA",
+                query_id="q-top-level",
+                current_price=125.3,
+                change_pct=1.87,
+                model_used="test-model",
+                analysis_summary="等待确认",
+                operation_advice="持有",
+                trend_prediction="看多",
+                sentiment_score=78,
+                news_summary="news",
+                technical_analysis="tech",
+                fundamental_analysis="fundamental",
+                risk_warning="risk",
+                report_language="zh",
+                runtime_execution={"steps": []},
+                notification_result=notification_result,
+                get_sniper_points=lambda: {},
+            ),
+            "q-fallback",
+            report_type="full",
+        )
+
+        self.assertEqual(response["query_id"], "q-top-level")
+        self.assertIs(response["notification_result"], notification_result)
 
     def test_build_analysis_report_extracts_fundamental_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
@@ -256,6 +331,33 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         mock_db.get_latest_fundamental_snapshot.assert_called_once_with(
             query_id="q_sync_001",
             code="600519",
+        )
+
+    def test_handle_sync_analysis_prefers_top_level_query_id_from_service_result(self) -> None:
+        if _handle_sync_analysis is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        fake_report = SimpleNamespace(model_dump=lambda: {"meta": {"query_id": "service-query-id"}})
+        service_result = {
+            "query_id": "service-query-id",
+            "stock_code": "600519",
+            "stock_name": "贵州茅台",
+            "report": {"meta": {"query_id": "nested-query-id"}},
+        }
+
+        with patch("src.services.analysis_service.AnalysisService") as service_cls, \
+             patch("api.v1.endpoints.analysis._load_sync_fundamental_sources", return_value=(None, None)) as load_sources, \
+             patch("api.v1.endpoints.analysis._build_analysis_report", return_value=fake_report):
+            service_cls.return_value.analyze_stock.return_value = service_result
+            response = _handle_sync_analysis(
+                "600519",
+                SimpleNamespace(report_type="detailed", force_refresh=False),
+            )
+
+        self.assertEqual(response.query_id, "service-query-id")
+        load_sources.assert_called_once_with(
+            query_id="service-query-id",
+            stock_code="600519",
         )
 
     def test_openapi_declares_single_and_batch_async_202_payloads(self) -> None:

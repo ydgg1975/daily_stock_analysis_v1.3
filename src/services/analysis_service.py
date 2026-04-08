@@ -13,9 +13,8 @@
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
-from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import (
     get_sentiment_label,
     get_localized_stock_name,
@@ -34,17 +33,14 @@ class AnalysisService:
     封装股票分析相关的业务逻辑
     """
     
-    def __init__(self):
-        """初始化分析服务"""
-        self.repo = AnalysisRepository()
-    
     def analyze_stock(
         self,
         stock_code: str,
         report_type: str = "detailed",
         force_refresh: bool = False,
         query_id: Optional[str] = None,
-        send_notification: bool = True
+        send_notification: bool = True,
+        progress_callback: Optional[Callable[[str, int, str], None]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -90,7 +86,10 @@ class AnalysisService:
                 code=stock_code,
                 skip_analysis=False,
                 single_stock_notify=send_notification,
-                report_type=rt
+                report_type=rt,
+                force_refresh=force_refresh,
+                analysis_query_id=query_id,
+                progress_callback=progress_callback,
             )
             
             if result is None:
@@ -104,29 +103,18 @@ class AnalysisService:
             logger.error(f"分析股票 {stock_code} 失败: {e}", exc_info=True)
             return None
     
-    def _build_analysis_response(
-        self, 
-        result: Any, 
+    def _build_report_payload(
+        self,
+        result: Any,
+        *,
         query_id: str,
-        report_type: str = "detailed",
+        report_type: str,
     ) -> Dict[str, Any]:
-        """
-        构建分析响应
-        
-        Args:
-            result: AnalysisResult 对象
-            query_id: 查询 ID
-            report_type: 归一化后的报告类型
-            
-        Returns:
-            格式化的响应字典
-        """
-        # 获取狙击点位
+        """Build the canonical report payload from an AnalysisResult."""
         sniper_points = {}
-        if hasattr(result, 'get_sniper_points'):
+        if hasattr(result, "get_sniper_points"):
             sniper_points = result.get_sniper_points() or {}
-        
-        # 计算情绪标签
+
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
         sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
@@ -137,9 +125,8 @@ class AnalysisService:
         except Exception as exc:
             logger.warning("构建 standard_report 失败，降级返回基础详情: %s", exc)
             standard_report = None
-        
-        # 构建报告结构
-        report = {
+
+        return {
             "meta": {
                 "query_id": query_id,
                 "stock_code": result.code,
@@ -172,10 +159,38 @@ class AnalysisService:
                 "standard_report": standard_report,
             }
         }
+
+    def _build_analysis_response(
+        self,
+        result: Any,
+        query_id: str,
+        report_type: str = "detailed",
+    ) -> Dict[str, Any]:
+        """
+        构建分析响应
         
+        Args:
+            result: AnalysisResult 对象
+            query_id: 查询 ID
+            report_type: 归一化后的报告类型
+            
+        Returns:
+            格式化的响应字典
+        """
+        report_language = normalize_report_language(getattr(result, "report_language", "zh"))
+        stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
+        resolved_query_id = str(getattr(result, "query_id", None) or query_id)
+        report = self._build_report_payload(
+            result,
+            query_id=resolved_query_id,
+            report_type=report_type,
+        )
+
         return {
             "stock_code": result.code,
             "stock_name": stock_name,
+            "query_id": resolved_query_id,
             "report": report,
             "runtime_execution": getattr(result, "runtime_execution", None),
+            "notification_result": getattr(result, "notification_result", None),
         }

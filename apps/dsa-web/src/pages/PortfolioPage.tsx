@@ -6,6 +6,7 @@ import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, WorkspacePageHeader } from '../components/common';
 import { toDateInputValue } from '../utils/format';
+import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
   PortfolioAccountItem,
   PortfolioCashDirection,
@@ -24,7 +25,7 @@ import type {
   PortfolioTradeListItem,
 } from '../types/portfolio';
 
-const PIE_COLORS = ['#00d4ff', '#00ff88', '#ffaa00', '#ff7a45', '#7f8cff', '#ff4466'];
+const PIE_COLORS = ['#f0f0fa', '#d8d8e2', '#b5b5c1', '#8d8d98', '#6b6b74', '#4c4c53'];
 const DEFAULT_PAGE_SIZE = 20;
 const FALLBACK_BROKERS: PortfolioImportBrokerItem[] = [
   { broker: 'huatai', aliases: [], displayName: '华泰' },
@@ -950,7 +951,10 @@ const PortfolioPage: React.FC = () => {
                       <td className="py-2 pr-2 text-right">{row.avgCost.toFixed(4)}</td>
                       <td className="py-2 pr-2 text-right">{row.lastPrice.toFixed(4)}</td>
                       <td className="py-2 pr-2 text-right">{formatMoney(row.marketValueBase, row.valuationCurrency)}</td>
-                      <td className={`py-2 text-right ${row.unrealizedPnlBase >= 0 ? 'text-success' : 'text-danger'}`}>
+                      <td
+                        className="py-2 text-right"
+                        style={{ color: getMarketDirectionColor(row.unrealizedPnlBase) }}
+                      >
                         {formatMoney(row.unrealizedPnlBase, row.valuationCurrency)}
                       </td>
                     </tr>

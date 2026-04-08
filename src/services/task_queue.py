@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List, Any, TYPE_CHECKING, Tuple, Literal
+from typing import Optional, Dict, List, Any, TYPE_CHECKING, Tuple, Literal, Callable
 
 if TYPE_CHECKING:
     from asyncio import Queue as AsyncQueue
@@ -226,6 +226,7 @@ class TaskInfo:
             "original_query": self.original_query,
             "selection_source": self.selection_source,
             "execution": self.execution,
+            "result": self.result,
             "execution_session_id": self.execution_session_id,
         }
     
@@ -626,6 +627,108 @@ class AnalysisTaskQueue:
             for task in self._tasks.values():
                 stats[task.status.value] = stats.get(task.status.value, 0) + 1
             return stats
+
+    @staticmethod
+    def _extract_result_artifacts(
+        task_id: str,
+        result: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        if not isinstance(result, dict):
+            return {
+                "query_id": task_id,
+                "stock_name": None,
+                "runtime_execution": None,
+                "notification_result": None,
+            }
+
+        query_id = str(result.get("query_id") or "").strip() or task_id
+        stock_name = str(result.get("stock_name") or "").strip() or None
+        return {
+            "query_id": query_id,
+            "stock_name": stock_name,
+            "runtime_execution": result.get("runtime_execution"),
+            "notification_result": result.get("notification_result"),
+        }
+
+    def _release_analyzing_stock_locked(self, task: TaskInfo) -> None:
+        dedupe_key = _dedupe_stock_code_key(task.stock_code)
+        if self._analyzing_stocks.get(dedupe_key) == task.task_id:
+            del self._analyzing_stocks[dedupe_key]
+
+    def _mark_task_processing(self, *, task_id: str, stock_code: str) -> Optional[Dict[str, Any]]:
+        with self._data_lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return None
+            task.status = TaskStatus.PROCESSING
+            task.started_at = datetime.now()
+            task.message = "正在初始化研究会话..."
+            task.progress = 5
+            task.execution = _build_configured_execution_summary()
+            task.execution_session_id = self._execution_log_service.start_session(
+                task_id=task_id,
+                stock_code=stock_code,
+                stock_name=task.stock_name,
+                configured_execution=task.execution,
+            )
+            return task.to_dict()
+
+    def _mark_task_completed(
+        self,
+        *,
+        task_id: str,
+        result: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        artifacts = self._extract_result_artifacts(task_id, result)
+        session_id: Optional[str] = None
+        with self._data_lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return None
+            task.status = TaskStatus.COMPLETED
+            task.progress = 100
+            task.completed_at = datetime.now()
+            task.result = result
+            task.execution = artifacts["runtime_execution"]
+            task.message = "分析完成"
+            task.stock_name = artifacts["stock_name"] or task.stock_name
+            session_id = task.execution_session_id
+            self._release_analyzing_stock_locked(task)
+            payload = task.to_dict()
+
+        if session_id:
+            self._execution_log_service.append_runtime_result(
+                session_id=session_id,
+                runtime_execution=artifacts["runtime_execution"],
+                notification_result=artifacts["notification_result"],
+                query_id=artifacts["query_id"],
+                overall_status="completed",
+            )
+
+        return payload
+
+    def _mark_task_failed(self, *, task_id: str, error_message: str) -> Optional[Dict[str, Any]]:
+        session_id: Optional[str] = None
+        with self._data_lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return None
+            task.status = TaskStatus.FAILED
+            task.completed_at = datetime.now()
+            task.error = error_message[:200]
+            task.message = f"分析失败: {error_message[:50]}"
+            session_id = task.execution_session_id
+            self._release_analyzing_stock_locked(task)
+            payload = task.to_dict()
+
+        if session_id:
+            self._execution_log_service.fail_session(
+                session_id=session_id,
+                error_message=error_message,
+                query_id=None,
+            )
+
+        return payload
     
     # ========== 任务执行 ==========
     
@@ -648,24 +751,19 @@ class AnalysisTaskQueue:
         Returns:
             分析结果字典
         """
-        # 更新状态为处理中
-        with self._data_lock:
-            task = self._tasks.get(task_id)
-            if not task:
-                return None
-            task.status = TaskStatus.PROCESSING
-            task.started_at = datetime.now()
-            task.message = "正在拉取行情与数据..."
-            task.progress = 10
-            task.execution = _build_configured_execution_summary()
-            task.execution_session_id = self._execution_log_service.start_session(
+        start_payload = self._mark_task_processing(task_id=task_id, stock_code=stock_code)
+        if start_payload is None:
+            return None
+
+        self._broadcast_event("task_started", start_payload)
+
+        def progress_callback(stage_key: str, progress: int, message: str) -> None:
+            self._update_task_progress(
                 task_id=task_id,
-                stock_code=stock_code,
-                stock_name=task.stock_name,
-                configured_execution=task.execution,
+                stage_key=stage_key,
+                progress=progress,
+                message=message,
             )
-        
-        self._broadcast_event("task_started", task.to_dict())
         
         try:
             # 导入分析服务（延迟导入避免循环依赖）
@@ -678,43 +776,15 @@ class AnalysisTaskQueue:
                 report_type=report_type,
                 force_refresh=force_refresh,
                 query_id=task_id,
+                progress_callback=progress_callback,
             )
             
             if result:
-                query_id = None
-                if isinstance(result, dict):
-                    report = result.get("report")
-                    if isinstance(report, dict):
-                        meta = report.get("meta")
-                        if isinstance(meta, dict):
-                            query_id = str(meta.get("query_id") or "").strip() or None
-                # 更新任务状态为完成
-                with self._data_lock:
-                    task = self._tasks.get(task_id)
-                    if task:
-                        task.status = TaskStatus.COMPLETED
-                        task.progress = 100
-                        task.completed_at = datetime.now()
-                        task.result = result
-                        task.execution = result.get("runtime_execution") if isinstance(result, dict) else None
-                        task.message = "分析完成"
-                        task.stock_name = result.get("stock_name", task.stock_name)
-                        
-                        # 从分析中集合移除
-                        dedupe_key = _dedupe_stock_code_key(task.stock_code)
-                        if dedupe_key in self._analyzing_stocks:
-                            del self._analyzing_stocks[dedupe_key]
+                completed_payload = self._mark_task_completed(task_id=task_id, result=result)
+                if completed_payload is None:
+                    return result
 
-                        if task.execution_session_id:
-                            self._execution_log_service.append_runtime_result(
-                                session_id=task.execution_session_id,
-                                runtime_execution=result.get("runtime_execution") if isinstance(result, dict) else None,
-                                notification_result=(result.get("notification_result") if isinstance(result, dict) else None),
-                                query_id=query_id,
-                                overall_status="completed",
-                            )
-                
-                self._broadcast_event("task_completed", task.to_dict())
+                self._broadcast_event("task_completed", completed_payload)
                 logger.info(f"[TaskQueue] 任务完成: {task_id} ({stock_code})")
                 
                 # 清理过期任务
@@ -728,32 +798,118 @@ class AnalysisTaskQueue:
         except Exception as e:
             error_msg = str(e)
             logger.error(f"[TaskQueue] 任务失败: {task_id} ({stock_code}), 错误: {error_msg}")
-            
-            with self._data_lock:
-                task = self._tasks.get(task_id)
-                if task:
-                    task.status = TaskStatus.FAILED
-                    task.completed_at = datetime.now()
-                    task.error = error_msg[:200]  # 限制错误信息长度
-                    task.message = f"分析失败: {error_msg[:50]}"
-                    
-                    # 从分析中集合移除
-                    dedupe_key = _dedupe_stock_code_key(task.stock_code)
-                    if dedupe_key in self._analyzing_stocks:
-                        del self._analyzing_stocks[dedupe_key]
-                    if task.execution_session_id:
-                        self._execution_log_service.fail_session(
-                            session_id=task.execution_session_id,
-                            error_message=error_msg,
-                            query_id=None,
-                        )
-            
-            self._broadcast_event("task_failed", task.to_dict())
+
+            failed_payload = self._mark_task_failed(task_id=task_id, error_message=error_msg)
+            if failed_payload is not None:
+                self._broadcast_event("task_failed", failed_payload)
             
             # 清理过期任务
             self._cleanup_old_tasks()
             
             return None
+
+    def _update_task_progress(
+        self,
+        *,
+        task_id: str,
+        stage_key: str,
+        progress: int,
+        message: str,
+    ) -> None:
+        with self._data_lock:
+            task = self._tasks.get(task_id)
+            if not task or task.status != TaskStatus.PROCESSING:
+                return
+
+            task.progress = max(0, min(int(progress), 99))
+            task.message = message
+            task.execution = self._merge_execution_stage(task.execution, stage_key=stage_key, detail=message)
+            payload = task.to_dict()
+
+        self._broadcast_event("task_updated", payload)
+
+    @staticmethod
+    def _merge_execution_stage(
+        execution: Optional[Dict[str, Any]],
+        *,
+        stage_key: str,
+        detail: str,
+    ) -> Dict[str, Any]:
+        summary = dict(execution or _build_configured_execution_summary())
+        steps = summary.get("steps")
+        if not isinstance(steps, list):
+            steps = []
+
+        stage_statuses: Dict[str, str] = {
+            "data_fetch": "unknown",
+            "ai_analysis": "unknown",
+            "notification": "unknown",
+        }
+
+        if stage_key in {"initializing", "fetching_market_data"}:
+            stage_statuses.update({
+                "data_fetch": "partial",
+                "ai_analysis": "waiting",
+            })
+        elif stage_key == "analyzing_signals":
+            stage_statuses.update({
+                "data_fetch": "ok",
+                "ai_analysis": "partial",
+            })
+        elif stage_key == "assembling_report":
+            stage_statuses.update({
+                "data_fetch": "ok",
+                "ai_analysis": "partial",
+            })
+        elif stage_key == "finalizing":
+            stage_statuses.update({
+                "data_fetch": "ok",
+                "ai_analysis": "ok",
+            })
+
+        existing_step_map: Dict[str, Dict[str, Any]] = {}
+        for step in steps:
+            if isinstance(step, dict) and step.get("key"):
+                existing_step_map[str(step["key"])] = dict(step)
+
+        notification_status = "waiting"
+        existing_notification = ((summary.get("notification") or {}) if isinstance(summary.get("notification"), dict) else {})
+        existing_notification_status = str(existing_notification.get("status") or "").strip().lower()
+        if existing_notification_status in {"not_configured", "skipped"}:
+            notification_status = existing_notification_status
+        elif stage_key == "finalizing":
+            notification_status = "waiting"
+        elif stage_key in {"assembling_report", "analyzing_signals", "fetching_market_data", "initializing"}:
+            notification_status = "waiting"
+        stage_statuses["notification"] = notification_status
+
+        step_details = {
+            "data_fetch": detail if stage_key in {"initializing", "fetching_market_data"} else existing_step_map.get("data_fetch", {}).get("detail"),
+            "ai_analysis": detail if stage_key in {"analyzing_signals", "assembling_report"} else existing_step_map.get("ai_analysis", {}).get("detail"),
+            "notification": detail if stage_key == "finalizing" else existing_step_map.get("notification", {}).get("detail"),
+        }
+
+        summary["steps"] = [
+            {
+                **existing_step_map.get("data_fetch", {}),
+                "key": "data_fetch",
+                "status": stage_statuses["data_fetch"],
+                "detail": step_details["data_fetch"],
+            },
+            {
+                **existing_step_map.get("ai_analysis", {}),
+                "key": "ai_analysis",
+                "status": stage_statuses["ai_analysis"],
+                "detail": step_details["ai_analysis"],
+            },
+            {
+                **existing_step_map.get("notification", {}),
+                "key": "notification",
+                "status": stage_statuses["notification"],
+                "detail": step_details["notification"],
+            },
+        ]
+        return summary
     
     def _cleanup_old_tasks(self) -> int:
         """

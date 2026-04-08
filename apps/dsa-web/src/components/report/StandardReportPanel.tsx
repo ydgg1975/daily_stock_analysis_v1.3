@@ -1,3 +1,8 @@
+/**
+ * SpaceX live refinement: preserves the standard-report IA and chart/execution/detail
+ * modules while allowing the homepage to suppress the duplicated hero decision summary
+ * so the chart becomes the first lower full-width module beneath the top workspace.
+ */
 import React from 'react';
 import { translateForCurrentLanguage } from '../../i18n/core';
 import type {
@@ -30,15 +35,16 @@ import {
 interface StandardReportPanelProps {
   report: AnalysisReport;
   chartFixtures?: ReportPriceChartFixtures;
+  showLeadSummary?: boolean;
 }
 
 const solidCardClass =
-  'theme-panel-solid rounded-[1.45rem] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+  'theme-panel-solid rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
 const chartLayerCardClass =
-  'theme-panel-solid rounded-[1.45rem] py-4 md:py-5 xl:py-6';
+  'theme-panel-solid rounded-[var(--cohere-radius-signature)] py-4 md:py-5 xl:py-6';
 const glassCardClass =
-  'theme-panel-glass rounded-[1.55rem] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
-const subtlePanelClass = 'theme-panel-subtle rounded-[1rem] px-3.5 py-3';
+  'theme-panel-glass rounded-[var(--cohere-radius-signature)] px-4 py-4 md:px-5 md:py-5 xl:px-6 xl:py-6';
+const subtlePanelClass = 'theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-3.5 py-3';
 const rowGridClass = 'grid gap-4 lg:grid-cols-2';
 
 const ui = translateForCurrentLanguage;
@@ -49,10 +55,10 @@ const joinLabelValue = (label: string, value: string): string => {
 };
 const renderGroupLabelClass = (): string => (
   isEnglishUi()
-    ? 'text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-text'
-    : 'text-[12px] font-semibold tracking-[0.08em] text-muted-text'
+    ? 'text-[11px] font-normal uppercase tracking-[0.12em] text-muted-text'
+    : 'text-[12px] font-normal tracking-[0.08em] text-muted-text'
 );
-const groupHeadingClass = 'text-[1.02rem] font-semibold leading-6 tracking-tight text-foreground md:text-[1.06rem]';
+const groupHeadingClass = 'text-[1.02rem] font-normal leading-6 tracking-[-0.02em] text-foreground md:text-[1.06rem]';
 
 const parseNumericValue = (value?: string | number): number | undefined => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -388,10 +394,10 @@ const changeToneClass = (changePct?: string): string => {
     return 'text-secondary-text';
   }
   if (numeric > 0) {
-    return 'text-[var(--accent-positive)]';
+    return 'text-[var(--market-up)]';
   }
   if (numeric < 0) {
-    return 'text-[var(--accent-danger)]';
+    return 'text-[var(--market-down)]';
   }
   return 'text-secondary-text';
 };
@@ -410,15 +416,15 @@ const SectionHeader: React.FC<{
     ) : null}
     <div className="flex items-start justify-between gap-3">
       {level === 2 ? (
-        <h2 className="min-w-0 text-[1.28rem] font-semibold tracking-tight text-foreground md:text-[1.48rem]">
+        <h2 className="min-w-0 text-[1.28rem] font-normal tracking-[-0.03em] text-foreground md:text-[1.48rem]">
           {title}
         </h2>
       ) : level === 4 ? (
-        <h4 className="min-w-0 text-[1.01rem] font-semibold tracking-tight text-foreground">
+        <h4 className="min-w-0 text-[1.01rem] font-normal tracking-[-0.02em] text-foreground">
           {title}
         </h4>
       ) : (
-        <h3 className="min-w-0 text-[1.08rem] font-semibold tracking-tight text-foreground">
+        <h3 className="min-w-0 text-[1.08rem] font-normal tracking-[-0.02em] text-foreground">
           {title}
         </h3>
       )}
@@ -434,13 +440,14 @@ const HeroStat: React.FC<{ label: string; value?: string | number; accent?: 'sco
   value,
   accent = 'default',
 }) => (
-  <div className="theme-panel-subtle rounded-[1rem] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
+  <div className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
     <p className={renderGroupLabelClass()}>{label}</p>
     <p
       className={cn(
-        'mt-2 font-semibold tracking-tight',
-        accent === 'score' ? 'text-[2.2rem] leading-none text-[var(--accent-primary)]' : 'text-[1.05rem] leading-7 text-foreground',
+        'mt-2 font-normal tracking-[-0.03em]',
+        accent === 'score' ? 'text-[2.05rem] leading-none text-[var(--accent-primary)]' : 'text-[1.02rem] leading-7 text-foreground',
       )}
+      style={accent === 'score' ? { fontFamily: 'var(--theme-heading-font)' } : undefined}
     >
       {softenMissingValue(typeof value === 'number' ? String(value) : value)}
     </p>
@@ -1171,7 +1178,7 @@ const DecisionSummaryHero: React.FC<{
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-            <h2 className="min-w-0 text-[1.9rem] font-semibold tracking-tight text-foreground md:text-[2.25rem]">
+            <h2 className="min-w-0 text-[1.9rem] font-normal tracking-[-0.04em] text-foreground md:text-[2.25rem]">
               {companyTitle}
             </h2>
             <span className="theme-inline-chip rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-text">
@@ -1180,10 +1187,10 @@ const DecisionSummaryHero: React.FC<{
           </div>
 
           <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
-            <p className="text-[2.35rem] font-semibold tracking-tight text-foreground md:text-[2.8rem]">
+            <p className="text-[2.35rem] font-normal tracking-[-0.05em] text-foreground md:text-[2.8rem]">
               {softenMissingValue(summary.currentPrice)}
             </p>
-            <p className={cn('pb-1 text-base font-semibold md:text-lg', changeToneClass(summary.changePct))}>
+            <p className={cn('pb-1 text-base font-normal md:text-lg', changeToneClass(summary.changePct))}>
               {softenMissingValue(summary.changeAmount)} / {softenMissingValue(summary.changePct)}
             </p>
           </div>
@@ -1325,7 +1332,11 @@ const AppendixDisclosure: React.FC<{
   </details>
 );
 
-export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report, chartFixtures }) => {
+export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({
+  report,
+  chartFixtures,
+  showLeadSummary = true,
+}) => {
   const standardReport = report.details?.standardReport;
 
   if (!standardReport) {
@@ -1345,7 +1356,7 @@ export const StandardReportPanel: React.FC<StandardReportPanelProps> = ({ report
 
   return (
     <div className="space-y-5 text-left md:space-y-6 xl:space-y-7" data-testid="standard-report-panel">
-      <DecisionSummaryHero standardReport={standardReport} report={report} />
+      {showLeadSummary ? <DecisionSummaryHero standardReport={standardReport} report={report} /> : null}
 
       <section className={cn(chartLayerCardClass)} data-testid="chart-context-layer">
         <ReportPriceChart

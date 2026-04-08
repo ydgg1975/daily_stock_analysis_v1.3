@@ -1,6 +1,12 @@
+/**
+ * SpaceX live refactor: preserves side-drawer mounting, focus escape, and body
+ * scroll locking while simplifying the shell into a quieter translucent panel
+ * with restrained header typography and lighter close controls.
+ */
 import type React from 'react';
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useId, useState } from 'react';
 import { cn } from '../../utils/cn';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 let activeDrawerCount = 0;
 
@@ -14,9 +20,6 @@ interface DrawerProps {
   side?: 'left' | 'right';
 }
 
-/**
- * Side drawer component with terminal-inspired styling.
- */
 export const Drawer: React.FC<DrawerProps> = ({
   isOpen,
   onClose,
@@ -26,6 +29,8 @@ export const Drawer: React.FC<DrawerProps> = ({
   zIndex = 50,
   side = 'right',
 }) => {
+  const { t } = useI18n();
+  const generatedId = useId();
   const [isMounted, setIsMounted] = useState(isOpen);
   const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
 
@@ -79,7 +84,7 @@ export const Drawer: React.FC<DrawerProps> = ({
 
   if (!isMounted) return null;
 
-  const titleId = title ? `drawer-title-${side}` : undefined;
+  const titleId = title ? `drawer-title-${generatedId}` : undefined;
   const sidePositionClass = side === 'left' ? 'left-0 justify-start' : 'right-0 justify-end';
   const borderClass = side === 'left' ? 'border-r' : 'border-l';
   const panelStateClass = side === 'left'
@@ -102,38 +107,37 @@ export const Drawer: React.FC<DrawerProps> = ({
         onClick={onClose}
       />
 
-      <div className={cn('absolute inset-y-0 flex w-full', sidePositionClass, width)}>
+      <div className={cn('drawer__frame absolute inset-y-0 flex w-full', sidePositionClass, width)}>
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
           className={cn(
-            'theme-modal-panel relative flex w-full flex-col transition-all duration-200 ease-out',
+            'drawer__panel theme-modal-panel relative flex w-full flex-col transition-all duration-200 ease-out',
             borderClass,
             side === 'right' ? 'border-border/70' : 'border-border/70',
             panelStateClass,
           )}
           data-state={uiState}
         >
-          <div className="flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-6 py-4">
+          <div className="drawer__header flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
             {title ? (
-              <div>
-                <span className="label-uppercase">DETAIL VIEW</span>
-                <h2 id={titleId} className="mt-1 text-lg font-semibold text-foreground">{title}</h2>
-              </div>
+              <h2 id={titleId} className="drawer__title text-base font-semibold uppercase tracking-[0.16em] text-foreground sm:text-lg">
+                {title}
+              </h2>
             ) : <div />}
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-muted)] bg-[var(--pill-bg)] text-secondary-text transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--pill-active-bg)] hover:text-foreground"
-              aria-label="关闭抽屉"
+              className="drawer__close inline-flex h-9 w-9 items-center justify-center rounded-[var(--theme-button-radius)] border border-[var(--border-muted)] bg-[var(--overlay-hover)] text-secondary-text transition-colors hover:border-[var(--border-default)] hover:bg-[var(--overlay-selected)] hover:text-foreground"
+              aria-label={t('common.closeDrawer')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto overscroll-contain p-6 [-webkit-overflow-scrolling:touch]">
+          <div className="drawer__body flex h-full min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5 [padding-bottom:max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]">
             {children}
           </div>
         </div>

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧾 **研究报告生成改为渐进式草稿体验** — 首页在异步分析启动后不再停留在泛化阻塞 loading，而是立即进入结构化“研究报告草稿”状态：后端任务队列通过 SSE 新增 `task_updated` 阶段事件并透出实时 `result`/执行摘要，前端据此按 `初始化 → 市场数据 → 信号分析 → 报告组装 → 收尾` 渐进填充报告章节，在失败时保留已呈现内容并提供重试入口，最终平滑切换到正式报告视图。
+- 📱 **Web 工作区响应式与抽屉交互进一步收口** — 首页移动端不再保留会挤压主内容的历史侧区预览，档案抽屉改为更高效的纵向层级与主滚动区，首页主操作按钮统一高度/宽度策略并移除重复档案入口；同时补齐移动端与桌面端断点切换时的抽屉/档案状态复位，避免 viewport 来回切换后残留遮挡层或错位框架。
+- 🚀 **Web 壳层切换为严格 SpaceX 设计纪律的研究工作区** — `dsa-web` 本轮不再保留“旧 dashboard 壳层 + 新皮肤”的混搭方案：主导航改为顶部极简 masthead + 移动端抽屉，历史分析从密集侧栏列表重构为独立档案抽屉与首页轻量工作区摘要，首页首屏改成面向研究流程的 command / archive / report 布局，登录页、启动加载页、报告生成态和共享按钮/输入/抽屉统一收口到黑底 + spectral white + ghost control 的受控极简语言；同时新增本地持久化“红跌绿涨 / 红涨绿跌”市场颜色约定，并同步应用到价格、涨跌幅与图表相关指标。
+- 🛰️ **Web 产品体验重构为统一设计系统** — Web 端现在以统一的 SpaceX-inspired 产品设计语言驱动整个体验：Shell、侧边导航、登录/认证入口、启动加载、状态横幅、按钮/输入/表格/弹窗等共享原语统一改为克制的黑白谱系、DIN 风格排版和低噪声交互；首页、回测、持仓、管理员日志以及共用历史/任务/报告表面同步对齐，移动端抽屉和首屏节奏也一起收口，避免“局部页面重做、整体仍然混搭”的问题。
+- 🧭 **回测域语义与工作区统一收口** — Backtest 现明确拆分为“历史分析评估”和“确定性规则策略回测”两套语义：历史评估统一把 `eval_window` 解释为 trading bars、`min_age` 解释为 calendar days；规则回测新增显式执行假设、buy-and-hold / excess return、交易审计字段与异步任务状态（`parsing / queued / running / summarizing / completed / failed`）。同时新增共享的本地美股 parquet helper，`stock_service`、历史评估 warmup / fill 路径和规则回测历史加载都统一优先读取 `US_STOCK_PARQUET_DIR`，缺失或异常时保留原有 API fallback 并输出明确日志。
 - 📚 **Backtest 工作区补齐历史与重置操作** — Backtest 页新增可配置的样本准备范围（支持更大的历史样本数）、回测运行历史列表、按 symbol 查看历史结果的回放入口，以及样本清理 / 结果清理 / 样本重建的显式控制。页面现在能区分“准备样本”“重跑结果”和“清空存量记录”，不再把这些动作混成一个模糊的 force rerun。
 - 📦 **Backtest sample warmup flow** — Settings/Backtest 页面新增显式“准备回测样本”动作：当历史分析不足以满足成熟窗口时，可先按股票代码补写可回测的历史分析样本到 `analysis_history`，再重新运行回测。该准备动作复用本地可用的历史行情数据作为输入，并保持回测主流程仍然只读取 `analysis_history` 作为候选源。
 - 📊 **Backtest run diagnostics** — `POST /api/v1/backtest/run` now returns an explicit `no_result_reason` / `no_result_message` when it writes no rows, so a 200 response no longer looks like a silent success when the candidate set is empty. The existing optional `performance` 404 handling remains unchanged; the page can now explain empty runs as “no analysis history” or “insufficient historical data” instead of showing an unexplained blank state.

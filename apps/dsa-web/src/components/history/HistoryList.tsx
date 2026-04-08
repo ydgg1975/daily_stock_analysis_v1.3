@@ -1,8 +1,8 @@
 import type React from 'react';
-import { useRef, useCallback, useEffect, useId } from 'react';
+import { useRef, useCallback, useEffect, useId, useState } from 'react';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import type { HistoryItem } from '../../types/analysis';
-import { Badge, Button, ScrollArea } from '../common';
+import { Button, ScrollArea } from '../common';
 import { HistoryListItem } from './HistoryListItem';
 
 interface HistoryListProps {
@@ -45,6 +45,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   embedded = false,
 }) => {
   const { t } = useI18n();
+  const [manageMode, setManageMode] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -79,34 +81,26 @@ export const HistoryList: React.FC<HistoryListProps> = ({
     [hasMore, isLoading, isLoadingMore, onLoadMore],
   );
 
-  const handleAsideWheelCapture = useCallback<React.WheelEventHandler<HTMLElement>>((event) => {
-    if (event.defaultPrevented) {
-      return;
-    }
-
-    const viewport = scrollContainerRef.current;
+  const applyWheelScroll = useCallback((viewport: HTMLDivElement | null, deltaY: number): boolean => {
     if (!viewport) {
-      return;
+      return false;
     }
 
     const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
     if (maxScrollTop <= 0) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
+      return true;
     }
 
     const nextScrollTop = Math.min(
       maxScrollTop,
-      Math.max(0, viewport.scrollTop + event.deltaY),
+      Math.max(0, viewport.scrollTop + deltaY),
     );
 
     if (nextScrollTop !== viewport.scrollTop) {
       viewport.scrollTop = nextScrollTop;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
+    return true;
   }, []);
 
   useEffect(() => {
@@ -126,35 +120,16 @@ export const HistoryList: React.FC<HistoryListProps> = ({
 
   useEffect(() => {
     const viewport = scrollContainerRef.current;
+    const panel = panelRef.current;
     if (!viewport) {
       return;
     }
 
     const handleWheel = (event: WheelEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-      if (!event.cancelable) {
+      if (event.defaultPrevented || !applyWheelScroll(viewport, event.deltaY)) {
         return;
       }
 
-      const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-      if (maxScrollTop <= 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-
-      const nextScrollTop = Math.min(
-        maxScrollTop,
-        Math.max(0, viewport.scrollTop + event.deltaY),
-      );
-
-      if (nextScrollTop !== viewport.scrollTop) {
-        viewport.scrollTop = nextScrollTop;
-      }
-
-      // Always consume wheel inside history viewport to prevent page scroll chaining.
       event.preventDefault();
       event.stopPropagation();
     };
@@ -163,22 +138,30 @@ export const HistoryList: React.FC<HistoryListProps> = ({
       event.stopPropagation();
     };
 
+    panel?.addEventListener('wheel', handleWheel, { passive: false });
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     viewport.addEventListener('touchstart', stopTouchBubble, { passive: true });
     viewport.addEventListener('touchmove', stopTouchBubble, { passive: true });
 
     return () => {
+      panel?.removeEventListener('wheel', handleWheel);
       viewport.removeEventListener('wheel', handleWheel);
       viewport.removeEventListener('touchstart', stopTouchBubble);
       viewport.removeEventListener('touchmove', stopTouchBubble);
     };
-  }, []);
+  }, [applyWheelScroll]);
 
   useEffect(() => {
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate = someVisibleSelected;
     }
   }, [someVisibleSelected]);
+
+  useEffect(() => {
+    if (selectedCount === 0 && !isDeleting) {
+      selectAllRef.current?.removeAttribute('aria-busy');
+    }
+  }, [isDeleting, selectedCount]);
 
   useEffect(() => {
     if (!highlightedId) {
@@ -195,55 +178,50 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   }, [highlightedId, items]);
 
   const wrapperClass = embedded
-    ? `theme-panel-solid min-h-0 h-full flex flex-1 flex-col overflow-hidden rounded-[1rem] ${className}`
-    : `theme-panel-solid min-h-0 flex flex-1 flex-col overflow-hidden rounded-[1rem] ${className}`;
+    ? `history-archive-panel min-h-0 h-full flex flex-1 flex-col overflow-hidden ${className}`
+    : `history-archive-panel min-h-0 flex flex-1 flex-col overflow-hidden ${className}`;
 
   return (
-    <aside className={wrapperClass} onWheelCapture={handleAsideWheelCapture}>
-      {embedded ? (
-        <div className="theme-sidebar-divider flex items-center justify-between border-b px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <svg className="h-3.5 w-3.5 theme-accent-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary-text">
-              {t('history.title')}
-            </h2>
-          </div>
-          {selectedCount > 0 ? (
-            <Badge variant="info" size="sm" className="animate-in fade-in zoom-in duration-200">
+    <aside
+      ref={panelRef}
+      className={wrapperClass}
+      data-embedded={embedded ? 'true' : 'false'}
+    >
+      <div className="history-archive-panel__header">
+        <div>
+          <p className="history-archive-panel__eyebrow">{t('shell.archiveEyebrow')}</p>
+          <h2 className="history-archive-panel__title">{t('history.title')}</h2>
+        </div>
+        <div className="history-archive-panel__actions">
+          {manageMode && selectedCount > 0 ? (
+            <span className="history-archive-panel__count">
               {t('history.selected', { count: selectedCount })}
-            </Badge>
+            </span>
+          ) : null}
+          {items.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setManageMode((current) => !current)}
+              className="history-archive-panel__utility"
+            >
+              {manageMode ? t('history.done') : t('history.manage')}
+            </button>
           ) : null}
         </div>
-      ) : null}
+      </div>
       <ScrollArea
         viewportRef={scrollContainerRef}
-        viewportClassName={embedded ? 'history-scroll-viewport h-full min-h-0 overflow-y-scroll px-1.5 pb-2' : 'history-scroll-viewport h-full min-h-0 p-4'}
+        viewportClassName={embedded
+          ? 'history-scroll-viewport history-scroll-viewport--archive h-full min-h-0 overflow-y-scroll px-0 pb-2'
+          : 'history-scroll-viewport history-scroll-viewport--archive h-full min-h-0 px-0 pb-2'}
         testId="home-history-list-scroll"
         onScroll={handleScroll}
       >
-        <div className={embedded ? 'mb-2 space-y-2 px-2.5 pt-2.5' : 'mb-4 space-y-3'}>
-          {!embedded ? (
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-secondary-text">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {t('history.title')}
-              </h2>
-              {selectedCount > 0 && (
-                <Badge variant="info" size="sm" className="animate-in fade-in zoom-in duration-200">
-                  {t('history.selected', { count: selectedCount })}
-                </Badge>
-              )}
-            </div>
-          ) : null}
-
-          {items.length > 0 && (
-            <div className="flex items-center gap-2">
+        <div className="history-archive-panel__body">
+          {manageMode && items.length > 0 ? (
+            <div className="history-archive-panel__manage">
               <label
-                className="flex flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 py-0.5"
+                className="history-archive-panel__select-all"
                 htmlFor={selectAllId}
               >
                 <input
@@ -256,7 +234,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   aria-label={t('history.currentLoaded')}
                   className="theme-checkbox"
                 />
-                <span className="select-none text-[11px] text-muted-text">{t('history.selectAllLoaded')}</span>
+                <span>{t('history.selectAllLoaded')}</span>
               </label>
               <Button
                 variant="danger-subtle"
@@ -264,36 +242,38 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                 onClick={onDeleteSelected}
                 disabled={selectedCount === 0 || isDeleting}
                 isLoading={isDeleting}
-                className="h-6 px-2 text-[9px] disabled:!border-transparent disabled:!bg-transparent"
+                className="history-archive-panel__delete"
               >
                 {isDeleting ? t('history.deleting') : t('history.delete')}
               </Button>
             </div>
-          )}
+          ) : null}
+
+          {items.length > 0 ? (
+            <p className="history-archive-panel__caption">
+              {t('history.archiveHint')}
+            </p>
+          ) : null}
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-10">
-            <div className="home-spinner h-6 w-6 animate-spin border-2" />
+          <div className="history-archive-state">
+            <div className="history-archive-state__pulse" />
+            <p>{t('history.loading')}</p>
           </div>
         ) : items.length === 0 ? (
-          <div className="space-y-3 py-12 text-center">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-subtle text-muted-text/30">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-secondary-text">{t('history.emptyTitle')}</p>
-              <p className="text-xs text-muted-text">{t('history.emptyBody')}</p>
-            </div>
+          <div className="history-archive-state">
+            <p className="history-archive-state__title">{t('history.emptyTitle')}</p>
+            <p>{t('history.emptyBody')}</p>
           </div>
         ) : (
-          <div className={embedded ? 'space-y-1.5 px-2.5 pb-3' : 'space-y-2'}>
+          <div className="history-archive-list">
             {items.map((item) => (
               <HistoryListItem
                 key={item.id}
                 item={item}
+                embedded={embedded}
+                manageMode={manageMode}
                 isViewing={selectedId === item.id}
                 isHighlighted={highlightedId === item.id}
                 isChecked={selectedIds.has(item.id)}
@@ -306,15 +286,15 @@ export const HistoryList: React.FC<HistoryListProps> = ({
             <div ref={loadMoreTriggerRef} className="h-4" />
             
             {isLoadingMore && (
-              <div className="flex justify-center py-4">
-                <div className="home-spinner h-5 w-5 animate-spin border-2" />
+              <div className="history-archive-state history-archive-state--compact">
+                <div className="history-archive-state__pulse" />
+                <p>{t('history.loadingMore')}</p>
               </div>
             )}
 
             {!hasMore && items.length > 0 && (
-              <div className="text-center py-5">
-                <div className="h-px bg-subtle w-full mb-3" />
-                <span className="text-[10px] text-muted-text/50 uppercase tracking-[0.2em]">{t('history.bottom')}</span>
+              <div className="history-archive-bottom">
+                <span>{t('history.bottom')}</span>
               </div>
             )}
           </div>

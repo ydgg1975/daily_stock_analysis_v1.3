@@ -79,6 +79,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(result.metrics["trade_count"], 0)
         self.assertIsNone(result.no_result_reason)
         self.assertGreater(len(result.equity_curve), 0)
+        self.assertIn("buy_and_hold_return_pct", result.metrics)
+        self.assertIn("excess_return_vs_buy_and_hold_pct", result.metrics)
+        self.assertEqual(result.execution_assumptions.indicator_price_basis, "close")
+        self.assertEqual(result.execution_assumptions.entry_fill_timing, "next_bar_open")
 
     def test_service_generates_fallback_ai_summary_and_persists_runs(self) -> None:
         service = RuleBacktestService(self.db)
@@ -98,10 +102,51 @@ class RuleBacktestTestCase(unittest.TestCase):
         history = service.list_runs(code="600519", page=1, limit=10)
         self.assertEqual(history["total"], 1)
         self.assertEqual(history["items"][0]["trade_count"], response["trade_count"])
+        self.assertIn("buy_and_hold_return_pct", history["items"][0])
+        self.assertIn("execution_assumptions", history["items"][0])
 
         detail = service.get_run(history["items"][0]["id"])
         self.assertIsNotNone(detail)
         self.assertEqual(len(detail["trades"]), response["trade_count"])
+        self.assertGreaterEqual(len(detail["status_history"]), 1)
+        self.assertIn(detail["status"], {"completed"})
+        if detail["trades"]:
+            first_trade = detail["trades"][0]
+            self.assertIn("entry_trigger", first_trade)
+            self.assertIn("price_basis", first_trade)
+            self.assertIn("holding_bars", first_trade)
+
+    def test_submit_and_process_backtest_records_async_status_history(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            submitted = service.submit_backtest(
+                code="600519",
+                strategy_text=strategy_text,
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+            self.assertIn(submitted["status"], {"parsing", "queued"})
+            self.assertGreaterEqual(len(submitted["status_history"]), 1)
+
+            service.process_submitted_run(submitted["id"])
+
+        detail = service.get_run(submitted["id"])
+        self.assertIsNotNone(detail)
+        assert detail is not None
+        self.assertEqual(detail["status"], "completed")
+        self.assertGreaterEqual(len(detail["status_history"]), 3)
+        self.assertEqual(detail["summary"]["request"]["lookback_bars"], 20)
+        self.assertEqual(detail["summary"]["request"]["confirmed"], True)
+        self.assertIn("execution_assumptions", detail["summary"])
+        statuses = [item.get("status") for item in detail["status_history"]]
+        self.assertIn("running", statuses)
+        self.assertIn("summarizing", statuses)
+        self.assertIn("completed", statuses)
+        self.assertIn("buy_and_hold_return_pct", detail)
+        self.assertIn("excess_return_vs_buy_and_hold_pct", detail)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ import json
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone, time as clock_time
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -298,7 +298,13 @@ class StockAnalysisPipeline:
             market_timestamp = market_timestamp.replace(tzinfo=market_tz)
         return market_timestamp.astimezone(market_tz).date().isoformat()
     
-    def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
+    def analyze_stock(
+        self,
+        code: str,
+        report_type: ReportType,
+        query_id: str,
+        progress_callback: Optional[Callable[[str, int, str], None]] = None,
+    ) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
         
@@ -342,6 +348,13 @@ class StockAnalysisPipeline:
                 "ai_attempt_chain": [],
                 "failure_reasons": [],
             }
+
+            self._emit_progress(
+                progress_callback,
+                "fetching_market_data",
+                18,
+                "正在获取行情、技术与基础上下文...",
+            )
 
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
@@ -701,8 +714,14 @@ class StockAnalysisPipeline:
                 'sma60': tech.get("ma60", {}).get("value", 'N/A'),
                 'sources': {k: v.get("source") for k, v in tech.items() if isinstance(v, dict)},
             }
-            
-            
+
+            self._emit_progress(
+                progress_callback,
+                "analyzing_signals",
+                46,
+                "正在分析价格信号、基本面与新闻证据...",
+            )
+
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             result = self.analyzer.analyze(enhanced_context, news_context=news_context)
             if result:
@@ -738,6 +757,12 @@ class StockAnalysisPipeline:
             # Step 8: 保存分析历史记录
             if result:
                 try:
+                    self._emit_progress(
+                        progress_callback,
+                        "assembling_report",
+                        72,
+                        "正在组装研究报告结构与结论层...",
+                    )
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
                         news_content=news_context,
@@ -3735,6 +3760,150 @@ class StockAnalysisPipeline:
             })
 
         return context
+
+    @staticmethod
+    def _emit_progress(
+        progress_callback: Optional[Callable[[str, int, str], None]],
+        stage_key: str,
+        progress: int,
+        message: str,
+    ) -> None:
+        if progress_callback:
+            progress_callback(stage_key, progress, message)
+
+    def _get_available_notification_channels(self) -> List[str]:
+        if not self.notifier.is_available():
+            return []
+        try:
+            return [
+                channel.value for channel in (self.notifier.get_available_channels() or [])
+            ]
+        except Exception:
+            return []
+
+    @staticmethod
+    def _build_notification_result(
+        *,
+        notifier_available: bool,
+        channels: List[str],
+    ) -> Dict[str, Any]:
+        return {
+            "attempted": False,
+            "status": "unknown" if notifier_available else "not_configured",
+            "success": None,
+            "channels": channels,
+            "truth": "actual",
+            "attempts": [],
+        }
+
+    def _render_single_stock_notification_report(
+        self,
+        *,
+        code: str,
+        result: AnalysisResult,
+        report_type: ReportType,
+    ) -> str:
+        if report_type == ReportType.FULL:
+            logger.info(f"[{code}] 使用完整报告格式")
+            return self.notifier.generate_dashboard_report([result])
+        if report_type == ReportType.BRIEF:
+            logger.info(f"[{code}] 使用简洁报告格式")
+            return self.notifier.generate_brief_report([result])
+
+        logger.info(f"[{code}] 使用精简报告格式")
+        return self.notifier.generate_single_stock_report(result)
+
+    def _notify_single_stock_result(
+        self,
+        *,
+        code: str,
+        result: AnalysisResult,
+        report_type: ReportType,
+    ) -> Dict[str, Any]:
+        channels = self._get_available_notification_channels()
+        notification_result = self._build_notification_result(
+            notifier_available=self.notifier.is_available(),
+            channels=channels,
+        )
+        if not self.notifier.is_available():
+            return notification_result
+
+        primary_channel = channels[0] if channels else "notification"
+        try:
+            report_content = self._render_single_stock_notification_report(
+                code=code,
+                result=result,
+                report_type=report_type,
+            )
+            push_ok = self.notifier.send(report_content, email_stock_codes=[code])
+            notification_result.update(
+                {
+                    "attempted": True,
+                    "status": "ok" if push_ok else "failed",
+                    "success": bool(push_ok),
+                    "attempts": [
+                        {
+                            "sequence": 1,
+                            "channel": primary_channel,
+                            "action": "succeeded" if push_ok else "failed",
+                            "result": "succeeded" if push_ok else "failed",
+                            "message": (
+                                f"Notification sent via {primary_channel}."
+                                if push_ok
+                                else f"Notification failed via {primary_channel}."
+                            ),
+                        }
+                    ],
+                }
+            )
+            if push_ok:
+                logger.info(f"[{code}] 单股推送成功")
+            else:
+                logger.warning(f"[{code}] 单股推送失败")
+        except Exception as exc:
+            notification_result.update(
+                {
+                    "attempted": True,
+                    "status": "failed",
+                    "success": False,
+                    "error": str(exc),
+                    "attempts": [
+                        {
+                            "sequence": 1,
+                            "channel": primary_channel,
+                            "action": "failed",
+                            "result": "timeout" if "timeout" in str(exc).lower() else "failed",
+                            "reason": str(exc),
+                            "message": f"Notification exception via {primary_channel}: {exc}",
+                        }
+                    ],
+                }
+            )
+            logger.error(f"[{code}] 单股推送异常: {exc}")
+        return notification_result
+
+    def _finalize_notification_result(
+        self,
+        *,
+        result: AnalysisResult,
+        notification_result: Dict[str, Any],
+    ) -> None:
+        result.notification_result = notification_result
+
+        try:
+            from src.services.execution_log_service import classify_notification_state
+            notification_result["delivery_classification"] = classify_notification_state(notification_result)
+        except Exception:
+            pass
+
+        if isinstance(getattr(result, "runtime_execution", None), dict):
+            result.runtime_execution["notification"] = notification_result
+            steps = result.runtime_execution.get("steps")
+            if isinstance(steps, list):
+                for step in steps:
+                    if isinstance(step, dict) and step.get("key") == "notification":
+                        step["status"] = str(notification_result.get("status") or "unknown")
+                        break
     
     def process_single_stock(
         self,
@@ -3742,7 +3911,9 @@ class StockAnalysisPipeline:
         skip_analysis: bool = False,
         single_stock_notify: bool = False,
         report_type: ReportType = ReportType.SIMPLE,
+        force_refresh: bool = False,
         analysis_query_id: Optional[str] = None,
+        progress_callback: Optional[Callable[[str, int, str], None]] = None,
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -3761,6 +3932,7 @@ class StockAnalysisPipeline:
             skip_analysis: 是否跳过 AI 分析
             single_stock_notify: 是否启用单股推送模式（每分析完一只立即推送）
             report_type: 报告类型枚举（从配置读取，Issue #119）
+            force_refresh: 是否强制刷新行情数据缓存
 
         Returns:
             AnalysisResult 或 None
@@ -3769,7 +3941,13 @@ class StockAnalysisPipeline:
         
         try:
             # Step 1: 获取并保存数据
-            success, error = self.fetch_and_save_stock_data(code)
+            self._emit_progress(
+                progress_callback,
+                "fetching_market_data",
+                18,
+                "正在准备行情、技术与数据抓取...",
+            )
+            success, error = self.fetch_and_save_stock_data(code, force_refresh=force_refresh)
             
             if not success:
                 logger.warning(f"[{code}] 数据获取失败: {error}")
@@ -3781,7 +3959,12 @@ class StockAnalysisPipeline:
                 return None
             
             effective_query_id = analysis_query_id or self.query_id or uuid.uuid4().hex
-            result = self.analyze_stock(code, report_type, query_id=effective_query_id)
+            result = self.analyze_stock(
+                code,
+                report_type,
+                query_id=effective_query_id,
+                progress_callback=progress_callback,
+            )
             
             if result:
                 if not result.success:
@@ -3795,85 +3978,21 @@ class StockAnalysisPipeline:
                     )
                 
                 # 单股推送模式（#55）：每分析完一只股票立即推送
+                self._emit_progress(
+                    progress_callback,
+                    "finalizing",
+                    88,
+                    "正在校验结论、同步归档并完成交付...",
+                )
+
                 if single_stock_notify:
-                    available_channels = []
-                    try:
-                        available_channels = [
-                            channel.value for channel in (self.notifier.get_available_channels() or [])
-                        ] if self.notifier.is_available() else []
-                    except Exception:
-                        available_channels = []
-
-                    notification_result: Dict[str, Any] = {
-                        "attempted": False,
-                        "status": "not_configured" if not self.notifier.is_available() else "unknown",
-                        "success": None,
-                        "channels": available_channels,
-                        "truth": "actual",
-                        "attempts": [],
-                    }
-
-                    if self.notifier.is_available():
-                        try:
-                            # 根据报告类型选择生成方法
-                            if report_type == ReportType.FULL:
-                                report_content = self.notifier.generate_dashboard_report([result])
-                                logger.info(f"[{code}] 使用完整报告格式")
-                            elif report_type == ReportType.BRIEF:
-                                report_content = self.notifier.generate_brief_report([result])
-                                logger.info(f"[{code}] 使用简洁报告格式")
-                            else:
-                                report_content = self.notifier.generate_single_stock_report(result)
-                                logger.info(f"[{code}] 使用精简报告格式")
-
-                            push_ok = self.notifier.send(report_content, email_stock_codes=[code])
-                            notification_result.update(
-                                {
-                                    "attempted": True,
-                                    "status": "ok" if push_ok else "failed",
-                                    "success": bool(push_ok),
-                                    "attempts": [
-                                        {
-                                            "sequence": 1,
-                                            "channel": (available_channels[0] if available_channels else "notification"),
-                                            "action": "succeeded" if push_ok else "failed",
-                                            "result": "succeeded" if push_ok else "failed",
-                                            "message": (
-                                                f"Notification sent via {(available_channels[0] if available_channels else 'notification')}."
-                                                if push_ok
-                                                else f"Notification failed via {(available_channels[0] if available_channels else 'notification')}."
-                                            ),
-                                        }
-                                    ],
-                                }
-                            )
-                            if push_ok:
-                                logger.info(f"[{code}] 单股推送成功")
-                            else:
-                                logger.warning(f"[{code}] 单股推送失败")
-                        except Exception as e:
-                            notification_result.update(
-                                {
-                                    "attempted": True,
-                                    "status": "failed",
-                                    "success": False,
-                                    "error": str(e),
-                                    "attempts": [
-                                        {
-                                            "sequence": 1,
-                                            "channel": (available_channels[0] if available_channels else "notification"),
-                                            "action": "failed",
-                                            "result": "timeout" if "timeout" in str(e).lower() else "failed",
-                                            "reason": str(e),
-                                            "message": f"Notification exception via {(available_channels[0] if available_channels else 'notification')}: {e}",
-                                        }
-                                    ],
-                                }
-                            )
-                            logger.error(f"[{code}] 单股推送异常: {e}")
-                    result.notification_result = notification_result
+                    notification_result = self._notify_single_stock_result(
+                        code=code,
+                        result=result,
+                        report_type=report_type,
+                    )
                 else:
-                    result.notification_result = {
+                    notification_result = {
                         "attempted": False,
                         "status": "skipped",
                         "success": None,
@@ -3882,21 +4001,10 @@ class StockAnalysisPipeline:
                         "attempts": [],
                     }
 
-                try:
-                    from src.services.execution_log_service import classify_notification_state
-                    if isinstance(result.notification_result, dict):
-                        result.notification_result["delivery_classification"] = classify_notification_state(result.notification_result)
-                except Exception:
-                    pass
-
-                if isinstance(getattr(result, "runtime_execution", None), dict):
-                    result.runtime_execution["notification"] = result.notification_result
-                    steps = result.runtime_execution.get("steps")
-                    if isinstance(steps, list):
-                        for step in steps:
-                            if isinstance(step, dict) and step.get("key") == "notification":
-                                step["status"] = str((result.notification_result or {}).get("status") or "unknown")
-                                break
+                self._finalize_notification_result(
+                    result=result,
+                    notification_result=notification_result,
+                )
             
             return result
             
@@ -3960,18 +4068,15 @@ class StockAnalysisPipeline:
         # 单股推送模式（#55）：从配置读取
         single_stock_notify = getattr(self.config, 'single_stock_notify', False)
         # Issue #119: 从配置读取报告类型
-        report_type_str = getattr(self.config, 'report_type', 'simple').lower()
-        if report_type_str == 'brief':
-            report_type = ReportType.BRIEF
-        elif report_type_str == 'full':
-            report_type = ReportType.FULL
-        else:
-            report_type = ReportType.SIMPLE
+        configured_report_type = getattr(self.config, "report_type", "simple")
+        report_type = ReportType.from_str(configured_report_type)
         # Issue #128: 从配置读取分析间隔
         analysis_delay = getattr(self.config, 'analysis_delay', 0)
 
         if single_stock_notify:
-            logger.info(f"已启用单股推送模式：每分析完一只股票立即推送（报告类型: {report_type_str}）")
+            logger.info(
+                f"已启用单股推送模式：每分析完一只股票立即推送（报告类型: {report_type.value}）"
+            )
         
         results: List[AnalysisResult] = []
         

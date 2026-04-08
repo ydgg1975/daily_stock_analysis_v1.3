@@ -13,7 +13,7 @@
 from typing import Optional, List, Any
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
 
 
@@ -27,16 +27,30 @@ class TaskStatusEnum(str, Enum):
 
 class AnalyzeRequest(BaseModel):
     """Analysis request parameters"""
-    
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "stock_code": "600519",
+                "report_type": "detailed",
+                "force_refresh": False,
+                "async_mode": False,
+                "stock_name": "贵州茅台",
+                "original_query": "茅台",
+                "selection_source": "autocomplete",
+            }
+        }
+    )
+
     stock_code: Optional[str] = Field(
-        None, 
-        description="单只股票代码", 
-        example="600519"
+        None,
+        description="单只股票代码",
+        json_schema_extra={"example": "600519"},
     )
     stock_codes: Optional[List[str]] = Field(
-        None, 
+        None,
         description="多只股票代码（与 stock_code 二选一）",
-        example=["600519", "000858"]
+        json_schema_extra={"example": ["600519", "000858"]},
     )
     report_type: str = Field(
         "detailed",
@@ -54,37 +68,41 @@ class AnalyzeRequest(BaseModel):
     stock_name: Optional[str] = Field(
         None,
         description="用户选中的股票名称（自动补全时提供）",
-        example="贵州茅台"
+        json_schema_extra={"example": "贵州茅台"},
     )
     original_query: Optional[str] = Field(
         None,
         description="用户原始输入（如茅台、gzmt、600519）",
-        example="茅台"
+        json_schema_extra={"example": "茅台"},
     )
     selection_source: Optional[str] = Field(
         None,
         description="股票选择来源：manual(手动输入) | autocomplete(自动补全) | import(导入) | image(图片识别)",
         pattern=SELECTION_SOURCE_PATTERN,
-        example="autocomplete"
+        json_schema_extra={"example": "autocomplete"},
     )
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "600519",
-                "report_type": "detailed",
-                "force_refresh": False,
-                "async_mode": False,
-                "stock_name": "贵州茅台",
-                "original_query": "茅台",
-                "selection_source": "autocomplete"
-            }
-        }
 
 
 class AnalysisResultResponse(BaseModel):
     """分析结果响应模型"""
-    
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "query_id": "abc123def456",
+                "stock_code": "600519",
+                "stock_name": "贵州茅台",
+                "report": {
+                    "summary": {
+                        "sentiment_score": 75,
+                        "operation_advice": "持有",
+                    }
+                },
+                "created_at": "2024-01-01T12:00:00",
+            }
+        }
+    )
+
     query_id: str = Field(..., description="分析记录唯一标识")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
@@ -94,27 +112,21 @@ class AnalysisResultResponse(BaseModel):
     market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
     news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
     report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "query_id": "abc123def456",
-                "stock_code": "600519",
-                "stock_name": "贵州茅台",
-                "report": {
-                    "summary": {
-                        "sentiment_score": 75,
-                        "operation_advice": "持有"
-                    }
-                },
-                "created_at": "2024-01-01T12:00:00"
-            }
-        }
 
 
 class TaskAccepted(BaseModel):
     """异步任务接受响应"""
-    
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "task_id": "task_abc123",
+                "status": "pending",
+                "message": "Analysis task accepted",
+            }
+        }
+    )
+
     task_id: str = Field(..., description="任务 ID，用于查询状态")
     status: str = Field(
         ..., 
@@ -122,19 +134,21 @@ class TaskAccepted(BaseModel):
         pattern="^(pending|processing)$"
     )
     message: Optional[str] = Field(None, description="提示信息")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "status": "pending",
-                "message": "Analysis task accepted"
-            }
-        }
 
 
 class BatchTaskAcceptedItem(BaseModel):
     """批量异步任务中的单个成功提交项。"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "task_id": "task_abc123",
+                "stock_code": "600519",
+                "status": "pending",
+                "message": "分析任务已加入队列: 600519",
+            }
+        }
+    )
 
     task_id: str = Field(..., description="任务 ID，用于查询状态")
     stock_code: str = Field(..., description="股票代码")
@@ -145,67 +159,74 @@ class BatchTaskAcceptedItem(BaseModel):
     )
     message: Optional[str] = Field(None, description="提示信息")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "stock_code": "600519",
-                "status": "pending",
-                "message": "分析任务已加入队列: 600519"
-            }
-        }
-
 
 class BatchDuplicateTaskItem(BaseModel):
     """批量异步任务中的重复提交项。"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "stock_code": "600519",
+                "existing_task_id": "task_existing_123",
+                "message": "股票 600519 正在分析中 (task_id: task_existing_123)",
+            }
+        }
+    )
 
     stock_code: str = Field(..., description="股票代码")
     existing_task_id: str = Field(..., description="已存在的任务 ID")
     message: str = Field(..., description="错误信息")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "600519",
-                "existing_task_id": "task_existing_123",
-                "message": "股票 600519 正在分析中 (task_id: task_existing_123)"
-            }
-        }
-
 
 class BatchTaskAcceptedResponse(BaseModel):
     """批量异步任务接受响应。"""
 
-    accepted: List[BatchTaskAcceptedItem] = Field(default_factory=list, description="成功提交的任务列表")
-    duplicates: List[BatchDuplicateTaskItem] = Field(default_factory=list, description="重复而跳过的任务列表")
-    message: str = Field(..., description="汇总信息")
-
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "accepted": [
                     {
                         "task_id": "task_abc123",
                         "stock_code": "600519",
                         "status": "pending",
-                        "message": "分析任务已加入队列: 600519"
+                        "message": "分析任务已加入队列: 600519",
                     }
                 ],
                 "duplicates": [
                     {
                         "stock_code": "000858",
                         "existing_task_id": "task_existing_456",
-                        "message": "股票 000858 正在分析中 (task_id: task_existing_456)"
+                        "message": "股票 000858 正在分析中 (task_id: task_existing_456)",
                     }
                 ],
-                "message": "已提交 1 个任务，1 个重复跳过"
+                "message": "已提交 1 个任务，1 个重复跳过",
             }
         }
+    )
+
+    accepted: List[BatchTaskAcceptedItem] = Field(default_factory=list, description="成功提交的任务列表")
+    duplicates: List[BatchDuplicateTaskItem] = Field(default_factory=list, description="重复而跳过的任务列表")
+    message: str = Field(..., description="汇总信息")
 
 
 class TaskStatus(BaseModel):
     """Task status model"""
-    
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "task_id": "task_abc123",
+                "status": "completed",
+                "progress": 100,
+                "result": None,
+                "error": None,
+                "stock_name": "贵州茅台",
+                "original_query": "茅台",
+                "selection_source": "autocomplete",
+            }
+        }
+    )
+
     task_id: str = Field(..., description="任务 ID")
     status: str = Field(
         ..., 
@@ -233,20 +254,6 @@ class TaskStatus(BaseModel):
         description="选择来源",
         pattern=SELECTION_SOURCE_PATTERN,
     )
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "status": "completed",
-                "progress": 100,
-                "result": None,
-                "error": None,
-                "stock_name": "贵州茅台",
-                "original_query": "茅台",
-                "selection_source": "autocomplete"
-            }
-        }
 
 
 class TaskInfo(BaseModel):
@@ -255,29 +262,9 @@ class TaskInfo(BaseModel):
 
     Used for task list and SSE event delivery
     """
-    
-    task_id: str = Field(..., description="任务 ID")
-    stock_code: str = Field(..., description="股票代码")
-    stock_name: Optional[str] = Field(None, description="股票名称")
-    status: TaskStatusEnum = Field(..., description="任务状态")
-    progress: int = Field(0, description="进度百分比 (0-100)", ge=0, le=100)
-    message: Optional[str] = Field(None, description="状态消息")
-    report_type: str = Field("detailed", description="报告类型")
-    created_at: str = Field(..., description="创建时间")
-    started_at: Optional[str] = Field(None, description="开始执行时间")
-    completed_at: Optional[str] = Field(None, description="完成时间")
-    error: Optional[str] = Field(None, description="错误信息（仅在 failed 时存在）")
-    original_query: Optional[str] = Field(None, description="用户原始输入")
-    selection_source: Optional[str] = Field(
-        None,
-        description="选择来源",
-        pattern=SELECTION_SOURCE_PATTERN,
-    )
-    execution: Optional[Any] = Field(None, description="运行执行摘要（AI/数据源/通知）")
-    execution_session_id: Optional[str] = Field(None, description="管理员执行日志会话 ID")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "task_id": "abc123def456",
                 "stock_code": "600519",
@@ -290,46 +277,71 @@ class TaskInfo(BaseModel):
                 "started_at": "2026-02-05T10:30:01",
                 "completed_at": None,
                 "error": None,
+                "result": None,
                 "original_query": "茅台",
                 "selection_source": "autocomplete",
-                "execution": None
+                "execution": None,
             }
         }
+    )
+
+    task_id: str = Field(..., description="任务 ID")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    status: TaskStatusEnum = Field(..., description="任务状态")
+    progress: int = Field(0, description="进度百分比 (0-100)", ge=0, le=100)
+    message: Optional[str] = Field(None, description="状态消息")
+    report_type: str = Field("detailed", description="报告类型")
+    created_at: str = Field(..., description="创建时间")
+    started_at: Optional[str] = Field(None, description="开始执行时间")
+    completed_at: Optional[str] = Field(None, description="完成时间")
+    error: Optional[str] = Field(None, description="错误信息（仅在 failed 时存在）")
+    result: Optional[Any] = Field(None, description="分析结果（仅在 completed 时可能存在）")
+    original_query: Optional[str] = Field(None, description="用户原始输入")
+    selection_source: Optional[str] = Field(
+        None,
+        description="选择来源",
+        pattern=SELECTION_SOURCE_PATTERN,
+    )
+    execution: Optional[Any] = Field(None, description="运行执行摘要（AI/数据源/通知）")
+    execution_session_id: Optional[str] = Field(None, description="管理员执行日志会话 ID")
 
 
 class TaskListResponse(BaseModel):
     """任务列表响应模型"""
-    
-    total: int = Field(..., description="任务总数")
-    pending: int = Field(..., description="等待中的任务数")
-    processing: int = Field(..., description="处理中的任务数")
-    tasks: List[TaskInfo] = Field(..., description="任务列表")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "total": 3,
                 "pending": 1,
                 "processing": 2,
-                "tasks": []
+                "tasks": [],
             }
         }
+    )
+
+    total: int = Field(..., description="任务总数")
+    pending: int = Field(..., description="等待中的任务数")
+    processing: int = Field(..., description="处理中的任务数")
+    tasks: List[TaskInfo] = Field(..., description="任务列表")
 
 
 class DuplicateTaskErrorResponse(BaseModel):
     """重复任务错误响应模型"""
-    
-    error: str = Field("duplicate_task", description="错误类型")
-    message: str = Field(..., description="错误信息")
-    stock_code: str = Field(..., description="股票代码")
-    existing_task_id: str = Field(..., description="已存在的任务 ID")
-    
-    class Config:
-        json_schema_extra = {
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error": "duplicate_task",
                 "message": "股票 600519 正在分析中",
                 "stock_code": "600519",
-                "existing_task_id": "abc123def456"
+                "existing_task_id": "abc123def456",
             }
         }
+    )
+
+    error: str = Field("duplicate_task", description="错误类型")
+    message: str = Field(..., description="错误信息")
+    stock_code: str = Field(..., description="股票代码")
+    existing_task_id: str = Field(..., description="已存在的任务 ID")

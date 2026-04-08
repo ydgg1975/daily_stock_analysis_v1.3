@@ -242,6 +242,14 @@ const report: AnalysisReport = {
 };
 
 describe('StandardReportPanel', () => {
+  it('can start directly at the chart layer when lead summary is suppressed', () => {
+    render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} showLeadSummary={false} />);
+
+    expect(screen.queryByTestId('hero-summary-card')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chart-context-layer')).toBeInTheDocument();
+    expect(screen.getByTestId('execution-risk-layer')).toBeInTheDocument();
+  });
+
   it('renders the layered report IA with compact summary, execution/risk focus, and appendix disclosures', async () => {
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
 

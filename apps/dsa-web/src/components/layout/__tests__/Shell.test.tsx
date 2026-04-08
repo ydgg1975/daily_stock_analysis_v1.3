@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Shell } from '../Shell';
+import { useShellRailSlot } from '../useShellRailSlot';
 
 const mockLogout = vi.fn().mockResolvedValue(undefined);
 
@@ -39,8 +40,15 @@ afterEach(() => {
   window.dispatchEvent(new Event('resize'));
 });
 
+const ShellRailFixture = () => {
+  useShellRailSlot(<div>archive content</div>);
+  return <div>page content</div>;
+};
+
+const settleDrawerMotion = () => new Promise((resolve) => window.setTimeout(resolve, 260));
+
 describe('Shell', () => {
-  it('renders navigation, theme toggle and completion badge', () => {
+  it('renders the streamlined navigation and completion badge without the old theme control', () => {
     render(
       <MemoryRouter initialEntries={['/chat']}>
         <ThemeProvider>
@@ -51,28 +59,10 @@ describe('Shell', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getAllByRole('button', { name: '切换主题' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
-    const logoutButton = screen.getByRole('button', { name: '退出' });
-    expect(logoutButton).toBeInTheDocument();
-    expect(logoutButton).toHaveClass('cursor-pointer');
-  });
-
-  it('opens the theme menu from the sidebar toggle', async () => {
-    render(
-      <MemoryRouter initialEntries={['/chat']}>
-        <ThemeProvider>
-          <Shell>
-            <div>page content</div>
-          </Shell>
-        </ThemeProvider>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getAllByRole('button', { name: '切换主题' })[0]);
-
-    expect(await screen.findByRole('menu', { name: '主题模式' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
   });
 
   it('shows a confirmation dialog before logout', async () => {
@@ -93,7 +83,7 @@ describe('Shell', () => {
     expect(mockLogout).toHaveBeenCalled();
   });
 
-  it('keeps theme and language controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
+  it('keeps language/logout controls inside the mobile drawer instead of duplicating them in the top bar', async () => {
     window.innerWidth = 375;
 
     render(
@@ -111,7 +101,58 @@ describe('Shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
 
-    expect(await screen.findByRole('button', { name: '切换主题' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '切换语言' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {
+    window.innerWidth = 390;
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <ShellRailFixture />
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+      await settleDrawerMotion();
+    });
+    expect(await screen.findByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: '分析档案' })[0]);
+      await settleDrawerMotion();
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    });
+    expect(document.body.style.overflow).toBe('hidden');
+
+    window.innerWidth = 1280;
+    await act(async () => {
+      fireEvent(window, new Event('resize'));
+      await settleDrawerMotion();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    });
+    expect(document.body.style.overflow).toBe('');
+
+    window.innerWidth = 390;
+    await act(async () => {
+      fireEvent(window, new Event('resize'));
+      await settleDrawerMotion();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    });
+    expect(screen.getByRole('button', { name: '打开导航菜单' })).toBeInTheDocument();
   });
 });

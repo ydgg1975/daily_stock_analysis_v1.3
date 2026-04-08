@@ -350,15 +350,17 @@ def _handle_sync_analysis(
                 }
             )
 
+        resolved_query_id = str(result.get("query_id") or query_id)
+
         # 构建报告结构
         report_data = result.get("report", {})
         context_snapshot, fundamental_snapshot = _load_sync_fundamental_sources(
-            query_id=query_id,
+            query_id=resolved_query_id,
             stock_code=result.get("stock_code", stock_code),
         )
         report = _build_analysis_report(
             report_data,
-            query_id,
+            resolved_query_id,
             stock_code,
             result.get("stock_name"),
             context_snapshot=context_snapshot,
@@ -375,7 +377,7 @@ def _handle_sync_analysis(
             }
 
         return AnalysisResultResponse(
-            query_id=query_id,
+            query_id=resolved_query_id,
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
             report=report.model_dump() if report else None,
@@ -451,6 +453,7 @@ def get_task_list(
             status=t.status.value,
             progress=t.progress,
             message=t.message,
+            result=t.result,
             report_type=t.report_type,
             created_at=t.created_at.isoformat(),
             started_at=t.started_at.isoformat() if t.started_at else None,
@@ -491,6 +494,7 @@ async def task_stream():
     - connected: 连接成功
     - task_created: 新任务创建
     - task_started: 任务开始执行
+    - task_updated: 任务阶段更新
     - task_completed: 任务完成
     - task_failed: 任务失败
     - heartbeat: 心跳（每 30 秒）

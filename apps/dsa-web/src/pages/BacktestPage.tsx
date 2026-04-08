@@ -1,146 +1,295 @@
 import type React from 'react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { backtestApi } from '../api/backtest';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, Pagination, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Badge, Button, Card, Pagination, WorkspacePageHeader } from '../components/common';
 import type {
+  AssumptionMap,
   BacktestResultItem,
   BacktestRunHistoryItem,
   BacktestRunResponse,
+  BacktestSampleStatusResponse,
   PerformanceMetrics,
   PrepareBacktestSamplesResponse,
-  BacktestSampleStatusResponse,
+  RuleBacktestHistoryItem,
   RuleBacktestParseResponse,
   RuleBacktestRunResponse,
-  RuleBacktestHistoryItem,
+  RuleBacktestTradeItem,
 } from '../types/backtest';
 
-// ============ Helpers ============
+const HISTORICAL_PAGE_SIZE = 20;
+const HISTORY_PAGE_SIZE = 10;
+const RULE_HISTORY_PAGE_SIZE = 10;
+const RULE_POLL_INTERVAL_MS = 1800;
 
-function pct(value?: number | null): string {
-  if (value == null) return '--';
-  return `${value.toFixed(1)}%`;
-}
-
-function outcomeBadge(outcome?: string) {
-  if (!outcome) return <Badge variant="default">--</Badge>;
-  switch (outcome) {
-    case 'win':
-      return <Badge variant="success" glow>命中</Badge>;
-    case 'loss':
-      return <Badge variant="danger" glow>失误</Badge>;
-    case 'neutral':
-      return <Badge variant="warning">中性</Badge>;
-    default:
-      return <Badge variant="default">{outcome}</Badge>;
-  }
-}
-
-function statusBadge(status: string) {
-  switch (status) {
-    case 'completed':
-      return <Badge variant="success">完成</Badge>;
-    case 'insufficient':
-      return <Badge variant="warning">样本不足</Badge>;
-    case 'error':
-      return <Badge variant="danger">异常</Badge>;
-    default:
-      return <Badge variant="default">{status}</Badge>;
-  }
-}
-
-function boolIcon(value?: boolean | null) {
-  if (value === true) return <span className="text-success">&#10003;</span>;
-  if (value === false) return <span className="text-danger">&#10007;</span>;
-  return <span className="text-muted-text">--</span>;
-}
+type ActiveModule = 'historical' | 'rule';
 
 type PerformanceNotice = {
   tone: 'warning' | 'danger';
   message: string;
 };
 
-// ============ Metric Row ============
+const RULE_STATUS_LABELS: Record<string, string> = {
+  parsing: '解析中',
+  queued: '排队中',
+  running: '运行中',
+  summarizing: '整理摘要',
+  completed: '已完成',
+  failed: '失败',
+};
 
-const MetricRow: React.FC<{ label: string; value: string; accent?: boolean }> = ({ label, value, accent }) => (
-  <div className="flex items-center justify-between border-b border-white/5 py-1.5 last:border-0">
-    <span className="text-xs text-secondary-text">{label}</span>
-    <span className={`text-sm font-mono font-semibold ${accent ? 'text-[hsl(var(--accent-primary-hsl))]' : 'text-foreground'}`}>{value}</span>
+const HISTORICAL_STATUS_LABELS: Record<string, string> = {
+  completed: '已完成',
+  error: '执行异常',
+  insufficient_data: '样本不足',
+};
+
+const ASSUMPTION_LABELS: Record<string, string> = {
+  module_type: '模块语义',
+  evaluation_window_unit: '评估窗口单位',
+  maturity_unit: '成熟期单位',
+  price_basis: '价格口径',
+  analysis_signal_timing: '分析信号时点',
+  simulated_entry_timing: '模拟入场时点',
+  simulated_exit_timing: '模拟离场时点',
+  position_sizing: '仓位假设',
+  fees_slippage: '费用与滑点',
+  timeframe: '时间周期',
+  signal_evaluation_timing: '信号评估时点',
+  entry_fill_timing: '入场成交时点',
+  exit_fill_timing: '离场成交时点',
+  position_sizing_model: '仓位模型',
+  fee_model: '手续费模型',
+  fee_bps_per_side: '单边手续费',
+  slippage_model: '滑点模型',
+  slippage_bps_per_side: '单边滑点',
+  benchmark_method: '基准比较',
+};
+
+function pct(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return '--';
+  return `${value.toFixed(2)}%`;
+}
+
+function formatNumber(value?: number | null, digits = 2): string {
+  if (value == null || Number.isNaN(value)) return '--';
+  return value.toFixed(digits);
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return '--';
+  return value.replace('T', ' ').replace('Z', '');
+}
+
+function parsePositiveInt(value: string, fallback: number, minimum = 1): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, parsed);
+}
+
+function formatAssumptionValue(value: unknown): string {
+  if (value == null) return '--';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+function getAssumptionEntries(assumptions?: AssumptionMap): Array<{ key: string; label: string; value: string }> {
+  return Object.entries(assumptions || {})
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => ({
+      key,
+      label: ASSUMPTION_LABELS[key] || key.replace(/_/g, ' '),
+      value: formatAssumptionValue(value),
+    }));
+}
+
+function formatIndicatorEntries(snapshot?: Record<string, unknown>): Array<{ key: string; value: string }> {
+  return Object.entries(snapshot || {})
+    .filter(([, value]) => value != null)
+    .slice(0, 6)
+    .map(([key, value]) => ({
+      key,
+      value: typeof value === 'number' ? value.toFixed(2) : String(value),
+    }));
+}
+
+function isRuleRunTerminal(status?: string): boolean {
+  return status === 'completed' || status === 'failed';
+}
+
+function getHistoricalStatusBadge(status?: string) {
+  const normalized = status || 'completed';
+  const label = HISTORICAL_STATUS_LABELS[normalized] || normalized;
+  if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
+  if (normalized === 'insufficient_data') return <Badge variant="warning">{label}</Badge>;
+  if (normalized === 'error') return <Badge variant="danger">{label}</Badge>;
+  return <Badge variant="default">{label}</Badge>;
+}
+
+function getRuleStatusBadge(status?: string) {
+  const normalized = status || 'queued';
+  const label = RULE_STATUS_LABELS[normalized] || normalized;
+  if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
+  if (normalized === 'failed') return <Badge variant="danger">{label}</Badge>;
+  if (normalized === 'summarizing') return <Badge variant="info">{label}</Badge>;
+  if (normalized === 'running') return <Badge variant="warning">{label}</Badge>;
+  return <Badge variant="default">{label}</Badge>;
+}
+
+function renderDirectionBadge(correct?: boolean | null, expected?: string | null) {
+  if (correct === true) return <span className="product-direction product-direction--positive">✓ {expected || '匹配'}</span>;
+  if (correct === false) return <span className="product-direction product-direction--negative">✕ {expected || '偏离'}</span>;
+  return <span className="product-direction">--</span>;
+}
+
+const SectionEyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="product-kicker">{children}</span>
+);
+
+const MetricCard: React.FC<{
+  label: string;
+  value: string;
+  tone?: 'default' | 'positive' | 'negative' | 'accent';
+  note?: string;
+}> = ({ label, value, tone = 'default', note }) => (
+  <div className={`metric-card metric-card--${tone}`}>
+    <p className="metric-card__label">{label}</p>
+    <p className="metric-card__value">{value}</p>
+    {note ? <p className="metric-card__note">{note}</p> : null}
   </div>
 );
 
-// ============ Performance Card ============
-
-const PerformanceCard: React.FC<{ metrics: PerformanceMetrics; title: string }> = ({ metrics, title }) => (
-  <Card variant="gradient" padding="md" className="animate-fade-in">
-    <div className="mb-3">
-      <span className="label-uppercase">{title}</span>
+const Banner: React.FC<{
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+  title: React.ReactNode;
+  body?: React.ReactNode;
+  actions?: React.ReactNode;
+  className?: string;
+}> = ({ tone = 'default', title, body, actions, className }) => (
+  <div className={`product-banner product-banner--${tone}${className ? ` ${className}` : ''}`}>
+    <div className="product-banner__copy">
+      <p className="product-banner__title">{title}</p>
+      {body ? <div className="product-banner__body">{body}</div> : null}
     </div>
-    <MetricRow label="方向准确率" value={pct(metrics.directionAccuracyPct)} accent />
-    <MetricRow label="胜率" value={pct(metrics.winRatePct)} accent />
-    <MetricRow label="平均模拟收益" value={pct(metrics.avgSimulatedReturnPct)} />
-    <MetricRow label="平均标的收益" value={pct(metrics.avgStockReturnPct)} />
-    <MetricRow label="止损触发率" value={pct(metrics.stopLossTriggerRate)} />
-    <MetricRow label="止盈触发率" value={pct(metrics.takeProfitTriggerRate)} />
-    <MetricRow label="平均命中天数" value={metrics.avgDaysToFirstHit != null ? metrics.avgDaysToFirstHit.toFixed(1) : '--'} />
-    <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between">
-      <span className="text-xs text-muted-text">有效评估</span>
-      <span className="text-xs text-secondary-text font-mono">
-        {Number(metrics.completedCount)} / {Number(metrics.totalEvaluations)}
-      </span>
-    </div>
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-muted-text">赢 / 亏 / 平</span>
-      <span className="text-xs font-mono">
-        <span className="text-success">{metrics.winCount}</span>
-        {' / '}
-        <span className="text-danger">{metrics.lossCount}</span>
-        {' / '}
-        <span className="text-[hsl(var(--accent-warning-hsl))]">{metrics.neutralCount}</span>
-      </span>
-    </div>
-  </Card>
+    {actions ? <div className="product-banner__actions">{actions}</div> : null}
+  </div>
 );
 
-const PerformanceNoticeCard: React.FC<{ notice: PerformanceNotice }> = ({ notice }) => {
-  const isDanger = notice.tone === 'danger';
+const Disclosure: React.FC<{
+  summary: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}> = ({ summary, children, defaultOpen = false }) => (
+  <details className="product-disclosure" open={defaultOpen}>
+    <summary className="product-disclosure__summary">{summary}</summary>
+    <div className="product-disclosure__body">{children}</div>
+  </details>
+);
+
+const AssumptionList: React.FC<{
+  assumptions?: AssumptionMap;
+  emptyText: string;
+}> = ({ assumptions, emptyText }) => {
+  const entries = getAssumptionEntries(assumptions);
+
+  if (entries.length === 0) {
+    return <p className="product-empty-note">{emptyText}</p>;
+  }
+
   return (
-    <Card
-      padding="md"
-      className={`
-        animate-fade-in border
-        ${isDanger ? 'border-danger/25 bg-danger/10' : 'border-warning/25 bg-warning/10'}
-      `}
-    >
-      <div className="flex items-start gap-2">
-        <div className={`mt-0.5 h-2.5 w-2.5 rounded-full ${isDanger ? 'bg-danger' : 'bg-[hsl(var(--accent-warning-hsl))]'}`} />
-        <div className="min-w-0">
-          <p className={`text-xs font-medium ${isDanger ? 'text-danger' : 'text-[hsl(var(--accent-warning-hsl))]'}`}>
-            {isDanger ? '表现数据加载失败' : '表现汇总尚未生成'}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-secondary-text">
-            {notice.message}
-          </p>
+    <dl className="audit-grid">
+      {entries.map((item) => (
+        <div key={item.key} className="audit-grid__row">
+          <dt className="audit-grid__label">{item.label}</dt>
+          <dd className="audit-grid__value">{item.value}</dd>
         </div>
-      </div>
-    </Card>
+      ))}
+    </dl>
   );
 };
 
-const RuleMetricRow: React.FC<{ label: string; value: string; accent?: boolean }> = ({ label, value, accent }) => (
-  <div className="flex items-center justify-between border-b border-white/5 py-1.5 last:border-0">
-    <span className="text-xs text-secondary-text">{label}</span>
-    <span className={`text-sm font-mono font-semibold ${accent ? 'text-[hsl(var(--accent-primary-hsl))]' : 'text-foreground'}`}>{value}</span>
+const PerformanceGroup: React.FC<{
+  title: string;
+  metrics: PerformanceMetrics;
+}> = ({ title, metrics }) => (
+  <div className="summary-block">
+    <div className="summary-block__header">
+      <div>
+        <SectionEyebrow>{title}</SectionEyebrow>
+        <h3 className="summary-block__title">Performance snapshot</h3>
+      </div>
+      <span className="product-inline-meta">
+        {metrics.completedCount}/{metrics.totalEvaluations} 条有效评估
+      </span>
+    </div>
+    <div className="metric-grid metric-grid--compact">
+      <MetricCard label="方向准确率" value={pct(metrics.directionAccuracyPct)} tone="accent" />
+      <MetricCard label="胜率" value={pct(metrics.winRatePct)} tone="positive" />
+      <MetricCard label="平均模拟收益" value={pct(metrics.avgSimulatedReturnPct)} />
+      <MetricCard label="平均标的收益" value={pct(metrics.avgStockReturnPct)} />
+      <MetricCard label="止损触发率" value={pct(metrics.stopLossTriggerRate)} />
+      <MetricCard label="止盈触发率" value={pct(metrics.takeProfitTriggerRate)} />
+    </div>
   </div>
 );
 
-const RuleBacktestChart: React.FC<{ points: Array<{ date?: string; equity?: number; cumulativeReturnPct?: number; drawdownPct?: number }> }> = ({ points }) => {
+const HistoricalRunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => (
+  <Banner
+    tone="info"
+    title="历史评估已更新"
+    body={(
+      <>
+        已处理 {data.processed} 条候选，写入 {data.saved} 条结果，完成 {data.completed} 条评估。
+        <span className="product-banner__meta">
+          样本不足 {data.insufficient} 条，异常 {data.errors} 条，候选 {data.candidateCount} 条。
+        </span>
+        {data.noResultMessage ? <span className="product-banner__meta">{data.noResultMessage}</span> : null}
+      </>
+    )}
+  />
+);
+
+const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }) => {
+  const latestStatusAt = run.statusHistory?.[run.statusHistory.length - 1]?.at;
+  const tone = run.status === 'failed'
+    ? 'danger'
+    : run.status === 'completed'
+      ? 'success'
+      : run.status === 'summarizing'
+        ? 'info'
+        : 'warning';
+
+  return (
+    <Banner
+      tone={tone}
+      title={(
+        <span className="flex flex-wrap items-center gap-2">
+          规则任务状态
+          {getRuleStatusBadge(run.status)}
+        </span>
+      )}
+      body={(
+        <>
+          {run.statusMessage || '规则回测已提交。'}
+          <span className="product-banner__meta">
+            运行 #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
+          </span>
+          {run.noResultMessage ? <span className="product-banner__meta">{run.noResultMessage}</span> : null}
+        </>
+      )}
+    />
+  );
+};
+
+const RuleBacktestChart: React.FC<{ points: RuleBacktestRunResponse['equityCurve'] }> = ({ points }) => {
   const geometry = useMemo(() => {
     if (!points.length) return null;
-    const width = 800;
-    const height = 220;
-    const paddingX = 28;
+    const width = 920;
+    const height = 260;
+    const paddingX = 20;
     const paddingY = 20;
     const equities = points.map((point) => Number(point.equity ?? 0));
     const min = Math.min(...equities);
@@ -154,7 +303,6 @@ const RuleBacktestChart: React.FC<{ points: Array<{ date?: string; equity?: numb
       return `${x},${y}`;
     });
     const first = points[0];
-    const mid = points[Math.floor(points.length / 2)];
     const last = points[points.length - 1];
     return {
       width,
@@ -163,178 +311,78 @@ const RuleBacktestChart: React.FC<{ points: Array<{ date?: string; equity?: numb
       min,
       max,
       first,
-      mid,
       last,
     };
   }, [points]);
 
   if (!geometry) {
-    return (
-      <div className="rounded-lg border border-dashed border-white/10 bg-elevated px-3 py-8 text-center text-xs text-muted-text">
-        暂无曲线数据。
-      </div>
-    );
+    return <div className="product-empty-state product-empty-state--compact">暂无权益曲线数据。</div>;
   }
 
   return (
-    <div className="rounded-xl border border-white/6 bg-card/72 p-3">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="label-uppercase">权益曲线</span>
-        <span className="text-xs text-muted-text font-mono">{points.length} points</span>
+    <div className="chart-card">
+      <div className="summary-block__header">
+        <div>
+          <SectionEyebrow>Equity Curve</SectionEyebrow>
+          <h3 className="summary-block__title">Deterministic execution path</h3>
+        </div>
+        <span className="product-inline-meta">{points.length} 个观测点</span>
       </div>
-      <svg viewBox={`0 0 ${geometry.width} ${geometry.height}`} className="h-[220px] w-full">
-        <defs>
-          <linearGradient id="rule-equity-gradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="hsl(var(--accent-primary-hsl))" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="hsl(var(--accent-primary-hsl))" stopOpacity="0.15" />
-          </linearGradient>
-        </defs>
-        <line x1="28" y1="20" x2="28" y2="200" stroke="rgba(255,255,255,0.08)" />
-        <line x1="28" y1="200" x2="772" y2="200" stroke="rgba(255,255,255,0.08)" />
-        <polyline
-          fill="none"
-          stroke="url(#rule-equity-gradient)"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={geometry.polyline}
-        />
-        <polyline
-          fill="rgba(82, 163, 255, 0.08)"
-          stroke="none"
-          points={`28,200 ${geometry.polyline} 772,200`}
-        />
-      </svg>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <div className="rounded-lg border border-white/5 bg-elevated px-3 py-2">
-          <p className="text-[11px] text-muted-text">起点</p>
-          <p className="mt-1 text-xs font-mono text-foreground">{geometry.first?.date || '--'}</p>
-          <p className="text-xs font-mono text-secondary-text">{pct(geometry.first?.cumulativeReturnPct)}</p>
+      <div className="chart-card__frame">
+        <svg viewBox={`0 0 ${geometry.width} ${geometry.height}`} className="chart-card__svg" aria-label="权益曲线图">
+          <line x1="20" y1="20" x2="20" y2="240" className="chart-card__grid" />
+          <line x1="20" y1="240" x2="900" y2="240" className="chart-card__grid" />
+          <polyline className="chart-card__area" points={`20,240 ${geometry.polyline} 900,240`} />
+          <polyline className="chart-card__line" points={geometry.polyline} />
+        </svg>
+      </div>
+      <div className="chart-card__footer">
+        <div>
+          <p className="metric-card__label">起点</p>
+          <p className="chart-card__value">{geometry.first?.date || '--'}</p>
+          <p className="metric-card__note">{pct(geometry.first?.cumulativeReturnPct)}</p>
         </div>
-        <div className="rounded-lg border border-white/5 bg-elevated px-3 py-2">
-          <p className="text-[11px] text-muted-text">中点</p>
-          <p className="mt-1 text-xs font-mono text-foreground">{geometry.mid?.date || '--'}</p>
-          <p className="text-xs font-mono text-secondary-text">{pct(geometry.mid?.cumulativeReturnPct)}</p>
-        </div>
-        <div className="rounded-lg border border-white/5 bg-elevated px-3 py-2">
-          <p className="text-[11px] text-muted-text">终点</p>
-          <p className="mt-1 text-xs font-mono text-foreground">{geometry.last?.date || '--'}</p>
-          <p className="text-xs font-mono text-secondary-text">{pct(geometry.last?.cumulativeReturnPct)}</p>
+        <div>
+          <p className="metric-card__label">终点</p>
+          <p className="chart-card__value">{geometry.last?.date || '--'}</p>
+          <p className="metric-card__note">{pct(geometry.last?.cumulativeReturnPct)}</p>
         </div>
       </div>
     </div>
   );
 };
 
-const RuleBacktestParsedPreview: React.FC<{
-  parsed: RuleBacktestParseResponse | null;
-  confirmed: boolean;
-  onToggleConfirmed: (value: boolean) => void;
-}> = ({ parsed, confirmed, onToggleConfirmed }) => {
-  if (!parsed) {
-    return (
-      <Card padding="md" className="border border-dashed border-white/10">
-        <p className="text-xs text-muted-text">先输入策略文本并解析，系统会显示结构化规则预览。</p>
-      </Card>
-    );
-  }
-
-  const ambiguities = parsed.ambiguities || [];
-  const needsAttention = parsed.needsConfirmation || parsed.confidence < 0.85 || ambiguities.length > 0;
-  return (
-    <Card padding="md" className={`border ${needsAttention ? 'border-warning/25 bg-warning/5' : 'border-success/20 bg-success/5'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <span className="label-uppercase">已解析策略</span>
-          <p className="mt-1 text-xs text-secondary-text">
-            解析置信度 {Math.round((parsed.confidence || 0) * 100)}% {needsAttention ? '，请先检查歧义项后再运行。' : '，可直接确认后运行。'}
-          </p>
-        </div>
-        <Badge variant={needsAttention ? 'warning' : 'success'}>
-          {needsAttention ? '需要确认' : '可运行'}
-        </Badge>
-      </div>
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <div className="rounded-lg border border-white/6 bg-elevated px-3 py-2">
-          <p className="text-[11px] text-muted-text">入场规则</p>
-          <p className="mt-1 text-sm text-foreground">{parsed.summary?.entry || '--'}</p>
-        </div>
-        <div className="rounded-lg border border-white/6 bg-elevated px-3 py-2">
-          <p className="text-[11px] text-muted-text">出场规则</p>
-          <p className="mt-1 text-sm text-foreground">{parsed.summary?.exit || '--'}</p>
-        </div>
-      </div>
-      {ambiguities.length > 0 ? (
-        <div className="mt-3 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2">
-          <p className="text-xs font-medium text-[hsl(var(--accent-warning-hsl))]">解析提示</p>
-          <ul className="mt-1 space-y-1 text-xs leading-5 text-secondary-text">
-            {ambiguities.slice(0, 3).map((item, index) => (
-              <li key={`${item.code || index}`} className="flex gap-2">
-                <span className="text-[hsl(var(--accent-warning-hsl))]">•</span>
-                <span>{String(item.message || item.suggestion || '解析需要确认')}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      <label className="mt-3 flex items-center gap-2 text-xs text-secondary-text">
-        <input
-          type="checkbox"
-          checked={confirmed}
-          onChange={(e) => onToggleConfirmed(e.target.checked)}
-          className="h-4 w-4 rounded border-white/20 bg-transparent"
-        />
-        我已确认解析结果，允许执行规则回测
-      </label>
-    </Card>
-  );
-};
-
-const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestRunResponse['trades'] }> = ({ trades }) => {
-  if (!trades.length) {
-    return (
-      <div className="rounded-lg border border-dashed border-white/10 bg-elevated px-3 py-8 text-center text-xs text-muted-text">
-        暂无交易记录。
-      </div>
-    );
+const HistoricalResultsTable: React.FC<{ rows: BacktestResultItem[] }> = ({ rows }) => {
+  if (rows.length === 0) {
+    return <div className="product-empty-state">暂无历史分析评估结果。先准备样本或运行一次评估。</div>;
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/6 bg-card/72">
-      <table className="w-full text-sm">
+    <div className="product-table-shell">
+      <table className="product-table">
         <thead>
-          <tr className="bg-elevated text-left">
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">入场</th>
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">出场</th>
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">入场原因</th>
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">出场原因</th>
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">收益率%</th>
-            <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">持有天数</th>
+          <tr>
+            <th>日期</th>
+            <th>代码</th>
+            <th>建议</th>
+            <th>方向</th>
+            <th className="product-table__align-right">模拟收益</th>
+            <th className="product-table__align-right">标的收益</th>
+            <th>数据源</th>
+            <th>状态</th>
           </tr>
         </thead>
         <tbody>
-          {trades.map((trade, index) => (
-            <tr key={`${trade.code}-${index}`} className="border-t border-white/5 transition-colors hover:bg-hover">
-              <td className="px-3 py-2 text-xs text-secondary-text">
-                <div className="font-mono text-[hsl(var(--accent-primary-hsl))]">{trade.entryDate || '--'}</div>
-                <div>{trade.entryPrice != null ? trade.entryPrice.toFixed(2) : '--'}</div>
-              </td>
-              <td className="px-3 py-2 text-xs text-secondary-text">
-                <div className="font-mono text-[hsl(var(--accent-primary-hsl))]">{trade.exitDate || '--'}</div>
-                <div>{trade.exitPrice != null ? trade.exitPrice.toFixed(2) : '--'}</div>
-              </td>
-              <td className="px-3 py-2 text-xs text-foreground truncate max-w-[240px]" title={trade.entrySignal || ''}>
-                {trade.entrySignal || '--'}
-              </td>
-              <td className="px-3 py-2 text-xs text-foreground truncate max-w-[240px]" title={trade.exitSignal || ''}>
-                {trade.exitSignal || '--'}
-              </td>
-              <td className="px-3 py-2 text-xs font-mono text-right">
-                <span className={trade.returnPct != null && trade.returnPct > 0 ? 'text-success' : trade.returnPct != null && trade.returnPct < 0 ? 'text-danger' : 'text-secondary-text'}>
-                  {pct(trade.returnPct)}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-xs font-mono text-right text-foreground">{trade.holdingDays ?? '--'}</td>
+          {rows.map((row) => (
+            <tr key={row.analysisHistoryId}>
+              <td>{row.analysisDate || '--'}</td>
+              <td className="product-table__mono">{row.code}</td>
+              <td>{row.operationAdvice || '--'}</td>
+              <td>{renderDirectionBadge(row.directionCorrect, row.directionExpected)}</td>
+              <td className="product-table__align-right">{pct(row.simulatedReturnPct)}</td>
+              <td className="product-table__align-right">{pct(row.stockReturnPct)}</td>
+              <td>{row.marketDataSources.length > 0 ? row.marketDataSources.join(', ') : '--'}</td>
+              <td>{getHistoricalStatusBadge(row.evalStatus)}</td>
             </tr>
           ))}
         </tbody>
@@ -343,58 +391,316 @@ const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestRunResponse['trades
   );
 };
 
-// ============ Run Summary ============
+const HistoricalRunsTable: React.FC<{
+  rows: BacktestRunHistoryItem[];
+  selectedRunId: number | null;
+  onOpen: (run: BacktestRunHistoryItem) => void;
+}> = ({ rows, selectedRunId, onOpen }) => {
+  if (rows.length === 0) {
+    return <div className="product-empty-state">暂无历史分析评估运行记录。</div>;
+  }
 
-const RunSummary: React.FC<{ data: BacktestRunResponse }> = ({ data }) => (
-  <div className="rounded-lg border border-white/5 bg-elevated px-3 py-2 text-xs font-mono animate-fade-in">
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <span className="text-secondary-text">已处理: <span className="text-foreground">{data.processed}</span></span>
-      <span className="text-secondary-text">已写入: <span className="text-[hsl(var(--accent-primary-hsl))]">{data.saved}</span></span>
-      <span className="text-secondary-text">已完成: <span className="text-success">{data.completed}</span></span>
-      <span className="text-secondary-text">样本不足: <span className="text-[hsl(var(--accent-warning-hsl))]">{data.insufficient}</span></span>
-      {data.errors > 0 && (
-        <span className="text-secondary-text">异常: <span className="text-danger">{data.errors}</span></span>
-      )}
+  return (
+    <div className="product-table-shell">
+      <table className="product-table">
+        <thead>
+          <tr>
+            <th>运行时间</th>
+            <th>代码</th>
+            <th>窗口定义</th>
+            <th className="product-table__align-right">候选</th>
+            <th className="product-table__align-right">胜率</th>
+            <th className="product-table__align-right">平均模拟收益</th>
+            <th>状态</th>
+            <th className="product-table__align-right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} data-active={selectedRunId === row.id ? 'true' : 'false'}>
+              <td>{formatDateTime(row.runAt)}</td>
+              <td className="product-table__mono">{row.code || '--'}</td>
+              <td>{row.evaluationWindowTradingBars || row.evalWindowDays} bars / {row.maturityCalendarDays || row.minAgeDays} 天</td>
+              <td className="product-table__align-right">{row.candidateCount}</td>
+              <td className="product-table__align-right">{pct(row.winRatePct)}</td>
+              <td className="product-table__align-right">{pct(row.avgSimulatedReturnPct)}</td>
+              <td>{getHistoricalStatusBadge(row.status)}</td>
+              <td className="product-table__align-right">
+                <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
+                  查看
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
-    {data.noResultMessage ? (
-      <div className="mt-2 rounded-md border border-warning/20 bg-warning/10 px-2.5 py-2 text-xs leading-5 text-warning">
-        {data.noResultMessage}
-      </div>
-    ) : null}
-  </div>
-);
+  );
+};
 
-// ============ Main Page ============
+const RuleBacktestTradeTable: React.FC<{ trades: RuleBacktestTradeItem[] }> = ({ trades }) => {
+  if (trades.length === 0) {
+    return <div className="product-empty-state">暂无交易明细。</div>;
+  }
+
+  return (
+    <div className="product-table-shell">
+      <table className="product-table product-table--wide">
+        <thead>
+          <tr>
+            <th>信号与成交</th>
+            <th>入场触发</th>
+            <th>离场触发</th>
+            <th>指标快照</th>
+            <th className="product-table__align-right">收益</th>
+            <th className="product-table__align-right">持有</th>
+            <th>执行审计</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trades.map((trade, index) => {
+            const entryIndicators = formatIndicatorEntries(trade.entryIndicators);
+            const exitIndicators = formatIndicatorEntries(trade.exitIndicators);
+            return (
+              <tr key={`${trade.code}-${trade.tradeIndex ?? index}`}>
+                <td>
+                  <div className="product-table__stack">
+                    <span className="product-table__mono">{trade.entrySignalDate || trade.entryDate || '--'} → {trade.exitSignalDate || trade.exitDate || '--'}</span>
+                    <span>{trade.entryDate || '--'} @ {formatNumber(trade.entryPrice)}</span>
+                    <span>{trade.exitDate || '--'} @ {formatNumber(trade.exitPrice)}</span>
+                  </div>
+                </td>
+                <td>{trade.entryTrigger || trade.entrySignal || '--'}</td>
+                <td>{trade.exitTrigger || trade.exitSignal || '--'}</td>
+                <td>
+                  <div className="indicator-stack">
+                    {entryIndicators.length > 0 ? (
+                      <div>
+                        <p className="metric-card__label">Entry</p>
+                        <div className="product-chip-list product-chip-list--tight">
+                          {entryIndicators.map((item) => (
+                            <span key={`entry-${item.key}`} className="product-chip">
+                              {item.key}: {item.value}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {exitIndicators.length > 0 ? (
+                      <div>
+                        <p className="metric-card__label">Exit</p>
+                        <div className="product-chip-list product-chip-list--tight">
+                          {exitIndicators.map((item) => (
+                            <span key={`exit-${item.key}`} className="product-chip">
+                              {item.key}: {item.value}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="product-table__align-right">{pct(trade.returnPct)}</td>
+                <td className="product-table__align-right">
+                  <div className="product-table__stack">
+                    <span>{trade.holdingBars ?? trade.holdingDays ?? '--'} bars</span>
+                    <span>{trade.holdingCalendarDays ?? '--'} 天</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="product-table__stack">
+                    <span>信号价口径: {trade.signalPriceBasis || '--'}</span>
+                    <span>成交价口径: {trade.priceBasis || '--'}</span>
+                    <span>手续费 / 滑点: {formatNumber(trade.feeBps, 1)}bp / {formatNumber(trade.slippageBps, 1)}bp</span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const RuleRunsTable: React.FC<{
+  rows: RuleBacktestHistoryItem[];
+  selectedRunId: number | null;
+  onOpen: (run: RuleBacktestHistoryItem) => void;
+}> = ({ rows, selectedRunId, onOpen }) => {
+  if (rows.length === 0) {
+    return <div className="product-empty-state">暂无确定性规则回测历史。</div>;
+  }
+
+  return (
+    <div className="product-table-shell">
+      <table className="product-table">
+        <thead>
+          <tr>
+            <th>运行时间</th>
+            <th>代码</th>
+            <th>状态</th>
+            <th className="product-table__align-right">Lookback</th>
+            <th className="product-table__align-right">交易</th>
+            <th className="product-table__align-right">总收益</th>
+            <th className="product-table__align-right">超额收益</th>
+            <th className="product-table__align-right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} data-active={selectedRunId === row.id ? 'true' : 'false'}>
+              <td>{formatDateTime(row.runAt)}</td>
+              <td className="product-table__mono">{row.code}</td>
+              <td>
+                <div className="product-table__stack">
+                  {getRuleStatusBadge(row.status)}
+                  <span>{row.statusMessage || '--'}</span>
+                </div>
+              </td>
+              <td className="product-table__align-right">{row.lookbackBars}</td>
+              <td className="product-table__align-right">{row.tradeCount}</td>
+              <td className="product-table__align-right">{pct(row.totalReturnPct)}</td>
+              <td className="product-table__align-right">{pct(row.excessReturnVsBuyAndHoldPct)}</td>
+              <td className="product-table__align-right">
+                <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
+                  查看
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const RuleParsedPreview: React.FC<{
+  parsed: RuleBacktestParseResponse | null;
+  confirmed: boolean;
+  onToggleConfirmed: (value: boolean) => void;
+}> = ({ parsed, confirmed, onToggleConfirmed }) => {
+  if (!parsed) {
+    return (
+      <div className="product-empty-state product-empty-state--compact">
+        先解析自然语言策略，再查看归一化规则、时间周期和最大 lookback。
+      </div>
+    );
+  }
+
+  const needsAttention = parsed.needsConfirmation || parsed.confidence < 0.85 || parsed.ambiguities.length > 0;
+
+  return (
+    <div className="summary-block">
+      <div className="summary-block__header">
+        <div>
+          <SectionEyebrow>Parsed Rule</SectionEyebrow>
+          <h3 className="summary-block__title">归一化策略预览</h3>
+        </div>
+        {needsAttention ? <Badge variant="warning">需要确认</Badge> : <Badge variant="success">可运行</Badge>}
+      </div>
+      <div className="preview-grid">
+        <div className="preview-card">
+          <p className="metric-card__label">标准化策略</p>
+          <p className="preview-card__text">{parsed.parsedStrategy.normalizedText || '--'}</p>
+        </div>
+        <div className="preview-card">
+          <p className="metric-card__label">时间周期 / 最大 lookback</p>
+          <p className="preview-card__text">{parsed.parsedStrategy.timeframe || 'daily'} / {parsed.maxLookback} bars</p>
+        </div>
+        <div className="preview-card">
+          <p className="metric-card__label">入场规则</p>
+          <p className="preview-card__text">{parsed.summary.entry || '--'}</p>
+        </div>
+        <div className="preview-card">
+          <p className="metric-card__label">离场规则</p>
+          <p className="preview-card__text">{parsed.summary.exit || '--'}</p>
+        </div>
+      </div>
+      {parsed.ambiguities.length > 0 ? (
+        <Banner
+          tone="warning"
+          className="mt-4"
+          title="解析提示"
+          body={(
+            <ul className="product-list">
+              {parsed.ambiguities.slice(0, 4).map((item, index) => (
+                <li key={`${String(item.code || index)}`}>
+                  {String(item.message || item.suggestion || '该规则仍需人工确认。')}
+                </li>
+              ))}
+            </ul>
+          )}
+        />
+      ) : null}
+      <label className="product-checkbox-row mt-4">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(event) => onToggleConfirmed(event.target.checked)}
+        />
+        <span>我已确认规则解析结果，允许按显式执行假设运行确定性回测。</span>
+      </label>
+    </div>
+  );
+};
 
 const BacktestPage: React.FC = () => {
-  // Set page title
   useEffect(() => {
-    document.title = '策略回测 - WolfyStock';
+    document.title = 'Backtesting - WolfyStock';
   }, []);
 
-  // Input state
+  const [activeModule, setActiveModule] = useState<ActiveModule>('historical');
   const [codeFilter, setCodeFilter] = useState('');
-  const [evalDays, setEvalDays] = useState('');
-  const [sampleRange, setSampleRange] = useState('60');
+  const [evaluationBars, setEvaluationBars] = useState('10');
+  const [maturityDays, setMaturityDays] = useState('14');
+  const [samplePreset, setSamplePreset] = useState('60');
   const [customSampleCount, setCustomSampleCount] = useState('252');
-  const [forceRerun, setForceRerun] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
+  const [forceReplaceResults, setForceReplaceResults] = useState(false);
+
+  const [isRunningHistoricalEval, setIsRunningHistoricalEval] = useState(false);
   const [runResult, setRunResult] = useState<BacktestRunResponse | null>(null);
   const [runError, setRunError] = useState<ParsedApiError | null>(null);
+
   const [prepareResult, setPrepareResult] = useState<PrepareBacktestSamplesResponse | null>(null);
   const [prepareError, setPrepareError] = useState<ParsedApiError | null>(null);
   const [isPreparingSamples, setIsPreparingSamples] = useState(false);
+
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [sampleStatusError, setSampleStatusError] = useState<ParsedApiError | null>(null);
+
+  const [sampleStatus, setSampleStatus] = useState<BacktestSampleStatusResponse | null>(null);
+  const [results, setResults] = useState<BacktestResultItem[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
+
+  const [historyItems, setHistoryItems] = useState<BacktestRunHistoryItem[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoadingSampleStatus, setIsLoadingSampleStatus] = useState(false);
+
+  const [overallPerf, setOverallPerf] = useState<PerformanceMetrics | null>(null);
+  const [stockPerf, setStockPerf] = useState<PerformanceMetrics | null>(null);
+  const [isLoadingPerf, setIsLoadingPerf] = useState(false);
+  const [performanceNotice, setPerformanceNotice] = useState<PerformanceNotice | null>(null);
+
   const [ruleStrategyText, setRuleStrategyText] = useState(
-    'Buy when MA5 > MA20 and RSI6 < 40.\nSell when MA5 < MA20 or RSI6 > 70.',
+    'Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.',
   );
+  const [ruleLookbackBars, setRuleLookbackBars] = useState('252');
+  const [ruleInitialCapital, setRuleInitialCapital] = useState('100000');
+  const [ruleFeeBps, setRuleFeeBps] = useState('0');
+  const [ruleSlippageBps, setRuleSlippageBps] = useState('0');
   const [ruleParsedStrategy, setRuleParsedStrategy] = useState<RuleBacktestParseResponse | null>(null);
+  const [ruleConfirmed, setRuleConfirmed] = useState(false);
   const [isParsingRuleStrategy, setIsParsingRuleStrategy] = useState(false);
   const [ruleParseError, setRuleParseError] = useState<ParsedApiError | null>(null);
   const [ruleRunResult, setRuleRunResult] = useState<RuleBacktestRunResponse | null>(null);
-  const [isRunningRuleBacktest, setIsRunningRuleBacktest] = useState(false);
+  const [isSubmittingRuleBacktest, setIsSubmittingRuleBacktest] = useState(false);
   const [ruleRunError, setRuleRunError] = useState<ParsedApiError | null>(null);
   const [ruleHistoryItems, setRuleHistoryItems] = useState<RuleBacktestHistoryItem[]>([]);
   const [ruleHistoryTotal, setRuleHistoryTotal] = useState(0);
@@ -402,52 +708,76 @@ const BacktestPage: React.FC = () => {
   const [isLoadingRuleHistory, setIsLoadingRuleHistory] = useState(false);
   const [ruleHistoryError, setRuleHistoryError] = useState<ParsedApiError | null>(null);
   const [selectedRuleRunId, setSelectedRuleRunId] = useState<number | null>(null);
-  const [ruleConfirmed, setRuleConfirmed] = useState(false);
-  const [ruleLookbackBars, setRuleLookbackBars] = useState('252');
 
-  // Results state
-  const [results, setResults] = useState<BacktestResultItem[]>([]);
-  const [totalResults, setTotalResults] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoadingResults, setIsLoadingResults] = useState(false);
-  const pageSize = 20;
-  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const normalizedCode = codeFilter.trim().toUpperCase();
+  const resolvedSampleCount = samplePreset === 'custom'
+    ? parsePositiveInt(customSampleCount, 252)
+    : parsePositiveInt(samplePreset, 60);
 
-  // Performance state
-  const [overallPerf, setOverallPerf] = useState<PerformanceMetrics | null>(null);
-  const [stockPerf, setStockPerf] = useState<PerformanceMetrics | null>(null);
-  const [isLoadingPerf, setIsLoadingPerf] = useState(false);
-  const [performanceNotice, setPerformanceNotice] = useState<PerformanceNotice | null>(null);
-  const [sampleStatus, setSampleStatus] = useState<BacktestSampleStatusResponse | null>(null);
-  const [historyItems, setHistoryItems] = useState<BacktestRunHistoryItem[]>([]);
-  const [historyPage, setHistoryPage] = useState(1);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [isLoadingSampleStatus, setIsLoadingSampleStatus] = useState(false);
+  const historicalAssumptions = runResult?.executionAssumptions
+    || overallPerf?.executionAssumptions
+    || results[0]?.executionAssumptions
+    || null;
 
-  // Fetch results
+  const previewRuleAssumptions = useMemo<AssumptionMap>(() => ({
+    timeframe: ruleParsedStrategy?.parsedStrategy.timeframe || 'daily',
+    price_basis: 'close',
+    signal_evaluation_timing: 'bar close',
+    entry_fill_timing: 'next bar open',
+    exit_fill_timing: 'next bar open; final bar may force close at close',
+    position_sizing: '100% capital when long, otherwise cash',
+    fee_bps_per_side: Number.parseFloat(ruleFeeBps) || 0,
+    slippage_bps_per_side: Number.parseFloat(ruleSlippageBps) || 0,
+  }), [ruleFeeBps, ruleParsedStrategy?.parsedStrategy.timeframe, ruleSlippageBps]);
+
+  const applyRuleRunDetail = useCallback((data: RuleBacktestRunResponse) => {
+    setRuleRunResult(data);
+    setSelectedRuleRunId(data.id);
+    setCodeFilter(data.code);
+    setRuleStrategyText(data.strategyText);
+    setRuleLookbackBars(String(data.lookbackBars || 252));
+    setRuleInitialCapital(String(data.initialCapital || 100000));
+    setRuleFeeBps(String(data.feeBps ?? 0));
+    setRuleSlippageBps(String(data.slippageBps ?? 0));
+    const parsedStrategySummary = (data.summary.parsedStrategySummary as Record<string, string> | undefined)
+      || data.parsedStrategy.summary;
+    setRuleParsedStrategy({
+      code: data.code,
+      strategyText: data.strategyText,
+      parsedStrategy: {
+        ...data.parsedStrategy,
+        summary: parsedStrategySummary,
+      },
+      confidence: data.parsedConfidence ?? data.parsedStrategy.confidence ?? 0,
+      needsConfirmation: data.needsConfirmation,
+      ambiguities: data.warnings,
+      summary: parsedStrategySummary,
+      maxLookback: data.parsedStrategy.maxLookback,
+    });
+    setRuleConfirmed(true);
+  }, []);
+
   const fetchResults = useCallback(async (
     page = 1,
     code?: string,
-    windowDays?: number,
+    windowBars?: number,
     runId?: number | null,
   ) => {
     setIsLoadingResults(true);
     try {
       const response = await backtestApi.getResults({
         code: code || undefined,
-        evalWindowDays: windowDays,
+        evalWindowDays: windowBars,
         runId: runId || undefined,
         page,
-        limit: pageSize,
+        limit: HISTORICAL_PAGE_SIZE,
       });
       setResults(response.items);
       setTotalResults(response.total);
       setCurrentPage(response.page);
       setPageError(null);
-    } catch (err) {
-      console.error('Failed to fetch backtest results:', err);
-      setPageError(getParsedApiError(err));
+    } catch (error) {
+      setPageError(getParsedApiError(error));
     } finally {
       setIsLoadingResults(false);
     }
@@ -456,13 +786,13 @@ const BacktestPage: React.FC = () => {
   const fetchHistory = useCallback(async (page = 1, code?: string) => {
     setIsLoadingHistory(true);
     try {
-      const response = await backtestApi.getHistory({ code: code || undefined, page, limit: 10 });
+      const response = await backtestApi.getHistory({ code: code || undefined, page, limit: HISTORY_PAGE_SIZE });
       setHistoryItems(response.items);
-      setHistoryPage(response.page);
       setHistoryTotal(response.total);
+      setHistoryPage(response.page);
       setHistoryError(null);
-    } catch (err) {
-      setHistoryError(getParsedApiError(err));
+    } catch (error) {
+      setHistoryError(getParsedApiError(error));
     } finally {
       setIsLoadingHistory(false);
     }
@@ -474,15 +804,14 @@ const BacktestPage: React.FC = () => {
       setSampleStatusError(null);
       return;
     }
-
     setIsLoadingSampleStatus(true);
     try {
       const response = await backtestApi.getSampleStatus(code);
       setSampleStatus(response);
       setSampleStatusError(null);
-    } catch (err) {
+    } catch (error) {
       setSampleStatus(null);
-      setSampleStatusError(getParsedApiError(err));
+      setSampleStatusError(getParsedApiError(error));
     } finally {
       setIsLoadingSampleStatus(false);
     }
@@ -491,40 +820,21 @@ const BacktestPage: React.FC = () => {
   const fetchRuleHistory = useCallback(async (page = 1, code?: string) => {
     setIsLoadingRuleHistory(true);
     try {
-      const response = await backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: 10 });
+      const response = await backtestApi.getRuleBacktestRuns({ code: code || undefined, page, limit: RULE_HISTORY_PAGE_SIZE });
       setRuleHistoryItems(response.items);
       setRuleHistoryTotal(response.total);
       setRuleHistoryPage(response.page);
       setRuleHistoryError(null);
-    } catch (err) {
-      setRuleHistoryError(getParsedApiError(err));
+    } catch (error) {
+      setRuleHistoryError(getParsedApiError(error));
     } finally {
       setIsLoadingRuleHistory(false);
     }
   }, []);
 
-  const applyRuleRunDetail = useCallback((data: RuleBacktestRunResponse) => {
-    setRuleStrategyText(data.strategyText);
-    setRuleLookbackBars(String(data.lookbackBars || 252));
-    setRuleRunResult(data);
-    setSelectedRuleRunId(data.id);
-    setRuleParsedStrategy({
-      code: data.code,
-      strategyText: data.strategyText,
-      parsedStrategy: data.parsedStrategy,
-      confidence: data.parsedConfidence ?? data.parsedStrategy.confidence ?? 0,
-      needsConfirmation: data.needsConfirmation,
-      ambiguities: data.warnings,
-      summary: (data.summary?.['parsedStrategySummary'] as Record<string, string>) || data.parsedStrategy.summary,
-      maxLookback: data.parsedStrategy.maxLookback,
-    });
-    setRuleConfirmed(true);
-  }, []);
-
-  // Fetch performance
   const fetchPerformance = useCallback(async (
     code?: string,
-    windowDays?: number,
+    windowBars?: number,
     options: { showNotice?: boolean } = {},
   ) => {
     const { showNotice = true } = options;
@@ -533,34 +843,24 @@ const BacktestPage: React.FC = () => {
     let hasDanger = false;
 
     try {
-      const overall = await backtestApi.getOverallPerformance(windowDays);
+      const overall = await backtestApi.getOverallPerformance(windowBars);
       setOverallPerf(overall);
-      if (overall == null && showNotice) {
-        notices.push('暂无整体回测表现汇总。');
-      }
-    } catch (err) {
-      console.error('Failed to fetch overall performance:', err);
+      if (overall == null && showNotice) notices.push('暂无整体历史分析评估汇总。');
+    } catch (error) {
       setOverallPerf(null);
       hasDanger = true;
-      if (showNotice) {
-        notices.push(getParsedApiError(err).message);
-      }
+      if (showNotice) notices.push(getParsedApiError(error).message);
     }
 
     if (code) {
       try {
-        const stock = await backtestApi.getStockPerformance(code, windowDays);
+        const stock = await backtestApi.getStockPerformance(code, windowBars);
         setStockPerf(stock);
-        if (stock == null && showNotice) {
-          notices.push(`暂无 ${code} 的单股表现汇总。`);
-        }
-      } catch (err) {
-        console.error('Failed to fetch stock performance:', err);
+        if (stock == null && showNotice) notices.push(`暂无 ${code} 的单股历史分析评估汇总。`);
+      } catch (error) {
         setStockPerf(null);
         hasDanger = true;
-        if (showNotice) {
-          notices.push(getParsedApiError(err).message);
-        }
+        if (showNotice) notices.push(getParsedApiError(error).message);
       }
     } else {
       setStockPerf(null);
@@ -578,82 +878,112 @@ const BacktestPage: React.FC = () => {
     setIsLoadingPerf(false);
   }, []);
 
-  // Initial load — fetch performance, current results, history, and sample status
   useEffect(() => {
     const init = async () => {
-      // Get latest performance (unfiltered returns most recent summary)
-      const overall = await backtestApi.getOverallPerformance();
-      setOverallPerf(overall);
-      // Use the summary's eval_window_days to filter results consistently
-      const windowDays = overall?.evalWindowDays;
-      if (windowDays && !evalDays) {
-        setEvalDays(String(windowDays));
+      try {
+        const overall = await backtestApi.getOverallPerformance();
+        setOverallPerf(overall);
+        const defaultWindow = overall?.evalWindowDays;
+        if (defaultWindow) setEvaluationBars(String(defaultWindow));
+        setPerformanceNotice(null);
+      } catch (error) {
+        setPerformanceNotice({
+          tone: 'danger',
+          message: getParsedApiError(error).message,
+        });
+      } finally {
+        void fetchResults(1, undefined, undefined, null);
+        void fetchHistory(1, undefined);
+        void fetchRuleHistory(1, undefined);
       }
-      setPerformanceNotice(null);
-      void fetchResults(1, undefined, windowDays);
-      void fetchHistory(1, undefined);
-      void fetchRuleHistory(1, undefined);
     };
-    init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void init();
+  }, [fetchHistory, fetchResults, fetchRuleHistory]);
 
-  // Run backtest
-  const handleRun = async () => {
-    setIsRunning(true);
+  useEffect(() => {
+    if (!ruleRunResult?.id || isRuleRunTerminal(ruleRunResult.status)) return undefined;
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const poll = async () => {
+      try {
+        const detail = await backtestApi.getRuleBacktestRun(ruleRunResult.id);
+        if (cancelled) return;
+        applyRuleRunDetail(detail);
+        if (isRuleRunTerminal(detail.status)) {
+          await fetchRuleHistory(1, detail.code || undefined);
+          return;
+        }
+      } catch (error) {
+        if (!cancelled) setRuleRunError(getParsedApiError(error));
+      }
+      if (!cancelled) timer = window.setTimeout(() => void poll(), RULE_POLL_INTERVAL_MS);
+    };
+
+    timer = window.setTimeout(() => void poll(), RULE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [applyRuleRunDetail, fetchRuleHistory, ruleRunResult?.id, ruleRunResult?.status]);
+
+  const handleFilter = () => {
+    const code = normalizedCode || undefined;
+    const windowBars = parsePositiveInt(evaluationBars, 10);
+    setSelectedRunId(null);
+    setHistoryPage(1);
+    setCurrentPage(1);
+    setRuleHistoryPage(1);
+    setPerformanceNotice(null);
+    if (ruleRunResult && code && ruleRunResult.code !== code) {
+      setRuleRunResult(null);
+      setSelectedRuleRunId(null);
+    }
+    void fetchResults(1, code, windowBars, null);
+    void fetchHistory(1, code);
+    void fetchSampleStatus(code);
+    void fetchPerformance(code, windowBars, { showNotice: true });
+    void fetchRuleHistory(1, code);
+  };
+
+  const handleRunHistoricalEvaluation = async () => {
+    setIsRunningHistoricalEval(true);
     setRunResult(null);
     setRunError(null);
     setPrepareResult(null);
     setPrepareError(null);
     try {
-      const code = codeFilter.trim() || undefined;
-      const evalWindowDays = evalDays ? parseInt(evalDays, 10) : undefined;
-      setPerformanceNotice(null);
+      const windowBars = parsePositiveInt(evaluationBars, 10);
+      const maturityCalendarDays = parsePositiveInt(maturityDays, 14, 0);
       const response = await backtestApi.run({
-        code,
-        force: forceRerun || undefined,
-        minAgeDays: forceRerun ? 0 : undefined,
-        evalWindowDays,
+        code: normalizedCode || undefined,
+        force: forceReplaceResults,
+        evalWindowDays: windowBars,
+        minAgeDays: maturityCalendarDays,
       });
       setRunResult(response);
       setSelectedRunId(response.runId ?? null);
-      // Refresh results first so optional performance summary cannot hide valid rows.
-      await fetchResults(1, codeFilter.trim() || undefined, evalWindowDays, response.runId ?? undefined);
-      await fetchHistory(1, codeFilter.trim() || undefined);
-      await fetchSampleStatus(codeFilter.trim() || undefined);
-      await fetchPerformance(codeFilter.trim() || undefined, evalWindowDays, { showNotice: true });
-    } catch (err) {
-      setRunError(getParsedApiError(err));
+      await Promise.all([
+        fetchResults(1, normalizedCode || undefined, windowBars, response.runId ?? null),
+        fetchHistory(1, normalizedCode || undefined),
+        fetchSampleStatus(normalizedCode || undefined),
+      ]);
+      await fetchPerformance(normalizedCode || undefined, windowBars, { showNotice: true });
+    } catch (error) {
+      setRunError(getParsedApiError(error));
     } finally {
-      setIsRunning(false);
+      setIsRunningHistoricalEval(false);
     }
   };
 
-  // Filter by code
-  const handleFilter = () => {
-    const code = codeFilter.trim() || undefined;
-    const windowDays = evalDays ? parseInt(evalDays, 10) : undefined;
-    setSelectedRunId(null);
-    setSelectedRuleRunId(null);
-    setCurrentPage(1);
-    setHistoryPage(1);
-    setRuleHistoryPage(1);
-    setPerformanceNotice(null);
-    void fetchResults(1, code, windowDays);
-    void fetchHistory(1, code);
-    void fetchSampleStatus(code);
-    void fetchPerformance(code, windowDays, { showNotice: true });
-    void fetchRuleHistory(1, code);
-  };
-
-  const resolvedSampleCount = sampleRange === 'custom' ? parseInt(customSampleCount, 10) : parseInt(sampleRange, 10);
-
   const handlePrepareSamples = async (options: { forceRefresh?: boolean } = {}) => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setPrepareError({
         title: '缺少股票代码',
-        message: '请输入股票代码后再准备回测样本。',
-        rawMessage: '请输入股票代码后再准备回测样本。',
+        message: '请先输入股票代码，再准备历史分析评估样本。',
+        rawMessage: '请先输入股票代码，再准备历史分析评估样本。',
         category: 'missing_params',
       });
       return;
@@ -662,32 +992,32 @@ const BacktestPage: React.FC = () => {
     setIsPreparingSamples(true);
     setPrepareResult(null);
     setPrepareError(null);
-
     try {
-      const evalWindowDays = evalDays ? parseInt(evalDays, 10) : undefined;
       const response = await backtestApi.prepareSamples({
-        code,
-        sampleCount: Number.isFinite(resolvedSampleCount) ? resolvedSampleCount : 60,
-        evalWindowDays,
+        code: normalizedCode,
+        sampleCount: resolvedSampleCount,
+        evalWindowDays: parsePositiveInt(evaluationBars, 10),
+        minAgeDays: parsePositiveInt(maturityDays, 14, 0),
         forceRefresh: options.forceRefresh || false,
       });
       setPrepareResult(response);
-      await fetchSampleStatus(code);
-      await fetchHistory(1, code);
-    } catch (err) {
-      setPrepareError(getParsedApiError(err));
+      await Promise.all([
+        fetchSampleStatus(normalizedCode),
+        fetchHistory(1, normalizedCode),
+      ]);
+    } catch (error) {
+      setPrepareError(getParsedApiError(error));
     } finally {
       setIsPreparingSamples(false);
     }
   };
 
   const handleRebuildSamples = async () => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setPrepareError({
         title: '缺少股票代码',
-        message: '请输入股票代码后再重建回测样本。',
-        rawMessage: '请输入股票代码后再重建回测样本。',
+        message: '请先输入股票代码，再重建历史分析评估样本。',
+        rawMessage: '请先输入股票代码，再重建历史分析评估样本。',
         category: 'missing_params',
       });
       return;
@@ -696,29 +1026,22 @@ const BacktestPage: React.FC = () => {
     setIsPreparingSamples(true);
     setPrepareResult(null);
     setPrepareError(null);
-
     try {
-      await backtestApi.clearSamples(code);
-      setRunResult(null);
-      setSelectedRunId(null);
-      setResults([]);
-      setTotalResults(0);
-      setHistoryPage(1);
+      await backtestApi.clearSamples(normalizedCode);
       await handlePrepareSamples({ forceRefresh: false });
-      await fetchResults(1, code, evalDays ? parseInt(evalDays, 10) : undefined);
-    } catch (err) {
-      setPrepareError(getParsedApiError(err));
+      await fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null);
+    } catch (error) {
+      setPrepareError(getParsedApiError(error));
       setIsPreparingSamples(false);
     }
   };
 
   const handleClearSamples = async () => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setPrepareError({
         title: '缺少股票代码',
-        message: '请输入股票代码后再清理回测样本。',
-        rawMessage: '请输入股票代码后再清理回测样本。',
+        message: '请先输入股票代码，再清理历史分析评估样本。',
+        rawMessage: '请先输入股票代码，再清理历史分析评估样本。',
         category: 'missing_params',
       });
       return;
@@ -727,77 +1050,79 @@ const BacktestPage: React.FC = () => {
     setIsPreparingSamples(true);
     setPrepareError(null);
     try {
-      await backtestApi.clearSamples(code);
+      await backtestApi.clearSamples(normalizedCode);
       setPrepareResult(null);
       setRunResult(null);
       setSelectedRunId(null);
       setResults([]);
       setTotalResults(0);
-      setHistoryPage(1);
       setOverallPerf(null);
       setStockPerf(null);
-      await fetchSampleStatus(code);
-      await fetchHistory(1, code);
-      await fetchResults(1, code, evalDays ? parseInt(evalDays, 10) : undefined);
-      await fetchPerformance(code, evalDays ? parseInt(evalDays, 10) : undefined, { showNotice: true });
-    } catch (err) {
-      setPrepareError(getParsedApiError(err));
+      await Promise.all([
+        fetchSampleStatus(normalizedCode),
+        fetchHistory(1, normalizedCode),
+        fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
+      ]);
+      await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
+    } catch (error) {
+      setPrepareError(getParsedApiError(error));
     } finally {
       setIsPreparingSamples(false);
     }
   };
 
   const handleClearResults = async () => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setRunError({
         title: '缺少股票代码',
-        message: '请输入股票代码后再清理回测结果。',
-        rawMessage: '请输入股票代码后再清理回测结果。',
+        message: '请先输入股票代码，再清理历史分析评估结果。',
+        rawMessage: '请先输入股票代码，再清理历史分析评估结果。',
         category: 'missing_params',
       });
       return;
     }
 
-    setIsRunning(true);
+    setIsRunningHistoricalEval(true);
     setRunError(null);
     try {
-      await backtestApi.clearResults(code);
+      await backtestApi.clearResults(normalizedCode);
       setRunResult(null);
       setSelectedRunId(null);
       setResults([]);
       setTotalResults(0);
-      setHistoryPage(1);
-      await fetchHistory(1, code);
-      await fetchResults(1, code, evalDays ? parseInt(evalDays, 10) : undefined);
-      await fetchPerformance(code, evalDays ? parseInt(evalDays, 10) : undefined, { showNotice: true });
-    } catch (err) {
-      setRunError(getParsedApiError(err));
+      await Promise.all([
+        fetchHistory(1, normalizedCode),
+        fetchResults(1, normalizedCode, parsePositiveInt(evaluationBars, 10), null),
+      ]);
+      await fetchPerformance(normalizedCode, parsePositiveInt(evaluationBars, 10), { showNotice: true });
+    } catch (error) {
+      setRunError(getParsedApiError(error));
     } finally {
-      setIsRunning(false);
+      setIsRunningHistoricalEval(false);
     }
   };
 
-  const handleOpenRun = async (run: BacktestRunHistoryItem) => {
+  const handleOpenHistoricalRun = async (run: BacktestRunHistoryItem) => {
     setSelectedRunId(run.id);
-    if (run.code) {
-      setCodeFilter(run.code);
-    }
-    setEvalDays(String(run.evalWindowDays));
-    setForceRerun(false);
+    setCodeFilter(run.code || '');
+    setEvaluationBars(String(run.evaluationWindowTradingBars || run.evalWindowDays));
+    setMaturityDays(String(run.maturityCalendarDays || run.minAgeDays));
+    setForceReplaceResults(false);
     setPerformanceNotice(null);
-    await fetchHistory(1, run.code || undefined);
-    await fetchSampleStatus(run.code || undefined);
-    await fetchResults(1, run.code || undefined, run.evalWindowDays, run.id);
+    await Promise.all([
+      fetchHistory(1, run.code || undefined),
+      fetchSampleStatus(run.code || undefined),
+      fetchResults(1, run.code || undefined, run.evalWindowDays, run.id),
+    ]);
+    await fetchPerformance(run.code || undefined, run.evalWindowDays, { showNotice: true });
   };
 
   const handleParseRuleStrategy = async () => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setRuleParseError({
         title: '缺少股票代码',
-        message: '请先输入股票代码，再解析规则策略。',
-        rawMessage: '请先输入股票代码，再解析规则策略。',
+        message: '请先输入股票代码，再解析规则文本。',
+        rawMessage: '请先输入股票代码，再解析规则文本。',
         category: 'missing_params',
       });
       return;
@@ -806,8 +1131,8 @@ const BacktestPage: React.FC = () => {
     if (!ruleStrategyText.trim()) {
       setRuleParseError({
         title: '缺少策略文本',
-        message: '请输入策略文本后再解析。',
-        rawMessage: '请输入策略文本后再解析。',
+        message: '请输入规则策略文本后再解析。',
+        rawMessage: '请输入规则策略文本后再解析。',
         category: 'missing_params',
       });
       return;
@@ -818,28 +1143,27 @@ const BacktestPage: React.FC = () => {
     setRuleRunError(null);
     try {
       const response = await backtestApi.parseRuleStrategy({
-        code,
+        code: normalizedCode,
         strategyText: ruleStrategyText,
       });
       setRuleParsedStrategy(response);
       setRuleConfirmed(false);
       setRuleRunResult(null);
       setSelectedRuleRunId(null);
-      await fetchRuleHistory(1, code || undefined);
-    } catch (err) {
-      setRuleParseError(getParsedApiError(err));
+      await fetchRuleHistory(1, normalizedCode);
+    } catch (error) {
+      setRuleParseError(getParsedApiError(error));
     } finally {
       setIsParsingRuleStrategy(false);
     }
   };
 
   const handleRunRuleBacktest = async () => {
-    const code = codeFilter.trim();
-    if (!code) {
+    if (!normalizedCode) {
       setRuleRunError({
         title: '缺少股票代码',
-        message: '请输入股票代码后再运行规则回测。',
-        rawMessage: '请输入股票代码后再运行规则回测。',
+        message: '请输入股票代码后再提交规则回测。',
+        rawMessage: '请输入股票代码后再提交规则回测。',
         category: 'missing_params',
       });
       return;
@@ -847,8 +1171,8 @@ const BacktestPage: React.FC = () => {
     if (!ruleParsedStrategy) {
       setRuleRunError({
         title: '需要先解析策略',
-        message: '请先解析策略并确认规则结构，再运行回测。',
-        rawMessage: '请先解析策略并确认规则结构，再运行回测。',
+        message: '请先解析并确认规则结构，再提交确定性规则回测。',
+        rawMessage: '请先解析并确认规则结构，再提交确定性规则回测。',
         category: 'validation_error',
       });
       return;
@@ -856,691 +1180,552 @@ const BacktestPage: React.FC = () => {
     if (!ruleConfirmed) {
       setRuleRunError({
         title: '需要确认解析结果',
-        message: '请勾选“我已确认解析结果”后再运行。',
-        rawMessage: '请勾选“我已确认解析结果”后再运行。',
+        message: '请确认归一化规则后再提交回测。',
+        rawMessage: '请确认归一化规则后再提交回测。',
         category: 'validation_error',
       });
       return;
     }
 
-    setIsRunningRuleBacktest(true);
+    setIsSubmittingRuleBacktest(true);
     setRuleRunError(null);
     try {
       const response = await backtestApi.runRuleBacktest({
-        code,
+        code: normalizedCode,
         strategyText: ruleStrategyText,
         parsedStrategy: ruleParsedStrategy.parsedStrategy,
-        lookbackBars: parseInt(ruleLookbackBars, 10) || 252,
+        lookbackBars: parsePositiveInt(ruleLookbackBars, 252, 10),
+        initialCapital: Number.parseFloat(ruleInitialCapital) || 100000,
+        feeBps: Number.parseFloat(ruleFeeBps) || 0,
+        slippageBps: Number.parseFloat(ruleSlippageBps) || 0,
         confirmed: true,
+        waitForCompletion: false,
       });
       applyRuleRunDetail(response);
-      await fetchRuleHistory(1, code || undefined);
-    } catch (err) {
-      setRuleRunError(getParsedApiError(err));
+      setActiveModule('rule');
+      await fetchRuleHistory(1, normalizedCode);
+    } catch (error) {
+      setRuleRunError(getParsedApiError(error));
     } finally {
-      setIsRunningRuleBacktest(false);
+      setIsSubmittingRuleBacktest(false);
     }
   };
 
   const handleOpenRuleRun = async (run: RuleBacktestHistoryItem) => {
     setSelectedRuleRunId(run.id);
-    if (run.code) {
-      setCodeFilter(run.code);
-    }
+    setCodeFilter(run.code);
     setRuleConfirmed(true);
+    setRuleRunError(null);
     try {
       const detail = await backtestApi.getRuleBacktestRun(run.id);
       applyRuleRunDetail(detail);
-    } catch (err) {
-      setRuleRunError(getParsedApiError(err));
+      setActiveModule('rule');
+    } catch (error) {
+      setRuleRunError(getParsedApiError(error));
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleFilter();
-    }
+  const handleResultsPageChange = (page: number) => {
+    void fetchResults(
+      page,
+      normalizedCode || undefined,
+      parsePositiveInt(evaluationBars, 10),
+      selectedRunId,
+    );
   };
 
-  // Pagination
-  const totalPages = Math.ceil(totalResults / pageSize);
-  const handlePageChange = (page: number) => {
-    const windowDays = evalDays ? parseInt(evalDays, 10) : undefined;
-    fetchResults(page, codeFilter.trim() || undefined, windowDays);
+  const handleCodeKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') handleFilter();
   };
 
   return (
     <div className="workspace-page workspace-page--backtest">
       <WorkspacePageHeader
-        className="flex-shrink-0"
         eyebrow="WolfyStock Quant Lab"
-        title="策略回测"
-        description="用统一窗口快速复盘建议方向、止盈止损触发率和历史执行质量。"
+        title="Backtesting"
+        description="在同一个量化工作台中区分历史分析评估与确定性规则回测，并把关键语义、执行假设和审计信息放在更克制的层级里。"
       >
-        <div className="workspace-surface-muted px-3 py-3 sm:px-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-[1_1_220px]">
+        <Card className="product-command-card" padding="md">
+          <div className="product-command-row">
+            <label className="product-field product-field--grow">
+              <span className="theme-field-label">股票代码</span>
               <input
                 type="text"
                 value={codeFilter}
-                onChange={(e) => setCodeFilter(e.target.value.toUpperCase())}
-                onKeyDown={handleKeyDown}
-                placeholder="按股票代码筛选，留空则查看全部"
-                disabled={isRunning}
-                className="input-terminal w-full"
+                onChange={(event) => setCodeFilter(event.target.value.toUpperCase())}
+                onKeyDown={handleCodeKeyDown}
+                placeholder="输入股票代码，如 AAPL 或 600519"
+                className="input-surface input-focus-glow product-command-input"
+                aria-label="股票代码"
               />
-            </div>
+            </label>
+            <Button onClick={handleFilter}>应用筛选</Button>
+          </div>
+          <div className="product-chip-list">
+            <span className="product-chip">当前标的: {normalizedCode || '全部股票'}</span>
+            <span className="product-chip">Historical = signal evaluation</span>
+            <span className="product-chip">Rule = deterministic execution</span>
+          </div>
+          <div className="product-module-switch" role="tablist" aria-label="回测模块">
             <button
               type="button"
-              onClick={handleFilter}
-              disabled={isLoadingResults}
-              className="btn-secondary flex items-center gap-1.5 whitespace-nowrap"
+              role="tab"
+              aria-selected={activeModule === 'historical'}
+              className={`product-module-switch__button${activeModule === 'historical' ? ' is-active' : ''}`}
+              onClick={() => setActiveModule('historical')}
             >
-              筛选
-            </button>
-            <div className="flex items-center gap-1 whitespace-nowrap">
-              <span className="text-xs text-muted-text">观察窗口</span>
-              <input
-                type="number"
-                min={1}
-                max={120}
-                value={evalDays}
-                onChange={(e) => setEvalDays(e.target.value)}
-                placeholder="10"
-                disabled={isRunning}
-                className="input-terminal w-14 py-2 text-center text-xs"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setForceRerun(!forceRerun)}
-              disabled={isRunning}
-              className={`
-                flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
-                transition-all duration-200 whitespace-nowrap border cursor-pointer
-                ${forceRerun
-                  ? 'border-[hsl(var(--accent-primary-hsl)/0.4)] bg-[hsl(var(--accent-primary-hsl)/0.1)] text-[hsl(var(--accent-primary-hsl))] shadow-[0_0_8px_hsl(var(--accent-primary-hsl)/0.2)]'
-                  : 'border-white/10 bg-transparent text-muted-text hover:border-white/20 hover:text-secondary-text'
-                }
-                disabled:cursor-not-allowed disabled:opacity-50
-              `}
-            >
-              <span
-                className={`
-                  inline-block h-1.5 w-1.5 rounded-full transition-colors duration-200
-                  ${forceRerun ? 'bg-[hsl(var(--accent-primary-hsl))] shadow-[0_0_4px_hsl(var(--accent-primary-hsl)/0.6)]' : 'bg-border'}
-                `}
-              />
-              强制重跑
+              <span>Historical Analysis Evaluation</span>
+              <small>历史分析信号评估</small>
             </button>
             <button
               type="button"
-              onClick={handleRun}
-              disabled={isRunning}
-                className="btn-primary flex items-center gap-1.5 whitespace-nowrap"
-              >
-                {isRunning ? (
-                <>
-                  <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  运行中...
-                </>
-              ) : (
-                '运行回测'
-              )}
+              role="tab"
+              aria-selected={activeModule === 'rule'}
+              className={`product-module-switch__button${activeModule === 'rule' ? ' is-active' : ''}`}
+              onClick={() => setActiveModule('rule')}
+            >
+              <span>Deterministic Rule Strategy Backtest</span>
+              <small>确定性规则回测</small>
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 whitespace-nowrap">
-              <span className="text-xs text-muted-text">样本范围</span>
-              <select
-                value={sampleRange}
-                onChange={(e) => setSampleRange(e.target.value)}
-                disabled={isPreparingSamples}
-                className="input-terminal min-w-[120px] py-2 text-xs"
-              >
-                <option value="20">20</option>
-                <option value="60">60</option>
-                <option value="120">120</option>
-                <option value="252">252</option>
-                <option value="custom">自定义</option>
-              </select>
-              {sampleRange === 'custom' ? (
+        </Card>
+      </WorkspacePageHeader>
+
+      {activeModule === 'historical' ? (
+        <>
+          <Card
+            title="Historical Analysis Evaluation"
+            subtitle="Module A"
+            className="product-section-card"
+          >
+            <p className="product-section-copy">
+              评估历史 AI 分析样本在后续行情中的方向与收益表现，不把它误读成逐 bar 的交易策略回测。
+            </p>
+            <div className="product-field-grid">
+              <label className="product-field">
+                <span className="theme-field-label">评估窗口</span>
                 <input
                   type="number"
                   min={1}
-                  max={365}
-                  value={customSampleCount}
-                  onChange={(e) => setCustomSampleCount(e.target.value)}
-                  disabled={isPreparingSamples}
-                  className="input-terminal w-20 py-2 text-center text-xs"
+                  max={120}
+                  value={evaluationBars}
+                  onChange={(event) => setEvaluationBars(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="评估窗口"
                 />
-              ) : null}
-            </div>
-            <button
-              type="button"
-              onClick={() => handlePrepareSamples({ forceRefresh: false })}
-              disabled={isRunning || isPreparingSamples || !codeFilter.trim()}
-              className="btn-secondary whitespace-nowrap"
-            >
-              {isPreparingSamples ? '准备中...' : '准备样本'}
-            </button>
-            <button
-              type="button"
-              onClick={handleRebuildSamples}
-              disabled={isRunning || isPreparingSamples || !codeFilter.trim()}
-              className="btn-secondary whitespace-nowrap"
-            >
-              重建样本
-            </button>
-            <button
-              type="button"
-              onClick={handleClearSamples}
-              disabled={isRunning || isPreparingSamples || !codeFilter.trim()}
-              className="btn-secondary whitespace-nowrap"
-            >
-              清空样本
-            </button>
-          </div>
-          {runResult ? <RunSummary data={runResult} /> : null}
-          {runResult?.noResultReason && ['insufficient_historical_data', 'no_analysis_history', 'missing_market_history', 'no_eligible_candidates'].includes(runResult.noResultReason) ? (
-            <Card padding="md" className="border border-warning/20 bg-warning/10">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-[hsl(var(--accent-warning-hsl))]">需要准备回测样本</p>
-                  <p className="mt-1 text-xs leading-5 text-secondary-text">
-                    {runResult.noResultMessage || '当前历史分析样本不足，先准备样本再重新运行回测。'}
-                  </p>
-                </div>
-              <button
-                  type="button"
-                  onClick={() => void handlePrepareSamples({ forceRefresh: false })}
-                  disabled={isRunning || isPreparingSamples || !codeFilter.trim()}
-                  className="btn-secondary whitespace-nowrap"
-                >
-                  {isPreparingSamples ? '准备中...' : '准备回测样本'}
-                </button>
-              </div>
-            </Card>
-          ) : null}
-          {prepareResult ? (
-            <Card padding="md" className="border border-success/20 bg-success/10">
-              <p className="text-xs font-medium text-success">回测样本已准备</p>
-              <p className="mt-1 text-xs leading-5 text-secondary-text">
-                已生成 {prepareResult.prepared} 条样本，跳过 {prepareResult.skippedExisting} 条已有样本。现在可以重新运行回测。
-              </p>
-            </Card>
-          ) : null}
-          {prepareError ? <ApiErrorAlert error={prepareError} /> : null}
-          {runError ? <ApiErrorAlert error={runError} /> : null}
-        </div>
-      </WorkspacePageHeader>
-
-      <Card padding="md" className="mb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <span className="label-uppercase">AI 规则回测</span>
-            <p className="mt-1 text-xs text-secondary-text">
-              输入自然语言或半结构化策略，先解析为结构化规则，再执行 deterministic 回测。
-            </p>
-          </div>
-          <div className="rounded-lg border border-white/6 bg-elevated px-3 py-2 text-xs text-secondary-text">
-            当前标的：<span className="font-mono text-foreground">{codeFilter.trim() || '--'}</span>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1.5 block text-xs text-secondary-text">策略文本</label>
-              <textarea
-                value={ruleStrategyText}
-                onChange={(e) => setRuleStrategyText(e.target.value)}
-                rows={6}
-                className="input-terminal min-h-[150px] w-full resize-y"
-                placeholder="例如：Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70."
-                disabled={isParsingRuleStrategy || isRunningRuleBacktest}
-              />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div>
-                <label className="mb-1.5 block text-xs text-secondary-text">回测窗口（日线）</label>
+                <span className="product-field-help">单位是 trading bars，例如 10 = 从分析日往后评估 10 根日线。</span>
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">成熟期</span>
                 <input
                   type="number"
-                  min={30}
-                  max={2000}
-                  value={ruleLookbackBars}
-                  onChange={(e) => setRuleLookbackBars(e.target.value)}
-                  className="input-terminal w-full py-2 text-xs"
-                  disabled={isParsingRuleStrategy || isRunningRuleBacktest}
+                  min={0}
+                  max={365}
+                  value={maturityDays}
+                  onChange={(event) => setMaturityDays(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="成熟期"
                 />
-              </div>
-              <div className="flex items-end gap-2 sm:col-span-2">
-                <button
-                  type="button"
-                  onClick={handleParseRuleStrategy}
-                  disabled={isParsingRuleStrategy || isRunningRuleBacktest || !codeFilter.trim()}
-                  className="btn-secondary whitespace-nowrap"
-                >
-                  {isParsingRuleStrategy ? '解析中...' : '解析策略'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRunRuleBacktest}
-                  disabled={isRunningRuleBacktest || isParsingRuleStrategy || !codeFilter.trim() || !ruleParsedStrategy || !ruleConfirmed}
-                  className="btn-primary whitespace-nowrap"
-                >
-                  {isRunningRuleBacktest ? '运行中...' : '确认并运行'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRuleParsedStrategy(null);
-                    setRuleConfirmed(false);
-                    setRuleRunResult(null);
-                    setRuleRunError(null);
-                    setRuleParseError(null);
-                  }}
-                  className="btn-secondary whitespace-nowrap"
-                >
-                  重置解析
-                </button>
-              </div>
-            </div>
-            {ruleParseError ? <ApiErrorAlert error={ruleParseError} /> : null}
-            {ruleRunError ? <ApiErrorAlert error={ruleRunError} /> : null}
-          </div>
-
-          <div>
-            <RuleBacktestParsedPreview
-              parsed={ruleParsedStrategy}
-              confirmed={ruleConfirmed}
-              onToggleConfirmed={setRuleConfirmed}
-            />
-          </div>
-        </div>
-      </Card>
-
-      <Card padding="md" className="mb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <span className="label-uppercase">规则回测结果</span>
-            <p className="mt-1 text-xs text-secondary-text">只展示规则执行的确定性结果，不由 AI 直接逐日决定交易。</p>
-          </div>
-          {selectedRuleRunId ? (
-            <div className="rounded-lg border border-white/6 bg-elevated px-3 py-2 text-xs text-secondary-text">
-              已选运行：<span className="font-mono text-foreground">#{selectedRuleRunId}</span>
-            </div>
-          ) : null}
-        </div>
-
-        {ruleRunResult ? (
-          <div className="mt-4 space-y-4">
-            {ruleRunResult.noResultMessage ? (
-              <Card padding="md" className="border border-warning/20 bg-warning/10">
-                <p className="text-xs font-medium text-[hsl(var(--accent-warning-hsl))]">无交易或结果受限</p>
-                <p className="mt-1 text-xs leading-5 text-secondary-text">{ruleRunResult.noResultMessage}</p>
-              </Card>
-            ) : null}
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <Card padding="sm" className="border border-white/5 bg-elevated">
-                <RuleMetricRow label="总收益" value={pct(ruleRunResult.totalReturnPct)} accent />
-                <RuleMetricRow label="交易次数" value={String(ruleRunResult.tradeCount ?? 0)} />
-              </Card>
-              <Card padding="sm" className="border border-white/5 bg-elevated">
-                <RuleMetricRow label="胜率" value={pct(ruleRunResult.winRatePct)} accent />
-                <RuleMetricRow label="平均单笔收益" value={pct(ruleRunResult.avgTradeReturnPct)} />
-              </Card>
-              <Card padding="sm" className="border border-white/5 bg-elevated">
-                <RuleMetricRow label="最大回撤" value={pct(ruleRunResult.maxDrawdownPct)} />
-                <RuleMetricRow label="平均持有天数" value={ruleRunResult.avgHoldingDays != null ? ruleRunResult.avgHoldingDays.toFixed(1) : '--'} />
-              </Card>
-              <Card padding="sm" className="border border-white/5 bg-elevated">
-                <RuleMetricRow label="最终权益" value={ruleRunResult.finalEquity != null ? ruleRunResult.finalEquity.toFixed(2) : '--'} accent />
-                <RuleMetricRow label="交易数" value={String(ruleRunResult.tradeCount ?? 0)} />
-              </Card>
-            </div>
-
-            <RuleBacktestChart points={ruleRunResult.equityCurve || []} />
-
-            <Card padding="md" className="border border-white/6 bg-elevated">
-              <span className="label-uppercase">AI 结果总结</span>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-secondary-text">
-                {ruleRunResult.aiSummary || '暂无 AI 总结。'}
-              </p>
-            </Card>
-
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="label-uppercase">交易明细</span>
-                <span className="text-xs text-muted-text">{ruleRunResult.trades?.length || 0} 笔</span>
-              </div>
-              <RuleBacktestTradeTable trades={ruleRunResult.trades || []} />
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 rounded-lg border border-dashed border-white/10 bg-elevated px-3 py-8 text-center text-xs text-muted-text">
-            解析并运行策略后，这里会显示指标、权益曲线、交易表和 AI 总结。
-          </div>
-        )}
-      </Card>
-
-      <Card padding="md" className="mb-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <span className="label-uppercase">规则回测历史</span>
-            <p className="mt-1 text-xs text-secondary-text">点击“查看”可回放某次规则回测结果。</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void fetchRuleHistory(1, codeFilter.trim() || undefined)}
-            className="btn-secondary whitespace-nowrap"
-            disabled={isLoadingRuleHistory}
-          >
-            {isLoadingRuleHistory ? '刷新中...' : '刷新历史'}
-          </button>
-        </div>
-
-        {isLoadingRuleHistory ? (
-          <div className="py-6 text-center text-xs text-muted-text">加载规则回测历史中...</div>
-        ) : ruleHistoryError ? (
-          <ApiErrorAlert error={ruleHistoryError} className="mt-3" />
-        ) : ruleHistoryItems.length === 0 ? (
-          <div className="py-6 text-center text-xs text-muted-text">暂无规则回测历史记录。</div>
-        ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-white/6 bg-card/72">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-elevated text-left">
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">运行时间</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">代码</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">策略</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">交易</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">总收益</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">胜率</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">状态</th>
-                  <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ruleHistoryItems.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`border-t border-white/5 transition-colors hover:bg-hover ${selectedRuleRunId === item.id ? 'bg-[hsl(var(--accent-primary-hsl)/0.06)]' : ''}`}
+                <span className="product-field-help">单位是 calendar days，例如 14 = 仅评估 14 天前的分析记录。</span>
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">分析样本数</span>
+                <div className="product-inline-fields">
+                  <select
+                    value={samplePreset}
+                    onChange={(event) => setSamplePreset(event.target.value)}
+                    className="input-surface product-command-input"
+                    aria-label="分析样本数"
                   >
-                    <td className="px-3 py-2 text-xs text-secondary-text">{item.runAt || '--'}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-[hsl(var(--accent-primary-hsl))]">{item.code}</td>
-                    <td className="px-3 py-2 text-xs text-foreground truncate max-w-[260px]" title={item.strategyText}>
-                      {item.strategyText}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-right text-foreground">{item.tradeCount}</td>
-                    <td className="px-3 py-2 text-xs text-right text-foreground">{pct(item.totalReturnPct)}</td>
-                    <td className="px-3 py-2 text-xs text-right text-foreground">{pct(item.winRatePct)}</td>
-                    <td className="px-3 py-2">{item.status === 'completed' ? <Badge variant="success">完成</Badge> : <Badge variant="warning">{item.status}</Badge>}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenRuleRun(item)}
-                        className="btn-secondary whitespace-nowrap"
-                      >
-                        查看
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-text">共 {ruleHistoryTotal} 条规则回测记录</p>
-          <Pagination
-            currentPage={ruleHistoryPage}
-            totalPages={Math.max(1, Math.ceil(ruleHistoryTotal / 10))}
-            onPageChange={(page) => {
-              setRuleHistoryPage(page);
-              void fetchRuleHistory(page, codeFilter.trim() || undefined);
-            }}
-          />
-        </div>
-      </Card>
-
-      {/* Main content */}
-      <main className="workspace-split-layout">
-        {/* Left sidebar - Performance */}
-        <div className="workspace-split-rail grid gap-3">
-          {isLoadingPerf ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-2 border-[hsl(var(--accent-primary-hsl)/0.2)] border-t-[hsl(var(--accent-primary-hsl))] rounded-full animate-spin" />
+                    <option value="20">20</option>
+                    <option value="60">60</option>
+                    <option value="120">120</option>
+                    <option value="252">252</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                  {samplePreset === 'custom' ? (
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={customSampleCount}
+                      onChange={(event) => setCustomSampleCount(event.target.value)}
+                      className="input-surface input-focus-glow product-command-input"
+                      aria-label="自定义样本数"
+                    />
+                  ) : null}
+                </div>
+                <span className="product-field-help">表示要准备多少条 analysis samples，而不是天数。</span>
+              </label>
             </div>
-          ) : (
-            <>
-              {performanceNotice ? <PerformanceNoticeCard notice={performanceNotice} /> : null}
-              {overallPerf ? (
-                <PerformanceCard metrics={overallPerf} title="整体表现" />
-              ) : performanceNotice ? null : (
-                <Card padding="md">
-                  <p className="text-xs text-muted-text text-center py-4">
-                    暂无回测表现数据。运行一次回测后，这里会显示整体命中率、收益率和止盈止损触发情况。
-                  </p>
-                </Card>
-              )}
-            </>
-          )}
 
-          {stockPerf && (
-            <PerformanceCard metrics={stockPerf} title={`${stockPerf.code || codeFilter}`} />
-          )}
-        </div>
-
-        {/* Right content - Results table */}
-        <section className="workspace-split-main">
-          <Card padding="md" className="mb-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="label-uppercase">样本状态</span>
-                <p className="mt-1 text-xs text-secondary-text">准备范围由上方“样本范围”控制。清空样本会删除当前 symbol 的 warmup 数据与相关结果。</p>
-              </div>
-              {isLoadingSampleStatus ? <span className="text-xs text-muted-text">加载中...</span> : null}
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricRow label="已准备样本" value={sampleStatus ? String(sampleStatus.preparedCount) : '--'} />
-              <MetricRow
-                label="覆盖日期"
-                value={sampleStatus?.preparedStartDate && sampleStatus?.preparedEndDate
-                  ? `${sampleStatus.preparedStartDate} ~ ${sampleStatus.preparedEndDate}`
-                  : '--'}
+            <label className="product-checkbox-row">
+              <input
+                type="checkbox"
+                checked={forceReplaceResults}
+                onChange={(event) => setForceReplaceResults(event.target.checked)}
+                aria-label="覆盖已有同窗口结果"
               />
-              <MetricRow label="最新准备时间" value={sampleStatus?.latestPreparedAt || '--'} />
-              <MetricRow label="当前目标范围" value={sampleRange === 'custom' ? `${customSampleCount}` : sampleRange} />
+              <span>覆盖已有同窗口结果。这个开关只影响是否重算，不会改变窗口或成熟期定义。</span>
+            </label>
+
+            <div className="product-action-row">
+              <Button onClick={() => void handleRunHistoricalEvaluation()} isLoading={isRunningHistoricalEval} loadingText="运行中…">
+                运行历史评估
+              </Button>
+              <Button variant="secondary" onClick={() => void handlePrepareSamples({ forceRefresh: false })} isLoading={isPreparingSamples} disabled={!normalizedCode} loadingText="准备中…">
+                准备分析样本
+              </Button>
+              <Button variant="outline" onClick={() => void handleRebuildSamples()} disabled={isPreparingSamples || !normalizedCode}>
+                重建样本
+              </Button>
+              <Button variant="ghost" onClick={() => void handleClearSamples()} disabled={isPreparingSamples || !normalizedCode}>
+                清理样本
+              </Button>
+              <Button variant="ghost" onClick={() => void handleClearResults()} disabled={isRunningHistoricalEval || !normalizedCode}>
+                清理结果
+              </Button>
             </div>
+
+            <div className="product-chip-list">
+              <span className="product-chip">Window: {parsePositiveInt(evaluationBars, 10)} trading bars</span>
+              <span className="product-chip">Maturity: {parsePositiveInt(maturityDays, 14, 0)} calendar days</span>
+              <span className="product-chip">Sample size: {resolvedSampleCount} analyses</span>
+            </div>
+
+            {runResult ? <HistoricalRunSummary data={runResult} /> : null}
             {prepareResult ? (
-              <div className="mt-3 rounded-md border border-success/20 bg-success/10 px-3 py-2 text-xs leading-5 text-secondary-text">
-                已准备 {prepareResult.prepared} 条样本，覆盖 {prepareResult.preparedStartDate || '--'} ~ {prepareResult.preparedEndDate || '--'}。
-                {prepareResult.noResultMessage ? ` ${prepareResult.noResultMessage}` : ''}
-              </div>
+              <Banner
+                tone="success"
+                title="样本准备完成"
+                body={(
+                  <>
+                    新增 {prepareResult.prepared} 条样本，跳过 {prepareResult.skippedExisting} 条已有样本。
+                    {prepareResult.noResultMessage ? <span className="product-banner__meta">{prepareResult.noResultMessage}</span> : null}
+                  </>
+                )}
+                className="mt-4"
+              />
             ) : null}
+            {prepareError ? <ApiErrorAlert error={prepareError} className="mt-4" /> : null}
+            {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
           </Card>
 
-          <div className="mb-2 flex items-center justify-between">
-            <span className="label-uppercase">当前回测结果</span>
-            <span className="text-xs text-muted-text">
-              {selectedRunId ? `历史运行 #${selectedRunId}` : '最新运行 / 当前筛选'}
-            </span>
-          </div>
-
-          {historyError ? <ApiErrorAlert error={historyError} className="mb-3" /> : null}
-          {sampleStatusError ? <ApiErrorAlert error={sampleStatusError} className="mb-3" /> : null}
-          {pageError ? (
-            <ApiErrorAlert error={pageError} className="mb-3" />
-          ) : null}
-          {isLoadingResults ? (
-            <div className="flex flex-col items-center justify-center h-64">
-              <div className="w-10 h-10 border-3 border-[hsl(var(--accent-primary-hsl)/0.2)] border-t-[hsl(var(--accent-primary-hsl))] rounded-full animate-spin" />
-              <p className="mt-3 text-secondary-text text-sm">加载回测结果中...</p>
-            </div>
-          ) : results.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <div className="w-12 h-12 mb-3 rounded-xl bg-elevated flex items-center justify-center">
-                <svg className="w-6 h-6 text-muted-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <h3 className="text-base font-medium text-foreground mb-1.5">暂无回测结果</h3>
-              <p className="text-xs text-muted-text max-w-xs">
-                先运行一次回测，再查看历史分析在不同股票与窗口下的方向判断和收益表现。
-              </p>
-            </div>
-          ) : (
-            <div className="animate-fade-in">
-              <div className="overflow-x-auto rounded-xl border border-white/6 bg-card/72">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-elevated text-left">
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">代码</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">日期</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">建议</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">方向</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">结果</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">收益率%</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-center">止损</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-center">止盈</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">状态</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((row) => (
-                      <tr
-                        key={row.analysisHistoryId}
-                        className="border-t border-white/5 transition-colors hover:bg-hover"
-                      >
-                        <td className="px-3 py-2 font-mono text-[hsl(var(--accent-primary-hsl))] text-xs">{row.code}</td>
-                        <td className="px-3 py-2 text-xs text-secondary-text">{row.analysisDate || '--'}</td>
-                        <td className="px-3 py-2 text-xs text-foreground truncate max-w-[140px]" title={row.operationAdvice || ''}>
-                          {row.operationAdvice || '--'}
-                        </td>
-                        <td className="px-3 py-2 text-xs">
-                          <span className="flex items-center gap-1">
-                            {boolIcon(row.directionCorrect)}
-                            <span className="text-muted-text">{row.directionExpected || ''}</span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">{outcomeBadge(row.outcome)}</td>
-                        <td className="px-3 py-2 text-xs font-mono text-right">
-                          <span className={
-                            row.simulatedReturnPct != null
-                              ? row.simulatedReturnPct > 0 ? 'text-success' : row.simulatedReturnPct < 0 ? 'text-danger' : 'text-secondary-text'
-                              : 'text-muted-text'
-                          }>
-                            {pct(row.simulatedReturnPct)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-center">{boolIcon(row.hitStopLoss)}</td>
-                        <td className="px-3 py-2 text-center">{boolIcon(row.hitTakeProfit)}</td>
-                        <td className="px-3 py-2">{statusBadge(row.evalStatus)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <Card title="Sample Status & Performance" subtitle="Summary" className="product-section-card">
+            <div className="summary-split">
+              <div className="summary-block">
+                <div className="summary-block__header">
+                  <div>
+                    <SectionEyebrow>Prepared Samples</SectionEyebrow>
+                    <h3 className="summary-block__title">样本状态</h3>
+                  </div>
+                  {isLoadingSampleStatus ? <span className="product-inline-meta">加载中…</span> : null}
+                </div>
+                <div className="metric-grid metric-grid--compact">
+                  <MetricCard label="已准备样本" value={String(sampleStatus?.preparedCount ?? '--')} />
+                  <MetricCard
+                    label="覆盖日期"
+                    value={sampleStatus?.preparedStartDate && sampleStatus?.preparedEndDate ? `${sampleStatus.preparedStartDate} ~ ${sampleStatus.preparedEndDate}` : '--'}
+                  />
+                  <MetricCard label="评估窗口" value={`${sampleStatus?.evaluationWindowTradingBars || parsePositiveInt(evaluationBars, 10)} bars`} />
+                  <MetricCard label="成熟期" value={`${sampleStatus?.maturityCalendarDays || parsePositiveInt(maturityDays, 14, 0)} 天`} />
+                </div>
+                {sampleStatusError ? <ApiErrorAlert error={sampleStatusError} className="mt-4" /> : null}
               </div>
 
-              {/* Pagination */}
-              <div className="mt-4">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={handlePageChange}
-                />
+              <div className="summary-block">
+                <div className="summary-block__header">
+                  <div>
+                    <SectionEyebrow>Performance</SectionEyebrow>
+                    <h3 className="summary-block__title">表现汇总</h3>
+                  </div>
+                  {isLoadingPerf ? <span className="product-inline-meta">加载中…</span> : null}
+                </div>
+                {performanceNotice ? (
+                  <Banner tone={performanceNotice.tone} title={performanceNotice.tone === 'danger' ? '表现数据加载失败' : '表现汇总尚未生成'} body={performanceNotice.message} />
+                ) : null}
+                {!isLoadingPerf && overallPerf ? <PerformanceGroup title="Overall" metrics={overallPerf} /> : null}
+                {!isLoadingPerf && stockPerf ? (
+                  <div className="mt-4">
+                    <PerformanceGroup title={stockPerf.code || normalizedCode || 'Symbol'} metrics={stockPerf} />
+                  </div>
+                ) : null}
+                {!isLoadingPerf && !overallPerf && !stockPerf && !performanceNotice ? (
+                  <div className="product-empty-state product-empty-state--compact">暂无表现汇总。</div>
+                ) : null}
               </div>
-
-              <p className="text-xs text-muted-text text-center mt-2">
-                共 {totalResults} 条结果
-              </p>
-            </div>
-          )}
-
-          <Card padding="md" className="mt-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="label-uppercase">回测历史</span>
-                <p className="mt-1 text-xs text-secondary-text">点击“查看”可回放某次运行的结果集。</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleClearResults()}
-                disabled={!codeFilter.trim() || isRunning}
-                className="btn-secondary whitespace-nowrap"
-              >
-                清空当前结果
-              </button>
             </div>
 
-            {isLoadingHistory ? (
-              <div className="py-6 text-center text-xs text-muted-text">加载历史记录中...</div>
-            ) : historyItems.length === 0 ? (
-              <div className="py-6 text-center text-xs text-muted-text">暂无历史运行记录。</div>
+            <Disclosure summary="执行假设与语义说明">
+              <AssumptionList
+                assumptions={historicalAssumptions || undefined}
+                emptyText="运行一次历史分析评估后，这里会显示固定执行假设。"
+              />
+            </Disclosure>
+          </Card>
+
+          <Card
+            title={selectedRunId ? `Evaluation Results #${selectedRunId}` : 'Evaluation Results'}
+            subtitle="Results"
+            className="product-section-card"
+          >
+            <p className="product-section-copy">
+              展示分析建议在后续窗口内的表现、数据源和状态，不把它描述成策略逐笔交易结果。
+            </p>
+            {pageError ? <ApiErrorAlert error={pageError} className="mb-4" /> : null}
+            {isLoadingResults ? (
+              <div className="product-empty-state">正在加载历史分析评估结果…</div>
             ) : (
-              <div className="mt-3 overflow-x-auto rounded-xl border border-white/6 bg-card/72">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-elevated text-left">
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">运行时间</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">代码</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">窗口</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">样本</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">胜率</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">平均收益</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider">状态</th>
-                      <th className="px-3 py-2.5 text-xs font-medium text-secondary-text uppercase tracking-wider text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyItems.map((item) => (
-                      <tr
-                        key={item.id}
-                        className={`border-t border-white/5 transition-colors hover:bg-hover ${selectedRunId === item.id ? 'bg-[hsl(var(--accent-primary-hsl)/0.06)]' : ''}`}
-                      >
-                        <td className="px-3 py-2 text-xs text-secondary-text">{item.runAt || '--'}</td>
-                        <td className="px-3 py-2 font-mono text-xs text-[hsl(var(--accent-primary-hsl))]">{item.code || '--'}</td>
-                        <td className="px-3 py-2 text-xs text-secondary-text">{item.evalWindowDays} / {item.minAgeDays}</td>
-                        <td className="px-3 py-2 text-xs text-foreground">{item.candidateCount}</td>
-                        <td className="px-3 py-2 text-xs text-right text-foreground">{pct(item.winRatePct)}</td>
-                        <td className="px-3 py-2 text-xs text-right text-foreground">{pct(item.avgSimulatedReturnPct)}</td>
-                        <td className="px-3 py-2">{statusBadge(item.status)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => void handleOpenRun(item)}
-                            className="btn-secondary whitespace-nowrap"
-                          >
-                            查看
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <HistoricalResultsTable rows={results} />
+            )}
+            <Pagination
+              className="mt-5"
+              currentPage={currentPage}
+              totalPages={Math.max(1, Math.ceil(totalResults / HISTORICAL_PAGE_SIZE))}
+              onPageChange={handleResultsPageChange}
+            />
+            <p className="product-footnote">共 {totalResults} 条历史分析评估结果。</p>
+          </Card>
+
+          <Card title="Run History" subtitle="Historical Module" className="product-section-card">
+            {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
+            {isLoadingHistory ? (
+              <div className="product-empty-state">正在加载历史分析评估运行记录…</div>
+            ) : (
+              <HistoricalRunsTable rows={historyItems} selectedRunId={selectedRunId} onOpen={(run) => void handleOpenHistoricalRun(run)} />
+            )}
+            <Pagination
+              className="mt-5"
+              currentPage={historyPage}
+              totalPages={Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE))}
+              onPageChange={(page) => {
+                setHistoryPage(page);
+                void fetchHistory(page, normalizedCode || undefined);
+              }}
+            />
+            <p className="product-footnote">共 {historyTotal} 条历史分析评估运行记录。</p>
+          </Card>
+        </>
+      ) : (
+        <>
+          <Card
+            title="Deterministic Rule Strategy Backtest"
+            subtitle="Module B"
+            className="product-section-card"
+          >
+            <p className="product-section-copy">
+              先把自然语言规则解析成标准化 entry / exit 结构，再按显式的价格口径、成交时点、费用和滑点假设执行。
+            </p>
+            <div className="product-field-grid product-field-grid--rule">
+              <label className="product-field product-field--full">
+                <span className="theme-field-label">策略文本</span>
+                <textarea
+                  value={ruleStrategyText}
+                  onChange={(event) => setRuleStrategyText(event.target.value)}
+                  rows={6}
+                  className="input-surface input-focus-glow product-command-input product-command-input--textarea"
+                  placeholder="例如：Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70."
+                />
+                <span className="product-field-help">这里描述的是规则逻辑；真正的成交假设在结果卡与执行假设中显式展示。</span>
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">Lookback</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={5000}
+                  value={ruleLookbackBars}
+                  onChange={(event) => setRuleLookbackBars(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="Lookback"
+                />
+                <span className="product-field-help">单位是 trading bars，例如 252 = 最近 252 根日线。</span>
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">初始资金</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={ruleInitialCapital}
+                  onChange={(event) => setRuleInitialCapital(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="初始资金"
+                />
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">单边手续费 (bp)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={ruleFeeBps}
+                  onChange={(event) => setRuleFeeBps(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="单边手续费 (bp)"
+                />
+              </label>
+              <label className="product-field">
+                <span className="theme-field-label">单边滑点 (bp)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={ruleSlippageBps}
+                  onChange={(event) => setRuleSlippageBps(event.target.value)}
+                  className="input-surface input-focus-glow product-command-input"
+                  aria-label="单边滑点 (bp)"
+                />
+              </label>
+            </div>
+
+            <div className="product-action-row">
+              <Button variant="secondary" onClick={() => void handleParseRuleStrategy()} isLoading={isParsingRuleStrategy} disabled={isSubmittingRuleBacktest || !normalizedCode} loadingText="解析中…">
+                解析规则
+              </Button>
+              <Button onClick={() => void handleRunRuleBacktest()} isLoading={isSubmittingRuleBacktest} disabled={isParsingRuleStrategy || !normalizedCode || !ruleParsedStrategy || !ruleConfirmed} loadingText="提交中…">
+                提交规则回测
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRuleParsedStrategy(null);
+                  setRuleConfirmed(false);
+                  setRuleRunResult(null);
+                  setRuleRunError(null);
+                  setRuleParseError(null);
+                }}
+              >
+                重置
+              </Button>
+            </div>
+
+            <div className="product-chip-list">
+              <span className="product-chip">Timeframe: {ruleParsedStrategy?.parsedStrategy.timeframe || 'daily'}</span>
+              <span className="product-chip">Price basis: close</span>
+              <span className="product-chip">Fill: next bar open</span>
+              <span className="product-chip">Fees/slippage: {Number.parseFloat(ruleFeeBps) || 0} / {Number.parseFloat(ruleSlippageBps) || 0} bp</span>
+            </div>
+
+            {ruleParseError ? <ApiErrorAlert error={ruleParseError} className="mt-4" /> : null}
+            {ruleRunError ? <ApiErrorAlert error={ruleRunError} className="mt-4" /> : null}
+
+            <div className="mt-4">
+              <RuleParsedPreview parsed={ruleParsedStrategy} confirmed={ruleConfirmed} onToggleConfirmed={setRuleConfirmed} />
+            </div>
+
+            <Disclosure summary="查看提交前执行假设">
+              <AssumptionList
+                assumptions={previewRuleAssumptions}
+                emptyText="填写参数后，这里会显示提交前的默认执行假设。"
+              />
+            </Disclosure>
+          </Card>
+
+          <Card title="Execution Result" subtitle="Rule Run" className="product-section-card">
+            {ruleRunResult ? (
+              <div className="result-stack">
+                <RuleRunStatusBanner run={ruleRunResult} />
+                <div className="metric-grid">
+                  <MetricCard label="总收益" value={pct(ruleRunResult.totalReturnPct)} tone="accent" />
+                  <MetricCard label="Buy & Hold" value={pct(ruleRunResult.buyAndHoldReturnPct)} />
+                  <MetricCard
+                    label="超额收益"
+                    value={pct(ruleRunResult.excessReturnVsBuyAndHoldPct)}
+                    tone={(ruleRunResult.excessReturnVsBuyAndHoldPct || 0) >= 0 ? 'positive' : 'negative'}
+                  />
+                  <MetricCard label="交易次数" value={String(ruleRunResult.tradeCount)} />
+                  <MetricCard label="胜率" value={pct(ruleRunResult.winRatePct)} tone="positive" />
+                  <MetricCard label="平均单笔收益" value={pct(ruleRunResult.avgTradeReturnPct)} />
+                  <MetricCard label="最大回撤" value={pct(ruleRunResult.maxDrawdownPct)} tone="negative" />
+                  <MetricCard
+                    label="平均持有"
+                    value={ruleRunResult.avgHoldingBars != null ? `${ruleRunResult.avgHoldingBars.toFixed(1)} bars` : '--'}
+                    note={ruleRunResult.avgHoldingCalendarDays != null ? `${ruleRunResult.avgHoldingCalendarDays.toFixed(1)} 天` : undefined}
+                  />
+                  <MetricCard label="最终权益" value={formatNumber(ruleRunResult.finalEquity)} />
+                </div>
+
+                <div className="summary-split">
+                  <RuleBacktestChart points={ruleRunResult.equityCurve || []} />
+                  <div className="summary-block">
+                    <div className="summary-block__header">
+                      <div>
+                        <SectionEyebrow>AI Summary</SectionEyebrow>
+                        <h3 className="summary-block__title">结果摘要</h3>
+                      </div>
+                    </div>
+                    <p className="product-section-copy">{ruleRunResult.aiSummary || '暂无 AI 摘要。'}</p>
+                    <div className="preview-grid mt-4">
+                      <div className="preview-card">
+                        <p className="metric-card__label">标准化文本</p>
+                        <p className="preview-card__text">{ruleRunResult.parsedStrategy.normalizedText || '--'}</p>
+                      </div>
+                      <div className="preview-card">
+                        <p className="metric-card__label">入场规则</p>
+                        <p className="preview-card__text">{ruleRunResult.parsedStrategy.summary?.entry || '--'}</p>
+                      </div>
+                      <div className="preview-card">
+                        <p className="metric-card__label">离场规则</p>
+                        <p className="preview-card__text">{ruleRunResult.parsedStrategy.summary?.exit || '--'}</p>
+                      </div>
+                      <div className="preview-card">
+                        <p className="metric-card__label">时间周期 / 最大 lookback</p>
+                        <p className="preview-card__text">{ruleRunResult.timeframe} / {ruleRunResult.parsedStrategy.maxLookback} bars</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Disclosure summary="执行假设与审计字段" defaultOpen={false}>
+                  <AssumptionList
+                    assumptions={ruleRunResult.executionAssumptions}
+                    emptyText="暂无执行假设。"
+                  />
+                </Disclosure>
+
+                <div className="summary-block">
+                  <div className="summary-block__header">
+                    <div>
+                      <SectionEyebrow>Trade Audit</SectionEyebrow>
+                      <h3 className="summary-block__title">交易明细</h3>
+                    </div>
+                    <span className="product-inline-meta">{ruleRunResult.trades.length} 笔</span>
+                  </div>
+                  <RuleBacktestTradeTable trades={ruleRunResult.trades || []} />
+                </div>
+              </div>
+            ) : (
+              <div className="product-empty-state">
+                解析并提交规则回测后，这里会显示状态、基准比较、权益曲线和交易审计。
               </div>
             )}
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-text">共 {historyTotal} 条历史运行记录</p>
-              <Pagination
-                currentPage={historyPage}
-                totalPages={Math.max(1, Math.ceil(historyTotal / 10))}
-                onPageChange={(page) => {
-                  setHistoryPage(page);
-                  void fetchHistory(page, codeFilter.trim() || undefined);
-                }}
-              />
-            </div>
           </Card>
-        </section>
-      </main>
+
+          <Card title="Run History" subtitle="Rule Module" className="product-section-card">
+            <div className="summary-block__header">
+              <div>
+                <SectionEyebrow>Async Runs</SectionEyebrow>
+                <h3 className="summary-block__title">规则回测历史</h3>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => void fetchRuleHistory(1, normalizedCode || undefined)} disabled={isLoadingRuleHistory}>
+                {isLoadingRuleHistory ? '刷新中…' : '刷新历史'}
+              </Button>
+            </div>
+            {ruleHistoryError ? <ApiErrorAlert error={ruleHistoryError} className="mb-4" /> : null}
+            <RuleRunsTable rows={ruleHistoryItems} selectedRunId={selectedRuleRunId} onOpen={(run) => void handleOpenRuleRun(run)} />
+            <Pagination
+              className="mt-5"
+              currentPage={ruleHistoryPage}
+              totalPages={Math.max(1, Math.ceil(ruleHistoryTotal / RULE_HISTORY_PAGE_SIZE))}
+              onPageChange={(page) => {
+                setRuleHistoryPage(page);
+                void fetchRuleHistory(page, normalizedCode || undefined);
+              }}
+            />
+            <p className="product-footnote">共 {ruleHistoryTotal} 条确定性规则回测记录。</p>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

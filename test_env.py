@@ -57,7 +57,7 @@ def print_section(title: str):
     print(f"\n--- {title} ---")
 
 
-def test_config():
+def check_config():
     """测试配置加载"""
     print_header("1. 配置加载测试")
     
@@ -175,7 +175,7 @@ def view_database():
     return True
 
 
-def test_data_fetch(stock_code: str = "600519"):
+def check_data_fetch(stock_code: str = "600519"):
     """测试数据获取"""
     print_header("3. 数据获取测试")
     
@@ -210,7 +210,7 @@ def test_data_fetch(stock_code: str = "600519"):
         return False
 
 
-def test_llm():
+def check_llm():
     """测试 LLM 调用"""
     print_header("4. LLM (Gemini) 调用测试")
     
@@ -313,7 +313,7 @@ def test_llm():
         return False
 
 
-def test_notification():
+def check_notification():
     """测试通知推送"""
     print_header("5. 通知推送测试")
     
@@ -372,7 +372,7 @@ def run_all_tests():
     
     # 1. 配置测试
     try:
-        results['配置加载'] = test_config()
+        results['配置加载'] = check_config()
     except Exception as e:
         print(f"  ✗ 配置测试失败: {e}")
         results['配置加载'] = False
@@ -458,7 +458,7 @@ def main():
     
     # 根据参数运行指定测试
     if args.config:
-        test_config()
+        check_config()
     
     if args.db:
         view_database()
@@ -467,20 +467,20 @@ def main():
         query_stock_data(args.stock)
     
     if args.fetch:
-        test_data_fetch()
+        check_data_fetch()
     
     if args.llm:
-        test_llm()
+        check_llm()
     
     if args.notify:
-        test_notification()
+        check_notification()
     
     if args.all:
-        test_config()
+        check_config()
         view_database()
-        test_data_fetch()
-        test_llm()
-        test_notification()
+        check_data_fetch()
+        check_llm()
+        check_notification()
     
     return 0
 

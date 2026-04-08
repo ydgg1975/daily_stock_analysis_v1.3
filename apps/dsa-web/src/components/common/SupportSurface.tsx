@@ -45,10 +45,10 @@ export const SupportBanner: React.FC<SupportBannerProps> = ({
   actionsClassName,
   role,
 }) => (
-  <div className={cn('theme-inline-banner rounded-xl px-3 py-3', bannerToneClasses[tone], className)} role={role}>
-    {title ? <p className={cn('theme-inline-banner-title text-sm font-medium', titleClassName)}>{title}</p> : null}
+  <div className={cn('theme-inline-banner rounded-[var(--cohere-radius-medium)] px-4 py-4', bannerToneClasses[tone], className)} role={role}>
+    {title ? <p className={cn('theme-inline-banner-title text-[0.98rem] font-normal tracking-[-0.01em]', titleClassName)}>{title}</p> : null}
     {body ? (
-      <div className={cn(title ? 'mt-1' : '', 'text-xs leading-5 opacity-90', bodyClassName)}>
+      <div className={cn(title ? 'mt-1.5' : '', 'text-sm leading-6 opacity-90', bodyClassName)}>
         {body}
       </div>
     ) : null}
@@ -73,7 +73,7 @@ export const SupportPanel: React.FC<SupportPanelProps> = ({
 }) => (
   <div
     className={cn(
-      'theme-panel-subtle rounded-[1rem] px-4 py-4',
+      'theme-panel-subtle rounded-[var(--cohere-radius-medium)] px-4 py-4',
       centered && 'text-center',
       className,
     )}
@@ -81,12 +81,12 @@ export const SupportPanel: React.FC<SupportPanelProps> = ({
   >
     {icon ? <div className={cn(centered && 'mx-auto')}>{icon}</div> : null}
     {title ? (
-      <p className={cn(icon ? 'mt-4' : '', 'text-sm font-medium text-foreground', titleClassName)}>
+      <p className={cn(icon ? 'mt-4' : '', 'text-[1rem] font-normal tracking-[-0.01em] text-foreground', titleClassName)}>
         {title}
       </p>
     ) : null}
     {body ? (
-      <div className={cn(title ? 'mt-1' : '', 'text-xs leading-5 text-muted-text', bodyClassName)}>
+      <div className={cn(title ? 'mt-1.5' : '', 'text-sm leading-6 text-muted-text', bodyClassName)}>
         {body}
       </div>
     ) : null}

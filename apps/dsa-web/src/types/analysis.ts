@@ -446,6 +446,7 @@ export interface TaskInfo {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   message?: string;
+  result?: AnalysisResult;
   reportType: string;
   createdAt: string;
   startedAt?: string;

@@ -19,11 +19,11 @@ export const SettingsSectionCard: React.FC<SettingsSectionCardProps> = ({
   actionsClassName = '',
 }) => {
   return (
-    <div className={cn('rounded-[1.5rem] border settings-border bg-card p-5 shadow-soft-card-strong', className)}>
+    <div className={cn('theme-panel-solid rounded-[var(--theme-panel-radius-lg)] p-5 md:p-6', className)}>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h2 className="text-sm font-semibold tracking-tight text-foreground uppercase tracking-wider">{title}</h2>
-          {description ? <p className="text-xs leading-6 text-muted-text">{description}</p> : null}
+          <h2 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{title}</h2>
+          {description ? <p className="text-sm leading-6 text-muted-text">{description}</p> : null}
         </div>
         {actions ? <div className={cn('flex shrink-0 flex-wrap items-center gap-2 sm:justify-end', actionsClassName)}>{actions}</div> : null}
       </div>

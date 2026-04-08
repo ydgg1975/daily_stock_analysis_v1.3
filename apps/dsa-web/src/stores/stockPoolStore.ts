@@ -80,7 +80,12 @@ function persistTasks(tasks: TaskInfo[]): void {
   if (typeof window === 'undefined') {
     return;
   }
-  window.localStorage.setItem(TASK_QUEUE_STORAGE_KEY, JSON.stringify(tasks.slice(0, MAX_RECENT_TASKS)));
+  const persistedTasks = tasks.slice(0, MAX_RECENT_TASKS).map((task) => {
+    const persistableTask = { ...task };
+    delete persistableTask.result;
+    return persistableTask;
+  });
+  window.localStorage.setItem(TASK_QUEUE_STORAGE_KEY, JSON.stringify(persistedTasks));
 }
 
 function touchTask(task: TaskInfo): TaskInfo {

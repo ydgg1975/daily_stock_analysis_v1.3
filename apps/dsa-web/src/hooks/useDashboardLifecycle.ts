@@ -81,6 +81,9 @@ export function useDashboardLifecycle({
       syncTaskUpdated(task);
       void hydrateRecentTasks();
     },
+    onTaskUpdated: (task) => {
+      syncTaskUpdated(task);
+    },
     onTaskCompleted: (task) => {
       syncTaskUpdated(task);
       void hydrateRecentTasks();

@@ -12,7 +12,7 @@ interface CardProps {
 }
 
 /**
- * Card component with terminal-inspired variants and optional hover styling.
+ * Card component aligned to the shared product design system.
  */
 export const Card: React.FC<CardProps> = ({
   title,
@@ -25,43 +25,33 @@ export const Card: React.FC<CardProps> = ({
 }) => {
   const paddingStyles = {
     none: '',
-    sm: 'p-4',
-    md: 'p-5',
-    lg: 'p-6',
+    sm: 'p-4 md:p-5',
+    md: 'p-5 md:p-6',
+    lg: 'p-6 md:p-7',
   };
 
   const variantStyles = {
-    default: 'terminal-card',
-    bordered: 'terminal-card',
-    gradient: 'gradient-border-card',
+    default: 'theme-panel-solid',
+    bordered: 'theme-panel-subtle',
+    gradient: 'theme-panel-band',
   };
 
-  const hoverStyles = hoverable ? 'terminal-card-hover cursor-pointer' : '';
-
-  if (variant === 'gradient') {
-    return (
-      <div className={cn(variantStyles.gradient, className)}>
-        <div className={cn('gradient-border-card-inner theme-card-surface', paddingStyles[padding])}>
-          {(title || subtitle) && (
-            <div className="mb-3">
-              {subtitle ? <span className="label-uppercase">{subtitle}</span> : null}
-              {title ? <h3 className="mt-1 text-lg font-semibold text-foreground">{title}</h3> : null}
-            </div>
-          )}
-          {children}
-        </div>
-      </div>
-    );
-  }
+  const hoverStyles = hoverable ? 'theme-card-hover cursor-pointer' : '';
 
   return (
     <div
-      className={cn('theme-card-surface rounded-[var(--theme-panel-radius-lg)]', variantStyles[variant], hoverStyles, paddingStyles[padding], className)}
+      className={cn(
+        'theme-card-surface rounded-[var(--theme-panel-radius-lg)]',
+        variantStyles[variant],
+        hoverStyles,
+        paddingStyles[padding],
+        className,
+      )}
     >
       {(title || subtitle) && (
-        <div className="mb-3">
+        <div className="mb-4 space-y-1.5">
           {subtitle ? <span className="label-uppercase">{subtitle}</span> : null}
-          {title ? <h3 className="mt-1 text-lg font-semibold text-foreground">{title}</h3> : null}
+          {title ? <h3 className="text-[1.125rem] font-normal tracking-[-0.02em] text-foreground md:text-[1.25rem]">{title}</h3> : null}
         </div>
       )}
       {children}

@@ -1,20 +1,31 @@
+/**
+ * SpaceX live refactor: preserves routing, archive access, language toggling,
+ * completion badge, and logout confirmation while shifting navigation to a
+ * restrained text-first shell with subtle active/hover states and no boxed tabs.
+ */
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { BarChart3, BriefcaseBusiness, Home, LogOut, MessageSquareQuote, Settings2 } from 'lucide-react';
+import {
+  Archive,
+  BriefcaseBusiness,
+  Globe,
+  Home,
+  LogOut,
+  MessageSquareText,
+  Settings2,
+  TestTubeDiagonal,
+} from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import brandImage from '../../assets/wolfystock-brand.png';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAgentChatStore } from '../../stores/agentChatStore';
 import { cn } from '../../utils/cn';
-import { LanguageToggle } from '../common/LanguageToggle';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { ThemeToggle } from '../theme/ThemeToggle';
 
 type SidebarNavProps = {
-  collapsed?: boolean;
+  layout?: 'header' | 'drawer';
   onNavigate?: () => void;
-  embeddedRail?: boolean;
+  onOpenArchive?: () => void;
+  hasArchive?: boolean;
 };
 
 type NavItem = {
@@ -22,108 +33,192 @@ type NavItem = {
   labelKey: string;
   to: string;
   icon: React.ComponentType<{ className?: string }>;
-  exact?: boolean;
   badge?: 'completion';
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'home', labelKey: 'nav.home', to: '/', icon: Home, exact: true },
-  { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareQuote, badge: 'completion' },
+  { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
+  { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
-  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: BarChart3 },
+  { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },
   { key: 'settings', labelKey: 'nav.settings', to: '/settings', icon: Settings2 },
 ];
 
-export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNavigate, embeddedRail = false }) => {
+function NavLabel({
+  label,
+  showBadge,
+}: {
+  label: string;
+  showBadge: boolean;
+}) {
+  return (
+    <span className="relative inline-flex min-w-0 items-center gap-2">
+      <span>{label}</span>
+      {showBadge ? (
+        <span
+          data-testid="chat-completion-badge"
+          className="shell-nav-dot"
+          aria-label={label}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+function DrawerUtilityLabel({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  return (
+    <span className="shell-nav-item__copy">
+      <span className="shell-nav-item__label">{label}</span>
+      {value ? <span className="shell-nav-item__value">{value}</span> : null}
+    </span>
+  );
+}
+
+export const SidebarNav: React.FC<SidebarNavProps> = ({
+  layout = 'header',
+  onNavigate,
+  onOpenArchive,
+  hasArchive = false,
+}) => {
   const { authEnabled, logout } = useAuth();
-  const { t } = useI18n();
+  const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const isDrawer = layout === 'drawer';
+
+  const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
+    const label = t(labelKey);
+    return (
+      <NavLink
+        key={key}
+        to={to}
+        end={to === '/'}
+        onClick={onNavigate}
+        aria-label={label}
+        className={({ isActive }) => cn(
+          isDrawer ? 'shell-drawer-link' : 'shell-header-link',
+          isActive ? 'is-active' : '',
+        )}
+      >
+        {isDrawer ? (
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
+        <span className={isDrawer ? 'shell-nav-item__label' : 'shell-header-link__label'}>
+          <NavLabel label={label} showBadge={badge === 'completion' && completionBadge} />
+        </span>
+      </NavLink>
+    );
+  });
+
+  const archiveAction = hasArchive ? (
+    <button
+      type="button"
+      onClick={() => {
+        onOpenArchive?.();
+        onNavigate?.();
+      }}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : 'shell-header-action'}
+      aria-label={t('shell.archiveTitle')}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <Archive className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={t('shell.archiveTitle')} />
+        </>
+      ) : (
+        <span>{t('shell.archiveShort')}</span>
+      )}
+    </button>
+  ) : null;
+
+  const languageAction = (
+    <button
+      type="button"
+      onClick={() => {
+        toggleLanguage();
+        onNavigate?.();
+      }}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility' : 'shell-header-action'}
+      aria-label={t('language.toggle')}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <Globe className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel
+            label={t('language.toggle')}
+            value={language === 'zh' ? t('language.zh') : t('language.en')}
+          />
+        </>
+      ) : (
+        <span>{language === 'zh' ? 'EN' : 'ZH'}</span>
+      )}
+    </button>
+  );
+
+  const logoutAction = authEnabled ? (
+    <button
+      type="button"
+      onClick={() => setShowLogoutConfirm(true)}
+      className={isDrawer ? 'shell-nav-item shell-nav-item--utility shell-nav-item--danger' : 'shell-header-action shell-header-action--danger'}
+      aria-label={t('nav.logout')}
+    >
+      {isDrawer ? (
+        <>
+          <span className="shell-nav-item__icon" aria-hidden="true">
+            <LogOut className="h-4 w-4" />
+          </span>
+          <DrawerUtilityLabel label={t('nav.logout')} />
+        </>
+      ) : (
+        <span>{t('nav.logout')}</span>
+      )}
+    </button>
+  ) : null;
 
   return (
-    <div className={cn('flex shrink-0 flex-col', embeddedRail ? 'h-auto' : 'h-full')}>
-      <div className={cn(embeddedRail ? 'mb-3 flex items-center gap-2 px-1' : 'mb-4 flex items-center gap-2 px-1', collapsed ? 'justify-center' : '')}>
-        <div className="theme-sidebar-brand flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl">
-          <img src={brandImage} alt="WolfyStock" className="h-full w-full scale-[1.12] object-cover object-center" />
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-[0.06em] text-foreground">WolfyStock</p>
-            <p className="truncate text-[10px] uppercase tracking-[0.18em] text-muted-text">{t('nav.terminal')}</p>
+    <>
+      {isDrawer ? (
+        <div className="shell-drawer-nav">
+          <div className="shell-drawer-brand">
+            <span className="shell-wordmark">WolfyStock</span>
+            <span className="shell-drawer-note">{t('nav.terminal')}</span>
           </div>
-        ) : null}
-      </div>
-
-      <div className={cn(embeddedRail ? 'mb-3 grid gap-2' : 'mb-3 grid gap-2')}>
-        <LanguageToggle variant="nav" collapsed={collapsed} />
-        <ThemeToggle variant="nav" collapsed={collapsed} />
-      </div>
-
-      <nav className={cn('theme-nav flex flex-col', embeddedRail ? '' : 'flex-1')} aria-label={t('shell.drawerTitle')}>
-        {NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, exact, badge }) => {
-          const label = t(labelKey);
-          return (
-          <NavLink
-            key={key}
-            to={to}
-            end={exact}
-            onClick={onNavigate}
-            aria-label={label}
-          className={({ isActive }) =>
-              cn(
-                'theme-nav-item group relative flex items-center gap-3 text-sm transition-all',
-                'h-[var(--nav-item-height)]',
-                collapsed ? 'justify-center px-0' : 'px-[var(--nav-item-padding-x)]',
-                isActive
-                  ? 'is-active text-foreground'
-                  : 'text-secondary-text hover:text-foreground'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <motion.div 
-                    layoutId="activeIndicator"
-                    className="theme-nav-indicator absolute bottom-1.5 left-1.5 top-1.5 bg-[var(--nav-indicator-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                  />
-                )}
-                <span className={cn('theme-nav-icon-wrap ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center', collapsed ? 'ml-0' : '')}>
-                  <Icon className={cn('h-[1.125rem] w-[1.125rem] shrink-0', isActive ? 'text-[var(--nav-icon-active)]' : 'text-current')} />
-                </span>
-                {!collapsed ? <span className="truncate">{label}</span> : null}
-                {badge === 'completion' && completionBadge ? (
-                  <span
-                    data-testid="chat-completion-badge"
-                    className={cn(
-                      'absolute right-3 h-2.5 w-2.5 rounded-full border border-black bg-[var(--nav-badge-bg)] shadow-[0_0_8px_var(--nav-indicator-shadow)]',
-                      collapsed ? 'right-2 top-2' : ''
-                    )}
-                    aria-label={t('nav.chatBadge')}
-                  />
-                ) : null}
-              </>
-            )}
-          </NavLink>
-        )})}
-      </nav>
-
-      {authEnabled ? (
-        <button
-          type="button"
-          onClick={() => setShowLogoutConfirm(true)}
-          className={cn(
-            'theme-panel-subtle mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl px-3 text-sm text-secondary-text transition-all hover:text-foreground',
-            collapsed ? 'justify-center px-2' : ''
-          )}
-        >
-          <LogOut className="h-5 w-5 shrink-0" />
-          {!collapsed ? <span>{t('nav.logout')}</span> : null}
-        </button>
-      ) : null}
+          <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
+            {navLinks}
+          </nav>
+          <div className="shell-drawer-footer">
+            {archiveAction}
+            {languageAction}
+            {logoutAction}
+          </div>
+        </div>
+      ) : (
+        <div className="shell-header-nav">
+          <div className="shell-header-brand">
+            <span className="shell-wordmark">WolfyStock</span>
+          </div>
+          <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
+            {navLinks}
+          </nav>
+          <div className="shell-header-utilities">
+            {archiveAction}
+            {languageAction}
+            {logoutAction}
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={showLogoutConfirm}
@@ -139,6 +234,6 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
         }}
         onCancel={() => setShowLogoutConfirm(false)}
       />
-    </div>
+    </>
   );
 };

@@ -50,6 +50,8 @@ describe('HistoryList', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: '管理' }));
+
     expect(screen.getByText('已选 1')).toBeInTheDocument();
     expect(screen.getByText((_, node) => node?.textContent === '建议 82')).toBeInTheDocument();
 
@@ -71,6 +73,7 @@ describe('HistoryList', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('button', { name: '管理' }));
     fireEvent.click(screen.getByText('全选当前'));
 
     expect(onToggleSelectAll).toHaveBeenCalledTimes(1);
@@ -83,6 +86,10 @@ describe('HistoryList', () => {
         <HistoryList {...baseProps} items={items} />
       </>,
     );
+
+    const manageButtons = screen.getAllByRole('button', { name: '管理' });
+    fireEvent.click(manageButtons[0]);
+    fireEvent.click(manageButtons[1]);
 
     const labels = container.querySelectorAll('label[for]');
     const ids = Array.from(labels).map((label) => label.getAttribute('for'));

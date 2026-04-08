@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { StockAutocomplete } from '../StockAutocomplete';
 import type { StockIndexItem } from '../../../types/stockIndex';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../../i18n/core';
 
 let stockIndexHookImpl: () => {
   index: StockIndexItem[];
@@ -75,6 +76,7 @@ describe('StockAutocomplete', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     stockIndexHookImpl = () => ({
       index: mockIndex,
       loading: false,
@@ -126,6 +128,20 @@ describe('StockAutocomplete', () => {
 
     const input = screen.getByPlaceholderText(/请输入代码/);
     expect(input).toBeInTheDocument();
+  });
+
+  it('uses the localized default placeholder when English is active', () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+
+    render(
+      <StockAutocomplete
+        value=""
+        onChange={mockOnChange}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('Enter a stock code or company name')).toBeInTheDocument();
   });
 
   it('renders the current value', () => {

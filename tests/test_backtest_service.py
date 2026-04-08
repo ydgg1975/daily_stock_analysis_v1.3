@@ -21,8 +21,12 @@ class BacktestServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._temp_dir = tempfile.TemporaryDirectory()
         self._db_path = os.path.join(self._temp_dir.name, "test_backtest_service.db")
+        self._original_database_path = os.environ.get("DATABASE_PATH")
+        self._original_eval_window = os.environ.get("BACKTEST_EVAL_WINDOW_DAYS")
+        self._original_min_age = os.environ.get("BACKTEST_MIN_AGE_DAYS")
         os.environ["DATABASE_PATH"] = self._db_path
         os.environ["BACKTEST_EVAL_WINDOW_DAYS"] = "3"
+        os.environ["BACKTEST_MIN_AGE_DAYS"] = "14"
 
         Config._instance = None
         DatabaseManager.reset_instance()
@@ -73,6 +77,18 @@ class BacktestServiceTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         DatabaseManager.reset_instance()
+        if self._original_database_path is None:
+            os.environ.pop("DATABASE_PATH", None)
+        else:
+            os.environ["DATABASE_PATH"] = self._original_database_path
+        if self._original_eval_window is None:
+            os.environ.pop("BACKTEST_EVAL_WINDOW_DAYS", None)
+        else:
+            os.environ["BACKTEST_EVAL_WINDOW_DAYS"] = self._original_eval_window
+        if self._original_min_age is None:
+            os.environ.pop("BACKTEST_MIN_AGE_DAYS", None)
+        else:
+            os.environ["BACKTEST_MIN_AGE_DAYS"] = self._original_min_age
         self._temp_dir.cleanup()
 
     def _count_results(self) -> int:
@@ -217,6 +233,18 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(item["outcome"], "win")
         self.assertEqual(item["direction_expected"], "up")
         self.assertTrue(item["direction_correct"])
+        self.assertEqual(item["evaluation_window_trading_bars"], 3)
+        self.assertIn("execution_assumptions", item)
+
+    def test_get_sample_status_allows_zero_maturity_days_from_config(self) -> None:
+        os.environ["BACKTEST_MIN_AGE_DAYS"] = "0"
+        Config._instance = None
+
+        service = BacktestService(self.db)
+        status = service.get_sample_status(code="600519")
+
+        self.assertEqual(status["min_age_days"], 0)
+        self.assertEqual(status["maturity_calendar_days"], 0)
 
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
@@ -224,6 +252,10 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         self.assertIsNotNone(stats["run_id"])
         self.assertEqual(self._count_runs(), 1)
+        self.assertEqual(stats["evaluation_mode"], "historical_analysis_evaluation")
+        self.assertEqual(stats["evaluation_window_trading_bars"], 3)
+        self.assertEqual(stats["maturity_calendar_days"], 0)
+        self.assertIn("execution_assumptions", stats)
 
         history = service.list_backtest_runs(code="600519", page=1, limit=10)
         self.assertEqual(history["total"], 1)
@@ -231,6 +263,9 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(item["code"], "600519")
         self.assertEqual(item["candidate_count"], 1)
         self.assertGreaterEqual(item["win_rate_pct"], 0)
+        self.assertEqual(item["evaluation_mode"], "historical_analysis_evaluation")
+        self.assertEqual(item["evaluation_window_trading_bars"], 3)
+        self.assertEqual(item["maturity_calendar_days"], 0)
 
         run_results = service.get_run_results(run_id=item["id"], page=1, limit=10)
         self.assertEqual(run_results["total"], 1)

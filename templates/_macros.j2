@@ -1,6 +1,7 @@
 {# Shared macros for report templates #}
 
 {% macro render_field_group(fields, critical_keywords=[]) -%}
+{% set empty_group_label = 'See Coverage / Audit (no critical missing fields in this section)' if report_language == 'en' else '详见 Coverage / Audit（当前区块无关键缺失字段）' %}
 {% set ns = namespace(lines=[]) %}
 {% for item in fields or [] %}
 {% set label = (item.label|string).strip() %}
@@ -26,7 +27,7 @@
 {{ line }}
 {% endfor %}
 {% else %}
-- 详见 Coverage / Audit（当前区块无关键缺失字段）
+- {{ empty_group_label }}
 {% endif %}
 {%- endmacro %}
 
@@ -43,6 +44,8 @@
 
 {% macro market_snapshot(result) -%}
 {% set snapshot = normalize_market_snapshot(result.market_snapshot if result.market_snapshot else {}) %}
+{% set session_type_label = 'Session Type' if report_language == 'en' else 'session 类型' %}
+{% set consistency_label = 'Consistency Warnings' if report_language == 'en' else '口径校验' %}
 ### 📈 {{ labels.market_snapshot_heading }}
 - **{{ labels.current_price_label }}**: {{ snapshot.get('price', na('接口未返回')) }}
 - **{{ labels.prev_close_label }}**: {{ snapshot.get('prev_close', na('接口未返回')) }}
@@ -57,9 +60,9 @@
 - **{{ labels.volume_ratio_label }}**: {{ snapshot.get('volume_ratio', na('当前数据源未提供')) }}
 - **{{ labels.turnover_rate_label }}**: {{ snapshot.get('turnover_rate', na('字段待接入')) }}
 - **{{ labels.source_label }}**: {{ snapshot.get('source', na('上游映射缺失')) }}
-- **session 类型**: {{ snapshot.get('session_type', na('接口未返回')) }}
+- **{{ session_type_label }}**: {{ snapshot.get('session_type', na('接口未返回')) }}
 {% if snapshot.get('consistency_warnings') %}
-- **口径校验**:
+- **{{ consistency_label }}**:
 {% for warning in snapshot.get('consistency_warnings') %}
   - {{ warning }}
 {% endfor %}

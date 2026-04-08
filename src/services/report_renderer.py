@@ -268,6 +268,44 @@ def _na(reason: str = "接口未返回") -> str:
     return f"NA（{normalized}）"
 
 
+_MISSING_REASON_TRANSLATIONS = {
+    "接口未返回": {"en": "API unavailable"},
+    "字段待接入": {"en": "integration pending"},
+    "当前数据源未提供": {"en": "not provided by current data source"},
+    "上游映射缺失": {"en": "upstream mapping unavailable"},
+    "口径冲突，待校正": {"en": "data source conflict; needs review"},
+}
+
+
+def _localize_missing_reason(reason: Optional[str], language: str = "zh") -> str:
+    normalized = _normalize_missing_reason(reason)
+    if normalize_report_language(language) != "en":
+        return normalized
+    return _MISSING_REASON_TRANSLATIONS.get(normalized, {}).get("en", normalized)
+
+
+def _na_localized(reason: str = "接口未返回", language: str = "zh") -> str:
+    return f"NA（{_localize_missing_reason(reason, language)}）"
+
+
+def _localize_missing_payload(value: Any, language: str) -> Any:
+    if normalize_report_language(language) != "en":
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("NA（") and text.endswith("）"):
+            return _na_localized(text[3:-1], language)
+        return value
+    if isinstance(value, list):
+        return [_localize_missing_payload(item, language) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _localize_missing_payload(item, language)
+            for key, item in value.items()
+        }
+    return value
+
+
 def _normalize_missing_text(value: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -3808,7 +3846,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
     no_position = position_advice.get("no_position") or localize_operation_advice(result.operation_advice, language)
     has_position = position_advice.get("has_position") or labels["continue_holding"]
 
-    return {
+    payload = {
         "title": title_block,
         "summary_panel": summary_panel,
         "info_fields": info_fields,
@@ -3835,6 +3873,7 @@ def build_standard_report_payload(result: AnalysisResult, report_language: str =
         "checklist": checklist,
         "checklist_items": checklist_items,
     }
+    return _localize_missing_payload(payload, language)
 
 
 def _summarize_checklist(checklist: List[str]) -> str:
@@ -4052,7 +4091,7 @@ def render(
         "report_language": report_language,
         "display_value": _format_text,
         "display_percent": _format_percent,
-        "na": _na,
+        "na": lambda reason="接口未返回": _na_localized(reason, report_language),
         "normalize_market_snapshot": _normalize_market_snapshot,
         "annotate_trade_levels": _annotate_trade_levels,
         "grade_intel_block": _grade_intel_block,

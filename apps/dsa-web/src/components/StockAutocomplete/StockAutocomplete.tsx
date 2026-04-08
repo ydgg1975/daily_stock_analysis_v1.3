@@ -13,6 +13,7 @@ import { useStockIndex } from '../../hooks/useStockIndex';
 import { useAutocomplete } from '../../hooks/useAutocomplete';
 import { SuggestionsList } from './SuggestionsList';
 import { cn } from '../../utils/cn';
+import { translateForCurrentLanguage } from '../../i18n/core';
 
 export interface StockAutocompleteProps {
   /** Input value */
@@ -29,12 +30,16 @@ export interface StockAutocompleteProps {
   className?: string;
 }
 
+function getDefaultPlaceholder(): string {
+  return translateForCurrentLanguage('common.stockSearchPlaceholder');
+}
+
 function FallbackInput({
   value,
   onChange,
   onSubmit,
   disabled = false,
-  placeholder = '输入股票代码或名称',
+  placeholder = getDefaultPlaceholder(),
   className,
 }: StockAutocompleteProps) {
   return (
@@ -49,7 +54,7 @@ function FallbackInput({
       }}
       placeholder={placeholder}
       disabled={disabled}
-      className={cn('input-terminal w-full', className)}
+      className={cn('input-surface input-focus-glow product-command-input w-full', className)}
       data-autocomplete-mode="fallback"
     />
   );
@@ -93,7 +98,7 @@ function StockAutocompleteInner({
   onChange,
   onSubmit,
   disabled = false,
-  placeholder = '输入股票代码或名称',
+  placeholder = getDefaultPlaceholder(),
   className,
 }: StockAutocompleteProps) {
   const { index, loading, fallback } = useStockIndex();
@@ -251,7 +256,7 @@ function StockAutocompleteInner({
         placeholder={placeholder}
         disabled={disabled}
         className={cn(
-          "input-terminal w-full",
+          'input-surface input-focus-glow product-command-input w-full',
           "focus:outline-none",
           isOpen && "rounded-b-none",
           className

@@ -19,18 +19,21 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
   value,
   tone,
 }) => (
-  <div className="home-subpanel p-3">
+  <div className="theme-panel-subtle relative overflow-hidden rounded-[var(--cohere-radius-medium)] px-4 py-4">
     <div className="flex flex-col">
-      <span className="text-xs text-muted-text mb-0.5">{label}</span>
+      <span className="label-uppercase">{label}</span>
       <span
-        className="text-lg font-bold font-mono"
-        style={{ color: value ? `var(${tone})` : 'var(--text-muted-text)' }}
+        className="mt-2 text-[1.45rem] font-normal tracking-[-0.03em]"
+        style={{
+          color: value ? `var(${tone})` : 'var(--text-muted-text)',
+          fontFamily: 'var(--theme-heading-font)',
+        }}
       >
         {value || '—'}
       </span>
     </div>
     <div
-      className="absolute bottom-0 left-0 right-0 h-0.5"
+      className="absolute bottom-0 left-0 right-0 h-px"
       style={{ background: `linear-gradient(90deg, transparent, var(${tone}), transparent)` }}
     />
   </div>
@@ -74,7 +77,7 @@ export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, langua
     <Card variant="bordered" padding="md" className="home-panel-card">
       <div className="mb-3 flex items-baseline gap-2">
         <span className="label-uppercase">{text.strategyPoints}</span>
-        <h3 className="text-base font-semibold text-foreground">{text.sniperLevels}</h3>
+        <h3 className="text-[1.1rem] font-normal tracking-[-0.02em] text-foreground">{text.sniperLevels}</h3>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {strategyItems.map((item) => (

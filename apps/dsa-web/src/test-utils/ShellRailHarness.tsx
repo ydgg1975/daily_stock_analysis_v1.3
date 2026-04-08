@@ -12,6 +12,7 @@ export const ShellRailHarness: React.FC<ShellRailHarnessProps> = ({ children }) 
     () => ({
       setRailContent,
       closeMobileRail: () => undefined,
+      openRail: () => undefined,
       isConnected: true,
     }),
     [],

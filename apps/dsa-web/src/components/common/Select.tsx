@@ -1,4 +1,10 @@
+/**
+ * SpaceX live refactor: preserves the shared select API while aligning dropdown
+ * controls with the same restrained input surface, uppercase field labels,
+ * and minimal accessory treatment used across the updated frontend.
+ */
 import React, { useId } from 'react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { cn } from '../../utils/cn';
 
 interface SelectOption {
@@ -20,52 +26,50 @@ interface SelectProps {
   emptyText?: string;
 }
 
-/**
- * Select component with terminal-inspired styling.
- */
 export const Select: React.FC<SelectProps> = ({
   id,
   value,
   onChange,
   options,
   label,
-  placeholder = '请选择',
+  placeholder,
   disabled = false,
   className = '',
 }) => {
+  const { t } = useI18n();
   const selectId = useId();
   const resolvedId = id ?? selectId;
+  const resolvedPlaceholder = placeholder ?? t('common.selectPlaceholder');
 
   return (
-    <div className={cn('flex flex-col', className)}>
-      {label ? <label htmlFor={resolvedId} className="mb-2 text-sm font-medium text-foreground">{label}</label> : null}
-      <div className="relative">
+    <div className={cn('select-field flex flex-col', className)}>
+      {label ? <label htmlFor={resolvedId} className="theme-field-label mb-2">{label}</label> : null}
+      <div className="select-field__control relative">
         <select
           id={resolvedId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           className={cn(
-            'h-11 w-full appearance-none rounded-xl border border-subtle bg-card px-4 py-2.5 pr-10 text-sm text-foreground',
-            'theme-focus-ring shadow-soft-card transition-all duration-200',
-            'hover:border-subtle-hover',
+            'select-surface input-surface theme-focus-ring h-12 w-full appearance-none rounded-[var(--theme-control-radius)] border bg-transparent px-4 py-2.5 pr-10 text-sm text-foreground',
+            'theme-focus-ring transition-all duration-200',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
           )}
         >
-          {placeholder && (
+          {resolvedPlaceholder && (
             <option value="" disabled>
-              {placeholder}
+              {resolvedPlaceholder}
             </option>
           )}
           {options.map((option) => (
-            <option key={option.value} value={option.value} className="bg-elevated text-foreground">
+            <option key={option.value} value={option.value} className="bg-[var(--surface-2)] text-foreground">
               {option.label}
             </option>
           ))}
         </select>
 
         {/* Dropdown arrow */}
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+        <div className="select-field__icon absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
           <svg
             className="h-4 w-4 text-secondary-text"
             fill="none"

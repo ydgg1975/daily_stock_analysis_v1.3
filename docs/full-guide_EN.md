@@ -644,15 +644,30 @@ Log file locations:
 
 ## Backtesting
 
-The backtesting module automatically validates historical AI analysis records against actual price movements, evaluating the accuracy of analysis recommendations.
+The backtest domain now has two explicit modules:
+
+1. **Historical Analysis Evaluation**
+   Validates historical AI analysis records from `AnalysisHistory` against later market moves.
+2. **Deterministic Rule Strategy Backtest**
+   Parses natural-language rules into structured entry / exit logic, then runs an auditable rule-based trading replay with explicit execution assumptions.
 
 ### How It Works
 
-1. Selects `AnalysisHistory` records past the cooldown period (default 14 days)
-2. Fetches daily bar data after the analysis date (forward bars)
-3. Infers expected direction from the operation advice and compares against actual movement
-4. Evaluates stop-loss/take-profit hit conditions and simulates execution returns
-5. Aggregates into overall and per-stock performance metrics
+#### A. Historical Analysis Evaluation
+
+1. Selects `AnalysisHistory` records past the maturity window (default 14 calendar days)
+2. Fetches daily bar data after the analysis date (forward trading bars)
+3. Infers expected direction from the operation advice and compares it against actual movement
+4. Evaluates stop-loss/take-profit hit conditions and simulated returns
+5. Aggregates overall and per-stock performance metrics
+
+#### B. Deterministic Rule Strategy Backtest
+
+1. Parses natural-language strategy text into normalized entry / exit rules
+2. Loads market history, preferring local US parquet files when applicable
+3. Runs the strategy with explicit signal timing, fill timing, price basis, position sizing, fees, and slippage assumptions
+4. Produces trade audits, equity curve, buy-and-hold benchmark, and excess return
+5. Submits asynchronously by default and exposes run-id based status polling
 
 ### Operation Advice Mapping
 
@@ -670,10 +685,11 @@ Set the following variables in `.env` (all optional, have defaults):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BACKTEST_ENABLED` | `true` | Whether to auto-run backtest after daily analysis |
-| `BACKTEST_EVAL_WINDOW_DAYS` | `10` | Evaluation window (trading days) |
-| `BACKTEST_MIN_AGE_DAYS` | `14` | Only backtest records older than N days to avoid incomplete data |
+| `BACKTEST_EVAL_WINDOW_DAYS` | `10` | Historical analysis evaluation window (trading bars) |
+| `BACKTEST_MIN_AGE_DAYS` | `14` | Historical sample maturity window (calendar days; `0` disables the maturity gate) |
 | `BACKTEST_ENGINE_VERSION` | `v1` | Engine version, used to distinguish results when logic is updated |
 | `BACKTEST_NEUTRAL_BAND_PCT` | `2.0` | Neutral band threshold (%), ±2% treated as range-bound |
+| `US_STOCK_PARQUET_DIR` | `/root/us_test/data/normalized/us` | Local US parquet root reused by stock history, historical evaluation, and rule backtests |
 
 ### Auto-run
 
@@ -689,6 +705,19 @@ Backtesting triggers automatically after the daily analysis flow completes (non-
 | `avg_simulated_return_pct` | Average simulated execution return (including SL/TP exits) |
 | `stop_loss_trigger_rate` | Stop-loss trigger rate (only counts records with SL configured) |
 | `take_profit_trigger_rate` | Take-profit trigger rate (only counts records with TP configured) |
+
+### Rule Backtest Execution Assumptions
+
+Deterministic rule backtests return the following assumptions explicitly so the semantics are auditable:
+
+- `timeframe`: current rule timeframe (default `daily`)
+- `price_basis`: signal calculation price basis (currently `close`)
+- `signal_evaluation_timing`: signals are evaluated at bar close
+- `entry_fill_timing`: entries fill on the next bar open
+- `exit_fill_timing`: exits fill on the next bar open; the last bar may force-close at close
+- `position_sizing`: 100% capital when long, otherwise cash
+- `fee_bps_per_side` / `slippage_bps_per_side`: per-side fee and slippage
+- `benchmark_method`: benchmarked against buy-and-hold over the same window
 
 ---
 
@@ -708,7 +737,7 @@ FastAPI provides RESTful API service for configuration management and triggering
 - **Configuration Management** - View/modify watchlist
 - **Quick Analysis** - Trigger analysis via API
 - **Real-time Progress** - Analysis task status updates in real-time, supports parallel tasks
-- **Backtest Validation** - Evaluate historical analysis accuracy, query direction win rate and simulated returns
+- **Backtest Validation** - Historical analysis evaluation plus deterministic rule strategy backtests, including run status, trade auditability, and buy-and-hold benchmarking
 - **API Documentation** - Visit `/docs` for Swagger UI
 
 ### API Endpoints
@@ -719,10 +748,16 @@ FastAPI provides RESTful API service for configuration management and triggering
 | `/api/v1/analysis/tasks` | GET | Query task list |
 | `/api/v1/analysis/status/{task_id}` | GET | Query task status |
 | `/api/v1/history` | GET | Query analysis history |
-| `/api/v1/backtest/run` | POST | Trigger backtest |
-| `/api/v1/backtest/results` | GET | Query backtest results (paginated) |
-| `/api/v1/backtest/performance` | GET | Get overall backtest performance |
-| `/api/v1/backtest/performance/{code}` | GET | Get per-stock backtest performance |
+| `/api/v1/backtest/run` | POST | Trigger historical analysis evaluation |
+| `/api/v1/backtest/prepare-samples` | POST | Prepare historical analysis evaluation samples for a symbol |
+| `/api/v1/backtest/sample-status` | GET | Query prepared sample coverage |
+| `/api/v1/backtest/results` | GET | Query historical analysis evaluation results (paginated) |
+| `/api/v1/backtest/performance` | GET | Get overall historical analysis evaluation performance |
+| `/api/v1/backtest/performance/{code}` | GET | Get per-stock historical analysis evaluation performance |
+| `/api/v1/backtest/rule/parse` | POST | Parse rule strategy text |
+| `/api/v1/backtest/rule/run` | POST | Submit or synchronously run deterministic rule backtests |
+| `/api/v1/backtest/rule/runs` | GET | Query rule backtest history |
+| `/api/v1/backtest/rule/runs/{run_id}` | GET | Query a rule backtest detail record |
 | `/api/health` | GET | Health check |
 | `/docs` | GET | API Swagger documentation |
 
@@ -741,24 +776,37 @@ curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
 # Query task status
 curl http://127.0.0.1:8000/api/v1/analysis/status/<task_id>
 
-# Trigger backtest (all stocks)
+# Trigger historical analysis evaluation (all stocks)
 curl -X POST http://127.0.0.1:8000/api/v1/backtest/run \
   -H 'Content-Type: application/json' \
   -d '{"force": false}'
 
-# Trigger backtest (specific stock)
+# Trigger historical analysis evaluation (specific stock)
 curl -X POST http://127.0.0.1:8000/api/v1/backtest/run \
   -H 'Content-Type: application/json' \
-  -d '{"code": "600519", "force": false}'
+  -d '{"code": "600519", "force": false, "eval_window_days": 10, "min_age_days": 14}'
 
-# Query overall backtest performance
+# Prepare historical analysis evaluation samples
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/prepare-samples \
+  -H 'Content-Type: application/json' \
+  -d '{"code": "AAPL", "sample_count": 60, "eval_window_days": 10, "min_age_days": 14}'
+
+# Query overall historical analysis evaluation performance
 curl http://127.0.0.1:8000/api/v1/backtest/performance
 
-# Query per-stock backtest performance
+# Query per-stock historical analysis evaluation performance
 curl http://127.0.0.1:8000/api/v1/backtest/performance/600519
 
-# Paginated backtest results
+# Paginated historical analysis evaluation results
 curl "http://127.0.0.1:8000/api/v1/backtest/results?page=1&limit=20"
+
+# Submit asynchronous rule backtest
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/run \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"AAPL","strategy_text":"Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.","lookback_bars":252,"fee_bps":0,"slippage_bps":0,"confirmed":true,"wait_for_completion":false}'
+
+# Query rule backtest detail
+curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123
 ```
 
 ### Custom Configuration
@@ -800,6 +848,12 @@ A: Modify `STOCK_LIST` environment variable, separate multiple codes with commas
 A: Check if Actions is enabled, and if cron expression is correct (note it's UTC time).
 
 ---
+
+## Web Product Experience Notes
+
+- The Web app now runs on one shared product shell and design system: login, boot loading, sidebar navigation, home, portfolio, backtest, and admin logs use the same typography, spacing, surface layering, and state-feedback language.
+- The backtest workspace still keeps the semantic split between Historical Analysis Evaluation and Deterministic Rule Strategy Backtest, but the first screen is intentionally simpler and pushes detailed audit / execution assumptions lower in the flow or into disclosure layers.
+- On mobile, navigation now consistently uses the shared drawer shell, and loading states favor structured skeleton/status surfaces instead of unrelated spinner-only treatments.
 
 ## Portfolio Web Notes
 

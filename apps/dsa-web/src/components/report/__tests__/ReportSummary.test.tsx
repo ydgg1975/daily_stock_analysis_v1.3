@@ -4,7 +4,11 @@ import { ReportSummary } from '../ReportSummary';
 import type { AnalysisReport } from '../../../types/analysis';
 
 vi.mock('../StandardReportPanel', () => ({
-  StandardReportPanel: () => <div data-testid="standard-report-panel">standard report panel</div>,
+  StandardReportPanel: ({ showLeadSummary }: { showLeadSummary?: boolean }) => (
+    <div data-testid="standard-report-panel" data-show-lead-summary={String(showLeadSummary)}>
+      standard report panel
+    </div>
+  ),
 }));
 
 vi.mock('../ReportOverview', () => ({
@@ -118,8 +122,16 @@ describe('ReportSummary', () => {
     render(<ReportSummary data={report} />);
 
     expect(screen.getByTestId('standard-report-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('standard-report-panel')).toHaveAttribute('data-show-lead-summary', 'true');
     expect(screen.getByTestId('report-details')).toBeInTheDocument();
     expect(screen.queryByTestId('legacy-report-news')).not.toBeInTheDocument();
+  });
+
+  it('suppresses duplicated lead summaries in compact-home mode', () => {
+    render(<ReportSummary data={report} leadSummaryMode="compact-home" />);
+
+    expect(screen.getByTestId('standard-report-panel')).toHaveAttribute('data-show-lead-summary', 'false');
+    expect(screen.queryByTestId('legacy-report-overview')).not.toBeInTheDocument();
   });
 
   it('uses guarded legacy fallback in auto mode for legacy_only payloads', () => {
