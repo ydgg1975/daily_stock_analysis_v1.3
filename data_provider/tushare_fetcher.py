@@ -394,9 +394,11 @@ class TushareFetcher(BaseFetcher):
         # Regular stocks
         # Shanghai: 600xxx, 601xxx, 603xxx, 688xxx (STAR Market)
         # Shenzhen: 000xxx, 002xxx, 300xxx (ChiNext)
-        if code.startswith(('600', '601', '603', '688')):
+        # Shanghai: 600/601/603/604/605 main board, 688/689 STAR Market
+        if code.startswith(('600', '601', '603', '604', '605', '688', '689')):
             return f"{code}.SH"
-        elif code.startswith(('000', '002', '300')):
+        # Shenzhen: 000/001/002/003 main board, 300/301 ChiNext
+        elif code.startswith(('000', '001', '002', '003', '300', '301')):
             return f"{code}.SZ"
         else:
             logger.warning(f"无法确定股票 {code} 的市场，默认使用深市")
