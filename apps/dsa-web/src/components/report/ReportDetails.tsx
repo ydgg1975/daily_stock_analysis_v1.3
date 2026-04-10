@@ -23,9 +23,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
 
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
-  const contextualNote = reportLanguage === 'en'
-    ? 'Raw result and snapshot are shown for traceability only and do not change the rendered recommendation blocks.'
-    : '原始结果和上下文快照仅用于追溯，不会改变页面上已经渲染的建议与结论区块。';
+  const contextualNote = text.traceabilityNote;
   const [showRaw, setShowRaw] = useState(false);
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [copiedPanels, setCopiedPanels] = useState<CopiedPanelState>({

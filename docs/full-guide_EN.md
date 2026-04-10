@@ -669,6 +669,19 @@ The backtest domain now has two explicit modules:
 4. Produces trade audits, equity curve, buy-and-hold benchmark, and excess return
 5. Submits asynchronously by default and exposes run-id based status polling
 
+The Web result view now follows one deterministic rendering pipeline as well:
+
+- It first normalizes the stored deterministic result into one `normalized rows / metrics / tradeEvents / benchmarkMeta / viewerMeta` payload
+- KPI cards, the linked chart workspace, the audit table, and the trade/event table all read from that same normalized payload instead of rebuilding their own timelines
+- The current run result and any history-opened run reuse the same chart workspace, with one shared visible window and hover state across return, daily PnL, position, and the bottom brush
+- The Web product flow is now formally split into two pages: `/backtest` handles deterministic backtest configuration and launch only, while `/backtest/results/:runId` is the full-width result analysis page
+- Launching from the configuration page navigates straight into the result page flow, and deterministic history items reuse that same result route instead of replaying the full analysis inline on `/backtest`
+- The result page first screen is now chart-centered: the default view keeps only the top summary, KPI cards, and the unified chart workspace, while day-level inspection moves into a hover-linked floating detail card and the audit/trade/parameter/history content moves into tabs and collapsible sections
+- The first screen has also been compacted into a dashboard-style hero: the header is now an even thinner top bar, the KPI area is a lower-height key-metric row, and the linked multi-panel chart workspace uses shorter panel heights again (about `220 / 72 / 56 / 40px` in dense mode) so the overview stays coherent without losing readability
+- The hover detail is now positioned from live hover geometry instead of staying pinned in a corner, with the tooltip defaulting to the lower-right of the hover point and flipping only when it nears an edge, so it follows the cursor/crosshair inside the chart workspace like a real inspection overlay
+- The result page now uses an explicit shared density system (`comfortable / compact / dense`) to drive the header, KPI row, panel heights, legend, brush, tooltip, and spacing together, instead of letting each area shrink independently
+- The hover tooltip also now uses a tooltip-specific label/value layout: primary metrics stay in a stable two-column grid, longer text moves into wrapping detail blocks, and the card enforces a max width / max height with internal scrolling instead of overflowing outward
+
 ### Operation Advice Mapping
 
 | Operation Advice | Position | Expected Direction | Win Condition |
@@ -852,7 +865,7 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 ## Web Product Experience Notes
 
 - The Web app now runs on one shared product shell and design system: login, boot loading, sidebar navigation, home, portfolio, backtest, and admin logs use the same typography, spacing, surface layering, and state-feedback language.
-- The backtest workspace still keeps the semantic split between Historical Analysis Evaluation and Deterministic Rule Strategy Backtest, but the first screen is intentionally simpler and pushes detailed audit / execution assumptions lower in the flow or into disclosure layers.
+- The backtest product flow now treats deterministic configuration and deterministic result analysis as two separate pages: `/backtest` stays configuration-first, while `/backtest/results/:runId` owns the full-width chart workspace and audit flow.
 - On mobile, navigation now consistently uses the shared drawer shell, and loading states favor structured skeleton/status surfaces instead of unrelated spinner-only treatments.
 
 ## Portfolio Web Notes

@@ -820,6 +820,19 @@ python main.py --debug
 4. 生成 trade audit、权益曲线、buy-and-hold 基准和超额收益
 5. 默认异步提交任务，并通过 run id 查询状态与最终结果
 
+Web 结果页现在也统一按一条确定的数据链路展示：
+
+- 先把持久化 deterministic result 归一化成一份 `normalized rows / metrics / tradeEvents / benchmarkMeta / viewerMeta`
+- KPI、联动图表、日级审计表和交易/事件表都只读取这份归一化结果，不再各自重建时序
+- 当前运行结果和从历史记录打开的结果共用同一个 chart workspace；主图、每日盈亏、仓位和底部 brush 使用同一套 visible window 与 hover 状态
+- Web 产品流现已正式拆成两页：`/backtest` 只负责确定性回测配置与发起，`/backtest/results/:runId` 负责 full-width KPI / chart workspace / audit / trade analysis
+- 从配置页发起运行后会直接进入结果页；历史记录中的 deterministic run 也统一打开同一个结果页路由，不再把完整大图分析长期嵌在配置页里
+- 结果页的首屏现在只保留顶部摘要、KPI 和统一图表工作区；日级详情改为跟随 hover 的浮层，审计明细、交易记录、参数/假设和历史结果统一进入 tab / 折叠区，避免主用例继续被长页面垂直滚动稀释
+- 首屏进一步压缩为 dashboard 结构：header 改成更薄的 top bar，KPI 改成更低高度的单行关键指标摘要，chart workspace 也继续收口到更短的多 panel 比例（dense 下约为 `220 / 72 / 56 / 40px`），避免首屏再次被几个独立高卡片拉成长页面
+- hover 明细不再固定在右上角，而是根据当前图表 hover 几何实时计算 `left/top`，默认贴近 hover 点的右下侧，接近边缘时再左右 / 上下翻转，作为真正随 cursor / crosshair 移动的 tooltip 显示在图表附近
+- 结果页现在显式使用三档共享 density（`comfortable / compact / dense`）统一驱动 header、KPI、panel 高度、legend、brush、tooltip 和间距，不再出现“大图一套缩放、文字一套缩放、tooltip 第三套缩放”的比例失衡
+- hover tooltip 也改成专用的 label/value 布局：主字段稳定放在两列网格里，长文本放到可换行的全文区；卡片有固定 max width / max height，过长内容会在 tooltip 内部滚动而不是溢出到外部
+
 ### 操作建议映射
 
 | 操作建议 | 仓位推断 | 预期方向 | 胜利条件 |

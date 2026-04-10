@@ -31,6 +31,13 @@ class BacktestRuntimeSettings:
     neutral_band_pct: float
 
 
+@dataclass(frozen=True)
+class BacktestSourceMetadata:
+    requested_mode: str
+    resolved_source: str
+    fallback_used: bool
+
+
 class BacktestService:
     """Service layer for historical analysis evaluation and sample preparation."""
 
@@ -75,6 +82,11 @@ class BacktestService:
             engine_version=settings.engine_version,
             force=force,
         )
+        sample_observability = self._build_sample_observability(
+            code=code,
+            settings=settings,
+            candidates=candidates,
+        )
 
         processed = 0
         completed = 0
@@ -83,10 +95,14 @@ class BacktestService:
         touched_codes: set[str] = set()
 
         results_to_save: List[BacktestResult] = []
+        run_runtime_sources: List[str] = []
+        run_fallback_used = False
 
         for analysis in candidates:
             processed += 1
             touched_codes.add(analysis.code)
+            analysis_runtime_source = "DatabaseCache"
+            analysis_fallback_used = False
 
             try:
                 analysis_date = self._resolve_analysis_date(analysis)
@@ -107,15 +123,20 @@ class BacktestService:
                 start_daily = self.stock_repo.get_start_daily(code=analysis.code, analysis_date=analysis_date)
 
                 if start_daily is None or start_daily.close is None:
-                    self._try_fill_daily_data(
+                    fill_source_meta = self._try_fill_daily_data(
                         code=analysis.code,
                         analysis_date=analysis_date,
                         eval_window_days=settings.eval_window_days,
                     )
+                    if fill_source_meta is not None:
+                        analysis_runtime_source = fill_source_meta.resolved_source
+                        analysis_fallback_used = analysis_fallback_used or fill_source_meta.fallback_used
                     start_daily = self.stock_repo.get_start_daily(code=analysis.code, analysis_date=analysis_date)
 
                 if start_daily is None or start_daily.close is None:
                     insufficient += 1
+                    run_runtime_sources.append(analysis_runtime_source)
+                    run_fallback_used = run_fallback_used or analysis_fallback_used
                     results_to_save.append(
                         BacktestResult(
                             analysis_history_id=analysis.id,
@@ -137,11 +158,14 @@ class BacktestService:
                 )
 
                 if len(forward_bars) < settings.eval_window_days:
-                    self._try_fill_daily_data(
+                    fill_source_meta = self._try_fill_daily_data(
                         code=analysis.code,
                         analysis_date=start_daily.date,
                         eval_window_days=settings.eval_window_days,
                     )
+                    if fill_source_meta is not None:
+                        analysis_runtime_source = fill_source_meta.resolved_source
+                        analysis_fallback_used = analysis_fallback_used or fill_source_meta.fallback_used
                     forward_bars = self.stock_repo.get_forward_bars(
                         code=analysis.code,
                         analysis_date=start_daily.date,
@@ -165,6 +189,8 @@ class BacktestService:
                     completed += 1
                 else:
                     errors += 1
+                run_runtime_sources.append(analysis_runtime_source)
+                run_fallback_used = run_fallback_used or analysis_fallback_used
 
                 results_to_save.append(
                     BacktestResult(
@@ -202,6 +228,8 @@ class BacktestService:
             except Exception as exc:
                 errors += 1
                 logger.error(f"历史分析评估失败: {analysis.code}#{analysis.id}: {exc}")
+                run_runtime_sources.append(analysis_runtime_source)
+                run_fallback_used = run_fallback_used or analysis_fallback_used
                 results_to_save.append(
                     BacktestResult(
                         analysis_history_id=analysis.id,
@@ -226,6 +254,16 @@ class BacktestService:
                 eval_window_days=settings.eval_window_days,
                 engine_version=settings.engine_version,
             )
+            run_source_metadata = self._build_source_metadata_from_runtime_sources(
+                code=code,
+                runtime_sources=run_runtime_sources,
+                fallback_used=run_fallback_used,
+            )
+            summary_snapshot.update({
+                "requested_mode": run_source_metadata.requested_mode,
+                "resolved_source": run_source_metadata.resolved_source,
+                "fallback_used": run_source_metadata.fallback_used,
+            })
 
         saved = 0
         if results_to_save:
@@ -284,6 +322,12 @@ class BacktestService:
         )
         run_record = self.repo.save_run(run_record)
 
+        run_source_metadata = self._build_source_metadata_from_runtime_sources(
+            code=code,
+            runtime_sources=run_runtime_sources,
+            fallback_used=run_fallback_used,
+        )
+
         return {
             "run_id": run_record.id,
             "run_at": run_record.run_at.isoformat() if run_record.run_at else None,
@@ -295,9 +339,18 @@ class BacktestService:
             "candidate_count": len(candidates),
             "no_result_reason": no_result_reason,
             "no_result_message": no_result_message,
+            "latest_prepared_sample_date": sample_observability.get("latest_prepared_sample_date"),
+            "latest_eligible_sample_date": sample_observability.get("latest_eligible_sample_date"),
+            "excluded_recent_reason": sample_observability.get("excluded_recent_reason"),
+            "excluded_recent_message": sample_observability.get("excluded_recent_message"),
             "evaluation_mode": "historical_analysis_evaluation",
             "evaluation_window_trading_bars": settings.eval_window_days,
             "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": run_source_metadata.requested_mode,
+            "resolved_source": run_source_metadata.resolved_source,
+            "fallback_used": run_source_metadata.fallback_used,
+            "pricing_resolved_source": run_source_metadata.resolved_source,
+            "pricing_fallback_used": run_source_metadata.fallback_used,
             "execution_assumptions": self._signal_evaluation_assumptions(),
         }
 
@@ -324,6 +377,12 @@ class BacktestService:
                 parsed_dates.append(parsed)
             if row.created_at and (latest_created_at is None or row.created_at > latest_created_at):
                 latest_created_at = row.created_at
+        source_metadata = self._build_source_metadata_for_samples(code=code, sample_rows=rows)
+        sample_observability = self._build_sample_observability(
+            code=code,
+            settings=settings,
+            sample_rows=rows,
+        )
 
         return {
             "code": code,
@@ -331,10 +390,19 @@ class BacktestService:
             "prepared_start_date": min(parsed_dates).isoformat() if parsed_dates else None,
             "prepared_end_date": max(parsed_dates).isoformat() if parsed_dates else None,
             "latest_prepared_at": latest_created_at.isoformat() if latest_created_at else None,
+            "latest_prepared_sample_date": sample_observability.get("latest_prepared_sample_date"),
+            "latest_eligible_sample_date": sample_observability.get("latest_eligible_sample_date"),
+            "excluded_recent_reason": sample_observability.get("excluded_recent_reason"),
+            "excluded_recent_message": sample_observability.get("excluded_recent_message"),
             "eval_window_days": settings.eval_window_days,
             "min_age_days": settings.min_age_days,
             "evaluation_window_trading_bars": settings.eval_window_days,
             "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": source_metadata.requested_mode,
+            "resolved_source": source_metadata.resolved_source,
+            "fallback_used": source_metadata.fallback_used,
+            "pricing_resolved_source": source_metadata.resolved_source,
+            "pricing_fallback_used": source_metadata.fallback_used,
         }
 
     def clear_backtest_samples(self, *, code: str) -> Dict[str, Any]:
@@ -411,7 +479,7 @@ class BacktestService:
         )
         sample_count = max(1, int(sample_count))
 
-        market_rows_saved = self._ensure_market_history(
+        market_rows_saved, warmup_source_metadata = self._ensure_market_history(
             code=normalized_code,
             min_age_days=settings.min_age_days,
             eval_window_days=settings.eval_window_days,
@@ -422,6 +490,11 @@ class BacktestService:
         rows = self._load_stock_daily_rows(normalized_code)
         candidate_rows = self._select_preparable_rows(rows, eval_window_days=settings.eval_window_days)
         if not candidate_rows:
+            source_metadata = warmup_source_metadata or self._build_source_metadata_from_runtime_sources(
+                code=normalized_code,
+                runtime_sources=["DatabaseCache"] if rows else [],
+                fallback_used=False,
+            )
             return {
                 "code": normalized_code,
                 "sample_count": sample_count,
@@ -433,6 +506,9 @@ class BacktestService:
                 "min_age_days": settings.min_age_days,
                 "no_result_reason": "missing_market_history",
                 "no_result_message": "当前没有足够的历史行情数据，无法生成历史分析评估样本。",
+                "requested_mode": source_metadata.requested_mode,
+                "resolved_source": source_metadata.resolved_source,
+                "fallback_used": source_metadata.fallback_used,
             }
 
         selected_rows = candidate_rows[-sample_count:]
@@ -493,6 +569,18 @@ class BacktestService:
 
             session.commit()
 
+        source_metadata = warmup_source_metadata or self._build_source_metadata_for_stock_rows(
+            code=normalized_code,
+            rows=rows,
+            default_to_cache=bool(rows),
+        )
+        sample_observability = self._build_sample_observability(
+            code=normalized_code,
+            settings=settings,
+            sample_rows=self.repo.get_sample_rows(code=normalized_code),
+            stock_rows=rows,
+        )
+
         return {
             "code": normalized_code,
             "sample_count": sample_count,
@@ -505,6 +593,10 @@ class BacktestService:
             "prepared_start_date": self._prepared_sample_start_date(normalized_code),
             "prepared_end_date": self._prepared_sample_end_date(normalized_code),
             "latest_prepared_at": self._latest_prepared_at(normalized_code),
+            "latest_prepared_sample_date": sample_observability.get("latest_prepared_sample_date"),
+            "latest_eligible_sample_date": sample_observability.get("latest_eligible_sample_date"),
+            "excluded_recent_reason": sample_observability.get("excluded_recent_reason"),
+            "excluded_recent_message": sample_observability.get("excluded_recent_message"),
             "no_result_reason": None if prepared > 0 else "no_samples_prepared",
             "no_result_message": (
                 f"已准备 {prepared} 条历史分析评估样本，可重新运行评估。"
@@ -513,6 +605,11 @@ class BacktestService:
             ),
             "evaluation_window_trading_bars": settings.eval_window_days,
             "maturity_calendar_days": settings.min_age_days,
+            "requested_mode": source_metadata.requested_mode,
+            "resolved_source": source_metadata.resolved_source,
+            "fallback_used": source_metadata.fallback_used,
+            "pricing_resolved_source": source_metadata.resolved_source,
+            "pricing_fallback_used": source_metadata.fallback_used,
         }
 
     @staticmethod
@@ -655,7 +752,7 @@ class BacktestService:
                 deduped.append(item)
         return deduped
 
-    def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:
+    def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> Optional[BacktestSourceMetadata]:
         try:
             # Fetch a window that covers the analysis bar plus the forward evaluation bars.
             end_date = analysis_date + timedelta(days=max(eval_window_days * 2, 30))
@@ -667,10 +764,12 @@ class BacktestService:
                 log_context="[historical-eval fill]",
             )
             if df is None or df.empty:
-                return
+                return None
             self.db.save_daily_data(df, code=code, data_source=source)
+            return self._build_source_metadata_from_fetch_source(code=code, source=source)
         except Exception as exc:
             logger.warning(f"补全历史分析评估日线数据失败({code}): {exc}")
+            return None
 
     def _ensure_market_history(
         self,
@@ -680,7 +779,7 @@ class BacktestService:
         eval_window_days: int,
         sample_count: int,
         force_refresh: bool,
-    ) -> int:
+    ) -> tuple[int, Optional[BacktestSourceMetadata]]:
         """Ensure enough market history exists for sample generation."""
         lookback_days = max(min_age_days + eval_window_days + sample_count + 30, 90)
         end_date = datetime.now().date()
@@ -694,7 +793,7 @@ class BacktestService:
             earliest = rows[0].date
             latest = rows[-1].date
             if earliest <= start_date and latest >= end_date - timedelta(days=1):
-                return 0
+                return 0, self._build_source_metadata_for_stock_rows(code=code, rows=rows, default_to_cache=True)
 
         try:
             df, source = self._load_history_with_local_us_fallback(
@@ -705,11 +804,12 @@ class BacktestService:
                 log_context="[historical-eval warmup]",
             )
             if df is None or df.empty:
-                return 0
-            return self.db.save_daily_data(df, code=code, data_source=source)
+                return 0, None
+            saved_count = self.db.save_daily_data(df, code=code, data_source=source)
+            return saved_count, self._build_source_metadata_from_fetch_source(code=code, source=source)
         except Exception as exc:
             logger.warning(f"准备历史分析评估样本时补全日线数据失败({code}): {exc}")
-            return 0
+            return 0, None
 
     def _load_stock_daily_rows(self, code: str) -> List[StockDaily]:
         with self.db.get_session() as session:
@@ -846,6 +946,81 @@ class BacktestService:
                 latest = row.created_at
         return latest.isoformat() if latest else None
 
+    def _build_sample_observability(
+        self,
+        *,
+        code: Optional[str],
+        settings: BacktestRuntimeSettings,
+        candidates: Optional[List[AnalysisHistory]] = None,
+        sample_rows: Optional[List[AnalysisHistory]] = None,
+        stock_rows: Optional[List[StockDaily]] = None,
+    ) -> Dict[str, Any]:
+        normalized_code = str(code or "").strip()
+        if not normalized_code:
+            return {
+                "latest_prepared_sample_date": None,
+                "latest_eligible_sample_date": None,
+                "excluded_recent_reason": None,
+                "excluded_recent_message": None,
+            }
+
+        sample_rows = sample_rows if sample_rows is not None else self.repo.get_sample_rows(code=normalized_code)
+        stock_rows = stock_rows if stock_rows is not None else self._load_stock_daily_rows(normalized_code)
+        candidates = candidates if candidates is not None else self.repo.get_candidates(
+            code=normalized_code,
+            min_age_days=settings.min_age_days,
+            limit=max(self.repo.count_analysis_history(code=normalized_code), 1),
+            eval_window_days=settings.eval_window_days,
+            engine_version=settings.engine_version,
+            force=True,
+        )
+
+        prepared_dates = [
+            parsed for parsed in
+            (self.repo.parse_analysis_date_from_snapshot(row.context_snapshot) for row in sample_rows)
+            if parsed is not None
+        ]
+        latest_prepared_sample_date = max(prepared_dates).isoformat() if prepared_dates else None
+
+        eligible_dates = [
+            parsed for parsed in
+            (self._resolve_analysis_date(candidate) for candidate in candidates)
+            if parsed is not None
+        ]
+        latest_eligible_sample_date = max(eligible_dates).isoformat() if eligible_dates else None
+
+        latest_market_date = stock_rows[-1].date if stock_rows else None
+        preparable_indexes = self._select_preparable_rows(stock_rows, eval_window_days=settings.eval_window_days)
+        latest_preparable_market_date = stock_rows[preparable_indexes[-1]].date if preparable_indexes else None
+
+        excluded_recent_reason: Optional[str] = None
+        excluded_recent_message: Optional[str] = None
+        if latest_prepared_sample_date and latest_eligible_sample_date and latest_prepared_sample_date > latest_eligible_sample_date:
+            excluded_recent_reason = "maturity_window_not_satisfied"
+            excluded_recent_message = (
+                f"最新已准备样本到 {latest_prepared_sample_date}，但最近样本尚未满足 {settings.min_age_days} 天成熟期，"
+                f"因此本次最新可评估日期只到 {latest_eligible_sample_date}。"
+            )
+        elif latest_market_date and latest_preparable_market_date and latest_market_date > latest_preparable_market_date:
+            excluded_recent_reason = "evaluation_window_not_satisfied"
+            excluded_recent_message = (
+                f"最新行情到 {latest_market_date.isoformat()}，但评估需要完整的 {settings.eval_window_days} 根未来窗口，"
+                f"所以最新可用于样本生成的日期只到 {latest_preparable_market_date.isoformat()}。"
+            )
+        elif latest_market_date and latest_prepared_sample_date and latest_market_date.isoformat() > latest_prepared_sample_date:
+            excluded_recent_reason = "no_newer_analysis_samples"
+            excluded_recent_message = (
+                f"最新行情到 {latest_market_date.isoformat()}，但没有更晚日期的历史分析样本，"
+                f"所以当前已准备样本只到 {latest_prepared_sample_date}。"
+            )
+
+        return {
+            "latest_prepared_sample_date": latest_prepared_sample_date,
+            "latest_eligible_sample_date": latest_eligible_sample_date,
+            "excluded_recent_reason": excluded_recent_reason,
+            "excluded_recent_message": excluded_recent_message,
+        }
+
     def _recompute_global_summaries_if_needed(self) -> None:
         config = get_config()
         eval_window_days = int(getattr(config, "backtest_eval_window_days", 10))
@@ -875,6 +1050,7 @@ class BacktestService:
                 eval_window_days=eval_window_days,
                 engine_version=engine_version,
             )
+            overall_data.update(self._build_source_metadata_for_result_rows(overall_rows, code=None))
             overall_summary = self._build_summary_model(overall_data)
             self.repo.upsert_summary(overall_summary)
 
@@ -896,6 +1072,7 @@ class BacktestService:
                     eval_window_days=eval_window_days,
                     engine_version=engine_version,
                 )
+                data.update(self._build_source_metadata_for_result_rows(rows, code=code))
                 summary = self._build_summary_model(data)
                 self.repo.upsert_summary(summary)
 
@@ -917,6 +1094,7 @@ class BacktestService:
                 eval_window_days=eval_window_days,
                 engine_version=engine_version,
             )
+            overall_data.update(self._build_source_metadata_for_result_rows(overall_rows, code=None))
             overall_summary = self._build_summary_model(overall_data)
             self.repo.upsert_summary(overall_summary)
 
@@ -937,11 +1115,16 @@ class BacktestService:
                     eval_window_days=eval_window_days,
                     engine_version=engine_version,
                 )
+                data.update(self._build_source_metadata_for_result_rows(rows, code=code))
                 summary = self._build_summary_model(data)
                 self.repo.upsert_summary(summary)
 
     @staticmethod
     def _build_summary_model(summary_data: Dict[str, Any]) -> BacktestSummary:
+        diagnostics = dict(summary_data.get("diagnostics") or {})
+        for key in ("requested_mode", "resolved_source", "fallback_used"):
+            if key in summary_data:
+                diagnostics[key] = summary_data.get(key)
         return BacktestSummary(
             scope=summary_data.get("scope"),
             code=summary_data.get("code"),
@@ -966,7 +1149,7 @@ class BacktestService:
             ambiguous_rate=summary_data.get("ambiguous_rate"),
             avg_days_to_first_hit=summary_data.get("avg_days_to_first_hit"),
             advice_breakdown_json=json.dumps(summary_data.get("advice_breakdown") or {}, ensure_ascii=False),
-            diagnostics_json=json.dumps(summary_data.get("diagnostics") or {}, ensure_ascii=False),
+            diagnostics_json=json.dumps(diagnostics, ensure_ascii=False),
         )
 
     def _result_to_dict(self, row: BacktestResult) -> Dict[str, Any]:
@@ -1051,10 +1234,14 @@ class BacktestService:
             "direction_accuracy_pct": row.direction_accuracy_pct,
             "summary": summary,
             "evaluation_mode": "historical_analysis_evaluation",
+            "requested_mode": summary.get("requested_mode"),
+            "resolved_source": summary.get("resolved_source"),
+            "fallback_used": summary.get("fallback_used"),
             "execution_assumptions": self._signal_evaluation_assumptions(),
         }
 
     def _summary_to_dict(self, row: BacktestSummary) -> Dict[str, Any]:
+        diagnostics = json.loads(row.diagnostics_json) if row.diagnostics_json else {}
         return {
             "scope": row.scope,
             "code": None if row.code == OVERALL_SENTINEL_CODE else row.code,
@@ -1080,9 +1267,144 @@ class BacktestService:
             "ambiguous_rate": row.ambiguous_rate,
             "avg_days_to_first_hit": row.avg_days_to_first_hit,
             "advice_breakdown": json.loads(row.advice_breakdown_json) if row.advice_breakdown_json else {},
-            "diagnostics": json.loads(row.diagnostics_json) if row.diagnostics_json else {},
+            "diagnostics": diagnostics,
             "evaluation_mode": "historical_analysis_evaluation",
+            "requested_mode": diagnostics.get("requested_mode"),
+            "resolved_source": diagnostics.get("resolved_source"),
+            "fallback_used": diagnostics.get("fallback_used"),
             "execution_assumptions": self._signal_evaluation_assumptions(),
+        }
+
+    @staticmethod
+    def _requested_mode_for_code(code: Optional[str]) -> str:
+        normalized_code = str(code or "").strip().upper()
+        if normalized_code and normalized_code.isascii() and normalized_code.isalpha():
+            return "local_first"
+        return "auto"
+
+    @staticmethod
+    def _normalize_resolved_source_label(source: Optional[str]) -> Optional[str]:
+        normalized = str(source or "").strip()
+        if not normalized:
+            return None
+        lower = normalized.lower()
+        if lower == "databasecache":
+            return "DatabaseCache"
+        if lower in {"local_us_parquet", "localparquet"} or "parquet" in lower or "stooq" in lower:
+            return "LocalParquet"
+        if "yfinance" in lower:
+            return "YfinanceFetcher"
+        if "cache" in lower or lower.startswith("db_") or lower == "db":
+            return "DatabaseCache"
+        return "ProviderAPI"
+
+    def _build_source_metadata_from_fetch_source(self, *, code: str, source: Optional[str]) -> BacktestSourceMetadata:
+        requested_mode = self._requested_mode_for_code(code)
+        normalized_source = self._normalize_resolved_source_label(source) or "Unknown"
+        fallback_used = requested_mode == "local_first" and normalized_source != "LocalParquet"
+        return BacktestSourceMetadata(
+            requested_mode=requested_mode,
+            resolved_source=normalized_source,
+            fallback_used=fallback_used,
+        )
+
+    def _build_source_metadata_from_runtime_sources(
+        self,
+        *,
+        code: Optional[str],
+        runtime_sources: List[str],
+        fallback_used: bool,
+    ) -> BacktestSourceMetadata:
+        requested_mode = self._requested_mode_for_code(code)
+        unique_sources: List[str] = []
+        for source in runtime_sources:
+            normalized = self._normalize_resolved_source_label(source) or source
+            if normalized and normalized not in unique_sources:
+                unique_sources.append(normalized)
+        if not unique_sources:
+            resolved_source = "Unknown"
+        elif len(unique_sources) == 1:
+            resolved_source = unique_sources[0]
+        else:
+            resolved_source = "MixedFallback"
+            fallback_used = True
+        return BacktestSourceMetadata(
+            requested_mode=requested_mode,
+            resolved_source=resolved_source,
+            fallback_used=bool(fallback_used),
+        )
+
+    def _build_source_metadata_for_stock_rows(
+        self,
+        *,
+        code: str,
+        rows: List[StockDaily],
+        default_to_cache: bool,
+    ) -> BacktestSourceMetadata:
+        sources = [str(row.data_source) for row in rows if getattr(row, "data_source", None)]
+        if default_to_cache and not sources:
+            return self._build_source_metadata_from_runtime_sources(
+                code=code,
+                runtime_sources=["DatabaseCache"],
+                fallback_used=False,
+            )
+        return self._build_source_metadata_from_runtime_sources(
+            code=code,
+            runtime_sources=sources,
+            fallback_used=len(set(sources)) > 1,
+        )
+
+    def _build_source_metadata_for_samples(
+        self,
+        *,
+        code: str,
+        sample_rows: List[AnalysisHistory],
+    ) -> BacktestSourceMetadata:
+        sources: List[str] = []
+        for row in sample_rows:
+            try:
+                raw = json.loads(row.raw_result) if row.raw_result else {}
+            except Exception:
+                raw = {}
+            value = raw.get("market_data_source")
+            if value:
+                sources.append(str(value))
+        if sample_rows and not sources:
+            return self._build_source_metadata_from_runtime_sources(
+                code=code,
+                runtime_sources=["DatabaseCache"],
+                fallback_used=False,
+            )
+        return self._build_source_metadata_from_runtime_sources(
+            code=code,
+            runtime_sources=sources,
+            fallback_used=len(set(sources)) > 1,
+        )
+
+    def _build_source_metadata_for_result_rows(
+        self,
+        rows: List[BacktestResult],
+        *,
+        code: Optional[str],
+    ) -> Dict[str, Any]:
+        runtime_sources: List[str] = []
+        for row in rows:
+            runtime_sources.extend(
+                self._collect_market_data_sources(
+                    code=row.code,
+                    analysis_date=row.analysis_date,
+                    eval_window_days=row.eval_window_days,
+                )
+            )
+        metadata = self._build_source_metadata_from_runtime_sources(
+            code=code,
+            runtime_sources=runtime_sources if runtime_sources else (["DatabaseCache"] if rows else []),
+            fallback_used=len(set(runtime_sources)) > 1,
+        )
+        return {
+            "requested_mode": metadata.requested_mode,
+            "resolved_source": metadata.resolved_source,
+            "fallback_used": metadata.fallback_used,
         }
 
     @staticmethod

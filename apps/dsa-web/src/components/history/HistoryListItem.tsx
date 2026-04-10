@@ -8,6 +8,7 @@ import { useI18n } from '../../contexts/UiLanguageContext';
 import type { HistoryItem } from '../../types/analysis';
 import { getSentimentColor, getSentimentColorAlpha } from '../../types/analysis';
 import { formatDateTime } from '../../utils/format';
+import { localizeReportControlledValue } from '../../utils/reportTerminology';
 
 interface HistoryListItemProps {
   item: HistoryItem;
@@ -21,24 +22,17 @@ interface HistoryListItemProps {
   onClick: (recordId: number) => void;
 }
 
-const getOperationBadgeLabel = (advice: string | undefined, fallbackSentiment: string, fallbackAdvice: string) => {
+const getOperationBadgeLabel = (
+  advice: string | undefined,
+  fallbackSentiment: string,
+  fallbackAdvice: string,
+  language: 'zh' | 'en',
+) => {
   const normalized = advice?.trim();
   if (!normalized) {
     return fallbackSentiment;
   }
-  if (normalized.includes('减仓') || /\b(trim|reduce)\b/i.test(normalized)) {
-    return fallbackAdvice;
-  }
-  if (normalized.includes('卖') || /\b(sell|exit)\b/i.test(normalized)) {
-    return fallbackAdvice;
-  }
-  if (normalized.includes('观望') || normalized.includes('等待') || /\b(wait|watch|hold)\b/i.test(normalized)) {
-    return fallbackAdvice;
-  }
-  if (normalized.includes('买') || normalized.includes('布局') || /\b(buy|build|accumulate)\b/i.test(normalized)) {
-    return fallbackAdvice;
-  }
-  return normalized.split(/[，。；、\s]/)[0] || fallbackAdvice;
+  return localizeReportControlledValue(normalized, language) || fallbackAdvice;
 };
 
 export const HistoryListItem: React.FC<HistoryListItemProps> = ({
@@ -52,11 +46,12 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   onToggleChecked,
   onClick,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const score = item.sentimentScore;
   const statusLabel = embedded ? null : t('tasks.completed');
   const displayName = item.stockName || item.stockCode;
   const timestamp = formatDateTime(item.createdAt);
+  const localizedAdvice = localizeReportControlledValue(item.operationAdvice, language);
 
   return (
     <div className="history-archive-item-shell group" data-embedded={embedded ? 'true' : 'false'}>
@@ -109,7 +104,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
                     backgroundColor: getSentimentColorAlpha(score, 0.1),
                   }}
                 >
-                  {getOperationBadgeLabel(item.operationAdvice, t('history.sentiment'), t('history.advice'))} {score}
+                  {getOperationBadgeLabel(item.operationAdvice, t('history.sentiment'), t('history.advice'), language)} {score}
                 </span>
               ) : null}
             </div>
@@ -117,7 +112,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
 
           {item.operationAdvice ? (
             <p className="history-archive-item__summary">
-              {item.operationAdvice}
+              {localizedAdvice}
             </p>
           ) : null}
         </div>

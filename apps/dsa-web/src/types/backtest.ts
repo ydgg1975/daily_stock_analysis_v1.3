@@ -31,7 +31,16 @@ export interface BacktestRunResponse {
   candidateCount: number;
   noResultReason?: string | null;
   noResultMessage?: string | null;
+  latestPreparedSampleDate?: string | null;
+  latestEligibleSampleDate?: string | null;
+  excludedRecentReason?: string | null;
+  excludedRecentMessage?: string | null;
   evaluationMode?: string | null;
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
+  pricingResolvedSource?: string | null;
+  pricingFallbackUsed?: boolean | null;
   evaluationWindowTradingBars?: number | null;
   maturityCalendarDays?: number | null;
   executionAssumptions: AssumptionMap;
@@ -57,8 +66,17 @@ export interface PrepareBacktestSamplesResponse {
   preparedStartDate?: string | null;
   preparedEndDate?: string | null;
   latestPreparedAt?: string | null;
+  latestPreparedSampleDate?: string | null;
+  latestEligibleSampleDate?: string | null;
+  excludedRecentReason?: string | null;
+  excludedRecentMessage?: string | null;
   noResultReason?: string | null;
   noResultMessage?: string | null;
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
+  pricingResolvedSource?: string | null;
+  pricingFallbackUsed?: boolean | null;
   evaluationWindowTradingBars?: number | null;
   maturityCalendarDays?: number | null;
 }
@@ -97,6 +115,9 @@ export interface BacktestRunHistoryItem {
   directionAccuracyPct?: number | null;
   summary: Record<string, unknown>;
   evaluationMode?: string | null;
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
   executionAssumptions: AssumptionMap;
 }
 
@@ -113,8 +134,17 @@ export interface BacktestSampleStatusResponse {
   preparedStartDate?: string | null;
   preparedEndDate?: string | null;
   latestPreparedAt?: string | null;
+  latestPreparedSampleDate?: string | null;
+  latestEligibleSampleDate?: string | null;
+  excludedRecentReason?: string | null;
+  excludedRecentMessage?: string | null;
   evalWindowDays: number;
   minAgeDays: number;
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
+  pricingResolvedSource?: string | null;
+  pricingFallbackUsed?: boolean | null;
   evaluationWindowTradingBars?: number | null;
   maturityCalendarDays?: number | null;
 }
@@ -131,8 +161,13 @@ export interface BacktestClearResponse {
 // ============ Rule Backtest ============
 
 export interface RuleBacktestParseRequest {
-  code: string;
+  code?: string;
   strategyText: string;
+  startDate?: string;
+  endDate?: string;
+  initialCapital?: number;
+  feeBps?: number;
+  slippageBps?: number;
 }
 
 export interface RuleBacktestRuleOperand {
@@ -164,12 +199,42 @@ export interface RuleBacktestParsedStrategy {
   ambiguities: Array<Record<string, unknown>>;
   summary: Record<string, string>;
   maxLookback: number;
+  strategyKind?: string;
+  setup?: Record<string, unknown>;
+  strategySpec?: Record<string, unknown>;
+  executable?: boolean;
+  normalizationState?: string;
+  assumptions?: Array<Record<string, unknown>>;
+  assumptionGroups?: Array<Record<string, unknown>>;
+  detectedStrategyFamily?: string | null;
+  unsupportedReason?: string | null;
+  unsupportedDetails?: Array<Record<string, unknown>>;
+  unsupportedExtensions?: Array<Record<string, unknown>>;
+  coreIntentSummary?: string | null;
+  interpretationConfidence?: number | null;
+  supportedPortionSummary?: string | null;
+  rewriteSuggestions?: Array<Record<string, unknown>>;
+  parseWarnings?: Array<Record<string, unknown>>;
 }
 
 export interface RuleBacktestParseResponse {
-  code: string;
+  code?: string;
   strategyText: string;
   parsedStrategy: RuleBacktestParsedStrategy;
+  normalizedStrategyFamily?: string;
+  detectedStrategyFamily?: string | null;
+  executable?: boolean;
+  normalizationState?: string;
+  assumptions?: Array<Record<string, unknown>>;
+  assumptionGroups?: Array<Record<string, unknown>>;
+  unsupportedReason?: string | null;
+  unsupportedDetails?: Array<Record<string, unknown>>;
+  unsupportedExtensions?: Array<Record<string, unknown>>;
+  coreIntentSummary?: string | null;
+  interpretationConfidence?: number | null;
+  supportedPortionSummary?: string | null;
+  rewriteSuggestions?: Array<Record<string, unknown>>;
+  parseWarnings?: Array<Record<string, unknown>>;
   confidence: number;
   needsConfirmation: boolean;
   ambiguities: Array<Record<string, unknown>>;
@@ -181,10 +246,14 @@ export interface RuleBacktestRunRequest {
   code: string;
   strategyText: string;
   parsedStrategy?: RuleBacktestParsedStrategy;
+  startDate?: string;
+  endDate?: string;
   lookbackBars?: number;
   initialCapital?: number;
   feeBps?: number;
   slippageBps?: number;
+  benchmarkMode?: string;
+  benchmarkCode?: string;
   confirmed?: boolean;
   waitForCompletion?: boolean;
 }
@@ -230,6 +299,85 @@ export interface RuleBacktestEquityPointItem {
   equity?: number;
   cumulativeReturnPct?: number;
   drawdownPct?: number;
+  close?: number | null;
+  signalSummary?: string | null;
+  targetPosition?: number | null;
+  executedAction?: string | null;
+  fillPrice?: number | null;
+  sharesHeld?: number | null;
+  cash?: number | null;
+  holdingsValue?: number | null;
+  totalPortfolioValue?: number | null;
+  positionState?: string | null;
+  exposurePct?: number | null;
+  feeAmount?: number | null;
+  slippageAmount?: number | null;
+  notes?: string | null;
+}
+
+export interface RuleBacktestBenchmarkPointItem {
+  date?: string;
+  close?: number;
+  normalizedValue?: number;
+  cumulativeReturnPct?: number;
+}
+
+export interface RuleBacktestBenchmarkSummary {
+  label?: string;
+  code?: string | null;
+  method?: string;
+  requestedMode?: string | null;
+  resolvedMode?: string | null;
+  normalizedBase?: number;
+  priceBasis?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  startPrice?: number | null;
+  endPrice?: number | null;
+  returnPct?: number | null;
+  unavailableReason?: string | null;
+  autoResolved?: boolean;
+  fallbackUsed?: boolean;
+}
+
+export interface RuleBacktestDailyReturnPointItem {
+  date?: string;
+  equity?: number;
+  dailyReturnPct?: number;
+  dailyPnl?: number;
+}
+
+export interface RuleBacktestExposurePointItem {
+  date?: string;
+  exposure?: number;
+  positionState?: string;
+  executedAction?: string | null;
+  fillPrice?: number | null;
+}
+
+export interface RuleBacktestAuditRowItem {
+  date?: string;
+  symbolClose?: number | null;
+  benchmarkClose?: number | null;
+  signalSummary?: string | null;
+  targetPosition?: number | null;
+  executedAction?: string | null;
+  fillPrice?: number | null;
+  sharesHeld?: number | null;
+  cash?: number | null;
+  holdingsValue?: number | null;
+  totalPortfolioValue?: number | null;
+  positionState?: string | null;
+  exposurePct?: number | null;
+  dailyPnl?: number | null;
+  dailyReturnPct?: number | null;
+  cumulativeStrategyReturnPct?: number | null;
+  cumulativeBenchmarkReturnPct?: number | null;
+  cumulativeBuyAndHoldReturnPct?: number | null;
+  fees?: number | null;
+  slippage?: number | null;
+  notes?: string | null;
+  unavailableReason?: string | null;
 }
 
 export interface RuleBacktestRunResponse {
@@ -239,6 +387,10 @@ export interface RuleBacktestRunResponse {
   parsedStrategy: RuleBacktestParsedStrategy;
   strategyHash: string;
   timeframe: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
   lookbackBars: number;
   initialCapital: number;
   feeBps: number;
@@ -257,6 +409,11 @@ export interface RuleBacktestRunResponse {
   winCount: number;
   lossCount: number;
   totalReturnPct?: number | null;
+  annualizedReturnPct?: number | null;
+  benchmarkMode?: string | null;
+  benchmarkCode?: string | null;
+  benchmarkReturnPct?: number | null;
+  excessReturnVsBenchmarkPct?: number | null;
   buyAndHoldReturnPct?: number | null;
   excessReturnVsBuyAndHoldPct?: number | null;
   winRatePct?: number | null;
@@ -268,6 +425,13 @@ export interface RuleBacktestRunResponse {
   finalEquity?: number | null;
   summary: Record<string, unknown>;
   executionAssumptions: AssumptionMap;
+  benchmarkCurve: RuleBacktestBenchmarkPointItem[];
+  benchmarkSummary: RuleBacktestBenchmarkSummary;
+  buyAndHoldCurve?: RuleBacktestBenchmarkPointItem[];
+  buyAndHoldSummary?: RuleBacktestBenchmarkSummary;
+  auditRows?: RuleBacktestAuditRowItem[];
+  dailyReturnSeries: RuleBacktestDailyReturnPointItem[];
+  exposureCurve: RuleBacktestExposurePointItem[];
   aiSummary?: string | null;
   equityCurve: RuleBacktestEquityPointItem[];
   trades: RuleBacktestTradeItem[];
@@ -354,5 +518,8 @@ export interface PerformanceMetrics {
   adviceBreakdown: Record<string, unknown>;
   diagnostics: Record<string, unknown>;
   evaluationMode?: string | null;
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
   executionAssumptions: AssumptionMap;
 }

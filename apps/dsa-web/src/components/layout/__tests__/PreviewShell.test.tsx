@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { translate } from '../../../i18n/core';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { PreviewShell } from '../PreviewShell';
 
@@ -26,7 +27,7 @@ afterEach(() => {
 });
 
 describe('PreviewShell', () => {
-  it('renders a single desktop theme control in the preview rail', () => {
+  it('renders the localized desktop preview action and no mobile menu', () => {
     render(
       <MemoryRouter initialEntries={['/__preview/report']}>
         <ThemeProvider>
@@ -38,11 +39,11 @@ describe('PreviewShell', () => {
     );
 
     expect(screen.getByTestId('preview-shell')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: '切换主题' })).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: '打开导航菜单' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'preview.shellAction') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'shell.openMenu') })).not.toBeInTheDocument();
   });
 
-  it('keeps the mobile preview top bar limited to the menu trigger and moves theme control into the drawer', async () => {
+  it('shows localized preview rail content in the mobile drawer', async () => {
     window.innerWidth = 390;
 
     render(
@@ -55,11 +56,11 @@ describe('PreviewShell', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: '打开导航菜单' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: translate('zh', 'shell.openMenu') })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: translate('zh', 'preview.shellAction') })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    fireEvent.click(screen.getByRole('button', { name: translate('zh', 'shell.openMenu') }));
 
-    expect(await screen.findByRole('button', { name: '切换主题' })).toBeInTheDocument();
+    expect(await screen.findByText(translate('zh', 'preview.shellTitle'))).toBeInTheDocument();
   });
 });

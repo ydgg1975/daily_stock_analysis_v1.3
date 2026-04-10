@@ -19,10 +19,16 @@ import type {
   StandardReportScoreBreakdownItem,
   StandardReportTableSection,
 } from '../../types/analysis';
+import { getSentimentColor, getSentimentLabel } from '../../types/analysis';
 import { Badge } from '../common';
 import { cn } from '../../utils/cn';
 import { ReportPriceChart, type ReportPriceChartFixtures } from './ReportPriceChart';
-import { localizeReportHeadingLabel, localizeReportTermLabel } from '../../utils/reportTerminology';
+import {
+  getReportControlledValueProfile,
+  localizeReportHeadingLabel,
+  localizeReportTermLabel,
+  localizeReportControlledValue,
+} from '../../utils/reportTerminology';
 import {
   buildMissingFieldAudit,
   collectMissingFieldEntriesFromStandardReport,
@@ -49,6 +55,7 @@ const rowGridClass = 'grid gap-4 lg:grid-cols-2';
 
 const ui = translateForCurrentLanguage;
 const isEnglishUi = (): boolean => /^[A-Za-z]/.test(ui('report.score'));
+const reportLanguage = (): 'en' | 'zh' => (isEnglishUi() ? 'en' : 'zh');
 const localeColon = (): string => (isEnglishUi() ? ': ' : '：');
 const joinLabelValue = (label: string, value: string): string => {
   return `${label}${localeColon()}${value}`;
@@ -113,6 +120,10 @@ const isPresentValue = (value?: string | null): boolean => {
   const text = String(value || '').trim();
   return Boolean(text) && !isMissingDisplayText(text);
 };
+
+const localizeControlledValue = (value?: string | null): string => localizeReportControlledValue(value, reportLanguage());
+
+const softenControlledValue = (value?: string | null): string => softenMissingValue(localizeControlledValue(value));
 
 const lowerText = (value?: string | null): string => String(value || '').trim().toLowerCase();
 
@@ -435,12 +446,22 @@ const SectionHeader: React.FC<{
   </div>
 );
 
-const HeroStat: React.FC<{ label: string; value?: string | number; accent?: 'score' | 'default' }> = ({
+const HeroStat: React.FC<{
+  label: string;
+  value?: string | number;
+  support?: string;
+  meter?: number;
+  meterColor?: string;
+  accent?: 'score' | 'default';
+}> = ({
   label,
   value,
+  support,
+  meter,
+  meterColor,
   accent = 'default',
 }) => (
-  <div className="theme-panel-subtle rounded-[var(--cohere-radius-medium)] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
+  <div className="theme-panel-subtle flex h-full flex-col rounded-[var(--cohere-radius-medium)] border border-[var(--theme-panel-subtle-border)] px-4 py-3.5">
     <p className={renderGroupLabelClass()}>{label}</p>
     <p
       className={cn(
@@ -451,6 +472,20 @@ const HeroStat: React.FC<{ label: string; value?: string | number; accent?: 'sco
     >
       {softenMissingValue(typeof value === 'number' ? String(value) : value)}
     </p>
+    {support ? (
+      <p className="mt-1.5 text-xs leading-5 text-secondary-text">{support}</p>
+    ) : null}
+    {typeof meter === 'number' ? (
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--theme-panel-subtle-border)]">
+        <span
+          className="block h-full rounded-full"
+          style={{
+            width: `${meter}%`,
+            backgroundColor: meterColor || 'var(--accent-primary)',
+          }}
+        />
+      </div>
+    ) : null}
   </div>
 );
 
@@ -585,29 +620,29 @@ const DecisionExecutionPanel: React.FC<{
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
         <div className="flex flex-wrap items-center gap-2.5">
-          <Badge variant="info">{softenMissingValue(decisionPanel?.setupType)}</Badge>
-          <Badge variant="history">{ui('report.confidenceLabel')} {softenMissingValue(decisionPanel?.confidence)}</Badge>
+          <Badge variant="info">{softenControlledValue(decisionPanel?.setupType)}</Badge>
+          <Badge variant="history">{ui('report.confidenceLabel')} {softenControlledValue(decisionPanel?.confidence)}</Badge>
         </div>
         <p className={cn('mt-3', renderGroupLabelClass())}>{ui('report.executionSummary')}</p>
         <p className="mt-2 text-base font-semibold leading-7 text-foreground">
-          {softenMissingValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
+          {softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label={ui('report.keySupport')} value={decisionPanel?.support} />
-          <CompactDecisionMetric label={ui('report.keyResistance')} value={decisionPanel?.resistance} />
-          <CompactDecisionMetric label={ui('report.stopReason')} value={decisionPanel?.stopReason} />
-          <CompactDecisionMetric label={ui('report.targetReason')} value={decisionPanel?.targetReason} />
+          <CompactDecisionMetric label={ui('report.keySupport')} value={softenControlledValue(decisionPanel?.support)} />
+          <CompactDecisionMetric label={ui('report.keyResistance')} value={softenControlledValue(decisionPanel?.resistance)} />
+          <CompactDecisionMetric label={ui('report.stopReason')} value={softenControlledValue(decisionPanel?.stopReason)} />
+          <CompactDecisionMetric label={ui('report.targetReason')} value={softenControlledValue(decisionPanel?.targetReason)} />
         </div>
       </div>
 
       <div className="theme-panel-subtle rounded-[1rem] px-4 py-4">
         <p className={renderGroupLabelClass()}>{ui('report.structureSnapshot')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
-          {softenMissingValue(decisionPanel?.marketStructure)}
+          {softenControlledValue(decisionPanel?.marketStructure)}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <CompactDecisionMetric label={ui('report.positionSizing')} value={decisionPanel?.positionSizing} />
-          <CompactDecisionMetric label={ui('report.targetZone')} value={decisionPanel?.targetZone || decisionPanel?.target} />
+          <CompactDecisionMetric label={ui('report.positionSizing')} value={softenControlledValue(decisionPanel?.positionSizing)} />
+          <CompactDecisionMetric label={ui('report.targetZone')} value={softenControlledValue(decisionPanel?.targetZone || decisionPanel?.target)} />
         </div>
       </div>
     </div>
@@ -655,7 +690,7 @@ const ChecklistPanel: React.FC<{ items: StandardReportChecklistItem[] }> = ({ it
               <span>{checklistLabel(item.status)}</span>
             </span>
           </Badge>
-          <p className="min-w-0 flex-1 text-sm leading-5 text-secondary-text">{localizeReportHeadingLabel(item.text, isEnglishUi() ? 'en' : 'zh')}</p>
+          <p className="min-w-0 flex-1 text-sm leading-5 text-secondary-text">{softenControlledValue(item.text)}</p>
         </div>
       ))}
     </div>
@@ -750,12 +785,12 @@ const DecisionBoardPanel: React.FC<{
           <div className={subtlePanelClass}>
             <p className={cn(groupHeadingClass, 'mb-0.5')}>{ui('report.scoreNotes')}</p>
             <div className="mt-2.5 grid gap-x-4 gap-y-3 sm:grid-cols-2">
-              <CompactDecisionMetric label={ui('report.shortTermView')} value={decisionContext?.shortTermView || ui('report.noFields')} />
-              <CompactDecisionMetric label={ui('report.compositeView')} value={decisionContext?.compositeView || ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.shortTermView')} value={decisionContext?.shortTermView ? softenControlledValue(decisionContext.shortTermView) : ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.compositeView')} value={decisionContext?.compositeView ? softenControlledValue(decisionContext.compositeView) : ui('report.noFields')} />
               <CompactDecisionMetric label={ui('report.checklistSummary')} value={reasonLayer?.checklistSummary || ui('report.noFields')} />
-              <CompactDecisionMetric label={ui('report.changeReason')} value={decisionContext?.changeReason || decisionContext?.adjustmentReason || ui('report.noFields')} />
+              <CompactDecisionMetric label={ui('report.changeReason')} value={decisionContext?.changeReason ? softenControlledValue(decisionContext.changeReason) : decisionContext?.adjustmentReason ? softenControlledValue(decisionContext.adjustmentReason) : ui('report.noFields')} />
               {isMeaningfulText(decisionContext?.adjustmentReason) ? (
-                <CompactDecisionMetric label={ui('report.adjustmentReason')} value={decisionContext?.adjustmentReason} />
+                <CompactDecisionMetric label={ui('report.adjustmentReason')} value={softenControlledValue(decisionContext.adjustmentReason)} />
               ) : null}
               {decisionContext?.previousScore ? (
                 <CompactDecisionMetric label={ui('report.previousScore')} value={decisionContext?.previousScore} />
@@ -1157,11 +1192,15 @@ const DecisionSummaryHero: React.FC<{
   standardReport: StandardReport;
   report: AnalysisReport;
 }> = ({ standardReport, report }) => {
+  const reportLanguage = isEnglishUi() ? 'en' : 'zh';
   const summary = standardReport.summaryPanel || {};
   const visualBlocks = standardReport.visualBlocks || {};
   const score = summary.score ?? visualBlocks.score?.value;
   const companyTitle = report.meta.stockName || summary.stock || report.meta.stockCode;
   const tickerLabel = summary.ticker || report.meta.stockCode;
+  const actionProfile = getReportControlledValueProfile(summary.operationAdvice || report.summary.operationAdvice, reportLanguage);
+  const trendProfile = getReportControlledValueProfile(summary.trendPrediction || report.summary.trendPrediction, reportLanguage);
+  const scoreSupport = score !== undefined ? getSentimentLabel(score, reportLanguage) : undefined;
   const compactMetaLine = uniqueMeaningfulItems(
     [
       summary.priceBasis,
@@ -1207,9 +1246,24 @@ const DecisionSummaryHero: React.FC<{
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <HeroStat label={ui('report.score')} value={score !== undefined ? `${score}` : 'NA'} accent="score" />
-          <HeroStat label={ui('report.actionAdvice')} value={summary.operationAdvice || report.summary.operationAdvice} />
-          <HeroStat label={ui('report.trend')} value={summary.trendPrediction || report.summary.trendPrediction} />
+          <HeroStat
+            label={ui('report.score')}
+            value={score !== undefined ? `${score}` : 'NA'}
+            support={scoreSupport}
+            meter={score !== undefined ? Math.max(0, Math.min(100, score)) : undefined}
+            meterColor={score !== undefined ? getSentimentColor(score) : undefined}
+            accent="score"
+          />
+          <HeroStat
+            label={ui('report.actionAdvice')}
+            value={actionProfile.value}
+            support={actionProfile.support}
+          />
+          <HeroStat
+            label={ui('report.trend')}
+            value={trendProfile.value}
+            support={trendProfile.support}
+          />
         </div>
       </div>
     </section>
@@ -1225,17 +1279,17 @@ const ExecutionPlanLayer: React.FC<{
 }) => {
   const executionSeen = new Set<string>();
   const currentActionItems = collectDedupedItems({
-    items: [decisionPanel?.keyAction || decisionPanel?.noPositionAdvice],
+    items: [softenControlledValue(decisionPanel?.keyAction || decisionPanel?.noPositionAdvice)],
     limit: 1,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,
   });
   const newPositionItems = collectDedupedItems({
     items: [
-      decisionPanel?.noPositionAdvice,
-      isPresentValue(decisionPanel?.idealEntry) ? joinLabelValue(ui('report.idealEntry'), softenMissingValue(decisionPanel?.idealEntry)) : undefined,
-      isPresentValue(decisionPanel?.backupEntry) ? joinLabelValue(ui('report.backupEntry'), softenMissingValue(decisionPanel?.backupEntry)) : undefined,
-      decisionPanel?.buildStrategy ? joinLabelValue(ui('report.buildStrategy'), softenMissingValue(decisionPanel?.buildStrategy)) : undefined,
+      softenControlledValue(decisionPanel?.noPositionAdvice),
+      isPresentValue(decisionPanel?.idealEntry) ? joinLabelValue(ui('report.idealEntry'), softenControlledValue(decisionPanel?.idealEntry)) : undefined,
+      isPresentValue(decisionPanel?.backupEntry) ? joinLabelValue(ui('report.backupEntry'), softenControlledValue(decisionPanel?.backupEntry)) : undefined,
+      decisionPanel?.buildStrategy ? joinLabelValue(ui('report.buildStrategy'), softenControlledValue(decisionPanel?.buildStrategy)) : undefined,
     ],
     limit: 4,
     keyResolver: executionSemanticKey,
@@ -1243,8 +1297,8 @@ const ExecutionPlanLayer: React.FC<{
   });
   const existingPositionItems = collectDedupedItems({
     items: [
-      decisionPanel?.holderAdvice,
-      decisionPanel?.positionSizing ? joinLabelValue(ui('report.positionSizing'), softenMissingValue(decisionPanel?.positionSizing)) : undefined,
+      softenControlledValue(decisionPanel?.holderAdvice),
+      decisionPanel?.positionSizing ? joinLabelValue(ui('report.positionSizing'), softenControlledValue(decisionPanel?.positionSizing)) : undefined,
     ],
     limit: 3,
     keyResolver: executionSemanticKey,
@@ -1254,18 +1308,18 @@ const ExecutionPlanLayer: React.FC<{
     items: [
       ...checklistItems
         .filter((item) => isPendingChecklistStatus(item.status))
-        .map((item) => item.text),
-      isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenMissingValue(decisionPanel?.stopLoss)) : undefined,
-      isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenMissingValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
-      isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenMissingValue(decisionPanel?.targetTwo)) : undefined,
-      decisionPanel?.riskControlStrategy ? joinLabelValue(ui('report.riskControl'), softenMissingValue(decisionPanel?.riskControlStrategy)) : undefined,
+        .map((item) => localizeReportHeadingLabel(item.text, reportLanguage())),
+      isPresentValue(decisionPanel?.stopLoss) ? joinLabelValue(ui('report.stopLoss'), softenControlledValue(decisionPanel?.stopLoss)) : undefined,
+      isPresentValue(decisionPanel?.targetOne || decisionPanel?.target) ? joinLabelValue(ui('report.targetOne'), softenControlledValue(decisionPanel?.targetOne || decisionPanel?.target)) : undefined,
+      isPresentValue(decisionPanel?.targetTwo) ? joinLabelValue(ui('report.targetTwo'), softenControlledValue(decisionPanel?.targetTwo)) : undefined,
+      decisionPanel?.riskControlStrategy ? joinLabelValue(ui('report.riskControl'), softenControlledValue(decisionPanel?.riskControlStrategy)) : undefined,
     ],
     limit: 6,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,
   });
   const compressedReminder = collectDedupedItems({
-    items: decisionPanel?.executionReminders || [],
+    items: (decisionPanel?.executionReminders || []).map((item) => localizeReportHeadingLabel(item, reportLanguage())),
     limit: 1,
     keyResolver: executionSemanticKey,
     seenKeys: executionSeen,

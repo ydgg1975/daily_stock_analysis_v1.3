@@ -10,6 +10,9 @@ import os
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta
+from unittest.mock import patch
+
+import pandas as pd
 
 from src.config import Config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE
@@ -236,6 +239,30 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(item["evaluation_window_trading_bars"], 3)
         self.assertIn("execution_assumptions", item)
 
+    def test_historical_source_metadata_fields_appear_in_contract(self) -> None:
+        service = BacktestService(self.db)
+        stats = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        self.assertEqual(stats["requested_mode"], "auto")
+        self.assertEqual(stats["resolved_source"], "DatabaseCache")
+        self.assertFalse(stats["fallback_used"])
+        self.assertIn("latest_prepared_sample_date", stats)
+        self.assertIn("latest_eligible_sample_date", stats)
+        self.assertIn("pricing_resolved_source", stats)
+        self.assertIn("pricing_fallback_used", stats)
+
+        history = service.list_backtest_runs(code="600519", page=1, limit=10)
+        history_item = history["items"][0]
+        self.assertEqual(history_item["requested_mode"], "auto")
+        self.assertEqual(history_item["resolved_source"], "DatabaseCache")
+        self.assertFalse(history_item["fallback_used"])
+
+        summary = service.get_summary(scope="stock", code="600519", eval_window_days=3)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["requested_mode"], "auto")
+        self.assertEqual(summary["resolved_source"], "DatabaseCache")
+        self.assertFalse(summary["fallback_used"])
+
     def test_get_sample_status_allows_zero_maturity_days_from_config(self) -> None:
         os.environ["BACKTEST_MIN_AGE_DAYS"] = "0"
         Config._instance = None
@@ -245,6 +272,9 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         self.assertEqual(status["min_age_days"], 0)
         self.assertEqual(status["maturity_calendar_days"], 0)
+        self.assertEqual(status["requested_mode"], "auto")
+        self.assertEqual(status["resolved_source"], "Unknown")
+        self.assertFalse(status["fallback_used"])
 
     def test_run_history_is_recorded_and_results_can_be_reopened(self) -> None:
         service = BacktestService(self.db)
@@ -342,6 +372,104 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         recent = service.get_recent_evaluations(code="000001", eval_window_days=3, limit=10, page=1)
         self.assertGreater(recent["total"], 0)
+
+    def test_prepare_samples_reports_local_first_source_metadata_on_local_hit(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 10},
+                {"date": "2024-01-02", "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.0, "volume": 10},
+                {"date": "2024-01-03", "open": 102.0, "high": 103.0, "low": 101.0, "close": 102.0, "volume": 10},
+                {"date": "2024-01-04", "open": 103.0, "high": 104.0, "low": 102.0, "close": 103.0, "volume": 10},
+                {"date": "2024-01-05", "open": 104.0, "high": 105.0, "low": 103.0, "close": 104.0, "volume": 10},
+                {"date": "2024-01-08", "open": 105.0, "high": 106.0, "low": 104.0, "close": 105.0, "volume": 10},
+                {"date": "2024-01-09", "open": 106.0, "high": 107.0, "low": 105.0, "close": 106.0, "volume": 10},
+            ]
+        )
+        service = BacktestService(self.db)
+
+        with patch.object(service, "_load_history_with_local_us_fallback", return_value=(frame, "local_us_parquet")):
+            prep = service.prepare_backtest_samples(code="AAPL", sample_count=2, eval_window_days=3, min_age_days=14)
+
+        self.assertEqual(prep["requested_mode"], "local_first")
+        self.assertEqual(prep["resolved_source"], "LocalParquet")
+        self.assertFalse(prep["fallback_used"])
+        self.assertEqual(prep["latest_prepared_sample_date"], "2024-01-04")
+        self.assertEqual(prep["latest_eligible_sample_date"], "2024-01-04")
+        self.assertEqual(prep["excluded_recent_reason"], "evaluation_window_not_satisfied")
+        self.assertEqual(prep["pricing_resolved_source"], "LocalParquet")
+        self.assertFalse(prep["pricing_fallback_used"])
+
+        status = service.get_sample_status(code="AAPL")
+        self.assertEqual(status["latest_prepared_sample_date"], "2024-01-04")
+        self.assertEqual(status["latest_eligible_sample_date"], "2024-01-04")
+        self.assertEqual(status["excluded_recent_reason"], "evaluation_window_not_satisfied")
+        self.assertEqual(status["pricing_resolved_source"], "LocalParquet")
+        self.assertFalse(status["pricing_fallback_used"])
+
+    def test_prepare_samples_reports_fallback_used_on_us_api_fallback(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 10},
+                {"date": "2024-01-02", "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.0, "volume": 10},
+                {"date": "2024-01-03", "open": 102.0, "high": 103.0, "low": 101.0, "close": 102.0, "volume": 10},
+                {"date": "2024-01-04", "open": 103.0, "high": 104.0, "low": 102.0, "close": 103.0, "volume": 10},
+                {"date": "2024-01-05", "open": 104.0, "high": 105.0, "low": 103.0, "close": 104.0, "volume": 10},
+                {"date": "2024-01-08", "open": 105.0, "high": 106.0, "low": 104.0, "close": 105.0, "volume": 10},
+                {"date": "2024-01-09", "open": 106.0, "high": 107.0, "low": 105.0, "close": 106.0, "volume": 10},
+            ]
+        )
+        service = BacktestService(self.db)
+
+        with patch.object(service, "_load_history_with_local_us_fallback", return_value=(frame, "yfinance")):
+            prep = service.prepare_backtest_samples(code="AAPL", sample_count=2, eval_window_days=3, min_age_days=14)
+
+        self.assertEqual(prep["requested_mode"], "local_first")
+        self.assertEqual(prep["resolved_source"], "YfinanceFetcher")
+        self.assertTrue(prep["fallback_used"])
+        self.assertEqual(prep["pricing_resolved_source"], "YfinanceFetcher")
+        self.assertTrue(prep["pricing_fallback_used"])
+
+    def test_sample_status_reports_maturity_window_exclusion_for_recent_samples(self) -> None:
+        recent_created_at = datetime.now() - timedelta(days=2)
+        old_created_at = datetime.now() - timedelta(days=20)
+        with self.db.get_session() as session:
+            session.add_all([
+                AnalysisHistory(
+                    query_id="bt-sample:000001:2024-03-01:w3",
+                    code="000001",
+                    name="平安银行",
+                    report_type="backtest_sample",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="old",
+                    raw_result='{"market_data_source":"db_cache"}',
+                    context_snapshot='{"enhanced_context": {"date": "2024-03-01"}}',
+                    created_at=old_created_at,
+                ),
+                AnalysisHistory(
+                    query_id="bt-sample:000001:2024-03-20:w3",
+                    code="000001",
+                    name="平安银行",
+                    report_type="backtest_sample",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="recent",
+                    raw_result='{"market_data_source":"db_cache"}',
+                    context_snapshot='{"enhanced_context": {"date": "2024-03-20"}}',
+                    created_at=recent_created_at,
+                ),
+            ])
+            session.commit()
+
+        service = BacktestService(self.db)
+        status = service.get_sample_status(code="000001")
+
+        self.assertEqual(status["latest_prepared_sample_date"], "2024-03-20")
+        self.assertEqual(status["latest_eligible_sample_date"], "2024-03-01")
+        self.assertEqual(status["excluded_recent_reason"], "maturity_window_not_satisfied")
+        self.assertIn("成熟期", status["excluded_recent_message"])
 
     def test_clear_samples_and_results_separate_reset_paths(self) -> None:
         service = BacktestService(self.db)

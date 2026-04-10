@@ -287,11 +287,34 @@ def parse_rule_strategy(
 ) -> RuleBacktestParseResponse:
     def _operation() -> RuleBacktestParseResponse:
         service = RuleBacktestService(db_manager)
-        parsed = service.parse_strategy(request.strategy_text)
-        return RuleBacktestParseResponse(
+        parsed = service.parse_strategy(
+            request.strategy_text,
             code=request.code,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            initial_capital=request.initial_capital,
+            fee_bps=request.fee_bps,
+            slippage_bps=request.slippage_bps,
+        )
+        strategy_spec = parsed.get("strategy_spec") if isinstance(parsed.get("strategy_spec"), dict) else {}
+        return RuleBacktestParseResponse(
+            code=(strategy_spec.get("symbol") if strategy_spec.get("symbol") else request.code),
             strategy_text=request.strategy_text,
             parsed_strategy=dict(parsed),
+            normalized_strategy_family=str(strategy_spec.get("strategy_type") or parsed.get("strategy_kind") or ""),
+            detected_strategy_family=(str(parsed.get("detected_strategy_family")) if parsed.get("detected_strategy_family") else None),
+            executable=bool(parsed.get("executable", False)),
+            normalization_state=str(parsed.get("normalization_state") or "pending"),
+            assumptions=list(parsed.get("assumptions") or []),
+            assumption_groups=list(parsed.get("assumption_groups") or []),
+            unsupported_reason=(str(parsed.get("unsupported_reason")) if parsed.get("unsupported_reason") else None),
+            unsupported_details=list(parsed.get("unsupported_details") or []),
+            unsupported_extensions=list(parsed.get("unsupported_extensions") or []),
+            core_intent_summary=(str(parsed.get("core_intent_summary")) if parsed.get("core_intent_summary") else None),
+            interpretation_confidence=float(parsed.get("interpretation_confidence") or 0.0),
+            supported_portion_summary=(str(parsed.get("supported_portion_summary")) if parsed.get("supported_portion_summary") else None),
+            rewrite_suggestions=list(parsed.get("rewrite_suggestions") or []),
+            parse_warnings=list(parsed.get("parse_warnings") or []),
             confidence=float(parsed.get("confidence") or 0.0),
             needs_confirmation=bool(parsed.get("needs_confirmation", False)),
             ambiguities=list(parsed.get("ambiguities") or []),
@@ -325,10 +348,14 @@ def run_rule_backtest(
                 code=request.code,
                 strategy_text=request.strategy_text,
                 parsed_strategy=request.parsed_strategy,
+                start_date=request.start_date,
+                end_date=request.end_date,
                 lookback_bars=request.lookback_bars,
                 initial_capital=request.initial_capital,
                 fee_bps=request.fee_bps,
                 slippage_bps=request.slippage_bps,
+                benchmark_mode=request.benchmark_mode,
+                benchmark_code=request.benchmark_code,
                 confirmed=request.confirmed,
             )
             return _build_model(RuleBacktestRunResponse, data)
@@ -337,10 +364,14 @@ def run_rule_backtest(
             code=request.code,
             strategy_text=request.strategy_text,
             parsed_strategy=request.parsed_strategy,
+            start_date=request.start_date,
+            end_date=request.end_date,
             lookback_bars=request.lookback_bars,
             initial_capital=request.initial_capital,
             fee_bps=request.fee_bps,
             slippage_bps=request.slippage_bps,
+            benchmark_mode=request.benchmark_mode,
+            benchmark_code=request.benchmark_code,
             confirmed=request.confirmed,
         )
         background_tasks.add_task(service.process_submitted_run, int(data["id"]))

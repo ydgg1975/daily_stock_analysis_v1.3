@@ -6,7 +6,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Menu } from 'lucide-react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Drawer } from '../common/Drawer';
 import { SidebarNav } from './SidebarNav';
 import { ShellRailContext } from './ShellRailContext';
@@ -54,6 +54,7 @@ const ShellRailPanel: React.FC<{
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { t } = useI18n();
   const location = useLocation();
+  const isBacktestRoute = location.pathname.startsWith('/backtest');
   const isDesktop = useIsDesktopViewport();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
@@ -125,17 +126,17 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                 >
                   <Menu className="h-4 w-4" />
                 </button>
-                <div className="shell-mobile-brand">
+                <NavLink to="/" end className="shell-mobile-brand shell-brand-link" aria-label="WolfyStock">
                   <span className="shell-wordmark">WolfyStock</span>
                   <span className="shell-mobile-brand__note">{t('nav.terminal')}</span>
-                </div>
+                </NavLink>
                 <span className="shell-mobile-placeholder" aria-hidden="true" />
               </div>
             )}
           </div>
         </header>
 
-        <div className="shell-content-frame">
+        <div className={`shell-content-frame${isBacktestRoute ? ' shell-content-frame--backtest' : ''}`}>
           <main className="theme-main-lane shell-main-column">
             <div key={location.pathname} className="theme-page-transition">
               {children ?? <Outlet />}

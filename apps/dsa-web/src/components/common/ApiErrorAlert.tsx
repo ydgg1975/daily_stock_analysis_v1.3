@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { ParsedApiError } from '../../api/error';
+import { useI18n } from '../../contexts/UiLanguageContext';
 import { SupportBanner } from './SupportSurface';
 
 interface ApiErrorAlertProps {
@@ -11,25 +12,28 @@ interface ApiErrorAlertProps {
   onDismiss?: () => void;
 }
 
-function getErrorGuidance(error: ParsedApiError): string[] {
+function getErrorGuidance(
+  error: ParsedApiError,
+  t: (key: string, vars?: Record<string, string | number | undefined>) => string,
+): string[] {
   if (error.category === 'local_connection_failed') {
     return [
-      '确认后端服务已启动，并且 Web 前端可访问同一个 API 地址。',
-      '移动端访问时请检查与服务端是否在同一网络，或是否正确配置了反向代理。',
-      '刷新页面后重试；若仍失败，请重新登录以刷新会话状态。',
+      t('common.apiError.guidance.localConnection1'),
+      t('common.apiError.guidance.localConnection2'),
+      t('common.apiError.guidance.localConnection3'),
     ];
   }
 
   if (error.category === 'upstream_timeout' || error.category === 'upstream_network' || error.category === 'upstream_unavailable') {
     return [
-      '本地服务已连接，但外部模型或数据源不可用，请稍后重试。',
-      '检查代理、DNS、API Key 配置或上游服务配额。',
+      t('common.apiError.guidance.upstream1'),
+      t('common.apiError.guidance.upstream2'),
     ];
   }
 
   if (error.category === 'analysis_conflict') {
     return [
-      '同一标的已有任务在运行，等待当前任务完成后再发起新的请求。',
+      t('common.apiError.guidance.analysisConflict'),
     ];
   }
 
@@ -41,11 +45,13 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
   className = '',
   actionLabel,
   onAction,
-  dismissLabel = '关闭',
+  dismissLabel,
   onDismiss,
 }) => {
+  const { t } = useI18n();
   const showDetails = error.rawMessage.trim() && error.rawMessage.trim() !== error.message.trim();
-  const guidance = getErrorGuidance(error);
+  const guidance = getErrorGuidance(error, t);
+  const dismissText = dismissLabel || t('common.apiError.close');
 
   return (
     <SupportBanner
@@ -59,7 +65,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
               className="shrink-0 rounded-[var(--theme-button-radius)] border border-[var(--state-danger-border)] bg-[var(--state-danger-bg)] px-2.5 py-1 text-[11px] uppercase tracking-[0.14em] text-[var(--state-danger-text)] transition hover:bg-[var(--state-danger-bg-strong)]"
               onClick={onDismiss}
             >
-              {dismissLabel}
+              {dismissText}
             </button>
           ) : null}
         </div>
@@ -72,7 +78,7 @@ export const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({
     >
       {showDetails ? (
         <details className="theme-panel-subtle mt-3 rounded-[var(--cohere-radius-medium)] px-3 py-3">
-          <summary className="label-uppercase cursor-pointer text-danger opacity-90">查看详情</summary>
+          <summary className="label-uppercase cursor-pointer text-danger opacity-90">{t('common.apiError.details')}</summary>
           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-danger opacity-85">
             {error.rawMessage}
           </pre>

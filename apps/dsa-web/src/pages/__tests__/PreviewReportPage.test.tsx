@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { translate } from '../../i18n/core';
 import PreviewReportPage from '../PreviewReportPage';
 
 vi.mock('../../components/report', () => ({
@@ -11,7 +12,7 @@ describe('PreviewReportPage', () => {
     render(<PreviewReportPage />);
 
     expect(screen.getByTestId('preview-report-page')).toBeInTheDocument();
-    expect(screen.getByText('Report preview')).toBeInTheDocument();
+    expect(screen.getByText(translate('zh', 'preview.reportTitle'))).toBeInTheDocument();
     expect(screen.getByTestId('standard-report-panel')).toBeInTheDocument();
   });
 });

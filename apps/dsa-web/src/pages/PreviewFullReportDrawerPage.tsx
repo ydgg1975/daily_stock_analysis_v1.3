@@ -5,6 +5,7 @@ import { ReportMarkdown } from '../components/report';
 import { previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import type { ReportLanguage } from '../types/analysis';
+import { useI18n } from '../contexts/UiLanguageContext';
 
 const previewMarkdownZh = `# NVIDIA（NVDA）完整研究报告
 
@@ -111,6 +112,7 @@ Technical indicators prioritize original API values. Conflicting fields are norm
 This memo is for research discussion and does not constitute investment advice.`;
 
 const PreviewFullReportDrawerPage: React.FC = () => {
+  const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [language, setLanguage] = useState<ReportLanguage>('zh');
   const normalizedPreviewReport = useMemo(
@@ -119,8 +121,8 @@ const PreviewFullReportDrawerPage: React.FC = () => {
   );
 
   useEffect(() => {
-    document.title = 'Full Report Drawer Preview - WolfyStock';
-  }, []);
+    document.title = `${t('preview.fullDrawerTitle')} - WolfyStock`;
+  }, [t]);
 
   const content = language === 'en' ? previewMarkdownEn : previewMarkdownZh;
   const stockName = language === 'en' ? 'NVIDIA' : '英伟达';
@@ -128,15 +130,15 @@ const PreviewFullReportDrawerPage: React.FC = () => {
   return (
     <div className="workspace-page workspace-page--preview" data-testid="preview-full-report-page">
       <WorkspacePageHeader
-        eyebrow="WolfyStock Preview Workspace"
-        title="Full report drawer preview"
-        description="开发态专用：验证完整报告抽屉在桌面与移动端下的阅读宽度、层级节奏与审计区可读性。"
+        eyebrow={t('preview.workspaceEyebrow')}
+        title={t('preview.fullDrawerTitle')}
+        description={t('preview.fullDrawerDesc')}
       />
 
       <div className="theme-panel-solid rounded-[1.25rem] px-4 py-4 md:px-5">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">Full report presentation mode</p>
+        <p className="text-[11px] uppercase tracking-[0.16em] text-muted-text">{t('preview.fullModeTitle')}</p>
         <p className="mt-2 text-sm leading-6 text-secondary-text">
-          使用下方按钮打开完整报告抽屉，分别检查中文与英文长文档在同一容器策略下的阅读体验。
+          {t('preview.fullModeBody')}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -147,7 +149,7 @@ const PreviewFullReportDrawerPage: React.FC = () => {
               setDrawerOpen(true);
             }}
           >
-            Open Chinese full report
+            {t('preview.openChinese')}
           </button>
           <button
             type="button"
@@ -157,7 +159,7 @@ const PreviewFullReportDrawerPage: React.FC = () => {
               setDrawerOpen(true);
             }}
           >
-            Open English full report
+            {t('preview.openEnglish')}
           </button>
         </div>
       </div>

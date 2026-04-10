@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import BacktestPage from './pages/BacktestPage';
+import DeterministicBacktestResultPage from './pages/DeterministicBacktestResultPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -104,6 +105,7 @@ const AppContent: React.FC = () => {
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/backtest" element={<BacktestPage />} />
+            <Route path="/backtest/results/:runId" element={<DeterministicBacktestResultPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin/logs" element={<AdminLogsPage />} />
             <Route path="*" element={<NotFoundPage />} />

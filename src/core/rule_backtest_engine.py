@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import date
 from statistics import mean
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -48,6 +48,22 @@ class ParsedStrategy:
     ambiguities: List[Dict[str, Any]]
     summary: Dict[str, str]
     max_lookback: int
+    strategy_kind: str = "rule_conditions"
+    setup: Dict[str, Any] = field(default_factory=dict)
+    strategy_spec: Dict[str, Any] = field(default_factory=dict)
+    executable: bool = False
+    normalization_state: str = "pending"
+    assumptions: List[Dict[str, Any]] = field(default_factory=list)
+    assumption_groups: List[Dict[str, Any]] = field(default_factory=list)
+    unsupported_reason: Optional[str] = None
+    unsupported_details: List[Dict[str, Any]] = field(default_factory=list)
+    unsupported_extensions: List[Dict[str, Any]] = field(default_factory=list)
+    detected_strategy_family: Optional[str] = None
+    core_intent_summary: Optional[str] = None
+    interpretation_confidence: float = 0.0
+    supported_portion_summary: Optional[str] = None
+    rewrite_suggestions: List[Dict[str, Any]] = field(default_factory=list)
+    parse_warnings: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -149,6 +165,20 @@ class RuleBacktestPoint:
     equity: float
     cumulative_return_pct: float
     drawdown_pct: float
+    close: Optional[float] = None
+    signal_summary: Optional[str] = None
+    target_position: Optional[float] = None
+    executed_action: Optional[str] = None
+    fill_price: Optional[float] = None
+    shares_held: Optional[float] = None
+    cash: Optional[float] = None
+    holdings_value: Optional[float] = None
+    total_portfolio_value: Optional[float] = None
+    position_state: Optional[str] = None
+    exposure_pct: Optional[float] = None
+    fee_amount: Optional[float] = None
+    slippage_amount: Optional[float] = None
+    notes: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -156,6 +186,20 @@ class RuleBacktestPoint:
             "equity": round(self.equity, 6),
             "cumulative_return_pct": round(self.cumulative_return_pct, 6),
             "drawdown_pct": round(self.drawdown_pct, 6),
+            "close": round(self.close, 6) if self.close is not None else None,
+            "signal_summary": self.signal_summary,
+            "target_position": round(self.target_position, 6) if self.target_position is not None else None,
+            "executed_action": self.executed_action,
+            "fill_price": round(self.fill_price, 6) if self.fill_price is not None else None,
+            "shares_held": round(self.shares_held, 6) if self.shares_held is not None else None,
+            "cash": round(self.cash, 6) if self.cash is not None else None,
+            "holdings_value": round(self.holdings_value, 6) if self.holdings_value is not None else None,
+            "total_portfolio_value": round(self.total_portfolio_value, 6) if self.total_portfolio_value is not None else None,
+            "position_state": self.position_state,
+            "exposure_pct": round(self.exposure_pct, 6) if self.exposure_pct is not None else None,
+            "fee_amount": round(self.fee_amount, 6) if self.fee_amount is not None else None,
+            "slippage_amount": round(self.slippage_amount, 6) if self.slippage_amount is not None else None,
+            "notes": self.notes,
         }
 
 
@@ -166,6 +210,10 @@ class RuleBacktestResult:
     trades: List[RuleBacktestTrade]
     equity_curve: List[RuleBacktestPoint]
     metrics: Dict[str, Any]
+    benchmark_curve: List[Dict[str, Any]] = field(default_factory=list)
+    benchmark_summary: Dict[str, Any] = field(default_factory=dict)
+    buy_and_hold_curve: List[Dict[str, Any]] = field(default_factory=list)
+    buy_and_hold_summary: Dict[str, Any] = field(default_factory=dict)
     no_result_reason: Optional[str] = None
     no_result_message: Optional[str] = None
     warnings: List[Dict[str, Any]] = None
@@ -177,6 +225,10 @@ class RuleBacktestResult:
             "trades": [trade.to_dict() for trade in self.trades],
             "equity_curve": [point.to_dict() for point in self.equity_curve],
             "metrics": self.metrics,
+            "benchmark_curve": self.benchmark_curve,
+            "benchmark_summary": self.benchmark_summary,
+            "buy_and_hold_curve": self.buy_and_hold_curve,
+            "buy_and_hold_summary": self.buy_and_hold_summary,
             "no_result_reason": self.no_result_reason,
             "no_result_message": self.no_result_message,
             "warnings": self.warnings or [],
@@ -215,6 +267,19 @@ class RuleBacktestParser:
         raw_text = (strategy_text or "").strip()
         if not raw_text:
             raise ValueError("strategy_text is required")
+
+        periodic_strategy = self._parse_periodic_accumulation(raw_text)
+        if periodic_strategy is not None:
+            return periodic_strategy
+        macd_strategy = self._parse_macd_crossover(raw_text)
+        if macd_strategy is not None:
+            return macd_strategy
+        moving_average_strategy = self._parse_moving_average_crossover(raw_text)
+        if moving_average_strategy is not None:
+            return moving_average_strategy
+        rsi_strategy = self._parse_rsi_threshold(raw_text)
+        if rsi_strategy is not None:
+            return rsi_strategy
 
         normalized = self._normalize_text(raw_text)
         entry_text, exit_text, issues, inferred_sections = self._split_sections(normalized)
@@ -260,6 +325,9 @@ class RuleBacktestParser:
                     ambiguities=self._dedupe_issues(ambiguities),
                     summary=summary,
                     max_lookback=max_lookback,
+                    strategy_spec={},
+                    executable=False,
+                    normalization_state="pending",
                 )
 
         max_lookback = self._collect_max_lookback(entry_node, exit_node)
@@ -277,7 +345,376 @@ class RuleBacktestParser:
             ambiguities=self._dedupe_issues(ambiguities),
             summary=summary,
             max_lookback=max_lookback,
+            strategy_spec={},
+            executable=False,
+            normalization_state="pending",
         )
+
+    def _parse_periodic_accumulation(self, raw_text: str) -> Optional[ParsedStrategy]:
+        text = (raw_text or "").strip()
+        if not text:
+            return None
+
+        normalized_text = re.sub(r"\s+", " ", text)
+        start_end_match = re.search(r"从\s*(\d{4}-\d{2}-\d{2})\s*到\s*(\d{4}-\d{2}-\d{2})", normalized_text)
+        daily_frequency = bool(re.search(r"(每天|每日|每个交易日)", normalized_text))
+        if not start_end_match or not daily_frequency:
+            return None
+
+        quantity_match = re.search(
+            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*股\s*([A-Za-z][A-Za-z0-9.\-]{0,9})?",
+            normalized_text,
+            flags=re.IGNORECASE,
+        )
+        amount_match = re.search(
+            r"(?:每天|每日|每个交易日)\s*买(?:入)?\s*([0-9]+(?:\.[0-9]+)?)\s*(元|块|块钱)\s*([A-Za-z][A-Za-z0-9.\-]{0,9})?",
+            normalized_text,
+            flags=re.IGNORECASE,
+        )
+        if quantity_match is None and amount_match is None:
+            return None
+
+        capital_match = re.search(r"资金\s*([0-9]+(?:\.[0-9]+)?)", normalized_text)
+        symbol = None
+        order_mode = "fixed_shares"
+        quantity_per_trade: Optional[float] = None
+        amount_per_trade: Optional[float] = None
+        if quantity_match is not None:
+            quantity_per_trade = float(quantity_match.group(1))
+            symbol = quantity_match.group(2)
+        else:
+            amount_per_trade = float(amount_match.group(1))
+            symbol = amount_match.group(3)
+
+        ambiguities: List[Dict[str, Any]] = []
+        if capital_match is None:
+            ambiguities.append({
+                "code": "default_initial_capital",
+                "message": "未显式写出初始资金，已默认使用 100000。",
+                "suggestion": "如需其他资金规模，请写成“资金 50000”。",
+            })
+        if not symbol:
+            ambiguities.append({
+                "code": "missing_symbol",
+                "message": "未在自然语言中识别到股票代码。",
+                "suggestion": "请在文本中写出类似 ORCL / AAPL 的单一股票代码。",
+            })
+
+        cash_stop = "stop_when_insufficient_cash" if re.search(r"(资金耗尽|现金不足|资金不足)", normalized_text) else "skip_when_insufficient_cash"
+        confidence = 0.98 if symbol else 0.82
+        setup = {
+            "symbol": str(symbol or "").upper() or None,
+            "start_date": start_end_match.group(1),
+            "end_date": start_end_match.group(2),
+            "initial_capital": float(capital_match.group(1)) if capital_match is not None else 100000.0,
+            "execution_frequency": "daily",
+            "action": "buy",
+            "order_mode": order_mode,
+            "quantity_per_trade": quantity_per_trade,
+            "amount_per_trade": amount_per_trade,
+            "cash_policy": cash_stop,
+            "execution_price_basis": "open",
+            "fee_bps": 0.0,
+            "slippage_bps": 0.0,
+            "exit_policy": "close_at_end",
+        }
+        size_text = (
+            f"每个交易日买入 {int(quantity_per_trade) if quantity_per_trade is not None and quantity_per_trade.is_integer() else quantity_per_trade:g} 股"
+            if quantity_per_trade is not None
+            else f"每个交易日买入 {amount_per_trade:g} 元"
+        )
+        stop_text = "现金不足即停止买入" if cash_stop == "stop_when_insufficient_cash" else "现金不足时跳过当日"
+        summary = {
+            "entry": f"{size_text} {setup['symbol'] or '--'}",
+            "exit": "区间结束统一按收盘价平仓",
+            "strategy": "中文定投策略草稿",
+        }
+        normalized = (
+            f"资金 {setup['initial_capital']:.0f}，{setup['start_date']} 至 {setup['end_date']}，"
+            f"{size_text} {setup['symbol'] or '--'}，{stop_text}。"
+        )
+        return ParsedStrategy(
+            version="v1",
+            timeframe="daily",
+            source_text=raw_text,
+            normalized_text=normalized,
+            entry=self._empty_group("and"),
+            exit=self._empty_group("or"),
+            confidence=confidence,
+            needs_confirmation=True,
+            ambiguities=ambiguities,
+            summary=summary,
+            max_lookback=1,
+            strategy_kind="periodic_accumulation",
+            setup=setup,
+            strategy_spec={},
+            executable=False,
+            normalization_state="pending",
+        )
+
+    def _parse_macd_crossover(self, raw_text: str) -> Optional[ParsedStrategy]:
+        text = (raw_text or "").strip()
+        if not text:
+            return None
+        normalized_text = re.sub(r"\s+", " ", text)
+        if "MACD" not in normalized_text.upper():
+            return None
+        upper = normalized_text.upper()
+        has_bullish = bool(re.search(r"(金叉|GOLDEN\s+CROSS|CROSS(?:ES)?\s+ABOVE)", upper, re.IGNORECASE))
+        has_bearish = bool(re.search(r"(死叉|DEAD\s+CROSS|CROSS(?:ES)?\s+BELOW)", upper, re.IGNORECASE))
+        if not (has_bullish and has_bearish):
+            return None
+
+        params_match = re.search(
+            r"MACD\s*(?:\(|（)?\s*(\d{1,3})\s*[,/]\s*(\d{1,3})\s*[,/]\s*(\d{1,3})\s*(?:\)|）)?",
+            upper,
+            re.IGNORECASE,
+        )
+        ambiguities: List[Dict[str, Any]] = []
+        if params_match is not None:
+            fast_period = int(params_match.group(1))
+            slow_period = int(params_match.group(2))
+            signal_period = int(params_match.group(3))
+        else:
+            fast_period, slow_period, signal_period = 12, 26, 9
+            ambiguities.append({
+                "code": "default_macd_periods",
+                "message": "未显式写出 MACD 参数，当前默认使用 (12, 26, 9)。",
+                "suggestion": "如需其他 MACD 参数，可写成 MACD(8,21,5)。",
+            })
+
+        summary = {
+            "entry": f"买入条件：MACD({fast_period},{slow_period},{signal_period}) 金叉",
+            "exit": f"卖出条件：MACD({fast_period},{slow_period},{signal_period}) 死叉",
+            "strategy": "MACD 交叉策略",
+        }
+        normalized = (
+            f"MACD({fast_period},{slow_period},{signal_period}) 金叉买入，"
+            f"MACD({fast_period},{slow_period},{signal_period}) 死叉卖出。"
+        )
+        setup = {
+            "indicator_family": "macd",
+            "fast_period": fast_period,
+            "slow_period": slow_period,
+            "signal_period": signal_period,
+        }
+        return ParsedStrategy(
+            version="v1",
+            timeframe="daily",
+            source_text=raw_text,
+            normalized_text=normalized,
+            entry=self._empty_group("and"),
+            exit=self._empty_group("or"),
+            confidence=0.96,
+            needs_confirmation=bool(ambiguities),
+            ambiguities=ambiguities,
+            summary=summary,
+            max_lookback=max(fast_period, slow_period) + signal_period,
+            strategy_kind="macd_crossover",
+            setup=setup,
+            strategy_spec={},
+            executable=False,
+            normalization_state="pending",
+        )
+
+    def _parse_moving_average_crossover(self, raw_text: str) -> Optional[ParsedStrategy]:
+        text = (raw_text or "").strip()
+        if not text:
+            return None
+        normalized_text = re.sub(r"\s+", " ", text)
+        upper = normalized_text.upper()
+        if "MACD" in upper:
+            return None
+
+        explicit_pair_match = re.search(
+            r"(?:(EMA|SMA|MA)\s*)?(\d{1,3})\s*(?:日|天|DAY)?\s*(?:均线|EMA|SMA|MA)?\s*(?:上穿|金叉|CROSS(?:ES)?\s+ABOVE)\s*(?:(EMA|SMA|MA)\s*)?(\d{1,3})\s*(?:日|天|DAY)?\s*(?:均线|EMA|SMA|MA)?",
+            upper,
+            re.IGNORECASE,
+        )
+        shorthand_match = re.search(
+            r"(?:MA|EMA|SMA)\s*(\d{1,3})\s*(?:上穿|金叉|CROSS(?:ES)?\s+ABOVE)\s*(?:MA|EMA|SMA)\s*(\d{1,3})",
+            upper,
+            re.IGNORECASE,
+        )
+        if explicit_pair_match is None and shorthand_match is None:
+            return None
+
+        if explicit_pair_match is not None:
+            fast_type = str(explicit_pair_match.group(1) or "").strip().upper()
+            fast_period = int(explicit_pair_match.group(2))
+            slow_type = str(explicit_pair_match.group(3) or "").strip().upper()
+            slow_period = int(explicit_pair_match.group(4))
+        else:
+            fast_type = "MA"
+            slow_type = "MA"
+            fast_period = int(shorthand_match.group(1))
+            slow_period = int(shorthand_match.group(2))
+        if fast_period == slow_period:
+            return None
+
+        ambiguities: List[Dict[str, Any]] = []
+        if not fast_type:
+            fast_type = "MA"
+            ambiguities.append({
+                "code": "default_fast_ma_type",
+                "message": "未显式写出快线类型，当前默认使用 SMA。",
+                "suggestion": "如需指数均线，可写成 EMA5。",
+            })
+        if not slow_type:
+            slow_type = "MA"
+            ambiguities.append({
+                "code": "default_slow_ma_type",
+                "message": "未显式写出慢线类型，当前默认使用 SMA。",
+                "suggestion": "如需指数均线，可写成 EMA20。",
+            })
+
+        has_exit = bool(re.search(r"(下穿|死叉|CROSS(?:ES)?\s+BELOW)", upper, re.IGNORECASE))
+        if not has_exit:
+            ambiguities.append({
+                "code": "default_reverse_exit",
+                "message": "未显式写出离场条件，当前默认使用反向下穿离场。",
+                "suggestion": "如需其他离场方式，请显式写出。",
+            })
+
+        summary = {
+            "entry": f"买入条件：{fast_type}{fast_period} 上穿 {slow_type}{slow_period}",
+            "exit": f"卖出条件：{fast_type}{fast_period} 下穿 {slow_type}{slow_period}",
+            "strategy": "均线交叉策略",
+        }
+        normalized = (
+            f"{fast_type}{fast_period} 上穿 {slow_type}{slow_period} 买入，"
+            f"{fast_type}{fast_period} 下穿 {slow_type}{slow_period} 卖出。"
+        )
+        setup = {
+            "indicator_family": "moving_average",
+            "fast_period": fast_period,
+            "slow_period": slow_period,
+            "fast_type": "ema" if fast_type == "EMA" else "simple",
+            "slow_type": "ema" if slow_type == "EMA" else "simple",
+        }
+        return ParsedStrategy(
+            version="v1",
+            timeframe="daily",
+            source_text=raw_text,
+            normalized_text=normalized,
+            entry=self._empty_group("and"),
+            exit=self._empty_group("or"),
+            confidence=0.95,
+            needs_confirmation=bool(ambiguities),
+            ambiguities=ambiguities,
+            summary=summary,
+            max_lookback=max(fast_period, slow_period),
+            strategy_kind="moving_average_crossover",
+            setup=setup,
+            strategy_spec={},
+            executable=False,
+            normalization_state="pending",
+        )
+
+    def _parse_rsi_threshold(self, raw_text: str) -> Optional[ParsedStrategy]:
+        text = (raw_text or "").strip()
+        if not text:
+            return None
+        normalized = self._normalize_text(text)
+        upper = normalized.upper()
+        if "RSI" not in upper:
+            return None
+        if re.search(r"\b(?:MA|EMA|SMA)\d+\b", upper):
+            return None
+
+        buy_pattern = re.search(
+            r"(?:BUY|买入).{0,24}?RSI\s*(\d{1,3})?\s*(?:<|<=)\s*([0-9]+(?:\.[0-9]+)?)|RSI\s*(\d{1,3})?\s*(?:<|<=)\s*([0-9]+(?:\.[0-9]+)?).{0,24}?(?:BUY|买入)",
+            upper,
+            re.IGNORECASE,
+        )
+        sell_pattern = re.search(
+            r"(?:SELL|卖出|平仓).{0,24}?RSI\s*(\d{1,3})?\s*(?:>|>=)\s*([0-9]+(?:\.[0-9]+)?)|RSI\s*(\d{1,3})?\s*(?:>|>=)\s*([0-9]+(?:\.[0-9]+)?).{0,24}?(?:SELL|卖出|平仓)",
+            upper,
+            re.IGNORECASE,
+        )
+        if buy_pattern is None:
+            buy_pattern = re.search(
+                r"(?:<|<=)\s*([0-9]+(?:\.[0-9]+)?).{0,12}?(?:BUY|买入)",
+                upper,
+                re.IGNORECASE,
+            )
+        if sell_pattern is None:
+            sell_pattern = re.search(
+                r"(?:>|>=)\s*([0-9]+(?:\.[0-9]+)?).{0,12}?(?:SELL|卖出|平仓)",
+                upper,
+                re.IGNORECASE,
+            )
+        if buy_pattern is None or sell_pattern is None:
+            return None
+
+        buy_groups = buy_pattern.groups()
+        sell_groups = sell_pattern.groups()
+        entry_period, lower_threshold = self._extract_rsi_match_parts(buy_groups, default_period=14)
+        exit_period, upper_threshold = self._extract_rsi_match_parts(sell_groups, default_period=entry_period)
+        period = entry_period if entry_period == exit_period else max(entry_period, exit_period)
+
+        ambiguities: List[Dict[str, Any]] = []
+        if not re.search(r"RSI\s*\d{1,3}", upper, re.IGNORECASE):
+            ambiguities.append({
+                "code": "default_rsi_period",
+                "message": "未显式写出 RSI 周期，当前默认使用 14。",
+                "suggestion": "如需其他周期，可写成 RSI6 或 RSI21。",
+            })
+        if entry_period != exit_period:
+            ambiguities.append({
+                "code": "mixed_rsi_period",
+                "message": f"买卖条件出现不同 RSI 周期，当前统一采用 RSI{period}。",
+                "suggestion": "建议显式使用同一个 RSI 周期。",
+            })
+
+        summary = {
+            "entry": f"买入条件：RSI{period} < {lower_threshold:g}",
+            "exit": f"卖出条件：RSI{period} > {upper_threshold:g}",
+            "strategy": "RSI 阈值策略",
+        }
+        normalized_text = f"RSI{period} 低于 {lower_threshold:g} 买入，RSI{period} 高于 {upper_threshold:g} 卖出。"
+        setup = {
+            "indicator_family": "rsi",
+            "period": period,
+            "lower_threshold": lower_threshold,
+            "upper_threshold": upper_threshold,
+        }
+        return ParsedStrategy(
+            version="v1",
+            timeframe="daily",
+            source_text=raw_text,
+            normalized_text=normalized_text,
+            entry=self._empty_group("and"),
+            exit=self._empty_group("or"),
+            confidence=0.95,
+            needs_confirmation=bool(ambiguities),
+            ambiguities=ambiguities,
+            summary=summary,
+            max_lookback=period + 1,
+            strategy_kind="rsi_threshold",
+            setup=setup,
+            strategy_spec={},
+            executable=False,
+            normalization_state="pending",
+        )
+
+    @staticmethod
+    def _extract_rsi_match_parts(groups: Tuple[Any, ...], *, default_period: int) -> Tuple[int, float]:
+        if len(groups) == 1:
+            return int(default_period), float(groups[0])
+        period_candidates = []
+        threshold_candidates = []
+        if len(groups) > 0:
+            period_candidates.append(groups[0])
+        if len(groups) > 1:
+            threshold_candidates.append(groups[1])
+        if len(groups) > 2:
+            period_candidates.append(groups[2])
+        if len(groups) > 3:
+            threshold_candidates.append(groups[3])
+        period_value = next((value for value in period_candidates if value not in (None, "")), None)
+        threshold_value = next((value for value in threshold_candidates if value not in (None, "")), None)
+        return int(period_value or default_period), float(threshold_value if threshold_value is not None else 0.0)
 
     def _llm_parse(self, raw_text: str, llm_adapter: Any) -> Optional[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
         prompt = (
@@ -651,12 +1088,46 @@ class RuleBacktestEngine:
         fee_bps: float = 0.0,
         slippage_bps: float = 0.0,
         lookback_bars: int = 252,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
     ) -> RuleBacktestResult:
         assumptions = self._build_execution_assumptions(
             timeframe=parsed_strategy.timeframe,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
         )
+        strategy_spec = parsed_strategy.strategy_spec or {}
+        strategy_type = str(strategy_spec.get("strategy_type") or parsed_strategy.strategy_kind)
+        if strategy_type == "periodic_accumulation":
+            assumptions.position_sizing = "scheduled_fixed_accumulation"
+            assumptions.signal_evaluation_timing = "execute scheduled accumulation on each trading day"
+            assumptions.entry_fill_timing = "same_bar_open"
+            assumptions.exit_fill_timing = "forced_close_at_window_end_close"
+            return self._run_periodic_accumulation(
+                code=code,
+                parsed_strategy=parsed_strategy,
+                bars=bars,
+                assumptions=assumptions,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        if strategy_type in {"moving_average_crossover", "macd_crossover", "rsi_threshold"}:
+            return self._run_indicator_family_strategy(
+                code=code,
+                parsed_strategy=parsed_strategy,
+                bars=bars,
+                assumptions=assumptions,
+                initial_capital=initial_capital,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                lookback_bars=lookback_bars,
+                start_date=start_date,
+                end_date=end_date,
+            )
         ordered_bars = list(bars)
         if not ordered_bars:
             return RuleBacktestResult(
@@ -664,7 +1135,7 @@ class RuleBacktestEngine:
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
-                metrics=self._empty_metrics(initial_capital, lookback_bars),
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="insufficient_history",
                 no_result_message="没有可用于回测的历史行情数据。",
                 warnings=[],
@@ -677,13 +1148,29 @@ class RuleBacktestEngine:
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
-                metrics=self._empty_metrics(initial_capital, lookback_bars),
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
                 no_result_reason="invalid_price_data",
                 no_result_message="历史行情存在缺失收盘价，无法执行规则回测。",
                 warnings=[],
             )
 
-        start_index = max(0, len(ordered_bars) - max(1, int(lookback_bars)))
+        execution_start_index, execution_end_index = self._resolve_execution_window(
+            ordered_bars,
+            lookback_bars=lookback_bars,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="no_bars_in_range",
+                no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                warnings=[],
+            )
         warmup_cache = self._build_indicator_cache(ordered_bars[:], parsed_strategy)
         trades: List[RuleBacktestTrade] = []
         equity_curve: List[RuleBacktestPoint] = []
@@ -705,8 +1192,14 @@ class RuleBacktestEngine:
             price = closes[idx]
             if price is None:
                 continue
-            if idx < start_index:
+            if idx < execution_start_index or idx > execution_end_index:
                 continue
+
+            executed_action: Optional[str] = None
+            executed_fill_price: Optional[float] = None
+            executed_fee_amount: Optional[float] = None
+            executed_slippage_amount: Optional[float] = None
+            action_notes: Optional[str] = None
 
             if pending_exit is not None and position:
                 fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
@@ -761,6 +1254,11 @@ class RuleBacktestEngine:
                 active_position = {}
                 shares = 0.0
                 position = False
+                executed_action = "sell"
+                executed_fill_price = float(exit_execution["effective_price"])
+                executed_fee_amount = float(exit_execution["fee_amount"])
+                executed_slippage_amount = float(exit_execution["slippage_amount"])
+                action_notes = "exit_signal_next_bar_open"
 
             if pending_entry is not None and not position:
                 fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
@@ -789,21 +1287,33 @@ class RuleBacktestEngine:
                         "entry_fill_basis": fill_basis,
                         "cash_buffer": float(entry_execution["cash_remaining"]),
                     }
+                    executed_action = "buy"
+                    executed_fill_price = float(entry_execution["effective_price"])
+                    executed_fee_amount = float(entry_execution["fee_amount"])
+                    executed_slippage_amount = float(entry_execution["slippage_amount"])
+                    action_notes = "entry_signal_next_bar_open"
                 pending_entry = None
 
             equity = cash if not position else cash + shares * price
             peak_equity = max(peak_equity, equity)
-            drawdown_pct = 0.0 if peak_equity <= 0 else ((equity / peak_equity) - 1.0) * 100.0
             equity_curve.append(
-                RuleBacktestPoint(
-                    date=getattr(bar, "date"),
-                    equity=float(equity),
-                    cumulative_return_pct=((equity / float(initial_capital)) - 1.0) * 100.0 if initial_capital else 0.0,
-                    drawdown_pct=float(drawdown_pct),
+                self._build_equity_point(
+                    point_date=getattr(bar, "date"),
+                    close_price=float(price),
+                    cash=float(cash),
+                    shares=float(shares),
+                    initial_capital=float(initial_capital),
+                    peak_equity=float(peak_equity),
+                    target_position=1.0 if position else 0.0,
+                    executed_action=executed_action,
+                    fill_price=executed_fill_price,
+                    fee_amount=executed_fee_amount,
+                    slippage_amount=executed_slippage_amount,
+                    notes=action_notes,
                 )
             )
 
-            if idx >= len(ordered_bars) - 1:
+            if idx >= execution_end_index:
                 continue
 
             if position and self._evaluate_node(exit_node, idx, ordered_bars, warmup_cache):
@@ -812,6 +1322,11 @@ class RuleBacktestEngine:
                     trigger=self._format_node(exit_node),
                     rule_json=exit_node,
                     indicators=self._collect_indicator_snapshot(exit_node, idx, ordered_bars, warmup_cache),
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=self._format_node(exit_node),
+                    target_position=0.0,
                 )
                 continue
 
@@ -823,10 +1338,15 @@ class RuleBacktestEngine:
                     rule_json=entry_node,
                     indicators=self._collect_indicator_snapshot(entry_node, idx, ordered_bars, warmup_cache),
                 )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=self._format_node(entry_node),
+                    target_position=1.0,
+                )
 
         if position and active_position:
-            last_bar = ordered_bars[-1]
-            last_price = closes[-1] or float(active_position["entry_price"])
+            last_bar = ordered_bars[execution_end_index]
+            last_price = closes[execution_end_index] or float(active_position["entry_price"])
             fill_price, fill_basis = self._resolve_fill_price(last_bar, close_price=last_price, preferred="close")
             exit_execution = self._apply_exit_execution(
                 shares=shares,
@@ -837,7 +1357,7 @@ class RuleBacktestEngine:
             cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
             exit_signal_date = pending_exit.signal_date if pending_exit is not None else getattr(last_bar, "date")
             exit_trigger = pending_exit.trigger if pending_exit is not None else "END_OF_WINDOW"
-            holding_bars = max(1, len(ordered_bars) - 1 - int(active_position["entry_fill_index"]) + 1)
+            holding_bars = max(1, execution_end_index - int(active_position["entry_fill_index"]) + 1)
             holding_calendar_days = max(1, (getattr(last_bar, "date") - active_position["entry_date"]).days)
             entry_total_cost = float(active_position["entry_total_cost"])
             trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
@@ -864,7 +1384,7 @@ class RuleBacktestEngine:
                     exit_indicators=(
                         pending_exit.indicators
                         if pending_exit is not None
-                        else self._collect_indicator_snapshot(exit_node, len(ordered_bars) - 1, ordered_bars, warmup_cache)
+                        else self._collect_indicator_snapshot(exit_node, execution_end_index, ordered_bars, warmup_cache)
                     ),
                     entry_fill_basis=active_position["entry_fill_basis"],
                     exit_fill_basis=fill_basis,
@@ -879,20 +1399,36 @@ class RuleBacktestEngine:
                     notes="forced_close_at_window_end",
                 )
             )
-            equity_curve[-1] = RuleBacktestPoint(
-                date=getattr(last_bar, "date"),
-                equity=float(cash),
-                cumulative_return_pct=((cash / float(initial_capital)) - 1.0) * 100.0 if initial_capital else 0.0,
-                drawdown_pct=equity_curve[-1].drawdown_pct if equity_curve else 0.0,
+            previous_signal_summary = equity_curve[-1].signal_summary if equity_curve else None
+            equity_curve[-1] = self._build_equity_point(
+                point_date=getattr(last_bar, "date"),
+                close_price=float(last_price),
+                cash=float(cash),
+                shares=0.0,
+                initial_capital=float(initial_capital),
+                peak_equity=float(peak_equity),
+                target_position=0.0,
+                signal_summary=previous_signal_summary,
+                executed_action="forced_close",
+                fill_price=float(exit_execution["effective_price"]),
+                fee_amount=float(exit_execution["fee_amount"]),
+                slippage_amount=float(exit_execution["slippage_amount"]),
+                notes="forced_close_at_window_end",
             )
 
+        execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
+        benchmark_metrics = self._build_benchmark_metrics(execution_bars)
+        buy_and_hold_curve = self._build_benchmark_curve(execution_bars)
+        buy_and_hold_summary = self._build_benchmark_summary(benchmark_metrics)
         metrics = self._build_metrics(
             trades=trades,
             equity_curve=equity_curve,
             initial_capital=float(initial_capital),
             trade_entry_signals=trade_entry_signals,
-            benchmark_metrics=self._build_benchmark_metrics(ordered_bars[start_index:]),
+            benchmark_metrics=benchmark_metrics,
             lookback_bars=int(lookback_bars),
+            start_date=start_date,
+            end_date=end_date,
         )
         no_result_reason, no_result_message = self._detect_no_result_reason(metrics, parsed_strategy)
         return RuleBacktestResult(
@@ -901,10 +1437,802 @@ class RuleBacktestEngine:
             trades=trades,
             equity_curve=equity_curve,
             metrics=metrics,
+            benchmark_curve=buy_and_hold_curve,
+            benchmark_summary=buy_and_hold_summary,
+            buy_and_hold_curve=buy_and_hold_curve,
+            buy_and_hold_summary=buy_and_hold_summary,
             no_result_reason=no_result_reason,
             no_result_message=no_result_message,
             warnings=parsed_strategy.ambiguities,
         )
+
+    def _run_indicator_family_strategy(
+        self,
+        *,
+        code: str,
+        parsed_strategy: ParsedStrategy,
+        bars: Sequence[Any],
+        assumptions: ExecutionAssumptions,
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ) -> RuleBacktestResult:
+        ordered_bars = list(bars)
+        if not ordered_bars:
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="insufficient_history",
+                no_result_message="没有可用于回测的历史行情数据。",
+                warnings=[],
+            )
+
+        closes = [self._safe_price(getattr(bar, "close", None)) for bar in ordered_bars]
+        if any(price is None for price in closes):
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="invalid_price_data",
+                no_result_message="历史行情存在缺失收盘价，无法执行规则回测。",
+                warnings=[],
+            )
+
+        execution_start_index, execution_end_index = self._resolve_execution_window(
+            ordered_bars,
+            lookback_bars=lookback_bars,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="no_bars_in_range",
+                no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                warnings=[],
+            )
+
+        strategy_spec = parsed_strategy.strategy_spec or {}
+        signal_spec = dict(strategy_spec.get("signal") or {})
+        series_payload = self._build_strategy_signal_series(closes, strategy_spec)
+        fee_rate = max(0.0, float(fee_bps)) / 10000.0
+        slippage_rate = max(0.0, float(slippage_bps)) / 10000.0
+        trades: List[RuleBacktestTrade] = []
+        equity_curve: List[RuleBacktestPoint] = []
+        peak_equity = float(initial_capital)
+        cash = float(initial_capital)
+        shares = 0.0
+        position = False
+        active_position: Dict[str, Any] = {}
+        pending_entry: Optional[PendingOrder] = None
+        pending_exit: Optional[PendingOrder] = None
+        trade_entry_signals = 0
+
+        for idx, bar in enumerate(ordered_bars):
+            price = closes[idx]
+            if price is None or idx < execution_start_index or idx > execution_end_index:
+                continue
+
+            executed_action: Optional[str] = None
+            executed_fill_price: Optional[float] = None
+            executed_fee_amount: Optional[float] = None
+            executed_slippage_amount: Optional[float] = None
+            action_notes: Optional[str] = None
+
+            if pending_exit is not None and position:
+                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                exit_execution = self._apply_exit_execution(
+                    shares=shares,
+                    base_fill_price=fill_price,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                )
+                cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+                exit_date = getattr(bar, "date")
+                entry_date = active_position["entry_date"]
+                holding_bars = max(1, idx - int(active_position["entry_fill_index"]))
+                holding_calendar_days = max(1, (exit_date - entry_date).days)
+                entry_total_cost = float(active_position["entry_total_cost"])
+                trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
+                trades.append(
+                    RuleBacktestTrade(
+                        code=code,
+                        entry_signal_date=active_position["entry_signal_date"],
+                        exit_signal_date=pending_exit.signal_date,
+                        entry_date=entry_date,
+                        exit_date=exit_date,
+                        entry_price=float(active_position["entry_price"]),
+                        exit_price=float(exit_execution["effective_price"]),
+                        entry_signal=active_position["entry_signal_text"],
+                        exit_signal=pending_exit.trigger,
+                        entry_trigger=active_position["entry_trigger"],
+                        exit_trigger=pending_exit.trigger,
+                        return_pct=round(trade_return, 4),
+                        holding_days=holding_bars,
+                        holding_bars=holding_bars,
+                        holding_calendar_days=holding_calendar_days,
+                        entry_rule_json=active_position["entry_rule_json"],
+                        exit_rule_json=pending_exit.rule_json,
+                        entry_indicators=active_position["entry_indicators"],
+                        exit_indicators=pending_exit.indicators,
+                        entry_fill_basis=active_position["entry_fill_basis"],
+                        exit_fill_basis=fill_basis,
+                        signal_price_basis="close",
+                        price_basis="close",
+                        fee_bps=float(fee_bps),
+                        slippage_bps=float(slippage_bps),
+                        entry_fee_amount=float(active_position["entry_fee_amount"]),
+                        exit_fee_amount=float(exit_execution["fee_amount"]),
+                        entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                        exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        notes=f"{strategy_spec.get('strategy_type')}_exit_next_bar_open",
+                    )
+                )
+                pending_exit = None
+                active_position = {}
+                shares = 0.0
+                position = False
+                executed_action = "sell"
+                executed_fill_price = float(exit_execution["effective_price"])
+                executed_fee_amount = float(exit_execution["fee_amount"])
+                executed_slippage_amount = float(exit_execution["slippage_amount"])
+                action_notes = f"{strategy_spec.get('strategy_type')}_exit_next_bar_open"
+
+            if pending_entry is not None and not position:
+                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                entry_execution = self._apply_entry_execution(
+                    cash=cash,
+                    base_fill_price=fill_price,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                )
+                if entry_execution["shares"] > 0:
+                    shares = entry_execution["shares"]
+                    cash = entry_execution["cash_remaining"]
+                    position = True
+                    active_position = {
+                        "entry_signal_date": pending_entry.signal_date,
+                        "entry_date": getattr(bar, "date"),
+                        "entry_fill_index": idx,
+                        "entry_price": float(entry_execution["effective_price"]),
+                        "entry_total_cost": float(entry_execution["total_cost"]),
+                        "entry_fee_amount": float(entry_execution["fee_amount"]),
+                        "entry_slippage_amount": float(entry_execution["slippage_amount"]),
+                        "entry_signal_text": pending_entry.trigger,
+                        "entry_trigger": pending_entry.trigger,
+                        "entry_rule_json": pending_entry.rule_json,
+                        "entry_indicators": pending_entry.indicators,
+                        "entry_fill_basis": fill_basis,
+                        "cash_buffer": float(entry_execution["cash_remaining"]),
+                    }
+                    executed_action = "buy"
+                    executed_fill_price = float(entry_execution["effective_price"])
+                    executed_fee_amount = float(entry_execution["fee_amount"])
+                    executed_slippage_amount = float(entry_execution["slippage_amount"])
+                    action_notes = f"{strategy_spec.get('strategy_type')}_entry_next_bar_open"
+                pending_entry = None
+
+            equity = cash if not position else cash + shares * price
+            peak_equity = max(peak_equity, equity)
+            equity_curve.append(
+                self._build_equity_point(
+                    point_date=getattr(bar, "date"),
+                    close_price=float(price),
+                    cash=float(cash),
+                    shares=float(shares),
+                    initial_capital=float(initial_capital),
+                    peak_equity=float(peak_equity),
+                    target_position=1.0 if position else 0.0,
+                    executed_action=executed_action,
+                    fill_price=executed_fill_price,
+                    fee_amount=executed_fee_amount,
+                    slippage_amount=executed_slippage_amount,
+                    notes=action_notes,
+                )
+            )
+
+            if idx >= execution_end_index:
+                continue
+
+            if position and self._signal_family_triggered("exit", idx, series_payload, signal_spec):
+                pending_exit = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=str(parsed_strategy.summary.get("exit") or "Exit signal"),
+                    rule_json={"strategy_spec": signal_spec, "condition": signal_spec.get("exit_condition")},
+                    indicators=self._collect_signal_strategy_snapshot(strategy_spec, idx, series_payload, ordered_bars),
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=str(parsed_strategy.summary.get("exit") or "Exit signal"),
+                    target_position=0.0,
+                )
+                continue
+
+            if (not position) and self._signal_family_triggered("entry", idx, series_payload, signal_spec):
+                trade_entry_signals += 1
+                pending_entry = PendingOrder(
+                    signal_date=getattr(bar, "date"),
+                    trigger=str(parsed_strategy.summary.get("entry") or "Entry signal"),
+                    rule_json={"strategy_spec": signal_spec, "condition": signal_spec.get("entry_condition")},
+                    indicators=self._collect_signal_strategy_snapshot(strategy_spec, idx, series_payload, ordered_bars),
+                )
+                self._update_point_signal(
+                    equity_curve[-1],
+                    signal_summary=str(parsed_strategy.summary.get("entry") or "Entry signal"),
+                    target_position=1.0,
+                )
+
+        end_behavior = dict(strategy_spec.get("end_behavior") or {})
+        if position and active_position and str(end_behavior.get("policy") or "liquidate_at_end") == "liquidate_at_end":
+            last_bar = ordered_bars[execution_end_index]
+            last_price = closes[execution_end_index] or float(active_position["entry_price"])
+            fill_price, fill_basis = self._resolve_fill_price(
+                last_bar,
+                close_price=last_price,
+                preferred=str(end_behavior.get("price_basis") or "close"),
+            )
+            exit_execution = self._apply_exit_execution(
+                shares=shares,
+                base_fill_price=fill_price,
+                fee_rate=fee_rate,
+                slippage_rate=slippage_rate,
+            )
+            cash = float(active_position.get("cash_buffer", 0.0)) + exit_execution["net_proceeds"]
+            holding_bars = max(1, execution_end_index - int(active_position["entry_fill_index"]) + 1)
+            holding_calendar_days = max(1, (getattr(last_bar, "date") - active_position["entry_date"]).days)
+            entry_total_cost = float(active_position["entry_total_cost"])
+            trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
+            trades.append(
+                RuleBacktestTrade(
+                    code=code,
+                    entry_signal_date=active_position["entry_signal_date"],
+                    exit_signal_date=getattr(last_bar, "date"),
+                    entry_date=active_position["entry_date"],
+                    exit_date=getattr(last_bar, "date"),
+                    entry_price=float(active_position["entry_price"]),
+                    exit_price=float(exit_execution["effective_price"]),
+                    entry_signal=active_position["entry_signal_text"],
+                    exit_signal="END_OF_WINDOW",
+                    entry_trigger=active_position["entry_trigger"],
+                    exit_trigger="END_OF_WINDOW",
+                    return_pct=round(trade_return, 4),
+                    holding_days=holding_bars,
+                    holding_bars=holding_bars,
+                    holding_calendar_days=holding_calendar_days,
+                    entry_rule_json=active_position["entry_rule_json"],
+                    exit_rule_json={"strategy_spec": signal_spec, "condition": "end_of_test_liquidation"},
+                    entry_indicators=active_position["entry_indicators"],
+                    exit_indicators=self._collect_signal_strategy_snapshot(strategy_spec, execution_end_index, series_payload, ordered_bars),
+                    entry_fill_basis=active_position["entry_fill_basis"],
+                    exit_fill_basis=fill_basis,
+                    signal_price_basis="close",
+                    price_basis="close",
+                    fee_bps=float(fee_bps),
+                    slippage_bps=float(slippage_bps),
+                    entry_fee_amount=float(active_position["entry_fee_amount"]),
+                    exit_fee_amount=float(exit_execution["fee_amount"]),
+                    entry_slippage_amount=float(active_position["entry_slippage_amount"]),
+                    exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                    notes="forced_close_at_window_end",
+                )
+            )
+            previous_signal_summary = equity_curve[-1].signal_summary if equity_curve else None
+            equity_curve[-1] = self._build_equity_point(
+                point_date=getattr(last_bar, "date"),
+                close_price=float(last_price),
+                cash=float(cash),
+                shares=0.0,
+                initial_capital=float(initial_capital),
+                peak_equity=float(peak_equity),
+                target_position=0.0,
+                signal_summary=previous_signal_summary,
+                executed_action="forced_close",
+                fill_price=float(exit_execution["effective_price"]),
+                fee_amount=float(exit_execution["fee_amount"]),
+                slippage_amount=float(exit_execution["slippage_amount"]),
+                notes="forced_close_at_window_end",
+            )
+
+        execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
+        benchmark_metrics = self._build_benchmark_metrics(execution_bars)
+        buy_and_hold_curve = self._build_benchmark_curve(execution_bars)
+        buy_and_hold_summary = self._build_benchmark_summary(benchmark_metrics)
+        metrics = self._build_metrics(
+            trades=trades,
+            equity_curve=equity_curve,
+            initial_capital=float(initial_capital),
+            trade_entry_signals=trade_entry_signals,
+            benchmark_metrics=benchmark_metrics,
+            lookback_bars=int(lookback_bars),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        no_result_reason, no_result_message = self._detect_no_result_reason(metrics, parsed_strategy)
+        return RuleBacktestResult(
+            parsed_strategy=parsed_strategy,
+            execution_assumptions=assumptions,
+            trades=trades,
+            equity_curve=equity_curve,
+            metrics=metrics,
+            benchmark_curve=buy_and_hold_curve,
+            benchmark_summary=buy_and_hold_summary,
+            buy_and_hold_curve=buy_and_hold_curve,
+            buy_and_hold_summary=buy_and_hold_summary,
+            no_result_reason=no_result_reason,
+            no_result_message=no_result_message,
+            warnings=parsed_strategy.ambiguities,
+        )
+
+    def _run_periodic_accumulation(
+        self,
+        *,
+        code: str,
+        parsed_strategy: ParsedStrategy,
+        bars: Sequence[Any],
+        assumptions: ExecutionAssumptions,
+        initial_capital: float,
+        fee_bps: float,
+        slippage_bps: float,
+        lookback_bars: int,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ) -> RuleBacktestResult:
+        ordered_bars = list(bars)
+        if not ordered_bars:
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="insufficient_history",
+                no_result_message="没有可用于回测的历史行情数据。",
+                warnings=[],
+            )
+
+        execution_start_index, execution_end_index = self._resolve_execution_window(
+            ordered_bars,
+            lookback_bars=lookback_bars,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
+            return RuleBacktestResult(
+                parsed_strategy=parsed_strategy,
+                execution_assumptions=assumptions,
+                trades=[],
+                equity_curve=[],
+                metrics=self._empty_metrics(initial_capital, lookback_bars, start_date=start_date, end_date=end_date),
+                no_result_reason="no_bars_in_range",
+                no_result_message="指定日期区间内没有可用于执行规则回测的历史数据。",
+                warnings=[],
+            )
+
+        strategy_spec = parsed_strategy.strategy_spec or {}
+        order_mode = str(strategy_spec.get("entry", {}).get("order", {}).get("mode") or "fixed_shares")
+        quantity_per_trade = _safe_float(strategy_spec.get("entry", {}).get("order", {}).get("quantity"))
+        amount_per_trade = _safe_float(strategy_spec.get("entry", {}).get("order", {}).get("amount"))
+        cash_policy = str(strategy_spec.get("position_behavior", {}).get("cash_policy") or "stop_when_insufficient_cash")
+        fee_rate = max(0.0, float(fee_bps)) / 10000.0
+        slippage_rate = max(0.0, float(slippage_bps)) / 10000.0
+
+        cash = float(initial_capital)
+        total_shares = 0.0
+        peak_equity = float(initial_capital)
+        equity_curve: List[RuleBacktestPoint] = []
+        trades: List[RuleBacktestTrade] = []
+        open_lots: List[Dict[str, Any]] = []
+        stop_buying = False
+        buy_attempts = 0
+
+        for idx in range(execution_start_index, execution_end_index + 1):
+            bar = ordered_bars[idx]
+            close_price = self._safe_price(getattr(bar, "close", None))
+            if close_price is None:
+                continue
+
+            executed_action: Optional[str] = None
+            executed_fill_price: Optional[float] = None
+            executed_fee_amount: Optional[float] = None
+            executed_slippage_amount: Optional[float] = None
+            action_notes: Optional[str] = None
+            signal_summary: Optional[str] = None
+
+            if not stop_buying:
+                buy_attempts += 1
+                base_fill_price, fill_basis = self._resolve_fill_price(bar, close_price=close_price, preferred="open")
+                order_plan = self._build_periodic_order_plan(
+                    order_mode=order_mode,
+                    quantity_per_trade=quantity_per_trade,
+                    amount_per_trade=amount_per_trade,
+                    base_fill_price=base_fill_price,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                    available_cash=cash,
+                )
+                if order_plan is None:
+                    if cash_policy == "stop_when_insufficient_cash":
+                        stop_buying = True
+                        signal_summary = "现金不足，后续停止继续买入"
+                        action_notes = "stop_buying_when_insufficient_cash"
+                    else:
+                        signal_summary = "现金不足，跳过本次计划买入"
+                        action_notes = "skip_buy_when_insufficient_cash"
+                else:
+                    cash -= order_plan["total_cost"]
+                    total_shares += order_plan["shares"]
+                    open_lots.append(
+                        {
+                            "entry_signal_date": getattr(bar, "date"),
+                            "entry_date": getattr(bar, "date"),
+                            "entry_index": idx,
+                            "entry_price": order_plan["effective_price"],
+                            "entry_fee_amount": order_plan["fee_amount"],
+                            "entry_slippage_amount": order_plan["slippage_amount"],
+                            "shares": order_plan["shares"],
+                            "entry_fill_basis": fill_basis,
+                            "cash_after_buy": cash,
+                        }
+                    )
+                    executed_action = "accumulate"
+                    executed_fill_price = float(order_plan["effective_price"])
+                    executed_fee_amount = float(order_plan["fee_amount"])
+                    executed_slippage_amount = float(order_plan["slippage_amount"])
+                    signal_summary = f"按计划买入 {self._format_accumulation_size(order_mode, quantity_per_trade, amount_per_trade)}"
+                    action_notes = "periodic_accumulation_fill"
+
+            equity = cash + total_shares * close_price
+            peak_equity = max(peak_equity, equity)
+            equity_curve.append(
+                self._build_equity_point(
+                    point_date=getattr(bar, "date"),
+                    close_price=float(close_price),
+                    cash=float(cash),
+                    shares=float(total_shares),
+                    initial_capital=float(initial_capital),
+                    peak_equity=float(peak_equity),
+                    target_position=(float(total_shares * close_price) / float(equity)) if equity > 0 else 0.0,
+                    signal_summary=signal_summary,
+                    executed_action=executed_action,
+                    fill_price=executed_fill_price,
+                    fee_amount=executed_fee_amount,
+                    slippage_amount=executed_slippage_amount,
+                    notes=action_notes,
+                )
+            )
+
+        if open_lots and equity_curve:
+            last_bar = ordered_bars[execution_end_index]
+            last_close = self._safe_price(getattr(last_bar, "close", None)) or 0.0
+            total_exit_fee = 0.0
+            total_exit_slippage = 0.0
+            final_fill_price = last_close * (1.0 - slippage_rate)
+            for lot in open_lots:
+                exit_execution = self._apply_exit_execution(
+                    shares=lot["shares"],
+                    base_fill_price=last_close,
+                    fee_rate=fee_rate,
+                    slippage_rate=slippage_rate,
+                )
+                cash += exit_execution["net_proceeds"]
+                total_shares -= lot["shares"]
+                total_exit_fee += float(exit_execution["fee_amount"])
+                total_exit_slippage += float(exit_execution["slippage_amount"])
+                final_fill_price = float(exit_execution["effective_price"])
+                holding_calendar_days = max(1, (getattr(last_bar, "date") - lot["entry_date"]).days)
+                holding_bars = max(1, execution_end_index - int(lot["entry_index"]) + 1)
+                entry_total_cost = float(lot["shares"]) * float(lot["entry_price"]) + float(lot["entry_fee_amount"])
+                trade_return = ((exit_execution["net_proceeds"] / entry_total_cost) - 1.0) * 100.0 if entry_total_cost else 0.0
+                trades.append(
+                    RuleBacktestTrade(
+                        code=code,
+                        entry_signal_date=lot["entry_signal_date"],
+                        exit_signal_date=getattr(last_bar, "date"),
+                        entry_date=lot["entry_date"],
+                        exit_date=getattr(last_bar, "date"),
+                        entry_price=float(lot["entry_price"]),
+                        exit_price=float(exit_execution["effective_price"]),
+                        entry_signal=f"定投买入 {self._format_accumulation_size(order_mode, quantity_per_trade, amount_per_trade)}",
+                        exit_signal="区间结束统一平仓",
+                        entry_trigger="PERIODIC_BUY",
+                        exit_trigger="END_OF_WINDOW",
+                        return_pct=round(trade_return, 4),
+                        holding_days=holding_bars,
+                        holding_bars=holding_bars,
+                        holding_calendar_days=holding_calendar_days,
+                        entry_rule_json={"strategy_spec": strategy_spec.get("entry", {}), "strategy_type": "periodic_accumulation"},
+                        exit_rule_json={"strategy_spec": strategy_spec.get("exit", {})},
+                        entry_indicators={
+                            "shares": round(float(lot["shares"]), 6),
+                            "cash_after_buy": round(float(max(lot["cash_after_buy"], 0.0)), 6),
+                        },
+                        exit_indicators={"close": round(float(last_close), 6)},
+                        entry_fill_basis=lot["entry_fill_basis"],
+                        exit_fill_basis="close",
+                        signal_price_basis="scheduled",
+                        price_basis="close",
+                        fee_bps=float(fee_bps),
+                        slippage_bps=float(slippage_bps),
+                        entry_fee_amount=float(lot["entry_fee_amount"]),
+                        exit_fee_amount=float(exit_execution["fee_amount"]),
+                        entry_slippage_amount=float(lot["entry_slippage_amount"]),
+                        exit_slippage_amount=float(exit_execution["slippage_amount"]),
+                        notes="periodic_accumulation_lot",
+                    )
+                )
+            equity_curve[-1] = self._build_equity_point(
+                point_date=getattr(last_bar, "date"),
+                close_price=float(last_close),
+                cash=float(cash),
+                shares=0.0,
+                initial_capital=float(initial_capital),
+                peak_equity=float(peak_equity),
+                target_position=0.0,
+                signal_summary="区间结束统一平仓",
+                executed_action="forced_close",
+                fill_price=float(final_fill_price),
+                fee_amount=float(total_exit_fee),
+                slippage_amount=float(total_exit_slippage),
+                notes="periodic_accumulation_window_close",
+            )
+
+        execution_bars = ordered_bars[execution_start_index:execution_end_index + 1]
+        benchmark_metrics = self._build_benchmark_metrics(execution_bars)
+        buy_and_hold_curve = self._build_benchmark_curve(execution_bars)
+        buy_and_hold_summary = self._build_benchmark_summary(benchmark_metrics)
+        metrics = self._build_metrics(
+            trades=trades,
+            equity_curve=equity_curve,
+            initial_capital=float(initial_capital),
+            trade_entry_signals=buy_attempts,
+            benchmark_metrics=benchmark_metrics,
+            lookback_bars=int(lookback_bars),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        no_result_reason = None
+        no_result_message = None
+        if metrics.get("trade_count", 0) <= 0:
+            no_result_reason = "no_trades"
+            no_result_message = "指定区间内未能完成任何定投买入。"
+        return RuleBacktestResult(
+            parsed_strategy=parsed_strategy,
+            execution_assumptions=assumptions,
+            trades=trades,
+            equity_curve=equity_curve,
+            metrics=metrics,
+            benchmark_curve=buy_and_hold_curve,
+            benchmark_summary=buy_and_hold_summary,
+            buy_and_hold_curve=buy_and_hold_curve,
+            buy_and_hold_summary=buy_and_hold_summary,
+            no_result_reason=no_result_reason,
+            no_result_message=no_result_message,
+            warnings=parsed_strategy.ambiguities,
+        )
+
+    def _build_strategy_signal_series(
+        self,
+        closes: Sequence[Optional[float]],
+        strategy_spec: Dict[str, Any],
+    ) -> Dict[str, List[Optional[float]]]:
+        signal_spec = dict(strategy_spec.get("signal") or {})
+        strategy_type = str(strategy_spec.get("strategy_type") or "")
+        if strategy_type == "moving_average_crossover":
+            fast_period = int(signal_spec.get("fast_period") or 5)
+            slow_period = int(signal_spec.get("slow_period") or 20)
+            fast_builder = self._build_ema if str(signal_spec.get("fast_type") or "simple") == "ema" else self._build_sma
+            slow_builder = self._build_ema if str(signal_spec.get("slow_type") or "simple") == "ema" else self._build_sma
+            return {
+                "fast": fast_builder(closes, fast_period),
+                "slow": slow_builder(closes, slow_period),
+            }
+        if strategy_type == "macd_crossover":
+            fast_period = int(signal_spec.get("fast_period") or 12)
+            slow_period = int(signal_spec.get("slow_period") or 26)
+            signal_period = int(signal_spec.get("signal_period") or 9)
+            fast_ema = self._build_ema(closes, fast_period)
+            slow_ema = self._build_ema(closes, slow_period)
+            macd_line = [
+                ((float(fast_ema[idx]) - float(slow_ema[idx])) if fast_ema[idx] is not None and slow_ema[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            signal_line = self._build_ema(macd_line, signal_period)
+            histogram = [
+                ((float(macd_line[idx]) - float(signal_line[idx])) if macd_line[idx] is not None and signal_line[idx] is not None else None)
+                for idx in range(len(closes))
+            ]
+            return {
+                "macd": macd_line,
+                "signal": signal_line,
+                "histogram": histogram,
+            }
+        if strategy_type == "rsi_threshold":
+            period = int(signal_spec.get("period") or 14)
+            return {
+                "rsi": self._build_rsi(closes, period),
+            }
+        return {}
+
+    def _signal_family_triggered(
+        self,
+        side: str,
+        index: int,
+        series_payload: Dict[str, List[Optional[float]]],
+        signal_spec: Dict[str, Any],
+    ) -> bool:
+        indicator_family = str(signal_spec.get("indicator_family") or "").lower()
+        if index <= 0:
+            return False
+        if indicator_family == "moving_average":
+            fast_series = series_payload.get("fast") or []
+            slow_series = series_payload.get("slow") or []
+            return self._cross_signal(fast_series, slow_series, index, direction=("above" if side == "entry" else "below"))
+        if indicator_family == "macd":
+            macd_line = series_payload.get("macd") or []
+            signal_line = series_payload.get("signal") or []
+            return self._cross_signal(macd_line, signal_line, index, direction=("above" if side == "entry" else "below"))
+        if indicator_family == "rsi":
+            rsi_series = series_payload.get("rsi") or []
+            threshold_value = signal_spec.get("lower_threshold") if side == "entry" else signal_spec.get("upper_threshold")
+            threshold = float(threshold_value or 0.0)
+            previous = rsi_series[index - 1] if index - 1 < len(rsi_series) else None
+            current = rsi_series[index] if index < len(rsi_series) else None
+            if previous is None or current is None:
+                return False
+            if side == "entry":
+                return float(previous) >= threshold and float(current) < threshold
+            return float(previous) <= threshold and float(current) > threshold
+        return False
+
+    @staticmethod
+    def _cross_signal(
+        left_series: Sequence[Optional[float]],
+        right_series: Sequence[Optional[float]],
+        index: int,
+        *,
+        direction: str,
+    ) -> bool:
+        if index <= 0 or index >= len(left_series) or index >= len(right_series):
+            return False
+        prev_left = left_series[index - 1]
+        prev_right = right_series[index - 1]
+        current_left = left_series[index]
+        current_right = right_series[index]
+        if prev_left is None or prev_right is None or current_left is None or current_right is None:
+            return False
+        if direction == "above":
+            return float(prev_left) <= float(prev_right) and float(current_left) > float(current_right)
+        return float(prev_left) >= float(prev_right) and float(current_left) < float(current_right)
+
+    def _collect_signal_strategy_snapshot(
+        self,
+        strategy_spec: Dict[str, Any],
+        index: int,
+        series_payload: Dict[str, List[Optional[float]]],
+        bars: Sequence[Any],
+    ) -> Dict[str, Any]:
+        signal_spec = dict(strategy_spec.get("signal") or {})
+        indicator_family = str(signal_spec.get("indicator_family") or "").lower()
+        close_value = self._safe_price(getattr(bars[index], "close", None))
+        snapshot: Dict[str, Any] = {
+            "Close": round(float(close_value), 6) if close_value is not None else None,
+        }
+        if indicator_family == "moving_average":
+            fast_period = int(signal_spec.get("fast_period") or 5)
+            slow_period = int(signal_spec.get("slow_period") or 20)
+            fast_label = f"{'EMA' if str(signal_spec.get('fast_type') or 'simple') == 'ema' else 'SMA'}{fast_period}"
+            slow_label = f"{'EMA' if str(signal_spec.get('slow_type') or 'simple') == 'ema' else 'SMA'}{slow_period}"
+            snapshot[fast_label] = self._series_value(series_payload.get("fast"), index)
+            snapshot[slow_label] = self._series_value(series_payload.get("slow"), index)
+            return snapshot
+        if indicator_family == "macd":
+            snapshot["MACD"] = self._series_value(series_payload.get("macd"), index)
+            snapshot["Signal"] = self._series_value(series_payload.get("signal"), index)
+            snapshot["Histogram"] = self._series_value(series_payload.get("histogram"), index)
+            return snapshot
+        if indicator_family == "rsi":
+            period = int(signal_spec.get("period") or 14)
+            snapshot[f"RSI{period}"] = self._series_value(series_payload.get("rsi"), index)
+            return snapshot
+        return snapshot
+
+    @staticmethod
+    def _series_value(series: Optional[Sequence[Optional[float]]], index: int) -> Optional[float]:
+        if not series or index >= len(series):
+            return None
+        value = series[index]
+        return round(float(value), 6) if value is not None else None
+
+    @staticmethod
+    def _build_periodic_order_plan(
+        *,
+        order_mode: str,
+        quantity_per_trade: Optional[float],
+        amount_per_trade: Optional[float],
+        base_fill_price: float,
+        fee_rate: float,
+        slippage_rate: float,
+        available_cash: float,
+    ) -> Optional[Dict[str, float]]:
+        effective_price = float(base_fill_price) * (1.0 + slippage_rate)
+        per_share_cost = effective_price * (1.0 + fee_rate)
+        if per_share_cost <= 0:
+            return None
+        if order_mode == "fixed_amount":
+            target_amount = float(amount_per_trade or 0.0)
+            if target_amount <= 0:
+                return None
+            gross_budget = min(target_amount, float(available_cash))
+            shares = gross_budget / per_share_cost
+        else:
+            shares = float(quantity_per_trade or 0.0)
+        if shares <= 0:
+            return None
+        gross_notional = shares * effective_price
+        fee_amount = gross_notional * fee_rate
+        total_cost = gross_notional + fee_amount
+        if total_cost > float(available_cash) + 1e-9:
+            return None
+        slippage_amount = shares * max(0.0, effective_price - float(base_fill_price))
+        return {
+            "shares": float(shares),
+            "effective_price": float(effective_price),
+            "fee_amount": float(fee_amount),
+            "slippage_amount": float(slippage_amount),
+            "total_cost": float(total_cost),
+        }
+
+    @staticmethod
+    def _format_accumulation_size(
+        order_mode: str,
+        quantity_per_trade: Optional[float],
+        amount_per_trade: Optional[float],
+    ) -> str:
+        if order_mode == "fixed_amount":
+            return f"{float(amount_per_trade or 0.0):g} 元"
+        return f"{float(quantity_per_trade or 0.0):g} 股"
+
+    @staticmethod
+    def _resolve_execution_window(
+        bars: Sequence[Any],
+        *,
+        lookback_bars: int,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ) -> Tuple[Optional[int], Optional[int]]:
+        if not bars:
+            return None, None
+        if start_date is None and end_date is None:
+            return max(0, len(bars) - max(1, int(lookback_bars))), len(bars) - 1
+
+        start_index: Optional[int] = None
+        end_index: Optional[int] = None
+        for idx, bar in enumerate(bars):
+            bar_date = getattr(bar, "date", None)
+            if not isinstance(bar_date, date):
+                continue
+            if start_date is not None and bar_date < start_date:
+                continue
+            if end_date is not None and bar_date > end_date:
+                if end_index is not None:
+                    break
+                continue
+            if start_index is None:
+                start_index = idx
+            end_index = idx
+        return start_index, end_index
 
     def _build_indicator_cache(self, bars: Sequence[Any], parsed_strategy: ParsedStrategy) -> Dict[Tuple[str, int], List[Optional[float]]]:
         closes = [self._safe_price(getattr(bar, "close", None)) for bar in bars]
@@ -1050,6 +2378,64 @@ class RuleBacktestEngine:
             "slippage_amount": float(slippage_amount),
             "net_proceeds": float(net_proceeds),
         }
+
+    @staticmethod
+    def _build_equity_point(
+        *,
+        point_date: date,
+        close_price: float,
+        cash: float,
+        shares: float,
+        initial_capital: float,
+        peak_equity: float,
+        target_position: Optional[float] = None,
+        signal_summary: Optional[str] = None,
+        executed_action: Optional[str] = None,
+        fill_price: Optional[float] = None,
+        fee_amount: Optional[float] = None,
+        slippage_amount: Optional[float] = None,
+        notes: Optional[str] = None,
+    ) -> RuleBacktestPoint:
+        holdings_value = max(0.0, float(shares)) * float(close_price)
+        total_portfolio_value = float(cash) + holdings_value
+        exposure_pct = (holdings_value / total_portfolio_value) if total_portfolio_value > 0 else 0.0
+        cumulative_return_pct = ((total_portfolio_value / float(initial_capital)) - 1.0) * 100.0 if initial_capital else 0.0
+        drawdown_pct = 0.0 if peak_equity <= 0 else ((total_portfolio_value / float(peak_equity)) - 1.0) * 100.0
+        return RuleBacktestPoint(
+            date=point_date,
+            equity=float(total_portfolio_value),
+            cumulative_return_pct=float(cumulative_return_pct),
+            drawdown_pct=float(drawdown_pct),
+            close=float(close_price),
+            signal_summary=signal_summary,
+            target_position=float(target_position) if target_position is not None else None,
+            executed_action=executed_action,
+            fill_price=float(fill_price) if fill_price is not None else None,
+            shares_held=float(shares),
+            cash=float(cash),
+            holdings_value=float(holdings_value),
+            total_portfolio_value=float(total_portfolio_value),
+            position_state="long" if float(shares) > 0 else "flat",
+            exposure_pct=float(exposure_pct),
+            fee_amount=float(fee_amount) if fee_amount is not None else None,
+            slippage_amount=float(slippage_amount) if slippage_amount is not None else None,
+            notes=notes,
+        )
+
+    @staticmethod
+    def _update_point_signal(
+        point: RuleBacktestPoint,
+        *,
+        signal_summary: Optional[str] = None,
+        target_position: Optional[float] = None,
+        notes: Optional[str] = None,
+    ) -> None:
+        if signal_summary:
+            point.signal_summary = signal_summary
+        if target_position is not None:
+            point.target_position = float(target_position)
+        if notes:
+            point.notes = notes
 
     def _collect_indicator_snapshot(
         self,
@@ -1223,11 +2609,21 @@ class RuleBacktestEngine:
             return f"{str(indicator).upper()}{period}"
         return str(indicator or "--").upper()
 
-    def _empty_metrics(self, initial_capital: float, lookback_bars: int) -> Dict[str, Any]:
+    def _empty_metrics(
+        self,
+        initial_capital: float,
+        lookback_bars: int,
+        *,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> Dict[str, Any]:
         return {
             "initial_capital": float(initial_capital),
             "final_equity": float(initial_capital),
             "total_return_pct": 0.0,
+            "annualized_return_pct": None,
+            "benchmark_return_pct": None,
+            "excess_return_vs_benchmark_pct": None,
             "buy_and_hold_return_pct": 0.0,
             "excess_return_vs_buy_and_hold_pct": 0.0,
             "trade_count": 0,
@@ -1242,8 +2638,8 @@ class RuleBacktestEngine:
             "avg_holding_calendar_days": 0.0,
             "bars_used": 0,
             "lookback_bars": int(lookback_bars),
-            "period_start": None,
-            "period_end": None,
+            "period_start": start_date.isoformat() if start_date is not None else None,
+            "period_end": end_date.isoformat() if end_date is not None else None,
         }
 
     def _build_metrics(
@@ -1255,6 +2651,8 @@ class RuleBacktestEngine:
         trade_entry_signals: int,
         benchmark_metrics: Dict[str, Any],
         lookback_bars: int,
+        start_date: Optional[date],
+        end_date: Optional[date],
     ) -> Dict[str, Any]:
         final_equity = equity_curve[-1].equity if equity_curve else initial_capital
         returns = [trade.return_pct for trade in trades]
@@ -1265,10 +2663,18 @@ class RuleBacktestEngine:
         holding_calendar_days = [trade.holding_calendar_days for trade in trades]
         total_return_pct = round(((final_equity / initial_capital) - 1.0) * 100.0, 4) if initial_capital else 0.0
         buy_and_hold_return_pct = float(benchmark_metrics.get("buy_and_hold_return_pct") or 0.0)
+        annualized_return_pct = self._calculate_annualized_return_pct(
+            total_return_pct=total_return_pct,
+            period_start=benchmark_metrics.get("period_start") or (start_date.isoformat() if start_date is not None else None),
+            period_end=benchmark_metrics.get("period_end") or (end_date.isoformat() if end_date is not None else None),
+        )
         metrics = {
             "initial_capital": float(initial_capital),
             "final_equity": round(float(final_equity), 6),
             "total_return_pct": total_return_pct,
+            "annualized_return_pct": annualized_return_pct,
+            "benchmark_return_pct": buy_and_hold_return_pct,
+            "excess_return_vs_benchmark_pct": round(total_return_pct - buy_and_hold_return_pct, 4),
             "buy_and_hold_return_pct": buy_and_hold_return_pct,
             "excess_return_vs_buy_and_hold_pct": round(total_return_pct - buy_and_hold_return_pct, 4),
             "trade_count": len(trades),
@@ -1283,10 +2689,32 @@ class RuleBacktestEngine:
             "avg_holding_calendar_days": round(mean(holding_calendar_days), 4) if holding_calendar_days else 0.0,
             "bars_used": len(equity_curve),
             "lookback_bars": int(lookback_bars),
-            "period_start": benchmark_metrics.get("period_start"),
-            "period_end": benchmark_metrics.get("period_end"),
+            "period_start": benchmark_metrics.get("period_start") or (start_date.isoformat() if start_date is not None else None),
+            "period_end": benchmark_metrics.get("period_end") or (end_date.isoformat() if end_date is not None else None),
         }
         return metrics
+
+    @staticmethod
+    def _calculate_annualized_return_pct(
+        *,
+        total_return_pct: float,
+        period_start: Optional[str],
+        period_end: Optional[str],
+    ) -> Optional[float]:
+        if not period_start or not period_end:
+            return None
+        try:
+            start_dt = date.fromisoformat(period_start)
+            end_dt = date.fromisoformat(period_end)
+        except ValueError:
+            return None
+        days = (end_dt - start_dt).days
+        if days <= 30:
+            return None
+        total_return = 1.0 + (float(total_return_pct) / 100.0)
+        if total_return <= 0:
+            return None
+        return round((math.pow(total_return, 365.0 / float(days)) - 1.0) * 100.0, 4)
 
     def _build_benchmark_metrics(self, bars: Sequence[Any]) -> Dict[str, Any]:
         if not bars:
@@ -1294,6 +2722,8 @@ class RuleBacktestEngine:
                 "buy_and_hold_return_pct": 0.0,
                 "period_start": None,
                 "period_end": None,
+                "start_close": None,
+                "end_close": None,
             }
         first_close = self._safe_price(getattr(bars[0], "close", None))
         last_close = self._safe_price(getattr(bars[-1], "close", None))
@@ -1305,6 +2735,50 @@ class RuleBacktestEngine:
             "buy_and_hold_return_pct": buy_and_hold_return,
             "period_start": getattr(bars[0], "date").isoformat() if getattr(bars[0], "date", None) else None,
             "period_end": getattr(bars[-1], "date").isoformat() if getattr(bars[-1], "date", None) else None,
+            "start_close": round(float(first_close), 6) if first_close is not None else None,
+            "end_close": round(float(last_close), 6) if last_close is not None else None,
+        }
+
+    def _build_benchmark_curve(self, bars: Sequence[Any]) -> List[Dict[str, Any]]:
+        if not bars:
+            return []
+        first_close = self._safe_price(getattr(bars[0], "close", None))
+        if first_close is None or first_close <= 0:
+            return []
+        curve: List[Dict[str, Any]] = []
+        for bar in bars:
+            close_price = self._safe_price(getattr(bar, "close", None))
+            bar_date = getattr(bar, "date", None)
+            if close_price is None or bar_date is None:
+                continue
+            normalized_value = close_price / first_close
+            curve.append(
+                {
+                    "date": bar_date.isoformat(),
+                    "close": round(float(close_price), 6),
+                    "normalized_value": round(float(normalized_value), 6),
+                    "cumulative_return_pct": round((float(normalized_value) - 1.0) * 100.0, 6),
+                }
+            )
+        return curve
+
+    def _build_benchmark_summary(self, benchmark_metrics: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "label": "当前标的买入并持有",
+            "code": None,
+            "method": "same_symbol_buy_and_hold",
+            "requested_mode": "same_symbol_buy_and_hold",
+            "resolved_mode": "same_symbol_buy_and_hold",
+            "normalized_base": 1.0,
+            "price_basis": "close",
+            "start_date": benchmark_metrics.get("period_start"),
+            "end_date": benchmark_metrics.get("period_end"),
+            "start_price": benchmark_metrics.get("start_close"),
+            "end_price": benchmark_metrics.get("end_close"),
+            "return_pct": benchmark_metrics.get("buy_and_hold_return_pct"),
+            "auto_resolved": False,
+            "fallback_used": False,
+            "unavailable_reason": None,
         }
 
     def _detect_no_result_reason(

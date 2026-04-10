@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useI18n } from '../../contexts/UiLanguageContext';
 
 interface BrandedLoadingScreenProps {
   fading?: boolean;
@@ -11,6 +12,7 @@ export const BrandedLoadingScreen: React.FC<BrandedLoadingScreenProps> = ({
   text = 'Loading WolfyStock...',
   subtext,
 }) => {
+  const { t } = useI18n();
   return (
     <div
       className={`app-boot-splash${fading ? ' is-fading' : ''}`}
@@ -19,7 +21,7 @@ export const BrandedLoadingScreen: React.FC<BrandedLoadingScreenProps> = ({
       aria-label={text}
     >
       <div className="app-boot-splash__inner">
-        <p className="app-boot-splash__eyebrow">Research Workspace</p>
+        <p className="app-boot-splash__eyebrow">{t('app.workspaceEyebrow')}</p>
         <p className="app-boot-splash__wordmark">WolfyStock</p>
 
         <p className="app-boot-splash__text">{text}</p>

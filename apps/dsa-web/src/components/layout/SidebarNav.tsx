@@ -36,6 +36,21 @@ type NavItem = {
   badge?: 'completion';
 };
 
+const BrandWordmark: React.FC<{
+  onNavigate?: () => void;
+  className?: string;
+}> = ({ onNavigate, className }) => (
+  <NavLink
+    to="/"
+    end
+    onClick={onNavigate}
+    aria-label="WolfyStock"
+    className={({ isActive }) => cn('shell-brand-link', className || '', isActive ? 'is-active' : '')}
+  >
+    <span className="shell-wordmark">WolfyStock</span>
+  </NavLink>
+);
+
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
   { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
@@ -192,7 +207,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {isDrawer ? (
         <div className="shell-drawer-nav">
           <div className="shell-drawer-brand">
-            <span className="shell-wordmark">WolfyStock</span>
+            <BrandWordmark onNavigate={onNavigate} />
             <span className="shell-drawer-note">{t('nav.terminal')}</span>
           </div>
           <nav className="shell-drawer-links" aria-label={t('shell.drawerTitle')}>
@@ -207,7 +222,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       ) : (
         <div className="shell-header-nav">
           <div className="shell-header-brand">
-            <span className="shell-wordmark">WolfyStock</span>
+            <BrandWordmark />
           </div>
           <nav className="shell-header-links" aria-label={t('shell.drawerTitle')}>
             {navLinks}

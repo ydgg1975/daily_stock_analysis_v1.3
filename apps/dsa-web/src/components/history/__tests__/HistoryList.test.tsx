@@ -53,7 +53,7 @@ describe('HistoryList', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }));
 
     expect(screen.getByText('已选 1')).toBeInTheDocument();
-    expect(screen.getByText((_, node) => node?.textContent === '建议 82')).toBeInTheDocument();
+    expect(screen.getByText((_, node) => node?.textContent === '买入 82')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /贵州茅台/i }));
     expect(onItemClick).toHaveBeenCalledWith(1);

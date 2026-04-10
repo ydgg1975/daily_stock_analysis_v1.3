@@ -14,6 +14,7 @@ import { SupportPanel } from '../common';
 import { ExecutionSummaryCard } from '../runtime/ExecutionSummaryCard';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
+import { localizeReportControlledValue } from '../../utils/reportTerminology';
 import { decideReportRenderPath } from './reportRenderPolicy';
 import { buildReportExecutionSummary } from '../../utils/runtimeExecution';
 
@@ -29,12 +30,13 @@ interface StandardOnlyCompatibilityPanelProps {
 }
 
 const StandardOnlyCompatibilityPanel: React.FC<StandardOnlyCompatibilityPanelProps> = ({ report, mode }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const reportLanguage = normalizeReportLanguage(language);
   const stockLabel = report.meta.stockName || report.meta.stockCode || '--';
   const reportTime = report.meta.createdAt || '--';
   const summary = report.summary.analysisSummary?.trim();
-  const advice = report.summary.operationAdvice?.trim();
-  const trend = report.summary.trendPrediction?.trim();
+  const advice = localizeReportControlledValue(report.summary.operationAdvice, reportLanguage);
+  const trend = localizeReportControlledValue(report.summary.trendPrediction, reportLanguage);
 
   return (
     <SupportPanel

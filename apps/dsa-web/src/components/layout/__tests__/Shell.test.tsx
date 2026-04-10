@@ -60,6 +60,7 @@ describe('Shell', () => {
     );
 
     expect(screen.queryByRole('button', { name: '切换主题' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'WolfyStock' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
@@ -103,6 +104,20 @@ describe('Shell', () => {
 
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('adds a dedicated content-frame modifier for the backtest route', () => {
+    render(
+      <MemoryRouter initialEntries={['/backtest']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    expect(document.querySelector('.shell-content-frame--backtest')).not.toBeNull();
   });
 
   it('resets mobile drawer and archive rail state when crossing back to desktop', async () => {

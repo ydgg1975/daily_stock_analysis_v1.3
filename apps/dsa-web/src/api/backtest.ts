@@ -22,9 +22,16 @@ import type {
 
 export const backtestApi = {
   parseRuleStrategy: async (params: RuleBacktestParseRequest): Promise<RuleBacktestParseResponse> => {
+    const requestData: Record<string, unknown> = { strategy_text: params.strategyText };
+    if (params.code) requestData.code = params.code;
+    if (params.startDate) requestData.start_date = params.startDate;
+    if (params.endDate) requestData.end_date = params.endDate;
+    if (params.initialCapital != null) requestData.initial_capital = params.initialCapital;
+    if (params.feeBps != null) requestData.fee_bps = params.feeBps;
+    if (params.slippageBps != null) requestData.slippage_bps = params.slippageBps;
     const response = await apiClient.post<Record<string, unknown>>(
       '/api/v1/backtest/rule/parse',
-      { code: params.code, strategy_text: params.strategyText },
+      requestData,
     );
     return toCamelCase<RuleBacktestParseResponse>(response.data);
   },
@@ -36,10 +43,14 @@ export const backtestApi = {
       confirmed: params.confirmed || false,
     };
     if (params.parsedStrategy) requestData.parsed_strategy = params.parsedStrategy;
+    if (params.startDate) requestData.start_date = params.startDate;
+    if (params.endDate) requestData.end_date = params.endDate;
     if (params.lookbackBars != null) requestData.lookback_bars = params.lookbackBars;
     if (params.initialCapital != null) requestData.initial_capital = params.initialCapital;
     if (params.feeBps != null) requestData.fee_bps = params.feeBps;
     if (params.slippageBps != null) requestData.slippage_bps = params.slippageBps;
+    if (params.benchmarkMode) requestData.benchmark_mode = params.benchmarkMode;
+    if (params.benchmarkCode) requestData.benchmark_code = params.benchmarkCode;
     if (params.waitForCompletion != null) requestData.wait_for_completion = params.waitForCompletion;
 
     const response = await apiClient.post<Record<string, unknown>>(

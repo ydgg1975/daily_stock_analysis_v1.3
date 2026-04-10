@@ -72,22 +72,6 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
   const relationCopy = getStatusRelationCopy(task, selectedReport, t);
   const titleLabel = task?.stockName || selectedReport?.meta.stockName || task?.stockCode || selectedReport?.meta.stockCode;
   const tickerLabel = task?.stockCode || selectedReport?.meta.stockCode;
-  const contextLabel = task
-    ? t('status.board.context.liveTask')
-    : selectedReport
-      ? t('status.board.context.loadedReport')
-      : t('status.board.context.workspaceState');
-  const contextValue = task
-    ? (task.status === 'pending'
-      ? t('status.board.value.queuedForAnalysis')
-      : task.status === 'processing'
-        ? t('status.board.value.researchInProgress')
-        : task.status === 'failed'
-          ? t('status.board.value.requiresAttention')
-          : t('status.board.value.reportDelivered'))
-    : selectedReport
-      ? t('status.board.value.continuingFromArchive')
-      : t('status.board.value.readyForNextTarget');
   const primaryMessage = taskError?.message || duplicateError || displayDescriptor.summary;
   const detailCandidates = [
     task?.message,
@@ -98,30 +82,17 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
   ].filter((item): item is string => Boolean(item && String(item).trim()));
   const normalizedPrimaryMessage = String(primaryMessage || '').trim();
   const supportLine = detailCandidates.find((item) => item.trim() !== normalizedPrimaryMessage) || null;
-  const subjectLabel = titleLabel
-    ? tickerLabel && tickerLabel !== titleLabel
-      ? `${titleLabel} · ${tickerLabel}`
-      : titleLabel
-    : t('status.board.value.noTargetSelected');
   const progressValue = task
     ? `${Math.min(task.progress || 0, 100)}%`
     : selectedReport
       ? t('status.board.value.loaded')
       : t('status.board.value.standby');
-  const metaItems = [
-    {
-      label: contextLabel,
-      value: contextValue,
-    },
-    {
-      label: t('status.board.context.target'),
-      value: subjectLabel,
-    },
-    {
-      label: t('status.board.context.progress'),
-      value: progressValue,
-    },
-  ];
+  const identityLabel = titleLabel
+    ? tickerLabel && tickerLabel !== titleLabel
+      ? `${titleLabel} · ${tickerLabel}`
+      : titleLabel
+    : t('status.board.value.noTargetSelected');
+  const shouldShowSupportLine = Boolean(taskError || duplicateError || displayDescriptor.key === 'failed');
 
   return (
     <section
@@ -134,11 +105,10 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
     >
       <article className="workspace-statusboard__panel workspace-statusboard__panel--workflow">
         <div className="workspace-statusboard__rail-head">
-          <p className="workspace-statusboard__rail-label">
-            {t('status.board.title')}
-          </p>
-
           <div className="workspace-statusboard__heading">
+            <p className="workspace-statusboard__rail-label">
+              {t('status.board.title')}
+            </p>
             <span
               className={cn(
                 'workspace-status-badge',
@@ -151,9 +121,11 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
             >
               {displayDescriptor.label}
             </span>
+          </div>
 
+          <div className="workspace-statusboard__identity">
             {titleLabel ? (
-              <span className="workspace-statusboard__ticker">
+              <span className="workspace-statusboard__ticker" title={identityLabel}>
                 <span>{titleLabel}</span>
                 {tickerLabel ? (
                   <span className="theme-task-meta-chip shrink-0 rounded-full px-2 py-0.5 text-[10px] font-normal uppercase tracking-[0.12em] text-muted-text">
@@ -161,21 +133,15 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
                   </span>
                 ) : null}
               </span>
-            ) : null}
+            ) : (
+              <span className="workspace-statusboard__identity-placeholder">{identityLabel}</span>
+            )}
+            <span className="workspace-statusboard__progress">{progressValue}</span>
           </div>
         </div>
 
-        <div className="workspace-statusboard__meta-strip">
-          {metaItems.map((item) => (
-            <div key={item.label} className="workspace-statusboard__meta-item">
-              <span className="workspace-statusboard__context-label">{item.label}</span>
-              <span className="workspace-statusboard__context-value" title={item.value}>{item.value}</span>
-            </div>
-          ))}
-        </div>
-
         <p className="workspace-statusboard__copy">{primaryMessage}</p>
-        {supportLine ? (
+        {supportLine && shouldShowSupportLine ? (
           <p
             className={cn(
               taskError || duplicateError ? 'workspace-statusboard__error' : 'workspace-statusboard__detail',
@@ -216,28 +182,26 @@ export const StatusBlocks: React.FC<StatusBlocksProps> = ({
                 data-state={state}
                 aria-current={isActive ? 'step' : undefined}
               >
-                <span className="workspace-status-step__header">
-                  <span
-                    className={cn(
-                      'workspace-status-dot',
-                      isFailed
-                        ? 'workspace-status-dot--failed'
-                        : isComplete
-                          ? 'workspace-status-dot--complete'
-                          : isActive
-                            ? 'workspace-status-dot--active'
-                            : '',
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      'workspace-status-step__label',
-                      language === 'en' ? 'font-medium tracking-[0.04em]' : 'tracking-[0.1em]',
-                    )}
-                    title={t(`status.${item}`)}
-                  >
-                    {getWorkflowStageShortLabel(item, t)}
-                  </span>
+                <span
+                  className={cn(
+                    'workspace-status-dot',
+                    isFailed
+                      ? 'workspace-status-dot--failed'
+                      : isComplete
+                        ? 'workspace-status-dot--complete'
+                        : isActive
+                          ? 'workspace-status-dot--active'
+                          : '',
+                  )}
+                />
+                <span
+                  className={cn(
+                    'workspace-status-step__label',
+                    language === 'en' ? 'font-medium tracking-[0.04em]' : 'tracking-[0.1em]',
+                  )}
+                  title={t(`status.${item}`)}
+                >
+                  {getWorkflowStageShortLabel(item, t)}
                 </span>
                 <span className="workspace-status-step__state">{getStatusRailStateLabel(state, t)}</span>
               </li>

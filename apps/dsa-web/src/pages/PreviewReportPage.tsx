@@ -4,23 +4,25 @@ import { WorkspacePageHeader } from '../components/common';
 import { StandardReportPanel } from '../components/report';
 import { previewChartFixtures, previewReport } from '../dev/reportPreviewFixture';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
+import { useI18n } from '../contexts/UiLanguageContext';
 
 const PreviewReportPage: React.FC = () => {
+  const { t } = useI18n();
   const normalizedPreviewReport = useMemo(
     () => normalizeFrontendReportContract(previewReport),
     [],
   );
 
   useEffect(() => {
-    document.title = 'Report Preview - WolfyStock';
-  }, []);
+    document.title = `${t('preview.reportTitle')} - WolfyStock`;
+  }, [t]);
 
   return (
     <div className="workspace-page workspace-page--preview" data-testid="preview-report-page">
       <WorkspacePageHeader
-        eyebrow="WolfyStock Preview Workspace"
-        title="Report preview"
-        description="开发态响应式预览页，用于校验桌面与移动端的报告层级、图表结构和主题表现。"
+        eyebrow={t('preview.workspaceEyebrow')}
+        title={t('preview.reportTitle')}
+        description={t('preview.reportDesc')}
       />
 
       <StandardReportPanel report={normalizedPreviewReport} chartFixtures={previewChartFixtures} />

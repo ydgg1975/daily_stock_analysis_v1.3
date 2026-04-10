@@ -9,16 +9,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiErrorAlert, Button, ConfirmDialog } from '../components/common';
 import { ProgressiveReportGeneration, ReportMarkdown, ReportSummary } from '../components/report';
-import { CommandBar, HistoryPanel, StatusBlocks } from '../components/home';
+import { CommandBar, HistoryPanel, StatusBlocks, TaskQueue } from '../components/home';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useDashboardLifecycle } from '../hooks';
 import { useStockPoolStore } from '../stores';
 import { normalizeFrontendReportContract } from '../api/reportNormalizer';
 import { systemConfigApi } from '../api/systemConfig';
 import type { TaskInfo } from '../types/analysis';
+import { getSentimentLabel } from '../types/analysis';
 import { cn } from '../utils/cn';
+import { getReportControlledValueProfile } from '../utils/reportTerminology';
 import { normalizeReportLanguage } from '../utils/reportLanguage';
-import { selectCompletedTasksByRecency, selectPrimaryTask } from '../utils/taskQueue';
+import { selectCompletedTasksByRecency, selectPrimaryTask, sortTasksByPriority } from '../utils/taskQueue';
 
 type LatestReportOpenState = {
   taskId: string;
@@ -34,8 +36,23 @@ type LatestReportToast = {
   stockName?: string;
 };
 
+type DecisionSummaryMetric = {
+  label: string;
+  value: string;
+  support?: string;
+  meter?: number;
+};
+
+type DecisionSummaryBlock = {
+  eyebrow: string;
+  title: string;
+  code: string | null;
+  body: string;
+  metrics: DecisionSummaryMetric[];
+};
+
 const HomePage: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const resultRegionRef = useRef<HTMLElement | null>(null);
@@ -45,6 +62,7 @@ const HomePage: React.FC = () => {
   const [latestReportOpenState, setLatestReportOpenState] = useState<LatestReportOpenState | null>(null);
   const [latestReportToast, setLatestReportToast] = useState<LatestReportToast | null>(null);
   const [showRuntimeExecutionSummary, setShowRuntimeExecutionSummary] = useState(false);
+  const reportLanguage = normalizeReportLanguage(language);
 
   const {
     query,
@@ -113,6 +131,7 @@ const HomePage: React.FC = () => {
   }, []);
 
   const selectedIds = useMemo(() => new Set(selectedHistoryIds), [selectedHistoryIds]);
+  const taskQueueItems = useMemo(() => sortTasksByPriority(activeTasks), [activeTasks]);
   const primaryTask = useMemo(() => selectPrimaryTask(activeTasks), [activeTasks]);
   const hasRunningTasks = useMemo(
     () => activeTasks.some((task) => task.status === 'pending' || task.status === 'processing'),
@@ -123,7 +142,6 @@ const HomePage: React.FC = () => {
     return liveReport ? normalizeFrontendReportContract(liveReport) : null;
   }, [primaryTask]);
   const displayReport = selectedReport ?? liveCompletedReport;
-  const reportLanguage = normalizeReportLanguage(displayReport?.meta.reportLanguage);
   const openingFinalReport = Boolean(
     primaryTask?.status === 'completed'
     && !selectedReport
@@ -289,25 +307,38 @@ const HomePage: React.FC = () => {
     });
   }, [activeTasks, attemptOpenLatestReport]);
 
-  const decisionSummaryBlock = useMemo(() => {
+  const decisionSummaryBlock = useMemo<DecisionSummaryBlock>(() => {
     if (displayReport) {
+      const actionProfile = getReportControlledValueProfile(displayReport.summary.operationAdvice, reportLanguage);
+      const trendProfile = getReportControlledValueProfile(displayReport.summary.trendPrediction, reportLanguage);
+      const sentimentScore = Number.isFinite(displayReport.summary.sentimentScore)
+        ? displayReport.summary.sentimentScore
+        : undefined;
+      const sentimentLabel = sentimentScore !== undefined
+        ? getSentimentLabel(sentimentScore, reportLanguage)
+        : undefined;
+
       return {
         eyebrow: t('home.decision.eyebrow'),
         title: displayReport.meta.stockName || displayReport.meta.stockCode,
         code: displayReport.meta.stockCode,
-        body: displayReport.summary.analysisSummary || displayReport.summary.operationAdvice || t('home.emptyBody'),
+        body: displayReport.summary.analysisSummary || actionProfile.value || t('home.emptyBody'),
         metrics: [
           {
             label: t('home.decision.action'),
-            value: displayReport.summary.operationAdvice || '--',
+            value: actionProfile.value || '--',
+            support: actionProfile.support,
           },
           {
             label: t('home.decision.trend'),
-            value: displayReport.summary.trendPrediction || '--',
+            value: trendProfile.value || '--',
+            support: trendProfile.support,
           },
           {
             label: t('home.decision.score'),
-            value: String(displayReport.summary.sentimentScore ?? '--'),
+            value: sentimentScore !== undefined ? String(sentimentScore) : '--',
+            support: sentimentLabel,
+            meter: sentimentScore !== undefined ? Math.max(0, Math.min(100, sentimentScore)) : undefined,
           },
         ],
       };
@@ -366,7 +397,7 @@ const HomePage: React.FC = () => {
         },
       ],
     };
-  }, [displayReport, progressiveTask, t]);
+  }, [displayReport, progressiveTask, reportLanguage, t]);
 
   return (
     <div data-testid="home-dashboard" className="workspace-page workspace-page--home">
@@ -380,7 +411,7 @@ const HomePage: React.FC = () => {
         <section className="home-dashboard-layout" data-testid="home-dashboard-layout">
           <div className="home-dashboard-primary">
             <section className="home-workflow-strip" data-layout="workflow" data-testid="home-workflow-strip">
-              <div className="home-workflow-strip__command">
+              <div className="home-workflow-strip__command" data-testid="home-command-region">
                 <CommandBar
                   label={t('home.commandLabel')}
                   value={query}
@@ -415,14 +446,16 @@ const HomePage: React.FC = () => {
                 />
               </div>
 
-              <StatusBlocks
-                task={primaryTask}
-                isAnalyzing={isAnalyzing}
-                selectedReport={displayReport}
-                duplicateError={duplicateError}
-                error={isAnalyzing || activeTasks.length > 0 || Boolean(duplicateError) ? error : null}
-                layout="workflow"
-              />
+              <div className="home-workflow-strip__status" data-testid="home-status-region">
+                <StatusBlocks
+                  task={primaryTask}
+                  isAnalyzing={isAnalyzing}
+                  selectedReport={displayReport}
+                  duplicateError={duplicateError}
+                  error={isAnalyzing || activeTasks.length > 0 || Boolean(duplicateError) ? error : null}
+                  layout="workflow"
+                />
+              </div>
             </section>
 
             <section className="home-decision-summary" aria-label={decisionSummaryBlock.eyebrow} data-testid="home-decision-summary">
@@ -455,10 +488,30 @@ const HomePage: React.FC = () => {
                   <div key={metric.label} className="home-decision-summary__metric">
                     <p className="home-decision-summary__metric-label">{metric.label}</p>
                     <p className="home-decision-summary__metric-value">{metric.value}</p>
+                    {metric.support ? (
+                      <p className="home-decision-summary__metric-support">{metric.support}</p>
+                    ) : null}
+                    {typeof metric.meter === 'number' ? (
+                      <div className="home-decision-summary__metric-meter" aria-hidden="true">
+                        <span
+                          className="home-decision-summary__metric-meter-fill"
+                          style={{ width: `${metric.meter}%` }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
             </section>
+
+            <TaskQueue
+              tasks={taskQueueItems}
+              primaryTaskId={primaryTask?.taskId || null}
+              viewedStockCode={displayReport?.meta.stockCode || null}
+              onTaskSelect={(task) => {
+                void focusLatestHistoryForStock(task.stockCode);
+              }}
+            />
           </div>
 
           <aside className="home-dashboard-history" data-column="history" data-testid="home-history-column">
@@ -563,7 +616,7 @@ const HomePage: React.FC = () => {
           recordId={displayReport.meta.id}
           stockName={displayReport.meta.stockName || ''}
           stockCode={displayReport.meta.stockCode}
-          reportLanguage={reportLanguage}
+          reportLanguage={language}
           standardReport={displayReport.details?.standardReport}
           onClose={closeMarkdownDrawer}
         />

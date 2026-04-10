@@ -9,17 +9,18 @@ type PreviewShellProps = {
   children: React.ReactNode;
 };
 
-const PreviewRail: React.FC = () => (
-  <div className="shell-context-panel">
-    <div className="shell-context-panel__header">
-      <p className="shell-context-panel__eyebrow">Preview</p>
-      <h2 className="shell-context-panel__title">Report Surface</h2>
-      <p className="shell-context-panel__body">
-        开发态预览壳层复用正式环境的 SpaceX 结构语言，用来检查报告与响应式行为是否仍然成立。
-      </p>
+const PreviewRail: React.FC = () => {
+  const { t } = useI18n();
+  return (
+    <div className="shell-context-panel">
+      <div className="shell-context-panel__header">
+        <p className="shell-context-panel__eyebrow">{t('preview.eyebrow')}</p>
+        <h2 className="shell-context-panel__title">{t('preview.shellTitle')}</h2>
+        <p className="shell-context-panel__body">{t('preview.shellBody')}</p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
   const { t } = useI18n();
@@ -34,11 +35,11 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
             <div className="shell-nav-strip">
               <div className="shell-nav-brand">
                 <span className="shell-wordmark">WolfyStock</span>
-                <span className="shell-nav-brand-note">Preview Shell</span>
+                <span className="shell-nav-brand-note">{t('preview.shellNote')}</span>
               </div>
               <div className="shell-nav-actions">
                 <button type="button" className="shell-nav-utility">
-                  Report Surface
+                  {t('preview.shellAction')}
                 </button>
               </div>
             </div>
@@ -53,8 +54,8 @@ export const PreviewShell: React.FC<PreviewShellProps> = ({ children }) => {
                 <Menu className="h-4 w-4" />
               </button>
               <div className="shell-mobile-brand">
-                <span className="shell-wordmark">Preview</span>
-                <span className="shell-mobile-brand__note">Report Surface</span>
+                <span className="shell-wordmark">{t('preview.eyebrow')}</span>
+                <span className="shell-mobile-brand__note">{t('preview.shellTitle')}</span>
               </div>
               <span className="shell-mobile-placeholder" aria-hidden="true" />
             </div>

@@ -72,27 +72,27 @@ export const CommandBar: React.FC<CommandBarProps> = ({
         >
           {analyzeText}
         </Button>
+      </div>
 
-        <div className="workspace-commandbar__actions">
-          <Button
-            variant="home-action-ai"
-            size="md"
-            disabled={!canFollowUp}
-            onClick={onFollowUp}
-            className="workspace-commandbar__action"
-          >
-            {followUpText}
-          </Button>
-          <Button
-            variant="home-action-report"
-            size="md"
-            disabled={!canViewReport}
-            onClick={onViewReport}
-            className="workspace-commandbar__action"
-          >
-            {reportText}
-          </Button>
-        </div>
+      <div className="workspace-commandbar__actions">
+        <Button
+          variant="home-action-ai"
+          size="md"
+          disabled={!canFollowUp}
+          onClick={onFollowUp}
+          className="workspace-commandbar__action"
+        >
+          {followUpText}
+        </Button>
+        <Button
+          variant="home-action-report"
+          size="md"
+          disabled={!canViewReport}
+          onClick={onViewReport}
+          className="workspace-commandbar__action"
+        >
+          {reportText}
+        </Button>
       </div>
 
       {inputError ? (

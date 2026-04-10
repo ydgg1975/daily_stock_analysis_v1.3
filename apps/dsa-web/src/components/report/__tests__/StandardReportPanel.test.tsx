@@ -1,5 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StandardReportPanel } from '../StandardReportPanel';
 import type { AnalysisReport } from '../../../types/analysis';
 import { previewChartFixtures } from '../../../dev/reportPreviewFixture';
@@ -242,6 +242,10 @@ const report: AnalysisReport = {
 };
 
 describe('StandardReportPanel', () => {
+  afterEach(() => {
+    window.localStorage.removeItem('dsa-ui-language');
+  });
+
   it('can start directly at the chart layer when lead summary is suppressed', () => {
     render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} showLeadSummary={false} />);
 
@@ -268,7 +272,7 @@ describe('StandardReportPanel', () => {
     expect(screen.getByTestId('key-actions-card')).toBeInTheDocument();
     expect(screen.getByTestId('watch-checklist-card')).toBeInTheDocument();
     expect(screen.getByText('执行计划')).toBeInTheDocument();
-    expect(screen.getAllByText('观望').length).toBe(1);
+    expect(screen.getAllByText('观望').length).toBeGreaterThanOrEqual(2);
 
     const deepAppendix = screen.getByTestId('deep-appendix-disclosure');
     expect(deepAppendix).toBeInTheDocument();
@@ -329,6 +333,42 @@ describe('StandardReportPanel', () => {
     expect(screen.getAllByText('成交额').length).toBeGreaterThan(0);
     expect(screen.queryByText('Report Block')).not.toBeInTheDocument();
     expect(screen.queryByText(/先看最重要的最新更新/)).not.toBeInTheDocument();
+  });
+
+  it('localizes controlled summary values in English mode without changing the report structure', () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+
+    render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
+
+    expect(screen.getByTestId('hero-summary-card')).toBeInTheDocument();
+    expect(screen.getAllByText('Watch').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Wait for confirmation')).toBeInTheDocument();
+    expect(screen.getByText('Trend strengthening')).toBeInTheDocument();
+    expect(screen.getAllByText('Bullish').length).toBeGreaterThan(0);
+    expect(screen.queryByText('观望')).not.toBeInTheDocument();
+    expect(screen.queryByText('看多')).not.toBeInTheDocument();
+  });
+
+  it('localizes controlled execution and risk values in English mode', () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+
+    render(<StandardReportPanel report={report} chartFixtures={previewChartFixtures} />);
+
+    const executionPanel = screen.getByTestId('decision-execution-panel');
+    expect(within(executionPanel).getAllByText('Pullback entry').length).toBeGreaterThanOrEqual(2);
+    expect(within(executionPanel).getByText(/Medium-high/)).toBeInTheDocument();
+    expect(within(executionPanel).getByText('Scale in')).toBeInTheDocument();
+    expect(within(executionPanel).getByText('A break of nearby support invalidates the bullish structure.')).toBeInTheDocument();
+    expect(within(executionPanel).getByText('Anchor the target to the prior high and the stronger resistance zone.')).toBeInTheDocument();
+    expect(within(executionPanel).queryByText('回踩买点')).not.toBeInTheDocument();
+    expect(within(executionPanel).queryByText('分批试仓')).not.toBeInTheDocument();
+    expect(within(executionPanel).queryByText('中高')).not.toBeInTheDocument();
+    expect(screen.getByText('Technical score')).toBeInTheDocument();
+    expect(screen.getByText('Fundamental score')).toBeInTheDocument();
+    expect(screen.queryByText('技术分')).not.toBeInTheDocument();
+    expect(screen.queryByText('基本面分')).not.toBeInTheDocument();
+    expect(screen.getByText('Price / volume structure intact')).toBeInTheDocument();
+    expect(screen.queryByText('量价结构未破坏')).not.toBeInTheDocument();
   });
 
   it('keeps extended-session NA fields out of main decision layers for A-share reports', () => {

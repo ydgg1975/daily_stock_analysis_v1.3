@@ -4,6 +4,7 @@ import { ScoreGauge, Card } from '../common';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { formatDateTime } from '../../utils/format';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
+import { getReportControlledValueProfile } from '../../utils/reportTerminology';
 
 interface ReportOverviewProps {
   meta: ReportMeta;
@@ -20,6 +21,8 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
   const { language } = useI18n();
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
+  const actionProfile = getReportControlledValueProfile(summary.operationAdvice, reportLanguage);
+  const trendProfile = getReportControlledValueProfile(summary.trendPrediction, reportLanguage);
   const getPriceChangeStyle = (changePct: number | undefined): React.CSSProperties | undefined => {
     if (changePct === undefined || changePct === null) {
       return undefined;
@@ -104,8 +107,11 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 <div className="space-y-1.5">
                   <h4 className="label-uppercase text-success">{text.actionAdvice}</h4>
                   <p className="text-sm leading-6 text-foreground">
-                    {summary.operationAdvice || text.noAdvice}
+                    {actionProfile.value || text.noAdvice}
                   </p>
+                  {actionProfile.support ? (
+                    <p className="text-xs leading-5 text-secondary-text">{actionProfile.support}</p>
+                  ) : null}
                 </div>
               </div>
             </Card>
@@ -121,8 +127,11 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 <div className="space-y-1.5">
                   <h4 className="label-uppercase text-warning">{text.trendPrediction}</h4>
                   <p className="text-sm leading-6 text-foreground">
-                    {summary.trendPrediction || text.noPrediction}
+                    {trendProfile.value || text.noPrediction}
                   </p>
+                  {trendProfile.support ? (
+                    <p className="text-xs leading-5 text-secondary-text">{trendProfile.support}</p>
+                  ) : null}
                 </div>
               </div>
             </Card>

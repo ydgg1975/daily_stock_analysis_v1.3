@@ -35,6 +35,7 @@ vi.mock('../../api/analysis', async () => {
     ...actual,
     analysisApi: {
       analyzeAsync: vi.fn(),
+      getTasks: vi.fn().mockResolvedValue({ total: 0, pending: 0, processing: 0, tasks: [] }),
     },
   };
 });
@@ -77,6 +78,7 @@ describe('HomePage', () => {
     navigateMock.mockReset();
     window.localStorage.clear();
     useStockPoolStore.getState().resetDashboardState();
+    vi.mocked(analysisApi.getTasks).mockResolvedValue({ total: 0, pending: 0, processing: 0, tasks: [] });
   });
 
   it('renders the dashboard workspace and auto-loads the first report', async () => {
@@ -105,11 +107,17 @@ describe('HomePage', () => {
     expect(dashboard.className).toContain('workspace-page');
     expect(dashboard.className).toContain('workspace-page--home');
     expect(screen.getByTestId('home-dashboard-layout')).toBeInTheDocument();
-    expect(screen.getByTestId('home-workflow-strip')).toBeInTheDocument();
+    const workflowStrip = screen.getByTestId('home-workflow-strip');
+    expect(workflowStrip).toBeInTheDocument();
+    expect(within(workflowStrip).getByTestId('home-command-region')).toBeInTheDocument();
+    expect(within(workflowStrip).getByTestId('home-status-region')).toBeInTheDocument();
+    expect(within(workflowStrip).queryByTestId('home-decision-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-history-column')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('输入股票代码或名称，如 600519、贵州茅台、AAPL')).toBeInTheDocument();
+    expect(within(screen.getByTestId('analysis-status-strip')).getAllByRole('listitem')).toHaveLength(6);
     const decisionSummary = screen.getByTestId('home-decision-summary');
     expect(within(decisionSummary).getByText('趋势维持强势')).toBeInTheDocument();
+    expect(workflowStrip.compareDocumentPosition(decisionSummary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(
       screen.getAllByRole('button', {
         name: getReportText(normalizeReportLanguage(historyReport.meta.reportLanguage)).fullReport,
@@ -163,6 +171,193 @@ describe('HomePage', () => {
     expect(screen.getByText('No analysis history yet')).toBeInTheDocument();
   });
 
+  it('shows multiple active tasks in the queue below the decision summary', async () => {
+    const tasks = [
+      {
+        taskId: 'task-processing',
+        stockCode: 'NVDA',
+        stockName: 'NVIDIA',
+        status: 'processing' as const,
+        progress: 62,
+        reportType: 'full',
+        createdAt: '2026-03-28T09:30:00Z',
+        startedAt: '2026-03-28T09:31:00Z',
+        updatedAt: '2026-03-28T09:34:00Z',
+        message: '正在拉取行情',
+      },
+      {
+        taskId: 'task-pending',
+        stockCode: 'AAPL',
+        stockName: 'Apple',
+        status: 'pending' as const,
+        progress: 14,
+        reportType: 'full',
+        createdAt: '2026-03-28T09:20:00Z',
+        updatedAt: '2026-03-28T09:22:00Z',
+        message: '等待队列空位',
+      },
+    ];
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.getTasks).mockResolvedValue({
+      total: 2,
+      pending: 1,
+      processing: 1,
+      tasks: tasks as never,
+    });
+
+    render(
+      <MemoryRouter>
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
+      </MemoryRouter>,
+    );
+
+    const queue = await screen.findByTestId('home-task-queue');
+    expect(queue).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(queue).getByText('NVIDIA')).toBeInTheDocument();
+      expect(within(queue).getByText('Apple')).toBeInTheDocument();
+    });
+    expect(within(queue).getByText('当前聚焦')).toBeInTheDocument();
+    expect(within(queue).getByLabelText('运行中')).toBeInTheDocument();
+    expect(within(queue).getByLabelText('排队中')).toBeInTheDocument();
+    expect(within(queue).getByText('行情')).toBeInTheDocument();
+    expect(within(queue).getByText('排队')).toBeInTheDocument();
+  });
+
+  it('renders a compact localized task queue in English mode', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    const tasks = [
+      {
+        taskId: 'task-processing',
+        stockCode: 'NVDA',
+        stockName: 'NVIDIA',
+        status: 'processing' as const,
+        progress: 62,
+        reportType: 'full',
+        createdAt: '2026-03-28T09:30:00Z',
+        startedAt: '2026-03-28T09:31:00Z',
+        updatedAt: '2026-03-28T09:34:00Z',
+      },
+      {
+        taskId: 'task-pending',
+        stockCode: 'AAPL',
+        stockName: 'Apple',
+        status: 'pending' as const,
+        progress: 14,
+        reportType: 'full',
+        createdAt: '2026-03-28T09:20:00Z',
+        updatedAt: '2026-03-28T09:22:00Z',
+      },
+    ];
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.getTasks).mockResolvedValue({
+      total: 2,
+      pending: 1,
+      processing: 1,
+      tasks: tasks as never,
+    });
+
+    render(
+      <MemoryRouter>
+        <UiLanguageProvider>
+          <ShellRailHarness>
+            <HomePage />
+          </ShellRailHarness>
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const queue = await screen.findByTestId('home-task-queue');
+    expect(within(queue).getAllByText('Task queue').length).toBeGreaterThanOrEqual(2);
+    expect(within(queue).getByText('NVIDIA')).toBeInTheDocument();
+    expect(within(queue).getByText('Apple')).toBeInTheDocument();
+    expect(within(queue).getByLabelText('Running')).toBeInTheDocument();
+    expect(within(queue).getByLabelText('Queued')).toBeInTheDocument();
+    expect(within(queue).getByText('Draft')).toBeInTheDocument();
+    expect(within(queue).getByText('Queue')).toBeInTheDocument();
+    expect(screen.queryByText('正在拉取行情')).not.toBeInTheDocument();
+    expect(screen.queryByText('等待队列空位')).not.toBeInTheDocument();
+  });
+
+  it('shows an overflow summary when more tasks exist than the compact queue can display', async () => {
+    const tasks = Array.from({ length: 7 }, (_, index) => ({
+      taskId: `task-${index}`,
+      stockCode: `STK${index}`,
+      stockName: `Stock ${index}`,
+      status: index === 0 ? 'processing' : index === 1 ? 'failed' : index === 2 ? 'completed' : 'pending',
+      progress: 12 + index * 8,
+      reportType: 'full',
+      createdAt: `2026-03-28T09:${String(10 + index).padStart(2, '0')}:00Z`,
+      updatedAt: `2026-03-28T09:${String(11 + index).padStart(2, '0')}:00Z`,
+    }));
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.getTasks).mockResolvedValue({
+      total: 7,
+      pending: 4,
+      processing: 1,
+      tasks: tasks as never,
+    });
+
+    render(
+      <MemoryRouter>
+        <ShellRailHarness>
+          <HomePage />
+        </ShellRailHarness>
+      </MemoryRouter>,
+    );
+
+    const queue = await screen.findByTestId('home-task-queue');
+    expect(within(queue).getByText('+1')).toBeInTheDocument();
+    expect(within(queue).getByLabelText('更多 1')).toBeInTheDocument();
+  });
+
+  it('localizes controlled decision values and keeps the summary metrics dense in English mode', async () => {
+    window.localStorage.setItem('dsa-ui-language', 'en');
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+
+    render(
+      <MemoryRouter>
+        <UiLanguageProvider>
+          <ShellRailHarness>
+            <HomePage />
+          </ShellRailHarness>
+        </UiLanguageProvider>
+      </MemoryRouter>,
+    );
+
+    const decisionSummary = await screen.findByTestId('home-decision-summary');
+    expect(within(decisionSummary).getByText('Watch')).toBeInTheDocument();
+    expect(within(decisionSummary).getByText('Wait for confirmation')).toBeInTheDocument();
+    expect(within(decisionSummary).getAllByText('Bullish')).toHaveLength(2);
+    expect(within(decisionSummary).getByText('Trend strengthening')).toBeInTheDocument();
+    expect(decisionSummary.querySelectorAll('.home-decision-summary__metric-meter')).toHaveLength(1);
+    expect(screen.queryByText('观望')).not.toBeInTheDocument();
+    expect(screen.queryByText('看空')).not.toBeInTheDocument();
+  });
+
   it('surfaces duplicate task warnings from dashboard submission', async () => {
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 0,
@@ -187,7 +382,7 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '分析' }));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/股票 600519 正在分析中/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/正在分析中/).length).toBeGreaterThan(0);
     });
   });
 
@@ -218,7 +413,8 @@ describe('HomePage', () => {
 
     expect(await screen.findByTestId('analysis-status-strip')).toBeInTheDocument();
     expect(screen.getAllByText('排队中').length).toBeGreaterThan(0);
-    expect(screen.getByText(/600519 已进入分析队列/)).toBeInTheDocument();
+    expect(screen.getByTestId('analysis-status-strip').querySelector('.workspace-statusboard__copy'))
+      .toHaveTextContent('600519 已进入分析队列');
   });
 
   it('shows a progressive research draft scaffold immediately after analysis starts', async () => {

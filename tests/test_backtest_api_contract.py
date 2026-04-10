@@ -14,10 +14,11 @@ ensure_litellm_stub()
 
 from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
+    parse_rule_strategy,
     get_rule_backtest_run,
     run_rule_backtest,
 )
-from api.v1.schemas.backtest import BacktestCodeRequest, RuleBacktestRunRequest  # noqa: E402
+from api.v1.schemas.backtest import BacktestCodeRequest, RuleBacktestParseRequest, RuleBacktestRunRequest  # noqa: E402
 
 
 class BacktestApiContractTestCase(unittest.TestCase):
@@ -30,14 +31,32 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "parsed_strategy": {},
             "strategy_hash": "abc123",
             "timeframe": "daily",
+            "start_date": "2025-01-01",
+            "end_date": "2025-12-31",
+            "period_start": "2025-01-01",
+            "period_end": "2025-12-31",
             "lookback_bars": 20,
             "initial_capital": 100000.0,
             "fee_bps": 0.0,
             "slippage_bps": 0.0,
             "status": status,
             "status_history": [{"status": status, "at": "2024-01-01T00:00:00"}],
+            "annualized_return_pct": 0.0,
+            "benchmark_mode": "auto",
+            "benchmark_code": None,
+            "benchmark_return_pct": None,
+            "excess_return_vs_benchmark_pct": None,
+            "buy_and_hold_return_pct": 0.0,
+            "excess_return_vs_buy_and_hold_pct": 0.0,
             "summary": {},
             "execution_assumptions": {},
+            "benchmark_curve": [],
+            "benchmark_summary": {"method": "same_symbol_buy_and_hold", "resolved_mode": "same_symbol_buy_and_hold"},
+            "buy_and_hold_curve": [],
+            "buy_and_hold_summary": {"method": "same_symbol_buy_and_hold", "resolved_mode": "same_symbol_buy_and_hold"},
+            "audit_rows": [],
+            "daily_return_series": [],
+            "exposure_curve": [],
             "equity_curve": [],
             "trades": [],
         }
@@ -46,6 +65,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         request = RuleBacktestRunRequest(
             code="600519",
             strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+            benchmark_mode="index_hs300",
             wait_for_completion=False,
             confirmed=True,
         )
@@ -58,6 +80,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(response.id, 123)
         service.submit_backtest.assert_called_once()
+        self.assertEqual(service.submit_backtest.call_args.kwargs["start_date"], "2025-01-01")
+        self.assertEqual(service.submit_backtest.call_args.kwargs["end_date"], "2025-12-31")
+        self.assertEqual(service.submit_backtest.call_args.kwargs["benchmark_mode"], "index_hs300")
         service.run_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 1)
 
@@ -65,6 +90,10 @@ class BacktestApiContractTestCase(unittest.TestCase):
         request = RuleBacktestRunRequest(
             code="600519",
             strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+            benchmark_mode="custom_code",
+            benchmark_code="SPY",
             wait_for_completion=True,
             confirmed=True,
         )
@@ -76,7 +105,12 @@ class BacktestApiContractTestCase(unittest.TestCase):
             response = run_rule_backtest(request, background_tasks, db_manager=MagicMock())
 
         self.assertEqual(response.status, "completed")
+        self.assertEqual(response.benchmark_summary["method"], "same_symbol_buy_and_hold")
         service.run_backtest.assert_called_once()
+        self.assertEqual(service.run_backtest.call_args.kwargs["start_date"], "2025-01-01")
+        self.assertEqual(service.run_backtest.call_args.kwargs["end_date"], "2025-12-31")
+        self.assertEqual(service.run_backtest.call_args.kwargs["benchmark_mode"], "custom_code")
+        self.assertEqual(service.run_backtest.call_args.kwargs["benchmark_code"], "SPY")
         service.submit_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 0)
 
@@ -90,6 +124,54 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
+
+    def test_parse_rule_strategy_returns_normalization_metadata(self) -> None:
+        request = RuleBacktestParseRequest(
+            code="AAPL",
+            strategy_text="MACD金叉买入，死叉卖出",
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+            initial_capital=100000,
+        )
+        service = MagicMock()
+        service.parse_strategy.return_value = {
+            "strategy_kind": "macd_crossover",
+            "strategy_spec": {"strategy_type": "macd_crossover", "symbol": "AAPL"},
+            "confidence": 0.96,
+            "needs_confirmation": True,
+            "ambiguities": [],
+            "summary": {"entry": "买入条件：MACD(12,26,9) 金叉", "exit": "卖出条件：MACD(12,26,9) 死叉"},
+            "max_lookback": 35,
+            "executable": True,
+            "normalization_state": "assumed",
+            "assumptions": [{"key": "macd_periods", "value": "12,26,9"}],
+            "assumption_groups": [{"key": "indicator_defaults", "label": "指标默认值", "items": [{"key": "macd_periods"}]}],
+            "detected_strategy_family": "macd_crossover",
+            "unsupported_reason": None,
+            "unsupported_details": [],
+            "unsupported_extensions": [],
+            "core_intent_summary": "已识别为 MACD 金叉 / 死叉主规则。",
+            "interpretation_confidence": 0.96,
+            "supported_portion_summary": "已识别为 MACD 金叉 / 死叉主规则。",
+            "rewrite_suggestions": [],
+            "parse_warnings": [],
+        }
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = parse_rule_strategy(request, db_manager=MagicMock())
+
+        self.assertEqual(response.normalized_strategy_family, "macd_crossover")
+        self.assertEqual(response.detected_strategy_family, "macd_crossover")
+        self.assertTrue(response.executable)
+        self.assertEqual(response.normalization_state, "assumed")
+        self.assertEqual(len(response.assumptions), 1)
+        self.assertEqual(len(response.assumption_groups), 1)
+        self.assertEqual(response.core_intent_summary, "已识别为 MACD 金叉 / 死叉主规则。")
+        self.assertEqual(response.interpretation_confidence, 0.96)
+        self.assertEqual(response.supported_portion_summary, "已识别为 MACD 金叉 / 死叉主规则。")
+        service.parse_strategy.assert_called_once()
+        self.assertEqual(service.parse_strategy.call_args.kwargs["start_date"], "2025-01-01")
+        self.assertEqual(service.parse_strategy.call_args.kwargs["end_date"], "2025-12-31")
 
     def test_clear_backtest_samples_maps_value_error_to_validation_error(self) -> None:
         service = MagicMock()

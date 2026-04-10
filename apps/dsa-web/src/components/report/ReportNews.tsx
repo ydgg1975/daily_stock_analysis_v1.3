@@ -19,9 +19,7 @@ interface ReportNewsProps {
 export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'zh' }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
-  const loadingCopy = reportLanguage === 'en'
-    ? 'Refreshing the latest news items for this record. Please wait a moment.'
-    : '正在整理最新资讯条目，请稍候。';
+  const loadingCopy = text.loadingNewsBody;
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState<NewsIntelItem[]>([]);
   const [error, setError] = useState<ParsedApiError | null>(null);
