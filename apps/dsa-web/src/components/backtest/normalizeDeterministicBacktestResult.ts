@@ -320,23 +320,24 @@ function populateFromAuditRows(rowsByDate: Map<string, MutableRow>, auditRows: R
       symbolClose: safeNumber(row.symbolClose),
       benchmarkClose: safeNumber(row.benchmarkClose),
       signalSummary: safeText(row.signalSummary),
-      position: clampPosition(row.exposurePct ?? row.targetPosition),
-      action: safeText(row.executedAction),
+      position: clampPosition(row.position ?? row.exposurePct ?? row.targetPosition),
+      action: safeText(row.action ?? row.executedAction),
       fillPrice: safeNumber(row.fillPrice),
-      shares: safeNumber(row.sharesHeld),
+      shares: safeNumber(row.shares ?? row.sharesHeld),
       cash: safeNumber(row.cash),
       holdingsValue: safeNumber(row.holdingsValue),
       totalValue: safeNumber(row.totalPortfolioValue),
       positionState: safeText(row.positionState),
       dailyPnl: safeNumber(row.dailyPnl),
-      dailyReturn: safeNumber(row.dailyReturnPct),
-      strategyCumReturn: safeNumber(row.cumulativeStrategyReturnPct),
-      benchmarkCumReturn: safeNumber(row.cumulativeBenchmarkReturnPct),
-      buyHoldCumReturn: safeNumber(row.cumulativeBuyAndHoldReturnPct),
+      dailyReturn: safeNumber(row.dailyReturn ?? row.dailyReturnPct),
+      strategyCumReturn: safeNumber(row.cumulativeReturn ?? row.cumulativeStrategyReturnPct),
+      benchmarkCumReturn: safeNumber(row.benchmarkCumulativeReturn ?? row.cumulativeBenchmarkReturnPct),
+      buyHoldCumReturn: safeNumber(row.buyHoldCumulativeReturn ?? row.cumulativeBuyAndHoldReturnPct),
       fees: safeNumber(row.fees),
       slippage: safeNumber(row.slippage),
       notes: safeText(row.notes),
       unavailableReason: safeText(row.unavailableReason),
+      drawdownPct: safeNumber(row.drawdownPct),
     });
   });
 }
@@ -351,55 +352,57 @@ export function normalizeDeterministicBacktestResult(run: RuleBacktestRunRespons
   const auditRows = Array.isArray(run.auditRows) ? run.auditRows : [];
   populateFromAuditRows(rowsByDate, auditRows);
 
-  (run.equityCurve || []).forEach((point) => {
-    mergeRow(rowsByDate, point.date, {
-      strategyCumReturn: safeNumber(point.cumulativeReturnPct),
-      position: clampPosition(point.exposurePct ?? point.targetPosition),
-      action: safeText(point.executedAction),
-      fillPrice: safeNumber(point.fillPrice),
-      shares: safeNumber(point.sharesHeld),
-      cash: safeNumber(point.cash),
-      holdingsValue: safeNumber(point.holdingsValue),
-      totalValue: safeNumber(point.totalPortfolioValue ?? point.equity),
-      symbolClose: safeNumber(point.close),
-      signalSummary: safeText(point.signalSummary),
-      notes: safeText(point.notes),
-      fees: safeNumber(point.feeAmount),
-      slippage: safeNumber(point.slippageAmount),
-      drawdownPct: safeNumber(point.drawdownPct),
-      positionState: safeText(point.positionState),
+  if (auditRows.length === 0) {
+    (run.equityCurve || []).forEach((point) => {
+      mergeRow(rowsByDate, point.date, {
+        strategyCumReturn: safeNumber(point.cumulativeReturnPct),
+        position: clampPosition(point.exposurePct ?? point.targetPosition),
+        action: safeText(point.executedAction),
+        fillPrice: safeNumber(point.fillPrice),
+        shares: safeNumber(point.sharesHeld),
+        cash: safeNumber(point.cash),
+        holdingsValue: safeNumber(point.holdingsValue),
+        totalValue: safeNumber(point.totalPortfolioValue ?? point.equity),
+        symbolClose: safeNumber(point.close),
+        signalSummary: safeText(point.signalSummary),
+        notes: safeText(point.notes),
+        fees: safeNumber(point.feeAmount),
+        slippage: safeNumber(point.slippageAmount),
+        drawdownPct: safeNumber(point.drawdownPct),
+        positionState: safeText(point.positionState),
+      });
     });
-  });
 
-  (run.benchmarkCurve || []).forEach((point) => {
-    mergeRow(rowsByDate, point.date, {
-      benchmarkCumReturn: safeNumber(point.cumulativeReturnPct),
-      benchmarkClose: safeNumber(point.close),
+    (run.benchmarkCurve || []).forEach((point) => {
+      mergeRow(rowsByDate, point.date, {
+        benchmarkCumReturn: safeNumber(point.cumulativeReturnPct),
+        benchmarkClose: safeNumber(point.close),
+      });
     });
-  });
 
-  (run.buyAndHoldCurve || []).forEach((point) => {
-    mergeRow(rowsByDate, point.date, {
-      buyHoldCumReturn: safeNumber(point.cumulativeReturnPct),
+    (run.buyAndHoldCurve || []).forEach((point) => {
+      mergeRow(rowsByDate, point.date, {
+        buyHoldCumReturn: safeNumber(point.cumulativeReturnPct),
+      });
     });
-  });
 
-  (run.dailyReturnSeries || []).forEach((point) => {
-    mergeRow(rowsByDate, point.date, {
-      dailyPnl: safeNumber(point.dailyPnl),
-      dailyReturn: safeNumber(point.dailyReturnPct),
-      totalValue: safeNumber(point.equity),
+    (run.dailyReturnSeries || []).forEach((point) => {
+      mergeRow(rowsByDate, point.date, {
+        dailyPnl: safeNumber(point.dailyPnl),
+        dailyReturn: safeNumber(point.dailyReturnPct),
+        totalValue: safeNumber(point.equity),
+      });
     });
-  });
 
-  (run.exposureCurve || []).forEach((point) => {
-    mergeRow(rowsByDate, point.date, {
-      position: clampPosition(point.exposure),
-      positionState: safeText(point.positionState),
-      action: safeText(point.executedAction),
-      fillPrice: safeNumber(point.fillPrice),
+    (run.exposureCurve || []).forEach((point) => {
+      mergeRow(rowsByDate, point.date, {
+        position: clampPosition(point.exposure),
+        positionState: safeText(point.positionState),
+        action: safeText(point.executedAction),
+        fillPrice: safeNumber(point.fillPrice),
+      });
     });
-  });
+  }
 
   const rows = Array.from(rowsByDate.values())
     .sort((left, right) => left.date.localeCompare(right.date))

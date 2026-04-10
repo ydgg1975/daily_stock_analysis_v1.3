@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { RuleBacktestRunResponse } from '../../../types/backtest';
-import { DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
+import { DeterministicAuditTable, DeterministicBacktestResultView } from '../DeterministicBacktestResultView';
+import { normalizeDeterministicBacktestResult } from '../normalizeDeterministicBacktestResult';
 
-function makeViewerRun(): RuleBacktestRunResponse {
+function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
   const auditRows = Array.from({ length: 70 }, (_, index) => {
     const day = String(index + 1).padStart(2, '0');
     return {
@@ -103,6 +104,7 @@ function makeViewerRun(): RuleBacktestRunResponse {
     aiSummary: null,
     equityCurve: [],
     trades: [],
+    ...overrides,
   };
 }
 
@@ -231,5 +233,52 @@ describe('DeterministicBacktestResultView', () => {
     expect(Number(secondTooltipLeft)).toBeLessThanOrEqual(330);
     expect(Number(secondTooltipTop)).toBeGreaterThanOrEqual(62);
     expect(Number(secondTooltipTop)).toBeLessThanOrEqual(82);
+  });
+
+  it('exports csv from stored audit rows instead of recomputed viewer rows', async () => {
+    const createObjectUrlMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+    const revokeObjectUrlMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const run = makeViewerRun({
+      auditRows: [
+        {
+          date: '2026-03-01',
+          symbolClose: 101,
+          benchmarkClose: 99,
+          position: 1,
+          shares: 100,
+          cash: 90000,
+          holdingsValue: 10100,
+          totalPortfolioValue: 100100,
+          dailyPnl: 100,
+          dailyReturn: 0.1,
+          cumulativeReturn: 0.1,
+          benchmarkCumulativeReturn: 0.05,
+          buyHoldCumulativeReturn: 0.04,
+          action: 'buy',
+          fillPrice: 101,
+          signalSummary: 'stored-row',
+          notes: 'stored-note',
+        },
+      ],
+      equityCurve: [
+        { date: '2026-03-01', close: 888, totalPortfolioValue: 999999, cumulativeReturnPct: 88 },
+      ],
+    });
+    const normalized = normalizeDeterministicBacktestResult(run);
+
+    render(<DeterministicAuditTable run={run} rows={normalized.rows} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
+
+    const blob = createObjectUrlMock.mock.calls[0]?.[0] as Blob;
+    const content = await blob.text();
+    expect(content).toContain('"101"');
+    expect(content).toContain('"stored-note"');
+    expect(content).not.toContain('"888"');
+
+    createObjectUrlMock.mockRestore();
+    revokeObjectUrlMock.mockRestore();
+    clickMock.mockRestore();
   });
 });

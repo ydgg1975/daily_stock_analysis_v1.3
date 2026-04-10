@@ -80,41 +80,41 @@ describe('normalizeDeterministicBacktestResult', () => {
       auditRows: [
         {
           date: '2026-03-01',
-          targetPosition: 0,
+          position: 0,
           totalPortfolioValue: 100000,
-          cumulativeStrategyReturnPct: 0,
-          cumulativeBenchmarkReturnPct: 0,
-          cumulativeBuyAndHoldReturnPct: 0,
+          cumulativeReturn: 0,
+          benchmarkCumulativeReturn: 0,
+          buyHoldCumulativeReturn: 0,
           dailyPnl: 0,
-          dailyReturnPct: 0,
+          dailyReturn: 0,
         },
         {
           date: '2026-03-02',
-          targetPosition: 1,
-          executedAction: 'buy',
+          position: 1,
+          action: 'buy',
           fillPrice: 101,
-          sharesHeld: 100,
+          shares: 100,
           cash: 89900,
           totalPortfolioValue: 102000,
-          cumulativeStrategyReturnPct: 2,
-          cumulativeBenchmarkReturnPct: 1.2,
-          cumulativeBuyAndHoldReturnPct: 1.1,
+          cumulativeReturn: 2,
+          benchmarkCumulativeReturn: 1.2,
+          buyHoldCumulativeReturn: 1.1,
           dailyPnl: 2000,
-          dailyReturnPct: 2,
+          dailyReturn: 2,
         },
         {
           date: '2026-03-03',
-          targetPosition: 0,
-          executedAction: 'sell',
+          position: 0,
+          action: 'sell',
           fillPrice: 105,
-          sharesHeld: 0,
+          shares: 0,
           cash: 105000,
           totalPortfolioValue: 105000,
-          cumulativeStrategyReturnPct: 5,
-          cumulativeBenchmarkReturnPct: 4,
-          cumulativeBuyAndHoldReturnPct: 3.5,
+          cumulativeReturn: 5,
+          benchmarkCumulativeReturn: 4,
+          buyHoldCumulativeReturn: 3.5,
           dailyPnl: 3000,
-          dailyReturnPct: 2.94,
+          dailyReturn: 2.94,
         },
       ],
     }));
@@ -138,6 +138,33 @@ describe('normalizeDeterministicBacktestResult', () => {
     expect(normalized.viewerMeta.dailyPnlSeriesLength).toBe(3);
     expect(normalized.viewerMeta.positionSeriesLength).toBe(3);
     expect(normalized.tradeEvents.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps stored audit rows as the primary source when secondary curves are also present', () => {
+    const normalized = normalizeDeterministicBacktestResult(makeRun({
+      auditRows: [
+        {
+          date: '2026-03-01',
+          symbolClose: 111,
+          totalPortfolioValue: 100000,
+          cumulativeReturn: 0,
+          dailyPnl: 0,
+          dailyReturn: 0,
+        },
+      ],
+      equityCurve: [
+        { date: '2026-03-01', close: 999, totalPortfolioValue: 999999, cumulativeReturnPct: 20 },
+      ],
+      dailyReturnSeries: [
+        { date: '2026-03-01', dailyPnl: 9999, dailyReturnPct: 9.99 },
+      ],
+    }));
+
+    expect(normalized.viewerMeta.primaryRowSource).toBe('auditRows');
+    expect(normalized.rows).toHaveLength(1);
+    expect(normalized.rows[0]?.symbolClose).toBe(111);
+    expect(normalized.rows[0]?.totalValue).toBe(100000);
+    expect(normalized.rows[0]?.dailyPnl).toBe(0);
   });
 
   it('merges curve-only payloads and derives missing strategy returns from total value', () => {

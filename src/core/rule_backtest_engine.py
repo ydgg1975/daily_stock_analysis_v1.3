@@ -204,6 +204,58 @@ class RuleBacktestPoint:
 
 
 @dataclass
+class RuleBacktestAuditRow:
+    date: date
+    symbol_close: Optional[float] = None
+    benchmark_close: Optional[float] = None
+    position: Optional[float] = None
+    shares: Optional[float] = None
+    cash: Optional[float] = None
+    holdings_value: Optional[float] = None
+    total_portfolio_value: Optional[float] = None
+    daily_pnl: Optional[float] = None
+    daily_return: Optional[float] = None
+    cumulative_return: Optional[float] = None
+    benchmark_cumulative_return: Optional[float] = None
+    buy_hold_cumulative_return: Optional[float] = None
+    action: Optional[str] = None
+    fill_price: Optional[float] = None
+    signal_summary: Optional[str] = None
+    drawdown_pct: Optional[float] = None
+    position_state: Optional[str] = None
+    fees: Optional[float] = None
+    slippage: Optional[float] = None
+    notes: Optional[str] = None
+    unavailable_reason: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "date": self.date.isoformat(),
+            "symbol_close": round(self.symbol_close, 6) if self.symbol_close is not None else None,
+            "benchmark_close": round(self.benchmark_close, 6) if self.benchmark_close is not None else None,
+            "position": round(self.position, 6) if self.position is not None else None,
+            "shares": round(self.shares, 6) if self.shares is not None else None,
+            "cash": round(self.cash, 6) if self.cash is not None else None,
+            "holdings_value": round(self.holdings_value, 6) if self.holdings_value is not None else None,
+            "total_portfolio_value": round(self.total_portfolio_value, 6) if self.total_portfolio_value is not None else None,
+            "daily_pnl": round(self.daily_pnl, 6) if self.daily_pnl is not None else None,
+            "daily_return": round(self.daily_return, 6) if self.daily_return is not None else None,
+            "cumulative_return": round(self.cumulative_return, 6) if self.cumulative_return is not None else None,
+            "benchmark_cumulative_return": round(self.benchmark_cumulative_return, 6) if self.benchmark_cumulative_return is not None else None,
+            "buy_hold_cumulative_return": round(self.buy_hold_cumulative_return, 6) if self.buy_hold_cumulative_return is not None else None,
+            "action": self.action,
+            "fill_price": round(self.fill_price, 6) if self.fill_price is not None else None,
+            "signal_summary": self.signal_summary,
+            "drawdown_pct": round(self.drawdown_pct, 6) if self.drawdown_pct is not None else None,
+            "position_state": self.position_state,
+            "fees": round(self.fees, 6) if self.fees is not None else None,
+            "slippage": round(self.slippage, 6) if self.slippage is not None else None,
+            "notes": self.notes,
+            "unavailable_reason": self.unavailable_reason,
+        }
+
+
+@dataclass
 class RuleBacktestResult:
     parsed_strategy: ParsedStrategy
     execution_assumptions: ExecutionAssumptions
@@ -214,6 +266,7 @@ class RuleBacktestResult:
     benchmark_summary: Dict[str, Any] = field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = field(default_factory=dict)
+    audit_ledger: List[RuleBacktestAuditRow] = field(default_factory=list)
     no_result_reason: Optional[str] = None
     no_result_message: Optional[str] = None
     warnings: List[Dict[str, Any]] = None
@@ -229,6 +282,7 @@ class RuleBacktestResult:
             "benchmark_summary": self.benchmark_summary,
             "buy_and_hold_curve": self.buy_and_hold_curve,
             "buy_and_hold_summary": self.buy_and_hold_summary,
+            "audit_ledger": [row.to_dict() for row in self.audit_ledger],
             "no_result_reason": self.no_result_reason,
             "no_result_message": self.no_result_message,
             "warnings": self.warnings or [],
@@ -2780,6 +2834,87 @@ class RuleBacktestEngine:
             "fallback_used": False,
             "unavailable_reason": None,
         }
+
+    @staticmethod
+    def _build_audit_ledger(
+        *,
+        equity_curve: Sequence[RuleBacktestPoint | Dict[str, Any]],
+        benchmark_curve: Sequence[Dict[str, Any]],
+        buy_and_hold_curve: Sequence[Dict[str, Any]],
+        benchmark_summary: Dict[str, Any],
+    ) -> List[RuleBacktestAuditRow]:
+        benchmark_by_date = {
+            str(point.get("date")): point
+            for point in benchmark_curve or []
+            if point.get("date")
+        }
+        buy_and_hold_by_date = {
+            str(point.get("date")): point
+            for point in buy_and_hold_curve or []
+            if point.get("date")
+        }
+        selected_benchmark_enabled = str(benchmark_summary.get("resolved_mode") or "").strip() not in {"", "none"}
+        selected_benchmark_unavailable_reason = str(benchmark_summary.get("unavailable_reason") or "").strip() or None
+
+        rows: List[RuleBacktestAuditRow] = []
+        previous_total_portfolio_value: Optional[float] = None
+        for point in equity_curve or []:
+            point_payload = point.to_dict() if isinstance(point, RuleBacktestPoint) else dict(point or {})
+            point_date = point_payload.get("date")
+            if not point_date:
+                continue
+
+            point_dt = point.date if isinstance(point, RuleBacktestPoint) else date.fromisoformat(str(point_date))
+            total_portfolio_value = _safe_float(point_payload.get("total_portfolio_value"))
+            if total_portfolio_value is None:
+                total_portfolio_value = _safe_float(point_payload.get("equity"))
+            if total_portfolio_value is None:
+                continue
+
+            daily_pnl: Optional[float] = None
+            daily_return: Optional[float] = None
+            if previous_total_portfolio_value is not None:
+                daily_pnl = float(total_portfolio_value) - float(previous_total_portfolio_value)
+                daily_return = 0.0
+                if previous_total_portfolio_value > 0:
+                    daily_return = (daily_pnl / float(previous_total_portfolio_value)) * 100.0
+            else:
+                daily_pnl = 0.0
+                daily_return = 0.0
+
+            benchmark_point = benchmark_by_date.get(str(point_date)) or {}
+            buy_and_hold_point = buy_and_hold_by_date.get(str(point_date)) or {}
+            benchmark_close = _safe_float(benchmark_point.get("close"))
+            unavailable_reason = selected_benchmark_unavailable_reason if selected_benchmark_enabled and benchmark_close is None else None
+
+            rows.append(
+                RuleBacktestAuditRow(
+                    date=point_dt,
+                    symbol_close=_safe_float(point_payload.get("close")),
+                    benchmark_close=benchmark_close,
+                    position=_safe_float(point_payload.get("exposure_pct") if point_payload.get("exposure_pct") is not None else point_payload.get("target_position")),
+                    shares=_safe_float(point_payload.get("shares_held")),
+                    cash=_safe_float(point_payload.get("cash")),
+                    holdings_value=_safe_float(point_payload.get("holdings_value")),
+                    total_portfolio_value=float(total_portfolio_value),
+                    daily_pnl=daily_pnl,
+                    daily_return=daily_return,
+                    cumulative_return=_safe_float(point_payload.get("cumulative_return_pct")),
+                    benchmark_cumulative_return=_safe_float(benchmark_point.get("cumulative_return_pct")),
+                    buy_hold_cumulative_return=_safe_float(buy_and_hold_point.get("cumulative_return_pct")),
+                    action=str(point_payload.get("executed_action") or "").strip() or None,
+                    fill_price=_safe_float(point_payload.get("fill_price")),
+                    signal_summary=str(point_payload.get("signal_summary") or "").strip() or None,
+                    drawdown_pct=_safe_float(point_payload.get("drawdown_pct")),
+                    position_state=str(point_payload.get("position_state") or "").strip() or None,
+                    fees=_safe_float(point_payload.get("fee_amount")),
+                    slippage=_safe_float(point_payload.get("slippage_amount")),
+                    notes=str(point_payload.get("notes") or "").strip() or None,
+                    unavailable_reason=unavailable_reason,
+                )
+            )
+            previous_total_portfolio_value = float(total_portfolio_value)
+        return rows
 
     def _detect_no_result_reason(
         self,

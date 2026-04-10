@@ -245,6 +245,31 @@ class RuleBacktestTradeItem(BaseModel):
     notes: Optional[str] = None
 
 
+class RuleBacktestAuditRowItem(BaseModel):
+    date: str
+    symbol_close: Optional[float] = None
+    benchmark_close: Optional[float] = None
+    position: Optional[float] = None
+    shares: Optional[float] = None
+    cash: Optional[float] = None
+    holdings_value: Optional[float] = None
+    total_portfolio_value: Optional[float] = None
+    daily_pnl: Optional[float] = None
+    daily_return: Optional[float] = None
+    cumulative_return: Optional[float] = None
+    benchmark_cumulative_return: Optional[float] = None
+    buy_hold_cumulative_return: Optional[float] = None
+    action: Optional[str] = None
+    fill_price: Optional[float] = None
+    signal_summary: Optional[str] = None
+    drawdown_pct: Optional[float] = None
+    position_state: Optional[str] = None
+    fees: Optional[float] = None
+    slippage: Optional[float] = None
+    notes: Optional[str] = None
+    unavailable_reason: Optional[str] = None
+
+
 class RuleBacktestHistoryItem(BaseModel):
     id: int
     code: str
@@ -294,7 +319,7 @@ class RuleBacktestHistoryItem(BaseModel):
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    audit_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    audit_rows: List[RuleBacktestAuditRowItem] = Field(default_factory=list)
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -355,7 +380,7 @@ class RuleBacktestRunResponse(BaseModel):
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    audit_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    audit_rows: List[RuleBacktestAuditRowItem] = Field(default_factory=list)
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
     ai_summary: Optional[str] = None

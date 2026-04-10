@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for AI-assisted rule backtesting."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -336,8 +337,10 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(response["buy_and_hold_curve"]), 0)
         self.assertEqual(response["buy_and_hold_summary"]["resolved_mode"], "same_symbol_buy_and_hold")
         self.assertGreater(len(response["audit_rows"]), 0)
+        self.assertEqual(response["summary"]["visualization"]["audit_rows"], response["audit_rows"])
         self.assertIn("total_portfolio_value", response["audit_rows"][0])
-        self.assertIn("cumulative_strategy_return_pct", response["audit_rows"][0])
+        self.assertIn("cumulative_return", response["audit_rows"][0])
+        self.assertIn("position", response["audit_rows"][0])
         self.assertGreater(len(response["daily_return_series"]), 0)
         self.assertGreater(len(response["exposure_curve"]), 0)
         self.assertIn("execution_assumptions", response)
@@ -534,6 +537,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("daily_return_series", detail)
         self.assertIn("exposure_curve", detail)
         self.assertGreater(len(detail["audit_rows"]), 0)
+        self.assertIn("action", detail["audit_rows"][0])
+        self.assertIn("cumulative_return", detail["audit_rows"][0])
         self.assertIn("signal_summary", detail["audit_rows"][0])
         if detail["trades"]:
             first_trade = detail["trades"][0]
@@ -615,6 +620,61 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("benchmark_curve", detail)
         self.assertIn("benchmark_summary", detail)
         self.assertIn("audit_rows", detail)
+
+    def test_get_run_prefers_persisted_audit_ledger_over_reconstruction(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text=strategy_text,
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["audit_rows"] = [
+            {
+                "date": "2024-01-20",
+                "symbol_close": 999.0,
+                "benchmark_close": None,
+                "position": 0.0,
+                "shares": None,
+                "cash": 123456.0,
+                "holdings_value": 0.0,
+                "total_portfolio_value": 123456.0,
+                "daily_pnl": 3456.0,
+                "daily_return": 2.88,
+                "cumulative_return": 23.456,
+                "benchmark_cumulative_return": None,
+                "buy_hold_cumulative_return": None,
+                "action": "buy",
+                "fill_price": 12.34,
+                "signal_summary": "stored-ledger-row",
+                "drawdown_pct": -0.5,
+                "position_state": "flat",
+                "fees": None,
+                "slippage": None,
+                "notes": "persisted-ledger",
+                "unavailable_reason": "stored-only",
+            }
+        ]
+        summary["visualization"]["daily_return_series"] = []
+        summary["visualization"]["exposure_curve"] = []
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["audit_rows"], summary["visualization"]["audit_rows"])
+        self.assertEqual(detail["audit_rows"][0]["symbol_close"], 999.0)
+        self.assertEqual(detail["audit_rows"][0]["signal_summary"], "stored-ledger-row")
+        self.assertEqual(detail["daily_return_series"][0]["equity"], 123456.0)
+        self.assertEqual(detail["daily_return_series"][0]["daily_return_pct"], 2.88)
+        self.assertEqual(detail["exposure_curve"][0]["executed_action"], "buy")
+        self.assertEqual(detail["exposure_curve"][0]["position_state"], "flat")
 
 
 if __name__ == "__main__":

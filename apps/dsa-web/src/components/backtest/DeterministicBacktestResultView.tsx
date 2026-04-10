@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import { Button, Card } from '../../components/common';
-import type { RuleBacktestRunResponse } from '../../types/backtest';
+import type { RuleBacktestAuditRowItem, RuleBacktestRunResponse } from '../../types/backtest';
 import { DeterministicBacktestChartWorkspace } from './DeterministicBacktestChartWorkspace';
 import {
   getDeterministicResultDensityCssVars,
@@ -21,7 +21,12 @@ import {
   type DeterministicBacktestTradeEvent,
 } from './normalizeDeterministicBacktestResult';
 
-function downloadAuditCsv(run: RuleBacktestRunResponse, rows: DeterministicBacktestNormalizedRow[]): void {
+function getStoredAuditRows(run: RuleBacktestRunResponse): RuleBacktestAuditRowItem[] {
+  return Array.isArray(run.auditRows) ? run.auditRows : [];
+}
+
+function downloadAuditCsv(run: RuleBacktestRunResponse): void {
+  const rows = getStoredAuditRows(run);
   const header = [
     '日期',
     '标的收盘价',
@@ -49,18 +54,18 @@ function downloadAuditCsv(run: RuleBacktestRunResponse, rows: DeterministicBackt
     row.symbolClose ?? '',
     row.benchmarkClose ?? '',
     row.signalSummary ?? '',
-    formatDeterministicActionLabel(row.action),
+    formatDeterministicActionLabel(row.action ?? row.executedAction),
     row.fillPrice ?? '',
-    row.shares ?? '',
+    row.shares ?? row.sharesHeld ?? '',
     row.cash ?? '',
     row.holdingsValue ?? '',
-    row.totalValue ?? '',
+    row.totalPortfolioValue ?? '',
     row.dailyPnl ?? '',
-    row.dailyReturn ?? '',
-    row.strategyCumReturn ?? '',
-    row.benchmarkCumReturn ?? '',
-    row.buyHoldCumReturn ?? '',
-    row.position ?? '',
+    row.dailyReturn ?? row.dailyReturnPct ?? '',
+    row.cumulativeReturn ?? row.cumulativeStrategyReturnPct ?? '',
+    row.benchmarkCumulativeReturn ?? row.cumulativeBenchmarkReturnPct ?? '',
+    row.buyHoldCumulativeReturn ?? row.cumulativeBuyAndHoldReturnPct ?? '',
+    row.position ?? row.exposurePct ?? row.targetPosition ?? '',
     row.fees ?? '',
     row.slippage ?? '',
     row.notes ?? '',
@@ -90,12 +95,12 @@ export function DeterministicAuditTable({
   return (
     <Card
       title="日级审计 / 对账"
-      subtitle="KPI 与联动图表共用同一份 normalized rows"
+      subtitle="表格与导出都直接读取已持久化的 audit ledger"
       className="product-section-card product-section-card--backtest-standard"
     >
       <div className="backtest-audit-table__header">
-        <p className="product-section-copy">每一行审计记录都直接来自 normalized rows，不再由表格自行重建业务数据。</p>
-        <Button variant="secondary" onClick={() => downloadAuditCsv(run, rows)}>导出 CSV</Button>
+        <p className="product-section-copy">当运行结果已存储 audit ledger 时，结果页和 CSV 导出都复用这份持久化账本，不再临时重算。</p>
+        <Button variant="secondary" onClick={() => downloadAuditCsv(run)} disabled={getStoredAuditRows(run).length === 0}>导出 CSV</Button>
       </div>
       {rows.length === 0 ? (
         <div className="product-empty-state product-empty-state--compact">暂无可导出的日级审计数据。</div>

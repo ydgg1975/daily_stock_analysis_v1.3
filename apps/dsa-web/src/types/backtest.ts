@@ -359,7 +359,20 @@ export interface RuleBacktestAuditRowItem {
   date?: string;
   symbolClose?: number | null;
   benchmarkClose?: number | null;
+  position?: number | null;
+  shares?: number | null;
+  dailyReturn?: number | null;
+  cumulativeReturn?: number | null;
+  benchmarkCumulativeReturn?: number | null;
+  buyHoldCumulativeReturn?: number | null;
+  action?: string | null;
   signalSummary?: string | null;
+  drawdownPct?: number | null;
+  positionState?: string | null;
+  fees?: number | null;
+  slippage?: number | null;
+  notes?: string | null;
+  unavailableReason?: string | null;
   targetPosition?: number | null;
   executedAction?: string | null;
   fillPrice?: number | null;
@@ -367,17 +380,12 @@ export interface RuleBacktestAuditRowItem {
   cash?: number | null;
   holdingsValue?: number | null;
   totalPortfolioValue?: number | null;
-  positionState?: string | null;
   exposurePct?: number | null;
   dailyPnl?: number | null;
   dailyReturnPct?: number | null;
   cumulativeStrategyReturnPct?: number | null;
   cumulativeBenchmarkReturnPct?: number | null;
   cumulativeBuyAndHoldReturnPct?: number | null;
-  fees?: number | null;
-  slippage?: number | null;
-  notes?: string | null;
-  unavailableReason?: string | null;
 }
 
 export interface RuleBacktestRunResponse {

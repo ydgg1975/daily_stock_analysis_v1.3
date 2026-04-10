@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧾 **Deterministic backtest audit ledger 持久化收口为单一真源** — 规则回测完成后现在会把日级 audit ledger 作为结构化结果的一部分持久化保存，字段口径统一收口为 `date / symbol_close / benchmark_close / position / shares / cash / holdings_value / total_portfolio_value / daily_pnl / daily_return / cumulative_return / benchmark_cumulative_return / buy_hold_cumulative_return / action / fill_price`，并继续保留信号摘要、手续费、滑点、drawdown 与 unavailable 原因等可审计字段。结果页读取与 CSV 导出在存在存储 ledger 时会直接复用这份持久化数据，不再走另一条临时重建路径；历史结果回放也保持与当前运行一致的 stored-ledger 读取语义。
 - 🗂️ **Deterministic 结果页改为“首屏看图 + 深信息入 tabs/collapse”** — `/backtest/results/:runId` 不再把日级详情、审计表、交易表、参数快照、benchmark 说明、执行假设和历史列表继续纵向常驻堆叠在默认页面流里。结果页首屏现在只保留顶部摘要 / 操作、KPI 和统一 chart workspace；日级详情改为跟随 hover 的浮动明细卡，`审计明细 / 交易记录 / 参数与假设 / 历史结果` 则收进专门标签页，首屏回到以图表分析为中心的 JoinQuant 风格。
 - 📊 **Deterministic 结果页首屏进一步压缩为 compact dashboard hero** — 结果页这次继续从“几个独立高 section 纵向堆叠”收敛为“一个紧凑主舞台”：顶部说明换成更薄的 top bar，KPI 改成更低高度的关键指标摘要（总收益 / 年化 / 最大回撤 / 夏普 / 基准 / 超额），统一 chart workspace 也把主图 / 日盈亏 / 仓位 / brush 一路压到更紧的 `220 / 72 / 56 / 40px` dense 比例，并同步缩短 panel 间距，首屏更像一个协调的 dashboard，而不是继续依赖长滚动阅读。
 - 🎯 **Deterministic hover 明细改为真实跟随型 tooltip** — 结果图里的当日详情不再固定钉在右上角角落，而是继续复用同一个 `hoverIndex / hoveredRow`，并额外根据当前 hover 的图表几何实时计算 tooltip 的 `left/top`：默认贴近 hover 点右下侧，接近边缘时再左右 / 上下翻转，在 chart workspace 内以真正跟随 cursor / crosshair 的浮层展示。

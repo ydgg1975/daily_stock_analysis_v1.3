@@ -444,6 +444,12 @@ class RuleBacktestService:
                 start_date=normalized_start_date,
                 end_date=normalized_end_date,
             )
+            result.audit_ledger = self.engine._build_audit_ledger(
+                equity_curve=result.equity_curve,
+                benchmark_curve=result.benchmark_curve,
+                buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
+                benchmark_summary=dict(result.benchmark_summary or {}),
+            )
             return result
 
         result = self.engine.run(
@@ -464,6 +470,12 @@ class RuleBacktestService:
             benchmark_code=benchmark_code,
             start_date=normalized_start_date,
             end_date=normalized_end_date,
+        )
+        result.audit_ledger = self.engine._build_audit_ledger(
+            equity_curve=result.equity_curve,
+            benchmark_curve=result.benchmark_curve,
+            buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
+            benchmark_summary=dict(result.benchmark_summary or {}),
         )
 
         if not result.no_result_reason and result.metrics.get("trade_count", 0) <= 0:
@@ -871,12 +883,7 @@ class RuleBacktestService:
         warnings = result.warnings or []
         equity_payload = [p.to_dict() for p in result.equity_curve]
         trade_payload = [trade.to_dict() for trade in result.trades]
-        audit_rows = self._build_audit_rows(
-            equity_curve=equity_payload,
-            benchmark_curve=list(result.benchmark_curve or []),
-            buy_and_hold_curve=list(getattr(result, "buy_and_hold_curve", []) or []),
-            benchmark_summary=dict(result.benchmark_summary or {}),
-        )
+        audit_rows = [row.to_dict() for row in list(getattr(result, "audit_ledger", []) or [])]
         daily_return_series = self._build_daily_return_series_from_audit_rows(audit_rows)
         exposure_curve = self._build_exposure_curve_from_audit_rows(audit_rows)
         summary_patch = self._update_summary_payload(
@@ -1246,7 +1253,7 @@ class RuleBacktestService:
                 {
                     "date": point_date,
                     "equity": round(float(total_portfolio_value), 6),
-                    "daily_return_pct": round(float(_safe_float(row.get("daily_return_pct")) or 0.0), 6),
+                    "daily_return_pct": round(float(_safe_float(row.get("daily_return")) or _safe_float(row.get("daily_return_pct")) or 0.0), 6),
                     "daily_pnl": round(float(_safe_float(row.get("daily_pnl")) or 0.0), 6),
                 }
             )
@@ -1260,74 +1267,15 @@ class RuleBacktestService:
         buy_and_hold_curve: List[Dict[str, Any]],
         benchmark_summary: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
-        benchmark_by_date = {
-            str(point.get("date")): point
-            for point in benchmark_curve or []
-            if point.get("date")
-        }
-        buy_and_hold_by_date = {
-            str(point.get("date")): point
-            for point in buy_and_hold_curve or []
-            if point.get("date")
-        }
-        selected_benchmark_enabled = str(benchmark_summary.get("resolved_mode") or "").strip() not in {"", BENCHMARK_MODE_NONE}
-        selected_benchmark_unavailable_reason = str(benchmark_summary.get("unavailable_reason") or "").strip() or None
-
-        rows: List[Dict[str, Any]] = []
-        previous_total_portfolio_value: Optional[float] = None
-        for point in equity_curve or []:
-            point_date = point.get("date")
-            if not point_date:
-                continue
-            date_str = str(point_date)
-            total_portfolio_value = _safe_float(point.get("total_portfolio_value"))
-            if total_portfolio_value is None:
-                total_portfolio_value = _safe_float(point.get("equity"))
-            if total_portfolio_value is None:
-                continue
-
-            daily_pnl = 0.0
-            daily_return_pct = 0.0
-            if previous_total_portfolio_value is not None and previous_total_portfolio_value > 0:
-                daily_pnl = float(total_portfolio_value) - float(previous_total_portfolio_value)
-                daily_return_pct = (daily_pnl / float(previous_total_portfolio_value)) * 100.0
-
-            benchmark_point = benchmark_by_date.get(date_str) or {}
-            buy_and_hold_point = buy_and_hold_by_date.get(date_str) or {}
-            benchmark_close = _safe_float(benchmark_point.get("close"))
-            cumulative_benchmark_return_pct = _safe_float(benchmark_point.get("cumulative_return_pct"))
-            cumulative_buy_and_hold_return_pct = _safe_float(buy_and_hold_point.get("cumulative_return_pct"))
-            row_notes = str(point.get("notes") or "").strip() or None
-            unavailable_reason = selected_benchmark_unavailable_reason if selected_benchmark_enabled and benchmark_close is None else None
-
-            rows.append(
-                {
-                    "date": date_str,
-                    "symbol_close": _safe_float(point.get("close")),
-                    "benchmark_close": benchmark_close,
-                    "signal_summary": point.get("signal_summary"),
-                    "target_position": _safe_float(point.get("target_position")),
-                    "executed_action": point.get("executed_action"),
-                    "fill_price": _safe_float(point.get("fill_price")),
-                    "shares_held": _safe_float(point.get("shares_held")),
-                    "cash": _safe_float(point.get("cash")),
-                    "holdings_value": _safe_float(point.get("holdings_value")),
-                    "total_portfolio_value": round(float(total_portfolio_value), 6),
-                    "position_state": point.get("position_state"),
-                    "exposure_pct": _safe_float(point.get("exposure_pct")),
-                    "daily_pnl": round(float(daily_pnl), 6),
-                    "daily_return_pct": round(float(daily_return_pct), 6),
-                    "cumulative_strategy_return_pct": _safe_float(point.get("cumulative_return_pct")),
-                    "cumulative_benchmark_return_pct": cumulative_benchmark_return_pct,
-                    "cumulative_buy_and_hold_return_pct": cumulative_buy_and_hold_return_pct,
-                    "fees": _safe_float(point.get("fee_amount")),
-                    "slippage": _safe_float(point.get("slippage_amount")),
-                    "notes": row_notes,
-                    "unavailable_reason": unavailable_reason,
-                }
+        return [
+            row.to_dict()
+            for row in RuleBacktestEngine._build_audit_ledger(
+                equity_curve=equity_curve,
+                benchmark_curve=benchmark_curve,
+                buy_and_hold_curve=buy_and_hold_curve,
+                benchmark_summary=benchmark_summary,
             )
-            previous_total_portfolio_value = float(total_portfolio_value)
-        return rows
+        ]
 
     @staticmethod
     def _build_exposure_curve(
@@ -1364,7 +1312,9 @@ class RuleBacktestService:
             point_date = row.get("date")
             if not point_date:
                 continue
-            exposure = _safe_float(row.get("exposure_pct"))
+            exposure = _safe_float(row.get("position"))
+            if exposure is None:
+                exposure = _safe_float(row.get("exposure_pct"))
             if exposure is None:
                 exposure = _safe_float(row.get("target_position"))
             series.append(
@@ -1372,7 +1322,7 @@ class RuleBacktestService:
                     "date": str(point_date),
                     "exposure": round(float(exposure or 0.0), 6),
                     "position_state": row.get("position_state") or ("long" if (exposure or 0.0) > 0 else "flat"),
-                    "executed_action": row.get("executed_action"),
+                    "executed_action": row.get("action") or row.get("executed_action"),
                     "fill_price": _safe_float(row.get("fill_price")),
                 }
             )
