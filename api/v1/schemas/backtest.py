@@ -270,6 +270,28 @@ class RuleBacktestAuditRowItem(BaseModel):
     unavailable_reason: Optional[str] = None
 
 
+class RuleBacktestExecutionMarketRules(BaseModel):
+    trading_day_execution: Optional[str] = None
+    terminal_bar_fill_fallback: Optional[str] = None
+    window_end_position_handling: Optional[str] = None
+
+
+class RuleBacktestExecutionModel(BaseModel):
+    version: str = "v1"
+    timeframe: str = "daily"
+    signal_evaluation_timing: str
+    entry_timing: str
+    exit_timing: str
+    entry_fill_price_basis: str
+    exit_fill_price_basis: str
+    position_sizing: str
+    fee_model: str
+    fee_bps_per_side: float = 0.0
+    slippage_model: str
+    slippage_bps_per_side: float = 0.0
+    market_rules: RuleBacktestExecutionMarketRules = Field(default_factory=RuleBacktestExecutionMarketRules)
+
+
 class RuleBacktestHistoryItem(BaseModel):
     id: int
     code: str
@@ -314,6 +336,18 @@ class RuleBacktestHistoryItem(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    execution_model: RuleBacktestExecutionModel = Field(
+        default_factory=lambda: RuleBacktestExecutionModel(
+            signal_evaluation_timing="bar_close",
+            entry_timing="next_bar_open",
+            exit_timing="next_bar_open",
+            entry_fill_price_basis="open",
+            exit_fill_price_basis="open",
+            position_sizing="single_position_full_notional",
+            fee_model="bps_per_side",
+            slippage_model="bps_per_side",
+        )
+    )
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
@@ -375,6 +409,18 @@ class RuleBacktestRunResponse(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
+    execution_model: RuleBacktestExecutionModel = Field(
+        default_factory=lambda: RuleBacktestExecutionModel(
+            signal_evaluation_timing="bar_close",
+            entry_timing="next_bar_open",
+            exit_timing="next_bar_open",
+            entry_fill_price_basis="open",
+            exit_fill_price_basis="open",
+            position_sizing="single_position_full_notional",
+            fee_model="bps_per_side",
+            slippage_model="bps_per_side",
+        )
+    )
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)

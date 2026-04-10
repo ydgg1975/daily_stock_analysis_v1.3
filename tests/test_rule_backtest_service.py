@@ -300,8 +300,13 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("excess_return_vs_buy_and_hold_pct", result.metrics)
         self.assertGreater(len(result.benchmark_curve), 0)
         self.assertEqual(result.benchmark_summary["method"], "same_symbol_buy_and_hold")
+        self.assertEqual(result.execution_model.signal_evaluation_timing, "bar_close")
+        self.assertEqual(result.execution_model.entry_timing, "next_bar_open")
+        self.assertEqual(result.execution_model.entry_fill_price_basis, "open")
+        self.assertEqual(result.execution_model.market_rules["terminal_bar_fill_fallback"], "same_bar_close")
         result_payload = result.to_dict()
         self.assertGreater(len(result_payload["benchmark_curve"]), 0)
+        self.assertEqual(result_payload["execution_model"]["entry_timing"], "next_bar_open")
         self.assertIn("cash", result_payload["equity_curve"][0])
         self.assertIn("shares_held", result_payload["equity_curve"][0])
         self.assertIn("total_portfolio_value", result_payload["equity_curve"][0])
@@ -338,6 +343,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(response["buy_and_hold_summary"]["resolved_mode"], "same_symbol_buy_and_hold")
         self.assertGreater(len(response["audit_rows"]), 0)
         self.assertEqual(response["summary"]["visualization"]["audit_rows"], response["audit_rows"])
+        self.assertEqual(response["execution_model"]["entry_timing"], "same_bar_open")
+        self.assertEqual(response["execution_model"]["exit_timing"], "forced_close_at_window_end_close")
+        self.assertEqual(response["summary"]["execution_model"]["entry_fill_price_basis"], "open")
         self.assertIn("total_portfolio_value", response["audit_rows"][0])
         self.assertIn("cumulative_return", response["audit_rows"][0])
         self.assertIn("position", response["audit_rows"][0])
@@ -523,6 +531,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("buy_and_hold_return_pct", history["items"][0])
         self.assertIn("benchmark_curve", history["items"][0])
         self.assertIn("benchmark_summary", history["items"][0])
+        self.assertIn("execution_model", history["items"][0])
         self.assertIn("execution_assumptions", history["items"][0])
 
         detail = service.get_run(history["items"][0]["id"])
@@ -533,6 +542,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertIn("annualized_return_pct", detail)
         self.assertIn("benchmark_curve", detail)
         self.assertIn("benchmark_summary", detail)
+        self.assertIn("execution_model", detail)
         self.assertIn("audit_rows", detail)
         self.assertIn("daily_return_series", detail)
         self.assertIn("exposure_curve", detail)
@@ -675,6 +685,45 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["daily_return_series"][0]["daily_return_pct"], 2.88)
         self.assertEqual(detail["exposure_curve"][0]["executed_action"], "buy")
         self.assertEqual(detail["exposure_curve"][0]["position_state"], "flat")
+
+    def test_get_run_derives_execution_model_for_legacy_runs_without_structured_config(self) -> None:
+        service = RuleBacktestService(self.db)
+        strategy_text = "Buy when Close > MA3. Sell when Close < MA3."
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text=strategy_text,
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_model", None)
+        summary["execution_assumptions"] = {
+            "timeframe": "daily",
+            "signal_evaluation_timing": "evaluate rules on each bar close",
+            "entry_fill_timing": "next_bar_open",
+            "exit_fill_timing": "next_bar_open; last openless bar falls back to same-bar close",
+            "default_fill_price_basis": "open",
+            "position_sizing": "single_position_full_notional",
+            "fee_model": "bps_per_side",
+            "fee_bps_per_side": 1.5,
+            "slippage_model": "bps_per_side",
+            "slippage_bps_per_side": 2.5,
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["execution_model"]["signal_evaluation_timing"], "bar_close")
+        self.assertEqual(detail["execution_model"]["entry_timing"], "next_bar_open")
+        self.assertEqual(detail["execution_model"]["entry_fill_price_basis"], "open")
+        self.assertEqual(detail["execution_model"]["fee_bps_per_side"], 1.5)
+        self.assertEqual(detail["execution_model"]["slippage_bps_per_side"], 2.5)
+        self.assertEqual(detail["execution_model"]["market_rules"]["terminal_bar_fill_fallback"], "same_bar_close")
 
 
 if __name__ == "__main__":

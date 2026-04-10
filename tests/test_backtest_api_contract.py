@@ -49,6 +49,25 @@ class BacktestApiContractTestCase(unittest.TestCase):
             "buy_and_hold_return_pct": 0.0,
             "excess_return_vs_buy_and_hold_pct": 0.0,
             "summary": {},
+            "execution_model": {
+                "version": "v1",
+                "timeframe": "daily",
+                "signal_evaluation_timing": "bar_close",
+                "entry_timing": "next_bar_open",
+                "exit_timing": "next_bar_open",
+                "entry_fill_price_basis": "open",
+                "exit_fill_price_basis": "open",
+                "position_sizing": "single_position_full_notional",
+                "fee_model": "bps_per_side",
+                "fee_bps_per_side": 0.0,
+                "slippage_model": "bps_per_side",
+                "slippage_bps_per_side": 0.0,
+                "market_rules": {
+                    "trading_day_execution": "available_bars_only",
+                    "terminal_bar_fill_fallback": "same_bar_close",
+                    "window_end_position_handling": "force_flatten",
+                },
+            },
             "execution_assumptions": {},
             "benchmark_curve": [],
             "benchmark_summary": {"method": "same_symbol_buy_and_hold", "resolved_mode": "same_symbol_buy_and_hold"},
@@ -106,6 +125,7 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(response.status, "completed")
         self.assertEqual(response.benchmark_summary["method"], "same_symbol_buy_and_hold")
+        self.assertEqual(response.execution_model.entry_timing, "next_bar_open")
         service.run_backtest.assert_called_once()
         self.assertEqual(service.run_backtest.call_args.kwargs["start_date"], "2025-01-01")
         self.assertEqual(service.run_backtest.call_args.kwargs["end_date"], "2025-12-31")

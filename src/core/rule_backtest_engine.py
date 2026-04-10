@@ -92,6 +92,62 @@ class ExecutionAssumptions:
 
 
 @dataclass
+class ExecutionModelConfig:
+    """Structured execution model for deterministic rule backtests."""
+
+    version: str
+    timeframe: str
+    signal_evaluation_timing: str
+    entry_timing: str
+    exit_timing: str
+    entry_fill_price_basis: str
+    exit_fill_price_basis: str
+    position_sizing: str
+    fee_model: str
+    fee_bps_per_side: float
+    slippage_model: str
+    slippage_bps_per_side: float
+    market_rules: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "timeframe": self.timeframe,
+            "signal_evaluation_timing": self.signal_evaluation_timing,
+            "entry_timing": self.entry_timing,
+            "exit_timing": self.exit_timing,
+            "entry_fill_price_basis": self.entry_fill_price_basis,
+            "exit_fill_price_basis": self.exit_fill_price_basis,
+            "position_sizing": self.position_sizing,
+            "fee_model": self.fee_model,
+            "fee_bps_per_side": round(float(self.fee_bps_per_side), 6),
+            "slippage_model": self.slippage_model,
+            "slippage_bps_per_side": round(float(self.slippage_bps_per_side), 6),
+            "market_rules": dict(self.market_rules or {}),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Optional[Dict[str, Any]]) -> Optional["ExecutionModelConfig"]:
+        if not isinstance(payload, dict) or not payload:
+            return None
+        return cls(
+            version=str(payload.get("version") or "v1"),
+            timeframe=str(payload.get("timeframe") or "daily"),
+            signal_evaluation_timing=str(payload.get("signal_evaluation_timing") or "bar_close"),
+            entry_timing=str(payload.get("entry_timing") or "next_bar_open"),
+            exit_timing=str(payload.get("exit_timing") or "next_bar_open"),
+            entry_fill_price_basis=str(payload.get("entry_fill_price_basis") or "open"),
+            exit_fill_price_basis=str(payload.get("exit_fill_price_basis") or "open"),
+            position_sizing=str(payload.get("position_sizing") or "single_position_full_notional"),
+            fee_model=str(payload.get("fee_model") or "bps_per_side"),
+            fee_bps_per_side=float(_safe_float(payload.get("fee_bps_per_side")) or 0.0),
+            slippage_model=str(payload.get("slippage_model") or "bps_per_side"),
+            slippage_bps_per_side=float(_safe_float(payload.get("slippage_bps_per_side")) or 0.0),
+            market_rules=dict(payload.get("market_rules") or {}),
+        )
+
+
+@dataclass
 class RuleBacktestTrade:
     code: str
     entry_signal_date: date
@@ -258,6 +314,7 @@ class RuleBacktestAuditRow:
 @dataclass
 class RuleBacktestResult:
     parsed_strategy: ParsedStrategy
+    execution_model: ExecutionModelConfig
     execution_assumptions: ExecutionAssumptions
     trades: List[RuleBacktestTrade]
     equity_curve: List[RuleBacktestPoint]
@@ -274,6 +331,7 @@ class RuleBacktestResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "parsed_strategy": self.parsed_strategy.to_dict(),
+            "execution_model": self.execution_model.to_dict(),
             "execution_assumptions": self.execution_assumptions.to_dict(),
             "trades": [trade.to_dict() for trade in self.trades],
             "equity_curve": [point.to_dict() for point in self.equity_curve],
@@ -1145,22 +1203,21 @@ class RuleBacktestEngine:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
     ) -> RuleBacktestResult:
-        assumptions = self._build_execution_assumptions(
+        strategy_spec = parsed_strategy.strategy_spec or {}
+        strategy_type = str(strategy_spec.get("strategy_type") or parsed_strategy.strategy_kind)
+        execution_model = self._build_execution_model(
             timeframe=parsed_strategy.timeframe,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            strategy_type=strategy_type,
         )
-        strategy_spec = parsed_strategy.strategy_spec or {}
-        strategy_type = str(strategy_spec.get("strategy_type") or parsed_strategy.strategy_kind)
+        assumptions = self._build_execution_assumptions(execution_model=execution_model)
         if strategy_type == "periodic_accumulation":
-            assumptions.position_sizing = "scheduled_fixed_accumulation"
-            assumptions.signal_evaluation_timing = "execute scheduled accumulation on each trading day"
-            assumptions.entry_fill_timing = "same_bar_open"
-            assumptions.exit_fill_timing = "forced_close_at_window_end_close"
             return self._run_periodic_accumulation(
                 code=code,
                 parsed_strategy=parsed_strategy,
                 bars=bars,
+                execution_model=execution_model,
                 assumptions=assumptions,
                 initial_capital=initial_capital,
                 fee_bps=fee_bps,
@@ -1174,6 +1231,7 @@ class RuleBacktestEngine:
                 code=code,
                 parsed_strategy=parsed_strategy,
                 bars=bars,
+                execution_model=execution_model,
                 assumptions=assumptions,
                 initial_capital=initial_capital,
                 fee_bps=fee_bps,
@@ -1186,6 +1244,7 @@ class RuleBacktestEngine:
         if not ordered_bars:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1199,6 +1258,7 @@ class RuleBacktestEngine:
         if any(price is None for price in closes):
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1217,6 +1277,7 @@ class RuleBacktestEngine:
         if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1233,8 +1294,8 @@ class RuleBacktestEngine:
         cash = float(initial_capital)
         entry_node = parsed_strategy.entry
         exit_node = parsed_strategy.exit
-        fee_rate = max(0.0, float(fee_bps)) / 10000.0
-        slippage_rate = max(0.0, float(slippage_bps)) / 10000.0
+        fee_rate = max(0.0, float(execution_model.fee_bps_per_side)) / 10000.0
+        slippage_rate = max(0.0, float(execution_model.slippage_bps_per_side)) / 10000.0
         peak_equity = float(initial_capital)
         trade_entry_signals = 0
         shares = 0.0
@@ -1256,7 +1317,11 @@ class RuleBacktestEngine:
             action_notes: Optional[str] = None
 
             if pending_exit is not None and position:
-                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                fill_price, fill_basis = self._resolve_fill_price(
+                    bar,
+                    close_price=price,
+                    preferred=execution_model.exit_fill_price_basis,
+                )
                 exit_execution = self._apply_exit_execution(
                     shares=shares,
                     base_fill_price=fill_price,
@@ -1295,8 +1360,8 @@ class RuleBacktestEngine:
                         exit_fill_basis=fill_basis,
                         signal_price_basis="close",
                         price_basis="close",
-                        fee_bps=float(fee_bps),
-                        slippage_bps=float(slippage_bps),
+                        fee_bps=float(execution_model.fee_bps_per_side),
+                        slippage_bps=float(execution_model.slippage_bps_per_side),
                         entry_fee_amount=float(active_position["entry_fee_amount"]),
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(active_position["entry_slippage_amount"]),
@@ -1315,7 +1380,11 @@ class RuleBacktestEngine:
                 action_notes = "exit_signal_next_bar_open"
 
             if pending_entry is not None and not position:
-                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                fill_price, fill_basis = self._resolve_fill_price(
+                    bar,
+                    close_price=price,
+                    preferred=execution_model.entry_fill_price_basis,
+                )
                 entry_execution = self._apply_entry_execution(
                     cash=cash,
                     base_fill_price=fill_price,
@@ -1401,7 +1470,11 @@ class RuleBacktestEngine:
         if position and active_position:
             last_bar = ordered_bars[execution_end_index]
             last_price = closes[execution_end_index] or float(active_position["entry_price"])
-            fill_price, fill_basis = self._resolve_fill_price(last_bar, close_price=last_price, preferred="close")
+            fill_price, fill_basis = self._resolve_fill_price(
+                last_bar,
+                close_price=last_price,
+                preferred=str((execution_model.market_rules or {}).get("terminal_bar_fill_fallback") or "close").startswith("same_bar_close") and "close" or execution_model.exit_fill_price_basis,
+            )
             exit_execution = self._apply_exit_execution(
                 shares=shares,
                 base_fill_price=fill_price,
@@ -1444,8 +1517,8 @@ class RuleBacktestEngine:
                     exit_fill_basis=fill_basis,
                     signal_price_basis="close",
                     price_basis="close",
-                    fee_bps=float(fee_bps),
-                    slippage_bps=float(slippage_bps),
+                    fee_bps=float(execution_model.fee_bps_per_side),
+                    slippage_bps=float(execution_model.slippage_bps_per_side),
                     entry_fee_amount=float(active_position["entry_fee_amount"]),
                     exit_fee_amount=float(exit_execution["fee_amount"]),
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
@@ -1487,6 +1560,7 @@ class RuleBacktestEngine:
         no_result_reason, no_result_message = self._detect_no_result_reason(metrics, parsed_strategy)
         return RuleBacktestResult(
             parsed_strategy=parsed_strategy,
+            execution_model=execution_model,
             execution_assumptions=assumptions,
             trades=trades,
             equity_curve=equity_curve,
@@ -1506,6 +1580,7 @@ class RuleBacktestEngine:
         code: str,
         parsed_strategy: ParsedStrategy,
         bars: Sequence[Any],
+        execution_model: ExecutionModelConfig,
         assumptions: ExecutionAssumptions,
         initial_capital: float,
         fee_bps: float,
@@ -1518,6 +1593,7 @@ class RuleBacktestEngine:
         if not ordered_bars:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1531,6 +1607,7 @@ class RuleBacktestEngine:
         if any(price is None for price in closes):
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1549,6 +1626,7 @@ class RuleBacktestEngine:
         if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1561,8 +1639,8 @@ class RuleBacktestEngine:
         strategy_spec = parsed_strategy.strategy_spec or {}
         signal_spec = dict(strategy_spec.get("signal") or {})
         series_payload = self._build_strategy_signal_series(closes, strategy_spec)
-        fee_rate = max(0.0, float(fee_bps)) / 10000.0
-        slippage_rate = max(0.0, float(slippage_bps)) / 10000.0
+        fee_rate = max(0.0, float(execution_model.fee_bps_per_side)) / 10000.0
+        slippage_rate = max(0.0, float(execution_model.slippage_bps_per_side)) / 10000.0
         trades: List[RuleBacktestTrade] = []
         equity_curve: List[RuleBacktestPoint] = []
         peak_equity = float(initial_capital)
@@ -1586,7 +1664,11 @@ class RuleBacktestEngine:
             action_notes: Optional[str] = None
 
             if pending_exit is not None and position:
-                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                fill_price, fill_basis = self._resolve_fill_price(
+                    bar,
+                    close_price=price,
+                    preferred=execution_model.exit_fill_price_basis,
+                )
                 exit_execution = self._apply_exit_execution(
                     shares=shares,
                     base_fill_price=fill_price,
@@ -1625,8 +1707,8 @@ class RuleBacktestEngine:
                         exit_fill_basis=fill_basis,
                         signal_price_basis="close",
                         price_basis="close",
-                        fee_bps=float(fee_bps),
-                        slippage_bps=float(slippage_bps),
+                        fee_bps=float(execution_model.fee_bps_per_side),
+                        slippage_bps=float(execution_model.slippage_bps_per_side),
                         entry_fee_amount=float(active_position["entry_fee_amount"]),
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(active_position["entry_slippage_amount"]),
@@ -1645,7 +1727,11 @@ class RuleBacktestEngine:
                 action_notes = f"{strategy_spec.get('strategy_type')}_exit_next_bar_open"
 
             if pending_entry is not None and not position:
-                fill_price, fill_basis = self._resolve_fill_price(bar, close_price=price, preferred="open")
+                fill_price, fill_basis = self._resolve_fill_price(
+                    bar,
+                    close_price=price,
+                    preferred=execution_model.entry_fill_price_basis,
+                )
                 entry_execution = self._apply_entry_execution(
                     cash=cash,
                     base_fill_price=fill_price,
@@ -1735,7 +1821,7 @@ class RuleBacktestEngine:
             fill_price, fill_basis = self._resolve_fill_price(
                 last_bar,
                 close_price=last_price,
-                preferred=str(end_behavior.get("price_basis") or "close"),
+                preferred=str(end_behavior.get("price_basis") or execution_model.exit_fill_price_basis or "close"),
             )
             exit_execution = self._apply_exit_execution(
                 shares=shares,
@@ -1773,8 +1859,8 @@ class RuleBacktestEngine:
                     exit_fill_basis=fill_basis,
                     signal_price_basis="close",
                     price_basis="close",
-                    fee_bps=float(fee_bps),
-                    slippage_bps=float(slippage_bps),
+                    fee_bps=float(execution_model.fee_bps_per_side),
+                    slippage_bps=float(execution_model.slippage_bps_per_side),
                     entry_fee_amount=float(active_position["entry_fee_amount"]),
                     exit_fee_amount=float(exit_execution["fee_amount"]),
                     entry_slippage_amount=float(active_position["entry_slippage_amount"]),
@@ -1816,6 +1902,7 @@ class RuleBacktestEngine:
         no_result_reason, no_result_message = self._detect_no_result_reason(metrics, parsed_strategy)
         return RuleBacktestResult(
             parsed_strategy=parsed_strategy,
+            execution_model=execution_model,
             execution_assumptions=assumptions,
             trades=trades,
             equity_curve=equity_curve,
@@ -1835,6 +1922,7 @@ class RuleBacktestEngine:
         code: str,
         parsed_strategy: ParsedStrategy,
         bars: Sequence[Any],
+        execution_model: ExecutionModelConfig,
         assumptions: ExecutionAssumptions,
         initial_capital: float,
         fee_bps: float,
@@ -1847,6 +1935,7 @@ class RuleBacktestEngine:
         if not ordered_bars:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1865,6 +1954,7 @@ class RuleBacktestEngine:
         if execution_start_index is None or execution_end_index is None or execution_start_index > execution_end_index:
             return RuleBacktestResult(
                 parsed_strategy=parsed_strategy,
+                execution_model=execution_model,
                 execution_assumptions=assumptions,
                 trades=[],
                 equity_curve=[],
@@ -1906,7 +1996,11 @@ class RuleBacktestEngine:
 
             if not stop_buying:
                 buy_attempts += 1
-                base_fill_price, fill_basis = self._resolve_fill_price(bar, close_price=close_price, preferred="open")
+                base_fill_price, fill_basis = self._resolve_fill_price(
+                    bar,
+                    close_price=close_price,
+                    preferred=execution_model.entry_fill_price_basis,
+                )
                 order_plan = self._build_periodic_order_plan(
                     order_mode=order_mode,
                     quantity_per_trade=quantity_per_trade,
@@ -2014,11 +2108,11 @@ class RuleBacktestEngine:
                         },
                         exit_indicators={"close": round(float(last_close), 6)},
                         entry_fill_basis=lot["entry_fill_basis"],
-                        exit_fill_basis="close",
+                        exit_fill_basis=execution_model.exit_fill_price_basis,
                         signal_price_basis="scheduled",
                         price_basis="close",
-                        fee_bps=float(fee_bps),
-                        slippage_bps=float(slippage_bps),
+                        fee_bps=float(execution_model.fee_bps_per_side),
+                        slippage_bps=float(execution_model.slippage_bps_per_side),
                         entry_fee_amount=float(lot["entry_fee_amount"]),
                         exit_fee_amount=float(exit_execution["fee_amount"]),
                         entry_slippage_amount=float(lot["entry_slippage_amount"]),
@@ -2063,6 +2157,7 @@ class RuleBacktestEngine:
             no_result_message = "指定区间内未能完成任何定投买入。"
         return RuleBacktestResult(
             parsed_strategy=parsed_strategy,
+            execution_model=execution_model,
             execution_assumptions=assumptions,
             trades=trades,
             equity_curve=equity_curve,
@@ -2363,19 +2458,71 @@ class RuleBacktestEngine:
         return series[index]
 
     @staticmethod
-    def _build_execution_assumptions(*, timeframe: str, fee_bps: float, slippage_bps: float) -> ExecutionAssumptions:
-        return ExecutionAssumptions(
+    def _build_execution_model(
+        *,
+        timeframe: str,
+        fee_bps: float,
+        slippage_bps: float,
+        strategy_type: Optional[str] = None,
+    ) -> ExecutionModelConfig:
+        normalized_strategy_type = str(strategy_type or "rule_conditions")
+        if normalized_strategy_type == "periodic_accumulation":
+            return ExecutionModelConfig(
+                version="v1",
+                timeframe=str(timeframe or "daily"),
+                signal_evaluation_timing="scheduled_trading_day_open",
+                entry_timing="same_bar_open",
+                exit_timing="forced_close_at_window_end_close",
+                entry_fill_price_basis="open",
+                exit_fill_price_basis="close",
+                position_sizing="scheduled_fixed_accumulation",
+                fee_model="bps_per_side",
+                fee_bps_per_side=float(fee_bps),
+                slippage_model="bps_per_side",
+                slippage_bps_per_side=float(slippage_bps),
+                market_rules={
+                    "trading_day_execution": "available_bars_only",
+                    "window_end_position_handling": "force_flatten",
+                },
+            )
+        return ExecutionModelConfig(
+            version="v1",
             timeframe=str(timeframe or "daily"),
-            indicator_price_basis="close",
-            signal_evaluation_timing="evaluate rules on each bar close",
-            entry_fill_timing="next_bar_open",
-            exit_fill_timing="next_bar_open; last openless bar falls back to same-bar close",
-            default_fill_price_basis="open",
+            signal_evaluation_timing="bar_close",
+            entry_timing="next_bar_open",
+            exit_timing="next_bar_open",
+            entry_fill_price_basis="open",
+            exit_fill_price_basis="open",
             position_sizing="single_position_full_notional",
             fee_model="bps_per_side",
             fee_bps_per_side=float(fee_bps),
             slippage_model="bps_per_side",
             slippage_bps_per_side=float(slippage_bps),
+            market_rules={
+                "trading_day_execution": "available_bars_only",
+                "terminal_bar_fill_fallback": "same_bar_close",
+                "window_end_position_handling": "force_flatten",
+            },
+        )
+
+    @staticmethod
+    def _build_execution_assumptions(*, execution_model: ExecutionModelConfig) -> ExecutionAssumptions:
+        exit_fill_timing = execution_model.exit_timing
+        terminal_fallback = str((execution_model.market_rules or {}).get("terminal_bar_fill_fallback") or "").strip()
+        if terminal_fallback:
+            exit_fill_timing = f"{exit_fill_timing}; {terminal_fallback}"
+        return ExecutionAssumptions(
+            timeframe=execution_model.timeframe,
+            indicator_price_basis="close",
+            signal_evaluation_timing=execution_model.signal_evaluation_timing,
+            entry_fill_timing=execution_model.entry_timing,
+            exit_fill_timing=exit_fill_timing,
+            default_fill_price_basis=execution_model.entry_fill_price_basis,
+            position_sizing=execution_model.position_sizing,
+            fee_model=execution_model.fee_model,
+            fee_bps_per_side=float(execution_model.fee_bps_per_side),
+            slippage_model=execution_model.slippage_model,
+            slippage_bps_per_side=float(execution_model.slippage_bps_per_side),
             benchmark_method="buy_and_hold_same_window",
             benchmark_price_basis="close",
         )

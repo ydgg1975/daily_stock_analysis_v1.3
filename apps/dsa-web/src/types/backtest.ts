@@ -5,6 +5,28 @@
 
 export type AssumptionMap = Record<string, unknown>;
 
+export interface RuleBacktestExecutionMarketRules {
+  tradingDayExecution?: string | null;
+  terminalBarFillFallback?: string | null;
+  windowEndPositionHandling?: string | null;
+}
+
+export interface RuleBacktestExecutionModel {
+  version?: string;
+  timeframe?: string;
+  signalEvaluationTiming?: string | null;
+  entryTiming?: string | null;
+  exitTiming?: string | null;
+  entryFillPriceBasis?: string | null;
+  exitFillPriceBasis?: string | null;
+  positionSizing?: string | null;
+  feeModel?: string | null;
+  feeBpsPerSide?: number | null;
+  slippageModel?: string | null;
+  slippageBpsPerSide?: number | null;
+  marketRules?: RuleBacktestExecutionMarketRules;
+}
+
 export interface StatusHistoryItem {
   status: string;
   at?: string;
@@ -432,6 +454,7 @@ export interface RuleBacktestRunResponse {
   avgHoldingCalendarDays?: number | null;
   finalEquity?: number | null;
   summary: Record<string, unknown>;
+  executionModel?: RuleBacktestExecutionModel;
   executionAssumptions: AssumptionMap;
   benchmarkCurve: RuleBacktestBenchmarkPointItem[];
   benchmarkSummary: RuleBacktestBenchmarkSummary;

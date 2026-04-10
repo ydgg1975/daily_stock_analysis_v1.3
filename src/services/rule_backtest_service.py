@@ -14,7 +14,7 @@ from data_provider.base import normalize_stock_code
 from data_provider.us_index_mapping import is_us_index_code, is_us_stock_code
 from src.agent.llm_adapter import LLMToolAdapter
 from src.config import get_config
-from src.core.rule_backtest_engine import ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
+from src.core.rule_backtest_engine import ExecutionModelConfig, ParsedStrategy, RuleBacktestEngine, RuleBacktestParser, _safe_float
 from src.repositories.rule_backtest_repo import RuleBacktestRepository
 from src.repositories.stock_repo import StockRepository
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback
@@ -215,11 +215,26 @@ class RuleBacktestService:
                 benchmark_mode=benchmark_mode,
                 benchmark_code=benchmark_code,
                 confirmed=confirmed,
+                execution_model=self._build_execution_model_payload(
+                    timeframe=(parsed.timeframe if parsed is not None else "daily"),
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    parsed_strategy=parsed,
+                ),
             ),
             execution_assumptions=self._build_execution_assumptions_payload(
+                execution_model=self._build_execution_model_payload(
+                    timeframe=(parsed.timeframe if parsed is not None else "daily"),
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    parsed_strategy=parsed,
+                ),
+            ),
+            execution_model=self._build_execution_model_payload(
                 timeframe=(parsed.timeframe if parsed is not None else "daily"),
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
+                parsed_strategy=parsed,
             ),
             parsed_strategy=parsed if parsed is not None else _UNSET,
             status=initial_status,
@@ -843,13 +858,16 @@ class RuleBacktestService:
         }
         from src.core.rule_backtest_engine import RuleBacktestResult
 
-        assumptions = self.engine._build_execution_assumptions(
+        execution_model = self.engine._build_execution_model(
             timeframe=parsed.timeframe,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            strategy_type=str(parsed.strategy_spec.get("strategy_type") or parsed.strategy_kind),
         )
+        assumptions = self.engine._build_execution_assumptions(execution_model=execution_model)
         return RuleBacktestResult(
             parsed_strategy=parsed,
+            execution_model=execution_model,
             execution_assumptions=assumptions,
             trades=[],
             equity_curve=[],
@@ -898,9 +916,11 @@ class RuleBacktestService:
                 benchmark_mode=benchmark_mode,
                 benchmark_code=benchmark_code,
                 confirmed=confirmed,
+                execution_model=result.execution_model.to_dict(),
             ),
             metrics=result.metrics,
             parsed_strategy=result.parsed_strategy,
+            execution_model=result.execution_model.to_dict(),
             execution_assumptions=result.execution_assumptions.to_dict(),
             visualization={
                 "benchmark_curve": result.benchmark_curve,
@@ -958,6 +978,7 @@ class RuleBacktestService:
                 request_payload=summary_patch.get("request"),
                 metrics=result.metrics,
                 parsed_strategy=result.parsed_strategy,
+                execution_model=summary_patch.get("execution_model"),
                 execution_assumptions=summary_patch.get("execution_assumptions"),
                 visualization=summary_patch.get("visualization"),
                 no_result_reason=result.no_result_reason,
@@ -1083,6 +1104,28 @@ class RuleBacktestService:
             self._load_summary_payload(row.summary_json),
             parsed_strategy=parsed_strategy if parsed_strategy is not None else _UNSET,
             metrics=metrics if metrics is not None else _UNSET,
+            execution_model=(
+                self._build_execution_model_payload(
+                    timeframe=parsed_strategy.timeframe,
+                    fee_bps=row.fee_bps,
+                    slippage_bps=float(self._extract_request_payload(row.summary_json).get("slippage_bps") or 0.0),
+                    parsed_strategy=parsed_strategy,
+                )
+                if parsed_strategy is not None
+                else _UNSET
+            ),
+            execution_assumptions=(
+                self._build_execution_assumptions_payload(
+                    execution_model=self._build_execution_model_payload(
+                        timeframe=parsed_strategy.timeframe,
+                        fee_bps=row.fee_bps,
+                        slippage_bps=float(self._extract_request_payload(row.summary_json).get("slippage_bps") or 0.0),
+                        parsed_strategy=parsed_strategy,
+                    )
+                )
+                if parsed_strategy is not None
+                else _UNSET
+            ),
             no_result_reason=no_result_reason if no_result_reason is not None else _UNSET,
             no_result_message=no_result_message if no_result_message is not None else _UNSET,
             status=status,
@@ -1161,6 +1204,7 @@ class RuleBacktestService:
             "benchmark_mode": str(request.get("benchmark_mode") or BENCHMARK_MODE_AUTO),
             "benchmark_code": str(request.get("benchmark_code") or "").strip() or None,
             "confirmed": bool(request.get("confirmed", False)),
+            "execution_model": dict(request.get("execution_model") or {}),
         }
 
     @staticmethod
@@ -1175,6 +1219,7 @@ class RuleBacktestService:
         benchmark_mode: str,
         benchmark_code: Optional[str],
         confirmed: bool,
+        execution_model: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return {
             "start_date": start_date.isoformat() if start_date is not None else None,
@@ -1186,6 +1231,7 @@ class RuleBacktestService:
             "benchmark_mode": str(benchmark_mode or BENCHMARK_MODE_AUTO),
             "benchmark_code": str(benchmark_code or "").strip() or None,
             "confirmed": bool(confirmed),
+            "execution_model": dict(execution_model or {}),
         }
 
     @staticmethod
@@ -1203,19 +1249,35 @@ class RuleBacktestService:
         if status_message:
             summary["status_message"] = status_message
 
-    def _build_execution_assumptions_payload(
+    def _build_execution_model_payload(
         self,
         *,
         timeframe: str,
         fee_bps: float,
         slippage_bps: float,
+        parsed_strategy: Optional[ParsedStrategy] = None,
     ) -> Dict[str, Any]:
-        return self.engine._build_execution_assumptions(
+        strategy_type = "rule_conditions"
+        if parsed_strategy is not None:
+            strategy_type = str(parsed_strategy.strategy_spec.get("strategy_type") or parsed_strategy.strategy_kind)
+        return self.engine._build_execution_model(
             timeframe=timeframe,
             fee_bps=fee_bps,
             slippage_bps=slippage_bps,
+            strategy_type=strategy_type,
         ).to_dict()
 
+    def _build_execution_assumptions_payload(
+        self,
+        *,
+        execution_model: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        resolved_model = ExecutionModelConfig.from_dict(execution_model)
+        if resolved_model is None:
+            return {}
+        return self.engine._build_execution_assumptions(
+            execution_model=resolved_model,
+        ).to_dict()
     @staticmethod
     def _build_daily_return_series(equity_curve: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         series: List[Dict[str, Any]] = []
@@ -1335,6 +1397,7 @@ class RuleBacktestService:
         request_payload: Any = _UNSET,
         parsed_strategy: Any = _UNSET,
         metrics: Any = _UNSET,
+        execution_model: Any = _UNSET,
         execution_assumptions: Any = _UNSET,
         visualization: Any = _UNSET,
         no_result_reason: Any = _UNSET,
@@ -1353,6 +1416,8 @@ class RuleBacktestService:
             )
         if metrics is not _UNSET:
             payload["metrics"] = metrics
+        if execution_model is not _UNSET:
+            payload["execution_model"] = execution_model
         if execution_assumptions is not _UNSET:
             payload["execution_assumptions"] = execution_assumptions
         if visualization is not _UNSET:
@@ -2409,6 +2474,78 @@ class RuleBacktestService:
             raise ValueError("start_date must be earlier than or equal to end_date")
         return normalized_start, normalized_end
 
+    @staticmethod
+    def _canonical_signal_evaluation_timing(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"scheduled_trading_day_open", "execute scheduled accumulation on each trading day"}:
+            return "scheduled_trading_day_open"
+        return "bar_close"
+
+    @staticmethod
+    def _canonical_entry_timing(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if "same_bar_open" in normalized:
+            return "same_bar_open"
+        return "next_bar_open"
+
+    @staticmethod
+    def _canonical_exit_timing(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if "forced_close_at_window_end_close" in normalized:
+            return "forced_close_at_window_end_close"
+        if ";" in normalized:
+            normalized = normalized.split(";", 1)[0].strip()
+        return normalized or "next_bar_open"
+
+    def _derive_execution_model_payload(
+        self,
+        *,
+        summary: Dict[str, Any],
+        row: RuleBacktestRun,
+        parsed_strategy: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        stored = summary.get("execution_model")
+        if isinstance(stored, dict) and stored:
+            return stored
+
+        execution_assumptions = dict(summary.get("execution_assumptions") or {})
+        request = dict(summary.get("request") or {})
+        parsed_payload = parsed_strategy if isinstance(parsed_strategy, dict) else {}
+        strategy_spec = dict(parsed_payload.get("strategy_spec") or parsed_payload.get("strategySpec") or {})
+        strategy_kind = str(strategy_spec.get("strategy_type") or parsed_payload.get("strategy_kind") or parsed_payload.get("strategyKind") or "rule_conditions")
+
+        derived = self.engine._build_execution_model(
+            timeframe=str(execution_assumptions.get("timeframe") or row.timeframe or "daily"),
+            fee_bps=float(_safe_float(execution_assumptions.get("fee_bps_per_side")) or row.fee_bps or 0.0),
+            slippage_bps=float(_safe_float(execution_assumptions.get("slippage_bps_per_side")) or request.get("slippage_bps") or 0.0),
+            strategy_type=strategy_kind,
+        ).to_dict()
+
+        if execution_assumptions:
+            derived["signal_evaluation_timing"] = self._canonical_signal_evaluation_timing(
+                execution_assumptions.get("signal_evaluation_timing")
+            )
+            derived["entry_timing"] = self._canonical_entry_timing(execution_assumptions.get("entry_fill_timing"))
+            derived["exit_timing"] = self._canonical_exit_timing(execution_assumptions.get("exit_fill_timing"))
+            if execution_assumptions.get("default_fill_price_basis"):
+                derived["entry_fill_price_basis"] = str(execution_assumptions.get("default_fill_price_basis"))
+            if derived["exit_timing"] == "forced_close_at_window_end_close":
+                derived["exit_fill_price_basis"] = "close"
+            else:
+                derived["exit_fill_price_basis"] = derived["entry_fill_price_basis"]
+            if execution_assumptions.get("position_sizing"):
+                derived["position_sizing"] = str(execution_assumptions.get("position_sizing"))
+            if execution_assumptions.get("fee_model"):
+                derived["fee_model"] = str(execution_assumptions.get("fee_model"))
+            if execution_assumptions.get("slippage_model"):
+                derived["slippage_model"] = str(execution_assumptions.get("slippage_model"))
+            market_rules = dict(derived.get("market_rules") or {})
+            if "same-bar close" in str(execution_assumptions.get("exit_fill_timing") or "").lower():
+                market_rules["terminal_bar_fill_fallback"] = "same_bar_close"
+            derived["market_rules"] = market_rules
+
+        return derived
+
     def _run_row_to_dict(
         self,
         row: RuleBacktestRun,
@@ -2445,7 +2582,10 @@ class RuleBacktestService:
                 equity_curve = []
 
         request = summary.get("request") or {}
-        execution_assumptions = summary.get("execution_assumptions") or {}
+        execution_model = self._derive_execution_model_payload(summary=summary, row=row, parsed_strategy=parsed_strategy)
+        execution_assumptions = summary.get("execution_assumptions") or self._build_execution_assumptions_payload(
+            execution_model=execution_model,
+        )
         metrics = summary.get("metrics") or {}
         visualization = summary.get("visualization") or {}
         audit_rows = (
@@ -2524,6 +2664,7 @@ class RuleBacktestService:
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
             "final_equity": row.final_equity,
             "summary": summary,
+            "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,
             "benchmark_curve": list(visualization.get("benchmark_curve") or []) if include_trades else [],
             "benchmark_summary": dict(visualization.get("benchmark_summary") or {}),
