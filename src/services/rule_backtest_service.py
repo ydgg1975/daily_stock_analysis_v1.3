@@ -35,6 +35,19 @@ BENCHMARK_MODE_QQQ = "etf_qqq"
 BENCHMARK_MODE_SP500 = "index_sp500"
 BENCHMARK_MODE_SPY = "etf_spy"
 BENCHMARK_MODE_CUSTOM = "custom_code"
+SUPPORTED_INDICATOR_STRATEGY_FAMILIES = frozenset(
+    {
+        "moving_average_crossover",
+        "macd_crossover",
+        "rsi_threshold",
+    }
+)
+SUPPORTED_DETERMINISTIC_STRATEGY_FAMILIES = frozenset(
+    {
+        "periodic_accumulation",
+        *SUPPORTED_INDICATOR_STRATEGY_FAMILIES,
+    }
+)
 
 BENCHMARK_PRESET_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     BENCHMARK_MODE_NONE: {
@@ -1918,6 +1931,21 @@ class RuleBacktestService:
     def _parsed_to_dict(parsed: ParsedStrategy) -> Dict[str, Any]:
         return parsed.to_dict()
 
+    @staticmethod
+    def _is_supported_indicator_strategy_family(strategy_kind: Optional[str]) -> bool:
+        return str(strategy_kind or "") in SUPPORTED_INDICATOR_STRATEGY_FAMILIES
+
+    @staticmethod
+    def _is_supported_deterministic_strategy_family(strategy_kind: Optional[str]) -> bool:
+        return str(strategy_kind or "") in SUPPORTED_DETERMINISTIC_STRATEGY_FAMILIES
+
+    def _resolve_supported_strategy_family(
+        self,
+        strategy_kind: Optional[str],
+        family_hint: Optional[str],
+    ) -> Optional[str]:
+        return str(strategy_kind) if self._is_supported_deterministic_strategy_family(strategy_kind) else family_hint
+
     def _dict_to_parsed_strategy(self, parsed_dict: Dict[str, Any], raw_text: str) -> ParsedStrategy:
         entry = parsed_dict.get("entry") or {"type": "group", "op": "and", "rules": []}
         exit_rule = parsed_dict.get("exit") or {"type": "group", "op": "or", "rules": []}
@@ -2023,7 +2051,7 @@ class RuleBacktestService:
                 fee_bps=fee_bps,
                 slippage_bps=slippage_bps,
             )
-        elif parsed.strategy_kind in {"moving_average_crossover", "macd_crossover", "rsi_threshold"}:
+        elif self._is_supported_indicator_strategy_family(parsed.strategy_kind):
             normalized_spec = self._normalize_indicator_strategy_spec(
                 parsed,
                 code=code,
@@ -2565,7 +2593,7 @@ class RuleBacktestService:
         if self._contains_any(upper_text, ["STOP LOSS", "STOP-LOSS", "止损", "TAKE PROFIT", "止盈", "TRAILING", "移动止损"]):
             details.append(self._build_unsupported_detail("unsupported_strategy_combination", "组合执行语义", "当前已支持技术信号主规则，但不支持叠加固定止损 / 止盈 / trailing stop。"))
 
-        if self._contains_any(upper_text, ["如果", "否则", "IF ", "THEN ", "ELSE ", "否则如果"]) and parsed.strategy_kind not in {"moving_average_crossover", "macd_crossover", "rsi_threshold", "periodic_accumulation"}:
+        if self._contains_any(upper_text, ["如果", "否则", "IF ", "THEN ", "ELSE ", "否则如果"]) and not self._is_supported_deterministic_strategy_family(parsed.strategy_kind):
             details.append(self._build_unsupported_detail("unsupported_nested_logic", "嵌套条件", "当前不支持带 if/else 分支的策略逻辑，请改写成单一入场条件 + 单一离场条件。"))
 
         unsupported_codes = {str(item.get("code") or "") for item in parsed.ambiguities}
@@ -2675,7 +2703,7 @@ class RuleBacktestService:
             if canonical:
                 label = "补成可执行版本" if unsupported_code == "unsupported_missing_exit_rule" else "改写成当前可执行版本"
                 suggestions.append(self._build_rewrite_suggestion(canonical, label))
-            effective_family = parsed.strategy_kind if parsed.strategy_kind in {"moving_average_crossover", "macd_crossover", "rsi_threshold", "periodic_accumulation"} else family_hint
+            effective_family = self._resolve_supported_strategy_family(parsed.strategy_kind, family_hint)
             if effective_family == "macd_crossover":
                 suggestions.append(self._build_rewrite_suggestion("MACD金叉买入，死叉卖出", "使用固定 MACD 参数"))
             elif effective_family == "moving_average_crossover":
@@ -2692,10 +2720,13 @@ class RuleBacktestService:
         return self._dedupe_rewrite_suggestions(suggestions)[:3]
 
     def _build_semantic_interpretation(self, parsed: ParsedStrategy) -> Dict[str, Any]:
-        family = parsed.strategy_kind if parsed.strategy_kind in {"moving_average_crossover", "macd_crossover", "rsi_threshold", "periodic_accumulation"} else self._guess_strategy_family_from_text(str(parsed.source_text or ""))
+        family = self._resolve_supported_strategy_family(
+            parsed.strategy_kind,
+            self._guess_strategy_family_from_text(str(parsed.source_text or "")),
+        )
         core_intent_summary = self._build_supported_portion_summary(parsed)
         interpretation_confidence = 0.0
-        if parsed.strategy_kind in {"moving_average_crossover", "macd_crossover", "rsi_threshold", "periodic_accumulation"}:
+        if self._is_supported_deterministic_strategy_family(parsed.strategy_kind):
             interpretation_confidence = 0.96 if parsed.executable else 0.9
         elif family:
             extracted = self._extract_family_semantic_details(str(parsed.source_text or ""), family)
@@ -2723,7 +2754,7 @@ class RuleBacktestService:
         family_hint: Optional[str] = None,
     ) -> str:
         resolved_symbol = str(symbol or self._nested_value(parsed.strategy_spec, "symbol") or self._nested_value(parsed.setup, "symbol") or "AAPL").upper()
-        effective_family = parsed.strategy_kind if parsed.strategy_kind in {"moving_average_crossover", "macd_crossover", "rsi_threshold", "periodic_accumulation"} else family_hint
+        effective_family = self._resolve_supported_strategy_family(parsed.strategy_kind, family_hint)
         if effective_family == "moving_average_crossover":
             return f"{resolved_symbol}，5日均线上穿20日均线买入，下穿卖出"
         if effective_family == "macd_crossover":

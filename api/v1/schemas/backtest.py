@@ -192,6 +192,8 @@ class RuleBacktestStrategyCosts(BaseModel):
 
 
 class RuleBacktestStrategySpecBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     version: str = "v1"
     strategy_type: Optional[str] = None
     strategy_family: Optional[str] = None
@@ -354,7 +356,7 @@ class RuleBacktestParsedStrategyPayload(BaseModel):
     max_lookback: int = 1
     strategy_kind: Optional[str] = None
     setup: Dict[str, Any] = Field(default_factory=dict)
-    strategy_spec: RuleBacktestStrategySpec | Dict[str, Any] = Field(default_factory=dict)
+    strategy_spec: RuleBacktestStrategySpec = Field(default_factory=dict)
     executable: bool = False
     normalization_state: str = "pending"
     assumptions: List[Dict[str, Any]] = Field(default_factory=list)

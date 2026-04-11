@@ -404,6 +404,40 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["period"], 14)
         self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])
 
+    def test_parse_response_keeps_generic_strategy_spec_fallback_for_unsupported_payload(self) -> None:
+        response = RuleBacktestParseResponse(
+            code="AAPL",
+            strategy_text="如果大盘跌破均线则空仓，否则按自定义规则执行",
+            parsed_strategy={
+                "strategy_kind": "rule_conditions",
+                "strategy_spec": {
+                    "version": "v1",
+                    "strategy_type": "custom_unsupported_strategy",
+                    "strategy_family": "custom_unsupported_strategy",
+                    "symbol": "AAPL",
+                    "timeframe": "daily",
+                    "support": {
+                        "executable": False,
+                        "normalization_state": "unsupported",
+                        "requires_confirmation": True,
+                        "unsupported_reason": "nested_logic",
+                        "detected_strategy_family": "moving_average_crossover",
+                    },
+                    "custom_branching": {"if": "index_below_ma", "then": "flat"},
+                    "custom_threshold": 5,
+                },
+            },
+            normalized_strategy_family=None,
+            detected_strategy_family="moving_average_crossover",
+            executable=False,
+            normalization_state="unsupported",
+        )
+
+        payload = response.model_dump()
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "custom_unsupported_strategy")
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["custom_branching"]["if"], "index_below_ma")
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["custom_threshold"], 5)
+
     def test_clear_backtest_samples_maps_value_error_to_validation_error(self) -> None:
         service = MagicMock()
         service.clear_backtest_samples.side_effect = ValueError("code is required")
