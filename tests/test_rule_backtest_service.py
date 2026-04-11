@@ -848,6 +848,108 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(history["items"][0]["benchmark_summary"]["label"], "stored benchmark")
         self.assertEqual(history["items"][0]["benchmark_return_pct"], 9.9)
 
+    def test_history_reads_prefer_stored_summary_metrics_over_row_columns(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["metrics"].update(
+            {
+                "trade_count": 7,
+                "win_count": 6,
+                "loss_count": 1,
+                "total_return_pct": 88.8,
+                "annualized_return_pct": 44.4,
+                "win_rate_pct": 85.7143,
+                "avg_trade_return_pct": 12.34,
+                "max_drawdown_pct": 9.87,
+                "avg_holding_days": 8.0,
+                "avg_holding_bars": 8.0,
+                "avg_holding_calendar_days": 10.0,
+                "final_equity": 188800.0,
+            }
+        )
+        summary["visualization"]["daily_return_series"] = [
+            {
+                "date": "2024-01-20",
+                "equity": 188800.0,
+                "daily_return_pct": 3.21,
+                "daily_pnl": 5875.0,
+            }
+        ]
+        summary["visualization"]["exposure_curve"] = [
+            {
+                "date": "2024-01-20",
+                "exposure": 0.25,
+                "position_state": "custom-stored",
+                "executed_action": "hold",
+                "fill_price": 321.0,
+            }
+        ]
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["trade_count"], 7)
+        self.assertEqual(detail["win_count"], 6)
+        self.assertEqual(detail["loss_count"], 1)
+        self.assertEqual(detail["total_return_pct"], 88.8)
+        self.assertEqual(detail["annualized_return_pct"], 44.4)
+        self.assertEqual(detail["win_rate_pct"], 85.7143)
+        self.assertEqual(detail["avg_trade_return_pct"], 12.34)
+        self.assertEqual(detail["max_drawdown_pct"], 9.87)
+        self.assertEqual(detail["avg_holding_days"], 8.0)
+        self.assertEqual(detail["avg_holding_bars"], 8.0)
+        self.assertEqual(detail["avg_holding_calendar_days"], 10.0)
+        self.assertEqual(detail["final_equity"], 188800.0)
+        self.assertEqual(detail["daily_return_series"], summary["visualization"]["daily_return_series"])
+        self.assertEqual(detail["exposure_curve"], summary["visualization"]["exposure_curve"])
+
+        history = service.list_runs(code="600519", page=1, limit=10)
+        self.assertEqual(history["items"][0]["trade_count"], 7)
+        self.assertEqual(history["items"][0]["total_return_pct"], 88.8)
+        self.assertEqual(history["items"][0]["annualized_return_pct"], 44.4)
+        self.assertEqual(history["items"][0]["final_equity"], 188800.0)
+
+    def test_get_run_uses_explicit_legacy_fallback_when_stored_replay_payload_is_missing(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["metrics"] = {}
+        summary["visualization"].pop("comparison", None)
+        summary["visualization"]["audit_rows"] = []
+        summary["visualization"]["daily_return_series"] = []
+        summary["visualization"]["exposure_curve"] = []
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertGreater(len(detail["audit_rows"]), 0)
+        self.assertGreater(len(detail["daily_return_series"]), 0)
+        self.assertGreater(len(detail["exposure_curve"]), 0)
+        self.assertEqual(detail["trade_count"], run_row.trade_count)
+        self.assertEqual(detail["total_return_pct"], run_row.total_return_pct)
+        self.assertEqual(detail["benchmark_return_pct"], detail["benchmark_summary"]["return_pct"])
+
     def test_get_run_derives_execution_model_for_legacy_runs_without_structured_config(self) -> None:
         service = RuleBacktestService(self.db)
         strategy_text = "Buy when Close > MA3. Sell when Close < MA3."

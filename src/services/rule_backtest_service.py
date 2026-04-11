@@ -1437,6 +1437,124 @@ class RuleBacktestService:
         )
 
     @staticmethod
+    def _resolve_run_metrics_payload(
+        *,
+        row: RuleBacktestRun,
+        summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        stored_metrics = dict(summary.get("metrics") or {})
+        fallbacks = {
+            "trade_count": row.trade_count,
+            "win_count": row.win_count,
+            "loss_count": row.loss_count,
+            "total_return_pct": row.total_return_pct,
+            "annualized_return_pct": None,
+            "win_rate_pct": row.win_rate_pct,
+            "avg_trade_return_pct": row.avg_trade_return_pct,
+            "max_drawdown_pct": row.max_drawdown_pct,
+            "avg_holding_days": row.avg_holding_days,
+            "avg_holding_bars": row.avg_holding_days,
+            "avg_holding_calendar_days": None,
+            "final_equity": row.final_equity,
+            "period_start": None,
+            "period_end": None,
+        }
+        resolved = dict(stored_metrics)
+        for key, fallback in fallbacks.items():
+            if key not in resolved or resolved.get(key) is None:
+                resolved[key] = fallback
+        return resolved
+
+    def _build_legacy_replay_visualization_payload(
+        self,
+        *,
+        equity_curve: List[Dict[str, Any]],
+        trade_rows: List[Dict[str, Any]],
+        benchmark_curve: List[Dict[str, Any]],
+        buy_and_hold_curve: List[Dict[str, Any]],
+        benchmark_summary: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        audit_rows = self._build_audit_rows(
+            equity_curve=list(equity_curve or []),
+            benchmark_curve=list(benchmark_curve or []),
+            buy_and_hold_curve=list(buy_and_hold_curve or []),
+            benchmark_summary=dict(benchmark_summary or {}),
+        )
+        if audit_rows:
+            daily_return_series = self._build_daily_return_series_from_audit_rows(list(audit_rows or []))
+            exposure_curve = self._build_exposure_curve_from_audit_rows(list(audit_rows or []))
+        else:
+            daily_return_series = self._build_daily_return_series(list(equity_curve or []))
+            exposure_curve = self._build_exposure_curve(list(equity_curve or []), list(trade_rows or []))
+        return {
+            "audit_rows": audit_rows,
+            "daily_return_series": daily_return_series,
+            "exposure_curve": exposure_curve,
+        }
+
+    def _resolve_replay_visualization_payload(
+        self,
+        *,
+        include_trades: bool,
+        visualization: Dict[str, Any],
+        metrics: Dict[str, Any],
+        equity_curve: List[Dict[str, Any]],
+        trade_rows: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        comparison = self._resolve_benchmark_comparison_payload(
+            visualization=visualization,
+            metrics=metrics,
+        )
+        benchmark_curve = list(comparison.get("benchmark_curve") or []) if include_trades else []
+        benchmark_summary = dict(comparison.get("benchmark_summary") or {})
+        buy_and_hold_curve = list(comparison.get("buy_and_hold_curve") or []) if include_trades else []
+        buy_and_hold_summary = dict(comparison.get("buy_and_hold_summary") or {})
+        if not include_trades:
+            return {
+                "comparison": comparison,
+                "benchmark_curve": benchmark_curve,
+                "benchmark_summary": benchmark_summary,
+                "buy_and_hold_curve": buy_and_hold_curve,
+                "buy_and_hold_summary": buy_and_hold_summary,
+                "audit_rows": [],
+                "daily_return_series": [],
+                "exposure_curve": [],
+            }
+
+        audit_rows = list(visualization.get("audit_rows") or [])
+        daily_return_series = list(visualization.get("daily_return_series") or [])
+        exposure_curve = list(visualization.get("exposure_curve") or [])
+        if audit_rows:
+            if not daily_return_series:
+                daily_return_series = self._build_daily_return_series_from_audit_rows(list(audit_rows or []))
+            if not exposure_curve:
+                exposure_curve = self._build_exposure_curve_from_audit_rows(list(audit_rows or []))
+        else:
+            legacy_payload = self._build_legacy_replay_visualization_payload(
+                equity_curve=equity_curve,
+                trade_rows=trade_rows,
+                benchmark_curve=benchmark_curve,
+                buy_and_hold_curve=buy_and_hold_curve,
+                benchmark_summary=benchmark_summary,
+            )
+            audit_rows = list(legacy_payload.get("audit_rows") or [])
+            if not daily_return_series:
+                daily_return_series = list(legacy_payload.get("daily_return_series") or [])
+            if not exposure_curve:
+                exposure_curve = list(legacy_payload.get("exposure_curve") or [])
+
+        return {
+            "comparison": comparison,
+            "benchmark_curve": benchmark_curve,
+            "benchmark_summary": benchmark_summary,
+            "buy_and_hold_curve": buy_and_hold_curve,
+            "buy_and_hold_summary": buy_and_hold_summary,
+            "audit_rows": audit_rows,
+            "daily_return_series": daily_return_series,
+            "exposure_curve": exposure_curve,
+        }
+
+    @staticmethod
     def _build_exposure_curve(
         equity_curve: List[Dict[str, Any]],
         trades: List[Dict[str, Any]],
@@ -2683,49 +2801,23 @@ class RuleBacktestService:
         execution_assumptions = summary.get("execution_assumptions") or self._build_execution_assumptions_payload(
             execution_model=execution_model,
         )
-        metrics = summary.get("metrics") or {}
+        metrics = self._resolve_run_metrics_payload(row=row, summary=summary)
         visualization = summary.get("visualization") or {}
-        comparison = self._resolve_benchmark_comparison_payload(
+        replay_visualization = self._resolve_replay_visualization_payload(
+            include_trades=include_trades,
             visualization=visualization,
             metrics=metrics,
+            equity_curve=list(equity_curve or []),
+            trade_rows=list(trade_rows or []),
         )
-        comparison_metrics = dict(comparison.get("metrics") or {})
-        benchmark_curve = list(comparison.get("benchmark_curve") or []) if include_trades else []
-        benchmark_summary = dict(comparison.get("benchmark_summary") or {})
-        buy_and_hold_curve = list(comparison.get("buy_and_hold_curve") or []) if include_trades else []
-        buy_and_hold_summary = dict(comparison.get("buy_and_hold_summary") or {})
-        audit_rows = (
-            list(visualization.get("audit_rows") or [])
-            if include_trades
-            else []
-        )
-        daily_return_series = (
-            list(visualization.get("daily_return_series") or [])
-            if include_trades
-            else []
-        )
-        exposure_curve = (
-            list(visualization.get("exposure_curve") or [])
-            if include_trades
-            else []
-        )
-        if include_trades and not daily_return_series:
-            if audit_rows:
-                daily_return_series = self._build_daily_return_series_from_audit_rows(list(audit_rows or []))
-            else:
-                daily_return_series = self._build_daily_return_series(list(equity_curve or []))
-        if include_trades and not exposure_curve:
-            if audit_rows:
-                exposure_curve = self._build_exposure_curve_from_audit_rows(list(audit_rows or []))
-            else:
-                exposure_curve = self._build_exposure_curve(list(equity_curve or []), list(trade_rows or []))
-        if include_trades and not audit_rows:
-            audit_rows = self._build_audit_rows(
-                equity_curve=list(equity_curve or []),
-                benchmark_curve=benchmark_curve,
-                buy_and_hold_curve=buy_and_hold_curve,
-                benchmark_summary=benchmark_summary,
-            )
+        comparison_metrics = dict((replay_visualization.get("comparison") or {}).get("metrics") or {})
+        benchmark_curve = list(replay_visualization.get("benchmark_curve") or [])
+        benchmark_summary = dict(replay_visualization.get("benchmark_summary") or {})
+        buy_and_hold_curve = list(replay_visualization.get("buy_and_hold_curve") or [])
+        buy_and_hold_summary = dict(replay_visualization.get("buy_and_hold_summary") or {})
+        audit_rows = list(replay_visualization.get("audit_rows") or [])
+        daily_return_series = list(replay_visualization.get("daily_return_series") or [])
+        exposure_curve = list(replay_visualization.get("exposure_curve") or [])
         return {
             "id": row.id,
             "code": row.code,
@@ -2751,10 +2843,10 @@ class RuleBacktestService:
             "status_history": list(summary.get("status_history") or []),
             "no_result_reason": row.no_result_reason,
             "no_result_message": row.no_result_message,
-            "trade_count": row.trade_count,
-            "win_count": row.win_count,
-            "loss_count": row.loss_count,
-            "total_return_pct": row.total_return_pct,
+            "trade_count": metrics.get("trade_count"),
+            "win_count": metrics.get("win_count"),
+            "loss_count": metrics.get("loss_count"),
+            "total_return_pct": metrics.get("total_return_pct"),
             "annualized_return_pct": metrics.get("annualized_return_pct"),
             "benchmark_mode": request.get("benchmark_mode"),
             "benchmark_code": request.get("benchmark_code"),
@@ -2762,13 +2854,13 @@ class RuleBacktestService:
             "excess_return_vs_benchmark_pct": comparison_metrics.get("excess_return_vs_benchmark_pct"),
             "buy_and_hold_return_pct": comparison_metrics.get("buy_and_hold_return_pct"),
             "excess_return_vs_buy_and_hold_pct": comparison_metrics.get("excess_return_vs_buy_and_hold_pct"),
-            "win_rate_pct": row.win_rate_pct,
-            "avg_trade_return_pct": row.avg_trade_return_pct,
-            "max_drawdown_pct": row.max_drawdown_pct,
-            "avg_holding_days": row.avg_holding_days,
-            "avg_holding_bars": metrics.get("avg_holding_bars", row.avg_holding_days),
+            "win_rate_pct": metrics.get("win_rate_pct"),
+            "avg_trade_return_pct": metrics.get("avg_trade_return_pct"),
+            "max_drawdown_pct": metrics.get("max_drawdown_pct"),
+            "avg_holding_days": metrics.get("avg_holding_days"),
+            "avg_holding_bars": metrics.get("avg_holding_bars"),
             "avg_holding_calendar_days": metrics.get("avg_holding_calendar_days"),
-            "final_equity": row.final_equity,
+            "final_equity": metrics.get("final_equity"),
             "summary": summary,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🕰️ **Deterministic 历史回放改为 stored-first replay，legacy fallback 显式隔离** — 规则回测历史详情与历史列表现在会优先从已持久化的 `summary.metrics`、`summary.visualization.audit_rows`、`summary.visualization.comparison` 以及已存储的日级序列中重建结果，不再让旧的 row columns 或隐式重算路径覆盖已有存储结果。只有旧运行缺少这些持久化字段时，才会进入明确命名的 legacy fallback 分支补建 audit / daily / exposure 数据，缩小 freshly completed run 与 reopened historical run 之间的口径漂移。
 - 📈 **Deterministic benchmark / buy-hold 对比口径改为单一持久化 comparison payload** — 规则回测现在会把 `benchmark_curve / benchmark_summary / buy_and_hold_curve / buy_and_hold_summary` 与对应 KPI returns 一起收口到 `summary.visualization.comparison` 作为持久化真源。结果详情与历史读取在该 payload 存在时会优先使用它，避免 KPI、图表与历史回放各自从不同字段重新推导。对于外部基准不可用的场景，系统会显式持久化 `unavailable_reason` 并返回 `null` 的 benchmark KPI，而不是伪造收益值；同标的 buy-hold 仍按同一 run window、同一 close 口径保留。
 - 🔌 **Deterministic 结果详情 API 统一公开 `auditRows` 字段名** — 规则回测服务内部仍以存储载荷里的 `summary.visualization.audit_rows` 作为审计台账真源，但 `/api/v1/backtest/rule/runs/{run_id}` 等 API 响应现在会把该字段稳定序列化为公开契约 `auditRows`，避免新运行在原始 JSON 中只能看到 `audit_rows`、前端再被动 camelCase 转换的隐式差异。CSV 导出与结果详情继续共用同一份已持久化 ledger。
 - ⚙️ **Deterministic backtest 执行模型收口为结构化配置** — 规则回测现在会把执行语义持久化为结构化 `execution_model`，明确记录 `signal_evaluation_timing / entry_timing / exit_timing / entry_fill_price_basis / exit_fill_price_basis / fee_model / slippage_model / market_rules`，并继续派生旧的 `execution_assumptions` 兼容视图。引擎内部也改为优先围绕这份结构化配置执行与持久化，历史运行若还没有新字段则会从旧的 assumptions 回推兼容配置，避免结果解释口径漂移。
