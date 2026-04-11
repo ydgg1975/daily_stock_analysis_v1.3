@@ -112,6 +112,26 @@ LLM_OLLAMA_MODELS=qwen3:8b,llama3.2
 LITELLM_MODEL=ollama/qwen3:8b
 ```
 
+### 示例：MiniMax 渠道模式
+
+MiniMax 提供 OpenAI 兼容接口（`api.minimax.io`），只需声明 `minimax` 渠道并填写 API Key，无需手动配置 base_url：
+
+```env
+# 1. 开启渠道模式，声明 minimax 渠道
+LLM_CHANNELS=minimax
+
+# 2. 填入 MiniMax API Key（从 https://platform.minimax.io 获取）
+LLM_MINIMAX_API_KEY=your_minimax_api_key_here
+
+# 3. 声明可用模型（MiniMax-M2.7 性能最强，highspeed 更快）
+LLM_MINIMAX_MODELS=MiniMax-M2.7,MiniMax-M2.7-highspeed
+
+# 4. 指定主模型
+LITELLM_MODEL=openai/MiniMax-M2.7
+```
+
+> **注意**：`MINIMAX_API_KEYS`（复数，无 `LLM_` 前缀）是用于新闻搜索（Coding Plan 搜索 API）的 Key，与此处 LLM 渠道的 `LLM_MINIMAX_API_KEY` 相互独立，用途不同。
+
 ### MiniMax 渠道模型填写说明
 
 - 如果你通过 OpenAI Compatible 渠道接 MiniMax，请在渠道模型里直接填写 `minimax/<模型名>`，例如 `minimax/MiniMax-M1`。

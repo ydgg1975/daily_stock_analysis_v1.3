@@ -311,6 +311,73 @@ class LLMChannelConfigTestCase(unittest.TestCase):
             ["gpt4o", "openai/gpt-4o-mini"],
         )
 
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_minimax_channel_normalizes_model_to_openai_prefix(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """MiniMax uses the OpenAI-compatible API, so models should be prefixed with openai/."""
+        env = {
+            "LLM_CHANNELS": "minimax",
+            "LLM_MINIMAX_API_KEY": "sk-minimax-key",
+            "LLM_MINIMAX_MODELS": "MiniMax-M2.7,MiniMax-M2.7-highspeed",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.llm_models_source, "llm_channels")
+        self.assertEqual(config.llm_channels[0]["protocol"], "minimax")
+        models = config.llm_channels[0]["models"]
+        self.assertIn("openai/MiniMax-M2.7", models)
+        self.assertIn("openai/MiniMax-M2.7-highspeed", models)
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_minimax_channel_auto_injects_default_base_url(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """When no base_url is set for a minimax channel, api.minimax.io/v1 should be injected."""
+        env = {
+            "LLM_CHANNELS": "minimax",
+            "LLM_MINIMAX_API_KEY": "sk-minimax-key",
+            "LLM_MINIMAX_MODELS": "MiniMax-M2.7",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        params = config.llm_model_list[0]["litellm_params"]
+        self.assertEqual(params["api_base"], "https://api.minimax.io/v1")
+        self.assertEqual(params["model"], "openai/MiniMax-M2.7")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_minimax_channel_respects_custom_base_url(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """An explicit base_url should override the default api.minimax.io endpoint."""
+        env = {
+            "LLM_CHANNELS": "minimax",
+            "LLM_MINIMAX_API_KEY": "sk-minimax-key",
+            "LLM_MINIMAX_MODELS": "MiniMax-M2.7",
+            "LLM_MINIMAX_BASE_URL": "https://api.minimaxi.com/v1",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        params = config.llm_model_list[0]["litellm_params"]
+        self.assertEqual(params["api_base"], "https://api.minimaxi.com/v1")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_minimax_protocol_resolved_from_channel_name(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        """Channel named 'minimax' should auto-resolve to minimax protocol without explicit PROTOCOL setting."""
+        env = {
+            "LLM_CHANNELS": "minimax",
+            "LLM_MINIMAX_API_KEY": "sk-minimax-key",
+            "LLM_MINIMAX_MODELS": "MiniMax-M2.7",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.llm_channels[0]["protocol"], "minimax")
 
 if __name__ == "__main__":
     unittest.main()

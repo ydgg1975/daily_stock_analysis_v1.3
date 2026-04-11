@@ -48,7 +48,9 @@ class ConfigIssue:
 
 
 _MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek"}
-SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama")
+SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama", "minimax")
+# Default base URL for the MiniMax OpenAI-compatible API (overseas endpoint)
+_MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/v1"
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
 AGENT_MAX_STEPS_DEFAULT = 10
 NEWS_STRATEGY_WINDOWS: Dict[str, int] = {
@@ -182,6 +184,7 @@ def canonicalize_llm_channel_protocol(value: Optional[str]) -> str:
         "google": "gemini",
         "vertex": "vertex_ai",
         "vertexai": "vertex_ai",
+        "minimaxi": "minimax",
     }
     return aliases.get(candidate, candidate)
 
@@ -264,6 +267,9 @@ def normalize_llm_channel_model(model: str, protocol: Optional[str], base_url: O
 
     if not resolved_protocol:
         return normalized_model
+    # MiniMax uses the OpenAI-compatible API; route via openai/ prefix with explicit api_base.
+    if resolved_protocol == "minimax":
+        return f"openai/{normalized_model}"
     return f"{resolved_protocol}/{normalized_model}"
 
 
@@ -1578,6 +1584,9 @@ class Config:
                         litellm_params['api_key'] = api_key
                     if ch['base_url']:
                         litellm_params['api_base'] = ch['base_url']
+                    elif ch.get('protocol') == 'minimax':
+                        # MiniMax uses OpenAI-compatible API; inject default overseas base URL
+                        litellm_params['api_base'] = _MINIMAX_DEFAULT_BASE_URL
                     # Auto-inject aihubmix sponsored header
                     headers = dict(ch.get('extra_headers') or {})
                     if ch['base_url'] and 'aihubmix.com' in ch['base_url']:

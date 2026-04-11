@@ -82,6 +82,19 @@ model_list:
   #     model: ollama/qwen3:8b
   #     api_base: http://localhost:11434
 
+  # --- MiniMax (OpenAI 兼容，海外 api.minimax.io) ---
+  # - model_name: openai/MiniMax-M2.7
+  #   litellm_params:
+  #     model: openai/MiniMax-M2.7
+  #     api_key: "os.environ/MINIMAX_API_KEY"
+  #     api_base: https://api.minimax.io/v1
+
+  # - model_name: openai/MiniMax-M2.7-highspeed
+  #   litellm_params:
+  #     model: openai/MiniMax-M2.7-highspeed
+  #     api_key: "os.environ/MINIMAX_API_KEY"
+  #     api_base: https://api.minimax.io/v1
+
 # ===================================
 # Router 设置（可选）
 # ===================================
