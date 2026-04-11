@@ -29,6 +29,12 @@ import {
   pct,
   type RuleBenchmarkMode,
 } from '../components/backtest/shared';
+import {
+  buildRuleStrategySummaryRows,
+  formatRuleNormalizationStateLabel,
+  getRuleStrategySpecSourceLabel,
+  getRuleStrategyTypeLabel,
+} from '../components/backtest/strategyInspectability';
 import type {
   RuleBacktestHistoryItem,
   RuleBacktestRunResponse,
@@ -227,7 +233,18 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const parsedSummaryEntries = Object.entries(run?.parsedStrategy?.summary || {})
     .filter(([, value]) => typeof value === 'string' && value.trim())
     .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) }));
-  const warningEntries = (run?.warnings || []).map((warning, index) => formatWarningText(warning, index));
+  const strategySummaryRows = useMemo(
+    () => (run
+      ? buildRuleStrategySummaryRows(run.parsedStrategy, run.code, run.startDate || '', run.endDate || '')
+      : []),
+    [run],
+  );
+  const strategyWarningEntries = Array.from(
+    new Set([
+      ...(run?.parsedStrategy?.parseWarnings || []).map((warning, index) => formatWarningText(warning, index)),
+      ...(run?.warnings || []).map((warning, index) => formatWarningText(warning, index)),
+    ].filter(Boolean)),
+  );
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
@@ -440,12 +457,40 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
                 </Disclosure>
 
-                <Disclosure summary="策略输入与解析">
+                <Disclosure summary="实际执行内容">
                   <div className="backtest-result-page__tab-stack">
                     <div className="summary-block">
                       <div className="summary-block__header">
                         <div>
-                          <h3 className="summary-block__title">策略输入</h3>
+                          <h3 className="summary-block__title">实际执行内容</h3>
+                        </div>
+                      </div>
+                      <p className="product-section-copy">这里展示的是本次回测实际使用的 canonical strategy_spec，和确认页中的“实际执行内容”保持同口径。</p>
+                      <div className="product-chip-list mt-4">
+                        <span className="product-chip">策略族 · {getRuleStrategyTypeLabel(run.parsedStrategy)}</span>
+                        <span className="product-chip">规格来源 · {getRuleStrategySpecSourceLabel(run.parsedStrategy)}</span>
+                        <span className="product-chip">归一化 · {formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</span>
+                        <span className="product-chip">需要确认 · {run.needsConfirmation ? '是' : '否'}</span>
+                        <span className="product-chip">可执行 · {run.parsedStrategy.executable ? '是' : '否'}</span>
+                      </div>
+                    </div>
+                    <div className="preview-grid">
+                      {strategySummaryRows.map((row) => (
+                        <div key={`${row.label}-${row.value}`} className="preview-card">
+                          <p className="metric-card__label">{row.label}</p>
+                          <p className="preview-card__text">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Disclosure>
+
+                <Disclosure summary="原始输入与解析">
+                  <div className="backtest-result-page__tab-stack">
+                    <div className="summary-block">
+                      <div className="summary-block__header">
+                        <div>
+                          <h3 className="summary-block__title">原始输入</h3>
                         </div>
                       </div>
                       <p className="product-section-copy">{run.strategyText || '--'}</p>
@@ -457,16 +502,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
                         <p className="preview-card__text">{run.timeframe || '--'}</p>
                       </div>
                       <div className="preview-card">
-                        <p className="metric-card__label">需要确认</p>
-                        <p className="preview-card__text">{run.needsConfirmation ? '是' : '否'}</p>
+                        <p className="metric-card__label">规格来源</p>
+                        <p className="preview-card__text">{getRuleStrategySpecSourceLabel(run.parsedStrategy)}</p>
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">策略族</p>
-                        <p className="preview-card__text">{run.parsedStrategy.detectedStrategyFamily || run.parsedStrategy.strategyKind || '--'}</p>
+                        <p className="preview-card__text">{getRuleStrategyTypeLabel(run.parsedStrategy)}</p>
                       </div>
                       <div className="preview-card">
                         <p className="metric-card__label">归一化状态</p>
-                        <p className="preview-card__text">{run.parsedStrategy.normalizationState || '--'}</p>
+                        <p className="preview-card__text">{formatRuleNormalizationStateLabel(run.parsedStrategy.normalizationState)}</p>
                       </div>
                     </div>
                     {parsedSummaryEntries.length ? (
@@ -497,15 +542,15 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     ) : (
                       <p className="product-empty-note">暂无状态轨迹。</p>
                     )}
-                    {warningEntries.length ? (
+                    {strategyWarningEntries.length ? (
                       <div className="summary-block">
                         <div className="summary-block__header">
                           <div>
-                            <h3 className="summary-block__title">解析警告</h3>
+                            <h3 className="summary-block__title">默认补全与提醒</h3>
                           </div>
                         </div>
                         <ul className="backtest-result-page__list">
-                          {warningEntries.map((warning) => (
+                          {strategyWarningEntries.map((warning) => (
                             <li key={warning}>{warning}</li>
                           ))}
                         </ul>

@@ -57,7 +57,85 @@ function makeResultRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
     id: 99,
     code: 'ORCL',
     strategyText: 'MA cross',
-    parsedStrategy: {} as RuleBacktestRunResponse['parsedStrategy'],
+    parsedStrategy: {
+      version: 'v1',
+      timeframe: 'daily',
+      sourceText: 'MA cross',
+      normalizedText: 'SMA5 上穿 SMA20 买入，下穿卖出。',
+      entry: { type: 'group', op: 'and', rules: [] },
+      exit: { type: 'group', op: 'or', rules: [] },
+      confidence: 0.97,
+      needsConfirmation: false,
+      ambiguities: [],
+      summary: {
+        entry: 'SMA5 上穿 SMA20',
+        exit: 'SMA5 下穿 SMA20',
+        strategy: '均线交叉策略',
+      },
+      maxLookback: 20,
+      strategyKind: 'moving_average_crossover',
+      executable: true,
+      normalizationState: 'ready',
+      assumptions: [],
+      assumptionGroups: [],
+      detectedStrategyFamily: 'moving_average_crossover',
+      unsupportedReason: null,
+      unsupportedDetails: [],
+      unsupportedExtensions: [],
+      coreIntentSummary: '已识别为均线交叉主规则。',
+      interpretationConfidence: 0.97,
+      supportedPortionSummary: '已识别为均线交叉主规则。',
+      rewriteSuggestions: [],
+      parseWarnings: [],
+      setup: {
+        symbol: 'ORCL',
+        startDate: '2026-03-01',
+        endDate: '2026-03-31',
+        initialCapital: 100000,
+      },
+      strategySpec: {
+        strategyType: 'moving_average_crossover',
+        strategyFamily: 'moving_average_crossover',
+        symbol: 'ORCL',
+        timeframe: 'daily',
+        dateRange: {
+          startDate: '2026-03-01',
+          endDate: '2026-03-31',
+        },
+        capital: {
+          initialCapital: 100000,
+          currency: 'USD',
+        },
+        signal: {
+          indicatorFamily: 'moving_average',
+          fastPeriod: 5,
+          slowPeriod: 20,
+          fastType: 'simple',
+          slowType: 'simple',
+          entryCondition: 'cross_above',
+          exitCondition: 'cross_below',
+        },
+        execution: {
+          frequency: 'daily',
+          signalTiming: 'bar_close',
+          fillTiming: 'next_bar_open',
+        },
+        positionBehavior: {
+          direction: 'long_only',
+          entrySizing: 'all_available_capital',
+          maxPositions: 1,
+          pyramiding: false,
+        },
+        endBehavior: {
+          policy: 'liquidate_at_end',
+          priceBasis: 'close',
+        },
+        costs: {
+          feeBps: 0,
+          slippageBps: 0,
+        },
+      },
+    } as RuleBacktestRunResponse['parsedStrategy'],
     strategyHash: 'hash',
     timeframe: 'daily',
     startDate: '2026-03-01',
@@ -222,11 +300,43 @@ describe('DeterministicBacktestResultPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
     expect(screen.getByText('参数快照')).toBeInTheDocument();
+    expect(screen.getAllByText('实际执行内容').length).toBeGreaterThan(0);
+    expect(screen.getByText('原始输入与解析')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-history')).toBeInTheDocument();
     expect(screen.getByText('同标的历史回测')).toBeInTheDocument();
   }, 10000);
+
+  it('aligns result-page strategy wording with the confirmation-page canonical spec language', async () => {
+    const currentRun = makeResultRun();
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+
+    expect(screen.getAllByText('策略族 · 均线交叉').length).toBeGreaterThan(0);
+    expect(screen.getByText('规格来源 · 显式 strategy_spec')).toBeInTheDocument();
+    expect(screen.getByText('归一化 · 已完成归一化')).toBeInTheDocument();
+    expect(screen.getAllByText('SMA5 上穿 SMA20').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('收盘后判定').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('下一根开盘成交').length).toBeGreaterThan(0);
+
+    expect(screen.getAllByText('策略族').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('均线交叉').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已完成归一化').length).toBeGreaterThan(0);
+  });
 
   it('keeps historical navigation on the same result-page rendering path', async () => {
     const currentRun = makeResultRun({ id: 99, runAt: '2026-04-07T08:00:00Z' });

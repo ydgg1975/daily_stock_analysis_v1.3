@@ -16,18 +16,16 @@ import {
   RuleRunsTable,
   SectionEyebrow,
   buildPeriodicAssumptions,
-  formatCashPolicy,
-  formatDraftOrder,
-  formatExecutionPriceBasis,
-  formatExitPolicy,
-  formatNumber,
   getBenchmarkModeLabel,
-  getPeriodicNumber,
-  getPeriodicString,
   type RuleBenchmarkMode,
   getStrategyPreviewSpec,
   getStrategySpecValue,
 } from './shared';
+import {
+  buildRuleStrategySummaryRows,
+  getRuleStrategySpecSourceLabel,
+  getRuleStrategyTypeLabel,
+} from './strategyInspectability';
 
 export type RuleWizardStep = 'symbol' | 'setup' | 'strategy' | 'confirm' | 'run';
 
@@ -161,104 +159,12 @@ function hasMeaningfulNode(node: unknown): boolean {
   return false;
 }
 
-function formatStrategyFamily(strategyType: string): string {
-  if (strategyType === 'periodic_accumulation') return '区间定投';
-  if (strategyType === 'moving_average_crossover') return '均线交叉';
-  if (strategyType === 'macd_crossover') return 'MACD 交叉';
-  if (strategyType === 'rsi_threshold') return 'RSI 阈值';
-  if (strategyType === 'rule_conditions') return '条件规则';
-  return strategyType || '--';
-}
-
 function getStrategyTypeLabel(parsed: RuleBacktestParseResponse | null): string {
-  const spec = getStrategyPreviewSpec(parsed);
-  const normalizedStrategyType = String(getStrategySpecValue(spec, ['strategy_type']) || '');
-  const parsedStrategyKind = String(parsed?.parsedStrategy.strategyKind || '');
-  const detectedStrategyFamily = String(getDetectedStrategyFamily(parsed) || '');
-  const strategyType = normalizedStrategyType
-    || (parsedStrategyKind && parsedStrategyKind !== 'rule_conditions' ? parsedStrategyKind : '')
-    || detectedStrategyFamily
-    || parsedStrategyKind;
-  return formatStrategyFamily(strategyType);
+  return getRuleStrategyTypeLabel(parsed?.parsedStrategy, getDetectedStrategyFamily(parsed));
 }
 
 function getStrategySpecSourceLabel(parsed: RuleBacktestParseResponse | null): string {
-  if (!parsed) return '未结构化';
-  const direct = parsed.parsedStrategy.strategySpec;
-  if (direct && typeof direct === 'object') return '显式 strategy_spec';
-  const fallback = parsed.parsedStrategy.setup;
-  if (fallback && typeof fallback === 'object') return '兼容 setup';
-  return '未结构化';
-}
-
-function formatFrequencyLabel(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null): string {
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') {
-    const frequency = getPeriodicString(spec, 'execution_frequency');
-    if (frequency === 'daily') return '每个交易日';
-    if (frequency === 'weekly') return '每周';
-    if (frequency === 'monthly') return '每月';
-    return frequency === '--' ? '--' : frequency;
-  }
-  return '按日线信号';
-}
-
-function getFillTimingLabel(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null): string {
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') return formatExecutionPriceBasis(spec);
-  return '下一根开盘价';
-}
-
-function formatStrategyCondition(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null, side: 'entry' | 'exit'): string {
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') {
-    return side === 'entry' ? formatDraftOrder(spec) : formatExitPolicy(spec);
-  }
-  if (strategyType === 'moving_average_crossover') {
-    const fastPeriod = getStrategySpecValue(spec, ['signal', 'fast_period']);
-    const slowPeriod = getStrategySpecValue(spec, ['signal', 'slow_period']);
-    const fastType = String(getStrategySpecValue(spec, ['signal', 'fast_type']) || 'simple');
-    const slowType = String(getStrategySpecValue(spec, ['signal', 'slow_type']) || 'simple');
-    const fastLabel = `${fastType === 'ema' ? 'EMA' : 'SMA'}${fastPeriod ?? '--'}`;
-    const slowLabel = `${slowType === 'ema' ? 'EMA' : 'SMA'}${slowPeriod ?? '--'}`;
-    return `${fastLabel} ${side === 'entry' ? '上穿' : '下穿'} ${slowLabel}`;
-  }
-  if (strategyType === 'macd_crossover') {
-    const fastPeriod = getStrategySpecValue(spec, ['signal', 'fast_period']) ?? 12;
-    const slowPeriod = getStrategySpecValue(spec, ['signal', 'slow_period']) ?? 26;
-    const signalPeriod = getStrategySpecValue(spec, ['signal', 'signal_period']) ?? 9;
-    return `MACD(${fastPeriod},${slowPeriod},${signalPeriod}) ${side === 'entry' ? '金叉' : '死叉'}`;
-  }
-  if (strategyType === 'rsi_threshold') {
-    const period = getStrategySpecValue(spec, ['signal', 'period']) ?? 14;
-    const threshold = getStrategySpecValue(spec, ['signal', side === 'entry' ? 'lower_threshold' : 'upper_threshold']);
-    return `RSI${period} ${side === 'entry' ? '低于' : '高于'} ${threshold ?? '--'}`;
-  }
-  return side === 'entry' ? parsed?.summary.entry || '--' : parsed?.summary.exit || '--';
-}
-
-function formatExecutionFrequency(spec: Record<string, unknown> | undefined): string {
-  const frequency = String(getStrategySpecValue(spec, ['execution', 'frequency']) || getStrategySpecValue(spec, ['schedule', 'frequency']) || '');
-  if (frequency === 'daily') return '日线';
-  if (frequency === 'weekly') return '周线';
-  if (frequency === 'monthly') return '月线';
-  return frequency || '--';
-}
-
-function formatExecutionTimingValue(value: unknown): string {
-  const text = String(value || '');
-  if (text === 'bar_close') return '收盘后判定';
-  if (text === 'next_bar_open') return '下一根开盘成交';
-  if (text === 'session_open') return '开盘执行';
-  return text || '--';
-}
-
-function formatEndBehavior(spec: Record<string, unknown> | undefined): string {
-  const periodic = formatExitPolicy(spec);
-  if (periodic !== '--') return periodic;
-  const policy = String(getStrategySpecValue(spec, ['end_behavior', 'policy']) || '');
-  if (policy === 'liquidate_at_end') return '区间结束强制平仓';
-  return policy || '区间结束强制平仓';
+  return getRuleStrategySpecSourceLabel(parsed?.parsedStrategy);
 }
 
 function formatAssumptionRecord(item: Record<string, unknown>): string {
@@ -360,123 +266,37 @@ function buildConfirmationRows(
   endDate: string,
 ): StrategyPreviewRow[] {
   if (!parsed) return [];
-  const spec = getStrategyPreviewSpec(parsed);
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') {
-    return [
-      row('策略类型', getStrategyTypeLabel(parsed), parsed, {
-        specPaths: [['strategy_type']],
-      }),
-      row('标的', getPeriodicString(spec, 'symbol') || currentCode || '--', parsed, {
-        specPaths: [['symbol']],
-        setupKeys: ['symbol'],
-      }),
-      row('日期区间', `${getPeriodicString(spec, 'start_date') || startDate || '--'} -> ${getPeriodicString(spec, 'end_date') || endDate || '--'}`, parsed, {
-        specPaths: [['date_range', 'start_date'], ['date_range', 'end_date']],
-        setupKeys: ['start_date', 'end_date'],
-      }),
-      row('初始资金', formatNumber(getPeriodicNumber(spec, 'initial_capital')), parsed, {
-        specPaths: [['capital', 'initial_capital']],
-        setupKeys: ['initial_capital'],
-      }),
-      row('执行频率', formatFrequencyLabel(spec, parsed), parsed, {
-        specPaths: [['schedule', 'frequency']],
-        setupKeys: ['execution_frequency'],
-      }),
-      row('买入条件', formatDraftOrder(spec), parsed, {
-        specPaths: [['entry', 'order', 'mode'], ['entry', 'order', 'quantity'], ['entry', 'order', 'amount']],
-        setupKeys: ['order_mode', 'quantity_per_trade', 'amount_per_trade'],
-      }),
-      row('成交时点', getFillTimingLabel(spec, parsed), parsed, {
-        specPaths: [['entry', 'price_basis']],
-        setupKeys: ['execution_price_basis'],
-        assumptionKeys: ['fill_timing', 'entry_fill_timing', 'simulated_entry_timing'],
-        assumptionKeywords: ['成交时点', '开盘执行', '下一根开盘'],
-      }),
-      row('卖出条件', formatExitPolicy(spec), parsed, {
-        specPaths: [['exit', 'policy']],
-        setupKeys: ['exit_policy'],
-      }),
-      row('现金策略', formatCashPolicy(spec), parsed, {
-        specPaths: [['position_behavior', 'cash_policy']],
-        setupKeys: ['cash_policy'],
-      }),
-      row('交易成本', `手续费 ${formatNumber(getPeriodicNumber(spec, 'fee_bps'), 0)} bp / 滑点 ${formatNumber(getPeriodicNumber(spec, 'slippage_bps'), 0)} bp`, parsed, {
-        specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']],
-        setupKeys: ['fee_bps', 'slippage_bps'],
-      }),
-    ];
-  }
+  const sourceHints: Record<string, StrategyFieldSourceHint> = {
+    strategy_family: { specPaths: [['strategy_type']] },
+    symbol: { specPaths: [['symbol']], setupKeys: ['symbol'] },
+    date_range: { specPaths: [['date_range', 'start_date'], ['date_range', 'end_date']], setupKeys: ['start_date', 'end_date'] },
+    initial_capital: { specPaths: [['capital', 'initial_capital']], setupKeys: ['initial_capital'] },
+    frequency: { specPaths: [['schedule', 'frequency'], ['execution', 'frequency']], setupKeys: ['execution_frequency'] },
+    entry: {
+      specPaths: [['entry'], ['signal']],
+      setupKeys: ['order_mode', 'quantity_per_trade', 'amount_per_trade', 'indicator_family', 'fast_period', 'slow_period', 'signal_period', 'period', 'lower_threshold', 'upper_threshold'],
+      warningCodes: ['default_macd_periods'],
+      warningKeywords: ['默认使用', '未显式写出'],
+    },
+    fill_timing: {
+      specPaths: [['entry', 'price_basis'], ['execution', 'fill_timing']],
+      setupKeys: ['execution_price_basis'],
+      assumptionKeys: ['fill_timing', 'entry_fill_timing', 'simulated_entry_timing'],
+      assumptionKeywords: ['成交时点', '开盘执行', '下一根开盘'],
+    },
+    exit: { specPaths: [['exit'], ['end_behavior', 'policy']], setupKeys: ['exit_policy'] },
+    cash_policy: { specPaths: [['position_behavior', 'cash_policy']], setupKeys: ['cash_policy'] },
+    signal_timing: {
+      specPaths: [['execution', 'signal_timing']],
+      assumptionKeys: ['analysis_signal_timing', 'signal_evaluation_timing'],
+      assumptionKeywords: ['信号时点', '收盘后判定'],
+    },
+    end_behavior: { specPaths: [['end_behavior', 'policy']] },
+    costs: { specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']], setupKeys: ['fee_bps', 'slippage_bps'] },
+  };
 
-  if (strategyType === 'moving_average_crossover' || strategyType === 'macd_crossover' || strategyType === 'rsi_threshold') {
-    return [
-      row('策略类型', getStrategyTypeLabel(parsed), parsed, {
-        specPaths: [['strategy_type']],
-      }),
-      row('标的', String(getStrategySpecValue(spec, ['symbol']) || currentCode || '--'), parsed, {
-        specPaths: [['symbol']],
-        setupKeys: ['symbol'],
-      }),
-      row('日期区间', `${String(getStrategySpecValue(spec, ['date_range', 'start_date']) || startDate || '--')} -> ${String(getStrategySpecValue(spec, ['date_range', 'end_date']) || endDate || '--')}`, parsed, {
-        specPaths: [['date_range', 'start_date'], ['date_range', 'end_date']],
-        setupKeys: ['start_date', 'end_date'],
-      }),
-      row('初始资金', formatNumber(Number(getStrategySpecValue(spec, ['capital', 'initial_capital']) || 0)), parsed, {
-        specPaths: [['capital', 'initial_capital']],
-        setupKeys: ['initial_capital'],
-      }),
-      row('买入条件', formatStrategyCondition(spec, parsed, 'entry'), parsed, {
-        specPaths: [['signal']],
-        warningCodes: ['default_macd_periods'],
-        warningKeywords: ['默认使用', '未显式写出'],
-      }),
-      row('卖出条件', formatStrategyCondition(spec, parsed, 'exit'), parsed, {
-        specPaths: [['signal']],
-        warningCodes: ['default_macd_periods'],
-        warningKeywords: ['默认使用', '未显式写出'],
-      }),
-      row('执行频率', formatExecutionFrequency(spec), parsed, {
-        specPaths: [['execution', 'frequency']],
-        setupKeys: ['execution_frequency'],
-      }),
-      row('信号时点', formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'signal_timing'])), parsed, {
-        specPaths: [['execution', 'signal_timing']],
-        assumptionKeys: ['analysis_signal_timing', 'signal_evaluation_timing'],
-        assumptionKeywords: ['信号时点', '收盘后判定'],
-      }),
-      row('成交时点', formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'fill_timing'])), parsed, {
-        specPaths: [['execution', 'fill_timing']],
-        assumptionKeys: ['fill_timing', 'entry_fill_timing', 'simulated_entry_timing'],
-        assumptionKeywords: ['成交时点', '下一根开盘'],
-      }),
-      row('期末处理', formatEndBehavior(spec), parsed, {
-        specPaths: [['end_behavior', 'policy']],
-      }),
-      row('交易成本', `手续费 ${formatNumber(Number(getStrategySpecValue(spec, ['costs', 'fee_bps']) || 0), 0)} bp / 滑点 ${formatNumber(Number(getStrategySpecValue(spec, ['costs', 'slippage_bps']) || 0), 0)} bp`, parsed, {
-        specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']],
-        setupKeys: ['fee_bps', 'slippage_bps'],
-      }),
-    ];
-  }
-
-  const detectedFamily = getDetectedStrategyFamily(parsed);
-  const coreIntentSummary = getCoreIntentSummary(parsed) || getSupportedPortionSummary(parsed);
-  const unsupportedExtensions = getUnsupportedExtensions(parsed)
-    .map((item) => String(item.title || item.message || '').trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(' / ');
-
-  return [
-    { label: '标的', value: currentCode || '--' },
-    { label: '核心策略', value: detectedFamily ? formatStrategyFamily(detectedFamily) : getStrategyTypeLabel(parsed) },
-    { label: '核心意图', value: coreIntentSummary || parsed.summary.strategy || '--' },
-    { label: '买入条件', value: parsed.summary.entry || '--' },
-    { label: '卖出条件', value: parsed.summary.exit || '--' },
-    ...(unsupportedExtensions ? [{ label: '不支持扩展', value: unsupportedExtensions }] : []),
-    { label: '周期', value: parsed.parsedStrategy.timeframe || 'daily' },
-    { label: '日期区间', value: `${startDate || '--'} -> ${endDate || '--'}` },
-  ];
+  return buildRuleStrategySummaryRows(parsed.parsedStrategy, currentCode, startDate, endDate, getDetectedStrategyFamily(parsed))
+    .map((item) => row(item.label, item.value, parsed, sourceHints[item.key] || {}));
 }
 
 function getUnsupportedMessages(parsed: RuleBacktestParseResponse): string[] {
