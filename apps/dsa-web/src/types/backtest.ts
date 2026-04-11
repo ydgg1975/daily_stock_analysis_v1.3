@@ -223,7 +223,7 @@ export interface RuleBacktestParsedStrategy {
   maxLookback: number;
   strategyKind?: string;
   setup?: Record<string, unknown>;
-  strategySpec?: Record<string, unknown>;
+  strategySpec?: RuleBacktestStrategySpec;
   executable?: boolean;
   normalizationState?: string;
   assumptions?: Array<Record<string, unknown>>;
@@ -237,6 +237,35 @@ export interface RuleBacktestParsedStrategy {
   supportedPortionSummary?: string | null;
   rewriteSuggestions?: Array<Record<string, unknown>>;
   parseWarnings?: Array<Record<string, unknown>>;
+}
+
+export interface RuleBacktestStrategySupport {
+  executable?: boolean;
+  normalizationState?: string;
+  requiresConfirmation?: boolean;
+  unsupportedReason?: string | null;
+  detectedStrategyFamily?: string | null;
+}
+
+export interface RuleBacktestStrategySpec {
+  version?: string;
+  strategyType?: string;
+  strategyFamily?: string;
+  symbol?: string | null;
+  timeframe?: string;
+  maxLookback?: number;
+  dateRange?: Record<string, unknown>;
+  capital?: Record<string, unknown>;
+  costs?: Record<string, unknown>;
+  signal?: Record<string, unknown>;
+  execution?: Record<string, unknown>;
+  schedule?: Record<string, unknown>;
+  entry?: Record<string, unknown>;
+  exit?: Record<string, unknown>;
+  positionBehavior?: Record<string, unknown>;
+  endBehavior?: Record<string, unknown>;
+  support?: RuleBacktestStrategySupport;
+  [key: string]: unknown;
 }
 
 export interface RuleBacktestParseResponse {

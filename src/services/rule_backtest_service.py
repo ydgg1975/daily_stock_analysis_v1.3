@@ -1893,6 +1893,7 @@ class RuleBacktestService:
             )
         else:
             normalized_spec = {
+                "version": "v1",
                 "strategy_type": "rule_conditions",
                 "timeframe": parsed.timeframe,
                 "entry_rule": parsed.entry,
@@ -1907,8 +1908,22 @@ class RuleBacktestService:
             else:
                 parsed.unsupported_reason = None
         self._enrich_confirmation_diagnostics(parsed)
-        parsed.strategy_spec = normalized_spec
+        parsed.strategy_spec = self._finalize_strategy_spec(parsed, normalized_spec)
         return parsed
+
+    def _finalize_strategy_spec(self, parsed: ParsedStrategy, strategy_spec: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(strategy_spec or {})
+        payload["version"] = str(payload.get("version") or "v1")
+        payload["strategy_family"] = str(payload.get("strategy_family") or parsed.strategy_kind)
+        payload["max_lookback"] = int(payload.get("max_lookback") or parsed.max_lookback or 1)
+        payload["support"] = {
+            "executable": bool(parsed.executable),
+            "normalization_state": str(parsed.normalization_state or "pending"),
+            "requires_confirmation": bool(parsed.needs_confirmation),
+            "unsupported_reason": parsed.unsupported_reason,
+            "detected_strategy_family": parsed.detected_strategy_family,
+        }
+        return payload
 
     def _normalize_periodic_accumulation_spec(
         self,
@@ -1928,39 +1943,39 @@ class RuleBacktestService:
             return self._nested_value(existing_spec, *path)
 
         normalized_start_date, normalized_end_date = self._normalize_date_range(
-            start_date=start_date or setup.get("start_date") or spec_value("date_range", "start_date"),
-            end_date=end_date or setup.get("end_date") or spec_value("date_range", "end_date"),
+            start_date=self._first_defined(start_date, spec_value("date_range", "start_date"), setup.get("start_date")),
+            end_date=self._first_defined(end_date, spec_value("date_range", "end_date"), setup.get("end_date")),
         )
-        symbol = str(setup.get("symbol") or spec_value("symbol") or code or "").strip().upper()
+        symbol = str(self._first_defined(code, spec_value("symbol"), setup.get("symbol"), "")).strip().upper()
         if not symbol:
             raise ValueError("periodic accumulation requires a single symbol")
 
         order_mode = str(
-            setup.get("order_mode")
-            or spec_value("entry", "order", "mode")
-            or "fixed_shares"
+            self._first_defined(
+                spec_value("entry", "order", "mode"),
+                setup.get("order_mode"),
+                "fixed_shares",
+            )
         ).strip().lower()
         if order_mode not in {"fixed_shares", "fixed_amount"}:
             raise ValueError(f"unsupported periodic accumulation order mode: {order_mode}")
 
-        quantity_per_trade = _safe_float(setup.get("quantity_per_trade"))
-        if quantity_per_trade is None:
-            quantity_per_trade = _safe_float(spec_value("entry", "order", "quantity"))
-        amount_per_trade = _safe_float(setup.get("amount_per_trade"))
-        if amount_per_trade is None:
-            amount_per_trade = _safe_float(spec_value("entry", "order", "amount"))
+        quantity_per_trade = _safe_float(self._first_defined(spec_value("entry", "order", "quantity"), setup.get("quantity_per_trade")))
+        amount_per_trade = _safe_float(self._first_defined(spec_value("entry", "order", "amount"), setup.get("amount_per_trade")))
         if order_mode == "fixed_shares":
             if quantity_per_trade is None or quantity_per_trade <= 0:
                 raise ValueError("fixed_shares periodic accumulation requires quantity_per_trade")
-        elif amount_per_trade is None or amount_per_trade <= 0:
-            raise ValueError("fixed_amount periodic accumulation requires amount_per_trade")
+            amount_per_trade = None
+        else:
+            if amount_per_trade is None or amount_per_trade <= 0:
+                raise ValueError("fixed_amount periodic accumulation requires amount_per_trade")
+            quantity_per_trade = None
 
         resolved_initial_capital = float(
             initial_capital
             if initial_capital is not None
             else (
-                _safe_float(setup.get("initial_capital"))
-                or _safe_float(spec_value("capital", "initial_capital"))
+                _safe_float(self._first_defined(spec_value("capital", "initial_capital"), setup.get("initial_capital")))
                 or 100000.0
             )
         )
@@ -1975,47 +1990,45 @@ class RuleBacktestService:
             },
             "capital": {
                 "initial_capital": resolved_initial_capital,
-                "currency": str(setup.get("currency") or spec_value("capital", "currency") or "USD"),
+                "currency": str(self._first_defined(spec_value("capital", "currency"), setup.get("currency"), "USD")),
             },
             "schedule": {
-                "frequency": str(setup.get("execution_frequency") or spec_value("schedule", "frequency") or "daily"),
-                "timing": str(setup.get("execution_timing") or spec_value("schedule", "timing") or "session_open"),
+                "frequency": str(self._first_defined(spec_value("schedule", "frequency"), setup.get("execution_frequency"), "daily")),
+                "timing": str(self._first_defined(spec_value("schedule", "timing"), setup.get("execution_timing"), "session_open")),
             },
             "entry": {
-                "side": str(setup.get("action") or spec_value("entry", "side") or "buy"),
+                "side": str(self._first_defined(spec_value("entry", "side"), setup.get("action"), "buy")),
                 "order": {
                     "mode": order_mode,
                     "quantity": quantity_per_trade,
                     "amount": amount_per_trade,
                 },
-                "price_basis": str(setup.get("execution_price_basis") or spec_value("entry", "price_basis") or "open"),
+                "price_basis": str(self._first_defined(spec_value("entry", "price_basis"), setup.get("execution_price_basis"), "open")),
             },
             "exit": {
-                "policy": str(setup.get("exit_policy") or spec_value("exit", "policy") or "close_at_end"),
+                "policy": str(self._first_defined(spec_value("exit", "policy"), setup.get("exit_policy"), "close_at_end")),
                 "price_basis": str(spec_value("exit", "price_basis") or "close"),
             },
             "position_behavior": {
                 "accumulate": True,
                 "cash_policy": str(
-                    setup.get("cash_policy")
-                    or spec_value("position_behavior", "cash_policy")
-                    or "stop_when_insufficient_cash"
+                    self._first_defined(
+                        spec_value("position_behavior", "cash_policy"),
+                        setup.get("cash_policy"),
+                        "stop_when_insufficient_cash",
+                    )
                 ),
             },
             "costs": {
                 "fee_bps": float(
-                    _safe_float(setup.get("fee_bps"))
-                    if _safe_float(setup.get("fee_bps")) is not None
-                    else (_safe_float(spec_value("costs", "fee_bps")) if _safe_float(spec_value("costs", "fee_bps")) is not None else fee_bps)
+                    _safe_float(self._first_defined(spec_value("costs", "fee_bps"), setup.get("fee_bps")))
+                    if _safe_float(self._first_defined(spec_value("costs", "fee_bps"), setup.get("fee_bps"))) is not None
+                    else fee_bps
                 ),
                 "slippage_bps": float(
-                    _safe_float(setup.get("slippage_bps"))
-                    if _safe_float(setup.get("slippage_bps")) is not None
-                    else (
-                        _safe_float(spec_value("costs", "slippage_bps"))
-                        if _safe_float(spec_value("costs", "slippage_bps")) is not None
-                        else slippage_bps
-                    )
+                    _safe_float(self._first_defined(spec_value("costs", "slippage_bps"), setup.get("slippage_bps")))
+                    if _safe_float(self._first_defined(spec_value("costs", "slippage_bps"), setup.get("slippage_bps"))) is not None
+                    else slippage_bps
                 ),
             },
         }
@@ -2040,10 +2053,7 @@ class RuleBacktestService:
         setup = dict(parsed.setup or {})
         existing_spec = dict(parsed.strategy_spec or {})
         symbol = str(
-            code
-            or setup.get("symbol")
-            or self._nested_value(existing_spec, "symbol")
-            or ""
+            self._first_defined(code, self._nested_value(existing_spec, "symbol"), setup.get("symbol"), "")
         ).strip().upper()
         normalized_start_date, normalized_end_date = self._normalize_date_range(
             start_date=start_date or self._nested_value(existing_spec, "date_range", "start_date"),
@@ -2075,12 +2085,11 @@ class RuleBacktestService:
             initial_capital
             if initial_capital is not None
             else (
-                _safe_float(setup.get("initial_capital"))
-                or _safe_float(self._nested_value(existing_spec, "capital", "initial_capital"))
+                _safe_float(self._first_defined(self._nested_value(existing_spec, "capital", "initial_capital"), setup.get("initial_capital")))
                 or 100000.0
             )
         )
-        signal_spec, summary_entry, summary_exit = self._build_indicator_signal_spec(parsed, setup)
+        signal_spec, summary_entry, summary_exit = self._build_indicator_signal_spec(parsed, setup, existing_spec)
         normalized_spec = {
             "strategy_type": parsed.strategy_kind,
             "version": "v1",
@@ -2139,13 +2148,21 @@ class RuleBacktestService:
         self,
         parsed: ParsedStrategy,
         setup: Dict[str, Any],
+        existing_spec: Optional[Dict[str, Any]] = None,
     ) -> tuple[Dict[str, Any], str, str]:
-        indicator_family = str(setup.get("indicator_family") or "").strip().lower()
+        existing_spec = dict(existing_spec or {})
+        indicator_family = str(
+            self._first_defined(
+                self._nested_value(existing_spec, "signal", "indicator_family"),
+                setup.get("indicator_family"),
+                "",
+            )
+        ).strip().lower()
         if parsed.strategy_kind == "moving_average_crossover":
-            fast_period = int(setup.get("fast_period") or 5)
-            slow_period = int(setup.get("slow_period") or 20)
-            fast_type = str(setup.get("fast_type") or "simple")
-            slow_type = str(setup.get("slow_type") or "simple")
+            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 5))
+            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 20))
+            fast_type = str(self._first_defined(self._nested_value(existing_spec, "signal", "fast_type"), setup.get("fast_type"), "simple"))
+            slow_type = str(self._first_defined(self._nested_value(existing_spec, "signal", "slow_type"), setup.get("slow_type"), "simple"))
             fast_label = self._format_average_label(fast_type, fast_period)
             slow_label = self._format_average_label(slow_type, slow_period)
             return (
@@ -2155,16 +2172,16 @@ class RuleBacktestService:
                     "slow_period": slow_period,
                     "fast_type": fast_type,
                     "slow_type": slow_type,
-                    "entry_condition": "fast_crosses_above_slow",
-                    "exit_condition": "fast_crosses_below_slow",
+                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "fast_crosses_above_slow")),
+                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "fast_crosses_below_slow")),
                 },
                 f"买入条件：{fast_label} 上穿 {slow_label}",
                 f"卖出条件：{fast_label} 下穿 {slow_label}",
             )
         if parsed.strategy_kind == "macd_crossover":
-            fast_period = int(setup.get("fast_period") or 12)
-            slow_period = int(setup.get("slow_period") or 26)
-            signal_period = int(setup.get("signal_period") or 9)
+            fast_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "fast_period"), setup.get("fast_period"), 12))
+            slow_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "slow_period"), setup.get("slow_period"), 26))
+            signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
             label = f"MACD({fast_period},{slow_period},{signal_period})"
             return (
                 {
@@ -2172,16 +2189,16 @@ class RuleBacktestService:
                     "fast_period": fast_period,
                     "slow_period": slow_period,
                     "signal_period": signal_period,
-                    "entry_condition": "macd_crosses_above_signal",
-                    "exit_condition": "macd_crosses_below_signal",
+                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "macd_crosses_above_signal")),
+                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "macd_crosses_below_signal")),
                 },
                 f"买入条件：{label} 金叉",
                 f"卖出条件：{label} 死叉",
             )
         if parsed.strategy_kind == "rsi_threshold":
-            period = int(setup.get("period") or 14)
-            lower_threshold = float(setup.get("lower_threshold") or 30.0)
-            upper_threshold = float(setup.get("upper_threshold") or 70.0)
+            period = int(self._first_defined(self._nested_value(existing_spec, "signal", "period"), setup.get("period"), 14))
+            lower_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "lower_threshold"), setup.get("lower_threshold"), 30.0))
+            upper_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "upper_threshold"), setup.get("upper_threshold"), 70.0))
             label = f"RSI{period}"
             return (
                 {
@@ -2189,8 +2206,8 @@ class RuleBacktestService:
                     "period": period,
                     "lower_threshold": lower_threshold,
                     "upper_threshold": upper_threshold,
-                    "entry_condition": "rsi_crosses_below_lower_threshold",
-                    "exit_condition": "rsi_crosses_above_upper_threshold",
+                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "rsi_crosses_below_lower_threshold")),
+                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "rsi_crosses_above_upper_threshold")),
                 },
                 f"买入条件：{label} 低于 {lower_threshold:g}",
                 f"卖出条件：{label} 高于 {upper_threshold:g}",
@@ -2666,6 +2683,16 @@ class RuleBacktestService:
             else:
                 return None
         return current
+
+    @staticmethod
+    def _first_defined(*values: Any) -> Any:
+        for value in values:
+            if value is None:
+                continue
+            if isinstance(value, str) and value == "":
+                continue
+            return value
+        return None
 
     @staticmethod
     def _has_meaningful_node(node: Optional[Dict[str, Any]]) -> bool:

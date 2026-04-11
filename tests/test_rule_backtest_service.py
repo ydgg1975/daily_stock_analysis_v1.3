@@ -81,6 +81,7 @@ class RuleBacktestTestCase(unittest.TestCase):
 
         self.assertEqual(parsed["strategy_kind"], "periodic_accumulation")
         self.assertEqual(parsed["strategy_spec"]["strategy_type"], "periodic_accumulation")
+        self.assertEqual(parsed["strategy_spec"]["strategy_family"], "periodic_accumulation")
         self.assertEqual(parsed["strategy_spec"]["symbol"], "ORCL")
         self.assertEqual(parsed["strategy_spec"]["date_range"]["start_date"], "2025-01-01")
         self.assertEqual(parsed["strategy_spec"]["date_range"]["end_date"], "2025-12-31")
@@ -90,6 +91,7 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(parsed["strategy_spec"]["entry"]["order"]["quantity"], 100.0)
         self.assertEqual(parsed["strategy_spec"]["position_behavior"]["cash_policy"], "stop_when_insufficient_cash")
         self.assertEqual(parsed["strategy_spec"]["entry"]["price_basis"], "open")
+        self.assertTrue(parsed["strategy_spec"]["support"]["executable"])
         self.assertTrue(parsed["needs_confirmation"])
 
     def test_normalize_moving_average_crossover_strategy_spec(self) -> None:
@@ -152,6 +154,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(parsed["strategy_spec"]["signal"]["period"], 14)
         self.assertEqual(parsed["strategy_spec"]["signal"]["lower_threshold"], 30.0)
         self.assertEqual(parsed["strategy_spec"]["signal"]["upper_threshold"], 70.0)
+        self.assertEqual(parsed["strategy_spec"]["strategy_family"], "rsi_threshold")
+        self.assertTrue(parsed["strategy_spec"]["support"]["executable"])
         self.assertTrue(parsed["executable"])
         self.assertEqual(parsed["normalization_state"], "assumed")
         self.assertTrue(any(item.get("key") == "rsi_period" for item in parsed["assumptions"]))
@@ -169,6 +173,8 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertFalse(parsed["executable"])
         self.assertEqual(parsed["normalization_state"], "unsupported")
         self.assertIn("单一标的", parsed["unsupported_reason"])
+        self.assertEqual(parsed["strategy_spec"]["support"]["normalization_state"], "unsupported")
+        self.assertIn("单一标的", parsed["strategy_spec"]["support"]["unsupported_reason"])
         self.assertEqual(parsed["detected_strategy_family"], "macd_crossover")
         self.assertIn("MACD", parsed["core_intent_summary"])
         self.assertTrue(parsed["supported_portion_summary"])
@@ -177,6 +183,55 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreaterEqual(len(parsed["unsupported_extensions"]), 2)
         self.assertGreaterEqual(len(parsed["rewrite_suggestions"]), 1)
         self.assertTrue(any("AAPL" in item["strategy_text"] or "NVDA" in item["strategy_text"] for item in parsed["rewrite_suggestions"]))
+
+    def test_re_normalization_prefers_explicit_indicator_strategy_spec_over_setup_defaults(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed_dict = service.parse_strategy(
+            "5日均线上穿20日均线买入，下穿卖出",
+            code="AAPL",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=50000,
+        )
+        parsed_dict["setup"]["fast_period"] = 5
+        parsed_dict["setup"]["slow_period"] = 20
+        parsed_dict["setup"]["fast_type"] = "simple"
+        parsed_dict["strategy_spec"]["signal"]["fast_period"] = 8
+        parsed_dict["strategy_spec"]["signal"]["slow_period"] = 21
+        parsed_dict["strategy_spec"]["signal"]["fast_type"] = "ema"
+        parsed_dict["strategy_spec"]["signal"]["slow_type"] = "ema"
+        parsed_dict["strategy_spec"]["capital"]["initial_capital"] = 75000.0
+
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        normalized = service._normalize_parsed_strategy(parsed)
+
+        self.assertEqual(normalized.strategy_spec["signal"]["fast_period"], 8)
+        self.assertEqual(normalized.strategy_spec["signal"]["slow_period"], 21)
+        self.assertEqual(normalized.strategy_spec["signal"]["fast_type"], "ema")
+        self.assertEqual(normalized.strategy_spec["signal"]["slow_type"], "ema")
+        self.assertEqual(normalized.strategy_spec["capital"]["initial_capital"], 75000.0)
+        self.assertEqual(normalized.strategy_spec["strategy_family"], "moving_average_crossover")
+        self.assertTrue(normalized.strategy_spec["support"]["executable"])
+
+    def test_re_normalization_prefers_explicit_periodic_strategy_spec_over_setup_defaults(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed_dict = service.parse_strategy("资金100000，从2025-01-01到2025-12-31，每天买100股ORCL，买到资金耗尽为止")
+        parsed_dict["setup"]["order_mode"] = "fixed_shares"
+        parsed_dict["setup"]["quantity_per_trade"] = 100
+        parsed_dict["strategy_spec"]["entry"]["order"]["mode"] = "fixed_amount"
+        parsed_dict["strategy_spec"]["entry"]["order"]["quantity"] = None
+        parsed_dict["strategy_spec"]["entry"]["order"]["amount"] = 5000.0
+        parsed_dict["strategy_spec"]["capital"]["initial_capital"] = 120000.0
+
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        normalized = service._normalize_parsed_strategy(parsed)
+
+        self.assertEqual(normalized.strategy_spec["entry"]["order"]["mode"], "fixed_amount")
+        self.assertIsNone(normalized.strategy_spec["entry"]["order"]["quantity"])
+        self.assertEqual(normalized.strategy_spec["entry"]["order"]["amount"], 5000.0)
+        self.assertEqual(normalized.strategy_spec["capital"]["initial_capital"], 120000.0)
+        self.assertEqual(normalized.strategy_spec["strategy_family"], "periodic_accumulation")
+        self.assertTrue(normalized.strategy_spec["support"]["executable"])
 
     def test_parse_strategy_marks_strategy_combination_unsupported_with_rewrite(self) -> None:
         service = RuleBacktestService(self.db)
