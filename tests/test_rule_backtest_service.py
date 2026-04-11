@@ -281,6 +281,153 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(normalized.strategy_spec["position_behavior"]["direction"], "long_only")
         self.assertEqual(normalized.strategy_spec["end_behavior"]["policy"], "liquidate_at_end")
 
+    def test_request_normalization_prefers_camel_case_strategy_spec_over_legacy_setup_defaults(self) -> None:
+        service = RuleBacktestService(self.db)
+        base = service.parse_strategy(
+            "MACD金叉买入，死叉卖出",
+            code="AAPL",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=50000,
+        )
+        request_payload = {
+            "version": "v1",
+            "timeframe": "daily",
+            "sourceText": base["source_text"],
+            "normalizedText": base["normalized_text"],
+            "entry": base["entry"],
+            "exit": base["exit"],
+            "confidence": base["confidence"],
+            "needsConfirmation": base["needs_confirmation"],
+            "ambiguities": base["ambiguities"],
+            "summary": base["summary"],
+            "maxLookback": base["max_lookback"],
+            "setup": {
+                "symbol": "AAPL",
+                "indicatorFamily": "macd",
+                "fastPeriod": 5,
+                "slowPeriod": 20,
+                "signalPeriod": 7,
+                "initialCapital": 50000,
+            },
+            "strategySpec": {
+                "strategyType": "macd_crossover",
+                "symbol": "AAPL",
+                "dateRange": {"startDate": "2024-01-01", "endDate": "2024-12-31"},
+                "capital": {"initialCapital": 75000.0, "currency": "USD"},
+                "costs": {"feeBps": 1.5, "slippageBps": 2.5},
+                "signal": {
+                    "indicatorFamily": "macd",
+                    "fastPeriod": 12,
+                    "slowPeriod": 26,
+                    "signalPeriod": 9,
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signalTiming": "bar_close",
+                    "fillTiming": "next_bar_open",
+                },
+                "positionBehavior": {
+                    "direction": "long_only",
+                    "entrySizing": "all_in",
+                    "maxPositions": 1,
+                    "pyramiding": False,
+                },
+                "endBehavior": {"policy": "liquidate_at_end", "priceBasis": "close"},
+            },
+        }
+
+        parsed = service._dict_to_parsed_strategy(request_payload, base["source_text"])
+        normalized = service._normalize_parsed_strategy(parsed)
+
+        self.assertEqual(parsed.strategy_kind, "macd_crossover")
+        self.assertEqual(parsed.setup["fast_period"], 5)
+        self.assertEqual(parsed.strategy_spec["signal"]["signal_period"], 9)
+        self.assertEqual(normalized.strategy_spec["signal"]["fast_period"], 12)
+        self.assertEqual(normalized.strategy_spec["signal"]["slow_period"], 26)
+        self.assertEqual(normalized.strategy_spec["signal"]["signal_period"], 9)
+        self.assertEqual(normalized.strategy_spec["capital"]["initial_capital"], 75000.0)
+        self.assertEqual(normalized.strategy_spec["costs"]["fee_bps"], 1.5)
+        self.assertEqual(normalized.strategy_spec["costs"]["slippage_bps"], 2.5)
+
+    def test_request_normalization_accepts_camel_case_periodic_setup_legacy_input(self) -> None:
+        service = RuleBacktestService(self.db)
+        request_payload = {
+            "version": "v1",
+            "timeframe": "daily",
+            "sourceText": "从2025-01-01到2025-12-31，每天买100股ORCL",
+            "normalizedText": "从2025-01-01到2025-12-31，每天买100股ORCL",
+            "entry": {"type": "group", "op": "and", "rules": []},
+            "exit": {"type": "group", "op": "or", "rules": []},
+            "confidence": 0.9,
+            "needsConfirmation": True,
+            "ambiguities": [],
+            "summary": {"entry": "买入条件：--", "exit": "卖出条件：--", "strategy": "区间定投策略"},
+            "maxLookback": 1,
+            "strategyKind": "periodic_accumulation",
+            "setup": {
+                "symbol": "ORCL",
+                "startDate": "2025-01-01",
+                "endDate": "2025-12-31",
+                "initialCapital": 100000,
+                "orderMode": "fixed_shares",
+                "quantityPerTrade": 100,
+                "executionFrequency": "daily",
+                "executionTiming": "session_open",
+                "executionPriceBasis": "open",
+                "cashPolicy": "stop_when_insufficient_cash",
+            },
+            "strategySpec": {},
+        }
+
+        parsed = service._dict_to_parsed_strategy(request_payload, request_payload["sourceText"])
+        normalized = service._normalize_parsed_strategy(parsed)
+
+        self.assertEqual(parsed.setup["start_date"], "2025-01-01")
+        self.assertEqual(parsed.setup["quantity_per_trade"], 100)
+        self.assertEqual(normalized.strategy_spec["strategy_type"], "periodic_accumulation")
+        self.assertEqual(normalized.strategy_spec["symbol"], "ORCL")
+        self.assertEqual(normalized.strategy_spec["date_range"]["start_date"], "2025-01-01")
+        self.assertEqual(normalized.strategy_spec["entry"]["order"]["mode"], "fixed_shares")
+        self.assertEqual(normalized.strategy_spec["entry"]["order"]["quantity"], 100.0)
+
+    def test_request_normalization_preserves_generic_fallback_for_unsupported_structured_input(self) -> None:
+        service = RuleBacktestService(self.db)
+        request_payload = {
+            "version": "v1",
+            "timeframe": "daily",
+            "sourceText": "如果指数跌破均线则空仓，否则执行自定义逻辑",
+            "normalizedText": "如果指数跌破均线则空仓，否则执行自定义逻辑",
+            "entry": {"type": "group", "op": "and", "rules": []},
+            "exit": {"type": "group", "op": "or", "rules": []},
+            "confidence": 0.8,
+            "needsConfirmation": True,
+            "ambiguities": [],
+            "summary": {"entry": "买入条件：--", "exit": "卖出条件：--", "strategy": "自定义策略"},
+            "maxLookback": 5,
+            "setup": {
+                "indicatorFamily": "macd",
+                "fastPeriod": 12,
+                "slowPeriod": 26,
+            },
+            "strategySpec": {
+                "strategyType": "custom_branching_strategy",
+                "strategyFamily": "custom_branching_strategy",
+                "customBranching": {"if": "index_below_ma", "then": "flat"},
+                "customThreshold": 5,
+            },
+        }
+
+        parsed = service._dict_to_parsed_strategy(request_payload, request_payload["sourceText"])
+        normalized = service._normalize_parsed_strategy(parsed)
+
+        self.assertEqual(parsed.strategy_kind, "custom_branching_strategy")
+        self.assertEqual(normalized.strategy_spec["strategy_type"], "custom_branching_strategy")
+        self.assertEqual(normalized.strategy_spec["strategy_family"], "custom_branching_strategy")
+        self.assertEqual(normalized.strategy_spec["customBranching"]["if"], "index_below_ma")
+        self.assertEqual(normalized.strategy_spec["customThreshold"], 5)
+        self.assertNotIn("signal", normalized.strategy_spec)
+
     def test_parse_strategy_marks_strategy_combination_unsupported_with_rewrite(self) -> None:
         service = RuleBacktestService(self.db)
         parsed = service.parse_strategy(

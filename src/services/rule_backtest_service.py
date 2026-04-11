@@ -1946,7 +1946,115 @@ class RuleBacktestService:
     ) -> Optional[str]:
         return str(strategy_kind) if self._is_supported_deterministic_strategy_family(strategy_kind) else family_hint
 
+    @staticmethod
+    def _camelize_key(key: str) -> str:
+        parts = str(key or "").split("_")
+        if not parts:
+            return str(key or "")
+        return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+
+    def _compat_mapping_value(self, payload: Optional[Dict[str, Any]], key: str) -> Any:
+        if not isinstance(payload, dict):
+            return None
+        if key in payload:
+            return payload.get(key)
+        camel_key = self._camelize_key(key)
+        if camel_key in payload:
+            return payload.get(camel_key)
+        return None
+
+    def _normalize_compat_mapping(
+        self,
+        payload: Optional[Dict[str, Any]],
+        *,
+        fields: List[str],
+        nested_fields: Optional[Dict[str, List[str]]] = None,
+    ) -> Dict[str, Any]:
+        normalized = dict(payload or {})
+        for field in fields:
+            value = self._compat_mapping_value(normalized, field)
+            if value is not None:
+                normalized[field] = value
+        for field, child_fields in (nested_fields or {}).items():
+            raw_child = self._compat_mapping_value(normalized, field)
+            if isinstance(raw_child, dict):
+                normalized[field] = self._normalize_compat_mapping(raw_child, fields=child_fields)
+        return normalized
+
+    def _normalize_request_setup_payload(self, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._normalize_compat_mapping(
+            payload,
+            fields=[
+                "symbol",
+                "start_date",
+                "end_date",
+                "initial_capital",
+                "currency",
+                "fee_bps",
+                "slippage_bps",
+                "order_mode",
+                "quantity_per_trade",
+                "amount_per_trade",
+                "execution_frequency",
+                "execution_timing",
+                "action",
+                "execution_price_basis",
+                "exit_policy",
+                "cash_policy",
+                "indicator_family",
+                "fast_period",
+                "slow_period",
+                "signal_period",
+                "period",
+                "lower_threshold",
+                "upper_threshold",
+                "fast_type",
+                "slow_type",
+            ],
+        )
+
+    def _normalize_request_strategy_spec_payload(self, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        return self._normalize_compat_mapping(
+            payload,
+            fields=[
+                "version",
+                "strategy_type",
+                "strategy_family",
+                "symbol",
+                "timeframe",
+                "max_lookback",
+            ],
+            nested_fields={
+                "date_range": ["start_date", "end_date"],
+                "capital": ["initial_capital", "currency"],
+                "costs": ["fee_bps", "slippage_bps"],
+                "schedule": ["frequency", "timing"],
+                "entry": ["side", "price_basis"],
+                "exit": ["policy", "price_basis"],
+                "position_behavior": ["accumulate", "cash_policy", "direction", "entry_sizing", "max_positions", "pyramiding"],
+                "execution": ["frequency", "signal_timing", "fill_timing"],
+                "end_behavior": ["policy", "price_basis"],
+                "signal": [
+                    "indicator_family",
+                    "fast_period",
+                    "slow_period",
+                    "signal_period",
+                    "period",
+                    "lower_threshold",
+                    "upper_threshold",
+                    "fast_type",
+                    "slow_type",
+                    "entry_condition",
+                    "exit_condition",
+                ],
+            },
+        )
+
     def _dict_to_parsed_strategy(self, parsed_dict: Dict[str, Any], raw_text: str) -> ParsedStrategy:
+        setup_payload = self._normalize_request_setup_payload(parsed_dict.get("setup") or {})
+        strategy_spec_payload = self._normalize_request_strategy_spec_payload(
+            parsed_dict.get("strategy_spec") or parsed_dict.get("strategySpec") or {}
+        )
         entry = parsed_dict.get("entry") or {"type": "group", "op": "and", "rules": []}
         exit_rule = parsed_dict.get("exit") or {"type": "group", "op": "or", "rules": []}
         summary = parsed_dict.get("summary") or {}
@@ -2012,9 +2120,14 @@ class RuleBacktestService:
                 "strategy": str(summary.get("strategy") or ""),
             },
             max_lookback=int(max_lookback_value or 1),
-            strategy_kind=str(parsed_dict.get("strategy_kind") or parsed_dict.get("strategyKind") or "rule_conditions"),
-            setup=dict(parsed_dict.get("setup") or {}),
-            strategy_spec=dict(parsed_dict.get("strategy_spec") or parsed_dict.get("strategySpec") or {}),
+            strategy_kind=str(
+                parsed_dict.get("strategy_kind")
+                or parsed_dict.get("strategyKind")
+                or strategy_spec_payload.get("strategy_type")
+                or "rule_conditions"
+            ),
+            setup=setup_payload,
+            strategy_spec=strategy_spec_payload,
             executable=bool(executable) if executable is not None else False,
             normalization_state=str(normalization_state or "pending"),
             assumptions=list(assumptions or []),
@@ -2062,14 +2175,13 @@ class RuleBacktestService:
                 slippage_bps=slippage_bps,
             )
         else:
-            normalized_spec = {
-                "version": "v1",
-                "strategy_type": "rule_conditions",
-                "timeframe": parsed.timeframe,
-                "entry_rule": parsed.entry,
-                "exit_rule": parsed.exit,
-                "max_lookback": parsed.max_lookback,
-            }
+            normalized_spec = dict(parsed.strategy_spec or {})
+            normalized_spec["version"] = str(normalized_spec.get("version") or "v1")
+            normalized_spec["strategy_type"] = str(normalized_spec.get("strategy_type") or parsed.strategy_kind or "rule_conditions")
+            normalized_spec["timeframe"] = str(normalized_spec.get("timeframe") or parsed.timeframe)
+            normalized_spec["entry_rule"] = parsed.entry
+            normalized_spec["exit_rule"] = parsed.exit
+            normalized_spec["max_lookback"] = int(normalized_spec.get("max_lookback") or parsed.max_lookback or 1)
             parsed.executable = self._has_meaningful_node(parsed.entry) and self._has_meaningful_node(parsed.exit)
             parsed.normalization_state = "assumed" if parsed.executable and (parsed.needs_confirmation or bool(parsed.ambiguities)) else ("ready" if parsed.executable else "unsupported")
             parsed.assumptions = list(parsed.assumptions or [])
