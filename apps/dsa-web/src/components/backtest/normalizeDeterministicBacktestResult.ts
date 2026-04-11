@@ -203,6 +203,11 @@ function getBenchmarkMeta(run: RuleBacktestRunResponse, rows: DeterministicBackt
 
 function getMetrics(run: RuleBacktestRunResponse, rows: DeterministicBacktestNormalizedRow[]): DeterministicBacktestMetrics {
   const lastRow = rows.at(-1) ?? null;
+  const totalReturnPct = safeNumber(run.totalReturnPct) ?? lastRow?.strategyCumReturn ?? null;
+  const benchmarkSummaryReturnPct = safeNumber(run.benchmarkSummary?.returnPct);
+  const buyHoldSummaryReturnPct = safeNumber(run.buyAndHoldSummary?.returnPct);
+  const benchmarkReturnPct = safeNumber(run.benchmarkReturnPct) ?? benchmarkSummaryReturnPct ?? lastRow?.benchmarkCumReturn ?? null;
+  const buyAndHoldReturnPct = safeNumber(run.buyAndHoldReturnPct) ?? buyHoldSummaryReturnPct ?? lastRow?.buyHoldCumReturn ?? null;
   const dailyReturns = rows
     .map((row) => row.dailyReturn)
     .filter((value): value is number => value != null && Number.isFinite(value));
@@ -216,7 +221,7 @@ function getMetrics(run: RuleBacktestRunResponse, rows: DeterministicBacktestNor
   })();
 
   return {
-    totalReturnPct: safeNumber(run.totalReturnPct) ?? lastRow?.strategyCumReturn ?? null,
+    totalReturnPct,
     annualizedReturnPct: safeNumber(run.annualizedReturnPct),
     maxDrawdownPct: safeNumber(run.maxDrawdownPct)
       ?? rows.reduce<number | null>((current, row) => {
@@ -226,10 +231,12 @@ function getMetrics(run: RuleBacktestRunResponse, rows: DeterministicBacktestNor
       }, null),
     sharpeRatio,
     finalEquity: safeNumber(run.finalEquity) ?? lastRow?.totalValue ?? null,
-    benchmarkReturnPct: safeNumber(run.benchmarkReturnPct) ?? lastRow?.benchmarkCumReturn ?? null,
-    excessReturnVsBenchmarkPct: safeNumber(run.excessReturnVsBenchmarkPct),
-    buyAndHoldReturnPct: safeNumber(run.buyAndHoldReturnPct) ?? lastRow?.buyHoldCumReturn ?? null,
-    excessReturnVsBuyAndHoldPct: safeNumber(run.excessReturnVsBuyAndHoldPct),
+    benchmarkReturnPct,
+    excessReturnVsBenchmarkPct: safeNumber(run.excessReturnVsBenchmarkPct)
+      ?? (totalReturnPct != null && benchmarkReturnPct != null ? totalReturnPct - benchmarkReturnPct : null),
+    buyAndHoldReturnPct,
+    excessReturnVsBuyAndHoldPct: safeNumber(run.excessReturnVsBuyAndHoldPct)
+      ?? (totalReturnPct != null && buyAndHoldReturnPct != null ? totalReturnPct - buyAndHoldReturnPct : null),
     tradeCount: Number(run.tradeCount ?? 0),
     winCount: Number(run.winCount ?? 0),
     lossCount: Number(run.lossCount ?? 0),

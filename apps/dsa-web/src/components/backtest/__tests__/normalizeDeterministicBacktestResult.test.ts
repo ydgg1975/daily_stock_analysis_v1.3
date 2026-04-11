@@ -197,4 +197,40 @@ describe('normalizeDeterministicBacktestResult', () => {
     expect(normalized.metrics.finalEquity).toBe(102000);
     expect(normalized.viewerMeta.primaryRowSource).toBe('mergedSeries');
   });
+
+  it('prefers stored benchmark summaries for KPI fallback when top-level comparison metrics are absent', () => {
+    const normalized = normalizeDeterministicBacktestResult(makeRun({
+      benchmarkReturnPct: null,
+      excessReturnVsBenchmarkPct: null,
+      buyAndHoldReturnPct: null,
+      excessReturnVsBuyAndHoldPct: null,
+      benchmarkSummary: {
+        label: 'QQQ',
+        requestedMode: 'auto',
+        resolvedMode: 'etf_qqq',
+        method: 'benchmark_security',
+        returnPct: 4,
+      },
+      buyAndHoldSummary: {
+        label: '当前标的买入并持有',
+        requestedMode: 'same_symbol_buy_and_hold',
+        resolvedMode: 'same_symbol_buy_and_hold',
+        method: 'same_symbol_buy_and_hold',
+        returnPct: 3.5,
+      },
+      auditRows: [
+        {
+          date: '2026-03-03',
+          totalPortfolioValue: 105000,
+          cumulativeReturn: 5,
+        },
+      ],
+    }));
+
+    expect(normalized.metrics.totalReturnPct).toBe(5);
+    expect(normalized.metrics.benchmarkReturnPct).toBe(4);
+    expect(normalized.metrics.excessReturnVsBenchmarkPct).toBe(1);
+    expect(normalized.metrics.buyAndHoldReturnPct).toBe(3.5);
+    expect(normalized.metrics.excessReturnVsBuyAndHoldPct).toBe(1.5);
+  });
 });

@@ -429,6 +429,69 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertGreater(len(result.benchmark_curve), 0)
         self.assertEqual(result.metrics["benchmark_return_pct"], result.metrics["buy_and_hold_return_pct"])
 
+    def test_service_persists_canonical_benchmark_comparison_payload(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        comparison = response["summary"]["visualization"].get("comparison") or {}
+        self.assertEqual(comparison.get("version"), "v1")
+        self.assertEqual(comparison.get("source"), "stored")
+        self.assertEqual(comparison.get("benchmark_summary"), response["benchmark_summary"])
+        self.assertEqual(comparison.get("buy_and_hold_summary"), response["buy_and_hold_summary"])
+        self.assertEqual(comparison.get("benchmark_curve"), response["benchmark_curve"])
+        self.assertEqual(comparison.get("buy_and_hold_curve"), response["buy_and_hold_curve"])
+        self.assertEqual(comparison.get("metrics", {}).get("benchmark_return_pct"), response["benchmark_return_pct"])
+        self.assertEqual(comparison.get("metrics", {}).get("buy_and_hold_return_pct"), response["buy_and_hold_return_pct"])
+
+    def test_service_persists_explicit_benchmark_unavailable_reason_without_fabricated_returns(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_load_external_benchmark_context",
+            return_value=(
+                [],
+                {
+                    "label": "沪深300",
+                    "code": "000300.SH",
+                    "method": "benchmark_security",
+                    "requested_mode": "index_hs300",
+                    "resolved_mode": "index_hs300",
+                    "price_basis": "close",
+                    "return_pct": None,
+                    "unavailable_reason": "沪深300 在当前窗口没有可用行情。",
+                },
+                "沪深300 在当前窗口没有可用行情。",
+            ),
+        ):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="index_hs300",
+                confirmed=True,
+            )
+
+        comparison = response["summary"]["visualization"].get("comparison") or {}
+        self.assertEqual(response["benchmark_summary"]["resolved_mode"], "index_hs300")
+        self.assertIn("沪深300", response["benchmark_summary"]["unavailable_reason"])
+        self.assertEqual(response["benchmark_curve"], [])
+        self.assertIsNone(response["benchmark_return_pct"])
+        self.assertIsNotNone(response["buy_and_hold_return_pct"])
+        self.assertEqual(comparison.get("benchmark_summary"), response["benchmark_summary"])
+        self.assertIsNone(comparison.get("metrics", {}).get("benchmark_return_pct"))
+        self.assertEqual(
+            comparison.get("metrics", {}).get("buy_and_hold_return_pct"),
+            response["buy_and_hold_return_pct"],
+        )
+
     def test_engine_executes_moving_average_crossover_from_normalized_spec(self) -> None:
         service = RuleBacktestService(self.db)
         bars = self._make_bars([10, 9.8, 9.6, 9.4, 9.2, 9.4, 9.8, 10.2, 10.8, 11.2, 11.6, 11.1, 10.7, 10.2, 9.8, 9.4, 9.0, 9.3, 9.7, 10.1, 10.5, 10.9, 11.3, 11.7, 12.1, 11.6, 11.0, 10.4, 9.8, 9.2])
@@ -685,6 +748,105 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(detail["daily_return_series"][0]["daily_return_pct"], 2.88)
         self.assertEqual(detail["exposure_curve"][0]["executed_action"], "buy")
         self.assertEqual(detail["exposure_curve"][0]["position_state"], "flat")
+
+    def test_get_run_prefers_persisted_benchmark_comparison_payload_over_legacy_fields(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary["visualization"]["benchmark_curve"] = []
+        summary["visualization"]["benchmark_summary"] = {
+            "label": "legacy benchmark",
+            "requested_mode": "auto",
+            "resolved_mode": "etf_qqq",
+            "method": "benchmark_security",
+            "price_basis": "close",
+            "return_pct": 1.1,
+            "unavailable_reason": None,
+        }
+        summary["visualization"]["buy_and_hold_curve"] = []
+        summary["visualization"]["buy_and_hold_summary"] = {
+            "label": "legacy buy hold",
+            "requested_mode": "same_symbol_buy_and_hold",
+            "resolved_mode": "same_symbol_buy_and_hold",
+            "method": "same_symbol_buy_and_hold",
+            "price_basis": "close",
+            "return_pct": 2.2,
+            "unavailable_reason": None,
+        }
+        summary["metrics"]["benchmark_return_pct"] = 1.1
+        summary["metrics"]["buy_and_hold_return_pct"] = 2.2
+        summary["metrics"]["excess_return_vs_benchmark_pct"] = 0.1
+        summary["metrics"]["excess_return_vs_buy_and_hold_pct"] = -1.0
+        summary["visualization"]["comparison"] = {
+            "version": "v1",
+            "source": "stored",
+            "benchmark_curve": [
+                {
+                    "date": "2024-01-20",
+                    "close": 321.0,
+                    "normalized_value": 1.099,
+                    "cumulative_return_pct": 9.9,
+                }
+            ],
+            "benchmark_summary": {
+                "label": "stored benchmark",
+                "requested_mode": "auto",
+                "resolved_mode": "etf_qqq",
+                "method": "benchmark_security",
+                "price_basis": "close",
+                "return_pct": 9.9,
+                "unavailable_reason": "stored benchmark reason",
+            },
+            "buy_and_hold_curve": [
+                {
+                    "date": "2024-01-20",
+                    "close": 205.5,
+                    "normalized_value": 1.055,
+                    "cumulative_return_pct": 5.5,
+                }
+            ],
+            "buy_and_hold_summary": {
+                "label": "stored buy hold",
+                "requested_mode": "same_symbol_buy_and_hold",
+                "resolved_mode": "same_symbol_buy_and_hold",
+                "method": "same_symbol_buy_and_hold",
+                "price_basis": "close",
+                "return_pct": 5.5,
+                "unavailable_reason": None,
+            },
+            "metrics": {
+                "benchmark_return_pct": 9.9,
+                "excess_return_vs_benchmark_pct": -4.4,
+                "buy_and_hold_return_pct": 5.5,
+                "excess_return_vs_buy_and_hold_pct": 0.0,
+            },
+        }
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["benchmark_summary"]["label"], "stored benchmark")
+        self.assertEqual(detail["benchmark_summary"]["unavailable_reason"], "stored benchmark reason")
+        self.assertEqual(detail["benchmark_curve"][0]["close"], 321.0)
+        self.assertEqual(detail["buy_and_hold_summary"]["label"], "stored buy hold")
+        self.assertEqual(detail["buy_and_hold_curve"][0]["cumulative_return_pct"], 5.5)
+        self.assertEqual(detail["benchmark_return_pct"], 9.9)
+        self.assertEqual(detail["buy_and_hold_return_pct"], 5.5)
+        self.assertEqual(detail["excess_return_vs_benchmark_pct"], -4.4)
+
+        history = service.list_runs(code="600519", page=1, limit=10)
+        self.assertEqual(history["items"][0]["benchmark_summary"]["label"], "stored benchmark")
+        self.assertEqual(history["items"][0]["benchmark_return_pct"], 9.9)
 
     def test_get_run_derives_execution_model_for_legacy_runs_without_structured_config(self) -> None:
         service = RuleBacktestService(self.db)

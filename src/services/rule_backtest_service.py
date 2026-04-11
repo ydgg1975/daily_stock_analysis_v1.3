@@ -762,22 +762,15 @@ class RuleBacktestService:
         result.benchmark_curve = selected_curve
         result.benchmark_summary = selected_summary
 
-        total_return_pct = _safe_float((getattr(result, "metrics", {}) or {}).get("total_return_pct")) or 0.0
-        buy_and_hold_return_pct = _safe_float(same_symbol_summary.get("return_pct"))
-        benchmark_return_pct = _safe_float(selected_summary.get("return_pct")) if selected_curve else None
-
-        result.metrics["buy_and_hold_return_pct"] = buy_and_hold_return_pct if buy_and_hold_return_pct is not None else 0.0
-        result.metrics["excess_return_vs_buy_and_hold_pct"] = (
-            round(total_return_pct - float(buy_and_hold_return_pct), 4)
-            if buy_and_hold_return_pct is not None
-            else None
+        comparison_metrics = self._build_benchmark_comparison_metrics(
+            total_return_pct=(getattr(result, "metrics", {}) or {}).get("total_return_pct"),
+            benchmark_summary=selected_summary,
+            buy_and_hold_summary=same_symbol_summary,
         )
-        result.metrics["benchmark_return_pct"] = benchmark_return_pct
-        result.metrics["excess_return_vs_benchmark_pct"] = (
-            round(total_return_pct - float(benchmark_return_pct), 4)
-            if benchmark_return_pct is not None
-            else None
-        )
+        result.metrics["buy_and_hold_return_pct"] = comparison_metrics.get("buy_and_hold_return_pct")
+        result.metrics["excess_return_vs_buy_and_hold_pct"] = comparison_metrics.get("excess_return_vs_buy_and_hold_pct")
+        result.metrics["benchmark_return_pct"] = comparison_metrics.get("benchmark_return_pct")
+        result.metrics["excess_return_vs_benchmark_pct"] = comparison_metrics.get("excess_return_vs_benchmark_pct")
         result.execution_assumptions.benchmark_method = str(selected_summary.get("method") or "no_benchmark")
         result.execution_assumptions.benchmark_price_basis = str(selected_summary.get("price_basis") or "close")
 
@@ -904,6 +897,13 @@ class RuleBacktestService:
         audit_rows = [row.to_dict() for row in list(getattr(result, "audit_ledger", []) or [])]
         daily_return_series = self._build_daily_return_series_from_audit_rows(audit_rows)
         exposure_curve = self._build_exposure_curve_from_audit_rows(audit_rows)
+        comparison_payload = self._build_benchmark_comparison_payload(
+            total_return_pct=result.metrics.get("total_return_pct"),
+            benchmark_curve=result.benchmark_curve,
+            benchmark_summary=result.benchmark_summary,
+            buy_and_hold_curve=getattr(result, "buy_and_hold_curve", []) or [],
+            buy_and_hold_summary=getattr(result, "buy_and_hold_summary", {}) or {},
+        )
         summary_patch = self._update_summary_payload(
             {},
             request_payload=self._build_request_payload(
@@ -923,10 +923,11 @@ class RuleBacktestService:
             execution_model=result.execution_model.to_dict(),
             execution_assumptions=result.execution_assumptions.to_dict(),
             visualization={
-                "benchmark_curve": result.benchmark_curve,
-                "benchmark_summary": result.benchmark_summary,
-                "buy_and_hold_curve": getattr(result, "buy_and_hold_curve", []) or [],
-                "buy_and_hold_summary": getattr(result, "buy_and_hold_summary", {}) or {},
+                "benchmark_curve": comparison_payload.get("benchmark_curve") or [],
+                "benchmark_summary": comparison_payload.get("benchmark_summary") or {},
+                "buy_and_hold_curve": comparison_payload.get("buy_and_hold_curve") or [],
+                "buy_and_hold_summary": comparison_payload.get("buy_and_hold_summary") or {},
+                "comparison": comparison_payload,
                 "audit_rows": audit_rows,
                 "daily_return_series": daily_return_series,
                 "exposure_curve": exposure_curve,
@@ -1338,6 +1339,102 @@ class RuleBacktestService:
                 benchmark_summary=benchmark_summary,
             )
         ]
+
+    @staticmethod
+    def _build_benchmark_comparison_metrics(
+        *,
+        total_return_pct: Any,
+        benchmark_summary: Dict[str, Any],
+        buy_and_hold_summary: Dict[str, Any],
+    ) -> Dict[str, Optional[float]]:
+        total_return = _safe_float(total_return_pct)
+        benchmark_resolved_mode = str(benchmark_summary.get("resolved_mode") or "").strip().lower()
+        benchmark_return_pct = (
+            None
+            if benchmark_resolved_mode in {"", BENCHMARK_MODE_NONE}
+            else _safe_float(benchmark_summary.get("return_pct"))
+        )
+        buy_and_hold_return_pct = _safe_float(buy_and_hold_summary.get("return_pct"))
+        return {
+            "benchmark_return_pct": benchmark_return_pct,
+            "excess_return_vs_benchmark_pct": (
+                round(float(total_return) - float(benchmark_return_pct), 4)
+                if total_return is not None and benchmark_return_pct is not None
+                else None
+            ),
+            "buy_and_hold_return_pct": buy_and_hold_return_pct,
+            "excess_return_vs_buy_and_hold_pct": (
+                round(float(total_return) - float(buy_and_hold_return_pct), 4)
+                if total_return is not None and buy_and_hold_return_pct is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def _build_benchmark_comparison_payload(
+        cls,
+        *,
+        total_return_pct: Any,
+        benchmark_curve: List[Dict[str, Any]],
+        benchmark_summary: Dict[str, Any],
+        buy_and_hold_curve: List[Dict[str, Any]],
+        buy_and_hold_summary: Dict[str, Any],
+        source: str = "stored",
+    ) -> Dict[str, Any]:
+        return {
+            "version": "v1",
+            "source": str(source or "stored"),
+            "benchmark_curve": list(benchmark_curve or []),
+            "benchmark_summary": dict(benchmark_summary or {}),
+            "buy_and_hold_curve": list(buy_and_hold_curve or []),
+            "buy_and_hold_summary": dict(buy_and_hold_summary or {}),
+            "metrics": cls._build_benchmark_comparison_metrics(
+                total_return_pct=total_return_pct,
+                benchmark_summary=dict(benchmark_summary or {}),
+                buy_and_hold_summary=dict(buy_and_hold_summary or {}),
+            ),
+        }
+
+    @classmethod
+    def _resolve_benchmark_comparison_payload(
+        cls,
+        *,
+        visualization: Dict[str, Any],
+        metrics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        stored_payload = visualization.get("comparison") or {}
+        if isinstance(stored_payload, dict) and stored_payload:
+            benchmark_curve = list(stored_payload.get("benchmark_curve") or visualization.get("benchmark_curve") or [])
+            benchmark_summary = dict(stored_payload.get("benchmark_summary") or visualization.get("benchmark_summary") or {})
+            buy_and_hold_curve = list(stored_payload.get("buy_and_hold_curve") or visualization.get("buy_and_hold_curve") or [])
+            buy_and_hold_summary = dict(stored_payload.get("buy_and_hold_summary") or visualization.get("buy_and_hold_summary") or {})
+            derived_metrics = cls._build_benchmark_comparison_metrics(
+                total_return_pct=metrics.get("total_return_pct"),
+                benchmark_summary=benchmark_summary,
+                buy_and_hold_summary=buy_and_hold_summary,
+            )
+            stored_metrics = dict(stored_payload.get("metrics") or {})
+            return {
+                "version": str(stored_payload.get("version") or "v1"),
+                "source": str(stored_payload.get("source") or "stored"),
+                "benchmark_curve": benchmark_curve,
+                "benchmark_summary": benchmark_summary,
+                "buy_and_hold_curve": buy_and_hold_curve,
+                "buy_and_hold_summary": buy_and_hold_summary,
+                "metrics": {
+                    **derived_metrics,
+                    **{key: stored_metrics.get(key) for key in derived_metrics.keys() if key in stored_metrics},
+                },
+            }
+
+        return cls._build_benchmark_comparison_payload(
+            total_return_pct=metrics.get("total_return_pct"),
+            benchmark_curve=list(visualization.get("benchmark_curve") or []),
+            benchmark_summary=dict(visualization.get("benchmark_summary") or {}),
+            buy_and_hold_curve=list(visualization.get("buy_and_hold_curve") or []),
+            buy_and_hold_summary=dict(visualization.get("buy_and_hold_summary") or {}),
+            source="legacy_derived",
+        )
 
     @staticmethod
     def _build_exposure_curve(
@@ -2588,6 +2685,15 @@ class RuleBacktestService:
         )
         metrics = summary.get("metrics") or {}
         visualization = summary.get("visualization") or {}
+        comparison = self._resolve_benchmark_comparison_payload(
+            visualization=visualization,
+            metrics=metrics,
+        )
+        comparison_metrics = dict(comparison.get("metrics") or {})
+        benchmark_curve = list(comparison.get("benchmark_curve") or []) if include_trades else []
+        benchmark_summary = dict(comparison.get("benchmark_summary") or {})
+        buy_and_hold_curve = list(comparison.get("buy_and_hold_curve") or []) if include_trades else []
+        buy_and_hold_summary = dict(comparison.get("buy_and_hold_summary") or {})
         audit_rows = (
             list(visualization.get("audit_rows") or [])
             if include_trades
@@ -2616,9 +2722,9 @@ class RuleBacktestService:
         if include_trades and not audit_rows:
             audit_rows = self._build_audit_rows(
                 equity_curve=list(equity_curve or []),
-                benchmark_curve=list(visualization.get("benchmark_curve") or []),
-                buy_and_hold_curve=list(visualization.get("buy_and_hold_curve") or []),
-                benchmark_summary=dict(visualization.get("benchmark_summary") or {}),
+                benchmark_curve=benchmark_curve,
+                buy_and_hold_curve=buy_and_hold_curve,
+                benchmark_summary=benchmark_summary,
             )
         return {
             "id": row.id,
@@ -2652,10 +2758,10 @@ class RuleBacktestService:
             "annualized_return_pct": metrics.get("annualized_return_pct"),
             "benchmark_mode": request.get("benchmark_mode"),
             "benchmark_code": request.get("benchmark_code"),
-            "benchmark_return_pct": metrics.get("benchmark_return_pct"),
-            "excess_return_vs_benchmark_pct": metrics.get("excess_return_vs_benchmark_pct"),
-            "buy_and_hold_return_pct": metrics.get("buy_and_hold_return_pct"),
-            "excess_return_vs_buy_and_hold_pct": metrics.get("excess_return_vs_buy_and_hold_pct"),
+            "benchmark_return_pct": comparison_metrics.get("benchmark_return_pct"),
+            "excess_return_vs_benchmark_pct": comparison_metrics.get("excess_return_vs_benchmark_pct"),
+            "buy_and_hold_return_pct": comparison_metrics.get("buy_and_hold_return_pct"),
+            "excess_return_vs_buy_and_hold_pct": comparison_metrics.get("excess_return_vs_buy_and_hold_pct"),
             "win_rate_pct": row.win_rate_pct,
             "avg_trade_return_pct": row.avg_trade_return_pct,
             "max_drawdown_pct": row.max_drawdown_pct,
@@ -2666,10 +2772,10 @@ class RuleBacktestService:
             "summary": summary,
             "execution_model": execution_model,
             "execution_assumptions": execution_assumptions,
-            "benchmark_curve": list(visualization.get("benchmark_curve") or []) if include_trades else [],
-            "benchmark_summary": dict(visualization.get("benchmark_summary") or {}),
-            "buy_and_hold_curve": list(visualization.get("buy_and_hold_curve") or []) if include_trades else [],
-            "buy_and_hold_summary": dict(visualization.get("buy_and_hold_summary") or {}),
+            "benchmark_curve": benchmark_curve,
+            "benchmark_summary": benchmark_summary,
+            "buy_and_hold_curve": buy_and_hold_curve,
+            "buy_and_hold_summary": buy_and_hold_summary,
             "audit_rows": audit_rows,
             "daily_return_series": daily_return_series,
             "exposure_curve": exposure_curve,
