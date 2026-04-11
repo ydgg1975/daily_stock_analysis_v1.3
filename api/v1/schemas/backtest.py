@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -168,10 +168,212 @@ class RuleBacktestParseRequest(BaseModel):
     slippage_bps: float = Field(0.0, ge=0, le=500, description="单边滑点（bp）")
 
 
+class RuleBacktestStrategySupport(BaseModel):
+    executable: bool = False
+    normalization_state: str = "pending"
+    requires_confirmation: bool = False
+    unsupported_reason: Optional[str] = None
+    detected_strategy_family: Optional[str] = None
+
+
+class RuleBacktestStrategyDateRange(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class RuleBacktestStrategyCapital(BaseModel):
+    initial_capital: Optional[float] = None
+    currency: Optional[str] = None
+
+
+class RuleBacktestStrategyCosts(BaseModel):
+    fee_bps: Optional[float] = None
+    slippage_bps: Optional[float] = None
+
+
+class RuleBacktestStrategySpecBase(BaseModel):
+    version: str = "v1"
+    strategy_type: Optional[str] = None
+    strategy_family: Optional[str] = None
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
+    max_lookback: Optional[int] = None
+    date_range: Optional[RuleBacktestStrategyDateRange] = None
+    capital: Optional[RuleBacktestStrategyCapital] = None
+    costs: Optional[RuleBacktestStrategyCosts] = None
+    support: Optional[RuleBacktestStrategySupport] = None
+
+
+class RuleBacktestPeriodicSchedule(BaseModel):
+    frequency: Optional[str] = None
+    timing: Optional[str] = None
+
+
+class RuleBacktestPeriodicOrder(BaseModel):
+    mode: Optional[str] = None
+    quantity: Optional[float] = None
+    amount: Optional[float] = None
+
+
+class RuleBacktestPeriodicEntry(BaseModel):
+    side: Optional[str] = None
+    order: RuleBacktestPeriodicOrder = Field(default_factory=RuleBacktestPeriodicOrder)
+    price_basis: Optional[str] = None
+
+
+class RuleBacktestPeriodicExit(BaseModel):
+    policy: Optional[str] = None
+    price_basis: Optional[str] = None
+
+
+class RuleBacktestPeriodicPositionBehavior(BaseModel):
+    accumulate: Optional[bool] = None
+    cash_policy: Optional[str] = None
+
+
+class RuleBacktestPeriodicAccumulationStrategySpec(RuleBacktestStrategySpecBase):
+    strategy_type: Literal["periodic_accumulation"]
+    strategy_family: Optional[Literal["periodic_accumulation"]] = "periodic_accumulation"
+    date_range: RuleBacktestStrategyDateRange
+    capital: RuleBacktestStrategyCapital
+    costs: RuleBacktestStrategyCosts
+    schedule: RuleBacktestPeriodicSchedule
+    entry: RuleBacktestPeriodicEntry
+    exit: RuleBacktestPeriodicExit
+    position_behavior: RuleBacktestPeriodicPositionBehavior
+
+
+class RuleBacktestMovingAverageSignal(BaseModel):
+    indicator_family: Literal["moving_average"]
+    fast_period: int
+    slow_period: int
+    fast_type: str
+    slow_type: str
+    entry_condition: str
+    exit_condition: str
+
+
+class RuleBacktestMacdSignal(BaseModel):
+    indicator_family: Literal["macd"]
+    fast_period: int
+    slow_period: int
+    signal_period: int
+    entry_condition: str
+    exit_condition: str
+
+
+class RuleBacktestRsiSignal(BaseModel):
+    indicator_family: Literal["rsi"]
+    period: int
+    lower_threshold: float
+    upper_threshold: float
+    entry_condition: str
+    exit_condition: str
+
+
+class RuleBacktestIndicatorExecution(BaseModel):
+    frequency: Optional[str] = None
+    signal_timing: Optional[str] = None
+    fill_timing: Optional[str] = None
+
+
+class RuleBacktestIndicatorPositionBehavior(BaseModel):
+    direction: Optional[str] = None
+    entry_sizing: Optional[str] = None
+    max_positions: Optional[int] = None
+    pyramiding: Optional[bool] = None
+
+
+class RuleBacktestIndicatorEndBehavior(BaseModel):
+    policy: Optional[str] = None
+    price_basis: Optional[str] = None
+
+
+class RuleBacktestMovingAverageCrossoverStrategySpec(RuleBacktestStrategySpecBase):
+    strategy_type: Literal["moving_average_crossover"]
+    strategy_family: Optional[Literal["moving_average_crossover"]] = "moving_average_crossover"
+    date_range: RuleBacktestStrategyDateRange
+    capital: RuleBacktestStrategyCapital
+    costs: RuleBacktestStrategyCosts
+    signal: RuleBacktestMovingAverageSignal
+    execution: RuleBacktestIndicatorExecution
+    position_behavior: RuleBacktestIndicatorPositionBehavior
+    end_behavior: RuleBacktestIndicatorEndBehavior
+
+
+class RuleBacktestMacdCrossoverStrategySpec(RuleBacktestStrategySpecBase):
+    strategy_type: Literal["macd_crossover"]
+    strategy_family: Optional[Literal["macd_crossover"]] = "macd_crossover"
+    date_range: RuleBacktestStrategyDateRange
+    capital: RuleBacktestStrategyCapital
+    costs: RuleBacktestStrategyCosts
+    signal: RuleBacktestMacdSignal
+    execution: RuleBacktestIndicatorExecution
+    position_behavior: RuleBacktestIndicatorPositionBehavior
+    end_behavior: RuleBacktestIndicatorEndBehavior
+
+
+class RuleBacktestRsiThresholdStrategySpec(RuleBacktestStrategySpecBase):
+    strategy_type: Literal["rsi_threshold"]
+    strategy_family: Optional[Literal["rsi_threshold"]] = "rsi_threshold"
+    date_range: RuleBacktestStrategyDateRange
+    capital: RuleBacktestStrategyCapital
+    costs: RuleBacktestStrategyCosts
+    signal: RuleBacktestRsiSignal
+    execution: RuleBacktestIndicatorExecution
+    position_behavior: RuleBacktestIndicatorPositionBehavior
+    end_behavior: RuleBacktestIndicatorEndBehavior
+
+
+class RuleBacktestGenericStrategySpec(RuleBacktestStrategySpecBase):
+    model_config = ConfigDict(extra="allow")
+
+
+RuleBacktestStrategySpec = (
+    RuleBacktestPeriodicAccumulationStrategySpec
+    | RuleBacktestMovingAverageCrossoverStrategySpec
+    | RuleBacktestMacdCrossoverStrategySpec
+    | RuleBacktestRsiThresholdStrategySpec
+    | RuleBacktestGenericStrategySpec
+)
+
+
+class RuleBacktestParsedStrategyPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    version: str = "v1"
+    timeframe: str = "daily"
+    source_text: Optional[str] = None
+    normalized_text: Optional[str] = None
+    entry: Dict[str, Any] = Field(default_factory=dict)
+    exit: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = 0.0
+    needs_confirmation: bool = False
+    ambiguities: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: Dict[str, str] = Field(default_factory=dict)
+    max_lookback: int = 1
+    strategy_kind: Optional[str] = None
+    setup: Dict[str, Any] = Field(default_factory=dict)
+    strategy_spec: RuleBacktestStrategySpec | Dict[str, Any] = Field(default_factory=dict)
+    executable: bool = False
+    normalization_state: str = "pending"
+    assumptions: List[Dict[str, Any]] = Field(default_factory=list)
+    assumption_groups: List[Dict[str, Any]] = Field(default_factory=list)
+    detected_strategy_family: Optional[str] = None
+    unsupported_reason: Optional[str] = None
+    unsupported_details: List[Dict[str, Any]] = Field(default_factory=list)
+    unsupported_extensions: List[Dict[str, Any]] = Field(default_factory=list)
+    core_intent_summary: Optional[str] = None
+    interpretation_confidence: float = 0.0
+    supported_portion_summary: Optional[str] = None
+    rewrite_suggestions: List[Dict[str, Any]] = Field(default_factory=list)
+    parse_warnings: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class RuleBacktestParseResponse(BaseModel):
     code: Optional[str] = None
     strategy_text: str
-    parsed_strategy: Dict[str, Any]
+    parsed_strategy: RuleBacktestParsedStrategyPayload
     normalized_strategy_family: Optional[str] = None
     detected_strategy_family: Optional[str] = None
     executable: bool = False
@@ -319,7 +521,7 @@ class RuleBacktestHistoryItem(BaseModel):
     id: int
     code: str
     strategy_text: str
-    parsed_strategy: Dict[str, Any] = Field(default_factory=dict)
+    parsed_strategy: RuleBacktestParsedStrategyPayload = Field(default_factory=RuleBacktestParsedStrategyPayload)
     strategy_hash: str
     timeframe: str
     start_date: Optional[str] = None
@@ -383,7 +585,7 @@ class RuleBacktestRunResponse(BaseModel):
     id: int
     code: str
     strategy_text: str
-    parsed_strategy: Dict[str, Any] = Field(default_factory=dict)
+    parsed_strategy: RuleBacktestParsedStrategyPayload = Field(default_factory=RuleBacktestParsedStrategyPayload)
     strategy_hash: str
     timeframe: str
     start_date: Optional[str] = None

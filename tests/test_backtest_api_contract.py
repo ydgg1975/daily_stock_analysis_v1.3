@@ -18,7 +18,13 @@ from api.v1.endpoints.backtest import (  # noqa: E402
     get_rule_backtest_run,
     run_rule_backtest,
 )
-from api.v1.schemas.backtest import BacktestCodeRequest, RuleBacktestParseRequest, RuleBacktestRunRequest  # noqa: E402
+from api.v1.schemas.backtest import (  # noqa: E402
+    BacktestCodeRequest,
+    RuleBacktestParseRequest,
+    RuleBacktestParseResponse,
+    RuleBacktestRunRequest,
+    RuleBacktestRunResponse,
+)
 
 
 class BacktestApiContractTestCase(unittest.TestCase):
@@ -134,9 +140,80 @@ class BacktestApiContractTestCase(unittest.TestCase):
         service.submit_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 0)
 
+    def test_run_rule_backtest_request_keeps_legacy_setup_backed_parsed_strategy_payload(self) -> None:
+        request = RuleBacktestRunRequest(
+            code="AAPL",
+            strategy_text="MACD金叉买入，死叉卖出",
+            parsed_strategy={
+                "strategy_kind": "macd_crossover",
+                "setup": {
+                    "symbol": "AAPL",
+                    "indicator_family": "macd",
+                    "fast_period": 12,
+                    "slow_period": 26,
+                    "signal_period": 9,
+                },
+                "strategy_spec": {},
+            },
+            start_date="2025-01-01",
+            end_date="2025-12-31",
+            wait_for_completion=True,
+            confirmed=True,
+        )
+        background_tasks = BackgroundTasks()
+        service = MagicMock()
+        service.run_backtest.return_value = self._rule_run_payload(status="completed")
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            run_rule_backtest(request, background_tasks, db_manager=MagicMock())
+
+        self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["setup"]["indicator_family"], "macd")
+        self.assertEqual(service.run_backtest.call_args.kwargs["parsed_strategy"]["strategy_spec"], {})
+
     def test_get_rule_backtest_run_serializes_canonical_audit_rows_field(self) -> None:
         service = MagicMock()
         service.get_run.return_value = self._rule_run_payload(status="completed")
+        service.get_run.return_value["parsed_strategy"] = {
+            "strategy_kind": "macd_crossover",
+            "strategy_spec": {
+                "version": "v1",
+                "strategy_type": "macd_crossover",
+                "strategy_family": "macd_crossover",
+                "symbol": "AAPL",
+                "timeframe": "daily",
+                "max_lookback": 35,
+                "date_range": {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+                "capital": {"initial_capital": 100000.0, "currency": "USD"},
+                "costs": {"fee_bps": 0.0, "slippage_bps": 0.0},
+                "signal": {
+                    "indicator_family": "macd",
+                    "fast_period": 12,
+                    "slow_period": 26,
+                    "signal_period": 9,
+                    "entry_condition": "macd_crosses_above_signal",
+                    "exit_condition": "macd_crosses_below_signal",
+                },
+                "execution": {
+                    "frequency": "daily",
+                    "signal_timing": "bar_close",
+                    "fill_timing": "next_bar_open",
+                },
+                "position_behavior": {
+                    "direction": "long_only",
+                    "entry_sizing": "all_in",
+                    "max_positions": 1,
+                    "pyramiding": False,
+                },
+                "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                "support": {
+                    "executable": True,
+                    "normalization_state": "assumed",
+                    "requires_confirmation": False,
+                    "unsupported_reason": None,
+                    "detected_strategy_family": "macd_crossover",
+                },
+            },
+        }
         service.get_run.return_value["audit_rows"] = [
             {
                 "date": "2025-01-02",
@@ -165,6 +242,9 @@ class BacktestApiContractTestCase(unittest.TestCase):
         self.assertNotIn("audit_rows", payload)
         self.assertEqual(len(payload["auditRows"]), 1)
         self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "macd_crossover")
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["signal_period"], 9)
+        self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])
 
     def test_get_rule_backtest_run_returns_404_not_found_contract(self) -> None:
         service = MagicMock()
@@ -176,6 +256,48 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
+
+    def test_rule_backtest_run_response_uses_supported_family_strategy_spec_contract(self) -> None:
+        response = RuleBacktestRunResponse(
+            **{
+                **self._rule_run_payload(status="completed"),
+                "parsed_strategy": {
+                    "strategy_kind": "periodic_accumulation",
+                    "strategy_spec": {
+                        "version": "v1",
+                        "strategy_type": "periodic_accumulation",
+                        "strategy_family": "periodic_accumulation",
+                        "symbol": "ORCL",
+                        "timeframe": "daily",
+                        "max_lookback": 1,
+                        "date_range": {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+                        "capital": {"initial_capital": 100000.0, "currency": "USD"},
+                        "costs": {"fee_bps": 0.0, "slippage_bps": 0.0},
+                        "schedule": {"frequency": "daily", "timing": "session_open"},
+                        "entry": {
+                            "side": "buy",
+                            "order": {"mode": "fixed_shares", "quantity": 100.0, "amount": None},
+                            "price_basis": "open",
+                        },
+                        "exit": {"policy": "close_at_end", "price_basis": "close"},
+                        "position_behavior": {"accumulate": True, "cash_policy": "stop_when_insufficient_cash"},
+                        "support": {
+                            "executable": True,
+                            "normalization_state": "assumed",
+                            "requires_confirmation": True,
+                            "unsupported_reason": None,
+                            "detected_strategy_family": "periodic_accumulation",
+                        },
+                        "unexpected_field": "drop_me",
+                    },
+                },
+            }
+        )
+
+        payload = response.model_dump()
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "periodic_accumulation")
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["entry"]["order"]["mode"], "fixed_shares")
+        self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])
 
     def test_parse_rule_strategy_returns_normalization_metadata(self) -> None:
         request = RuleBacktestParseRequest(
@@ -224,6 +346,63 @@ class BacktestApiContractTestCase(unittest.TestCase):
         service.parse_strategy.assert_called_once()
         self.assertEqual(service.parse_strategy.call_args.kwargs["start_date"], "2025-01-01")
         self.assertEqual(service.parse_strategy.call_args.kwargs["end_date"], "2025-12-31")
+
+    def test_parse_response_uses_supported_family_strategy_spec_contract(self) -> None:
+        response = RuleBacktestParseResponse(
+            code="AAPL",
+            strategy_text="RSI 小于 30 买入，大于 70 卖出",
+            parsed_strategy={
+                "strategy_kind": "rsi_threshold",
+                "strategy_spec": {
+                    "version": "v1",
+                    "strategy_type": "rsi_threshold",
+                    "strategy_family": "rsi_threshold",
+                    "symbol": "AAPL",
+                    "timeframe": "daily",
+                    "max_lookback": 14,
+                    "date_range": {"start_date": "2025-01-01", "end_date": "2025-12-31"},
+                    "capital": {"initial_capital": 100000.0, "currency": "USD"},
+                    "costs": {"fee_bps": 0.0, "slippage_bps": 0.0},
+                    "signal": {
+                        "indicator_family": "rsi",
+                        "period": 14,
+                        "lower_threshold": 30.0,
+                        "upper_threshold": 70.0,
+                        "entry_condition": "rsi_crosses_below_lower_threshold",
+                        "exit_condition": "rsi_crosses_above_upper_threshold",
+                    },
+                    "execution": {
+                        "frequency": "daily",
+                        "signal_timing": "bar_close",
+                        "fill_timing": "next_bar_open",
+                    },
+                    "position_behavior": {
+                        "direction": "long_only",
+                        "entry_sizing": "all_in",
+                        "max_positions": 1,
+                        "pyramiding": False,
+                    },
+                    "end_behavior": {"policy": "liquidate_at_end", "price_basis": "close"},
+                    "support": {
+                        "executable": True,
+                        "normalization_state": "assumed",
+                        "requires_confirmation": False,
+                        "unsupported_reason": None,
+                        "detected_strategy_family": "rsi_threshold",
+                    },
+                    "unexpected_field": "drop_me",
+                },
+            },
+            normalized_strategy_family="rsi_threshold",
+            detected_strategy_family="rsi_threshold",
+            executable=True,
+            normalization_state="assumed",
+        )
+
+        payload = response.model_dump()
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["strategy_type"], "rsi_threshold")
+        self.assertEqual(payload["parsed_strategy"]["strategy_spec"]["signal"]["period"], 14)
+        self.assertNotIn("unexpected_field", payload["parsed_strategy"]["strategy_spec"])
 
     def test_clear_backtest_samples_maps_value_error_to_validation_error(self) -> None:
         service = MagicMock()

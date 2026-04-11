@@ -201,6 +201,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         parsed_dict["strategy_spec"]["signal"]["fast_type"] = "ema"
         parsed_dict["strategy_spec"]["signal"]["slow_type"] = "ema"
         parsed_dict["strategy_spec"]["capital"]["initial_capital"] = 75000.0
+        parsed_dict["strategy_spec"]["signal"]["unexpected_field"] = "drop_me"
+        parsed_dict["strategy_spec"]["execution"]["unexpected_field"] = "drop_me"
+        parsed_dict["strategy_spec"]["unexpected_field"] = "drop_me"
 
         parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
         normalized = service._normalize_parsed_strategy(parsed)
@@ -212,6 +215,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(normalized.strategy_spec["capital"]["initial_capital"], 75000.0)
         self.assertEqual(normalized.strategy_spec["strategy_family"], "moving_average_crossover")
         self.assertTrue(normalized.strategy_spec["support"]["executable"])
+        self.assertNotIn("unexpected_field", normalized.strategy_spec)
+        self.assertNotIn("unexpected_field", normalized.strategy_spec["signal"])
+        self.assertNotIn("unexpected_field", normalized.strategy_spec["execution"])
 
     def test_re_normalization_prefers_explicit_periodic_strategy_spec_over_setup_defaults(self) -> None:
         service = RuleBacktestService(self.db)
@@ -222,6 +228,9 @@ class RuleBacktestTestCase(unittest.TestCase):
         parsed_dict["strategy_spec"]["entry"]["order"]["quantity"] = None
         parsed_dict["strategy_spec"]["entry"]["order"]["amount"] = 5000.0
         parsed_dict["strategy_spec"]["capital"]["initial_capital"] = 120000.0
+        parsed_dict["strategy_spec"]["entry"]["order"]["unexpected_field"] = "drop_me"
+        parsed_dict["strategy_spec"]["schedule"]["unexpected_field"] = "drop_me"
+        parsed_dict["strategy_spec"]["unexpected_field"] = "drop_me"
 
         parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
         normalized = service._normalize_parsed_strategy(parsed)
@@ -232,6 +241,45 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(normalized.strategy_spec["capital"]["initial_capital"], 120000.0)
         self.assertEqual(normalized.strategy_spec["strategy_family"], "periodic_accumulation")
         self.assertTrue(normalized.strategy_spec["support"]["executable"])
+        self.assertNotIn("unexpected_field", normalized.strategy_spec)
+        self.assertNotIn("unexpected_field", normalized.strategy_spec["entry"]["order"])
+        self.assertNotIn("unexpected_field", normalized.strategy_spec["schedule"])
+
+    def test_normalize_legacy_setup_backed_indicator_strategy_into_canonical_family_shape(self) -> None:
+        service = RuleBacktestService(self.db)
+        parsed_dict = service.parse_strategy(
+            "MACD金叉买入，死叉卖出",
+            code="AAPL",
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=50000,
+        )
+        parsed_dict["strategy_spec"] = {}
+        parsed_dict["setup"]["symbol"] = "AAPL"
+        parsed_dict["setup"]["indicator_family"] = "macd"
+        parsed_dict["setup"]["fast_period"] = 12
+        parsed_dict["setup"]["slow_period"] = 26
+        parsed_dict["setup"]["signal_period"] = 9
+        parsed_dict["setup"]["initial_capital"] = 50000
+
+        parsed = service._dict_to_parsed_strategy(parsed_dict, parsed_dict["source_text"])
+        normalized = service._normalize_parsed_strategy(
+            parsed,
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=50000,
+        )
+
+        self.assertEqual(normalized.strategy_spec["strategy_type"], "macd_crossover")
+        self.assertEqual(normalized.strategy_spec["strategy_family"], "macd_crossover")
+        self.assertEqual(normalized.strategy_spec["signal"]["indicator_family"], "macd")
+        self.assertEqual(normalized.strategy_spec["signal"]["fast_period"], 12)
+        self.assertEqual(normalized.strategy_spec["signal"]["slow_period"], 26)
+        self.assertEqual(normalized.strategy_spec["signal"]["signal_period"], 9)
+        self.assertEqual(normalized.strategy_spec["execution"]["signal_timing"], "bar_close")
+        self.assertEqual(normalized.strategy_spec["execution"]["fill_timing"], "next_bar_open")
+        self.assertEqual(normalized.strategy_spec["position_behavior"]["direction"], "long_only")
+        self.assertEqual(normalized.strategy_spec["end_behavior"]["policy"], "liquidate_at_end")
 
     def test_parse_strategy_marks_strategy_combination_unsupported_with_rewrite(self) -> None:
         service = RuleBacktestService(self.db)

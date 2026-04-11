@@ -247,16 +247,148 @@ export interface RuleBacktestStrategySupport {
   detectedStrategyFamily?: string | null;
 }
 
-export interface RuleBacktestStrategySpec {
+export interface RuleBacktestStrategyDateRange {
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
+export interface RuleBacktestStrategyCapital {
+  initialCapital?: number | null;
+  currency?: string | null;
+}
+
+export interface RuleBacktestStrategyCosts {
+  feeBps?: number | null;
+  slippageBps?: number | null;
+}
+
+export interface RuleBacktestStrategySpecBase {
   version?: string;
   strategyType?: string;
   strategyFamily?: string;
   symbol?: string | null;
   timeframe?: string;
   maxLookback?: number;
-  dateRange?: Record<string, unknown>;
-  capital?: Record<string, unknown>;
-  costs?: Record<string, unknown>;
+  dateRange?: RuleBacktestStrategyDateRange;
+  capital?: RuleBacktestStrategyCapital;
+  costs?: RuleBacktestStrategyCosts;
+  support?: RuleBacktestStrategySupport;
+  [key: string]: unknown;
+}
+
+export interface RuleBacktestPeriodicSchedule {
+  frequency?: string | null;
+  timing?: string | null;
+}
+
+export interface RuleBacktestPeriodicOrder {
+  mode?: string | null;
+  quantity?: number | null;
+  amount?: number | null;
+}
+
+export interface RuleBacktestPeriodicEntry {
+  side?: string | null;
+  order?: RuleBacktestPeriodicOrder;
+  priceBasis?: string | null;
+}
+
+export interface RuleBacktestPeriodicExit {
+  policy?: string | null;
+  priceBasis?: string | null;
+}
+
+export interface RuleBacktestPeriodicPositionBehavior {
+  accumulate?: boolean | null;
+  cashPolicy?: string | null;
+}
+
+export interface RuleBacktestPeriodicAccumulationStrategySpec extends RuleBacktestStrategySpecBase {
+  strategyType: 'periodic_accumulation';
+  strategyFamily?: 'periodic_accumulation';
+  dateRange?: RuleBacktestStrategyDateRange;
+  capital?: RuleBacktestStrategyCapital;
+  costs?: RuleBacktestStrategyCosts;
+  schedule?: RuleBacktestPeriodicSchedule;
+  entry?: RuleBacktestPeriodicEntry;
+  exit?: RuleBacktestPeriodicExit;
+  positionBehavior?: RuleBacktestPeriodicPositionBehavior;
+}
+
+export interface RuleBacktestMovingAverageSignalSpec {
+  indicatorFamily: 'moving_average';
+  fastPeriod: number;
+  slowPeriod: number;
+  fastType: string;
+  slowType: string;
+  entryCondition: string;
+  exitCondition: string;
+}
+
+export interface RuleBacktestMacdSignalSpec {
+  indicatorFamily: 'macd';
+  fastPeriod: number;
+  slowPeriod: number;
+  signalPeriod: number;
+  entryCondition: string;
+  exitCondition: string;
+}
+
+export interface RuleBacktestRsiSignalSpec {
+  indicatorFamily: 'rsi';
+  period: number;
+  lowerThreshold: number;
+  upperThreshold: number;
+  entryCondition: string;
+  exitCondition: string;
+}
+
+export interface RuleBacktestIndicatorExecutionSpec {
+  frequency?: string | null;
+  signalTiming?: string | null;
+  fillTiming?: string | null;
+}
+
+export interface RuleBacktestIndicatorPositionBehaviorSpec {
+  direction?: string | null;
+  entrySizing?: string | null;
+  maxPositions?: number | null;
+  pyramiding?: boolean | null;
+}
+
+export interface RuleBacktestIndicatorEndBehaviorSpec {
+  policy?: string | null;
+  priceBasis?: string | null;
+}
+
+export interface RuleBacktestMovingAverageCrossoverStrategySpec extends RuleBacktestStrategySpecBase {
+  strategyType: 'moving_average_crossover';
+  strategyFamily?: 'moving_average_crossover';
+  signal?: RuleBacktestMovingAverageSignalSpec;
+  execution?: RuleBacktestIndicatorExecutionSpec;
+  positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
+  endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+}
+
+export interface RuleBacktestMacdCrossoverStrategySpec extends RuleBacktestStrategySpecBase {
+  strategyType: 'macd_crossover';
+  strategyFamily?: 'macd_crossover';
+  signal?: RuleBacktestMacdSignalSpec;
+  execution?: RuleBacktestIndicatorExecutionSpec;
+  positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
+  endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+}
+
+export interface RuleBacktestRsiThresholdStrategySpec extends RuleBacktestStrategySpecBase {
+  strategyType: 'rsi_threshold';
+  strategyFamily?: 'rsi_threshold';
+  signal?: RuleBacktestRsiSignalSpec;
+  execution?: RuleBacktestIndicatorExecutionSpec;
+  positionBehavior?: RuleBacktestIndicatorPositionBehaviorSpec;
+  endBehavior?: RuleBacktestIndicatorEndBehaviorSpec;
+}
+
+export interface RuleBacktestGenericStrategySpec extends RuleBacktestStrategySpecBase {
   signal?: Record<string, unknown>;
   execution?: Record<string, unknown>;
   schedule?: Record<string, unknown>;
@@ -264,9 +396,15 @@ export interface RuleBacktestStrategySpec {
   exit?: Record<string, unknown>;
   positionBehavior?: Record<string, unknown>;
   endBehavior?: Record<string, unknown>;
-  support?: RuleBacktestStrategySupport;
   [key: string]: unknown;
 }
+
+export type RuleBacktestStrategySpec =
+  | RuleBacktestPeriodicAccumulationStrategySpec
+  | RuleBacktestMovingAverageCrossoverStrategySpec
+  | RuleBacktestMacdCrossoverStrategySpec
+  | RuleBacktestRsiThresholdStrategySpec
+  | RuleBacktestGenericStrategySpec;
 
 export interface RuleBacktestParseResponse {
   code?: string;

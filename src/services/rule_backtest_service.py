@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import re
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -77,6 +78,147 @@ BENCHMARK_PRESET_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "method": "benchmark_security",
     },
 }
+
+
+@dataclass
+class _StrategySpecSupportPayload:
+    executable: bool
+    normalization_state: str
+    requires_confirmation: bool
+    unsupported_reason: Optional[str]
+    detected_strategy_family: Optional[str]
+
+
+@dataclass
+class _StrategySpecDateRangePayload:
+    start_date: str
+    end_date: str
+
+
+@dataclass
+class _StrategySpecCapitalPayload:
+    initial_capital: float
+    currency: str
+
+
+@dataclass
+class _StrategySpecCostsPayload:
+    fee_bps: float
+    slippage_bps: float
+
+
+@dataclass
+class _PeriodicSchedulePayload:
+    frequency: str
+    timing: str
+
+
+@dataclass
+class _PeriodicOrderPayload:
+    mode: str
+    quantity: Optional[float]
+    amount: Optional[float]
+
+
+@dataclass
+class _PeriodicEntryPayload:
+    side: str
+    order: _PeriodicOrderPayload
+    price_basis: str
+
+
+@dataclass
+class _PeriodicExitPayload:
+    policy: str
+    price_basis: str
+
+
+@dataclass
+class _PeriodicPositionBehaviorPayload:
+    accumulate: bool
+    cash_policy: str
+
+
+@dataclass
+class _PeriodicAccumulationStrategySpecPayload:
+    strategy_type: str
+    version: str
+    symbol: str
+    timeframe: str
+    date_range: _StrategySpecDateRangePayload
+    capital: _StrategySpecCapitalPayload
+    schedule: _PeriodicSchedulePayload
+    entry: _PeriodicEntryPayload
+    exit: _PeriodicExitPayload
+    position_behavior: _PeriodicPositionBehaviorPayload
+    costs: _StrategySpecCostsPayload
+
+
+@dataclass
+class _MovingAverageSignalPayload:
+    indicator_family: str
+    fast_period: int
+    slow_period: int
+    fast_type: str
+    slow_type: str
+    entry_condition: str
+    exit_condition: str
+
+
+@dataclass
+class _MacdSignalPayload:
+    indicator_family: str
+    fast_period: int
+    slow_period: int
+    signal_period: int
+    entry_condition: str
+    exit_condition: str
+
+
+@dataclass
+class _RsiSignalPayload:
+    indicator_family: str
+    period: int
+    lower_threshold: float
+    upper_threshold: float
+    entry_condition: str
+    exit_condition: str
+
+
+@dataclass
+class _IndicatorExecutionPayload:
+    frequency: str
+    signal_timing: str
+    fill_timing: str
+
+
+@dataclass
+class _IndicatorPositionBehaviorPayload:
+    direction: str
+    entry_sizing: str
+    max_positions: int
+    pyramiding: bool
+
+
+@dataclass
+class _IndicatorEndBehaviorPayload:
+    policy: str
+    price_basis: str
+
+
+@dataclass
+class _IndicatorStrategySpecPayload:
+    strategy_type: str
+    version: str
+    symbol: str
+    timeframe: str
+    date_range: _StrategySpecDateRangePayload
+    capital: _StrategySpecCapitalPayload
+    signal: Any
+    execution: _IndicatorExecutionPayload
+    position_behavior: _IndicatorPositionBehaviorPayload
+    costs: _StrategySpecCostsPayload
+    end_behavior: _IndicatorEndBehaviorPayload
 
 
 class RuleBacktestService:
@@ -1916,14 +2058,106 @@ class RuleBacktestService:
         payload["version"] = str(payload.get("version") or "v1")
         payload["strategy_family"] = str(payload.get("strategy_family") or parsed.strategy_kind)
         payload["max_lookback"] = int(payload.get("max_lookback") or parsed.max_lookback or 1)
-        payload["support"] = {
-            "executable": bool(parsed.executable),
-            "normalization_state": str(parsed.normalization_state or "pending"),
-            "requires_confirmation": bool(parsed.needs_confirmation),
-            "unsupported_reason": parsed.unsupported_reason,
-            "detected_strategy_family": parsed.detected_strategy_family,
-        }
+        payload["support"] = asdict(
+            _StrategySpecSupportPayload(
+                executable=bool(parsed.executable),
+                normalization_state=str(parsed.normalization_state or "pending"),
+                requires_confirmation=bool(parsed.needs_confirmation),
+                unsupported_reason=parsed.unsupported_reason,
+                detected_strategy_family=parsed.detected_strategy_family,
+            )
+        )
         return payload
+
+    @staticmethod
+    def _periodic_strategy_spec_payload(
+        *,
+        symbol: str,
+        timeframe: str,
+        start_date: str,
+        end_date: str,
+        initial_capital: float,
+        currency: str,
+        frequency: str,
+        timing: str,
+        side: str,
+        order_mode: str,
+        quantity: Optional[float],
+        amount: Optional[float],
+        entry_price_basis: str,
+        exit_policy: str,
+        exit_price_basis: str,
+        cash_policy: str,
+        fee_bps: float,
+        slippage_bps: float,
+    ) -> Dict[str, Any]:
+        return asdict(
+            _PeriodicAccumulationStrategySpecPayload(
+                strategy_type="periodic_accumulation",
+                version="v1",
+                symbol=symbol,
+                timeframe=timeframe,
+                date_range=_StrategySpecDateRangePayload(start_date=start_date, end_date=end_date),
+                capital=_StrategySpecCapitalPayload(initial_capital=initial_capital, currency=currency),
+                schedule=_PeriodicSchedulePayload(frequency=frequency, timing=timing),
+                entry=_PeriodicEntryPayload(
+                    side=side,
+                    order=_PeriodicOrderPayload(mode=order_mode, quantity=quantity, amount=amount),
+                    price_basis=entry_price_basis,
+                ),
+                exit=_PeriodicExitPayload(policy=exit_policy, price_basis=exit_price_basis),
+                position_behavior=_PeriodicPositionBehaviorPayload(accumulate=True, cash_policy=cash_policy),
+                costs=_StrategySpecCostsPayload(fee_bps=fee_bps, slippage_bps=slippage_bps),
+            )
+        )
+
+    @staticmethod
+    def _indicator_strategy_spec_payload(
+        *,
+        strategy_type: str,
+        symbol: str,
+        timeframe: str,
+        start_date: str,
+        end_date: str,
+        initial_capital: float,
+        currency: str,
+        signal: Any,
+        frequency: str,
+        signal_timing: str,
+        fill_timing: str,
+        direction: str,
+        entry_sizing: str,
+        max_positions: int,
+        pyramiding: bool,
+        fee_bps: float,
+        slippage_bps: float,
+        end_policy: str,
+        end_price_basis: str,
+    ) -> Dict[str, Any]:
+        return asdict(
+            _IndicatorStrategySpecPayload(
+                strategy_type=strategy_type,
+                version="v1",
+                symbol=symbol,
+                timeframe=timeframe,
+                date_range=_StrategySpecDateRangePayload(start_date=start_date, end_date=end_date),
+                capital=_StrategySpecCapitalPayload(initial_capital=initial_capital, currency=currency),
+                signal=signal,
+                execution=_IndicatorExecutionPayload(
+                    frequency=frequency,
+                    signal_timing=signal_timing,
+                    fill_timing=fill_timing,
+                ),
+                position_behavior=_IndicatorPositionBehaviorPayload(
+                    direction=direction,
+                    entry_sizing=entry_sizing,
+                    max_positions=max_positions,
+                    pyramiding=pyramiding,
+                ),
+                costs=_StrategySpecCostsPayload(fee_bps=fee_bps, slippage_bps=slippage_bps),
+                end_behavior=_IndicatorEndBehaviorPayload(policy=end_policy, price_basis=end_price_basis),
+            )
+        )
 
     def _normalize_periodic_accumulation_spec(
         self,
@@ -1979,59 +2213,34 @@ class RuleBacktestService:
                 or 100000.0
             )
         )
-        normalized_spec = {
-            "strategy_type": "periodic_accumulation",
-            "version": "v1",
-            "symbol": symbol,
-            "timeframe": str(parsed.timeframe or "daily"),
-            "date_range": {
-                "start_date": normalized_start_date.isoformat(),
-                "end_date": normalized_end_date.isoformat(),
-            },
-            "capital": {
-                "initial_capital": resolved_initial_capital,
-                "currency": str(self._first_defined(spec_value("capital", "currency"), setup.get("currency"), "USD")),
-            },
-            "schedule": {
-                "frequency": str(self._first_defined(spec_value("schedule", "frequency"), setup.get("execution_frequency"), "daily")),
-                "timing": str(self._first_defined(spec_value("schedule", "timing"), setup.get("execution_timing"), "session_open")),
-            },
-            "entry": {
-                "side": str(self._first_defined(spec_value("entry", "side"), setup.get("action"), "buy")),
-                "order": {
-                    "mode": order_mode,
-                    "quantity": quantity_per_trade,
-                    "amount": amount_per_trade,
-                },
-                "price_basis": str(self._first_defined(spec_value("entry", "price_basis"), setup.get("execution_price_basis"), "open")),
-            },
-            "exit": {
-                "policy": str(self._first_defined(spec_value("exit", "policy"), setup.get("exit_policy"), "close_at_end")),
-                "price_basis": str(spec_value("exit", "price_basis") or "close"),
-            },
-            "position_behavior": {
-                "accumulate": True,
-                "cash_policy": str(
-                    self._first_defined(
-                        spec_value("position_behavior", "cash_policy"),
-                        setup.get("cash_policy"),
-                        "stop_when_insufficient_cash",
-                    )
-                ),
-            },
-            "costs": {
-                "fee_bps": float(
-                    _safe_float(self._first_defined(spec_value("costs", "fee_bps"), setup.get("fee_bps")))
-                    if _safe_float(self._first_defined(spec_value("costs", "fee_bps"), setup.get("fee_bps"))) is not None
-                    else fee_bps
-                ),
-                "slippage_bps": float(
-                    _safe_float(self._first_defined(spec_value("costs", "slippage_bps"), setup.get("slippage_bps")))
-                    if _safe_float(self._first_defined(spec_value("costs", "slippage_bps"), setup.get("slippage_bps"))) is not None
-                    else slippage_bps
-                ),
-            },
-        }
+        resolved_fee_bps = _safe_float(self._first_defined(spec_value("costs", "fee_bps"), setup.get("fee_bps")))
+        resolved_slippage_bps = _safe_float(self._first_defined(spec_value("costs", "slippage_bps"), setup.get("slippage_bps")))
+        normalized_spec = self._periodic_strategy_spec_payload(
+            symbol=symbol,
+            timeframe=str(parsed.timeframe or "daily"),
+            start_date=normalized_start_date.isoformat(),
+            end_date=normalized_end_date.isoformat(),
+            initial_capital=resolved_initial_capital,
+            currency=str(self._first_defined(spec_value("capital", "currency"), setup.get("currency"), "USD")),
+            frequency=str(self._first_defined(spec_value("schedule", "frequency"), setup.get("execution_frequency"), "daily")),
+            timing=str(self._first_defined(spec_value("schedule", "timing"), setup.get("execution_timing"), "session_open")),
+            side=str(self._first_defined(spec_value("entry", "side"), setup.get("action"), "buy")),
+            order_mode=order_mode,
+            quantity=quantity_per_trade,
+            amount=amount_per_trade,
+            entry_price_basis=str(self._first_defined(spec_value("entry", "price_basis"), setup.get("execution_price_basis"), "open")),
+            exit_policy=str(self._first_defined(spec_value("exit", "policy"), setup.get("exit_policy"), "close_at_end")),
+            exit_price_basis=str(spec_value("exit", "price_basis") or "close"),
+            cash_policy=str(
+                self._first_defined(
+                    spec_value("position_behavior", "cash_policy"),
+                    setup.get("cash_policy"),
+                    "stop_when_insufficient_cash",
+                )
+            ),
+            fee_bps=float(resolved_fee_bps if resolved_fee_bps is not None else fee_bps),
+            slippage_bps=float(resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps),
+        )
         parsed.executable = True
         parsed.normalization_state = "assumed" if (parsed.needs_confirmation or bool(parsed.ambiguities)) else "ready"
         parsed.assumptions = self._build_periodic_assumptions(parsed, normalized_spec)
@@ -2090,48 +2299,29 @@ class RuleBacktestService:
             )
         )
         signal_spec, summary_entry, summary_exit = self._build_indicator_signal_spec(parsed, setup, existing_spec)
-        normalized_spec = {
-            "strategy_type": parsed.strategy_kind,
-            "version": "v1",
-            "symbol": symbol,
-            "timeframe": str(parsed.timeframe or "daily"),
-            "date_range": {
-                "start_date": normalized_start_date.isoformat(),
-                "end_date": normalized_end_date.isoformat(),
-            },
-            "capital": {
-                "initial_capital": resolved_initial_capital,
-                "currency": str(self._nested_value(existing_spec, "capital", "currency") or "USD"),
-            },
-            "signal": signal_spec,
-            "execution": {
-                "frequency": str(self._nested_value(existing_spec, "execution", "frequency") or "daily"),
-                "signal_timing": str(self._nested_value(existing_spec, "execution", "signal_timing") or "bar_close"),
-                "fill_timing": str(self._nested_value(existing_spec, "execution", "fill_timing") or "next_bar_open"),
-            },
-            "position_behavior": {
-                "direction": str(self._nested_value(existing_spec, "position_behavior", "direction") or "long_only"),
-                "entry_sizing": str(self._nested_value(existing_spec, "position_behavior", "entry_sizing") or "all_in"),
-                "max_positions": int(self._nested_value(existing_spec, "position_behavior", "max_positions") or 1),
-                "pyramiding": bool(self._nested_value(existing_spec, "position_behavior", "pyramiding") or False),
-            },
-            "costs": {
-                "fee_bps": float(
-                    _safe_float(self._nested_value(existing_spec, "costs", "fee_bps"))
-                    if _safe_float(self._nested_value(existing_spec, "costs", "fee_bps")) is not None
-                    else fee_bps
-                ),
-                "slippage_bps": float(
-                    _safe_float(self._nested_value(existing_spec, "costs", "slippage_bps"))
-                    if _safe_float(self._nested_value(existing_spec, "costs", "slippage_bps")) is not None
-                    else slippage_bps
-                ),
-            },
-            "end_behavior": {
-                "policy": str(self._nested_value(existing_spec, "end_behavior", "policy") or "liquidate_at_end"),
-                "price_basis": str(self._nested_value(existing_spec, "end_behavior", "price_basis") or "close"),
-            },
-        }
+        resolved_fee_bps = _safe_float(self._nested_value(existing_spec, "costs", "fee_bps"))
+        resolved_slippage_bps = _safe_float(self._nested_value(existing_spec, "costs", "slippage_bps"))
+        normalized_spec = self._indicator_strategy_spec_payload(
+            strategy_type=parsed.strategy_kind,
+            symbol=symbol,
+            timeframe=str(parsed.timeframe or "daily"),
+            start_date=normalized_start_date.isoformat(),
+            end_date=normalized_end_date.isoformat(),
+            initial_capital=resolved_initial_capital,
+            currency=str(self._nested_value(existing_spec, "capital", "currency") or "USD"),
+            signal=signal_spec,
+            frequency=str(self._nested_value(existing_spec, "execution", "frequency") or "daily"),
+            signal_timing=str(self._nested_value(existing_spec, "execution", "signal_timing") or "bar_close"),
+            fill_timing=str(self._nested_value(existing_spec, "execution", "fill_timing") or "next_bar_open"),
+            direction=str(self._nested_value(existing_spec, "position_behavior", "direction") or "long_only"),
+            entry_sizing=str(self._nested_value(existing_spec, "position_behavior", "entry_sizing") or "all_in"),
+            max_positions=int(self._nested_value(existing_spec, "position_behavior", "max_positions") or 1),
+            pyramiding=bool(self._nested_value(existing_spec, "position_behavior", "pyramiding") or False),
+            fee_bps=float(resolved_fee_bps if resolved_fee_bps is not None else fee_bps),
+            slippage_bps=float(resolved_slippage_bps if resolved_slippage_bps is not None else slippage_bps),
+            end_policy=str(self._nested_value(existing_spec, "end_behavior", "policy") or "liquidate_at_end"),
+            end_price_basis=str(self._nested_value(existing_spec, "end_behavior", "price_basis") or "close"),
+        )
         parsed.summary = {
             "entry": summary_entry,
             "exit": summary_exit,
@@ -2166,15 +2356,17 @@ class RuleBacktestService:
             fast_label = self._format_average_label(fast_type, fast_period)
             slow_label = self._format_average_label(slow_type, slow_period)
             return (
-                {
-                    "indicator_family": indicator_family or "moving_average",
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "fast_type": fast_type,
-                    "slow_type": slow_type,
-                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "fast_crosses_above_slow")),
-                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "fast_crosses_below_slow")),
-                },
+                asdict(
+                    _MovingAverageSignalPayload(
+                        indicator_family=indicator_family or "moving_average",
+                        fast_period=fast_period,
+                        slow_period=slow_period,
+                        fast_type=fast_type,
+                        slow_type=slow_type,
+                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "fast_crosses_above_slow")),
+                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "fast_crosses_below_slow")),
+                    )
+                ),
                 f"买入条件：{fast_label} 上穿 {slow_label}",
                 f"卖出条件：{fast_label} 下穿 {slow_label}",
             )
@@ -2184,14 +2376,16 @@ class RuleBacktestService:
             signal_period = int(self._first_defined(self._nested_value(existing_spec, "signal", "signal_period"), setup.get("signal_period"), 9))
             label = f"MACD({fast_period},{slow_period},{signal_period})"
             return (
-                {
-                    "indicator_family": indicator_family or "macd",
-                    "fast_period": fast_period,
-                    "slow_period": slow_period,
-                    "signal_period": signal_period,
-                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "macd_crosses_above_signal")),
-                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "macd_crosses_below_signal")),
-                },
+                asdict(
+                    _MacdSignalPayload(
+                        indicator_family=indicator_family or "macd",
+                        fast_period=fast_period,
+                        slow_period=slow_period,
+                        signal_period=signal_period,
+                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "macd_crosses_above_signal")),
+                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "macd_crosses_below_signal")),
+                    )
+                ),
                 f"买入条件：{label} 金叉",
                 f"卖出条件：{label} 死叉",
             )
@@ -2201,14 +2395,16 @@ class RuleBacktestService:
             upper_threshold = float(self._first_defined(self._nested_value(existing_spec, "signal", "upper_threshold"), setup.get("upper_threshold"), 70.0))
             label = f"RSI{period}"
             return (
-                {
-                    "indicator_family": indicator_family or "rsi",
-                    "period": period,
-                    "lower_threshold": lower_threshold,
-                    "upper_threshold": upper_threshold,
-                    "entry_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "rsi_crosses_below_lower_threshold")),
-                    "exit_condition": str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "rsi_crosses_above_upper_threshold")),
-                },
+                asdict(
+                    _RsiSignalPayload(
+                        indicator_family=indicator_family or "rsi",
+                        period=period,
+                        lower_threshold=lower_threshold,
+                        upper_threshold=upper_threshold,
+                        entry_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "entry_condition"), "rsi_crosses_below_lower_threshold")),
+                        exit_condition=str(self._first_defined(self._nested_value(existing_spec, "signal", "exit_condition"), "rsi_crosses_above_upper_threshold")),
+                    )
+                ),
                 f"买入条件：{label} 低于 {lower_threshold:g}",
                 f"卖出条件：{label} 高于 {upper_threshold:g}",
             )
