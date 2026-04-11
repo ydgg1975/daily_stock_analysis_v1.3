@@ -895,8 +895,9 @@ class RuleBacktestService:
         equity_payload = [p.to_dict() for p in result.equity_curve]
         trade_payload = [trade.to_dict() for trade in result.trades]
         audit_rows = [row.to_dict() for row in list(getattr(result, "audit_ledger", []) or [])]
-        daily_return_series = self._build_daily_return_series_from_audit_rows(audit_rows)
-        exposure_curve = self._build_exposure_curve_from_audit_rows(audit_rows)
+        replay_series = self._build_replay_series_from_audit_rows(audit_rows)
+        daily_return_series = list(replay_series.get("daily_return_series") or [])
+        exposure_curve = list(replay_series.get("exposure_curve") or [])
         comparison_payload = self._build_benchmark_comparison_payload(
             total_return_pct=result.metrics.get("total_return_pct"),
             benchmark_curve=result.benchmark_curve,
@@ -1322,6 +1323,13 @@ class RuleBacktestService:
             )
         return series
 
+    @classmethod
+    def _build_replay_series_from_audit_rows(cls, audit_rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        return {
+            "daily_return_series": cls._build_daily_return_series_from_audit_rows(list(audit_rows or [])),
+            "exposure_curve": cls._build_exposure_curve_from_audit_rows(list(audit_rows or [])),
+        }
+
     @staticmethod
     def _build_audit_rows(
         *,
@@ -1481,8 +1489,9 @@ class RuleBacktestService:
             benchmark_summary=dict(benchmark_summary or {}),
         )
         if audit_rows:
-            daily_return_series = self._build_daily_return_series_from_audit_rows(list(audit_rows or []))
-            exposure_curve = self._build_exposure_curve_from_audit_rows(list(audit_rows or []))
+            replay_series = self._build_replay_series_from_audit_rows(audit_rows)
+            daily_return_series = list(replay_series.get("daily_return_series") or [])
+            exposure_curve = list(replay_series.get("exposure_curve") or [])
         else:
             daily_return_series = self._build_daily_return_series(list(equity_curve or []))
             exposure_curve = self._build_exposure_curve(list(equity_curve or []), list(trade_rows or []))
@@ -1525,10 +1534,11 @@ class RuleBacktestService:
         daily_return_series = list(visualization.get("daily_return_series") or [])
         exposure_curve = list(visualization.get("exposure_curve") or [])
         if audit_rows:
+            replay_series = self._build_replay_series_from_audit_rows(audit_rows)
             if not daily_return_series:
-                daily_return_series = self._build_daily_return_series_from_audit_rows(list(audit_rows or []))
+                daily_return_series = list(replay_series.get("daily_return_series") or [])
             if not exposure_curve:
-                exposure_curve = self._build_exposure_curve_from_audit_rows(list(audit_rows or []))
+                exposure_curve = list(replay_series.get("exposure_curve") or [])
         else:
             legacy_payload = self._build_legacy_replay_visualization_payload(
                 equity_curve=equity_curve,

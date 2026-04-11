@@ -292,6 +292,27 @@ class RuleBacktestExecutionModel(BaseModel):
     market_rules: RuleBacktestExecutionMarketRules = Field(default_factory=RuleBacktestExecutionMarketRules)
 
 
+def _default_rule_backtest_execution_model() -> RuleBacktestExecutionModel:
+    return RuleBacktestExecutionModel(
+        signal_evaluation_timing="bar_close",
+        entry_timing="next_bar_open",
+        exit_timing="next_bar_open",
+        entry_fill_price_basis="open",
+        exit_fill_price_basis="open",
+        position_sizing="single_position_full_notional",
+        fee_model="bps_per_side",
+        slippage_model="bps_per_side",
+    )
+
+
+def _rule_backtest_audit_rows_field() -> Any:
+    return Field(
+        default_factory=list,
+        validation_alias=AliasChoices("audit_rows", "auditRows"),
+        serialization_alias="auditRows",
+    )
+
+
 class RuleBacktestHistoryItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -338,28 +359,13 @@ class RuleBacktestHistoryItem(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
-    execution_model: RuleBacktestExecutionModel = Field(
-        default_factory=lambda: RuleBacktestExecutionModel(
-            signal_evaluation_timing="bar_close",
-            entry_timing="next_bar_open",
-            exit_timing="next_bar_open",
-            entry_fill_price_basis="open",
-            exit_fill_price_basis="open",
-            position_sizing="single_position_full_notional",
-            fee_model="bps_per_side",
-            slippage_model="bps_per_side",
-        )
-    )
+    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    auditRows: List[RuleBacktestAuditRowItem] = Field(
-        default_factory=list,
-        validation_alias=AliasChoices("audit_rows", "auditRows"),
-        serialization_alias="auditRows",
-    )
+    auditRows: List[RuleBacktestAuditRowItem] = _rule_backtest_audit_rows_field()
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -417,28 +423,13 @@ class RuleBacktestRunResponse(BaseModel):
     avg_holding_calendar_days: Optional[float] = None
     final_equity: Optional[float] = None
     summary: Dict[str, Any] = Field(default_factory=dict)
-    execution_model: RuleBacktestExecutionModel = Field(
-        default_factory=lambda: RuleBacktestExecutionModel(
-            signal_evaluation_timing="bar_close",
-            entry_timing="next_bar_open",
-            exit_timing="next_bar_open",
-            entry_fill_price_basis="open",
-            exit_fill_price_basis="open",
-            position_sizing="single_position_full_notional",
-            fee_model="bps_per_side",
-            slippage_model="bps_per_side",
-        )
-    )
+    execution_model: RuleBacktestExecutionModel = Field(default_factory=_default_rule_backtest_execution_model)
     execution_assumptions: Dict[str, Any] = Field(default_factory=dict)
     benchmark_curve: List[Dict[str, Any]] = Field(default_factory=list)
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    auditRows: List[RuleBacktestAuditRowItem] = Field(
-        default_factory=list,
-        validation_alias=AliasChoices("audit_rows", "auditRows"),
-        serialization_alias="auditRows",
-    )
+    auditRows: List[RuleBacktestAuditRowItem] = _rule_backtest_audit_rows_field()
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
     ai_summary: Optional[str] = None
