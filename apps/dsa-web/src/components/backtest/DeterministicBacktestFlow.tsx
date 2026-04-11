@@ -66,7 +66,17 @@ const FLOW_PANEL_TRANSITION = {
 
 type ParseState = 'empty' | 'ready' | 'assumed' | 'unsupported' | 'stale';
 
-type StrategyPreviewRow = { label: string; value: string };
+type StrategyFieldSource = 'explicit' | 'derived' | 'compat';
+type StrategyPreviewRow = { label: string; value: string; source?: StrategyFieldSource | null };
+type StrategyPreviewCardGroup = { label: string; items: string[] };
+type StrategyFieldSourceHint = {
+  specPaths?: string[][];
+  setupKeys?: string[];
+  assumptionKeys?: string[];
+  assumptionKeywords?: string[];
+  warningCodes?: string[];
+  warningKeywords?: string[];
+};
 
 function getParsedExecutable(parsed: RuleBacktestParseResponse | null): boolean {
   if (!parsed) return false;
@@ -172,6 +182,15 @@ function getStrategyTypeLabel(parsed: RuleBacktestParseResponse | null): string 
   return formatStrategyFamily(strategyType);
 }
 
+function getStrategySpecSourceLabel(parsed: RuleBacktestParseResponse | null): string {
+  if (!parsed) return '未结构化';
+  const direct = parsed.parsedStrategy.strategySpec;
+  if (direct && typeof direct === 'object') return '显式 strategy_spec';
+  const fallback = parsed.parsedStrategy.setup;
+  if (fallback && typeof fallback === 'object') return '兼容 setup';
+  return '未结构化';
+}
+
 function formatFrequencyLabel(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null): string {
   const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
   if (strategyType === 'periodic_accumulation') {
@@ -188,21 +207,6 @@ function getFillTimingLabel(spec: Record<string, unknown> | undefined, parsed: R
   const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
   if (strategyType === 'periodic_accumulation') return formatExecutionPriceBasis(spec);
   return '下一根开盘价';
-}
-
-function getSignalTimingLabel(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null): string {
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') return '按计划触发';
-  return '收盘后判定';
-}
-
-function getPositionBehaviorLabel(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null): string {
-  const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed?.parsedStrategy.strategyKind || '');
-  if (strategyType === 'periodic_accumulation') return '持续累积仓位';
-  if (strategyType === 'moving_average_crossover' || strategyType === 'macd_crossover' || strategyType === 'rsi_threshold') {
-    return '单标的多头 / 单次满仓 / 最多一笔持仓';
-  }
-  return '单一多头仓位';
 }
 
 function formatStrategyCondition(spec: Record<string, unknown> | undefined, parsed: RuleBacktestParseResponse | null, side: 'entry' | 'exit'): string {
@@ -264,6 +268,91 @@ function formatAssumptionRecord(item: Record<string, unknown>): string {
   return `${label}${value}${reason ? `。${reason}` : ''}`;
 }
 
+function hasMeaningfulValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function getLegacySetupValue(setup: Record<string, unknown> | undefined, key: string): unknown {
+  if (!setup) return undefined;
+  if (key in setup) return setup[key];
+  const camelKey = key.replace(/_([a-z])/g, (_, ch: string) => ch.toUpperCase());
+  if (camelKey in setup) return setup[camelKey];
+  return undefined;
+}
+
+function matchesKeyword(text: string, keywords: string[]): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+  return keywords.some((keyword) => normalized.includes(keyword.trim().toLowerCase()));
+}
+
+function resolveFieldSource(
+  parsed: RuleBacktestParseResponse | null,
+  hint: StrategyFieldSourceHint,
+): StrategyFieldSource | null {
+  if (!parsed) return null;
+
+  const assumptionItems = getParsedAssumptionRecords(parsed);
+  const warnings = getParseWarnings(parsed);
+
+  if (hint.assumptionKeys?.length || hint.assumptionKeywords?.length) {
+    const hasAssumptionMatch = assumptionItems.some((item) => {
+      const key = String(item.key || '').trim();
+      const text = [item.label, item.reason, item.value].map((value) => String(value || '')).join(' ');
+      return (hint.assumptionKeys?.includes(key) ?? false)
+        || (hint.assumptionKeywords ? matchesKeyword(text, hint.assumptionKeywords) : false);
+    });
+    if (hasAssumptionMatch) return 'derived';
+  }
+
+  if (hint.warningCodes?.length || hint.warningKeywords?.length) {
+    const hasWarningMatch = warnings.some((item) => {
+      const code = String(item.code || '').trim();
+      const text = String(item.message || '');
+      return (hint.warningCodes?.includes(code) ?? false)
+        || (hint.warningKeywords ? matchesKeyword(text, hint.warningKeywords) : false);
+    });
+    if (hasWarningMatch) return 'derived';
+  }
+
+  const directSpec = parsed.parsedStrategy.strategySpec;
+  if (directSpec && typeof directSpec === 'object') {
+    const hasSpecValue = (hint.specPaths || []).some((path) => hasMeaningfulValue(getStrategySpecValue(directSpec as Record<string, unknown>, path)));
+    if (hasSpecValue) return 'explicit';
+  }
+
+  const setup = parsed.parsedStrategy.setup;
+  const hasSetupValue = (hint.setupKeys || []).some((key) => hasMeaningfulValue(getLegacySetupValue(setup, key)));
+  if (hasSetupValue || (!directSpec && setup && typeof setup === 'object')) {
+    return 'compat';
+  }
+
+  return null;
+}
+
+function getFieldSourceLabel(source: StrategyFieldSource | null | undefined): string | null {
+  if (source === 'explicit') return '显式结构化';
+  if (source === 'derived') return '默认/推断';
+  if (source === 'compat') return '兼容 setup';
+  return null;
+}
+
+function row(
+  label: string,
+  value: string,
+  parsed: RuleBacktestParseResponse | null,
+  hint: StrategyFieldSourceHint,
+): StrategyPreviewRow {
+  return {
+    label,
+    value,
+    source: resolveFieldSource(parsed, hint),
+  };
+}
+
 function buildConfirmationRows(
   parsed: RuleBacktestParseResponse | null,
   currentCode: string,
@@ -275,34 +364,98 @@ function buildConfirmationRows(
   const strategyType = String(getStrategySpecValue(spec, ['strategy_type']) || parsed.parsedStrategy.strategyKind || '');
   if (strategyType === 'periodic_accumulation') {
     return [
-      { label: '标的', value: getPeriodicString(spec, 'symbol') || currentCode || '--' },
-      { label: '策略类型', value: getStrategyTypeLabel(parsed) },
-      { label: '买入条件', value: formatDraftOrder(spec) },
-      { label: '卖出条件', value: formatExitPolicy(spec) },
-      { label: '执行频率', value: formatFrequencyLabel(spec, parsed) },
-      { label: '信号时点', value: getSignalTimingLabel(spec, parsed) },
-      { label: '成交时点', value: getFillTimingLabel(spec, parsed) },
-      { label: '仓位行为', value: getPositionBehaviorLabel(spec, parsed) },
-      { label: '期末处理', value: formatExitPolicy(spec) },
-      { label: '初始资金', value: formatNumber(getPeriodicNumber(spec, 'initial_capital')) },
-      { label: '日期区间', value: `${getPeriodicString(spec, 'start_date') || startDate || '--'} -> ${getPeriodicString(spec, 'end_date') || endDate || '--'}` },
-      { label: '现金策略', value: formatCashPolicy(spec) },
+      row('策略类型', getStrategyTypeLabel(parsed), parsed, {
+        specPaths: [['strategy_type']],
+      }),
+      row('标的', getPeriodicString(spec, 'symbol') || currentCode || '--', parsed, {
+        specPaths: [['symbol']],
+        setupKeys: ['symbol'],
+      }),
+      row('日期区间', `${getPeriodicString(spec, 'start_date') || startDate || '--'} -> ${getPeriodicString(spec, 'end_date') || endDate || '--'}`, parsed, {
+        specPaths: [['date_range', 'start_date'], ['date_range', 'end_date']],
+        setupKeys: ['start_date', 'end_date'],
+      }),
+      row('初始资金', formatNumber(getPeriodicNumber(spec, 'initial_capital')), parsed, {
+        specPaths: [['capital', 'initial_capital']],
+        setupKeys: ['initial_capital'],
+      }),
+      row('执行频率', formatFrequencyLabel(spec, parsed), parsed, {
+        specPaths: [['schedule', 'frequency']],
+        setupKeys: ['execution_frequency'],
+      }),
+      row('买入条件', formatDraftOrder(spec), parsed, {
+        specPaths: [['entry', 'order', 'mode'], ['entry', 'order', 'quantity'], ['entry', 'order', 'amount']],
+        setupKeys: ['order_mode', 'quantity_per_trade', 'amount_per_trade'],
+      }),
+      row('成交时点', getFillTimingLabel(spec, parsed), parsed, {
+        specPaths: [['entry', 'price_basis']],
+        setupKeys: ['execution_price_basis'],
+        assumptionKeys: ['fill_timing', 'entry_fill_timing', 'simulated_entry_timing'],
+        assumptionKeywords: ['成交时点', '开盘执行', '下一根开盘'],
+      }),
+      row('卖出条件', formatExitPolicy(spec), parsed, {
+        specPaths: [['exit', 'policy']],
+        setupKeys: ['exit_policy'],
+      }),
+      row('现金策略', formatCashPolicy(spec), parsed, {
+        specPaths: [['position_behavior', 'cash_policy']],
+        setupKeys: ['cash_policy'],
+      }),
+      row('交易成本', `手续费 ${formatNumber(getPeriodicNumber(spec, 'fee_bps'), 0)} bp / 滑点 ${formatNumber(getPeriodicNumber(spec, 'slippage_bps'), 0)} bp`, parsed, {
+        specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']],
+        setupKeys: ['fee_bps', 'slippage_bps'],
+      }),
     ];
   }
 
   if (strategyType === 'moving_average_crossover' || strategyType === 'macd_crossover' || strategyType === 'rsi_threshold') {
     return [
-      { label: '标的', value: String(getStrategySpecValue(spec, ['symbol']) || currentCode || '--') },
-      { label: '策略类型', value: getStrategyTypeLabel(parsed) },
-      { label: '买入条件', value: formatStrategyCondition(spec, parsed, 'entry') },
-      { label: '卖出条件', value: formatStrategyCondition(spec, parsed, 'exit') },
-      { label: '执行频率', value: formatExecutionFrequency(spec) },
-      { label: '信号时点', value: formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'signal_timing'])) },
-      { label: '成交时点', value: formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'fill_timing'])) },
-      { label: '仓位行为', value: getPositionBehaviorLabel(spec, parsed) },
-      { label: '期末处理', value: formatEndBehavior(spec) },
-      { label: '初始资金', value: formatNumber(Number(getStrategySpecValue(spec, ['capital', 'initial_capital']) || 0)) },
-      { label: '日期区间', value: `${String(getStrategySpecValue(spec, ['date_range', 'start_date']) || startDate || '--')} -> ${String(getStrategySpecValue(spec, ['date_range', 'end_date']) || endDate || '--')}` },
+      row('策略类型', getStrategyTypeLabel(parsed), parsed, {
+        specPaths: [['strategy_type']],
+      }),
+      row('标的', String(getStrategySpecValue(spec, ['symbol']) || currentCode || '--'), parsed, {
+        specPaths: [['symbol']],
+        setupKeys: ['symbol'],
+      }),
+      row('日期区间', `${String(getStrategySpecValue(spec, ['date_range', 'start_date']) || startDate || '--')} -> ${String(getStrategySpecValue(spec, ['date_range', 'end_date']) || endDate || '--')}`, parsed, {
+        specPaths: [['date_range', 'start_date'], ['date_range', 'end_date']],
+        setupKeys: ['start_date', 'end_date'],
+      }),
+      row('初始资金', formatNumber(Number(getStrategySpecValue(spec, ['capital', 'initial_capital']) || 0)), parsed, {
+        specPaths: [['capital', 'initial_capital']],
+        setupKeys: ['initial_capital'],
+      }),
+      row('买入条件', formatStrategyCondition(spec, parsed, 'entry'), parsed, {
+        specPaths: [['signal']],
+        warningCodes: ['default_macd_periods'],
+        warningKeywords: ['默认使用', '未显式写出'],
+      }),
+      row('卖出条件', formatStrategyCondition(spec, parsed, 'exit'), parsed, {
+        specPaths: [['signal']],
+        warningCodes: ['default_macd_periods'],
+        warningKeywords: ['默认使用', '未显式写出'],
+      }),
+      row('执行频率', formatExecutionFrequency(spec), parsed, {
+        specPaths: [['execution', 'frequency']],
+        setupKeys: ['execution_frequency'],
+      }),
+      row('信号时点', formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'signal_timing'])), parsed, {
+        specPaths: [['execution', 'signal_timing']],
+        assumptionKeys: ['analysis_signal_timing', 'signal_evaluation_timing'],
+        assumptionKeywords: ['信号时点', '收盘后判定'],
+      }),
+      row('成交时点', formatExecutionTimingValue(getStrategySpecValue(spec, ['execution', 'fill_timing'])), parsed, {
+        specPaths: [['execution', 'fill_timing']],
+        assumptionKeys: ['fill_timing', 'entry_fill_timing', 'simulated_entry_timing'],
+        assumptionKeywords: ['成交时点', '下一根开盘'],
+      }),
+      row('期末处理', formatEndBehavior(spec), parsed, {
+        specPaths: [['end_behavior', 'policy']],
+      }),
+      row('交易成本', `手续费 ${formatNumber(Number(getStrategySpecValue(spec, ['costs', 'fee_bps']) || 0), 0)} bp / 滑点 ${formatNumber(Number(getStrategySpecValue(spec, ['costs', 'slippage_bps']) || 0), 0)} bp`, parsed, {
+        specPaths: [['costs', 'fee_bps'], ['costs', 'slippage_bps']],
+        setupKeys: ['fee_bps', 'slippage_bps'],
+      }),
     ];
   }
 
@@ -397,11 +550,95 @@ function StrategySpecSummaryCard({
       {rows.map((row) => (
         <div key={`${row.label}-${row.value}`} className="preview-card">
           <p className="metric-card__label">{row.label}</p>
+          {getFieldSourceLabel(row.source) ? (
+            <div className="product-chip-list product-chip-list--tight">
+              <span className="product-chip">{getFieldSourceLabel(row.source)}</span>
+            </div>
+          ) : null}
           <p className="preview-card__text">{row.value}</p>
         </div>
       ))}
     </div>
   );
+}
+
+function StrategyParseDetails({
+  parsed,
+}: {
+  parsed: RuleBacktestParseResponse | null;
+}) {
+  if (!parsed) return <div className="product-empty-state product-empty-state--compact">暂无解析细节。</div>;
+
+  const normalizedText = String(parsed.parsedStrategy.normalizedText || '').trim();
+  const sourceText = String(parsed.parsedStrategy.sourceText || parsed.strategyText || '').trim();
+
+  return (
+    <div className="summary-block">
+      <div className="summary-block__header">
+        <div>
+          <SectionEyebrow>解析细节</SectionEyebrow>
+          <h3 className="summary-block__title">原始输入与归一化表达</h3>
+        </div>
+      </div>
+      <div className="preview-grid">
+        <div className="preview-card">
+          <p className="metric-card__label">规格来源</p>
+          <p className="preview-card__text">{getStrategySpecSourceLabel(parsed)}</p>
+        </div>
+        <div className="preview-card">
+          <p className="metric-card__label">需要确认</p>
+          <p className="preview-card__text">{parsed.needsConfirmation ? '是' : '否'}</p>
+        </div>
+      </div>
+      <div className="mt-4">
+        <p className="metric-card__label">原始输入</p>
+        <p className="product-section-copy">{sourceText || '--'}</p>
+      </div>
+      <div className="mt-4">
+        <p className="metric-card__label">归一化表达</p>
+        <p className="product-section-copy">{normalizedText || '--'}</p>
+      </div>
+    </div>
+  );
+}
+
+function buildAssumptionCards(
+  assumptionGroups: Array<Record<string, unknown>>,
+  assumptionItems: string[],
+  parseWarnings: Array<Record<string, unknown>>,
+  ambiguities: Array<Record<string, unknown>>,
+): StrategyPreviewCardGroup[] {
+  const cards: StrategyPreviewCardGroup[] = [];
+
+  if (assumptionGroups.length > 0) {
+    cards.push(
+      ...assumptionGroups.map((group, index) => ({
+        label: String(group.label || `默认假设 ${index + 1}`),
+        items: (Array.isArray(group.items) ? group.items : [])
+          .map((item) => formatAssumptionRecord(item as Record<string, unknown>))
+          .filter(Boolean),
+      })),
+    );
+  } else if (assumptionItems.length > 0) {
+    cards.push({
+      label: '默认假设',
+      items: assumptionItems,
+    });
+  }
+
+  const warningItems = [
+    ...parseWarnings.slice(0, 4).map((item) => String(item.message || '请人工确认。')),
+    ...ambiguities.slice(0, 4).map((item) => String(item.message || item.suggestion || '请人工确认。')),
+  ].filter(Boolean);
+
+  if (warningItems.length > 0) {
+    cards.push({
+      label: '推断与提醒',
+      items: warningItems,
+    });
+  }
+
+  return cards.filter((card) => card.items.length > 0);
 }
 
 type FlowProps = {
@@ -535,6 +772,12 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
         ? buildPeriodicAssumptions(strategySpec)
         : []
     );
+  const assumptionCards = buildAssumptionCards(
+    assumptionGroups,
+    assumptionItems,
+    parseWarnings,
+    parsedStrategy?.ambiguities || [],
+  );
   const canProceedFromBaseParams = Boolean(
     startDate
     && endDate
@@ -877,8 +1120,33 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   </div>
                 </div>
 
-                <Disclosure summary="查看解析细节">
+                <div className="summary-block mt-4" data-testid="confirm-executable-spec-section">
+                  <div className="summary-block__header">
+                    <div>
+                      <SectionEyebrow>可执行规格</SectionEyebrow>
+                      <h3 className="summary-block__title">实际执行内容</h3>
+                    </div>
+                  </div>
+                  <p className="product-section-copy">
+                    以下字段来自当前 canonical <code>strategy_spec</code>，会直接驱动确定性回测执行。
+                  </p>
+                  <div className="product-chip-list mb-4">
+                    <span className="product-chip">策略族 · {getStrategyTypeLabel(parsedStrategy)}</span>
+                    <span className="product-chip">规格来源 · {getStrategySpecSourceLabel(parsedStrategy)}</span>
+                    <span className="product-chip">归一化 · {getParsedNormalizationState(parsedStrategy)}</span>
+                    <span className="product-chip">需要确认 · {parsedStrategy?.needsConfirmation ? '是' : '否'}</span>
+                    <span className="product-chip">可执行 · {getParsedExecutable(parsedStrategy) ? '是' : '否'}</span>
+                  </div>
+                  <div className="product-chip-list product-chip-list--tight mb-4">
+                    <span className="product-chip">显式结构化</span>
+                    <span className="product-chip">默认/推断</span>
+                    <span className="product-chip">兼容 setup</span>
+                  </div>
                   <StrategySpecSummaryCard parsed={parsedStrategy} currentCode={code} startDate={startDate} endDate={endDate} />
+                </div>
+
+                <Disclosure summary="查看解析细节">
+                  <StrategyParseDetails parsed={parsedStrategy} />
                 </Disclosure>
 
                 {(supportedPortionSummary || unsupportedExtensions.length > 0 || rewriteSuggestions.length > 0) && (
@@ -923,24 +1191,23 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                   </div>
                 )}
 
-                {assumptionGroups.length > 0 ? (
+                {assumptionCards.length > 0 ? (
                   <div className="summary-block mt-4" data-testid="confirm-assumptions-section">
                     <div className="summary-block__header">
                       <div>
-                        <SectionEyebrow>默认假设</SectionEyebrow>
-                        <h3 className="summary-block__title">假设摘要</h3>
+                        <SectionEyebrow>默认与推断</SectionEyebrow>
+                        <h3 className="summary-block__title">默认补全与提醒</h3>
                       </div>
                     </div>
+                    <p className="product-section-copy">这些内容不是用户显式写出的 canonical 执行字段，而是系统补全、默认或需要人工确认的部分。</p>
                     <div className="preview-grid">
-                      {assumptionGroups.map((group, index) => {
-                        const label = String(group.label || `默认假设 ${index + 1}`);
-                        const items = Array.isArray(group.items) ? group.items : [];
+                      {assumptionCards.map((group, index) => {
                         return (
-                          <div key={`${label}-${index}`} className="preview-card">
-                            <p className="metric-card__label">{label}</p>
+                          <div key={`${group.label}-${index}`} className="preview-card">
+                            <p className="metric-card__label">{group.label}</p>
                             <div className="product-chip-list">
-                              {items.map((item, itemIndex) => (
-                                <span key={`${label}-${itemIndex}`} className="product-chip">{formatAssumptionRecord(item as Record<string, unknown>)}</span>
+                              {group.items.map((item, itemIndex) => (
+                                <span key={`${group.label}-${itemIndex}`} className="product-chip">{item}</span>
                               ))}
                             </div>
                           </div>
@@ -948,27 +1215,6 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
                       })}
                     </div>
                   </div>
-                ) : assumptionItems.length > 0 ? (
-                  <Disclosure summary="默认假设">
-                    <ul className="product-list">
-                      {assumptionItems.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </Disclosure>
-                ) : null}
-
-                {(parseWarnings.length > 0 || (parsedStrategy && parsedStrategy.ambiguities.length > 0)) ? (
-                  <Disclosure summary="提醒">
-                    <ul className="product-list">
-                      {parseWarnings.slice(0, 4).map((item, index) => (
-                        <li key={`${String(item.code || index)}-warning`}>{String(item.message || '请人工确认。')}</li>
-                      ))}
-                      {parsedStrategy?.ambiguities.slice(0, 4).map((item, index) => (
-                        <li key={`${String(item.code || index)}-ambiguity`}>{String(item.message || item.suggestion || '请人工确认。')}</li>
-                      ))}
-                    </ul>
-                  </Disclosure>
                 ) : null}
 
                 {!isProfessionalMode ? (

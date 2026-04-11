@@ -395,6 +395,17 @@ function makeUnsupportedMacdParseResponse(): RuleBacktestParseResponse {
   };
 }
 
+function makeLegacySetupOnlyParseResponse(): RuleBacktestParseResponse {
+  const response = makeRuleParseResponse();
+  return {
+    ...response,
+    parsedStrategy: {
+      ...response.parsedStrategy,
+      strategySpec: undefined,
+    },
+  };
+}
+
 function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBacktestRunResponse {
   return {
     id: 99,
@@ -839,7 +850,10 @@ describe('BacktestPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '解析策略' }));
 
     const guidanceSection = await screen.findByTestId('confirm-guidance-section');
+    const assumptionsSection = screen.getByTestId('confirm-assumptions-section');
     expect(screen.getAllByText('当前不支持').length).toBeGreaterThan(0);
+    expect(within(assumptionsSection).getByText('推断与提醒')).toBeInTheDocument();
+    expect(within(assumptionsSection).getByText('未显式写出 MACD 参数，当前默认使用 (12, 26, 9)。')).toBeInTheDocument();
 
     fireEvent.click(within(guidanceSection).getByRole('button', {
       name: /改写成当前可执行版本:\s*AAPL，MACD金叉买入，死叉卖出/i,
@@ -856,11 +870,33 @@ describe('BacktestPage', () => {
 
     expect(screen.getByTestId('confirm-status-section')).toBeInTheDocument();
     expect(screen.getByTestId('confirm-compact-summary-section')).toBeInTheDocument();
+    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
+    expect(executableSpecSection).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('实际执行内容')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('规格来源 · 显式 strategy_spec')).toBeInTheDocument();
+    expect(within(executableSpecSection).getAllByText('显式结构化').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getAllByText('默认/推断').length).toBeGreaterThan(0);
+    expect(within(executableSpecSection).getByText('每个交易日')).toBeInTheDocument();
+    expect(within(executableSpecSection).getByText('100 股 / 次')).toBeInTheDocument();
     expect(screen.getByText('查看解析细节')).toBeInTheDocument();
+    expect(screen.getByTestId('confirm-assumptions-section')).toBeInTheDocument();
+    expect(screen.getByText('默认补全与提醒')).toBeInTheDocument();
     expect(screen.queryByTestId('backtest-display-board')).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/我已确认当前解析结果与执行假设/i)).toHaveLength(1);
     expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-chart-workspace')).not.toBeInTheDocument();
+  });
+
+  it('marks executable spec fields as compatibility-derived when only legacy setup is available', async () => {
+    parseRuleStrategy.mockResolvedValueOnce(makeLegacySetupOnlyParseResponse());
+
+    renderBacktestRoutes();
+
+    await parseDeterministicStrategy();
+
+    const executableSpecSection = screen.getByTestId('confirm-executable-spec-section');
+    expect(within(executableSpecSection).getByText('规格来源 · 兼容 setup')).toBeInTheDocument();
+    expect(within(executableSpecSection).getAllByText('兼容 setup').length).toBeGreaterThan(1);
   });
 
   it('keeps historical evaluation functional across Normal and Professional modes', async () => {

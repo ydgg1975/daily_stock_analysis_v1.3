@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🔎 **Deterministic 回测前确认区改为优先展示 canonical strategy_spec 与字段级来源标记** — `/backtest` 的确定性策略确认区现在会把“实际执行内容”作为默认可见区块，直接展示当前 canonical `strategy_spec` 的 family、来源、归一化状态和关键执行字段，减少用户必须点开细节才能知道“系统到底会执行什么”的不透明感。关键执行字段还会附带轻量 provenance 标记，用来区分 `显式结构化 / 默认或推断 / 兼容 setup` 三类来源。原有 `parseWarnings` 也不再只藏在次级 disclosure 中，而是和 assumption groups 一起归到“默认补全与提醒”层，与“不支持项 / 改写建议”分开显示，更清楚地区分显式结构化字段、系统补全假设和当前不会执行的扩展部分。
 - 🧩 **Deterministic strategy_spec 归一化改为优先保留显式结构化字段** — 自然语言策略解析后，周期定投与已支持的指标型策略在再次归一化时，现在会优先沿用已有 `strategy_spec` 中明确给出的 `signal / capital / order / schedule / costs` 等结构化字段，而不是被旧的 `setup` 默认值静默覆盖。同时规范化后的 `strategy_spec` 会附带统一的 `support` 元信息与 `strategy_family / max_lookback`，让 NLP 解释结果与后续 deterministic 执行之间的契约更可检查、更稳定。
 - 🧱 **Deterministic strategy_spec 对已支持 family 改为输出更稳定的 canonical shape** — 当前已支持的 `periodic_accumulation / moving_average_crossover / macd_crossover / rsi_threshold` 现在会通过 family-specific payload builder 输出规范化后的 `strategy_spec`，只保留 deterministic 引擎真正支持的字段集合，并对 legacy `setup` 输入继续做兼容归一化。这让已支持 family 的结果不再依赖松散 dict 合并保留任意附加键，降低 NLP 解释层与执行层之间的结构漂移。
 - 🔗 **Deterministic strategy_spec 已支持 family 契约在 API schema 与前端类型上对齐** — 规则回测 API 现在会对 `parsed_strategy.strategy_spec` 的已支持 family 使用显式 schema（`periodic_accumulation / moving_average_crossover / macd_crossover / rsi_threshold`），结果响应不再只暴露为宽泛 dict；前端共享类型也同步对齐为 family union，并继续保留 generic fallback 兼容未完全结构化或 legacy payload。
