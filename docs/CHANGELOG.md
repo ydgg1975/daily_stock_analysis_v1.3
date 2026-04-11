@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🔌 **Deterministic 结果详情 API 统一公开 `auditRows` 字段名** — 规则回测服务内部仍以存储载荷里的 `summary.visualization.audit_rows` 作为审计台账真源，但 `/api/v1/backtest/rule/runs/{run_id}` 等 API 响应现在会把该字段稳定序列化为公开契约 `auditRows`，避免新运行在原始 JSON 中只能看到 `audit_rows`、前端再被动 camelCase 转换的隐式差异。CSV 导出与结果详情继续共用同一份已持久化 ledger。
 - ⚙️ **Deterministic backtest 执行模型收口为结构化配置** — 规则回测现在会把执行语义持久化为结构化 `execution_model`，明确记录 `signal_evaluation_timing / entry_timing / exit_timing / entry_fill_price_basis / exit_fill_price_basis / fee_model / slippage_model / market_rules`，并继续派生旧的 `execution_assumptions` 兼容视图。引擎内部也改为优先围绕这份结构化配置执行与持久化，历史运行若还没有新字段则会从旧的 assumptions 回推兼容配置，避免结果解释口径漂移。
 - 🧾 **Deterministic backtest audit ledger 持久化收口为单一真源** — 规则回测完成后现在会把日级 audit ledger 作为结构化结果的一部分持久化保存，字段口径统一收口为 `date / symbol_close / benchmark_close / position / shares / cash / holdings_value / total_portfolio_value / daily_pnl / daily_return / cumulative_return / benchmark_cumulative_return / buy_hold_cumulative_return / action / fill_price`，并继续保留信号摘要、手续费、滑点、drawdown 与 unavailable 原因等可审计字段。结果页读取与 CSV 导出在存在存储 ledger 时会直接复用这份持久化数据，不再走另一条临时重建路径；历史结果回放也保持与当前运行一致的 stored-ledger 读取语义。
 - 🗂️ **Deterministic 结果页改为“首屏看图 + 深信息入 tabs/collapse”** — `/backtest/results/:runId` 不再把日级详情、审计表、交易表、参数快照、benchmark 说明、执行假设和历史列表继续纵向常驻堆叠在默认页面流里。结果页首屏现在只保留顶部摘要 / 操作、KPI 和统一 chart workspace；日级详情改为跟随 hover 的浮动明细卡，`审计明细 / 交易记录 / 参数与假设 / 历史结果` 则收进专门标签页，首屏回到以图表分析为中心的 JoinQuant 风格。

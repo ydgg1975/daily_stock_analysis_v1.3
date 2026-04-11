@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class BacktestRunRequest(BaseModel):
@@ -293,6 +293,8 @@ class RuleBacktestExecutionModel(BaseModel):
 
 
 class RuleBacktestHistoryItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: int
     code: str
     strategy_text: str
@@ -353,7 +355,11 @@ class RuleBacktestHistoryItem(BaseModel):
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    audit_rows: List[RuleBacktestAuditRowItem] = Field(default_factory=list)
+    auditRows: List[RuleBacktestAuditRowItem] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("audit_rows", "auditRows"),
+        serialization_alias="auditRows",
+    )
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -366,6 +372,8 @@ class RuleBacktestHistoryResponse(BaseModel):
 
 
 class RuleBacktestRunResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: int
     code: str
     strategy_text: str
@@ -426,7 +434,11 @@ class RuleBacktestRunResponse(BaseModel):
     benchmark_summary: Dict[str, Any] = Field(default_factory=dict)
     buy_and_hold_curve: List[Dict[str, Any]] = Field(default_factory=list)
     buy_and_hold_summary: Dict[str, Any] = Field(default_factory=dict)
-    audit_rows: List[RuleBacktestAuditRowItem] = Field(default_factory=list)
+    auditRows: List[RuleBacktestAuditRowItem] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("audit_rows", "auditRows"),
+        serialization_alias="auditRows",
+    )
     daily_return_series: List[Dict[str, Any]] = Field(default_factory=list)
     exposure_curve: List[Dict[str, Any]] = Field(default_factory=list)
     ai_summary: Optional[str] = None

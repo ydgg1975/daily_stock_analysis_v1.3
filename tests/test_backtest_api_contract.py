@@ -134,6 +134,38 @@ class BacktestApiContractTestCase(unittest.TestCase):
         service.submit_backtest.assert_not_called()
         self.assertEqual(len(background_tasks.tasks), 0)
 
+    def test_get_rule_backtest_run_serializes_canonical_audit_rows_field(self) -> None:
+        service = MagicMock()
+        service.get_run.return_value = self._rule_run_payload(status="completed")
+        service.get_run.return_value["audit_rows"] = [
+            {
+                "date": "2025-01-02",
+                "symbol_close": 101.0,
+                "benchmark_close": 202.0,
+                "position": 1.0,
+                "shares": 100.0,
+                "cash": 0.0,
+                "holdings_value": 10100.0,
+                "total_portfolio_value": 10100.0,
+                "daily_pnl": 100.0,
+                "daily_return": 1.0,
+                "cumulative_return": 1.0,
+                "benchmark_cumulative_return": 0.5,
+                "buy_hold_cumulative_return": 0.75,
+                "action": "hold",
+                "fill_price": None,
+            }
+        ]
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_run(123, db_manager=MagicMock())
+
+        payload = response.model_dump(by_alias=True)
+        self.assertIn("auditRows", payload)
+        self.assertNotIn("audit_rows", payload)
+        self.assertEqual(len(payload["auditRows"]), 1)
+        self.assertEqual(payload["auditRows"][0]["symbol_close"], 101.0)
+
     def test_get_rule_backtest_run_returns_404_not_found_contract(self) -> None:
         service = MagicMock()
         service.get_run.return_value = None
