@@ -1,0 +1,12 @@
+#,验收项,检查结果,备注
+1,基础通路,✅,
+2,页面一致性,⚠️,需人工比对结果页/历史页
+3,Confirmation 页无 fake runtime,⚠️,需人工确认确认页未显示 runtime timeline
+4,正常买卖路径可读,❌,没有 buy/sell 事件
+5,现金不足 skip,❌,没有 skip 事件或 cash 信息不完整
+6,assumptions/defaults 可追溯,❌,assumptions 为空
+7,Persisted-first replay,⚠️,需人工确认历史页显示顺序
+8,旧 run fallback,❌,fallback 标记缺失
+9,Trace 可读性 & 中文,⚠️,需人工确认中文字段显示
+10,结果数据与 trace 对齐,❌,最终 position/cash 异常
+11,回归检查,⚠️,需人工检查 confirmation / explanation 页

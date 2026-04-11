@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for AI-assisted rule backtesting."""
 
+import csv
 import json
 import os
 import tempfile
@@ -11,7 +12,7 @@ from unittest.mock import patch
 
 from src.config import Config
 from src.core.rule_backtest_engine import RuleBacktestEngine, RuleBacktestParser
-from src.services.rule_backtest_service import RuleBacktestService
+from src.services.rule_backtest_service import RuleBacktestService, run_backtest_automated
 from src.storage import DatabaseManager, StockDaily
 
 
@@ -699,6 +700,170 @@ class RuleBacktestTestCase(unittest.TestCase):
         self.assertEqual(comparison.get("buy_and_hold_curve"), response["buy_and_hold_curve"])
         self.assertEqual(comparison.get("metrics", {}).get("benchmark_return_pct"), response["benchmark_return_pct"])
         self.assertEqual(comparison.get("metrics", {}).get("buy_and_hold_return_pct"), response["buy_and_hold_return_pct"])
+
+    def test_service_exports_execution_trace_csv_and_json_from_stored_result(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        self.assertIn("execution_trace", response)
+        self.assertGreater(len(response["execution_trace"]["rows"]), 0)
+        self.assertTrue(response["execution_trace"]["assumptions_defaults"]["summary_text"])
+
+        csv_path = os.path.join(self._temp_dir.name, "trace.csv")
+        json_path = os.path.join(self._temp_dir.name, "trace.json")
+        service.export_execution_trace_csv(run_id=response["id"], output_path=csv_path)
+        service.export_execution_trace_json(run_id=response["id"], output_path=json_path)
+
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertGreater(len(rows), 0)
+        self.assertEqual(
+            list(rows[0].keys()),
+            [
+                "日期",
+                "标的收盘价",
+                "基准收盘价",
+                "信号摘要",
+                "动作",
+                "成交价",
+                "持股数",
+                "现金",
+                "持仓市值",
+                "总资产",
+                "当日盈亏",
+                "当日收益率",
+                "策略累计收益率",
+                "基准累计收益率",
+                "买入持有累计收益率",
+                "仓位",
+                "手续费",
+                "滑点",
+                "备注",
+                "assumptions",
+                "fallback",
+            ],
+        )
+        self.assertIn("fallback", rows[0])
+        self.assertIn("assumptions", rows[0])
+        self.assertIn("仓位", rows[0])
+        self.assertIn("现金", rows[0])
+        self.assertIn("总资产", rows[0])
+        self.assertTrue(any((row.get("动作") or "") in {"买", "卖"} for row in rows))
+        self.assertTrue(all((row.get("fallback") or "") for row in rows))
+
+        with open(json_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        self.assertIn("trace_rows", payload)
+        self.assertEqual(payload["trace_rows"], rows)
+        self.assertIn("assumptions", payload)
+        self.assertIn("execution_model", payload)
+
+    def test_periodic_trace_marks_skip_and_python_automation_can_auto_confirm(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_ensure_market_history",
+            return_value=0,
+        ):
+            with self.assertRaises(ValueError):
+                service.parse_and_run(
+                    code="600519",
+                    strategy_text="资金1500，从2024-01-05到2024-01-20，每天买100股ORCL，买到资金耗尽为止",
+                    confirmed=False,
+                )
+
+            response = service.parse_and_run_automated(
+                code="600519",
+                strategy_text="资金1500，从2024-01-05到2024-01-20，每天买100股ORCL，买到资金耗尽为止",
+                start_date="2024-01-05",
+                end_date="2024-01-20",
+                initial_capital=1500.0,
+            )
+
+        trace_rows = list(response["execution_trace"]["rows"])
+        self.assertTrue(any(row.get("event_type") == "buy" for row in trace_rows))
+        self.assertTrue(any(row.get("event_type") == "skip" for row in trace_rows))
+        self.assertTrue(any("默认/推断" in str(row.get("assumptions_defaults") or "") for row in trace_rows))
+
+    def test_execution_trace_marks_benchmark_fallback_without_recomputing_rows(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None), patch.object(
+            service,
+            "_load_external_benchmark_context",
+            return_value=(
+                [],
+                {
+                    "label": "沪深300",
+                    "code": "000300.SH",
+                    "method": "benchmark_security",
+                    "requested_mode": "index_hs300",
+                    "resolved_mode": "index_hs300",
+                    "price_basis": "close",
+                    "return_pct": None,
+                    "unavailable_reason": "沪深300 在当前窗口没有可用行情。",
+                },
+                "沪深300 在当前窗口没有可用行情。",
+            ),
+        ):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                benchmark_mode="auto",
+                confirmed=True,
+            )
+
+        self.assertTrue(response["execution_trace"]["fallback"]["run_fallback"])
+        self.assertTrue(all(str(row.get("fallback") or "").strip() not in {"", "无"} for row in response["execution_trace"]["rows"]))
+
+    def test_get_run_rebuilds_execution_trace_for_legacy_run_with_provenance(self) -> None:
+        service = RuleBacktestService(self.db)
+
+        with patch.object(service, "_get_llm_adapter", return_value=None):
+            response = service.parse_and_run(
+                code="600519",
+                strategy_text="Buy when Close > MA3. Sell when Close < MA3.",
+                lookback_bars=20,
+                confirmed=True,
+            )
+
+        run_row = service.repo.get_run(response["id"])
+        assert run_row is not None
+        summary = json.loads(run_row.summary_json)
+        summary.pop("execution_trace", None)
+        service.repo.update_run(run_row.id, summary_json=service._serialize_json(summary))
+
+        detail = service.get_run(run_row.id)
+        assert detail is not None
+        self.assertEqual(detail["execution_trace"]["source"], "rebuilt_from_stored_audit_rows")
+        self.assertTrue(detail["execution_trace"]["fallback"]["trace_rebuilt"])
+        self.assertTrue(all("历史运行回补trace" in str(row.get("fallback") or "") for row in detail["execution_trace"]["rows"]))
+
+    def test_module_level_run_backtest_automated_exports_trace_files(self) -> None:
+        with patch.object(RuleBacktestService, "_ensure_market_history", return_value=0), patch.object(
+            RuleBacktestService,
+            "_get_llm_adapter",
+            return_value=None,
+        ):
+            result = run_backtest_automated(
+                symbol="600519",
+                scenario="cash_insufficiency_skip",
+                initial_capital=1500.0,
+                output_dir=self._temp_dir.name,
+            )
+
+        self.assertTrue(os.path.exists(result["csv_path"]))
+        self.assertTrue(os.path.exists(result["json_path"]))
+        self.assertEqual(result["scenario"], "cash_insufficiency_skip")
 
     def test_service_persists_explicit_benchmark_unavailable_reason_without_fabricated_returns(self) -> None:
         service = RuleBacktestService(self.db)

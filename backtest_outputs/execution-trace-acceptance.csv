@@ -1,0 +1,6 @@
+﻿scenario,passed,trace_length
+A_standard_buy_sell,✅,2515
+B_cash_insufficient,✅,2515
+C_inferred_default,✅,2515
+D_compat_setup,✅,2515
+E_old_run_fallback,✅,2515
