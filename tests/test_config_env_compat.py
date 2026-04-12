@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.config import Config
+from src.config import Config, setup_env
 
 
 class ConfigEnvCompatibilityTestCase(unittest.TestCase):
@@ -193,6 +193,60 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.news_max_age_days, 3)
         self.assertEqual(config.max_workers, 3)
         self.assertEqual(config.webui_port, 8000)
+
+    def test_setup_env_maps_legacy_local_proxy_to_standard_proxy_variables(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "USE_PROXY=true",
+                        "PROXY_HOST=127.0.0.1",
+                        "PROXY_PORT=18080",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ENV_FILE": str(env_path),
+                },
+                clear=True,
+            ):
+                setup_env(override=True)
+
+                self.assertEqual(os.environ.get("HTTP_PROXY"), "http://127.0.0.1:18080")
+                self.assertEqual(os.environ.get("HTTPS_PROXY"), "http://127.0.0.1:18080")
+
+    def test_setup_env_keeps_explicit_http_proxy_as_authoritative(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "USE_PROXY=true",
+                        "PROXY_HOST=127.0.0.1",
+                        "PROXY_PORT=18080",
+                        "HTTP_PROXY=http://proxy.example:9000",
+                        "HTTPS_PROXY=http://secure-proxy.example:9443",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.dict(
+                os.environ,
+                {
+                    "ENV_FILE": str(env_path),
+                },
+                clear=True,
+            ):
+                setup_env(override=True)
+
+                self.assertEqual(os.environ.get("HTTP_PROXY"), "http://proxy.example:9000")
+                self.assertEqual(os.environ.get("HTTPS_PROXY"), "http://secure-proxy.example:9443")
 
 
 if __name__ == "__main__":

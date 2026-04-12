@@ -6,6 +6,7 @@ import { Shell } from '../Shell';
 import { useShellRailSlot } from '../useShellRailSlot';
 
 const mockLogout = vi.fn().mockResolvedValue(undefined);
+const mockGetAgentStatus = vi.fn().mockResolvedValue({ enabled: true });
 
 vi.mock('../../../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -17,6 +18,12 @@ vi.mock('../../../contexts/AuthContext', () => ({
 vi.mock('../../../stores/agentChatStore', () => ({
   useAgentChatStore: (selector: (state: { completionBadge: boolean }) => unknown) =>
     selector({ completionBadge: true }),
+}));
+
+vi.mock('../../../api/agent', () => ({
+  agentApi: {
+    getStatus: (...args: unknown[]) => mockGetAgentStatus(...args),
+  },
 }));
 
 beforeAll(() => {
@@ -64,6 +71,24 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('hides the Ask Stock navigation entry when the agent runtime is unavailable', async () => {
+    mockGetAgentStatus.mockResolvedValueOnce({ enabled: false });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: '问股' })).not.toBeInTheDocument();
+    });
   });
 
   it('shows a confirmation dialog before logout', async () => {

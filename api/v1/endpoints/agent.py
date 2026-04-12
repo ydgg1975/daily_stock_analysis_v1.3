@@ -62,6 +62,10 @@ class ChatResponse(BaseModel):
     session_id: str
     error: Optional[str] = None
 
+
+class AgentStatusResponse(BaseModel):
+    enabled: bool
+
 class SkillInfo(BaseModel):
     id: str
     name: str
@@ -90,6 +94,12 @@ class AgentModelDeployment(BaseModel):
 
 class AgentModelsResponse(BaseModel):
     models: List[AgentModelDeployment]
+
+
+@router.get("/status", response_model=AgentStatusResponse)
+async def get_agent_status():
+    """Return whether the Ask Stock experience should be exposed."""
+    return AgentStatusResponse(enabled=get_config().is_agent_available())
 
 
 @router.get("/models", response_model=AgentModelsResponse)

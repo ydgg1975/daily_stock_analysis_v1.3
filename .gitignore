@@ -51,6 +51,10 @@ env/
 /data/
 logs/
 reports/
+backtest_outputs/
+output/
+repo_archive/
+repo_trash/
 *.db
 *.sqlite
 *.sqlite3

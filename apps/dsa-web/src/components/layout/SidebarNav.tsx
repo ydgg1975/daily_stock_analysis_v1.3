@@ -3,7 +3,7 @@
  * completion badge, and logout confirmation while shifting navigation to a
  * restrained text-first shell with subtle active/hover states and no boxed tabs.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Archive,
   BriefcaseBusiness,
@@ -14,7 +14,8 @@ import {
   Settings2,
   TestTubeDiagonal,
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { agentApi } from '../../api/agent';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/UiLanguageContext';
 import { useAgentChatStore } from '../../stores/agentChatStore';
@@ -101,13 +102,40 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   onOpenArchive,
   hasArchive = false,
 }) => {
+  const location = useLocation();
   const { authEnabled, logout } = useAuth();
   const { language, t, toggleLanguage } = useI18n();
   const completionBadge = useAgentChatStore((state) => state.completionBadge);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [agentEnabled, setAgentEnabled] = useState<boolean>(location.pathname.startsWith('/chat'));
   const isDrawer = layout === 'drawer';
 
-  const navLinks = NAV_ITEMS.map(({ key, labelKey, to, icon: Icon, badge }) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    void agentApi.getStatus()
+      .then((payload) => {
+        if (!cancelled) {
+          setAgentEnabled(payload.enabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && location.pathname.startsWith('/chat')) {
+          setAgentEnabled(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.key !== 'chat' || agentEnabled),
+    [agentEnabled],
+  );
+
+  const navLinks = visibleNavItems.map(({ key, labelKey, to, icon: Icon, badge }) => {
     const label = t(labelKey);
     return (
       <NavLink

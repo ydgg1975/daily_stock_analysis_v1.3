@@ -201,6 +201,25 @@ class TestPipelineMultiDimQuality(unittest.TestCase):
         self.assertEqual(time_ctx["market_timestamp"], "2026-03-27T16:00:00-04:00")
         self.assertEqual(time_ctx["session_type"], "last_completed_session")
 
+    def test_time_context_preserves_explicit_session_type_for_replay_context(self) -> None:
+        ctx = {
+            "code": "600519",
+            "date": "2026-03-28",
+            "today": {},
+            "yesterday": {},
+            "session_type": "intraday_snapshot",
+        }
+        quote = SimpleNamespace(
+            price=15.72,
+            market_timestamp="2026-03-28T10:30:00+08:00",
+        )
+
+        time_ctx = self.pipeline._build_time_context(ctx, quote)
+
+        self.assertEqual(time_ctx["market_session_date"], "2026-03-28")
+        self.assertEqual(time_ctx["market_timestamp"], "2026-03-28T10:30:00+08:00")
+        self.assertEqual(time_ctx["session_type"], "intraday_snapshot")
+
     def test_compute_volume_ratio_can_mix_local_and_fallback_history(self) -> None:
         today = date.today()
         self.pipeline.db.get_latest_data = MagicMock(

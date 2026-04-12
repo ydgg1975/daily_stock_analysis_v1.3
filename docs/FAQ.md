@@ -107,14 +107,22 @@
 
 **解决方案**：
 
-在 `.env` 中配置：
+优先推荐在 `.env` 中直接配置标准代理变量：
+
+```bash
+HTTP_PROXY=http://127.0.0.1:10809
+HTTPS_PROXY=http://127.0.0.1:10809
+```
+
+旧版本地快捷写法仍兼容：
+
 ```bash
 USE_PROXY=true
 PROXY_HOST=127.0.0.1
 PROXY_PORT=10809
 ```
 
-> ⚠️ 注意：代理配置仅对本地运行生效，GitHub Actions 环境无需配置代理。
+> ⚠️ 注意：`USE_PROXY/PROXY_*` 只在本地快捷场景下作为兼容写法生效；若同时配置 `HTTP_PROXY/HTTPS_PROXY`，以后者为准。GitHub Actions 环境通常无需配置代理。
 
 ---
 

@@ -7,7 +7,7 @@ import os
 import tempfile
 import unittest
 
-import auto_trace_check
+from scripts import auto_trace_check
 
 
 class AutoTraceCheckTestCase(unittest.TestCase):

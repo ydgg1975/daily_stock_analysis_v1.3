@@ -456,6 +456,27 @@ def setup_env(override: bool = False):
     else:
         env_path = Path(__file__).parent.parent / '.env'
     load_dotenv_file(env_path, override=override)
+    _apply_legacy_proxy_env()
+
+
+def _apply_legacy_proxy_env() -> None:
+    """Normalize legacy local proxy hints into standard HTTP(S)_PROXY vars."""
+    http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+
+    if not http_proxy and os.getenv("GITHUB_ACTIONS") != "true" and parse_env_bool(os.getenv("USE_PROXY"), False):
+        proxy_host = (os.getenv("PROXY_HOST") or "127.0.0.1").strip() or "127.0.0.1"
+        proxy_port = (os.getenv("PROXY_PORT") or "10809").strip() or "10809"
+        http_proxy = f"http://{proxy_host}:{proxy_port}"
+        if not https_proxy:
+            https_proxy = http_proxy
+
+    if http_proxy:
+        os.environ["HTTP_PROXY"] = http_proxy
+        os.environ["http_proxy"] = http_proxy
+    if https_proxy:
+        os.environ["HTTPS_PROXY"] = https_proxy
+        os.environ["https_proxy"] = https_proxy
 
 
 @dataclass

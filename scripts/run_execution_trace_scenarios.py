@@ -12,7 +12,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from auto_trace_check import _read_csv_rows, _read_json_payload, run_acceptance_checks, summarize_acceptance_reports, write_acceptance_report
+from scripts.auto_trace_check import (
+    _read_csv_rows,
+    _read_json_payload,
+    run_acceptance_checks,
+    summarize_acceptance_reports,
+    write_acceptance_report,
+)
 from src.services.rule_backtest_service import run_backtest_automated
 
 

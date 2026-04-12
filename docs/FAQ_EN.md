@@ -105,14 +105,22 @@ This document compiles common issues encountered by users and their solutions.
 
 **Solution**:
 
-Configure in `.env`:
+Prefer the standard proxy variables in `.env`:
+
+```bash
+HTTP_PROXY=http://127.0.0.1:10809
+HTTPS_PROXY=http://127.0.0.1:10809
+```
+
+The old local shortcut is still supported:
+
 ```bash
 USE_PROXY=true
 PROXY_HOST=127.0.0.1
 PROXY_PORT=10809
 ```
 
-> Note: Proxy configuration only works for local runs, GitHub Actions environment doesn't need proxy.
+> Note: `USE_PROXY/PROXY_*` is now only a local compatibility shortcut. If `HTTP_PROXY/HTTPS_PROXY` are also set, the standard variables win. GitHub Actions usually does not need proxy configuration.
 
 ---
 

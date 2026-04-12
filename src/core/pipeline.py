@@ -2067,6 +2067,14 @@ class StockAnalysisPipeline:
         market_tz_name = self._get_market_timezone_name(code)
         market_tz = ZoneInfo(market_tz_name)
         market_now = datetime.now(market_tz)
+        explicit_session_type = (
+            str(context.get("session_type") or "")
+            .strip()
+            .lower()
+            .replace("-", "_")
+        )
+        if explicit_session_type not in {"intraday_snapshot", "last_completed_session"}:
+            explicit_session_type = ""
         raw_market_timestamp = getattr(realtime_quote, "market_timestamp", None) if realtime_quote is not None else None
         market_timestamp = self._parse_time_contract_datetime(raw_market_timestamp)
         if market_timestamp is not None:
@@ -2084,7 +2092,14 @@ class StockAnalysisPipeline:
         market = get_market_for_stock(code)
         is_trading_day = is_market_open(market, market_now.date()) if market else False
         is_regular_hours = self._is_regular_session_clock(market, market_now)
-        session_type = "intraday_snapshot" if (has_realtime_price and is_trading_day and is_regular_hours) else "last_completed_session"
+        inferred_session_type = (
+            "intraday_snapshot"
+            if (has_realtime_price and is_trading_day and is_regular_hours)
+            else "last_completed_session"
+        )
+        # Replay/history callers may already have classified the snapshot;
+        # preserve that explicit contract instead of re-deriving from wall-clock time.
+        session_type = explicit_session_type or inferred_session_type
         return {
             "market_timezone": market_tz_name,
             "market_timestamp": market_now.isoformat(),

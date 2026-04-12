@@ -29,6 +29,10 @@ export interface SkillInfo {
   description: string;
 }
 
+export interface AgentStatusResponse {
+  enabled: boolean;
+}
+
 export interface SkillsResponse {
   skills: SkillInfo[];
   default_skill_id: string;
@@ -58,6 +62,10 @@ export const agentApi = {
   },
   async getSkills(): Promise<SkillsResponse> {
     const response = await apiClient.get<SkillsResponse>('/api/v1/agent/skills');
+    return response.data;
+  },
+  async getStatus(): Promise<AgentStatusResponse> {
+    const response = await apiClient.get<AgentStatusResponse>('/api/v1/agent/status');
     return response.data;
   },
   async getChatSessions(limit = 50): Promise<ChatSessionItem[]> {

@@ -20,15 +20,9 @@ A股自选股智能分析系统 - 环境验证测试
 
 """
 import os
-# Proxy config - controlled by USE_PROXY env var, off by default.
-# Set USE_PROXY=true in .env if you need a local proxy (e.g. mainland China).
-# GitHub Actions always skips this regardless of USE_PROXY.
-if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
-    proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
-    proxy_port = os.getenv("PROXY_PORT", "10809")
-    proxy_url = f"http://{proxy_host}:{proxy_port}"
-    os.environ["http_proxy"] = proxy_url
-    os.environ["https_proxy"] = proxy_url
+from src.config import setup_env
+
+setup_env()
 
 import argparse
 import logging
