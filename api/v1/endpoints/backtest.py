@@ -24,6 +24,8 @@ from api.v1.schemas.backtest import (
     RuleBacktestDetailResponse,
     RuleBacktestHistoryItem,
     RuleBacktestHistoryResponse,
+    RuleBacktestStatusResponse,
+    RuleBacktestCancelResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
     RuleBacktestRunRequest,
@@ -35,7 +37,6 @@ from src.services.rule_backtest_service import RuleBacktestService
 from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 ResponseT = TypeVar("ResponseT")
 
@@ -88,6 +89,8 @@ def _run_endpoint(
         raise _internal_error(action_label, exc) from exc
 
 
+# ------------------ 普通回测接口，使用 BacktestService ------------------
+
 @router.post(
     "/run",
     response_model=BacktestRunResponse,
@@ -98,10 +101,7 @@ def _run_endpoint(
     summary="运行历史分析评估",
     description="对历史分析记录做事后信号评估，并写入 backtest_results/backtest_summaries",
 )
-def run_backtest(
-    request: BacktestRunRequest,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> BacktestRunResponse:
+def run_backtest(request: BacktestRunRequest, db_manager: DatabaseManager = Depends(get_database_manager)) -> BacktestRunResponse:
     def _operation() -> BacktestRunResponse:
         service = BacktestService(db_manager)
         stats = service.run_backtest(
@@ -112,7 +112,6 @@ def run_backtest(
             limit=request.limit,
         )
         return BacktestRunResponse(**stats)
-
     return _run_endpoint("回测执行失败", _operation)
 
 
@@ -127,10 +126,7 @@ def run_backtest(
     summary="准备历史分析评估样本",
     description="按股票代码准备可用于历史分析评估的分析样本，并持久化到 analysis_history。",
 )
-def prepare_backtest_samples(
-    request: PrepareBacktestSamplesRequest,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> PrepareBacktestSamplesResponse:
+def prepare_backtest_samples(request: PrepareBacktestSamplesRequest, db_manager: DatabaseManager = Depends(get_database_manager)) -> PrepareBacktestSamplesResponse:
     def _operation() -> PrepareBacktestSamplesResponse:
         service = BacktestService(db_manager)
         stats = service.prepare_backtest_samples(
@@ -141,7 +137,6 @@ def prepare_backtest_samples(
             force_refresh=request.force_refresh,
         )
         return PrepareBacktestSamplesResponse(**stats)
-
     return _run_endpoint("准备回测样本失败", _operation, allow_validation_error=True)
 
 
@@ -155,15 +150,11 @@ def prepare_backtest_samples(
     },
     summary="获取历史分析评估样本状态",
 )
-def get_sample_status(
-    code: str = Query(..., description="股票代码"),
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> BacktestSampleStatusResponse:
+def get_sample_status(code: str = Query(..., description="股票代码"), db_manager: DatabaseManager = Depends(get_database_manager)) -> BacktestSampleStatusResponse:
     def _operation() -> BacktestSampleStatusResponse:
         service = BacktestService(db_manager)
         data = service.get_sample_status(code=code)
         return BacktestSampleStatusResponse(**data)
-
     return _run_endpoint("查询回测样本状态失败", _operation, allow_validation_error=True)
 
 
@@ -186,7 +177,6 @@ def get_backtest_runs(
         service = BacktestService(db_manager)
         data = service.list_backtest_runs(code=code, page=page, limit=limit)
         return BacktestRunHistoryResponse(**data)
-
     return _run_endpoint("查询回测历史失败", _operation)
 
 
@@ -215,13 +205,7 @@ def get_backtest_results(
         else:
             data = service.get_recent_evaluations(code=code, eval_window_days=eval_window_days, limit=limit, page=page)
         items = [BacktestResultItem(**item) for item in data.get("items", [])]
-        return BacktestResultsResponse(
-            total=int(data.get("total", 0)),
-            page=page,
-            limit=limit,
-            items=items,
-        )
-
+        return BacktestResultsResponse(total=int(data.get("total", 0)), page=page, limit=limit, items=items)
     return _run_endpoint("查询回测结果失败", _operation)
 
 
@@ -235,16 +219,12 @@ def get_backtest_results(
     },
     summary="清理历史分析评估样本",
 )
-def clear_backtest_samples(
-    request: BacktestCodeRequest,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> BacktestClearResponse:
+def clear_backtest_samples(request: BacktestCodeRequest, db_manager: DatabaseManager = Depends(get_database_manager)) -> BacktestClearResponse:
     def _operation() -> BacktestClearResponse:
         service = BacktestService(db_manager)
         data = service.clear_backtest_samples(code=request.code or "")
         data["message"] = "回测样本已清理"
         return BacktestClearResponse(**data)
-
     return _run_endpoint("清理回测样本失败", _operation, allow_validation_error=True)
 
 
@@ -258,18 +238,16 @@ def clear_backtest_samples(
     },
     summary="清理历史分析评估结果",
 )
-def clear_backtest_results(
-    request: BacktestCodeRequest,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> BacktestClearResponse:
+def clear_backtest_results(request: BacktestCodeRequest, db_manager: DatabaseManager = Depends(get_database_manager)) -> BacktestClearResponse:
     def _operation() -> BacktestClearResponse:
         service = BacktestService(db_manager)
         data = service.clear_backtest_results(code=request.code or "")
         data["message"] = "回测结果已清理"
         return BacktestClearResponse(**data)
-
     return _run_endpoint("清理回测结果失败", _operation, allow_validation_error=True)
 
+
+# ------------------ /rule/* 路由，使用 RuleBacktestService ------------------
 
 @router.post(
     "/rule/parse",
@@ -281,10 +259,7 @@ def clear_backtest_results(
     },
     summary="解析规则策略",
 )
-def parse_rule_strategy(
-    request: RuleBacktestParseRequest,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> RuleBacktestParseResponse:
+def parse_rule_strategy(request: RuleBacktestParseRequest, db_manager: DatabaseManager = Depends(get_database_manager)) -> RuleBacktestParseResponse:
     def _operation() -> RuleBacktestParseResponse:
         service = RuleBacktestService(db_manager)
         parsed = service.parse_strategy(
@@ -298,7 +273,7 @@ def parse_rule_strategy(
         )
         strategy_spec = parsed.get("strategy_spec") if isinstance(parsed.get("strategy_spec"), dict) else {}
         return RuleBacktestParseResponse(
-            code=(strategy_spec.get("symbol") if strategy_spec.get("symbol") else request.code),
+            code=(strategy_spec.get("symbol") or request.code),
             strategy_text=request.strategy_text,
             parsed_strategy=dict(parsed),
             normalized_strategy_family=str(strategy_spec.get("strategy_type") or parsed.get("strategy_kind") or ""),
@@ -316,12 +291,11 @@ def parse_rule_strategy(
             rewrite_suggestions=list(parsed.get("rewrite_suggestions") or []),
             parse_warnings=list(parsed.get("parse_warnings") or []),
             confidence=float(parsed.get("confidence") or 0.0),
-            needs_confirmation=bool(parsed.get("needs_confirmation", False)),
+            needs_confirmation=bool(parsed.get("needs_confirmation") or False),
             ambiguities=list(parsed.get("ambiguities") or []),
             summary=dict(parsed.get("summary") or {}),
             max_lookback=int(parsed.get("max_lookback") or 1),
         )
-
     return _run_endpoint("解析规则策略失败", _operation, allow_validation_error=True)
 
 
@@ -336,11 +310,7 @@ def parse_rule_strategy(
     summary="运行确定性规则策略回测",
     description="默认异步提交规则回测任务并快速返回运行 ID；传入 wait_for_completion=true 时阻塞至完成。",
 )
-def run_rule_backtest(
-    request: RuleBacktestRunRequest,
-    background_tasks: BackgroundTasks,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> RuleBacktestRunResponse:
+def run_rule_backtest(request: RuleBacktestRunRequest, background_tasks: BackgroundTasks, db_manager: DatabaseManager = Depends(get_database_manager)) -> RuleBacktestRunResponse:
     def _operation() -> RuleBacktestRunResponse:
         service = RuleBacktestService(db_manager)
         if request.wait_for_completion:
@@ -376,7 +346,6 @@ def run_rule_backtest(
         )
         background_tasks.add_task(service.process_submitted_run, int(data["id"]))
         return _build_model(RuleBacktestRunResponse, data)
-
     return _run_endpoint("规则回测失败", _operation, allow_validation_error=True)
 
 
@@ -399,13 +368,7 @@ def get_rule_backtest_runs(
         service = RuleBacktestService(db_manager)
         data = service.list_runs(code=code, page=page, limit=limit)
         items = _build_models(RuleBacktestHistoryItem, data.get("items", []))
-        return RuleBacktestHistoryResponse(
-            total=int(data.get("total", 0)),
-            page=page,
-            limit=limit,
-            items=items,
-        )
-
+        return RuleBacktestHistoryResponse(total=int(data.get("total", 0)), page=page, limit=limit, items=items)
     return _run_endpoint("查询规则回测历史失败", _operation)
 
 
@@ -419,18 +382,55 @@ def get_rule_backtest_runs(
     },
     summary="获取规则回测详情",
 )
-def get_rule_backtest_run(
-    run_id: int,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> RuleBacktestDetailResponse:
+def get_rule_backtest_run(run_id: int, db_manager: DatabaseManager = Depends(get_database_manager)) -> RuleBacktestDetailResponse:
     def _operation() -> RuleBacktestDetailResponse:
         service = RuleBacktestService(db_manager)
         data = service.get_run(run_id)
         if data is None:
             raise _not_found_error("规则回测记录不存在")
         return _build_model(RuleBacktestDetailResponse, data)
-
     return _run_endpoint("查询规则回测详情失败", _operation)
+
+
+@router.get(
+    "/rule/runs/{run_id}/status",
+    response_model=RuleBacktestStatusResponse,
+    responses={
+        200: {"description": "规则回测状态"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取规则回测状态",
+)
+def get_rule_backtest_run_status(run_id: int, db_manager: DatabaseManager = Depends(get_database_manager)) -> RuleBacktestStatusResponse:
+    def _operation() -> RuleBacktestStatusResponse:
+        service = RuleBacktestService(db_manager)
+        data = service.get_run_status(run_id)
+        if data is None:
+            raise _not_found_error("规则回测记录不存在")
+        return _build_model(RuleBacktestStatusResponse, data)
+    return _run_endpoint("查询规则回测状态失败", _operation)
+
+
+@router.post(
+    "/rule/runs/{run_id}/cancel",
+    response_model=RuleBacktestCancelResponse,
+    responses={
+        200: {"description": "规则回测取消结果"},
+        404: {"description": "记录不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="取消规则回测",
+    description="对尚未完成的异步规则回测执行 best-effort cancel；若任务已结束，则返回当前最终状态。",
+)
+def cancel_rule_backtest_run(run_id: int, db_manager: DatabaseManager = Depends(get_database_manager)) -> RuleBacktestCancelResponse:
+    def _operation() -> RuleBacktestCancelResponse:
+        service = RuleBacktestService(db_manager)
+        data = service.cancel_run(run_id)
+        if data is None:
+            raise _not_found_error("规则回测记录不存在")
+        return _build_model(RuleBacktestCancelResponse, data)
+    return _run_endpoint("取消规则回测失败", _operation)
 
 
 @router.get(
@@ -453,7 +453,6 @@ def get_overall_performance(
         if summary is None:
             raise _not_found_error("未找到整体回测汇总")
         return PerformanceMetrics(**summary)
-
     return _run_endpoint("查询整体表现失败", _operation)
 
 
@@ -477,6 +476,5 @@ def get_stock_performance(
         summary = service.get_summary(scope="stock", code=code, eval_window_days=eval_window_days)
         if summary is None:
             raise _not_found_error(f"未找到 {code} 的回测汇总")
-        return PerformanceMetrics(**summary)
-
+        return _build_model(PerformanceMetrics, summary)
     return _run_endpoint("查询单股表现失败", _operation)

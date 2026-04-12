@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "symbol": "NVDA",
+  "strategy_family": "moving_average_crossover",
+  "strategy_label": "ma-baseline",
+  "strategy_text": "5日均线上穿20日均线买入，下穿卖出",
+  "parameters": {
+    "fast_period": 5,
+    "slow_period": 20,
+    "fast_type": "simple",
+    "slow_type": "simple"
+  },
+  "metadata": {
+    "symbol": "NVDA",
+    "strategy_label": "ma-baseline",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T075434Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:54:41.518710+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 3008651.165438,
+    "total_return_pct": 2908.6512,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 19748.045,
+    "excess_return_vs_benchmark_pct": -16839.3938,
+    "buy_and_hold_return_pct": 19748.045,
+    "excess_return_vs_buy_and_hold_pct": -16839.3938,
+    "trade_count": 77,
+    "entry_signal_count": 77,
+    "win_count": 36,
+    "loss_count": 41,
+    "win_rate_pct": 46.7532,
+    "avg_trade_return_pct": 6.2901,
+    "max_drawdown_pct": 47.0712,
+    "avg_holding_days": 20.8442,
+    "avg_holding_bars": 20.8442,
+    "avg_holding_calendar_days": 30.2857,
+    "bars_used": 2514,
+    "lookback_bars": 2514,
+    "period_start": "2016-04-06T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

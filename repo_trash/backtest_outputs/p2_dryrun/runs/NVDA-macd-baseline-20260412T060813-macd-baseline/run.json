@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "symbol": "NVDA",
+  "strategy_family": "macd_crossover",
+  "strategy_label": "macd-baseline",
+  "strategy_text": "MACD(12,26,9) 金叉买入，死叉卖出",
+  "parameters": {
+    "fast_period": 12,
+    "slow_period": 26,
+    "signal_period": 9
+  },
+  "metadata": {
+    "symbol": "NVDA",
+    "strategy_label": "macd-baseline",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T060813Z",
+    "benchmark_symbol": "ORCL",
+    "generated_at": "2026-04-12T06:08:13.253218+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 192874.861007,
+    "total_return_pct": 92.874861,
+    "annualized_return_pct": 18.5,
+    "benchmark_return_pct": 13.2,
+    "excess_return_vs_benchmark_pct": 5.3,
+    "buy_and_hold_return_pct": 13.2,
+    "excess_return_vs_buy_and_hold_pct": 5.3,
+    "trade_count": 6,
+    "entry_signal_count": 6,
+    "win_count": 4,
+    "loss_count": 2,
+    "win_rate_pct": 66.6667,
+    "avg_trade_return_pct": 4.2,
+    "max_drawdown_pct": 9.1,
+    "avg_holding_days": 7.5,
+    "avg_holding_bars": 7.5,
+    "avg_holding_calendar_days": 7.5,
+    "bars_used": 90,
+    "lookback_bars": 90,
+    "period_start": "2024-01-02",
+    "period_end": "2024-03-31"
+  },
+  "error": null
+}

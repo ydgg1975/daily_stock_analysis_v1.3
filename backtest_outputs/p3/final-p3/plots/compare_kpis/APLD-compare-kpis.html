@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APLD Compare KPIs</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #e8edf7;
+    }
+    .card {
+      background: #121933;
+      border: 1px solid #273159;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+    h1, h2, h3 { margin: 0 0 12px 0; }
+    p, li { color: #b7c1de; }
+    svg { width: 100%; height: auto; display: block; }
+    .axis { stroke: #7081b9; stroke-width: 1; }
+    .grid { stroke: #253052; stroke-width: 1; opacity: 0.8; }
+    .label { fill: #b7c1de; font-size: 12px; }
+    .series-label { fill: #e8edf7; font-size: 12px; }
+    .bar { fill: #2a9d8f; }
+    .line-a { stroke: #4cc9f0; fill: none; stroke-width: 2; }
+    .line-b { stroke: #f72585; fill: none; stroke-width: 2; }
+    .line-c { stroke: #f4a261; fill: none; stroke-width: 2; }
+    .line-d { stroke: #90be6d; fill: none; stroke-width: 2; }
+    .dot { fill: #f4a261; opacity: 0.85; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #273159;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #192445; }
+  </style>
+</head>
+<body>
+  
+        <div class="card">
+          <h1>APLD Compare KPIs</h1>
+          <p>Risk and return KPI matrix for deduplicated strategy runs.</p>
+          <table>
+            <thead><tr><th>Strategy</th><th>total_return_pct</th><th>sharpe_ratio</th><th>sortino_ratio</th><th>max_drawdown_pct</th></tr></thead>
+            <tbody><tr><td>macd-10-30-9</td><td style='background:rgb(100,71,82)'>396.75</td><td style='background:rgb(109,60,70)'>0.84</td><td style='background:rgb(109,60,70)'>1.26</td><td style='background:rgb(107,62,72)'>79.55</td></tr><tr><td>macd-5-35-5</td><td style='background:rgb(95,77,89)'>623.61</td><td style='background:rgb(109,60,70)'>0.95</td><td style='background:rgb(109,60,70)'>1.35</td><td style='background:rgb(107,62,72)'>75.59</td></tr><tr><td>macd-8-21-5</td><td style='background:rgb(99,72,84)'>456.42</td><td style='background:rgb(109,60,70)'>0.88</td><td style='background:rgb(109,60,70)'>1.26</td><td style='background:rgb(107,62,72)'>82.19</td></tr><tr><td>macd-baseline</td><td style='background:rgb(107,63,73)'>109.12</td><td style='background:rgb(109,60,70)'>0.63</td><td style='background:rgb(109,60,70)'>0.90</td><td style='background:rgb(107,62,73)'>84.34</td></tr><tr><td>ma-10-30</td><td style='background:rgb(110,60,70)'>-16.02</td><td style='background:rgb(109,60,70)'>0.44</td><td style='background:rgb(109,60,70)'>0.52</td><td style='background:rgb(107,62,73)'>84.80</td></tr><tr><td>ma-3-15</td><td style='background:rgb(70,107,122)'>1724.47</td><td style='background:rgb(109,60,70)'>1.21</td><td style='background:rgb(109,60,70)'>1.75</td><td style='background:rgb(108,61,72)'>55.00</td></tr><tr><td>ma-8-21</td><td style='background:rgb(108,61,71)'>36.57</td><td style='background:rgb(109,60,70)'>0.57</td><td style='background:rgb(109,60,70)'>0.69</td><td style='background:rgb(107,62,72)'>83.59</td></tr><tr><td>ma-baseline</td><td style='background:rgb(108,62,72)'>63.21</td><td style='background:rgb(109,60,70)'>0.56</td><td style='background:rgb(109,60,70)'>0.74</td><td style='background:rgb(107,62,72)'>82.16</td></tr><tr><td>rsi-14-35-65</td><td style='background:rgb(78,98,111)'>1371.14</td><td style='background:rgb(109,60,70)'>1.14</td><td style='background:rgb(109,60,70)'>1.42</td><td style='background:rgb(108,61,72)'>56.23</td></tr><tr><td>rsi-21-30-70</td><td style='background:rgb(105,64,75)'>164.29</td><td style='background:rgb(109,60,70)'>0.63</td><td style='background:rgb(109,60,70)'>0.70</td><td style='background:rgb(108,61,71)'>40.32</td></tr><tr><td>rsi-6-25-75</td><td style='background:rgb(20,170,190)'>3996.69</td><td style='background:rgb(109,60,70)'>1.40</td><td style='background:rgb(109,60,70)'>1.80</td><td style='background:rgb(108,62,72)'>59.07</td></tr><tr><td>rsi-baseline</td><td style='background:rgb(101,69,80)'>341.87</td><td style='background:rgb(109,60,70)'>0.83</td><td style='background:rgb(109,60,70)'>0.97</td><td style='background:rgb(108,61,71)'>37.75</td></tr></tbody>
+          </table>
+        </div>
+        
+</body>
+</html>

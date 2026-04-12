@@ -1,0 +1,400 @@
+{
+  "provider": "local_rule_based_summary",
+  "summary_text": "OPEN / ma-baseline 回测显示总收益 -9.8446%，年化 None%，最大回撤 93.0712%，胜率 27.6596%。 对比结果中 Sharpe 最优配置为 ma-3-15 (0.444564)。 敏感性分析提示 moving_average_crossover 参数敏感性中最佳为 ma-3-15（总收益 38.4208%），最弱为 ma-8-21（总收益 -32.1994%）。。",
+  "key_metrics": {
+    "total_return_pct": -9.8446,
+    "annualized_return_pct": null,
+    "max_drawdown_pct": 93.0712,
+    "win_rate_pct": 27.6596,
+    "sharpe_ratio": 0.358229,
+    "sortino_ratio": 0.48176
+  },
+  "sensitivity_highlights": {
+    "headline": "moving_average_crossover 参数敏感性中最佳为 ma-3-15（总收益 38.4208%），最弱为 ma-8-21（总收益 -32.1994%）。",
+    "best_total_return": {
+      "symbol": "OPEN",
+      "strategy_family": "moving_average_crossover",
+      "strategy_label": "ma-3-15",
+      "strategy_text": "3日均线上穿15日均线买入，下穿卖出",
+      "parameters": {
+        "fast_period": 3,
+        "slow_period": 15,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "metadata": {
+        "symbol": "OPEN",
+        "strategy_label": "ma-3-15",
+        "strategy_version": "v1",
+        "parse_version": "v1",
+        "engine_version": "v1",
+        "run_tag": "p2-20260412T075434Z",
+        "benchmark_symbol": "AMD",
+        "generated_at": "2026-04-12T07:54:41.992602+00:00"
+      },
+      "metrics": {
+        "initial_capital": 100000.0,
+        "final_equity": 138420.792306,
+        "total_return_pct": 38.4208,
+        "annualized_return_pct": null,
+        "benchmark_return_pct": -57.3306,
+        "excess_return_vs_benchmark_pct": 95.7514,
+        "buy_and_hold_return_pct": -57.3306,
+        "excess_return_vs_buy_and_hold_pct": 95.7514,
+        "trade_count": 72,
+        "entry_signal_count": 72,
+        "win_count": 19,
+        "loss_count": 53,
+        "win_rate_pct": 26.3889,
+        "avg_trade_return_pct": 5.2879,
+        "max_drawdown_pct": 94.8841,
+        "avg_holding_days": 8.625,
+        "avg_holding_bars": 8.625,
+        "avg_holding_calendar_days": 12.3056,
+        "bars_used": 1456,
+        "lookback_bars": 1456,
+        "period_start": "2020-06-18T00:00:00",
+        "period_end": "2026-04-06T00:00:00"
+      },
+      "compare_kpis": {
+        "volatility_pct": 83.715109,
+        "sortino_ratio": 0.673703,
+        "calmar_ratio": null,
+        "alpha_pct": 29.469452,
+        "beta": 0.203461,
+        "sharpe_ratio": 0.444564,
+        "max_drawdown_pct": 94.8841,
+        "win_rate_pct": 26.3889,
+        "avg_holding_period_days": 12.3056,
+        "profit_loss_ratio": 5.025183
+      },
+      "benchmark_summary": {
+        "label": "当前标的买入并持有",
+        "code": null,
+        "method": "same_symbol_buy_and_hold",
+        "requested_mode": "same_symbol_buy_and_hold",
+        "resolved_mode": "same_symbol_buy_and_hold",
+        "normalized_base": 1.0,
+        "price_basis": "close",
+        "start_date": "2020-06-18T00:00:00",
+        "end_date": "2026-04-06T00:00:00",
+        "start_price": 10.804,
+        "end_price": 4.61,
+        "return_pct": -57.3306,
+        "auto_resolved": false,
+        "fallback_used": false,
+        "unavailable_reason": null
+      },
+      "buy_and_hold_summary": {
+        "label": "当前标的买入并持有",
+        "code": null,
+        "method": "same_symbol_buy_and_hold",
+        "requested_mode": "same_symbol_buy_and_hold",
+        "resolved_mode": "same_symbol_buy_and_hold",
+        "normalized_base": 1.0,
+        "price_basis": "close",
+        "start_date": "2020-06-18T00:00:00",
+        "end_date": "2026-04-06T00:00:00",
+        "start_price": 10.804,
+        "end_price": 4.61,
+        "return_pct": -57.3306,
+        "auto_resolved": false,
+        "fallback_used": false,
+        "unavailable_reason": null
+      },
+      "warnings": [
+        {
+          "code": "default_fast_ma_type",
+          "message": "未显式写出快线类型，当前默认使用 SMA。",
+          "suggestion": "如需指数均线，可写成 EMA5。"
+        },
+        {
+          "code": "default_slow_ma_type",
+          "message": "未显式写出慢线类型，当前默认使用 SMA。",
+          "suggestion": "如需指数均线，可写成 EMA20。"
+        }
+      ],
+      "no_result_reason": null,
+      "no_result_message": null
+    },
+    "worst_total_return": {
+      "symbol": "OPEN",
+      "strategy_family": "moving_average_crossover",
+      "strategy_label": "ma-8-21",
+      "strategy_text": "8日均线上穿21日均线买入，下穿卖出",
+      "parameters": {
+        "fast_period": 8,
+        "slow_period": 21,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "metadata": {
+        "symbol": "OPEN",
+        "strategy_label": "ma-8-21",
+        "strategy_version": "v1",
+        "parse_version": "v1",
+        "engine_version": "v1",
+        "run_tag": "p2-20260412T075434Z",
+        "benchmark_symbol": "AMD",
+        "generated_at": "2026-04-12T07:54:42.300330+00:00"
+      },
+      "metrics": {
+        "initial_capital": 100000.0,
+        "final_equity": 67800.587708,
+        "total_return_pct": -32.1994,
+        "annualized_return_pct": null,
+        "benchmark_return_pct": -57.3306,
+        "excess_return_vs_benchmark_pct": 25.1312,
+        "buy_and_hold_return_pct": -57.3306,
+        "excess_return_vs_buy_and_hold_pct": 25.1312,
+        "trade_count": 37,
+        "entry_signal_count": 37,
+        "win_count": 12,
+        "loss_count": 25,
+        "win_rate_pct": 32.4324,
+        "avg_trade_return_pct": 5.0792,
+        "max_drawdown_pct": 93.1843,
+        "avg_holding_days": 15.8649,
+        "avg_holding_bars": 15.8649,
+        "avg_holding_calendar_days": 23.2162,
+        "bars_used": 1456,
+        "lookback_bars": 1456,
+        "period_start": "2020-06-18T00:00:00",
+        "period_end": "2026-04-06T00:00:00"
+      },
+      "compare_kpis": {
+        "volatility_pct": 82.863967,
+        "sortino_ratio": 0.386542,
+        "calmar_ratio": null,
+        "alpha_pct": 15.984797,
+        "beta": 0.225641,
+        "sharpe_ratio": 0.29659,
+        "max_drawdown_pct": 93.1843,
+        "win_rate_pct": 32.4324,
+        "avg_holding_period_days": 23.2162,
+        "profit_loss_ratio": 3.069523
+      },
+      "benchmark_summary": {
+        "label": "当前标的买入并持有",
+        "code": null,
+        "method": "same_symbol_buy_and_hold",
+        "requested_mode": "same_symbol_buy_and_hold",
+        "resolved_mode": "same_symbol_buy_and_hold",
+        "normalized_base": 1.0,
+        "price_basis": "close",
+        "start_date": "2020-06-18T00:00:00",
+        "end_date": "2026-04-06T00:00:00",
+        "start_price": 10.804,
+        "end_price": 4.61,
+        "return_pct": -57.3306,
+        "auto_resolved": false,
+        "fallback_used": false,
+        "unavailable_reason": null
+      },
+      "buy_and_hold_summary": {
+        "label": "当前标的买入并持有",
+        "code": null,
+        "method": "same_symbol_buy_and_hold",
+        "requested_mode": "same_symbol_buy_and_hold",
+        "resolved_mode": "same_symbol_buy_and_hold",
+        "normalized_base": 1.0,
+        "price_basis": "close",
+        "start_date": "2020-06-18T00:00:00",
+        "end_date": "2026-04-06T00:00:00",
+        "start_price": 10.804,
+        "end_price": 4.61,
+        "return_pct": -57.3306,
+        "auto_resolved": false,
+        "fallback_used": false,
+        "unavailable_reason": null
+      },
+      "warnings": [
+        {
+          "code": "default_fast_ma_type",
+          "message": "未显式写出快线类型，当前默认使用 SMA。",
+          "suggestion": "如需指数均线，可写成 EMA5。"
+        },
+        {
+          "code": "default_slow_ma_type",
+          "message": "未显式写出慢线类型，当前默认使用 SMA。",
+          "suggestion": "如需指数均线，可写成 EMA20。"
+        }
+      ],
+      "no_result_reason": null,
+      "no_result_message": null
+    }
+  },
+  "compare_highlights": {
+    "best_total_return": {
+      "symbol": "OPEN",
+      "strategy_family": "moving_average_crossover",
+      "strategy_label": "ma-3-15",
+      "parameters": {
+        "fast_period": 3,
+        "slow_period": 15,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "metrics": {
+        "initial_capital": 100000.0,
+        "final_equity": 138420.792306,
+        "total_return_pct": 38.4208,
+        "annualized_return_pct": null,
+        "benchmark_return_pct": -57.3306,
+        "excess_return_vs_benchmark_pct": 95.7514,
+        "buy_and_hold_return_pct": -57.3306,
+        "excess_return_vs_buy_and_hold_pct": 95.7514,
+        "trade_count": 72,
+        "entry_signal_count": 72,
+        "win_count": 19,
+        "loss_count": 53,
+        "win_rate_pct": 26.3889,
+        "avg_trade_return_pct": 5.2879,
+        "max_drawdown_pct": 94.8841,
+        "avg_holding_days": 8.625,
+        "avg_holding_bars": 8.625,
+        "avg_holding_calendar_days": 12.3056,
+        "bars_used": 1456,
+        "lookback_bars": 1456,
+        "period_start": "2020-06-18T00:00:00",
+        "period_end": "2026-04-06T00:00:00"
+      },
+      "kpis": {
+        "volatility_pct": 83.715109,
+        "sortino_ratio": 0.673703,
+        "calmar_ratio": null,
+        "alpha_pct": 29.469452,
+        "beta": 0.203461,
+        "sharpe_ratio": 0.444564,
+        "max_drawdown_pct": 94.8841,
+        "win_rate_pct": 26.3889,
+        "avg_holding_period_days": 12.3056,
+        "profit_loss_ratio": 5.025183
+      },
+      "metadata": {
+        "symbol": "OPEN",
+        "strategy_label": "ma-3-15",
+        "strategy_version": "v1",
+        "parse_version": "v1",
+        "engine_version": "v1",
+        "run_tag": "p2-20260412T075434Z",
+        "benchmark_symbol": "AMD",
+        "generated_at": "2026-04-12T07:54:41.992602+00:00"
+      }
+    },
+    "best_sharpe": {
+      "symbol": "OPEN",
+      "strategy_family": "moving_average_crossover",
+      "strategy_label": "ma-3-15",
+      "parameters": {
+        "fast_period": 3,
+        "slow_period": 15,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "metrics": {
+        "initial_capital": 100000.0,
+        "final_equity": 138420.792306,
+        "total_return_pct": 38.4208,
+        "annualized_return_pct": null,
+        "benchmark_return_pct": -57.3306,
+        "excess_return_vs_benchmark_pct": 95.7514,
+        "buy_and_hold_return_pct": -57.3306,
+        "excess_return_vs_buy_and_hold_pct": 95.7514,
+        "trade_count": 72,
+        "entry_signal_count": 72,
+        "win_count": 19,
+        "loss_count": 53,
+        "win_rate_pct": 26.3889,
+        "avg_trade_return_pct": 5.2879,
+        "max_drawdown_pct": 94.8841,
+        "avg_holding_days": 8.625,
+        "avg_holding_bars": 8.625,
+        "avg_holding_calendar_days": 12.3056,
+        "bars_used": 1456,
+        "lookback_bars": 1456,
+        "period_start": "2020-06-18T00:00:00",
+        "period_end": "2026-04-06T00:00:00"
+      },
+      "kpis": {
+        "volatility_pct": 83.715109,
+        "sortino_ratio": 0.673703,
+        "calmar_ratio": null,
+        "alpha_pct": 29.469452,
+        "beta": 0.203461,
+        "sharpe_ratio": 0.444564,
+        "max_drawdown_pct": 94.8841,
+        "win_rate_pct": 26.3889,
+        "avg_holding_period_days": 12.3056,
+        "profit_loss_ratio": 5.025183
+      },
+      "metadata": {
+        "symbol": "OPEN",
+        "strategy_label": "ma-3-15",
+        "strategy_version": "v1",
+        "parse_version": "v1",
+        "engine_version": "v1",
+        "run_tag": "p2-20260412T075434Z",
+        "benchmark_symbol": "AMD",
+        "generated_at": "2026-04-12T07:54:41.992602+00:00"
+      }
+    },
+    "best_sortino": {
+      "symbol": "OPEN",
+      "strategy_family": "moving_average_crossover",
+      "strategy_label": "ma-3-15",
+      "parameters": {
+        "fast_period": 3,
+        "slow_period": 15,
+        "fast_type": "simple",
+        "slow_type": "simple"
+      },
+      "metrics": {
+        "initial_capital": 100000.0,
+        "final_equity": 138420.792306,
+        "total_return_pct": 38.4208,
+        "annualized_return_pct": null,
+        "benchmark_return_pct": -57.3306,
+        "excess_return_vs_benchmark_pct": 95.7514,
+        "buy_and_hold_return_pct": -57.3306,
+        "excess_return_vs_buy_and_hold_pct": 95.7514,
+        "trade_count": 72,
+        "entry_signal_count": 72,
+        "win_count": 19,
+        "loss_count": 53,
+        "win_rate_pct": 26.3889,
+        "avg_trade_return_pct": 5.2879,
+        "max_drawdown_pct": 94.8841,
+        "avg_holding_days": 8.625,
+        "avg_holding_bars": 8.625,
+        "avg_holding_calendar_days": 12.3056,
+        "bars_used": 1456,
+        "lookback_bars": 1456,
+        "period_start": "2020-06-18T00:00:00",
+        "period_end": "2026-04-06T00:00:00"
+      },
+      "kpis": {
+        "volatility_pct": 83.715109,
+        "sortino_ratio": 0.673703,
+        "calmar_ratio": null,
+        "alpha_pct": 29.469452,
+        "beta": 0.203461,
+        "sharpe_ratio": 0.444564,
+        "max_drawdown_pct": 94.8841,
+        "win_rate_pct": 26.3889,
+        "avg_holding_period_days": 12.3056,
+        "profit_loss_ratio": 5.025183
+      },
+      "metadata": {
+        "symbol": "OPEN",
+        "strategy_label": "ma-3-15",
+        "strategy_version": "v1",
+        "parse_version": "v1",
+        "engine_version": "v1",
+        "run_tag": "p2-20260412T075434Z",
+        "benchmark_symbol": "AMD",
+        "generated_at": "2026-04-12T07:54:41.992602+00:00"
+      }
+    }
+  }
+}

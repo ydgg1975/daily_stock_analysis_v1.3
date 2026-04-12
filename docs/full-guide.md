@@ -853,7 +853,7 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 | `BACKTEST_MIN_AGE_DAYS` | `14` | 历史分析样本成熟期（calendar days，`0` 表示不限） |
 | `BACKTEST_ENGINE_VERSION` | `v1` | 引擎版本号，升级逻辑时用于区分结果 |
 | `BACKTEST_NEUTRAL_BAND_PCT` | `2.0` | 中性区间阈值（%），±2% 内视为震荡 |
-| `US_STOCK_PARQUET_DIR` | `/root/us_test/data/normalized/us` | 本地美股 parquet 根目录；stock history、历史分析评估和规则回测会统一优先读取 |
+| `LOCAL_US_PARQUET_DIR` | `/root/us_test/data/normalized/us` | 本地美股 parquet 首选根目录；stock history、历史分析评估和规则回测会统一优先读取，未设置时兼容回退到 `US_STOCK_PARQUET_DIR` |
 
 ### 自动运行
 
@@ -916,18 +916,24 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 | `/api/v1/backtest/prepare-samples` | POST | 按股票代码准备历史分析评估样本 |
 | `/api/v1/backtest/sample-status` | GET | 查询历史分析评估样本状态 |
 | `/api/v1/backtest/results` | GET | 查询历史分析评估结果（分页） |
+| `/api/v1/backtest/samples/clear` | POST | 清理历史分析评估样本 |
+| `/api/v1/backtest/results/clear` | POST | 清理历史分析评估结果 |
 | `/api/v1/backtest/performance` | GET | 获取整体历史分析评估表现 |
 | `/api/v1/backtest/performance/{code}` | GET | 获取单股历史分析评估表现 |
 | `/api/v1/backtest/rule/parse` | POST | 解析规则策略文本 |
 | `/api/v1/backtest/rule/run` | POST | 提交或同步执行确定性规则回测 |
 | `/api/v1/backtest/rule/runs` | GET | 查询规则回测历史 |
 | `/api/v1/backtest/rule/runs/{run_id}` | GET | 查询规则回测详情 |
+| `/api/v1/backtest/rule/runs/{run_id}/status` | GET | 查询规则回测轻量状态 |
+| `/api/v1/backtest/rule/runs/{run_id}/cancel` | POST | best-effort 取消规则回测 |
 | `/api/v1/stocks/extract-from-image` | POST | 从图片提取股票代码（multipart，超时 60s） |
 | `/api/v1/stocks/parse-import` | POST | 解析 CSV/Excel/剪贴板（multipart file 或 JSON `{"text":"..."}`，文件≤2MB，文本≤100KB） |
 | `/api/health` | GET | 健康检查 |
 | `/docs` | GET | API Swagger 文档 |
 
 > 说明：`POST /api/v1/analysis/analyze` 在 `async_mode=false` 时仅支持单只股票；批量 `stock_codes` 需使用 `async_mode=true`。异步 `202` 响应对单股返回 `task_id`，对批量返回 `accepted` / `duplicates` 汇总结构。
+>
+> Backtest 修复后的服务边界、本地 parquet 优先级与 smoke 脚本见 [docs/backtest-system.md](./backtest-system.md)。
 
 **调用示例**：
 ```bash
@@ -971,8 +977,22 @@ curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/run \
   -H 'Content-Type: application/json' \
   -d '{"code":"AAPL","strategy_text":"Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.","lookback_bars":252,"fee_bps":0,"slippage_bps":0,"confirmed":true,"wait_for_completion":false}'
 
+# 轮询规则回测状态
+curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/status
+
 # 查询规则回测详情
 curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123
+
+# 取消尚未完成的规则回测
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/cancel
+```
+
+Backtest 专项 smoke：
+
+```bash
+python3 test_backtest_basic.py
+python3 test_backtest_rule.py
+python3 test_backtest_run.py --mode both
 ```
 
 ### 自定义配置

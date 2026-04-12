@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "symbol": "NBIS",
+  "strategy_family": "macd_crossover",
+  "strategy_label": "macd-10-30-9",
+  "strategy_text": "MACD(10,30,9) 金叉买入，死叉卖出",
+  "parameters": {
+    "fast_period": 10,
+    "slow_period": 30,
+    "signal_period": 9
+  },
+  "metadata": {
+    "symbol": "NBIS",
+    "strategy_label": "macd-10-30-9",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T075434Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:54:41.282947+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 122866.840367,
+    "total_return_pct": 22.8668,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 462.7,
+    "excess_return_vs_benchmark_pct": -439.8332,
+    "buy_and_hold_return_pct": 462.7,
+    "excess_return_vs_buy_and_hold_pct": -439.8332,
+    "trade_count": 15,
+    "entry_signal_count": 15,
+    "win_count": 6,
+    "loss_count": 9,
+    "win_rate_pct": 40.0,
+    "avg_trade_return_pct": 3.6794,
+    "max_drawdown_pct": 59.3486,
+    "avg_holding_days": 12.6,
+    "avg_holding_bars": 12.6,
+    "avg_holding_calendar_days": 18.6,
+    "bars_used": 364,
+    "lookback_bars": 364,
+    "period_start": "2024-10-21T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "symbol": "MU",
+  "strategy_family": "moving_average_crossover",
+  "strategy_label": "ma-3-15",
+  "strategy_text": "3日均线上穿15日均线买入，下穿卖出",
+  "parameters": {
+    "fast_period": 3,
+    "slow_period": 15,
+    "fast_type": "simple",
+    "slow_type": "simple"
+  },
+  "metadata": {
+    "symbol": "MU",
+    "strategy_label": "ma-3-15",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T074852Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:48:57.594188+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 348243.272261,
+    "total_return_pct": 248.2433,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 3508.0229,
+    "excess_return_vs_benchmark_pct": -3259.7796,
+    "buy_and_hold_return_pct": 3508.0229,
+    "excess_return_vs_buy_and_hold_pct": -3259.7796,
+    "trade_count": 107,
+    "entry_signal_count": 107,
+    "win_count": 40,
+    "loss_count": 67,
+    "win_rate_pct": 37.3832,
+    "avg_trade_return_pct": 1.9072,
+    "max_drawdown_pct": 50.5968,
+    "avg_holding_days": 13.2617,
+    "avg_holding_bars": 13.2617,
+    "avg_holding_calendar_days": 19.2243,
+    "bars_used": 2514,
+    "lookback_bars": 2514,
+    "period_start": "2016-04-06T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

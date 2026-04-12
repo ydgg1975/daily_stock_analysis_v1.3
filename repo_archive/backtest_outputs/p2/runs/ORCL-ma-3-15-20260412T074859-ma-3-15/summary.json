@@ -1,0 +1,106 @@
+{
+  "symbol": "ORCL",
+  "strategy_family": "moving_average_crossover",
+  "strategy_label": "ma-3-15",
+  "strategy_text": "3日均线上穿15日均线买入，下穿卖出",
+  "parameters": {
+    "fast_period": 3,
+    "slow_period": 15,
+    "fast_type": "simple",
+    "slow_type": "simple"
+  },
+  "metadata": {
+    "symbol": "ORCL",
+    "strategy_label": "ma-3-15",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T074852Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:48:59.871661+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 131230.429115,
+    "total_return_pct": 31.2304,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 257.1534,
+    "excess_return_vs_benchmark_pct": -225.923,
+    "buy_and_hold_return_pct": 257.1534,
+    "excess_return_vs_buy_and_hold_pct": -225.923,
+    "trade_count": 108,
+    "entry_signal_count": 108,
+    "win_count": 36,
+    "loss_count": 72,
+    "win_rate_pct": 33.3333,
+    "avg_trade_return_pct": 0.6526,
+    "max_drawdown_pct": 45.8821,
+    "avg_holding_days": 12.8889,
+    "avg_holding_bars": 12.8889,
+    "avg_holding_calendar_days": 18.6111,
+    "bars_used": 2514,
+    "lookback_bars": 2514,
+    "period_start": "2016-04-06T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "compare_kpis": {
+    "volatility_pct": 22.224387,
+    "sortino_ratio": 0.224227,
+    "calmar_ratio": null,
+    "alpha_pct": 1.104653,
+    "beta": 0.067583,
+    "sharpe_ratio": 0.233829,
+    "max_drawdown_pct": 45.8821,
+    "win_rate_pct": 33.3333,
+    "avg_holding_period_days": 18.6111,
+    "profit_loss_ratio": 2.565645
+  },
+  "benchmark_summary": {
+    "label": "当前标的买入并持有",
+    "code": null,
+    "method": "same_symbol_buy_and_hold",
+    "requested_mode": "same_symbol_buy_and_hold",
+    "resolved_mode": "same_symbol_buy_and_hold",
+    "normalized_base": 1.0,
+    "price_basis": "close",
+    "start_date": "2016-04-06T00:00:00",
+    "end_date": "2026-04-06T00:00:00",
+    "start_price": 40.75,
+    "end_price": 145.539993,
+    "return_pct": 257.1534,
+    "auto_resolved": false,
+    "fallback_used": false,
+    "unavailable_reason": null
+  },
+  "buy_and_hold_summary": {
+    "label": "当前标的买入并持有",
+    "code": null,
+    "method": "same_symbol_buy_and_hold",
+    "requested_mode": "same_symbol_buy_and_hold",
+    "resolved_mode": "same_symbol_buy_and_hold",
+    "normalized_base": 1.0,
+    "price_basis": "close",
+    "start_date": "2016-04-06T00:00:00",
+    "end_date": "2026-04-06T00:00:00",
+    "start_price": 40.75,
+    "end_price": 145.539993,
+    "return_pct": 257.1534,
+    "auto_resolved": false,
+    "fallback_used": false,
+    "unavailable_reason": null
+  },
+  "warnings": [
+    {
+      "code": "default_fast_ma_type",
+      "message": "未显式写出快线类型，当前默认使用 SMA。",
+      "suggestion": "如需指数均线，可写成 EMA5。"
+    },
+    {
+      "code": "default_slow_ma_type",
+      "message": "未显式写出慢线类型，当前默认使用 SMA。",
+      "suggestion": "如需指数均线，可写成 EMA20。"
+    }
+  ],
+  "no_result_reason": null,
+  "no_result_message": null
+}

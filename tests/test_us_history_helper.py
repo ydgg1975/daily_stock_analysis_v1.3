@@ -14,6 +14,7 @@ from src.services.us_history_helper import (
     LOCAL_US_PARQUET_SOURCE,
     LocalUsHistoryLoadResult,
     fetch_daily_history_with_local_us_fallback,
+    get_us_stock_parquet_dir,
 )
 
 
@@ -72,6 +73,17 @@ class UsHistoryHelperTestCase(unittest.TestCase):
             end_date="2024-01-31",
             days=20,
         )
+
+    def test_get_us_stock_parquet_dir_prefers_local_us_env_over_legacy_env(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "LOCAL_US_PARQUET_DIR": "/tmp/local-priority",
+                "US_STOCK_PARQUET_DIR": "/tmp/legacy-fallback",
+            },
+            clear=False,
+        ):
+            self.assertEqual(str(get_us_stock_parquet_dir()), "/tmp/local-priority")
 
 
 if __name__ == "__main__":

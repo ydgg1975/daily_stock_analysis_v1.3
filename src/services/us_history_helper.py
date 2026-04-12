@@ -38,10 +38,17 @@ class LocalUsHistoryLoadResult:
 
 
 def get_us_stock_parquet_dir() -> Path:
-    """Return the configured US parquet root."""
+    """Return the configured US parquet root.
 
-    configured = os.getenv("US_STOCK_PARQUET_DIR", DEFAULT_US_STOCK_PARQUET_DIR).strip()
-    return Path(configured or DEFAULT_US_STOCK_PARQUET_DIR)
+    `LOCAL_US_PARQUET_DIR` is the primary knob for local-first backtests.
+    `US_STOCK_PARQUET_DIR` remains as a compatibility fallback.
+    """
+
+    for env_key in ("LOCAL_US_PARQUET_DIR", "US_STOCK_PARQUET_DIR"):
+        configured = os.getenv(env_key, "").strip()
+        if configured:
+            return Path(configured)
+    return Path(DEFAULT_US_STOCK_PARQUET_DIR)
 
 
 def get_local_us_history_path(stock_code: str) -> Path:

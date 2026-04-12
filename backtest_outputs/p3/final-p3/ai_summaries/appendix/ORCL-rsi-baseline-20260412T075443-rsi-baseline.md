@@ -1,0 +1,11 @@
+### ORCL / rsi-baseline
+
+- Total return: `20.0424`%
+- Annualized return: `1.842517`%
+- Sharpe / Sortino / Calmar: `0.194489` / `0.169792` / `0.039051`
+- Max drawdown: `47.1827`%
+- Win rate: `77.7778`%
+- Average holding duration: `174.7778` days
+- Parameter sensitivity: rsi_threshold 参数敏感性中最佳为 rsi-6-25-75（总收益 289.87%），最弱为 rsi-baseline（总收益 20.0424%）。
+- Compare note: Top total-return configuration is `rsi-6-25-75`.
+- Completeness: `{"annualized_return_pct":"computed_from_total_return_and_period","calmar_ratio":"computed_from_annualized_and_drawdown","max_drawdown_pct":"provided_by_p2","profit_loss_ratio":"provided_by_p2","sharpe_ratio":"provided_by_p2","sortino_ratio":"provided_by_p2","volatility_pct":"provided_by_p2"}`

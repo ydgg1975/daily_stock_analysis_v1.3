@@ -14,16 +14,20 @@ ensure_litellm_stub()
 
 from api.v1.endpoints.backtest import (  # noqa: E402
     clear_backtest_samples,
+    cancel_rule_backtest_run,
     parse_rule_strategy,
     get_rule_backtest_run,
+    get_rule_backtest_run_status,
     run_rule_backtest,
 )
 from api.v1.schemas.backtest import (  # noqa: E402
     BacktestCodeRequest,
+    RuleBacktestCancelResponse,
     RuleBacktestParseRequest,
     RuleBacktestParseResponse,
     RuleBacktestRunRequest,
     RuleBacktestRunResponse,
+    RuleBacktestStatusResponse,
 )
 
 
@@ -256,6 +260,59 @@ class BacktestApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail["error"], "not_found")
+
+    def test_get_rule_backtest_run_status_returns_lightweight_contract(self) -> None:
+        service = MagicMock()
+        service.get_run_status.return_value = {
+            "id": 123,
+            "code": "600519",
+            "status": "running",
+            "status_message": "正在执行规则回测。",
+            "status_history": [{"status": "queued", "at": "2024-01-01T00:00:00"}],
+            "run_at": "2024-01-01T00:00:00",
+            "completed_at": None,
+            "no_result_reason": None,
+            "no_result_message": None,
+            "trade_count": 0,
+            "parsed_confidence": 0.8,
+            "needs_confirmation": False,
+        }
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = get_rule_backtest_run_status(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestStatusResponse)
+        self.assertEqual(response.status, "running")
+        self.assertEqual(response.status_history[0]["status"], "queued")
+        service.get_run_status.assert_called_once_with(123)
+
+    def test_cancel_rule_backtest_run_returns_cancel_contract(self) -> None:
+        service = MagicMock()
+        service.cancel_run.return_value = {
+            "id": 123,
+            "code": "600519",
+            "status": "cancelled",
+            "status_message": "规则回测已取消。",
+            "status_history": [
+                {"status": "queued", "at": "2024-01-01T00:00:00"},
+                {"status": "cancelled", "at": "2024-01-01T00:00:01"},
+            ],
+            "run_at": "2024-01-01T00:00:00",
+            "completed_at": "2024-01-01T00:00:01",
+            "no_result_reason": "cancelled",
+            "no_result_message": "规则回测已取消。",
+            "trade_count": 0,
+            "parsed_confidence": 0.8,
+            "needs_confirmation": False,
+        }
+
+        with patch("api.v1.endpoints.backtest.RuleBacktestService", return_value=service):
+            response = cancel_rule_backtest_run(123, db_manager=MagicMock())
+
+        self.assertIsInstance(response, RuleBacktestCancelResponse)
+        self.assertEqual(response.status, "cancelled")
+        self.assertEqual(response.no_result_reason, "cancelled")
+        service.cancel_run.assert_called_once_with(123)
 
     def test_rule_backtest_run_response_uses_supported_family_strategy_spec_contract(self) -> None:
         response = RuleBacktestRunResponse(

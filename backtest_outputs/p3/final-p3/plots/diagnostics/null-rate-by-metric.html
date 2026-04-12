@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Null Rate by Metric</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #e8edf7;
+    }
+    .card {
+      background: #121933;
+      border: 1px solid #273159;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+    h1, h2, h3 { margin: 0 0 12px 0; }
+    p, li { color: #b7c1de; }
+    svg { width: 100%; height: auto; display: block; }
+    .axis { stroke: #7081b9; stroke-width: 1; }
+    .grid { stroke: #253052; stroke-width: 1; opacity: 0.8; }
+    .label { fill: #b7c1de; font-size: 12px; }
+    .series-label { fill: #e8edf7; font-size: 12px; }
+    .bar { fill: #2a9d8f; }
+    .line-a { stroke: #4cc9f0; fill: none; stroke-width: 2; }
+    .line-b { stroke: #f72585; fill: none; stroke-width: 2; }
+    .line-c { stroke: #f4a261; fill: none; stroke-width: 2; }
+    .line-d { stroke: #90be6d; fill: none; stroke-width: 2; }
+    .dot { fill: #f4a261; opacity: 0.85; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #273159;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #192445; }
+  </style>
+</head>
+<body>
+  
+        <div class="card">
+          <h1>Null Rate by Metric</h1>
+          <p>Percentage of deduplicated runs with null values per metric.</p>
+          <svg viewBox="0 0 960 420">
+            <line class="axis" x1="56" y1="364" x2="904" y2="364" />
+            <line class="axis" x1="56" y1="56" x2="56" y2="364" />
+            <rect class="bar" x="62.00" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="122.57" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="183.14" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="243.71" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="304.29" y="298.24" width="48.57" height="65.76" /><rect class="bar" x="364.86" y="298.24" width="48.57" height="65.76" /><rect class="bar" x="425.43" y="298.24" width="48.57" height="65.76" /><rect class="bar" x="486.00" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="546.57" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="607.14" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="667.71" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="728.29" y="56.00" width="48.57" height="308.00" /><rect class="bar" x="788.86" y="340.00" width="48.57" height="24.00" /><rect class="bar" x="849.43" y="340.00" width="48.57" height="24.00" />
+            <text class="label" x="62.00" y="386">total_return_pct</text><text class="label" x="122.57" y="386">daily_return_pct</text><text class="label" x="183.14" y="386">volatility_pct</text><text class="label" x="243.71" y="386">max_drawdown_pct</text><text class="label" x="304.29" y="386">sharpe_ratio</text><text class="label" x="364.86" y="386">sortino_ratio</text><text class="label" x="425.43" y="386">calmar_ratio</text><text class="label" x="486.00" y="386">alpha_pct</text><text class="label" x="546.57" y="386">beta</text><text class="label" x="607.14" y="386">win_rate_pct</text><text class="label" x="667.71" y="386">avg_position_duration_days</text><text class="label" x="728.29" y="386">profit_loss_ratio</text><text class="label" x="788.86" y="386">trade_count</text><text class="label" x="849.43" y="386">annualized_return_pct</text>
+          </svg>
+        </div>
+        
+</body>
+</html>

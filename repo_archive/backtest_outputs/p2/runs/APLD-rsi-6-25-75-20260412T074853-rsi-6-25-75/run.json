@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "symbol": "APLD",
+  "strategy_family": "rsi_threshold",
+  "strategy_label": "rsi-6-25-75",
+  "strategy_text": "RSI6 小于 25 买入，RSI6 大于 75 卖出",
+  "parameters": {
+    "period": 6,
+    "lower_threshold": 25.0,
+    "upper_threshold": 75.0
+  },
+  "metadata": {
+    "symbol": "APLD",
+    "strategy_label": "rsi-6-25-75",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T074852Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:48:53.379430+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 4096688.119537,
+    "total_return_pct": 3996.6881,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 419.3815,
+    "excess_return_vs_benchmark_pct": 3577.3066,
+    "buy_and_hold_return_pct": 419.3815,
+    "excess_return_vs_buy_and_hold_pct": 3577.3066,
+    "trade_count": 17,
+    "entry_signal_count": 17,
+    "win_count": 13,
+    "loss_count": 4,
+    "win_rate_pct": 76.4706,
+    "avg_trade_return_pct": 30.7911,
+    "max_drawdown_pct": 59.0698,
+    "avg_holding_days": 23.4706,
+    "avg_holding_bars": 23.4706,
+    "avg_holding_calendar_days": 33.9412,
+    "bars_used": 997,
+    "lookback_bars": 997,
+    "period_start": "2022-04-13T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

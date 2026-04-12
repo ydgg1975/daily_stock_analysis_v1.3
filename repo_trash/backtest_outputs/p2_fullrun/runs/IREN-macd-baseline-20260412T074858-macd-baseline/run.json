@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "symbol": "IREN",
+  "strategy_family": "macd_crossover",
+  "strategy_label": "macd-baseline",
+  "strategy_text": "MACD(12,26,9) 金叉买入，死叉卖出",
+  "parameters": {
+    "fast_period": 12,
+    "slow_period": 26,
+    "signal_period": 9
+  },
+  "metadata": {
+    "symbol": "IREN",
+    "strategy_label": "macd-baseline",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T074852Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:48:58.392992+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 194467.149341,
+    "total_return_pct": 94.4671,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 43.681,
+    "excess_return_vs_benchmark_pct": 50.7861,
+    "buy_and_hold_return_pct": 43.681,
+    "excess_return_vs_buy_and_hold_pct": 50.7861,
+    "trade_count": 41,
+    "entry_signal_count": 41,
+    "win_count": 12,
+    "loss_count": 29,
+    "win_rate_pct": 29.2683,
+    "avg_trade_return_pct": 7.1267,
+    "max_drawdown_pct": 78.1065,
+    "avg_holding_days": 14.561,
+    "avg_holding_bars": 14.561,
+    "avg_holding_calendar_days": 21.2195,
+    "bars_used": 1098,
+    "lookback_bars": 1098,
+    "period_start": "2021-11-17T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

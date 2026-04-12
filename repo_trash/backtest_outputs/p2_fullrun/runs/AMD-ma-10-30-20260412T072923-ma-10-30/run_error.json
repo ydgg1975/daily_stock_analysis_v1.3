@@ -1,0 +1,7 @@
+{
+  "symbol": "AMD",
+  "strategy_family": "moving_average_crossover",
+  "strategy_label": "ma-10-30",
+  "error": "ValueError: Invalid isoformat string: '2016-04-06T00:00:00'",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/yehengli/daily_stock_analysis/src/services/wolfystock_p2_runner.py\", line 1275, in process_strategy_family\n    result_payload, parsed_strategy = execute_engine_run(\n                                      ^^^^^^^^^^^^^^^^^^^\n  File \"/Users/yehengli/daily_stock_analysis/src/services/wolfystock_p2_runner.py\", line 910, in execute_engine_run\n    for row in RuleBacktestEngine._build_audit_ledger(\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/yehengli/daily_stock_analysis/src/core/rule_backtest_engine.py\", line 3014, in _build_audit_ledger\n    point_dt = point.date if isinstance(point, RuleBacktestPoint) else date.fromisoformat(str(point_date))\n                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: Invalid isoformat string: '2016-04-06T00:00:00'\n"
+}

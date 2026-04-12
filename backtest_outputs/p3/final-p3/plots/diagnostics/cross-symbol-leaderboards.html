@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cross-Symbol Leaderboard</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #e8edf7;
+    }
+    .card {
+      background: #121933;
+      border: 1px solid #273159;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+    h1, h2, h3 { margin: 0 0 12px 0; }
+    p, li { color: #b7c1de; }
+    svg { width: 100%; height: auto; display: block; }
+    .axis { stroke: #7081b9; stroke-width: 1; }
+    .grid { stroke: #253052; stroke-width: 1; opacity: 0.8; }
+    .label { fill: #b7c1de; font-size: 12px; }
+    .series-label { fill: #e8edf7; font-size: 12px; }
+    .bar { fill: #2a9d8f; }
+    .line-a { stroke: #4cc9f0; fill: none; stroke-width: 2; }
+    .line-b { stroke: #f72585; fill: none; stroke-width: 2; }
+    .line-c { stroke: #f4a261; fill: none; stroke-width: 2; }
+    .line-d { stroke: #90be6d; fill: none; stroke-width: 2; }
+    .dot { fill: #f4a261; opacity: 0.85; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #273159;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #192445; }
+  </style>
+</head>
+<body>
+  
+        <div class="card">
+          <h1>Cross-Symbol Leaderboard</h1>
+          <p>Top symbols ranked by best unique strategy total return.</p>
+          <svg viewBox="0 0 960 420">
+            <line class="axis" x1="56" y1="364" x2="904" y2="364" />
+            <line class="axis" x1="56" y1="56" x2="56" y2="364" />
+            <rect class="bar" x="62.00" y="56.00" width="58.67" height="308.00" /><rect class="bar" x="132.67" y="113.51" width="58.67" height="250.49" /><rect class="bar" x="203.33" y="120.98" width="58.67" height="243.02" /><rect class="bar" x="274.00" y="251.15" width="58.67" height="112.85" /><rect class="bar" x="344.67" y="264.59" width="58.67" height="99.41" /><rect class="bar" x="415.33" y="289.61" width="58.67" height="74.39" /><rect class="bar" x="486.00" y="296.82" width="58.67" height="67.18" /><rect class="bar" x="556.67" y="298.84" width="58.67" height="65.16" /><rect class="bar" x="627.33" y="301.99" width="58.67" height="62.01" /><rect class="bar" x="698.00" y="302.57" width="58.67" height="61.43" /><rect class="bar" x="768.67" y="334.81" width="58.67" height="29.19" /><rect class="bar" x="839.33" y="340.00" width="58.67" height="24.00" />
+            <text class="label" x="62.00" y="386">APLD</text><text class="label" x="132.67" y="386">TSLA</text><text class="label" x="203.33" y="386">NVDA</text><text class="label" x="274.00" y="386">SNDK</text><text class="label" x="344.67" y="386">AMD</text><text class="label" x="415.33" y="386">APP</text><text class="label" x="486.00" y="386">AVAV</text><text class="label" x="556.67" y="386">MU</text><text class="label" x="627.33" y="386">BMNR</text><text class="label" x="698.00" y="386">IREN</text><text class="label" x="768.67" y="386">PLTR</text><text class="label" x="839.33" y="386">HOOD</text>
+          </svg>
+        </div>
+        
+</body>
+</html>

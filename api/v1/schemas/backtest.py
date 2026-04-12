@@ -639,9 +639,29 @@ class RuleBacktestRunResponse(BaseModel):
     ai_summary: Optional[str] = None
     equity_curve: List[Dict[str, Any]] = Field(default_factory=list)
     trades: List[RuleBacktestTradeItem] = Field(default_factory=list)
+    execution_trace: Optional[Dict[str, Any]] = None
 
 
 class RuleBacktestDetailResponse(RuleBacktestRunResponse):
+    pass
+
+
+class RuleBacktestStatusResponse(BaseModel):
+    id: int
+    code: str
+    status: str
+    status_message: Optional[str] = None
+    status_history: List[Dict[str, Any]] = Field(default_factory=list)
+    run_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    no_result_reason: Optional[str] = None
+    no_result_message: Optional[str] = None
+    trade_count: int = 0
+    parsed_confidence: Optional[float] = None
+    needs_confirmation: bool = False
+
+
+class RuleBacktestCancelResponse(RuleBacktestStatusResponse):
     pass
 
 

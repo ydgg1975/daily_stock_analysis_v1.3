@@ -702,7 +702,7 @@ Set the following variables in `.env` (all optional, have defaults):
 | `BACKTEST_MIN_AGE_DAYS` | `14` | Historical sample maturity window (calendar days; `0` disables the maturity gate) |
 | `BACKTEST_ENGINE_VERSION` | `v1` | Engine version, used to distinguish results when logic is updated |
 | `BACKTEST_NEUTRAL_BAND_PCT` | `2.0` | Neutral band threshold (%), ±2% treated as range-bound |
-| `US_STOCK_PARQUET_DIR` | `/root/us_test/data/normalized/us` | Local US parquet root reused by stock history, historical evaluation, and rule backtests |
+| `LOCAL_US_PARQUET_DIR` | `/root/us_test/data/normalized/us` | Preferred local US parquet root reused by stock history, historical evaluation, and rule backtests; falls back to `US_STOCK_PARQUET_DIR` for legacy compatibility |
 
 ### Auto-run
 
@@ -765,16 +765,22 @@ FastAPI provides RESTful API service for configuration management and triggering
 | `/api/v1/backtest/prepare-samples` | POST | Prepare historical analysis evaluation samples for a symbol |
 | `/api/v1/backtest/sample-status` | GET | Query prepared sample coverage |
 | `/api/v1/backtest/results` | GET | Query historical analysis evaluation results (paginated) |
+| `/api/v1/backtest/samples/clear` | POST | Clear prepared historical analysis evaluation samples |
+| `/api/v1/backtest/results/clear` | POST | Clear historical analysis evaluation results |
 | `/api/v1/backtest/performance` | GET | Get overall historical analysis evaluation performance |
 | `/api/v1/backtest/performance/{code}` | GET | Get per-stock historical analysis evaluation performance |
 | `/api/v1/backtest/rule/parse` | POST | Parse rule strategy text |
 | `/api/v1/backtest/rule/run` | POST | Submit or synchronously run deterministic rule backtests |
 | `/api/v1/backtest/rule/runs` | GET | Query rule backtest history |
 | `/api/v1/backtest/rule/runs/{run_id}` | GET | Query a rule backtest detail record |
+| `/api/v1/backtest/rule/runs/{run_id}/status` | GET | Query lightweight rule run status |
+| `/api/v1/backtest/rule/runs/{run_id}/cancel` | POST | Best-effort cancel a rule run |
 | `/api/health` | GET | Health check |
 | `/docs` | GET | API Swagger documentation |
 
 > Note: `POST /api/v1/analysis/analyze` supports only one stock when `async_mode=false`; batch `stock_codes` requires `async_mode=true`. The async `202` response returns a single `task_id` for one stock, or an `accepted` / `duplicates` summary for batch requests.
+>
+> See [docs/backtest-system_EN.md](./backtest-system_EN.md) for repaired backtest ownership, local parquet priority, and smoke-script usage.
 
 **Usage examples**:
 ```bash
@@ -818,8 +824,22 @@ curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/run \
   -H 'Content-Type: application/json' \
   -d '{"code":"AAPL","strategy_text":"Buy when MA5 > MA20 and RSI6 < 40. Sell when MA5 < MA20 or RSI6 > 70.","lookback_bars":252,"fee_bps":0,"slippage_bps":0,"confirmed":true,"wait_for_completion":false}'
 
+# Poll rule backtest status
+curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/status
+
 # Query rule backtest detail
 curl http://127.0.0.1:8000/api/v1/backtest/rule/runs/123
+
+# Cancel an unfinished rule backtest
+curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/cancel
+```
+
+Backtest smoke suites:
+
+```bash
+python3 test_backtest_basic.py
+python3 test_backtest_rule.py
+python3 test_backtest_run.py --mode both
 ```
 
 ### Custom Configuration

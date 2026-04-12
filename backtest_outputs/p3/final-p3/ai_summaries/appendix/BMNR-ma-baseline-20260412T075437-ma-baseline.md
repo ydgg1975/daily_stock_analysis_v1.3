@@ -1,0 +1,11 @@
+### BMNR / ma-baseline
+
+- Total return: `-47.4061`%
+- Annualized return: `-53.651315`%
+- Sharpe / Sortino / Calmar: `-1.189685` / `-1.211125` / `-1.048293`
+- Max drawdown: `51.1797`%
+- Win rate: `16.6667`%
+- Average holding duration: `16.3333` days
+- Parameter sensitivity: moving_average_crossover 参数敏感性中最佳为 ma-3-15（总收益 -41.4404%），最弱为 ma-8-21（总收益 -58.3764%）。
+- Compare note: Top total-return configuration is `macd-5-35-5`.
+- Completeness: `{"annualized_return_pct":"computed_from_total_return_and_period","calmar_ratio":"computed_from_annualized_and_drawdown","max_drawdown_pct":"provided_by_p2","profit_loss_ratio":"provided_by_p2","sharpe_ratio":"provided_by_p2","sortino_ratio":"provided_by_p2","volatility_pct":"provided_by_p2"}`

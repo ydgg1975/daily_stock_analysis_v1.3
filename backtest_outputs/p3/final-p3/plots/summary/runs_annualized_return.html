@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runs Annualized Return Distribution</title>
+  <style>
+    body {
+      margin: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: #e8edf7;
+    }
+    .card {
+      background: #121933;
+      border: 1px solid #273159;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+    h1, h2, h3 { margin: 0 0 12px 0; }
+    p, li { color: #b7c1de; }
+    svg { width: 100%; height: auto; display: block; }
+    .axis { stroke: #7081b9; stroke-width: 1; }
+    .grid { stroke: #253052; stroke-width: 1; opacity: 0.8; }
+    .label { fill: #b7c1de; font-size: 12px; }
+    .series-label { fill: #e8edf7; font-size: 12px; }
+    .bar { fill: #2a9d8f; }
+    .line-a { stroke: #4cc9f0; fill: none; stroke-width: 2; }
+    .line-b { stroke: #f72585; fill: none; stroke-width: 2; }
+    .line-c { stroke: #f4a261; fill: none; stroke-width: 2; }
+    .line-d { stroke: #90be6d; fill: none; stroke-width: 2; }
+    .dot { fill: #f4a261; opacity: 0.85; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #273159;
+      padding: 8px;
+      text-align: left;
+    }
+    th { background: #192445; }
+  </style>
+</head>
+<body>
+  
+        <div class="card">
+          <h1>Runs Annualized Return Distribution</h1>
+          <p>Deduplicated run counts by annualized return bucket.</p>
+          <svg viewBox="0 0 960 420">
+            <line class="axis" x1="56" y1="364" x2="904" y2="364" />
+            <line class="axis" x1="56" y1="56" x2="56" y2="364" />
+            <rect class="bar" x="62.00" y="333.24" width="18.00" height="30.76" /><rect class="bar" x="87.70" y="333.24" width="18.00" height="30.76" /><rect class="bar" x="113.39" y="312.95" width="18.00" height="51.05" /><rect class="bar" x="139.09" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="164.79" y="272.38" width="18.00" height="91.62" /><rect class="bar" x="190.48" y="279.14" width="18.00" height="84.86" /><rect class="bar" x="216.18" y="204.76" width="18.00" height="159.24" /><rect class="bar" x="241.88" y="143.90" width="18.00" height="220.10" /><rect class="bar" x="267.58" y="56.00" width="18.00" height="308.00" /><rect class="bar" x="293.27" y="137.14" width="18.00" height="226.86" /><rect class="bar" x="318.97" y="170.95" width="18.00" height="193.05" /><rect class="bar" x="344.67" y="231.81" width="18.00" height="132.19" /><rect class="bar" x="370.36" y="279.14" width="18.00" height="84.86" /><rect class="bar" x="396.06" y="312.95" width="18.00" height="51.05" /><rect class="bar" x="421.76" y="326.48" width="18.00" height="37.52" /><rect class="bar" x="447.45" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="473.15" y="333.24" width="18.00" height="30.76" /><rect class="bar" x="498.85" y="326.48" width="18.00" height="37.52" /><rect class="bar" x="524.55" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="550.24" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="575.94" y="333.24" width="18.00" height="30.76" /><rect class="bar" x="601.64" y="333.24" width="18.00" height="30.76" /><rect class="bar" x="627.33" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="653.03" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="678.73" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="704.42" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="730.12" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="755.82" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="781.52" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="807.21" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="832.91" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="858.61" y="340.00" width="18.00" height="24.00" /><rect class="bar" x="884.30" y="340.00" width="18.00" height="24.00" />
+            <text class="label" x="62.00" y="386">-70.0</text><text class="label" x="87.70" y="386">-60.0</text><text class="label" x="113.39" y="386">-50.0</text><text class="label" x="139.09" y="386">-40.0</text><text class="label" x="164.79" y="386">-30.0</text><text class="label" x="190.48" y="386">-20.0</text><text class="label" x="216.18" y="386">-10.0</text><text class="label" x="241.88" y="386">-0.0</text><text class="label" x="267.58" y="386">10.0</text><text class="label" x="293.27" y="386">20.0</text><text class="label" x="318.97" y="386">30.0</text><text class="label" x="344.67" y="386">40.0</text><text class="label" x="370.36" y="386">50.0</text><text class="label" x="396.06" y="386">60.0</text><text class="label" x="421.76" y="386">70.0</text><text class="label" x="447.45" y="386">80.0</text><text class="label" x="473.15" y="386">90.0</text><text class="label" x="498.85" y="386">100.0</text><text class="label" x="524.55" y="386">110.0</text><text class="label" x="550.24" y="386">130.0</text><text class="label" x="575.94" y="386">140.0</text><text class="label" x="601.64" y="386">150.0</text><text class="label" x="627.33" y="386">160.0</text><text class="label" x="653.03" y="386">220.0</text><text class="label" x="678.73" y="386">610.0</text><text class="label" x="704.42" y="386">660.0</text><text class="label" x="730.12" y="386">720.0</text><text class="label" x="755.82" y="386">770.0</text><text class="label" x="781.52" y="386">810.0</text><text class="label" x="807.21" y="386">820.0</text><text class="label" x="832.91" y="386">1050.0</text><text class="label" x="858.61" y="386">1060.0</text><text class="label" x="884.30" y="386">1470.0</text>
+          </svg>
+        </div>
+        
+</body>
+</html>

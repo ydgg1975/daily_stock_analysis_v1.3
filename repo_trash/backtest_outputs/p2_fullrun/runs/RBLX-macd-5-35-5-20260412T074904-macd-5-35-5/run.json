@@ -1,0 +1,47 @@
+{
+  "status": "completed",
+  "symbol": "RBLX",
+  "strategy_family": "macd_crossover",
+  "strategy_label": "macd-5-35-5",
+  "strategy_text": "MACD(5,35,5) 金叉买入，死叉卖出",
+  "parameters": {
+    "fast_period": 5,
+    "slow_period": 35,
+    "signal_period": 5
+  },
+  "metadata": {
+    "symbol": "RBLX",
+    "strategy_label": "macd-5-35-5",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T074852Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:49:04.198616+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 60216.473626,
+    "total_return_pct": -39.7835,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": -17.6978,
+    "excess_return_vs_benchmark_pct": -22.0857,
+    "buy_and_hold_return_pct": -17.6978,
+    "excess_return_vs_buy_and_hold_pct": -22.0857,
+    "trade_count": 95,
+    "entry_signal_count": 95,
+    "win_count": 34,
+    "loss_count": 61,
+    "win_rate_pct": 35.7895,
+    "avg_trade_return_pct": -0.02,
+    "max_drawdown_pct": 69.9854,
+    "avg_holding_days": 6.9474,
+    "avg_holding_bars": 6.9474,
+    "avg_holding_calendar_days": 10.0211,
+    "bars_used": 1274,
+    "lookback_bars": 1274,
+    "period_start": "2021-03-10T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}

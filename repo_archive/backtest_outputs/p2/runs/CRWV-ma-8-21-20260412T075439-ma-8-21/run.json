@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "symbol": "CRWV",
+  "strategy_family": "moving_average_crossover",
+  "strategy_label": "ma-8-21",
+  "strategy_text": "8日均线上穿21日均线买入，下穿卖出",
+  "parameters": {
+    "fast_period": 8,
+    "slow_period": 21,
+    "fast_type": "simple",
+    "slow_type": "simple"
+  },
+  "metadata": {
+    "symbol": "CRWV",
+    "strategy_label": "ma-8-21",
+    "strategy_version": "v1",
+    "parse_version": "v1",
+    "engine_version": "v1",
+    "run_tag": "p2-20260412T075434Z",
+    "benchmark_symbol": "AMD",
+    "generated_at": "2026-04-12T07:54:39.387014+00:00"
+  },
+  "metrics": {
+    "initial_capital": 100000.0,
+    "final_equity": 201861.723604,
+    "total_return_pct": 101.8617,
+    "annualized_return_pct": null,
+    "benchmark_return_pct": 102.35,
+    "excess_return_vs_benchmark_pct": -0.4883,
+    "buy_and_hold_return_pct": 102.35,
+    "excess_return_vs_buy_and_hold_pct": -0.4883,
+    "trade_count": 7,
+    "entry_signal_count": 7,
+    "win_count": 3,
+    "loss_count": 4,
+    "win_rate_pct": 42.8571,
+    "avg_trade_return_pct": 25.0494,
+    "max_drawdown_pct": 50.46,
+    "avg_holding_days": 17,
+    "avg_holding_bars": 17,
+    "avg_holding_calendar_days": 24.7143,
+    "bars_used": 256,
+    "lookback_bars": 256,
+    "period_start": "2025-03-28T00:00:00",
+    "period_end": "2026-04-06T00:00:00"
+  },
+  "error": null
+}
