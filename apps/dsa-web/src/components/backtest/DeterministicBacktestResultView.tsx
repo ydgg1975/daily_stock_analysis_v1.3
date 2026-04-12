@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import { Button, Card } from '../../components/common';
-import type { RuleBacktestAuditRowItem, RuleBacktestRunResponse } from '../../types/backtest';
+import type { RuleBacktestRunResponse } from '../../types/backtest';
 import { DeterministicBacktestChartWorkspace } from './DeterministicBacktestChartWorkspace';
 import {
   getDeterministicResultDensityCssVars,
@@ -10,6 +10,7 @@ import {
 } from './deterministicResultDensity';
 import {
   MetricCard,
+  SummaryStrip,
   formatNumber,
   pct,
 } from './shared';
@@ -20,70 +21,11 @@ import {
   type DeterministicBacktestNormalizedRow,
   type DeterministicBacktestTradeEvent,
 } from './normalizeDeterministicBacktestResult';
-
-function getStoredAuditRows(run: RuleBacktestRunResponse): RuleBacktestAuditRowItem[] {
-  return Array.isArray(run.auditRows) ? run.auditRows : [];
-}
-
-function downloadAuditCsv(run: RuleBacktestRunResponse): void {
-  const rows = getStoredAuditRows(run);
-  const header = [
-    '日期',
-    '标的收盘价',
-    '基准收盘价',
-    '信号摘要',
-    '动作',
-    '成交价',
-    '持股数',
-    '现金',
-    '持仓市值',
-    '总资产',
-    '当日盈亏',
-    '当日收益率',
-    '策略累计收益率',
-    '基准累计收益率',
-    '买入持有累计收益率',
-    '仓位',
-    '手续费',
-    '滑点',
-    '备注',
-    '不可用说明',
-  ];
-  const lines = rows.map((row) => [
-    row.date,
-    row.symbolClose ?? '',
-    row.benchmarkClose ?? '',
-    row.signalSummary ?? '',
-    formatDeterministicActionLabel(row.action ?? row.executedAction),
-    row.fillPrice ?? '',
-    row.shares ?? row.sharesHeld ?? '',
-    row.cash ?? '',
-    row.holdingsValue ?? '',
-    row.totalPortfolioValue ?? '',
-    row.dailyPnl ?? '',
-    row.dailyReturn ?? row.dailyReturnPct ?? '',
-    row.cumulativeReturn ?? row.cumulativeStrategyReturnPct ?? '',
-    row.benchmarkCumulativeReturn ?? row.cumulativeBenchmarkReturnPct ?? '',
-    row.buyHoldCumulativeReturn ?? row.cumulativeBuyAndHoldReturnPct ?? '',
-    row.position ?? row.exposurePct ?? row.targetPosition ?? '',
-    row.fees ?? '',
-    row.slippage ?? '',
-    row.notes ?? '',
-    row.unavailableReason ?? '',
-  ]);
-  const content = [header, ...lines]
-    .map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `backtest-audit-${run.code}-${run.id}.csv`;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+import {
+  downloadExecutionTraceCsv,
+  downloadExecutionTraceJson,
+  hasExecutionTraceRows,
+} from './executionTraceUtils';
 
 export function DeterministicAuditTable({
   run,
@@ -95,12 +37,15 @@ export function DeterministicAuditTable({
   return (
     <Card
       title="日级审计 / 对账"
-      subtitle="表格与导出都直接读取已持久化的 audit ledger"
+      subtitle="表格读取已持久化审计账本；导出优先复用执行轨迹"
       className="product-section-card product-section-card--backtest-standard"
     >
       <div className="backtest-audit-table__header">
-        <p className="product-section-copy">当运行结果已存储 audit ledger 时，结果页和 CSV 导出都复用这份持久化账本，不再临时重算。</p>
-        <Button variant="secondary" onClick={() => downloadAuditCsv(run)} disabled={getStoredAuditRows(run).length === 0}>导出 CSV</Button>
+        <p className="product-section-copy">当运行结果已持久化审计账本后，结果页会优先复用执行轨迹和 auditRows，不再临时重算。</p>
+        <div className="product-action-row">
+          <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)} disabled={!hasExecutionTraceRows(run)}>导出 CSV</Button>
+          <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)} disabled={!hasExecutionTraceRows(run)}>导出 JSON</Button>
+        </div>
       </div>
       {rows.length === 0 ? (
         <div className="product-empty-state product-empty-state--compact">暂无可导出的日级审计数据。</div>
@@ -203,6 +148,21 @@ export const DeterministicBacktestResultView: React.FC<{
   const { metrics, benchmarkMeta, viewerMeta } = normalized;
   const annualizedReturn = metrics.annualizedReturnPct != null ? pct(metrics.annualizedReturnPct) : '--';
   const sharpeRatio = metrics.sharpeRatio != null ? formatNumber(metrics.sharpeRatio, 2) : '--';
+  const comparisonLabel = benchmarkMeta.showBenchmark
+    ? `相对 ${benchmarkMeta.benchmarkLabel}`
+    : benchmarkMeta.showBuyHold
+      ? `相对 ${benchmarkMeta.buyHoldLabel}`
+      : '相对比较';
+  const comparisonValue = benchmarkMeta.showBenchmark
+    ? metrics.excessReturnVsBenchmarkPct
+    : benchmarkMeta.showBuyHold
+      ? metrics.excessReturnVsBuyAndHoldPct
+      : null;
+  const comparisonNote = benchmarkMeta.showBenchmark
+    ? `基准收益 ${pct(metrics.benchmarkReturnPct)}`
+    : benchmarkMeta.showBuyHold
+      ? `${benchmarkMeta.buyHoldLabel} ${pct(metrics.buyAndHoldReturnPct)}`
+      : '当前没有可比较的基准收益';
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
 
   return (
@@ -227,7 +187,7 @@ export const DeterministicBacktestResultView: React.FC<{
             <div className="backtest-result-viewer__metric-stage" data-testid="deterministic-result-kpi-row">
               <div className="backtest-result-viewer__metric-stage-header">
                 <div>
-                  <span className="product-kicker">Dashboard</span>
+                  <span className="product-kicker">结果摘要</span>
                   <h2 className="backtest-result-viewer__metric-stage-title">关键指标</h2>
                 </div>
                 <div className="product-chip-list product-chip-list--tight">
@@ -237,22 +197,68 @@ export const DeterministicBacktestResultView: React.FC<{
                 </div>
               </div>
               <div className="metric-grid backtest-result-viewer__metric-grid">
-                <MetricCard label="总收益" value={pct(metrics.totalReturnPct)} tone="accent" />
-                <MetricCard label="年化收益" value={annualizedReturn} />
-                <MetricCard label="最大回撤" value={pct(metrics.maxDrawdownPct)} tone="negative" />
-                <MetricCard label="夏普" value={sharpeRatio} />
                 <MetricCard
-                  label={benchmarkMeta.showBenchmark ? benchmarkMeta.benchmarkLabel : '基准收益'}
-                  value={benchmarkMeta.showBenchmark ? pct(metrics.benchmarkReturnPct) : '--'}
+                  label="总收益"
+                  value={pct(metrics.totalReturnPct)}
+                  tone="accent"
+                  note={comparisonNote}
                 />
                 <MetricCard
-                  label="超额收益"
-                  value={benchmarkMeta.showBenchmark ? pct(metrics.excessReturnVsBenchmarkPct) : '--'}
-                  tone={benchmarkMeta.showBenchmark
-                    ? (metrics.excessReturnVsBenchmarkPct ?? 0) >= 0 ? 'positive' : 'negative'
+                  label={comparisonLabel}
+                  value={pct(comparisonValue)}
+                  tone={comparisonValue != null
+                    ? (comparisonValue >= 0 ? 'positive' : 'negative')
                     : 'default'}
+                  note={benchmarkMeta.showBenchmark
+                    ? `买入持有 ${pct(metrics.buyAndHoldReturnPct)}`
+                    : comparisonNote}
+                />
+                <MetricCard
+                  label="最大回撤"
+                  value={pct(metrics.maxDrawdownPct)}
+                  tone="negative"
+                  note={`年化收益 ${annualizedReturn}`}
+                />
+                <MetricCard
+                  label="交易次数"
+                  value={String(metrics.tradeCount)}
+                  note={metrics.tradeCount > 0 ? `${metrics.winCount} 胜 / ${metrics.lossCount} 负` : '暂无成交交易'}
+                />
+                <MetricCard
+                  label="胜率"
+                  value={pct(metrics.winRatePct)}
+                  note={metrics.avgTradeReturnPct != null ? `平均每笔 ${pct(metrics.avgTradeReturnPct)}` : '按已成交交易统计'}
+                />
+                <MetricCard
+                  label="期末权益"
+                  value={formatNumber(metrics.finalEquity)}
+                  note={`初始资金 ${formatNumber(run.initialCapital)}`}
                 />
               </div>
+              <SummaryStrip
+                items={[
+                  {
+                    label: benchmarkMeta.benchmarkLabel,
+                    value: benchmarkMeta.showBenchmark ? pct(metrics.benchmarkReturnPct) : '--',
+                    note: '与策略使用同一回测窗口',
+                  },
+                  {
+                    label: benchmarkMeta.buyHoldLabel,
+                    value: pct(metrics.buyAndHoldReturnPct),
+                    note: '当前标的买入并持有',
+                  },
+                  {
+                    label: '夏普',
+                    value: sharpeRatio,
+                    note: `年化 ${annualizedReturn}`,
+                  },
+                  {
+                    label: '平均持有',
+                    value: metrics.avgHoldingBars == null ? '--' : `${formatNumber(metrics.avgHoldingBars, 1)} 根K线`,
+                    note: metrics.avgHoldingCalendarDays == null ? '按交易日统计' : `${formatNumber(metrics.avgHoldingCalendarDays, 1)} 天`,
+                  },
+                ]}
+              />
             </div>
             <div className="backtest-result-viewer__chart-stage">
               <DeterministicBacktestChartWorkspace key={workspaceKey} normalized={normalized} densityConfig={resolvedDensity} />

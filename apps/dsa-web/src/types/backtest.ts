@@ -529,6 +529,53 @@ export interface RuleBacktestBenchmarkSummary {
   fallbackUsed?: boolean;
 }
 
+export interface RuleBacktestExecutionTraceRowItem {
+  date?: string | null;
+  symbolClose?: number | null;
+  benchmarkClose?: number | null;
+  signalSummary?: string | null;
+  eventType?: string | null;
+  action?: string | null;
+  actionDisplay?: string | null;
+  fillPrice?: number | null;
+  shares?: number | null;
+  cash?: number | null;
+  holdingsValue?: number | null;
+  totalPortfolioValue?: number | null;
+  dailyPnl?: number | null;
+  dailyReturn?: number | null;
+  cumulativeReturn?: number | null;
+  benchmarkCumulativeReturn?: number | null;
+  buyHoldCumulativeReturn?: number | null;
+  position?: number | null;
+  fees?: number | null;
+  slippage?: number | null;
+  notes?: string | null;
+  unavailableReason?: string | null;
+  assumptionsDefaults?: string | null;
+  fallback?: string | null;
+}
+
+export interface RuleBacktestExecutionTraceAssumptionsDefaults {
+  items?: Array<Record<string, unknown>>;
+  summaryText?: string | null;
+}
+
+export interface RuleBacktestExecutionTraceFallback {
+  runFallback?: boolean;
+  traceRebuilt?: boolean;
+  note?: string | null;
+}
+
+export interface RuleBacktestExecutionTracePayload {
+  source?: string | null;
+  rows?: RuleBacktestExecutionTraceRowItem[];
+  executionModel?: RuleBacktestExecutionModel;
+  executionAssumptions?: AssumptionMap;
+  assumptionsDefaults?: RuleBacktestExecutionTraceAssumptionsDefaults;
+  fallback?: RuleBacktestExecutionTraceFallback;
+}
+
 export interface RuleBacktestDailyReturnPointItem {
   date?: string;
   equity?: number;
@@ -633,9 +680,27 @@ export interface RuleBacktestRunResponse {
   aiSummary?: string | null;
   equityCurve: RuleBacktestEquityPointItem[];
   trades: RuleBacktestTradeItem[];
+  executionTrace?: RuleBacktestExecutionTracePayload | null;
 }
 
 export type RuleBacktestHistoryItem = RuleBacktestRunResponse;
+
+export interface RuleBacktestStatusResponse {
+  id: number;
+  code: string;
+  status: string;
+  statusMessage?: string | null;
+  statusHistory: StatusHistoryItem[];
+  runAt?: string | null;
+  completedAt?: string | null;
+  noResultReason?: string | null;
+  noResultMessage?: string | null;
+  tradeCount: number;
+  parsedConfidence?: number | null;
+  needsConfirmation: boolean;
+}
+
+export type RuleBacktestCancelResponse = RuleBacktestStatusResponse;
 
 export interface RuleBacktestHistoryResponse {
   total: number;

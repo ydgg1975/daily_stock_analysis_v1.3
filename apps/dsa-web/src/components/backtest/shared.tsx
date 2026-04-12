@@ -40,8 +40,12 @@ const RULE_STATUS_LABELS: Record<string, string> = {
   running: '运行中',
   summarizing: '整理摘要',
   completed: '已完成',
+  cancelled: '已取消',
   failed: '失败',
 };
+
+const TERMINAL_RULE_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const CANCELLABLE_RULE_STATUSES = new Set(['queued', 'parsing', 'running', 'summarizing']);
 
 const HISTORICAL_STATUS_LABELS: Record<string, string> = {
   completed: '已完成',
@@ -302,7 +306,33 @@ function formatIndicatorEntries(snapshot?: Record<string, unknown>): Array<{ key
 }
 
 export function isRuleRunTerminal(status?: string): boolean {
-  return status === 'completed' || status === 'failed';
+  return TERMINAL_RULE_STATUSES.has(String(status || '').trim().toLowerCase());
+}
+
+export function canCancelRuleRun(status?: string): boolean {
+  return CANCELLABLE_RULE_STATUSES.has(String(status || '').trim().toLowerCase());
+}
+
+export function getRuleRunStatusDescription(status?: string): string {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'parsing') return '正在解析策略文本并整理可执行规则。';
+  if (normalized === 'queued') return '任务已入队，等待后台开始执行。';
+  if (normalized === 'running') return '后台正在执行回测，会持续刷新状态。';
+  if (normalized === 'summarizing') return '回测已算完，正在整理摘要、交易和执行轨迹。';
+  if (normalized === 'completed') return '回测已完成，可以查看结果摘要、交易和执行轨迹。';
+  if (normalized === 'cancelled') return '回测已取消，当前运行不会继续推进。';
+  if (normalized === 'failed') return '回测执行失败，可以返回配置页调整后重试。';
+  return '规则回测已提交。';
+}
+
+export function getRuleRunStatusTone(status?: string): 'default' | 'success' | 'warning' | 'danger' | 'info' {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'completed') return 'success';
+  if (normalized === 'failed') return 'danger';
+  if (normalized === 'summarizing') return 'info';
+  if (normalized === 'cancelled') return 'warning';
+  if (normalized === 'running' || normalized === 'queued' || normalized === 'parsing') return 'warning';
+  return 'default';
 }
 
 export function getHistoricalStatusBadge(status?: string) {
@@ -320,27 +350,87 @@ export function getRuleStatusBadge(status?: string) {
   if (normalized === 'completed') return <Badge variant="success">{label}</Badge>;
   if (normalized === 'failed') return <Badge variant="danger">{label}</Badge>;
   if (normalized === 'summarizing') return <Badge variant="info">{label}</Badge>;
+  if (normalized === 'cancelled') return <Badge variant="warning">{label}</Badge>;
   if (normalized === 'running') return <Badge variant="warning">{label}</Badge>;
   return <Badge variant="default">{label}</Badge>;
+}
+
+export function getRuleRunStatusLabel(status?: string): string {
+  const normalized = String(status || 'queued').trim().toLowerCase();
+  return RULE_STATUS_LABELS[normalized] || normalized;
 }
 
 export function getHistoricalRequestedModeLabel(mode?: string | null): string {
   const normalized = String(mode || '').trim().toLowerCase();
   if (!normalized) return '--';
-  if (normalized === 'local_first') return '本地优先';
-  if (normalized === 'api_first') return 'API 优先';
-  if (normalized === 'auto') return '自动';
+  if (normalized === 'local_first') return '本地优先（优先读 LocalParquet）';
+  if (normalized === 'api_first') return '远端优先';
+  if (normalized === 'auto') return '自动选择';
   return String(mode);
 }
 
 export function getHistoricalResolvedSourceLabel(source?: string | null): string {
   const normalized = String(source || '').trim();
+  if (normalized === 'LocalParquet') return 'LocalParquet 本地文件';
+  if (normalized === 'DatabaseCache') return '数据库缓存';
+  if (normalized === 'YfinanceFetcher') return 'Yfinance 在线回退';
+  if (normalized === 'MixedFallback') return '混合回退路径';
+  if (normalized === 'Unknown') return '未知来源';
   return normalized || '--';
 }
 
 export function getHistoricalFallbackLabel(value?: boolean | null): string {
   if (value == null) return '--';
-  return value ? '是' : '否';
+  return value ? '已回退' : '未回退';
+}
+
+export function describeHistoricalDataSource(meta: {
+  requestedMode?: string | null;
+  resolvedSource?: string | null;
+  fallbackUsed?: boolean | null;
+}): {
+  tone: 'success' | 'warning' | 'info';
+  title: string;
+  body: string;
+  detail: string;
+} {
+  const requestedLabel = getHistoricalRequestedModeLabel(meta.requestedMode);
+  const resolvedLabel = getHistoricalResolvedSourceLabel(meta.resolvedSource);
+  const fallbackLabel = getHistoricalFallbackLabel(meta.fallbackUsed);
+
+  if (meta.resolvedSource === 'LocalParquet' && meta.fallbackUsed === false) {
+    return {
+      tone: 'success',
+      title: '已命中 LocalParquet',
+      body: '本次样本与评估优先读取本地 Parquet，没有走回退路径。',
+      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+    };
+  }
+
+  if (meta.fallbackUsed) {
+    return {
+      tone: 'warning',
+      title: `已回退到 ${resolvedLabel}`,
+      body: '系统仍按本地优先发起，但本次实际使用了回退路径。通常表示本地数据缺失、不可用，或覆盖范围不足。',
+      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+    };
+  }
+
+  if (meta.resolvedSource) {
+    return {
+      tone: 'info',
+      title: `当前使用 ${resolvedLabel}`,
+      body: '这里显示的是本次实际命中的数据路径，便于确认是否按预期读取。',
+      detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+    };
+  }
+
+  return {
+    tone: 'info',
+    title: '等待生成数据源诊断',
+    body: '准备样本或运行评估后，这里会显示本次请求的实际数据路径。',
+    detail: `请求模式：${requestedLabel} · 实际来源：${resolvedLabel} · 回退：${fallbackLabel}`,
+  };
 }
 
 function renderDirectionBadge(correct?: boolean | null, expected?: string | null) {
@@ -447,13 +537,8 @@ export const HistoricalRunSummary: React.FC<{ data: BacktestRunResponse }> = ({ 
 
 export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = ({ run }) => {
   const latestStatusAt = run.statusHistory?.[run.statusHistory.length - 1]?.at;
-  const tone = run.status === 'failed'
-    ? 'danger'
-    : run.status === 'completed'
-      ? 'success'
-      : run.status === 'summarizing'
-        ? 'info'
-        : 'warning';
+  const tone = getRuleRunStatusTone(run.status);
+  const statusDescription = getRuleRunStatusDescription(run.status);
 
   return (
     <Banner
@@ -466,7 +551,7 @@ export const RuleRunStatusBanner: React.FC<{ run: RuleBacktestRunResponse }> = (
       )}
       body={(
         <>
-          {run.statusMessage || '规则回测已提交。'}
+          {run.statusMessage || statusDescription}
           <span className="product-banner__meta">
             运行 #{run.id} · {run.code} · {latestStatusAt ? formatDateTime(latestStatusAt) : '--'}
           </span>

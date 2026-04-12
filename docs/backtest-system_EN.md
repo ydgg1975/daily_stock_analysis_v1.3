@@ -28,6 +28,15 @@
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` is a best-effort cancel endpoint: unfinished runs are marked `cancelled`, while already-finished runs keep their final state.
 - `GET /api/v1/backtest/rule/runs/{run_id}` remains the full-detail endpoint and includes `execution_trace`, trades, and audit data.
 
+## P5 Web Usability Layer
+
+- `/backtest` remains the configuration-and-launch page. This phase does not redesign the working standard or rule-backtest backend flow; it tightens input grouping, button wording, and state copy so users can understand the next step more easily.
+- `/backtest/results/:runId` now keeps a dedicated run-status card above the result summary and chart workspace. While a rule run is active, the page polls `GET /api/v1/backtest/rule/runs/{run_id}/status`; once the run reaches `completed / failed / cancelled`, polling stops automatically.
+- Active rule runs now surface the full lifecycle more clearly: `parsing / queued / running / summarizing / completed / cancelled / failed`. The UI also exposes a safe `Cancel run` action during cancellable stages and still reuses the existing `POST /api/v1/backtest/rule/runs/{run_id}/cancel` contract.
+- The result page promotes user-facing summary metrics first: total return, relative benchmark or buy-and-hold comparison, max drawdown, trade count, win rate, and final equity. Raw parameters, execution assumptions, technical notes, and history remain available as secondary detail.
+- `execution_trace` still comes from the existing detail payload, but the Web UI now defaults to a lighter “highlights” view that focuses on buy/sell actions, fallback notes, and exceptions. Users can still switch to the full trace and export CSV / JSON.
+- Historical Evaluation now explains LocalParquet versus fallback in simpler product language. The raw diagnostics fields `requested_mode / resolved_source / fallback_used` remain available under a disclosure so the main flow stays readable.
+
 ## Local US Parquet Priority
 
 - US daily history first reads `LOCAL_US_PARQUET_DIR`.

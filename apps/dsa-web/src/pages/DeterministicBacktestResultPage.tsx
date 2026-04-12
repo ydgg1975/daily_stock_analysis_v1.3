@@ -22,22 +22,33 @@ import {
   RuleRunStatusBanner,
   RuleRunsTable,
   SummaryStrip,
+  canCancelRuleRun,
   formatDateTime,
   formatNumber,
   getBenchmarkModeLabel,
+  getRuleRunStatusDescription,
+  getRuleRunStatusLabel,
   isRuleRunTerminal,
   pct,
   type RuleBenchmarkMode,
 } from '../components/backtest/shared';
+import ExecutionTracePanel from '../components/backtest/ExecutionTracePanel';
 import {
   buildRuleStrategySummaryRows,
   formatRuleNormalizationStateLabel,
   getRuleStrategySpecSourceLabel,
   getRuleStrategyTypeLabel,
 } from '../components/backtest/strategyInspectability';
+import {
+  downloadExecutionTraceCsv,
+  downloadExecutionTraceJson,
+  hasExecutionTraceRows,
+} from '../components/backtest/executionTraceUtils';
 import type {
+  RuleBacktestCancelResponse,
   RuleBacktestHistoryItem,
   RuleBacktestRunResponse,
+  RuleBacktestStatusResponse,
   StatusHistoryItem,
 } from '../types/backtest';
 
@@ -99,6 +110,10 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<ResultPageTabKey>('overview');
+  const [isPollingStatus, setIsPollingStatus] = useState(false);
+  const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(null);
+  const [isCancellingRun, setIsCancellingRun] = useState(false);
+  const [cancelError, setCancelError] = useState<ParsedApiError | null>(null);
   const density = useDeterministicResultDensity();
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
@@ -109,6 +124,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
       const response = await backtestApi.getRuleBacktestRun(parsedRunId);
       setRun(response);
       setRunError(null);
+      setCancelError(null);
+      setLastStatusRefreshAt(new Date().toISOString());
     } catch (error) {
       setRunError(getParsedApiError(error));
     } finally {
@@ -148,7 +165,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
     const seededRun = initialRun && initialRun.id === parsedRunId ? initialRun : null;
     setRun(seededRun);
     setRunError(null);
+    setCancelError(null);
     setIsLoadingRun(!seededRun);
+    setLastStatusRefreshAt(seededRun ? new Date().toISOString() : null);
     void fetchRun({ suppressLoading: Boolean(seededRun) });
   }, [fetchRun, hasValidRunId, initialRun, parsedRunId]);
 
@@ -159,17 +178,24 @@ const DeterministicBacktestResultPage: React.FC = () => {
     let timer: number | undefined;
 
     const poll = async () => {
+      if (!cancelled) setIsPollingStatus(true);
       try {
-        const detail = await backtestApi.getRuleBacktestRun(run.id);
+        const status = await backtestApi.getRuleBacktestRunStatus(run.id);
         if (cancelled) return;
-        setRun(detail);
+        setRun((current) => (current ? { ...current, ...(status as RuleBacktestStatusResponse) } : current));
         setRunError(null);
-        if (isRuleRunTerminal(detail.status)) {
-          await fetchHistory(detail.code);
+        setLastStatusRefreshAt(new Date().toISOString());
+        if (isRuleRunTerminal(status.status)) {
+          await Promise.all([
+            fetchRun({ suppressLoading: true }),
+            fetchHistory(status.code),
+          ]);
           return;
         }
       } catch (error) {
         if (!cancelled) setRunError(getParsedApiError(error));
+      } finally {
+        if (!cancelled) setIsPollingStatus(false);
       }
 
       if (!cancelled) timer = window.setTimeout(() => void poll(), RULE_POLL_INTERVAL_MS);
@@ -181,7 +207,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [fetchHistory, run?.code, run?.id, run?.status]);
+  }, [fetchHistory, fetchRun, run?.id, run?.status]);
 
   useEffect(() => {
     if (!run?.code) {
@@ -245,6 +271,54 @@ const DeterministicBacktestResultPage: React.FC = () => {
       ...(run?.warnings || []).map((warning, index) => formatWarningText(warning, index)),
     ].filter(Boolean)),
   );
+  const canCancelCurrentRun = Boolean(run && canCancelRuleRun(run.status));
+  const canExportTrace = Boolean(run && hasExecutionTraceRows(run));
+  const statusSummaryItems = run ? [
+    {
+      label: '当前阶段',
+      value: getRuleRunStatusLabel(run.status),
+      note: run.statusMessage || getRuleRunStatusDescription(run.status),
+    },
+    {
+      label: '自动刷新',
+      value: isRuleRunTerminal(run.status) ? '已停止' : '每 1.8 秒',
+      note: isPollingStatus ? '正在同步最新状态' : '运行中自动轮询',
+    },
+    {
+      label: '最近刷新',
+      value: lastStatusRefreshAt ? formatDateTime(lastStatusRefreshAt) : '--',
+      note: isLoadingRun ? '正在拉取详情' : '也可手动刷新',
+    },
+    {
+      label: '下一步',
+      value: canCancelCurrentRun ? '可取消' : canExportTrace ? '可导出' : isRuleRunTerminal(run.status) ? '查看结果' : '等待执行',
+      note: canExportTrace ? 'CSV / JSON 导出已就绪' : '导出会在轨迹生成后可用',
+    },
+  ] : [];
+
+  const handleCancelRun = useCallback(async () => {
+    if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
+    const confirmed = window.confirm('确定取消当前规则回测吗？当前运行会停止继续推进，已保留的数据不会被删除。');
+    if (!confirmed) return;
+
+    setIsCancellingRun(true);
+    setCancelError(null);
+
+    try {
+      const response = await backtestApi.cancelRuleBacktestRun(run.id);
+      setRun((current) => (current ? { ...current, ...(response as RuleBacktestCancelResponse) } : current));
+      setRunError(null);
+      setLastStatusRefreshAt(new Date().toISOString());
+      await Promise.all([
+        fetchRun({ suppressLoading: true }),
+        fetchHistory(response.code),
+      ]);
+    } catch (error) {
+      setCancelError(getParsedApiError(error));
+    } finally {
+      setIsCancellingRun(false);
+    }
+  }, [fetchHistory, fetchRun, isCancellingRun, run]);
 
   const renderRunStatusSection = () => {
     if (!run && isLoadingRun) {
@@ -267,27 +341,35 @@ const DeterministicBacktestResultPage: React.FC = () => {
       );
     }
 
-    if (run.status === 'completed') {
-      if (!runError) return null;
-      return (
-        <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-          <Card title="最近一次刷新失败" subtitle="当前仍显示最近一次成功加载的结果" className="product-section-card product-section-card--backtest-secondary">
-            <ApiErrorAlert error={runError} />
-          </Card>
-        </section>
-      );
-    }
-
     return (
       <section className="backtest-display-section" data-testid="deterministic-result-page-status">
-        <Card title="运行状态" subtitle="结果页负责轮询与状态切换" className="product-section-card product-section-card--backtest-result">
+        <Card title="运行状态" subtitle="结果页负责轮询、取消与导出入口" className="product-section-card product-section-card--backtest-result">
           <RuleRunStatusBanner run={run} />
+          <SummaryStrip items={statusSummaryItems} />
           {!isRuleRunTerminal(run.status) ? (
             <div className="mt-4">
               <Banner
                 tone="info"
-                title="结果页正在跟踪运行状态"
-                body="当前运行尚未结束。页面会自动轮询，完成后在这里直接展开 KPI、统一图表工作区和分标签的深度数据。"
+                title="页面正在自动跟踪状态"
+                body="当前运行尚未结束。页面会自动轮询；完成、取消或失败后会停止刷新。"
+              />
+            </div>
+          ) : null}
+          {run.status === 'completed' ? (
+            <div className="mt-4">
+              <Banner
+                tone="success"
+                title="回测已完成"
+                body="建议先看结果摘要，再按需打开审计明细、执行轨迹、交易记录和参数区。"
+              />
+            </div>
+          ) : null}
+          {run.status === 'cancelled' ? (
+            <div className="mt-4">
+              <Banner
+                tone="warning"
+                title="回测已取消"
+                body="当前运行已经停止。可以返回配置页调整参数，或直接用相同参数重新发起。"
               />
             </div>
           ) : null}
@@ -300,16 +382,44 @@ const DeterministicBacktestResultPage: React.FC = () => {
               />
             </div>
           ) : null}
+          <div className="product-action-row mt-4">
+            <Button variant="ghost" onClick={() => void fetchRun()} disabled={isCancellingRun}>
+              {isPollingStatus || isLoadingRun ? '刷新中…' : '刷新状态'}
+            </Button>
+            {canCancelCurrentRun ? (
+              <Button
+                variant="danger-subtle"
+                onClick={() => void handleCancelRun()}
+                isLoading={isCancellingRun}
+                loadingText="取消中…"
+              >
+                取消运行
+              </Button>
+            ) : null}
+            {isRuleRunTerminal(run.status) && canExportTrace ? (
+              <>
+                <Button variant="secondary" onClick={() => downloadExecutionTraceCsv(run)}>
+                  导出 CSV
+                </Button>
+                <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
+                  导出 JSON
+                </Button>
+              </>
+            ) : null}
+          </div>
           {run.statusHistory?.length ? (
-            <div className="product-chip-list mt-4">
-              {run.statusHistory.map((item, index) => (
-                <span key={`${item.status}-${item.at || index}`} className="product-chip">
-                  {index + 1}. {formatStatusHistoryLabel(item)}
-                </span>
-              ))}
-            </div>
+            <Disclosure summary={`查看状态轨迹 (${run.statusHistory.length})`}>
+              <div className="product-chip-list">
+                {run.statusHistory.map((item, index) => (
+                  <span key={`${item.status}-${item.at || index}`} className="product-chip">
+                    {index + 1}. {formatStatusHistoryLabel(item)}
+                  </span>
+                ))}
+              </div>
+            </Disclosure>
           ) : null}
           {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
+          {cancelError ? <ApiErrorAlert error={cancelError} className="mt-4" /> : null}
         </Card>
       </section>
     );
@@ -376,6 +486,7 @@ const DeterministicBacktestResultPage: React.FC = () => {
             role="tabpanel"
             aria-labelledby="deterministic-result-tab-audit"
           >
+            <ExecutionTracePanel run={run} />
             <DeterministicAuditTable run={run} rows={normalized.rows} />
           </section>
         );
@@ -529,19 +640,8 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                 </Disclosure>
 
-                <Disclosure summary="技术说明与状态轨迹">
+                <Disclosure summary="技术说明与提醒">
                   <div className="backtest-result-page__tab-stack">
-                    {run.statusHistory.length ? (
-                      <div className="product-chip-list">
-                        {run.statusHistory.map((item, index) => (
-                          <span key={`${item.status}-${item.at || index}`} className="product-chip">
-                            {index + 1}. {formatStatusHistoryLabel(item)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="product-empty-note">暂无状态轨迹。</p>
-                    )}
                     {strategyWarningEntries.length ? (
                       <div className="summary-block">
                         <div className="summary-block__header">

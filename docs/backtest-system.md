@@ -28,6 +28,15 @@
 - `POST /api/v1/backtest/rule/runs/{run_id}/cancel` 提供 best-effort cancel：对尚未完成的任务会标记为 `cancelled`；若任务已结束，则返回当前最终状态而不覆盖结果。
 - `GET /api/v1/backtest/rule/runs/{run_id}` 继续作为完整详情接口，包含 `execution_trace`、交易明细和审计数据。
 
+## P5 Web 可用性收口
+
+- `/backtest` 继续作为配置与发起页，不改动现有标准回测与规则回测的后端执行链路；本轮主要收口输入分组、按钮文案和状态提示，减少“要先做什么、下一步会发生什么”的理解成本。
+- `/backtest/results/:runId` 会优先展示运行状态卡，再展示结果摘要与图表工作区。运行中页面使用 `GET /api/v1/backtest/rule/runs/{run_id}/status` 做轻量轮询，进入 `completed / failed / cancelled` 后自动停止刷新。
+- 规则回测运行中会明确展示 `parsing / queued / running / summarizing / completed / cancelled / failed` 状态，并在可取消阶段暴露 `取消运行`。取消仍复用既有 `POST /api/v1/backtest/rule/runs/{run_id}/cancel`，不会改写已完成结果。
+- 结果页首屏优先展示用户更容易理解的摘要指标：总收益、相对基准或买入持有、最大回撤、交易次数、胜率、期末权益；原始参数、执行假设、技术说明和历史结果下沉到标签页或 disclosure。
+- `execution_trace` 继续来自既有结果详情响应，但 Web 端默认先显示“关键节点”视图，只突出买卖动作、fallback 与异常说明；完整逐行轨迹仍可切换查看，并继续支持 CSV / JSON 导出。
+- Historical Evaluation 现在会用更直接的产品文案说明本次数据来自 `LocalParquet` 还是 fallback 路径；`requested_mode / resolved_source / fallback_used` 这类诊断字段仍保留，但默认折叠在“查看数据源诊断”中，避免干扰主流程。
+
 ## 本地 US parquet 优先级
 
 - 美股日线优先读取 `LOCAL_US_PARQUET_DIR`。

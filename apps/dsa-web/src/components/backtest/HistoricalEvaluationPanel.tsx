@@ -20,6 +20,7 @@ import {
   HistoricalRunsTable,
   SectionEyebrow,
   SummaryStrip,
+  describeHistoricalDataSource,
   getHistoricalFallbackLabel,
   getHistoricalRequestedModeLabel,
   getHistoricalResolvedSourceLabel,
@@ -143,16 +144,17 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
   panelMode,
 }) => {
   const [currentStep, setCurrentStep] = useState<HistoricalWizardStep>('scope');
+  const sourceSummary = describeHistoricalDataSource(historicalSourceMetadata);
   const modeSummaryItems = [
     {
-      label: 'Scope',
-      value: normalizedCode || 'All symbols',
-      note: normalizedCode ? '单标的过滤' : '整体汇总视图',
+      label: '评估范围',
+      value: normalizedCode || '全部标的',
+      note: normalizedCode ? '当前按单一标的过滤' : '当前查看整体汇总',
     },
     {
-      label: 'Samples',
+      label: '样本状态',
       value: isLoadingSampleStatus
-        ? 'Syncing'
+        ? '同步中'
         : sampleStatus?.preparedCount != null
           ? String(sampleStatus.preparedCount)
           : prepareResult
@@ -163,13 +165,13 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         : '样本准备状态',
     },
     {
-      label: 'Evaluation',
-      value: isRunningHistoricalEval ? 'Running' : runResult ? 'Fresh result' : 'Idle',
+      label: '评估执行',
+      value: isRunningHistoricalEval ? '运行中' : runResult ? '已有最新结果' : '等待执行',
       note: runResult?.runId ? `运行 #${runResult.runId}` : '等待执行',
     },
     {
-      label: 'Results',
-      value: isLoadingResults ? 'Refreshing' : String(totalResults),
+      label: '结果视图',
+      value: isLoadingResults ? '刷新中' : String(totalResults),
       note: selectedRunId ? `锁定运行 #${selectedRunId}` : '当前过滤结果',
     },
   ];
@@ -280,12 +282,34 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
           <p className="backtest-guided-step-helper">设置评估窗口、成熟期和覆盖策略，确保结果口径一致。</p>
         ) : null}
         <SummaryStrip items={modeSummaryItems} />
-        <div className="product-chip-list mt-4">
-          <span className="product-chip">请求模式: {getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</span>
-          <span className="product-chip">实际数据源: {getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</span>
-          <span className="product-chip">是否回退: {getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</span>
-        </div>
-        <p className="product-footnote">{historicalSampleTransparency}</p>
+        <Banner
+          tone={sourceSummary.tone}
+          className="mt-4"
+          title={sourceSummary.title}
+          body={(
+            <>
+              {sourceSummary.body}
+              <span className="product-banner__meta">{sourceSummary.detail}</span>
+            </>
+          )}
+        />
+        <Disclosure summary="查看数据源诊断">
+          <div className="preview-grid">
+            <div className="preview-card">
+              <p className="metric-card__label">requested_mode</p>
+              <p className="preview-card__text">{getHistoricalRequestedModeLabel(historicalSourceMetadata.requestedMode)}</p>
+            </div>
+            <div className="preview-card">
+              <p className="metric-card__label">resolved_source</p>
+              <p className="preview-card__text">{getHistoricalResolvedSourceLabel(historicalSourceMetadata.resolvedSource)}</p>
+            </div>
+            <div className="preview-card">
+              <p className="metric-card__label">fallback_used</p>
+              <p className="preview-card__text">{getHistoricalFallbackLabel(historicalSourceMetadata.fallbackUsed)}</p>
+            </div>
+          </div>
+          <p className="product-footnote mt-4">{historicalSampleTransparency}</p>
+        </Disclosure>
         <div className="product-field-grid backtest-control-grid">
           <label className="product-field">
             <span className="theme-field-label">评估窗口</span>
@@ -373,7 +397,7 @@ const HistoricalEvaluationPanel: React.FC<Props> = ({
         <div className="product-action-row backtest-control-actions backtest-control-actions--footer">
           <Button variant="ghost" onClick={() => setCurrentStep('execute')}>返回</Button>
           <Button onClick={() => void handleRunEvaluationClick()} isLoading={isRunningHistoricalEval} loadingText="运行中…">
-            Rerun Evaluation
+            重新运行评估
           </Button>
         </div>
       </Card>

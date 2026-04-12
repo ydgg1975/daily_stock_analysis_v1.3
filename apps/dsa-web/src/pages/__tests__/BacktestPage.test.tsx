@@ -25,6 +25,8 @@ const {
   runRuleBacktest,
   getRuleBacktestRuns,
   getRuleBacktestRun,
+  getRuleBacktestRunStatus,
+  cancelRuleBacktestRun,
 } = vi.hoisted(() => ({
   runBacktest: vi.fn(),
   getResults: vi.fn(),
@@ -39,6 +41,8 @@ const {
   runRuleBacktest: vi.fn(),
   getRuleBacktestRuns: vi.fn(),
   getRuleBacktestRun: vi.fn(),
+  getRuleBacktestRunStatus: vi.fn(),
+  cancelRuleBacktestRun: vi.fn(),
 }));
 
 vi.mock('motion/react', async () => {
@@ -95,6 +99,8 @@ vi.mock('../../api/backtest', () => ({
     runRuleBacktest,
     getRuleBacktestRuns,
     getRuleBacktestRun,
+    getRuleBacktestRunStatus,
+    cancelRuleBacktestRun,
   },
 }));
 
@@ -774,6 +780,42 @@ describe('BacktestPage', () => {
         ],
       }),
     );
+    getRuleBacktestRunStatus.mockResolvedValue({
+      id: 99,
+      code: 'ORCL',
+      status: 'completed',
+      statusMessage: '规则回测已完成，可查看交易明细与执行假设。',
+      statusHistory: [
+        { status: 'queued', at: '2026-04-07T08:00:00Z' },
+        { status: 'running', at: '2026-04-07T08:00:30Z' },
+        { status: 'summarizing', at: '2026-04-07T08:01:30Z' },
+        { status: 'completed', at: '2026-04-07T08:02:00Z' },
+      ],
+      runAt: '2026-04-07T08:00:00Z',
+      completedAt: '2026-04-07T08:02:00Z',
+      noResultReason: null,
+      noResultMessage: null,
+      tradeCount: 2,
+      parsedConfidence: 0.97,
+      needsConfirmation: true,
+    });
+    cancelRuleBacktestRun.mockResolvedValue({
+      id: 99,
+      code: 'ORCL',
+      status: 'cancelled',
+      statusMessage: '规则回测已取消。',
+      statusHistory: [
+        { status: 'queued', at: '2026-04-07T08:00:00Z' },
+        { status: 'cancelled', at: '2026-04-07T08:00:45Z' },
+      ],
+      runAt: '2026-04-07T08:00:00Z',
+      completedAt: '2026-04-07T08:00:45Z',
+      noResultReason: 'cancelled',
+      noResultMessage: '规则回测已取消。',
+      tradeCount: 0,
+      parsedConfidence: 0.97,
+      needsConfirmation: true,
+    });
   });
 
   afterEach(() => {

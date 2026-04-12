@@ -7,15 +7,21 @@ import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage'
 const {
   getRuleBacktestRun,
   getRuleBacktestRuns,
+  getRuleBacktestRunStatus,
+  cancelRuleBacktestRun,
 } = vi.hoisted(() => ({
   getRuleBacktestRun: vi.fn(),
   getRuleBacktestRuns: vi.fn(),
+  getRuleBacktestRunStatus: vi.fn(),
+  cancelRuleBacktestRun: vi.fn(),
 }));
 
 vi.mock('../../api/backtest', () => ({
   backtestApi: {
     getRuleBacktestRun,
     getRuleBacktestRuns,
+    getRuleBacktestRunStatus,
+    cancelRuleBacktestRun,
   },
 }));
 
@@ -202,6 +208,42 @@ function makeResultRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
       returnPct: 2.6,
     },
     auditRows,
+    executionTrace: {
+      source: 'storedExecutionTrace',
+      rows: auditRows.map((row) => ({
+        date: row.date,
+        symbolClose: row.symbolClose,
+        benchmarkClose: row.benchmarkClose,
+        signalSummary: row.signalSummary,
+        action: row.executedAction,
+        actionDisplay: row.executedAction === 'buy' ? '买入' : row.executedAction === 'sell' ? '卖出' : '持有',
+        fillPrice: row.fillPrice,
+        shares: row.sharesHeld,
+        cash: row.cash,
+        holdingsValue: row.holdingsValue,
+        totalPortfolioValue: row.totalPortfolioValue,
+        dailyPnl: row.dailyPnl,
+        dailyReturn: row.dailyReturnPct,
+        cumulativeReturn: row.cumulativeStrategyReturnPct,
+        benchmarkCumulativeReturn: row.cumulativeBenchmarkReturnPct,
+        buyHoldCumulativeReturn: row.cumulativeBuyAndHoldReturnPct,
+        position: row.targetPosition,
+        fees: row.fees,
+        slippage: row.slippage,
+        notes: row.notes,
+        unavailableReason: row.unavailableReason,
+        assumptionsDefaults: 'next bar open / long only',
+        fallback: '',
+      })),
+      assumptionsDefaults: {
+        summaryText: 'next bar open / long only',
+      },
+      fallback: {
+        runFallback: false,
+        traceRebuilt: false,
+        note: '标准执行路径',
+      },
+    },
     dailyReturnSeries: [],
     exposureCurve: [],
     aiSummary: null,
@@ -215,10 +257,12 @@ describe('DeterministicBacktestResultPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    vi.stubGlobal('confirm', vi.fn(() => true));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('polls processing runs on the result page and then renders the completed analysis workspace', async () => {
@@ -234,6 +278,23 @@ describe('DeterministicBacktestResultPage', () => {
     getRuleBacktestRun
       .mockResolvedValueOnce(queuedRun)
       .mockResolvedValueOnce(completedRun);
+    getRuleBacktestRunStatus.mockResolvedValueOnce({
+      id: 99,
+      code: 'ORCL',
+      status: 'completed',
+      statusMessage: '规则回测已完成。',
+      statusHistory: [
+        { status: 'queued', at: '2026-04-07T08:00:00Z' },
+        { status: 'completed', at: '2026-04-07T08:02:00Z' },
+      ],
+      runAt: '2026-04-07T08:00:00Z',
+      completedAt: '2026-04-07T08:02:00Z',
+      noResultReason: null,
+      noResultMessage: null,
+      tradeCount: 1,
+      parsedConfidence: 0.97,
+      needsConfirmation: false,
+    });
     getRuleBacktestRuns.mockResolvedValue({
       total: 1,
       page: 1,
@@ -248,7 +309,7 @@ describe('DeterministicBacktestResultPage', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText('结果页正在跟踪运行状态')).toBeInTheDocument();
+    expect(screen.getByText('页面正在自动跟踪状态')).toBeInTheDocument();
     expect(screen.queryByTestId('deterministic-backtest-result-view')).not.toBeInTheDocument();
 
     await act(async () => {
@@ -260,6 +321,7 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
+    expect(getRuleBacktestRunStatus).toHaveBeenCalledTimes(1);
     expect(getRuleBacktestRun).toHaveBeenCalledTimes(2);
   }, 10000);
 
@@ -288,10 +350,13 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.queryByText('交易 / 事件日志')).not.toBeInTheDocument();
     expect(screen.queryByText('同标的历史回测')).not.toBeInTheDocument();
     expect(screen.queryByText('参数快照')).not.toBeInTheDocument();
+    expect(screen.getByText('回测已完成')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '审计明细' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-audit')).toBeInTheDocument();
     expect(screen.getByText('日级审计 / 对账')).toBeInTheDocument();
+    expect(screen.getByText('执行轨迹')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '关键节点' })).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(screen.getByRole('tab', { name: '交易记录' }));
     expect(await screen.findByTestId('deterministic-result-tab-panel-trades')).toBeInTheDocument();
@@ -336,6 +401,62 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getAllByText('策略族').length).toBeGreaterThan(0);
     expect(screen.getAllByText('均线交叉').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已完成归一化').length).toBeGreaterThan(0);
+  });
+
+  it('lets users cancel active runs from the result page', async () => {
+    const queuedRun = makeResultRun({
+      status: 'queued',
+      completedAt: null,
+      statusMessage: '策略已提交，等待开始执行。',
+      statusHistory: [{ status: 'queued', at: '2026-04-07T08:00:00Z' }],
+      auditRows: [],
+      executionTrace: null,
+    });
+    const cancelledRun = makeResultRun({
+      status: 'cancelled',
+      completedAt: '2026-04-07T08:00:45Z',
+      statusMessage: '规则回测已取消。',
+      statusHistory: [
+        { status: 'queued', at: '2026-04-07T08:00:00Z' },
+        { status: 'cancelled', at: '2026-04-07T08:00:45Z' },
+      ],
+      auditRows: [],
+      executionTrace: null,
+    });
+
+    getRuleBacktestRun
+      .mockResolvedValueOnce(queuedRun)
+      .mockResolvedValueOnce(cancelledRun);
+    cancelRuleBacktestRun.mockResolvedValue({
+      id: 99,
+      code: 'ORCL',
+      status: 'cancelled',
+      statusMessage: '规则回测已取消。',
+      statusHistory: cancelledRun.statusHistory,
+      runAt: queuedRun.runAt,
+      completedAt: cancelledRun.completedAt,
+      noResultReason: 'cancelled',
+      noResultMessage: '规则回测已取消。',
+      tradeCount: 0,
+      parsedConfidence: 0.97,
+      needsConfirmation: false,
+    });
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [cancelledRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByText('取消运行')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消运行' }));
+
+    await waitFor(() => {
+      expect(cancelRuleBacktestRun).toHaveBeenCalledWith(99);
+    });
+    expect(await screen.findByText('回测已取消')).toBeInTheDocument();
   });
 
   it('keeps historical navigation on the same result-page rendering path', async () => {
