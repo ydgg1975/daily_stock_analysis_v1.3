@@ -681,6 +681,18 @@ The Web result view now follows one deterministic rendering pipeline as well:
 - The hover detail is now positioned from live hover geometry instead of staying pinned in a corner, with the tooltip defaulting to the lower-right of the hover point and flipping only when it nears an edge, so it follows the cursor/crosshair inside the chart workspace like a real inspection overlay
 - The result page now uses an explicit shared density system (`comfortable / compact / dense`) to drive the header, KPI row, panel heights, legend, brush, tooltip, and spacing together, instead of letting each area shrink independently
 - The hover tooltip also now uses a tooltip-specific label/value layout: primary metrics stay in a stable two-column grid, longer text moves into wrapping detail blocks, and the card enforces a max width / max height with internal scrolling instead of overflowing outward
+- Starting in P6, the `History` tab on the result page adds a lightweight compare workflow: the current run stays pinned as the baseline, and users can select up to three completed runs for side-by-side comparison across return, excess return, drawdown, win rate, ending equity, and strategy setup, with fairness warnings when date ranges, fee/slippage assumptions, or benchmark settings differ
+- P6 also makes the chart workspace more decision-oriented: the main panel still keeps strategy vs benchmark vs buy-and-hold, the second panel now prioritizes drawdown, and the third panel can switch between `relative vs benchmark / daily PnL / position behavior` so users can judge faster whether the strategy outperformed, what it cost, and whether trading activity became too noisy
+- The `Parameters & Assumptions` tab now includes a controlled `Scenario Lab` for lightweight strategy iteration on supported rule strategies, covering deterministic first-step variants such as MA windows, MACD/RSI variants, benchmark mode, fee/slippage stress, and lookback windows, then summarizing them against the current run in a compact comparison view instead of acting like a full optimizer
+- The `Overview` tab now generates an exportable decision summary (Markdown / HTML) that leads with a human-readable report and keeps CSV / JSON execution-trace export as the deeper layer; the result flow also auto-saves recent drafts and supports named presets so users can quickly reuse prior configurations from the launch page without rebuilding the whole setup
+
+Recommended P6 manual checks:
+
+1. Finish one rule backtest, open the `History` tab, and select 1-3 completed runs to confirm the side-by-side comparison, normalized progress chart, and fairness warnings all appear as expected.
+2. Review the first-screen chart workspace and switch the third panel mode to confirm you can quickly read outperformance vs benchmark/buy-and-hold, drawdown severity, and trading activity.
+3. Open `Parameters & Assumptions -> Scenario Lab`, launch one scenario group, and confirm the variants reuse the existing async run, polling, and result-detail flow before appearing in the compact baseline-vs-variant comparison area.
+4. Export the Markdown / HTML decision summary from the `Overview` tab, and also confirm CSV / JSON execution-trace export still works with the decision summary positioned ahead of the deep trace.
+5. Save a named preset from the result page, return to `/backtest`, and confirm the `Quick Reuse` section shows the recent draft / preset and restores code, strategy text, date range, lookback, fee/slippage, and benchmark settings.
 
 ### Operation Advice Mapping
 

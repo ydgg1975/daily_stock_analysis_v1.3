@@ -34,6 +34,10 @@ import {
 } from '../components/backtest/shared';
 import ExecutionTracePanel from '../components/backtest/ExecutionTracePanel';
 import {
+  RuleRunComparisonPanel,
+  type RuleComparisonItem,
+} from '../components/backtest/RuleRunComparisonPanel';
+import {
   buildRuleStrategySummaryRows,
   formatRuleNormalizationStateLabel,
   getRuleStrategySpecSourceLabel,
@@ -44,6 +48,15 @@ import {
   downloadExecutionTraceJson,
   hasExecutionTraceRows,
 } from '../components/backtest/executionTraceUtils';
+import {
+  buildRuleRunReportMarkdown,
+  createRuleBacktestPresetFromRun,
+  getRuleScenarioPlans,
+  loadRuleBacktestPresets,
+  saveRuleBacktestPreset,
+  type RuleBacktestPreset,
+  type RuleScenarioPlan,
+} from '../components/backtest/ruleBacktestP6';
 import type {
   RuleBacktestCancelResponse,
   RuleBacktestHistoryItem,
@@ -57,6 +70,16 @@ const RESULT_HISTORY_PAGE_SIZE = 10;
 
 type ResultPageLocationState = {
   initialRun?: RuleBacktestRunResponse;
+};
+
+type ScenarioRunState = {
+  variantId: string;
+  label: string;
+  description: string;
+  runId: number | null;
+  status: string;
+  result: RuleBacktestRunResponse | null;
+  error: string | null;
 };
 
 type ResultPageTabKey = 'overview' | 'audit' | 'trades' | 'parameters' | 'history';
@@ -92,6 +115,25 @@ function formatWarningText(warning: Record<string, unknown>, index: number): str
   return serialized && serialized !== '{}' ? serialized : `warning #${index + 1}`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 const DeterministicBacktestResultPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -114,6 +156,16 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const [lastStatusRefreshAt, setLastStatusRefreshAt] = useState<string | null>(null);
   const [isCancellingRun, setIsCancellingRun] = useState(false);
   const [cancelError, setCancelError] = useState<ParsedApiError | null>(null);
+  const [compareRunIds, setCompareRunIds] = useState<number[]>([]);
+  const [compareRunMap, setCompareRunMap] = useState<Record<number, RuleBacktestRunResponse>>({});
+  const [isLoadingCompareRuns, setIsLoadingCompareRuns] = useState(false);
+  const [compareError, setCompareError] = useState<ParsedApiError | null>(null);
+  const [selectedScenarioPlanId, setSelectedScenarioPlanId] = useState<string | null>(null);
+  const [scenarioRuns, setScenarioRuns] = useState<ScenarioRunState[]>([]);
+  const [isSubmittingScenarioRuns, setIsSubmittingScenarioRuns] = useState(false);
+  const [scenarioError, setScenarioError] = useState<ParsedApiError | null>(null);
+  const [presetNotice, setPresetNotice] = useState<string | null>(null);
+  const [availablePresets, setAvailablePresets] = useState<RuleBacktestPreset[]>([]);
   const density = useDeterministicResultDensity();
 
   const fetchRun = useCallback(async (options: { suppressLoading?: boolean } = {}) => {
@@ -218,10 +270,99 @@ const DeterministicBacktestResultPage: React.FC = () => {
   }, [fetchHistory, run?.code]);
 
   useEffect(() => {
+    setCompareRunIds([]);
+    setScenarioRuns([]);
+    setScenarioError(null);
+  }, [run?.id]);
+
+  useEffect(() => {
     document.title = hasValidRunId
       ? `确定性回测结果 #${parsedRunId} - WolfyStock`
       : '确定性回测结果 - WolfyStock';
   }, [hasValidRunId, parsedRunId]);
+
+  useEffect(() => {
+    setAvailablePresets(loadRuleBacktestPresets());
+  }, []);
+
+  useEffect(() => {
+    if (!run || run.status !== 'completed') return;
+    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, { kind: 'recent' }));
+    setAvailablePresets(next);
+  }, [run]);
+
+  useEffect(() => {
+    if (compareRunIds.length === 0) {
+      setCompareError(null);
+      return;
+    }
+    let cancelled = false;
+    const missingIds = compareRunIds.filter((id) => !compareRunMap[id]);
+    if (missingIds.length === 0) return;
+
+    const loadRuns = async () => {
+      setIsLoadingCompareRuns(true);
+      try {
+        const items = await Promise.all(missingIds.map((id) => backtestApi.getRuleBacktestRun(id)));
+        if (cancelled) return;
+        setCompareRunMap((current) => ({
+          ...current,
+          ...Object.fromEntries(items.map((item) => [item.id, item])),
+        }));
+        setCompareError(null);
+      } catch (error) {
+        if (!cancelled) setCompareError(getParsedApiError(error));
+      } finally {
+        if (!cancelled) setIsLoadingCompareRuns(false);
+      }
+    };
+
+    void loadRuns();
+    return () => {
+      cancelled = true;
+    };
+  }, [compareRunIds, compareRunMap]);
+
+  useEffect(() => {
+    const pendingRuns = scenarioRuns.filter((item) => item.runId && !isRuleRunTerminal(item.status));
+    if (pendingRuns.length === 0) return undefined;
+
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const updates = await Promise.all(
+            pendingRuns.map(async (item) => {
+              const status = await backtestApi.getRuleBacktestRunStatus(item.runId as number);
+              if (status.status === 'completed') {
+                const detail = await backtestApi.getRuleBacktestRun(item.runId as number);
+                return { runId: item.runId, status: detail.status, detail, error: null };
+              }
+              return { runId: item.runId, status: status.status, detail: null, error: null };
+            }),
+          );
+          if (cancelled) return;
+          setScenarioRuns((current) => current.map((item) => {
+            const matched = updates.find((update) => update.runId === item.runId);
+            if (!matched) return item;
+            return {
+              ...item,
+              status: matched.status,
+              result: matched.detail ?? item.result,
+              error: matched.error,
+            };
+          }));
+        } catch (error) {
+          if (!cancelled) setScenarioError(getParsedApiError(error));
+        }
+      })();
+    }, RULE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [scenarioRuns]);
 
   const handleOpenHistoryRun = useCallback((item: RuleBacktestHistoryItem) => {
     navigate(`/backtest/results/${item.id}`);
@@ -252,6 +393,55 @@ const DeterministicBacktestResultPage: React.FC = () => {
   const normalized = useMemo(
     () => (run?.status === 'completed' ? normalizeDeterministicBacktestResult(run) : null),
     [run],
+  );
+  const scenarioPlans = useMemo<RuleScenarioPlan[]>(
+    () => (run?.status === 'completed' ? getRuleScenarioPlans(run) : []),
+    [run],
+  );
+  const selectedScenarioPlan = useMemo(
+    () => scenarioPlans.find((plan) => plan.id === selectedScenarioPlanId) || scenarioPlans[0] || null,
+    [scenarioPlans, selectedScenarioPlanId],
+  );
+  useEffect(() => {
+    if (!selectedScenarioPlanId && scenarioPlans[0]) {
+      setSelectedScenarioPlanId(scenarioPlans[0].id);
+    }
+  }, [scenarioPlans, selectedScenarioPlanId]);
+  const comparisonItems = useMemo<RuleComparisonItem[]>(() => {
+    if (!run || !normalized) return [];
+    const items: RuleComparisonItem[] = [{ run, normalized, label: `当前运行 #${run.id}`, badge: '当前' }];
+    compareRunIds.forEach((id) => {
+      const detail = compareRunMap[id];
+      if (!detail || detail.status !== 'completed') return;
+      items.push({
+        run: detail,
+        normalized: normalizeDeterministicBacktestResult(detail),
+        label: `比较运行 #${detail.id}`,
+      });
+    });
+    return items;
+  }, [compareRunIds, compareRunMap, normalized, run]);
+  const scenarioComparisonItems = useMemo<RuleComparisonItem[]>(() => {
+    if (!run || !normalized) return [];
+    const completedScenarioRuns = scenarioRuns.filter((item) => item.result?.status === 'completed' && item.result);
+    return [
+      { run, normalized, label: `当前运行 #${run.id}`, badge: '基线' },
+      ...completedScenarioRuns.map((item) => ({
+        run: item.result as RuleBacktestRunResponse,
+        normalized: normalizeDeterministicBacktestResult(item.result as RuleBacktestRunResponse),
+        label: item.label,
+      })),
+    ];
+  }, [normalized, run, scenarioRuns]);
+  const decisionReportMarkdown = useMemo(
+    () => (run && normalized
+      ? buildRuleRunReportMarkdown({
+        run,
+        normalized,
+        comparedRuns: comparisonItems.slice(1).map((item) => item.run),
+      })
+      : ''),
+    [comparisonItems, normalized, run],
   );
   const headerDescription = run
     ? `${run.code} · ${run.startDate || '--'} -> ${run.endDate || '--'} · 基准 ${selectedBenchmarkLabel}`
@@ -295,6 +485,81 @@ const DeterministicBacktestResultPage: React.FC = () => {
       note: canExportTrace ? 'CSV / JSON 导出已就绪' : '导出会在轨迹生成后可用',
     },
   ] : [];
+
+  const handleToggleCompareRun = useCallback((item: RuleBacktestHistoryItem) => {
+    setCompareRunIds((current) => {
+      if (current.includes(item.id)) return current.filter((id) => id !== item.id);
+      return [...current, item.id].slice(0, 3);
+    });
+  }, []);
+
+  const handleSavePreset = useCallback(() => {
+    if (!run) return;
+    const suggestedName = `${run.code} · ${getRuleStrategyTypeLabel(run.parsedStrategy)}`;
+    const name = window.prompt('保存预设名称', suggestedName);
+    if (!name || !name.trim()) return;
+    const next = saveRuleBacktestPreset(createRuleBacktestPresetFromRun(run, {
+      kind: 'saved',
+      name,
+    }));
+    setAvailablePresets(next);
+    setPresetNotice(`已保存预设：${name.trim()}`);
+  }, [run]);
+
+  const handleExportDecisionReport = useCallback((format: 'md' | 'html') => {
+    if (!run || !normalized || !decisionReportMarkdown) return;
+    if (format === 'md') {
+      downloadTextFile(`backtest-run-${run.id}-summary.md`, decisionReportMarkdown, 'text/markdown;charset=utf-8');
+      return;
+    }
+    const html = [
+      '<!doctype html>',
+      '<html lang="zh-CN"><head><meta charset="utf-8" />',
+      `<title>Backtest Summary #${run.id}</title>`,
+      '<style>body{font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;line-height:1.6;color:#111827}pre{white-space:pre-wrap;word-break:break-word;background:#f3f4f6;border:1px solid #d1d5db;border-radius:12px;padding:18px}</style>',
+      '</head><body>',
+      `<h1>Backtest Summary #${run.id}</h1>`,
+      `<pre>${escapeHtml(decisionReportMarkdown)}</pre>`,
+      '</body></html>',
+    ].join('');
+    downloadTextFile(`backtest-run-${run.id}-summary.html`, html, 'text/html;charset=utf-8');
+  }, [decisionReportMarkdown, normalized, run]);
+
+  const handleRunScenarioPlan = useCallback(async () => {
+    if (!run || !selectedScenarioPlan) return;
+    setIsSubmittingScenarioRuns(true);
+    setScenarioError(null);
+    setScenarioRuns(selectedScenarioPlan.variants.map((variant) => ({
+      variantId: variant.id,
+      label: variant.label,
+      description: variant.description,
+      runId: null,
+      status: 'submitting',
+      result: null,
+      error: null,
+    })));
+
+    try {
+      const nextStates: ScenarioRunState[] = [];
+      for (const variant of selectedScenarioPlan.variants) {
+        const response = await backtestApi.runRuleBacktest(variant.request);
+        nextStates.push({
+          variantId: variant.id,
+          label: variant.label,
+          description: variant.description,
+          runId: response.id,
+          status: response.status,
+          result: response.status === 'completed' ? response : null,
+          error: null,
+        });
+      }
+      setScenarioRuns(nextStates);
+    } catch (error) {
+      setScenarioError(getParsedApiError(error));
+    } finally {
+      setIsSubmittingScenarioRuns(false);
+    }
+  }, [run, selectedScenarioPlan]);
 
   const handleCancelRun = useCallback(async () => {
     if (!run || !canCancelRuleRun(run.status) || isCancellingRun) return;
@@ -404,6 +669,9 @@ const DeterministicBacktestResultPage: React.FC = () => {
                 <Button variant="ghost" onClick={() => downloadExecutionTraceJson(run)}>
                   导出 JSON
                 </Button>
+                <Button variant="ghost" onClick={() => handleExportDecisionReport('md')}>
+                  导出摘要 MD
+                </Button>
               </>
             ) : null}
           </div>
@@ -420,6 +688,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
           ) : null}
           {runError ? <ApiErrorAlert error={runError} className="mt-4" /> : null}
           {cancelError ? <ApiErrorAlert error={cancelError} className="mt-4" /> : null}
+          {presetNotice ? (
+            <div className="mt-4">
+              <Banner tone="success" title={presetNotice} body={`当前本地可复用预设/最近配置：${availablePresets.length} 条。`} />
+            </div>
+          ) : null}
         </Card>
       </section>
     );
@@ -472,6 +745,23 @@ const DeterministicBacktestResultPage: React.FC = () => {
                   </div>
                   <p className="product-footnote">{benchmarkStatusNote}</p>
                   <AssumptionList assumptions={run.executionAssumptions} emptyText="暂无执行假设。" />
+                </div>
+              </Disclosure>
+              <Disclosure summary="查看可导出的决策摘要">
+                <div className="backtest-result-page__tab-stack">
+                  <div className="summary-block">
+                    <div className="summary-block__header">
+                      <div>
+                        <h3 className="summary-block__title">决策摘要 / Shareable Report</h3>
+                        <p className="product-section-copy">优先输出人类可读判断，再把深层 trace 留给 CSV / JSON 导出。</p>
+                      </div>
+                      <div className="product-action-row">
+                        <Button variant="secondary" onClick={() => handleExportDecisionReport('md')}>导出 Markdown</Button>
+                        <Button variant="ghost" onClick={() => handleExportDecisionReport('html')}>导出 HTML</Button>
+                      </div>
+                    </div>
+                    <pre className="comparison-report-preview">{decisionReportMarkdown}</pre>
+                  </div>
                 </div>
               </Disclosure>
             </Card>
@@ -660,6 +950,115 @@ const DeterministicBacktestResultPage: React.FC = () => {
                     {run.parsedStrategy.unsupportedReason ? <p className="product-footnote">{run.parsedStrategy.unsupportedReason}</p> : null}
                   </div>
                 </Disclosure>
+
+                <Disclosure summary="参数迭代 / Scenario Lab">
+                  <div className="backtest-result-page__tab-stack">
+                    <div className="summary-block">
+                      <div className="summary-block__header">
+                        <div>
+                          <h3 className="summary-block__title">受控场景比较</h3>
+                          <p className="product-section-copy">只做轻量、结构化、确定性的变体，不引入 full optimizer。</p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          onClick={() => void handleRunScenarioPlan()}
+                          isLoading={isSubmittingScenarioRuns}
+                          loadingText="提交场景中…"
+                          disabled={!selectedScenarioPlan}
+                        >
+                          运行当前场景组
+                        </Button>
+                      </div>
+                      <div className="comparison-card-grid">
+                        {scenarioPlans.map((plan) => (
+                          <button
+                            key={plan.id}
+                            type="button"
+                            className={`comparison-card comparison-card--selectable${selectedScenarioPlan?.id === plan.id ? ' is-active' : ''}`}
+                            onClick={() => setSelectedScenarioPlanId(plan.id)}
+                          >
+                            <div className="comparison-card__header">
+                              <div>
+                                <p className="metric-card__label">Scenario Plan</p>
+                                <h3 className="comparison-card__title">{plan.label}</h3>
+                              </div>
+                              <span className="product-chip">{plan.variants.length} 个变体</span>
+                            </div>
+                            <p className="comparison-card__narrative">{plan.description}</p>
+                            <div className="product-chip-list product-chip-list--tight">
+                              {plan.variants.map((variant) => (
+                                <span key={`${plan.id}-${variant.id}`} className="product-chip">{variant.label}</span>
+                              ))}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {scenarioError ? <ApiErrorAlert error={scenarioError} /> : null}
+                    {scenarioRuns.length > 0 ? (
+                      <div className="product-table-shell">
+                        <table className="product-table">
+                          <thead>
+                            <tr>
+                              <th>场景</th>
+                              <th>状态</th>
+                              <th>Run ID</th>
+                              <th className="product-table__align-right">操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {scenarioRuns.map((item) => (
+                              <tr key={item.variantId}>
+                                <td>
+                                  <div className="product-table__stack">
+                                    <span>{item.label}</span>
+                                    <span>{item.description}</span>
+                                  </div>
+                                </td>
+                                <td>{getRuleRunStatusLabel(item.status)}</td>
+                                <td className="product-table__mono">{item.runId || '--'}</td>
+                                <td className="product-table__align-right">
+                                  {item.runId ? (
+                                    <Button size="sm" variant="ghost" onClick={() => navigate(`/backtest/results/${item.runId}`)}>
+                                      查看
+                                    </Button>
+                                  ) : (
+                                    '--'
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                    <RuleRunComparisonPanel
+                      title="场景结果比较"
+                      subtitle="把当前运行作为基线，对照 P6 轻量参数变体。"
+                      items={scenarioComparisonItems}
+                      emptyText="先选择一个 scenario plan 并运行，结果会在这里汇总成紧凑比较表。"
+                    />
+                  </div>
+                </Disclosure>
+
+                <Disclosure summary="可复用配置 / Presets">
+                  <div className="backtest-result-page__tab-stack">
+                    <div className="summary-block__header">
+                      <div>
+                        <h3 className="summary-block__title">快速复用当前配置</h3>
+                        <p className="product-section-copy">结果页会自动沉淀 recent draft；也可以手动保存一个具名 preset，回到配置页快速复用。</p>
+                      </div>
+                      <Button variant="secondary" onClick={handleSavePreset}>保存为预设</Button>
+                    </div>
+                    <div className="product-chip-list">
+                      {availablePresets.map((preset) => (
+                        <span key={preset.id} className="product-chip">
+                          {preset.kind === 'saved' ? '预设' : '最近'} · {preset.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </Disclosure>
               </div>
             </Card>
           </section>
@@ -677,14 +1076,34 @@ const DeterministicBacktestResultPage: React.FC = () => {
               <div className="summary-block__header">
                 <div>
                   <h3 className="summary-block__title">同标的历史回测</h3>
-                  <p className="product-section-copy">点击历史项会继续停留在 `/backtest/results/:runId` 路径，只切换当前运行 ID 和对应结果数据。</p>
+                  <p className="product-section-copy">点击历史项会继续停留在 `/backtest/results/:runId` 路径，只切换当前运行 ID 和对应结果数据；勾选已完成运行可直接做 side-by-side comparison。</p>
                 </div>
                 <Button variant="ghost" onClick={() => void fetchHistory(run.code)} disabled={isLoadingHistory}>
                   {isLoadingHistory ? '刷新中…' : '刷新'}
                 </Button>
               </div>
               {historyError ? <ApiErrorAlert error={historyError} className="mb-4" /> : null}
-              <RuleRunsTable rows={historyItems} selectedRunId={run.id} onOpen={handleOpenHistoryRun} />
+              {compareError ? <ApiErrorAlert error={compareError} className="mb-4" /> : null}
+              {isLoadingCompareRuns ? <p className="product-footnote">正在加载比较运行详情…</p> : null}
+              <RuleRunComparisonPanel
+                title="运行比较"
+                subtitle="当前运行固定为基线，额外支持最多再选 3 条已完成运行。"
+                items={comparisonItems}
+                emptyText="先在下方历史表中勾选已完成运行，系统会自动拉取详情并生成比较视图。"
+              />
+              <div className="product-action-row mt-4">
+                <Button variant="ghost" onClick={() => setCompareRunIds([])} disabled={compareRunIds.length === 0}>清空比较</Button>
+              </div>
+              <RuleRunsTable
+                rows={historyItems}
+                selectedRunId={run.id}
+                onOpen={handleOpenHistoryRun}
+                compareSelection={{
+                  selectedIds: compareRunIds,
+                  onToggle: handleToggleCompareRun,
+                  maxSelections: 3,
+                }}
+              />
             </Card>
           </section>
         );
@@ -719,6 +1138,11 @@ const DeterministicBacktestResultPage: React.FC = () => {
               onClick={() => navigate('/backtest', { state: { draftRun: run } })}
             >
               用相同参数重跑
+            </Button>
+          ) : null}
+          {run ? (
+            <Button variant="ghost" size={density.buttonSize} onClick={handleSavePreset}>
+              保存预设
             </Button>
           ) : null}
           <Button variant="ghost" size={density.buttonSize} onClick={() => void fetchRun()}>

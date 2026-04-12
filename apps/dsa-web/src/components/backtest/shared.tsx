@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { Badge, Button } from '../../components/common';
+import { Badge, Button, Checkbox } from '../../components/common';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -737,7 +737,12 @@ export const RuleRunsTable: React.FC<{
   rows: RuleBacktestHistoryItem[];
   selectedRunId: number | null;
   onOpen: (run: RuleBacktestHistoryItem) => void;
-}> = ({ rows, selectedRunId, onOpen }) => {
+  compareSelection?: {
+    selectedIds: number[];
+    onToggle: (run: RuleBacktestHistoryItem) => void;
+    maxSelections?: number;
+  };
+}> = ({ rows, selectedRunId, onOpen, compareSelection }) => {
   if (rows.length === 0) {
     return <div className="product-empty-state">暂无确定性规则回测历史。</div>;
   }
@@ -754,6 +759,7 @@ export const RuleRunsTable: React.FC<{
             <th className="product-table__align-right">交易</th>
             <th className="product-table__align-right">总收益</th>
             <th className="product-table__align-right">超额收益</th>
+            {compareSelection ? <th className="product-table__align-right">比较</th> : null}
             <th className="product-table__align-right">操作</th>
           </tr>
         </thead>
@@ -772,6 +778,25 @@ export const RuleRunsTable: React.FC<{
               <td className="product-table__align-right">{row.tradeCount}</td>
               <td className="product-table__align-right">{pct(row.totalReturnPct)}</td>
               <td className="product-table__align-right">{pct(row.excessReturnVsBuyAndHoldPct)}</td>
+              {compareSelection ? (
+                <td className="product-table__align-right">
+                  {row.id === selectedRunId ? (
+                    <span className="product-chip">当前</span>
+                  ) : row.status !== 'completed' ? (
+                    <span className="product-footnote">仅已完成</span>
+                  ) : (
+                    <Checkbox
+                      aria-label={`比较运行 ${row.id}`}
+                      checked={compareSelection.selectedIds.includes(row.id)}
+                      disabled={
+                        !compareSelection.selectedIds.includes(row.id)
+                        && compareSelection.selectedIds.length >= (compareSelection.maxSelections ?? 3)
+                      }
+                      onChange={() => compareSelection.onToggle(row)}
+                    />
+                  )}
+                </td>
+              ) : null}
               <td className="product-table__align-right">
                 <Button size="sm" variant="ghost" onClick={() => onOpen(row)}>
                   查看

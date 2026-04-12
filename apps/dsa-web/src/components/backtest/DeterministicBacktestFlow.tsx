@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ApiErrorAlert, Badge, Button, Card } from '../../components/common';
 import type { ParsedApiError } from '../../api/error';
@@ -26,6 +26,11 @@ import {
   getRuleStrategySpecSourceLabel,
   getRuleStrategyTypeLabel,
 } from './strategyInspectability';
+import {
+  deleteRuleBacktestPreset,
+  loadRuleBacktestPresets,
+  type RuleBacktestPreset,
+} from './ruleBacktestP6';
 
 export type RuleWizardStep = 'symbol' | 'setup' | 'strategy' | 'confirm' | 'run';
 
@@ -610,6 +615,7 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
   const professionalCurrentStepIndex = PROFESSIONAL_STEP_ORDER.indexOf(currentStep);
   const normalCurrentStep = currentStep === 'confirm' ? 'strategy' : currentStep;
   const normalCurrentStepIndex = NORMAL_STEP_ORDER.indexOf(normalCurrentStep);
+  const [presets, setPresets] = useState<RuleBacktestPreset[]>(() => loadRuleBacktestPresets());
 
   const handleStepSelect = useCallback((step: RuleWizardStep) => {
     if (isProfessionalMode) {
@@ -629,6 +635,75 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
       onStepChange('strategy');
     }
   }, [currentStep, isProfessionalMode, onStepChange]);
+
+  const handleApplyPreset = useCallback((preset: RuleBacktestPreset) => {
+    onCodeChange(preset.code);
+    onStrategyTextChange(preset.strategyText);
+    onStartDateChange(preset.startDate);
+    onEndDateChange(preset.endDate);
+    onLookbackBarsChange(preset.lookbackBars);
+    onInitialCapitalChange(preset.initialCapital);
+    onFeeBpsChange(preset.feeBps);
+    onSlippageBpsChange(preset.slippageBps);
+    onBenchmarkModeChange((preset.benchmarkMode as RuleBenchmarkMode) || 'auto');
+    onBenchmarkCodeChange(preset.benchmarkCode);
+    onToggleConfirmed(false);
+    onStepChange('symbol');
+  }, [
+    onBenchmarkCodeChange,
+    onBenchmarkModeChange,
+    onCodeChange,
+    onEndDateChange,
+    onFeeBpsChange,
+    onInitialCapitalChange,
+    onLookbackBarsChange,
+    onSlippageBpsChange,
+    onStartDateChange,
+    onStepChange,
+    onStrategyTextChange,
+    onToggleConfirmed,
+  ]);
+
+  const handleDeletePreset = useCallback((presetId: string) => {
+    setPresets(deleteRuleBacktestPreset(presetId));
+  }, []);
+
+  const renderPresetSection = () => {
+    if (presets.length === 0) return null;
+
+    return (
+      <section className="backtest-display-section" data-testid="backtest-display-section-presets">
+        <Card title="快速复用" subtitle="P6 presets / recent drafts" className="product-section-card product-section-card--backtest-secondary">
+          <p className="product-section-copy">结果页保存的 recent draft 和具名 preset 会出现在这里，方便你不用重新拼完整配置。</p>
+          <div className="comparison-card-grid">
+            {presets.map((preset) => (
+              <div key={preset.id} className="comparison-card">
+                <div className="comparison-card__header">
+                  <div>
+                    <p className="metric-card__label">{preset.kind === 'saved' ? 'Saved preset' : 'Recent draft'}</p>
+                    <h3 className="comparison-card__title">{preset.name}</h3>
+                  </div>
+                  <span className="product-chip">{preset.code}</span>
+                </div>
+                <p className="comparison-card__meta">{preset.startDate || '--'} {'->'} {preset.endDate || '--'} · lookback {preset.lookbackBars}</p>
+                <div className="product-chip-list product-chip-list--tight">
+                  <span className="product-chip">{preset.benchmarkMode || 'auto'}</span>
+                  <span className="product-chip">费 {preset.feeBps}bp</span>
+                  <span className="product-chip">滑 {preset.slippageBps}bp</span>
+                </div>
+                <div className="product-action-row mt-4">
+                  <Button size="sm" variant="secondary" onClick={() => handleApplyPreset(preset)}>应用</Button>
+                  {preset.kind === 'saved' ? (
+                    <Button size="sm" variant="ghost" onClick={() => handleDeletePreset(preset.id)}>删除</Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+    );
+  };
 
   const baseParamsSection = (
     <section
@@ -1238,6 +1313,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           </p>
         </Card>
 
+        {renderPresetSection()}
+
         <nav className="backtest-normal-stepper" aria-label="确定性回测向导步骤">
           {NORMAL_STEP_ORDER.map((step, index) => {
             const stepMeta = NORMAL_STEP_LABELS[step];
@@ -1312,6 +1389,8 @@ const DeterministicBacktestFlow: React.FC<FlowProps> = ({
           专业版保留完整配置控制，但完整分析结果统一落在 `/backtest/results/:runId`。这里不再承载全宽图表工作区。
         </p>
       </Card>
+
+      {renderPresetSection()}
 
       <nav className="backtest-control-stepper backtest-control-stepper--secondary" aria-label="确定性回测步骤">
         {PROFESSIONAL_STEP_ORDER.map((step, index) => {

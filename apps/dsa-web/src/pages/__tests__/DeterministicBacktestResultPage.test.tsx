@@ -9,11 +9,13 @@ const {
   getRuleBacktestRuns,
   getRuleBacktestRunStatus,
   cancelRuleBacktestRun,
+  runRuleBacktest,
 } = vi.hoisted(() => ({
   getRuleBacktestRun: vi.fn(),
   getRuleBacktestRuns: vi.fn(),
   getRuleBacktestRunStatus: vi.fn(),
   cancelRuleBacktestRun: vi.fn(),
+  runRuleBacktest: vi.fn(),
 }));
 
 vi.mock('../../api/backtest', () => ({
@@ -22,6 +24,7 @@ vi.mock('../../api/backtest', () => ({
     getRuleBacktestRuns,
     getRuleBacktestRunStatus,
     cancelRuleBacktestRun,
+    runRuleBacktest,
   },
 }));
 
@@ -520,4 +523,88 @@ describe('DeterministicBacktestResultPage', () => {
     expect(screen.getByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
+
+  it('supports side-by-side comparison from the history tab', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const compareRun = makeResultRun({
+      id: 123,
+      totalReturnPct: 2.1,
+      excessReturnVsBenchmarkPct: -0.8,
+      maxDrawdownPct: 3.4,
+      tradeCount: 2,
+      winRatePct: 50,
+    });
+
+    getRuleBacktestRun.mockImplementation(async (id: number) => (id === 123 ? compareRun : currentRun));
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 10,
+      items: [currentRun, compareRun],
+    });
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '历史结果' }));
+    expect(await screen.findByText('运行比较')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '比较运行 123' }));
+
+    await waitFor(() => {
+      expect(getRuleBacktestRun).toHaveBeenCalledWith(123);
+    });
+    expect(await screen.findByLabelText('回测比较收益进度图')).toBeInTheDocument();
+    expect(screen.getAllByText('比较运行 #123').length).toBeGreaterThan(0);
+  });
+
+  it('runs lightweight scenario variants and exports the summary report', async () => {
+    const currentRun = makeResultRun({ id: 99 });
+    const scenarioRun = makeResultRun({
+      id: 201,
+      totalReturnPct: 5.6,
+      excessReturnVsBenchmarkPct: 2.3,
+      maxDrawdownPct: 2.1,
+      tradeCount: 2,
+      winRatePct: 100,
+      status: 'completed',
+    });
+
+    getRuleBacktestRun.mockResolvedValue(currentRun);
+    getRuleBacktestRuns.mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 10,
+      items: [currentRun],
+    });
+    runRuleBacktest.mockResolvedValue(scenarioRun);
+
+    const createObjectUrlMock = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-summary');
+    const revokeObjectUrlMock = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickMock = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderResultPage();
+
+    expect(await screen.findByTestId('deterministic-backtest-result-view')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '参数与假设' }));
+    expect(await screen.findByTestId('deterministic-result-tab-panel-parameters')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('参数迭代 / Scenario Lab'));
+    fireEvent.click(screen.getByRole('button', { name: '运行当前场景组' }));
+
+    await waitFor(() => {
+      expect(runRuleBacktest).toHaveBeenCalled();
+    });
+    expect(await screen.findByText('场景结果比较')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '概览' }));
+    fireEvent.click(screen.getByText('查看可导出的决策摘要'));
+    fireEvent.click(screen.getByRole('button', { name: '导出 Markdown' }));
+
+    await waitFor(() => {
+      expect(createObjectUrlMock).toHaveBeenCalled();
+      expect(clickMock).toHaveBeenCalled();
+      expect(revokeObjectUrlMock).toHaveBeenCalled();
+    });
+  });
 });

@@ -26,6 +26,10 @@ import {
   downloadExecutionTraceJson,
   hasExecutionTraceRows,
 } from './executionTraceUtils';
+import {
+  describeRuleRunNarrative,
+  getRuleRunExecutionNotes,
+} from './ruleBacktestP6';
 
 export function DeterministicAuditTable({
   run,
@@ -164,6 +168,8 @@ export const DeterministicBacktestResultView: React.FC<{
       ? `${benchmarkMeta.buyHoldLabel} ${pct(metrics.buyAndHoldReturnPct)}`
       : '当前没有可比较的基准收益';
   const workspaceKey = `${viewerMeta.runId}:${viewerMeta.rowCount}:${viewerMeta.firstDate ?? 'empty'}:${viewerMeta.lastDate ?? 'empty'}`;
+  const narrative = describeRuleRunNarrative(run);
+  const executionNotes = getRuleRunExecutionNotes(run);
 
   return (
     <div
@@ -196,6 +202,33 @@ export const DeterministicBacktestResultView: React.FC<{
                   <span className="product-chip">权益 {formatNumber(metrics.finalEquity)}</span>
                 </div>
               </div>
+              <SummaryStrip
+                items={[
+                  {
+                    label: '决策判断',
+                    value: narrative.verdict,
+                    note: benchmarkMeta.showBenchmark ? benchmarkMeta.benchmarkLabel : benchmarkMeta.buyHoldLabel,
+                  },
+                  {
+                    label: '回撤体感',
+                    value: narrative.drawdownLabel,
+                    note: pct(metrics.maxDrawdownPct),
+                  },
+                  {
+                    label: '交易活跃度',
+                    value: narrative.activityLabel,
+                    note: `${metrics.tradeCount} 次交易`,
+                  },
+                  {
+                    label: '信号质量',
+                    value: narrative.qualityLabel,
+                    note: pct(metrics.winRatePct),
+                  },
+                ]}
+              />
+              {executionNotes.length > 0 ? (
+                <p className="product-footnote">{executionNotes[0]}</p>
+              ) : null}
               <div className="metric-grid backtest-result-viewer__metric-grid">
                 <MetricCard
                   label="总收益"

@@ -832,6 +832,18 @@ Web 结果页现在也统一按一条确定的数据链路展示：
 - hover 明细不再固定在右上角，而是根据当前图表 hover 几何实时计算 `left/top`，默认贴近 hover 点的右下侧，接近边缘时再左右 / 上下翻转，作为真正随 cursor / crosshair 移动的 tooltip 显示在图表附近
 - 结果页现在显式使用三档共享 density（`comfortable / compact / dense`）统一驱动 header、KPI、panel 高度、legend、brush、tooltip 和间距，不再出现“大图一套缩放、文字一套缩放、tooltip 第三套缩放”的比例失衡
 - hover tooltip 也改成专用的 label/value 布局：主字段稳定放在两列网格里，长文本放到可换行的全文区；卡片有固定 max width / max height，过长内容会在 tooltip 内部滚动而不是溢出到外部
+- P6 起，结果页的 `历史结果` tab 增加了轻量 compare workflow：当前运行固定为基线，可再勾选最多 3 条已完成运行做 side-by-side comparison；比较区会同时展示收益/超额/回撤/胜率/期末权益/策略设置，并对日期区间、费滑或 benchmark 不一致给出公平性提醒
+- P6 也把 chart workspace 调整为更偏决策支持的结构：主图继续保留策略/基准/买入持有对照，第二张图优先展示回撤，第三张图可在 `相对基准 / 每日盈亏 / 仓位行为` 之间切换，帮助更快判断“是否跑赢、代价多大、交易是否过于频繁”
+- `参数与假设` tab 现在内置受控 `Scenario Lab`，支持对已支持的 rule strategy 做轻量参数迭代（例如 MA window、MACD/RSI 变体、benchmark mode、fee/slippage stress、lookback 窗口），并把当前运行作为基线汇总成紧凑比较表；它不是 full optimizer，只覆盖受控、确定性的 first-step iteration
+- 结果页 `概览` tab 会生成可导出的决策摘要（Markdown / HTML），优先输出人类可读的 decision summary，再把 execution trace 留给 CSV / JSON 导出；结果页同时会自动沉淀 recent draft，并支持手动保存具名 preset，配置页可直接复用这些回测配置而不用重新填写整套参数
+
+P6 手动验收建议：
+
+1. 先完成一条规则回测，再打开 `历史结果` tab 勾选 1-3 条已完成运行，确认 side-by-side comparison、归一化收益进度图和公平性提醒都能正常出现。
+2. 在首屏查看主图、回撤图和第三面板切换，确认可以快速读出“是否跑赢基准/买入持有、回撤深浅、交易活跃度”。
+3. 打开 `参数与假设 -> Scenario Lab`，选择一个场景组并提交，确认变体会走现有异步运行、状态轮询和结果详情链路，完成后可在紧凑比较区查看基线与变体差异。
+4. 在 `概览` tab 导出 Markdown / HTML 摘要，同时继续确认 CSV / JSON execution trace 导出仍可用，且摘要优先突出 decision summary。
+5. 在结果页保存一个具名 preset，然后返回 `/backtest` 配置页，确认 `快速复用` 区能看到 recent draft / preset，并且应用后会回填代码、策略、日期、lookback、fee/slippage 与 benchmark 配置。
 
 ### 操作建议映射
 

@@ -8,6 +8,7 @@ import type {
   RuleBacktestParseResponse,
   RuleBacktestRunResponse,
 } from '../../types/backtest';
+import { RULE_BACKTEST_PRESET_STORAGE_KEY } from '../../components/backtest/ruleBacktestP6';
 import BacktestPage from '../BacktestPage';
 import DeterministicBacktestResultPage from '../DeterministicBacktestResultPage';
 
@@ -489,7 +490,45 @@ function makeRuleRunResponse(overrides: Partial<RuleBacktestRunResponse> = {}): 
       endDate: '2025-12-31',
       returnPct: 0,
     },
-    auditRows: [],
+    auditRows: [
+      {
+        date: '2025-01-01',
+        targetPosition: 0,
+        totalPortfolioValue: 100000,
+        cumulativeStrategyReturnPct: 0,
+        cumulativeBenchmarkReturnPct: 0,
+        cumulativeBuyAndHoldReturnPct: 0,
+        dailyPnl: 0,
+        dailyReturnPct: 0,
+        drawdownPct: 0,
+      },
+      {
+        date: '2025-06-01',
+        targetPosition: 1,
+        executedAction: 'buy',
+        fillPrice: 50,
+        totalPortfolioValue: 103000,
+        cumulativeStrategyReturnPct: 3,
+        cumulativeBenchmarkReturnPct: 1.8,
+        cumulativeBuyAndHoldReturnPct: 1.6,
+        dailyPnl: 3000,
+        dailyReturnPct: 3,
+        drawdownPct: -1.2,
+      },
+      {
+        date: '2025-12-31',
+        targetPosition: 0,
+        executedAction: 'sell',
+        fillPrice: 55,
+        totalPortfolioValue: 108000,
+        cumulativeStrategyReturnPct: 8,
+        cumulativeBenchmarkReturnPct: 4.2,
+        cumulativeBuyAndHoldReturnPct: 3.9,
+        dailyPnl: 5000,
+        dailyReturnPct: 4.85,
+        drawdownPct: -2.4,
+      },
+    ],
     dailyReturnSeries: [],
     exposureCurve: [],
     aiSummary: null,
@@ -1019,8 +1058,6 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '99');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toBeInTheDocument();
     expect(screen.getByLabelText('累计收益率图')).toBeInTheDocument();
-    expect(screen.getByLabelText('每日盈亏图')).toBeInTheDocument();
-    expect(screen.getByLabelText('仓位/买卖行为图')).toBeInTheDocument();
     expect(screen.getByLabelText('回测范围选择器')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: '审计明细' })).toBeInTheDocument();
@@ -1087,4 +1124,34 @@ describe('BacktestPage', () => {
     expect(await screen.findByTestId('deterministic-backtest-result-view')).toHaveAttribute('data-run-id', '123');
     expect(screen.getByTestId('deterministic-backtest-chart-workspace')).toHaveAttribute('data-row-count', '3');
   }, 10000);
+
+  it('applies saved presets on the configuration page', async () => {
+    window.localStorage.setItem(RULE_BACKTEST_PRESET_STORAGE_KEY, JSON.stringify([
+      {
+        id: 'saved-1',
+        kind: 'saved',
+        name: 'ORCL Swing',
+        savedAt: '2026-04-12T08:00:00Z',
+        sourceRunId: 99,
+        code: 'ORCL',
+        strategyText: 'MACD金叉买入，死叉卖出',
+        startDate: '2026-01-01',
+        endDate: '2026-03-31',
+        lookbackBars: '126',
+        initialCapital: '150000',
+        feeBps: '3',
+        slippageBps: '2',
+        benchmarkMode: 'etf_qqq',
+        benchmarkCode: '',
+      },
+    ]));
+
+    renderBacktestRoutes();
+
+    expect(await screen.findByText('快速复用')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '应用' }));
+
+    expect((screen.getByLabelText('股票代码') as HTMLInputElement).value).toBe('ORCL');
+    expect((screen.getByLabelText('初始资金') as HTMLInputElement).value).toBe('150000');
+  });
 });

@@ -24,6 +24,7 @@ function makeViewerRun(overrides: Partial<RuleBacktestRunResponse> = {}): RuleBa
       cumulativeStrategyReturnPct: index * 0.8,
       cumulativeBenchmarkReturnPct: index * 0.6,
       cumulativeBuyAndHoldReturnPct: index * 0.55,
+      drawdownPct: index < 10 ? 0 : -Math.min((index - 9) * 0.12, 4.3),
       fees: 0,
       slippage: 0,
       notes: null,
@@ -116,6 +117,8 @@ describe('DeterministicBacktestResultView', () => {
     const dashboard = screen.getByTestId('deterministic-result-dashboard');
     const workspace = screen.getByTestId('deterministic-backtest-chart-workspace');
     const returnSvg = screen.getByLabelText('累计收益率图');
+    const drawdownSvg = screen.getByLabelText('回撤曲线图');
+    const relativeSvg = screen.getByLabelText('相对基准曲线图');
 
     expect(resultView).toHaveAttribute('data-row-count', '70');
     expect(resultView).toHaveAttribute('data-main-series-length', '70');
@@ -145,6 +148,8 @@ describe('DeterministicBacktestResultView', () => {
     expect(Number(workspace.getAttribute('data-brush-height'))).toBeLessThanOrEqual(36);
     expect(workspace).toHaveAttribute('data-tooltip-visible', 'false');
     expect(returnSvg.querySelector('.chart-card__line--strategy')?.getAttribute('points')).toBeTruthy();
+    expect(drawdownSvg).toBeInTheDocument();
+    expect(relativeSvg).toBeInTheDocument();
   });
 
   it('applies one shared density level to KPI sizing and chart sizing together', () => {

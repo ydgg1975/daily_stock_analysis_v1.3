@@ -26,6 +26,8 @@ type SharedPanelProps = {
   surfaceTestId: string;
 };
 
+type SecondaryPanelMode = 'relative' | 'daily' | 'position';
+
 const CHART_BASE_WIDTH = 1180;
 const RANGE_BRUSH_WIDTH = 1000;
 const RANGE_BRUSH_PADDING = 8;
@@ -382,6 +384,192 @@ function DailyPnlPanel({
   );
 }
 
+function DrawdownPanel({
+  visibleRows,
+  hoveredIndex,
+  onHoverIndexChange,
+  onHoverLeave,
+  layout,
+  surfaceTestId,
+}: Omit<SharedPanelProps, 'benchmarkMeta'> & { benchmarkMeta?: DeterministicBacktestBenchmarkMeta }) {
+  const seriesLength = visibleRows.filter((row) => row.drawdownPct != null).length;
+  if (!visibleRows.length || !seriesLength) {
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无回撤数据。</div></div>;
+  }
+
+  const { width, density, config } = layout;
+  const height = config.dailyHeight;
+  const paddingLeft = density === 'dense' ? 56 : 64;
+  const paddingRight = 22;
+  const paddingTop = 14;
+  const paddingBottom = density === 'dense' ? 28 : 34;
+  const plotRight = width - paddingRight;
+  const plotBottom = height - paddingBottom;
+  const usableWidth = plotRight - paddingLeft;
+  const usableHeight = plotBottom - paddingTop;
+  const values = visibleRows.map((row) => Math.min(row.drawdownPct ?? 0, 0));
+  const min = Math.min(...values, -1);
+  const span = Math.max(4, Math.abs(min));
+  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
+  const getY = (value: number) => paddingTop + ((0 - value) / span) * usableHeight;
+  const line = visibleRows.map((row, index) => `${getX(index)},${getY(Math.min(row.drawdownPct ?? 0, 0))}`).join(' ');
+  const area = `${paddingLeft},${getY(0)} ${line} ${plotRight},${getY(0)}`;
+  const xTicks = buildTickIndices(
+    visibleRows.length,
+    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
+  ).map((index) => ({
+    x: getX(index),
+    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
+  }));
+  const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
+    const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
+    const value = 0 - ratio * span;
+    return { value, y: getY(value), label: formatSignedPercent(value, density === 'dense' ? 0 : 1) };
+  });
+  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
+
+  return (
+    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
+      <div className="backtest-unified-chart-viewer__panel-header">
+        <div>
+          <span className="product-kicker">风险</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">回撤曲线</h3>
+        </div>
+      </div>
+      <div className="chart-card__frame">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="回撤曲线图">
+          {yTicks.map((tick) => (
+            <g key={`drawdown-y-${tick.label}`}>
+              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
+              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
+                {tick.label}
+              </text>
+            </g>
+          ))}
+          {xTicks.map((tick) => (
+            <text key={`drawdown-x-${tick.label}`} x={tick.x} y={height - 14} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
+              {tick.label}
+            </text>
+          ))}
+          <polyline className="comparison-chart__drawdown-area" points={area} />
+          <polyline className="comparison-chart__drawdown-line" points={line} />
+          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
+          <ChartSurface
+            rows={visibleRows}
+            hoveredIndex={hoveredIndex}
+            onHoverIndexChange={onHoverIndexChange}
+            onHoverLeave={onHoverLeave}
+            testId={surfaceTestId}
+            x={paddingLeft}
+            y={paddingTop}
+            width={usableWidth}
+            height={usableHeight}
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function RelativePerformancePanel({
+  visibleRows,
+  hoveredIndex,
+  onHoverIndexChange,
+  onHoverLeave,
+  benchmarkMeta,
+  layout,
+  surfaceTestId,
+}: SharedPanelProps) {
+  const comparatorLabel = benchmarkMeta.showBenchmark
+    ? benchmarkMeta.benchmarkLabel
+    : benchmarkMeta.showBuyHold
+      ? benchmarkMeta.buyHoldLabel
+      : null;
+  const series = visibleRows.map((row) => {
+    if (benchmarkMeta.showBenchmark && row.strategyCumReturn != null && row.benchmarkCumReturn != null) {
+      return row.strategyCumReturn - row.benchmarkCumReturn;
+    }
+    if (benchmarkMeta.showBuyHold && row.strategyCumReturn != null && row.buyHoldCumReturn != null) {
+      return row.strategyCumReturn - row.buyHoldCumReturn;
+    }
+    return null;
+  });
+  const seriesLength = series.filter((value): value is number => value != null).length;
+  if (!visibleRows.length || !seriesLength || !comparatorLabel) {
+    return <div className="backtest-unified-chart-viewer__panel"><div className="product-empty-state product-empty-state--compact">暂无相对基准对比曲线。</div></div>;
+  }
+
+  const { width, density, config } = layout;
+  const height = config.positionHeight;
+  const paddingLeft = density === 'dense' ? 56 : 64;
+  const paddingRight = 22;
+  const paddingTop = 14;
+  const paddingBottom = density === 'dense' ? 24 : 30;
+  const plotRight = width - paddingRight;
+  const plotBottom = height - paddingBottom;
+  const usableWidth = plotRight - paddingLeft;
+  const usableHeight = plotBottom - paddingTop;
+  const values = series.filter((value): value is number => value != null);
+  const amplitude = Math.max(Math.abs(Math.min(...values, 0)), Math.abs(Math.max(...values, 0)), 2);
+  const getX = (index: number) => paddingLeft + (usableWidth * index) / Math.max(1, visibleRows.length - 1);
+  const getY = (value: number) => paddingTop + usableHeight - ((value + amplitude) / (amplitude * 2)) * usableHeight;
+  const line = series.map((value, index) => `${getX(index)},${getY(value ?? 0)}`).join(' ');
+  const xTicks = buildTickIndices(
+    visibleRows.length,
+    buildVisibleTickCount(visibleRows.length, width, config.xTickMinGap, 5),
+  ).map((index) => ({
+    x: getX(index),
+    label: formatChartDateLabel(visibleRows[index]?.date || '--'),
+  }));
+  const yTicks = Array.from({ length: config.subYTickCount + 1 }, (_, index) => {
+    const ratio = config.subYTickCount === 0 ? 0 : index / config.subYTickCount;
+    const value = amplitude - ratio * amplitude * 2;
+    return { value, y: getY(value), label: formatSignedPercent(value, density === 'dense' ? 0 : 1) };
+  });
+  const hoverX = getX(clampNumber(hoveredIndex, 0, visibleRows.length - 1));
+
+  return (
+    <div className="backtest-unified-chart-viewer__panel backtest-linked-chart" data-density={density} data-series-length={seriesLength}>
+      <div className="backtest-unified-chart-viewer__panel-header">
+        <div>
+          <span className="product-kicker">对照</span>
+          <h3 className="backtest-unified-chart-viewer__panel-title">相对 {comparatorLabel}</h3>
+        </div>
+      </div>
+      <div className="chart-card__frame">
+        <svg viewBox={`0 0 ${width} ${height}`} className="chart-card__svg" aria-label="相对基准曲线图">
+          {yTicks.map((tick) => (
+            <g key={`relative-y-${tick.label}`}>
+              <line x1={paddingLeft} y1={tick.y} x2={plotRight} y2={tick.y} className="chart-card__grid" />
+              <text x={paddingLeft - 12} y={tick.y + 4} className="chart-card__axis-label chart-card__axis-label--y" fontSize={config.axisFontSize}>
+                {tick.label}
+              </text>
+            </g>
+          ))}
+          {xTicks.map((tick) => (
+            <text key={`relative-x-${tick.label}`} x={tick.x} y={height - 12} textAnchor="middle" className="chart-card__axis-label" fontSize={config.axisFontSize}>
+              {tick.label}
+            </text>
+          ))}
+          <polyline className="comparison-chart__relative-line" points={line} />
+          <line x1={hoverX} y1={paddingTop} x2={hoverX} y2={plotBottom} className="backtest-linked-chart__cursor" />
+          <ChartSurface
+            rows={visibleRows}
+            hoveredIndex={hoveredIndex}
+            onHoverIndexChange={onHoverIndexChange}
+            onHoverLeave={onHoverLeave}
+            testId={surfaceTestId}
+            x={paddingLeft}
+            y={paddingTop}
+            width={usableWidth}
+            height={usableHeight}
+          />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function PositionPanel({
   visibleRows,
   hoveredIndex,
@@ -646,10 +834,14 @@ function ChartHeader({
   totalRows,
   visibleRowsLength,
   onApplyQuickRange,
+  secondaryPanelMode,
+  onSecondaryPanelModeChange,
 }: {
   totalRows: number;
   visibleRowsLength: number;
   onApplyQuickRange: (bars: number | 'all') => void;
+  secondaryPanelMode: SecondaryPanelMode;
+  onSecondaryPanelModeChange: (mode: SecondaryPanelMode) => void;
 }) {
   return (
       <div className="backtest-result-viewer__toolbar">
@@ -660,7 +852,12 @@ function ChartHeader({
           <span className="product-chip">当前窗口: {visibleRowsLength} 天</span>
           <span className="product-chip">全部区间: {totalRows} 天</span>
         </div>
-      <p className="backtest-result-viewer__toolbar-note">brush 控制联动窗口，hover 浮层跟随同一个 hoveredRow。</p>
+        <div className="product-chip-list product-chip-list--tight">
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'relative' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('relative')}>相对基准</button>
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'daily' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('daily')}>每日盈亏</button>
+          <button type="button" className={`product-chip product-chip--interactive${secondaryPanelMode === 'position' ? ' is-active' : ''}`} onClick={() => onSecondaryPanelModeChange('position')}>仓位行为</button>
+        </div>
+      <p className="backtest-result-viewer__toolbar-note">主图看收益，第二张优先看回撤，第三张可在相对基准 / 每日盈亏 / 仓位之间切换。</p>
     </div>
   );
 }
@@ -677,6 +874,7 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
   const [visibleStartIndex, setVisibleStartIndex] = useState(0);
   const [visibleEndIndex, setVisibleEndIndex] = useState(Math.max(totalRows - 1, 0));
   const [hoverIndex, setHoverIndex] = useState(Math.max(totalRows - 1, 0));
+  const [secondaryPanelMode, setSecondaryPanelMode] = useState<SecondaryPanelMode>('relative');
   const [hoverAnchor, setHoverAnchor] = useState<{
     x: number;
     y: number;
@@ -791,7 +989,13 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
       data-brush-height={layout.config.brushHeight}
       data-tooltip-visible={tooltipPosition && hoveredRow ? 'true' : 'false'}
     >
-      <ChartHeader totalRows={totalRows} visibleRowsLength={visibleRows.length} onApplyQuickRange={applyQuickRange} />
+      <ChartHeader
+        totalRows={totalRows}
+        visibleRowsLength={visibleRows.length}
+        onApplyQuickRange={applyQuickRange}
+        secondaryPanelMode={secondaryPanelMode}
+        onSecondaryPanelModeChange={setSecondaryPanelMode}
+      />
       <div
         ref={(node) => {
           shellRef.current = node;
@@ -815,24 +1019,48 @@ export const DeterministicBacktestChartWorkspace: React.FC<{
             layout={layout}
             surfaceTestId="deterministic-chart-surface-return"
           />
-          <DailyPnlPanel
+          <DrawdownPanel
             visibleRows={visibleRows}
             hoveredIndex={safeHoverIndex}
             onHoverIndexChange={handleHoverIndexChange}
             onHoverLeave={handleHoverLeave}
             benchmarkMeta={normalized.benchmarkMeta}
             layout={layout}
-            surfaceTestId="deterministic-chart-surface-daily-pnl"
+            surfaceTestId="deterministic-chart-surface-drawdown"
           />
-          <PositionPanel
-            visibleRows={visibleRows}
-            hoveredIndex={safeHoverIndex}
-            onHoverIndexChange={handleHoverIndexChange}
-            onHoverLeave={handleHoverLeave}
-            benchmarkMeta={normalized.benchmarkMeta}
-            layout={layout}
-            surfaceTestId="deterministic-chart-surface-position"
-          />
+          {secondaryPanelMode === 'daily' ? (
+            <DailyPnlPanel
+              visibleRows={visibleRows}
+              hoveredIndex={safeHoverIndex}
+              onHoverIndexChange={handleHoverIndexChange}
+              onHoverLeave={handleHoverLeave}
+              benchmarkMeta={normalized.benchmarkMeta}
+              layout={layout}
+              surfaceTestId="deterministic-chart-surface-daily-pnl"
+            />
+          ) : null}
+          {secondaryPanelMode === 'position' ? (
+            <PositionPanel
+              visibleRows={visibleRows}
+              hoveredIndex={safeHoverIndex}
+              onHoverIndexChange={handleHoverIndexChange}
+              onHoverLeave={handleHoverLeave}
+              benchmarkMeta={normalized.benchmarkMeta}
+              layout={layout}
+              surfaceTestId="deterministic-chart-surface-position"
+            />
+          ) : null}
+          {secondaryPanelMode === 'relative' ? (
+            <RelativePerformancePanel
+              visibleRows={visibleRows}
+              hoveredIndex={safeHoverIndex}
+              onHoverIndexChange={handleHoverIndexChange}
+              onHoverLeave={handleHoverLeave}
+              benchmarkMeta={normalized.benchmarkMeta}
+              layout={layout}
+              surfaceTestId="deterministic-chart-surface-relative"
+            />
+          ) : null}
         </div>
       </div>
       <RangeBrushPanel
