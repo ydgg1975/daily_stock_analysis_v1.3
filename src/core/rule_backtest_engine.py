@@ -1,7 +1,25 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+import numpy as np  # ✅ 新增
 """Deterministic rule backtesting engine for AI-assisted strategies."""
 
-from __future__ import annotations
+from datetime import date, datetime
+
+def _coerce_to_date(value):
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if hasattr(value, "date"):
+        try:
+            return value.date()
+        except Exception:
+            pass
+    text = str(value)
+    try:
+        return datetime.fromisoformat(text.replace("T", " ")).date()
+    except Exception:
+        return date.fromisoformat(text[:10])
+    
+
 
 import math
 import re
@@ -3011,7 +3029,7 @@ class RuleBacktestEngine:
             if not point_date:
                 continue
 
-            point_dt = point.date if isinstance(point, RuleBacktestPoint) else date.fromisoformat(str(point_date))
+            point_dt = point.date if isinstance(point, RuleBacktestPoint) else _coerce_to_date(point_date)
             total_portfolio_value = _safe_float(point_payload.get("total_portfolio_value"))
             if total_portfolio_value is None:
                 total_portfolio_value = _safe_float(point_payload.get("equity"))
