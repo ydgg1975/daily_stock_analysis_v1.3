@@ -172,6 +172,27 @@ class ScannerRepository:
                 ).scalar() or 0
             )
 
+    def update_candidate_diagnostics(
+        self,
+        candidate_id: int,
+        *,
+        diagnostics_json: str,
+    ) -> Optional[MarketScannerCandidate]:
+        with self.db.get_session() as session:
+            candidate = session.execute(
+                select(MarketScannerCandidate)
+                .where(MarketScannerCandidate.id == candidate_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if candidate is None:
+                return None
+
+            candidate.diagnostics_json = diagnostics_json
+            session.add(candidate)
+            session.commit()
+            session.refresh(candidate)
+            return candidate
+
     def update_run(
         self,
         run_id: int,

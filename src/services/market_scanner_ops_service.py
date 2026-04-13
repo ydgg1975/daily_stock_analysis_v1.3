@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from zoneinfo import ZoneInfo
 
 from src.config import Config, get_config
-from src.core.scanner_profile import get_scanner_profile
+from src.core.scanner_profile import get_scanner_profile, get_scanner_profile_by_key
 from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
 from src.notification import NotificationService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
@@ -75,7 +75,7 @@ class MarketScannerOperationsService:
         force_run: bool = False,
     ) -> Dict[str, Any]:
         profile = getattr(self.config, "scanner_profile", "cn_preopen_v1") or "cn_preopen_v1"
-        resolved_profile = get_scanner_profile(market="cn", profile=profile)
+        resolved_profile = get_scanner_profile_by_key(profile)
         watchlist_date = self._resolve_watchlist_date(resolved_profile.market)
 
         if (
@@ -150,7 +150,7 @@ class MarketScannerOperationsService:
                     profile_label=resolved_profile.label,
                     universe_name=resolved_profile.universe_name,
                     status="empty",
-                    headline="今日 A 股盘前未筛出满足条件的观察名单",
+                    headline=self._build_empty_headline(resolved_profile.market),
                     trigger_mode=trigger_mode,
                     request_source=request_source,
                     watchlist_date=watchlist_date,
@@ -159,9 +159,9 @@ class MarketScannerOperationsService:
                         "empty_reason": message,
                     },
                     universe_notes=[
-                        "本次运行未筛出满足条件的候选。可复核当日市场活跃度、流动性过滤条件与历史样本完备性。",
+                        self._build_empty_note(resolved_profile.market),
                     ],
-                    scoring_notes=self.scanner_service._build_scoring_notes(),
+                    scoring_notes=self.scanner_service._build_scoring_notes(profile=resolved_profile),
                     shortlist=[],
                 )
             else:
@@ -224,6 +224,18 @@ class MarketScannerOperationsService:
                 "详细评估阶段未留下有效候选",
             )
         )
+
+    @staticmethod
+    def _build_empty_headline(market: str) -> str:
+        if (market or "").strip().lower() == "us":
+            return "今日美股盘前未筛出满足条件的观察名单"
+        return "今日 A 股盘前未筛出满足条件的观察名单"
+
+    @staticmethod
+    def _build_empty_note(market: str) -> str:
+        if (market or "").strip().lower() == "us":
+            return "本次运行未筛出满足条件的美股候选。可复核本地 US universe、流动性阈值、趋势条件与实时 quote 可用性。"
+        return "本次运行未筛出满足条件的候选。可复核当日市场活跃度、流动性过滤条件与历史样本完备性。"
 
     def _resolve_watchlist_date(self, market: str) -> str:
         tz_name = MARKET_TIMEZONE.get((market or "").strip().lower(), "Asia/Shanghai")
@@ -296,7 +308,8 @@ class MarketScannerOperationsService:
     def build_watchlist_notification(detail: Dict[str, Any]) -> str:
         watchlist_date = detail.get("watchlist_date") or detail.get("run_at", "")[:10]
         profile_label = detail.get("profile_label") or detail.get("profile") or "Scanner"
-        headline = detail.get("headline") or "A 股盘前观察名单"
+        market = str(detail.get("market") or "").strip().lower()
+        headline = detail.get("headline") or ("美股盘前观察名单" if market == "us" else "A 股盘前观察名单")
         status = str(detail.get("status") or "completed")
         shortlist = detail.get("shortlist") or []
         diagnostics = detail.get("diagnostics") if isinstance(detail.get("diagnostics"), dict) else {}

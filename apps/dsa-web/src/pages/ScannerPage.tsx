@@ -24,6 +24,20 @@ import type {
 } from '../types/scanner';
 
 const HISTORY_PAGE_SIZE = 6;
+const PROFILE_DEFAULTS = {
+  cn: {
+    profile: 'cn_preopen_v1',
+    shortlistSize: '5',
+    universeLimit: '300',
+    detailLimit: '60',
+  },
+  us: {
+    profile: 'us_preopen_v1',
+    shortlistSize: '5',
+    universeLimit: '180',
+    detailLimit: '40',
+  },
+} as const;
 
 function formatTimestamp(value?: string | null): string {
   if (!value) return '--';
@@ -80,6 +94,20 @@ function thesisVariant(label?: string | null): 'success' | 'warning' | 'danger' 
   return 'history';
 }
 
+function aiStatusVariant(status?: string | null): 'success' | 'info' | 'warning' | 'danger' | 'history' {
+  if (status === 'generated') return 'success';
+  if (status === 'skipped') return 'warning';
+  if (status === 'failed') return 'danger';
+  if (status === 'disabled' || status === 'unavailable') return 'history';
+  return 'info';
+}
+
+function marketBadgeVariant(market?: string | null): 'info' | 'success' | 'history' {
+  if (market === 'us') return 'success';
+  if (market === 'cn') return 'info';
+  return 'history';
+}
+
 function formatPercent(value?: number | null, digits = 1): string {
   if (value == null || Number.isNaN(value)) return '--';
   return `${value.toFixed(digits)}%`;
@@ -126,6 +154,7 @@ const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
 
+  const [market, setMarket] = useState<'cn' | 'us'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
   const [shortlistSize, setShortlistSize] = useState('5');
   const [universeLimit, setUniverseLimit] = useState('300');
@@ -149,6 +178,68 @@ const ScannerPage: React.FC = () => {
     document.title = t('scanner.documentTitle');
   }, [t]);
 
+  const profileOptions = useMemo(() => (
+    market === 'us'
+      ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
+      : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
+  ), [market, t]);
+
+  const universeOptions = useMemo(() => (
+    market === 'us'
+      ? [
+        { value: '120', label: '120' },
+        { value: '180', label: '180' },
+        { value: '240', label: '240' },
+      ]
+      : [
+        { value: '200', label: '200 只' },
+        { value: '300', label: '300 只' },
+        { value: '500', label: '500 只' },
+      ]
+  ), [market]);
+
+  const detailOptions = useMemo(() => (
+    market === 'us'
+      ? [
+        { value: '30', label: '30' },
+        { value: '40', label: '40' },
+        { value: '60', label: '60' },
+      ]
+      : [
+        { value: '40', label: '40 只' },
+        { value: '60', label: '60 只' },
+        { value: '80', label: '80 只' },
+      ]
+  ), [market]);
+
+  const selectedMarketCopy = useMemo(() => (
+    market === 'us'
+      ? {
+        subtitle: t('scanner.subtitleUs'),
+        universeTitle: t('scanner.universeTitleUs'),
+        universeBody: t('scanner.universeBodyUs'),
+        runHint: t('scanner.runHintUs'),
+        currentRunFallback: t('scanner.currentRunFallbackUs'),
+      }
+      : {
+        subtitle: t('scanner.subtitleCn'),
+        universeTitle: t('scanner.universeTitleCn'),
+        universeBody: t('scanner.universeBodyCn'),
+        runHint: t('scanner.runHintCn'),
+        currentRunFallback: t('scanner.currentRunFallbackCn'),
+      }
+  ), [market, t]);
+
+  const handleMarketChange = useCallback((nextMarket: string) => {
+    const normalizedMarket = nextMarket === 'us' ? 'us' : 'cn';
+    const defaults = PROFILE_DEFAULTS[normalizedMarket];
+    setMarket(normalizedMarket);
+    setProfile(defaults.profile);
+    setShortlistSize(defaults.shortlistSize);
+    setUniverseLimit(defaults.universeLimit);
+    setDetailLimit(defaults.detailLimit);
+  }, []);
+
   const loadRun = useCallback(async (runId: number) => {
     setIsLoadingRun(true);
     try {
@@ -167,7 +258,7 @@ const ScannerPage: React.FC = () => {
     setIsLoadingHistory(true);
     try {
       const response = await scannerApi.getRecentWatchlists({
-        market: 'cn',
+        market,
         profile,
         limitDays: HISTORY_PAGE_SIZE,
       });
@@ -189,12 +280,12 @@ const ScannerPage: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [loadRun, profile, selectedRunId]);
+  }, [loadRun, market, profile, selectedRunId]);
 
   const fetchStatus = useCallback(async () => {
     try {
       const response = await scannerApi.getStatus({
-        market: 'cn',
+        market,
         profile,
       });
       setStatusSummary(response);
@@ -205,7 +296,13 @@ const ScannerPage: React.FC = () => {
     } catch {
       setStatusSummary(null);
     }
-  }, [loadRun, profile, selectedRunId]);
+  }, [loadRun, market, profile, selectedRunId]);
+
+  useEffect(() => {
+    setRunDetail(null);
+    setSelectedRunId(null);
+    setSelectedCandidate(null);
+  }, [market, profile]);
 
   useEffect(() => {
     void fetchHistory(1);
@@ -216,7 +313,7 @@ const ScannerPage: React.FC = () => {
     setIsRunning(true);
     try {
       const response = await scannerApi.run({
-        market: 'cn',
+        market,
         profile,
         shortlistSize: Number.parseInt(shortlistSize, 10),
         universeLimit: Number.parseInt(universeLimit, 10),
@@ -232,7 +329,7 @@ const ScannerPage: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [detailLimit, fetchHistory, fetchStatus, profile, shortlistSize, universeLimit]);
+  }, [detailLimit, fetchHistory, fetchStatus, market, profile, shortlistSize, universeLimit]);
 
   const handleStartAnalysis = useCallback(async (candidate: ScannerCandidate) => {
     try {
@@ -260,6 +357,8 @@ const ScannerPage: React.FC = () => {
   const latestDiagnostics = (runDetail?.diagnostics || {}) as Record<string, unknown>;
   const historyStats = (latestDiagnostics.historyStats || {}) as Record<string, unknown>;
   const scannerData = (latestDiagnostics.scannerData || {}) as Record<string, unknown>;
+  const aiDiagnostics = (latestDiagnostics.aiInterpretation || {}) as Record<string, unknown>;
+  const liveQuoteStats = (latestDiagnostics.liveQuoteStats || {}) as Record<string, unknown>;
   const universeResolution = (scannerData.universeResolution || {}) as Record<string, unknown>;
   const snapshotResolution = (scannerData.snapshotResolution || {}) as Record<string, unknown>;
   const universeAttempts = Array.isArray(universeResolution.attempts)
@@ -270,12 +369,28 @@ const ScannerPage: React.FC = () => {
     : [];
   const degradedModeDefined = Object.prototype.hasOwnProperty.call(scannerData, 'degradedModeUsed');
   const degradedModeUsed = Boolean(scannerData.degradedModeUsed);
+  const aiStatus = typeof aiDiagnostics.status === 'string' ? aiDiagnostics.status : null;
+  const aiModelsUsed = Array.isArray(aiDiagnostics.modelsUsed)
+    ? aiDiagnostics.modelsUsed.map((item) => String(item)).filter((item) => item.trim().length > 0)
+    : [];
+  const aiAttemptedCandidates = typeof aiDiagnostics.attemptedCandidates === 'number' ? aiDiagnostics.attemptedCandidates : null;
+  const aiGeneratedCandidates = typeof aiDiagnostics.generatedCandidates === 'number' ? aiDiagnostics.generatedCandidates : null;
+  const liveQuoteAttemptedCandidates = typeof liveQuoteStats.attemptedCandidates === 'number' ? liveQuoteStats.attemptedCandidates : null;
+  const liveQuoteAvailableCandidates = typeof liveQuoteStats.availableCandidates === 'number' ? liveQuoteStats.availableCandidates : null;
+  const liveQuoteSources = Array.isArray(liveQuoteStats.sources)
+    ? liveQuoteStats.sources.map((item) => String(item)).filter((item) => item.trim().length > 0)
+    : [];
   const showRuntimeDiagnostics = Boolean(runDetail) && (
     typeof universeResolution.source === 'string'
     || typeof snapshotResolution.source === 'string'
     || universeAttempts.length > 0
     || snapshotAttempts.length > 0
     || degradedModeDefined
+    || aiStatus != null
+    || aiModelsUsed.length > 0
+    || aiGeneratedCandidates != null
+    || liveQuoteAvailableCandidates != null
+    || liveQuoteSources.length > 0
   );
   const lastScheduledRun = statusSummary?.lastScheduledRun || null;
   const runNotificationStatus = runDetail?.notification?.status || statusSummary?.todayWatchlist?.notificationStatus || 'not_attempted';
@@ -290,8 +405,10 @@ const ScannerPage: React.FC = () => {
 
     const comparison = runDetail.comparisonToPrevious;
     const review = runDetail.reviewSummary;
+    const exportHeadline = runDetail.headline
+      || (runDetail.market === 'us' ? t('scanner.currentRunFallbackUs') : t('scanner.currentRunFallbackCn'));
     const lines = [
-      `# ${runDetail.headline || t('scanner.currentRunFallback')}`,
+      `# ${exportHeadline}`,
       '',
       `- ${t('scanner.metricWatchlistDate')}: ${runDetail.watchlistDate || '--'}`,
       `- ${t('scanner.metricNotification')}: ${t(`scanner.notificationStatus.${runNotificationStatus}`)}`,
@@ -307,6 +424,7 @@ const ScannerPage: React.FC = () => {
         `### #${candidate.rank} ${candidate.symbol} ${candidate.name}`,
         `- Score: ${candidate.score.toFixed(1)}`,
         `- ${t('scanner.reasonListTitle')}: ${candidate.reasonSummary || '--'}`,
+        `- ${t('scanner.aiTitle')}: ${candidate.aiInterpretation?.summary || candidate.aiInterpretation?.message || '--'}`,
         `- ${t('scanner.riskTitle')}: ${(candidate.riskNotes || []).slice(0, 1).join(' / ') || '--'}`,
         `- ${t('scanner.watchTitle')}: ${(candidate.watchContext || []).slice(0, 1).map((item) => `${item.label} ${item.value}`).join(' / ') || '--'}`,
         `- ${t('scanner.reviewReturnLabel')}: ${formatSignedPercent(outcome.reviewWindowReturnPct)}`,
@@ -360,7 +478,7 @@ const ScannerPage: React.FC = () => {
         <WorkspacePageHeader
           eyebrow={t('scanner.eyebrow')}
           title={t('scanner.title')}
-          description={t('scanner.subtitle')}
+          description={selectedMarketCopy.subtitle}
         >
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
             <Card
@@ -370,12 +488,19 @@ const ScannerPage: React.FC = () => {
             >
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Select
+                  label={t('scanner.marketLabel')}
+                  value={market}
+                  onChange={handleMarketChange}
+                  options={[
+                    { value: 'cn', label: t('scanner.marketCn') },
+                    { value: 'us', label: t('scanner.marketUs') },
+                  ]}
+                />
+                <Select
                   label={t('scanner.profileLabel')}
                   value={profile}
                   onChange={setProfile}
-                  options={[
-                    { value: 'cn_preopen_v1', label: 'A股盘前扫描 v1' },
-                  ]}
+                  options={profileOptions}
                 />
                 <Select
                   label={t('scanner.shortlistLabel')}
@@ -391,21 +516,13 @@ const ScannerPage: React.FC = () => {
                   label={t('scanner.universeLabel')}
                   value={universeLimit}
                   onChange={setUniverseLimit}
-                  options={[
-                    { value: '200', label: '200 只' },
-                    { value: '300', label: '300 只' },
-                    { value: '500', label: '500 只' },
-                  ]}
+                  options={universeOptions}
                 />
                 <Select
                   label={t('scanner.detailLabel')}
                   value={detailLimit}
                   onChange={setDetailLimit}
-                  options={[
-                    { value: '40', label: '40 只' },
-                    { value: '60', label: '60 只' },
-                    { value: '80', label: '80 只' },
-                  ]}
+                  options={detailOptions}
                 />
               </div>
 
@@ -417,16 +534,16 @@ const ScannerPage: React.FC = () => {
                   </p>
                 </div>
                 <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.universeTitle')}</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{selectedMarketCopy.universeTitle}</p>
                   <p className="mt-2 text-sm leading-6 text-secondary-text">
-                    {t('scanner.universeBody')}
+                    {selectedMarketCopy.universeBody}
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-secondary-text">
-                  {t('scanner.runHint')}
+                  {selectedMarketCopy.runHint}
                 </p>
                 <Button
                   type="button"
@@ -448,6 +565,7 @@ const ScannerPage: React.FC = () => {
                 <>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={marketBadgeVariant(runDetail.market)}>{runDetail.market === 'us' ? t('scanner.marketUs') : t('scanner.marketCn')}</Badge>
                       <Badge variant="info">{runDetail.profileLabel || runDetail.profile}</Badge>
                       <Badge variant={runStatusVariant(runDetail.status)}>{t(`scanner.status.${runDetail.status}`)}</Badge>
                       {runDetail.triggerMode ? (
@@ -462,7 +580,7 @@ const ScannerPage: React.FC = () => {
                       <Badge variant={notificationVariant(runNotificationStatus)}>{`${t('scanner.notificationLabel')} ${t(`scanner.notificationStatus.${runNotificationStatus}`)}`}</Badge>
                     </div>
                     <h2 className="text-[1.05rem] text-foreground md:text-[1.15rem]">
-                      {runDetail.headline || t('scanner.currentRunFallback')}
+                      {runDetail.headline || selectedMarketCopy.currentRunFallback}
                     </h2>
                     <p className="text-sm leading-6 text-secondary-text">
                       {runDetail.sourceSummary}
@@ -692,6 +810,35 @@ const ScannerPage: React.FC = () => {
                         ))}
                       </div>
 
+                      {(candidate.aiInterpretation?.available || (candidate.aiInterpretation?.status && candidate.aiInterpretation.status !== 'skipped')) ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.aiTitle')}</p>
+                            <Badge variant={aiStatusVariant(candidate.aiInterpretation.status)}>
+                              {t(`scanner.aiStatus.${candidate.aiInterpretation.status || 'skipped'}`)}
+                            </Badge>
+                            {candidate.aiInterpretation.opportunityType ? (
+                              <Badge variant="history">{candidate.aiInterpretation.opportunityType}</Badge>
+                            ) : null}
+                          </div>
+                          {candidate.aiInterpretation.available ? (
+                            <div className="mt-2 space-y-2 text-sm leading-6">
+                              <p className="text-foreground">{candidate.aiInterpretation.summary}</p>
+                              {candidate.aiInterpretation.riskInterpretation ? (
+                                <p className="text-secondary-text">{`${t('scanner.aiRiskLabel')} · ${candidate.aiInterpretation.riskInterpretation}`}</p>
+                              ) : null}
+                              {candidate.aiInterpretation.watchPlan ? (
+                                <p className="text-secondary-text">{`${t('scanner.aiWatchLabel')} · ${candidate.aiInterpretation.watchPlan}`}</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-sm leading-6 text-secondary-text">
+                              {candidate.aiInterpretation.message || t('scanner.aiFallback')}
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+
                       <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={reviewStatusVariant(candidate.realizedOutcome.reviewStatus)}>
@@ -839,6 +986,7 @@ const ScannerPage: React.FC = () => {
                           <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={isActive ? 'info' : 'history'}>{`#${item.id}`}</Badge>
+                              <Badge variant={marketBadgeVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : t('scanner.marketCn')}</Badge>
                               {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
                               {item.triggerMode ? (
                                 <Badge variant={item.triggerMode === 'scheduled' ? 'info' : 'history'}>
@@ -854,7 +1002,7 @@ const ScannerPage: React.FC = () => {
                               <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
                             </div>
                             <p className="text-sm leading-6 text-foreground">
-                              {item.headline || t('scanner.currentRunFallback')}
+                              {item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : t('scanner.currentRunFallbackCn'))}
                             </p>
                             <p className="text-xs leading-5 text-secondary-text">
                               {item.topSymbols.join(' / ') || t('scanner.noTopSymbols')}
@@ -947,6 +1095,31 @@ const ScannerPage: React.FC = () => {
                           {`${t('scanner.degradedModeLabel')} ${degradedModeUsed ? t('scanner.degradedYes') : t('scanner.degradedNo')}`}
                         </div>
                       ) : null}
+                      {aiStatus ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          {`${t('scanner.aiStatusLabel')} ${t(`scanner.aiStatus.${aiStatus}`)}`}
+                        </div>
+                      ) : null}
+                      {aiGeneratedCandidates != null && aiAttemptedCandidates != null ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          {`${t('scanner.aiCoverageLabel')} ${aiGeneratedCandidates}/${aiAttemptedCandidates}`}
+                        </div>
+                      ) : null}
+                      {aiModelsUsed.length ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          {`${t('scanner.aiModelLabel')} ${aiModelsUsed.join(' / ')}`}
+                        </div>
+                      ) : null}
+                      {liveQuoteAvailableCandidates != null && liveQuoteAttemptedCandidates != null ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          {`${t('scanner.liveQuoteCoverageLabel')} ${liveQuoteAvailableCandidates}/${liveQuoteAttemptedCandidates}`}
+                        </div>
+                      ) : null}
+                      {liveQuoteSources.length ? (
+                        <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                          {`${t('scanner.liveQuoteSourceLabel')} ${liveQuoteSources.join(' / ')}`}
+                        </div>
+                      ) : null}
                       {universeAttempts.length ? (
                         <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
                           {`${t('scanner.universeAttemptsLabel')} ${universeAttempts.join(' / ')}`}
@@ -1015,6 +1188,48 @@ const ScannerPage: React.FC = () => {
               {selectedCandidate.keyMetrics.map((metric) => (
                 <MetricPair key={`${selectedCandidate.symbol}-${metric.label}`} label={metric.label} value={metric.value} />
               ))}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.aiTitle')}</p>
+                <Badge variant={aiStatusVariant(selectedCandidate.aiInterpretation.status)}>
+                  {t(`scanner.aiStatus.${selectedCandidate.aiInterpretation.status || 'skipped'}`)}
+                </Badge>
+                {selectedCandidate.aiInterpretation.opportunityType ? (
+                  <Badge variant="history">{selectedCandidate.aiInterpretation.opportunityType}</Badge>
+                ) : null}
+              </div>
+              {selectedCandidate.aiInterpretation.available ? (
+                <div className="space-y-2">
+                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                    <span className="text-foreground">{t('scanner.aiSummaryLabel')}</span>
+                    <span className="mx-2 text-muted-text">·</span>
+                    <span>{selectedCandidate.aiInterpretation.summary || '--'}</span>
+                  </div>
+                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                    <span className="text-foreground">{t('scanner.aiRiskLabel')}</span>
+                    <span className="mx-2 text-muted-text">·</span>
+                    <span>{selectedCandidate.aiInterpretation.riskInterpretation || '--'}</span>
+                  </div>
+                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                    <span className="text-foreground">{t('scanner.aiWatchLabel')}</span>
+                    <span className="mx-2 text-muted-text">·</span>
+                    <span>{selectedCandidate.aiInterpretation.watchPlan || '--'}</span>
+                  </div>
+                  {(selectedCandidate.aiInterpretation.reviewCommentary || selectedCandidate.realizedOutcome.reviewStatus !== 'pending') ? (
+                    <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-2 text-sm leading-6 text-secondary-text">
+                      <span className="text-foreground">{t('scanner.aiReviewLabel')}</span>
+                      <span className="mx-2 text-muted-text">·</span>
+                      <span>{selectedCandidate.aiInterpretation.reviewCommentary || t('scanner.aiReviewPending')}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-3 py-3 text-sm leading-6 text-secondary-text">
+                  {selectedCandidate.aiInterpretation.message || t('scanner.aiFallback')}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">

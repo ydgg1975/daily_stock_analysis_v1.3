@@ -934,17 +934,66 @@ class GeminiAnalyzer:
             Response text, or None if the LLM call fails (error is logged).
         """
         try:
-            result = self._call_litellm(
+            result = self.generate_text_with_meta(
                 prompt,
-                generation_config={"max_tokens": max_tokens, "temperature": temperature},
+                max_tokens=max_tokens,
+                temperature=temperature,
             )
-            if isinstance(result, tuple):
-                text, model_used, usage, _attempt_trace = result
-                persist_llm_usage(usage, model_used, call_type="market_review")
-                return text
-            return result
+            return result["text"] if isinstance(result, dict) else None
         except Exception as exc:
             logger.error("[generate_text] LLM call failed: %s", exc)
+            return None
+
+    def generate_text_with_meta(
+        self,
+        prompt: str,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+        *,
+        system_prompt: Optional[str] = None,
+        call_type: str = "market_review",
+    ) -> Optional[Dict[str, Any]]:
+        """Public text generation entry with model/usage diagnostics."""
+        try:
+            call_kwargs: Dict[str, Any] = {
+                "generation_config": {"max_tokens": max_tokens, "temperature": temperature},
+            }
+            if system_prompt is not None:
+                call_kwargs["system_prompt"] = system_prompt
+
+            response = self._call_litellm(prompt, **call_kwargs)
+            text: Optional[str]
+            model_used: str
+            usage: Dict[str, Any]
+            attempt_trace: List[Dict[str, Any]]
+
+            if isinstance(response, tuple):
+                if len(response) == 4:
+                    text, model_used, usage, attempt_trace = response
+                elif len(response) == 3:
+                    text, model_used, usage = response
+                    attempt_trace = []
+                else:
+                    raise ValueError(f"Unexpected _call_litellm tuple length: {len(response)}")
+            else:
+                text = response
+                model_used = str(getattr(get_config(), "litellm_model", "") or "")
+                usage = {}
+                attempt_trace = []
+
+            if not text:
+                return None
+            persist_llm_usage(usage, model_used, call_type=call_type)
+            provider = model_used.split("/", 1)[0] if "/" in model_used else model_used
+            return {
+                "text": text,
+                "model": model_used,
+                "provider": provider,
+                "usage": usage,
+                "attempt_trace": attempt_trace,
+            }
+        except Exception as exc:
+            logger.error("[generate_text_with_meta] LLM call failed: %s", exc)
             return None
 
     def analyze(

@@ -8,10 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.notification import NotificationChannel
+from src.repositories.stock_repo import StockRepository
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager
-from tests.test_market_scanner_service import FakeScannerDataManager
+from tests.test_market_scanner_service import FakeScannerDataManager, FakeUsScannerDataManager, seed_us_local_history
 
 
 class FakeNotifier:
@@ -222,6 +223,33 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
             ["akshare_snapshot_fetch_failed", "efinance_snapshot_fetch_failed"],
         )
         self.assertIn("snapshot_attempts=", detail["source_summary"])
+
+    def test_scheduled_run_resolves_us_profile_from_config(self) -> None:
+        stock_repo = StockRepository(self.db)
+        seed_us_local_history(stock_repo)
+        us_scanner_service = MarketScannerService(self.db, data_manager=FakeUsScannerDataManager())
+        ops_service = MarketScannerOperationsService(
+            scanner_service=us_scanner_service,
+            config=_make_config(
+                scanner_profile="us_preopen_v1",
+                scanner_schedule_enabled=True,
+                scanner_notification_enabled=False,
+            ),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        detail = ops_service.run_scheduled_scan(force_run=True)
+
+        self.assertEqual(detail["market"], "us")
+        self.assertEqual(detail["profile"], "us_preopen_v1")
+        self.assertEqual(detail["trigger_mode"], "scheduled")
+        self.assertTrue(detail["headline"].startswith("今日美股盘前优先观察："))
+        self.assertEqual(detail["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
+
+        status = ops_service.get_operational_status(market="us", profile="us_preopen_v1")
+        self.assertEqual(status["market"], "us")
+        self.assertEqual(status["profile"], "us_preopen_v1")
+        self.assertEqual(status["today_watchlist"]["id"], detail["id"])
 
 
 if __name__ == "__main__":

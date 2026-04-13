@@ -1,8 +1,8 @@
-# Market Scanner (A-share Pre-open)
+# Market Scanner (A-share + US Pre-open)
 
 ## Product Boundary
 
-Market Scanner is a distinct WolfyStock product capability for answering one question before the China market opens:
+Market Scanner is a distinct WolfyStock product capability for answering one question before the market opens:
 
 > What should I watch today before the open?
 
@@ -26,7 +26,12 @@ Current entry points:
 
 ## Scope In This Phase
 
-The first production version is intentionally **A-share first**:
+The current production scope now includes two explicit market profiles:
+
+- `cn_preopen_v1`: the original A-share pre-open scanner and the default
+- `us_preopen_v1`: a new US pre-open scanner focused on practical watchlist generation
+
+Shared behavior remains intentionally stable:
 
 - separate run panel and result flow
 - shortlist-first UI instead of a raw backend table
@@ -37,7 +42,7 @@ The first production version is intentionally **A-share first**:
   - stock Q&A
   - backtest with prefilled symbol
 
-The codebase already includes a future US profile extension point, but US implementation is not the focus of this phase.
+A-share remains the default A-share-first experience, while the US profile is added as a clearly separate scanner profile without changing A-share ranking behavior.
 
 ## A-share Universe Definition
 
@@ -149,6 +154,108 @@ Each shortlisted candidate includes:
 
 The output should be read as a pre-open watchlist, not as an execution engine.
 
+## AI Interpretation Layer (Phase 1)
+
+Without changing the existing A-share `cn_preopen_v1` rule-based ranking, Scanner now supports an **optional AI interpretation layer**.
+
+Its role is intentionally secondary:
+
+- explain why a deterministic shortlist candidate is interesting today
+- translate scanner reasons into trader-friendly language
+- summarize the main risk and what to watch before/after the open
+- add a light post-close review note when realized review data is available
+
+It does **not**:
+
+- replace the original `rank / score`
+- become the first-pass selector or primary ranking logic
+- block Scanner when AI is unavailable
+- generate auto-trading or execution instructions
+
+### Current AI Output Surface
+
+The current implementation only interprets the top N shortlisted candidates, with a default cap of `3`. Candidate detail now includes:
+
+- `AI summary`
+- `opportunity type`
+- `AI risk interpretation`
+- `AI watch plan`
+- `AI review commentary` (only when review data is ready)
+
+Deterministic fields such as `reason summary / reasons / risk notes / watch context` remain visible alongside the AI layer so users can compare both interpretations directly.
+
+### Fallback And Diagnostics
+
+AI is additive rather than mandatory:
+
+- if `SCANNER_AI_ENABLED=false`, Scanner remains fully rule-based
+- if the AI provider/model is unavailable, the UI shows an explicit fallback message instead of a vague failure
+- `/scanner` runtime diagnostics show whether AI ran, how many candidates were covered, which model was used, and whether fallback occurred
+
+### AI Configuration
+
+- `SCANNER_AI_ENABLED`
+- `SCANNER_AI_TOP_N`
+
+The recommended default is still a small bounded top-N coverage to keep latency and cost predictable.
+
+## US Scanner Profile (Phase 2)
+
+Without changing the original A-share `cn_preopen_v1` ranking path, Scanner now adds a separate `us_preopen_v1` profile.
+
+Its role is still bounded:
+
+- it is still a Scanner capability rather than a Backtest or execution module
+- deterministic scoring remains the primary shortlist generator
+- AI, when enabled, stays secondary and optional
+- the first US version favors correctness and structure over full A-share feature parity
+
+### US Universe And Data Assumptions
+
+The first US profile uses a **local-first bounded universe**:
+
+1. `LOCAL_US_PARQUET_DIR` when available
+2. `US_STOCK_PARQUET_DIR` as a compatibility fallback
+3. local `stock_daily` rows that already contain US ticker history
+
+The scanner does not try to blind-scan the internet for a first-pass universe. It only evaluates locally available US history candidates.
+
+The current filters remove:
+
+- ultra-low-price names
+- insufficient 20-day average dollar volume
+- insufficient 20-day average share volume
+- insufficient history length
+- the benchmark ticker itself (currently `SPY`) from the candidate ranking set
+
+### What The US Profile Optimizes For
+
+`us_preopen_v1` currently emphasizes:
+
+- liquidity
+- recent trend and momentum continuation
+- volatility / tradability
+- benchmark-relative behavior versus `SPY`
+- optional live-quote / gap context
+
+If live quotes are unavailable, the scanner still returns a shortlist and explicitly marks the run as more history-driven in diagnostics and risk notes.
+
+### UX And Market Context
+
+The `/scanner` page now lets users switch explicitly between:
+
+- `A-share`
+- `US`
+
+Market/profile context is preserved in:
+
+- the active run badge set
+- recent watchlist history items
+- status / review / quality summaries
+- exported scanner summaries
+
+US reasons, risks, and watch-plan text also use market-appropriate wording such as pre-open context, gap risk, opening confirmation, and tradability instead of reusing A-share-specific phrasing.
+
 ## Risk Notes And Watch Context
 
 The first version already reflects A-share market realities:
@@ -195,12 +302,16 @@ Scanner now supports a practical pre-open daily workflow instead of only ad hoc 
 
 Scanner uses its own config surface instead of overloading the regular analysis schedule:
 
-- `SCANNER_PROFILE`
+- `SCANNER_PROFILE` (currently `cn_preopen_v1` or `us_preopen_v1`)
 - `SCANNER_SCHEDULE_ENABLED`
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
 - `SCANNER_NOTIFICATION_ENABLED`
 - `SCANNER_LOCAL_UNIVERSE_PATH`
+- `LOCAL_US_PARQUET_DIR`
+- `US_STOCK_PARQUET_DIR` (legacy compatibility name)
+- `SCANNER_AI_ENABLED`
+- `SCANNER_AI_TOP_N`
 
 The intended first operational setup is a China pre-open run such as `08:40`. Regular analysis and Scanner schedules can coexist in one process while remaining separate product capabilities.
 

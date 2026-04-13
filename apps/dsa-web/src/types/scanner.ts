@@ -21,6 +21,20 @@ export interface ScannerNotificationResult {
   sentAt?: string | null;
 }
 
+export interface ScannerAiInterpretation {
+  available: boolean;
+  status: string;
+  summary?: string | null;
+  opportunityType?: string | null;
+  riskInterpretation?: string | null;
+  watchPlan?: string | null;
+  reviewCommentary?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  generatedAt?: string | null;
+  message?: string | null;
+}
+
 export interface ScannerCandidateOutcome {
   reviewStatus: string;
   outcomeLabel: string;
@@ -113,6 +127,7 @@ export interface ScannerCandidate {
   appearedInRecentRuns: number;
   lastTradeDate?: string | null;
   scanTimestamp?: string | null;
+  aiInterpretation: ScannerAiInterpretation;
   realizedOutcome: ScannerCandidateOutcome;
   diagnostics: Record<string, unknown>;
 }

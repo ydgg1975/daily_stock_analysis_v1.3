@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class ScannerRunRequest(BaseModel):
-    market: Literal["cn", "us"] = Field("cn", description="目标市场，当前阶段仅实现 cn")
+    market: Literal["cn", "us"] = Field("cn", description="目标市场，当前阶段实现 cn 与 us profile")
     profile: Optional[str] = Field(None, description="扫描配置 key，默认按市场选择")
     shortlist_size: int = Field(5, ge=1, le=20, description="输出观察名单数量")
     universe_limit: Optional[int] = Field(None, ge=50, le=1000, description="进入详细评估前的候选池上限")
@@ -29,6 +29,20 @@ class ScannerNotificationResult(BaseModel):
     message: Optional[str] = None
     report_path: Optional[str] = None
     sent_at: Optional[str] = None
+
+
+class ScannerAiInterpretationResponse(BaseModel):
+    available: bool = False
+    status: str = "skipped"
+    summary: Optional[str] = None
+    opportunity_type: Optional[str] = None
+    risk_interpretation: Optional[str] = None
+    watch_plan: Optional[str] = None
+    review_commentary: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    generated_at: Optional[str] = None
+    message: Optional[str] = None
 
 
 class ScannerCandidateOutcomeResponse(BaseModel):
@@ -123,6 +137,7 @@ class ScannerCandidateResponse(BaseModel):
     appeared_in_recent_runs: int = 0
     last_trade_date: Optional[str] = None
     scan_timestamp: Optional[str] = None
+    ai_interpretation: ScannerAiInterpretationResponse = Field(default_factory=ScannerAiInterpretationResponse)
     realized_outcome: ScannerCandidateOutcomeResponse = Field(default_factory=ScannerCandidateOutcomeResponse)
     diagnostics: Dict[str, Any] = Field(default_factory=dict)
 

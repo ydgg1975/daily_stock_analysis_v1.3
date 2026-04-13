@@ -75,6 +75,18 @@ function makeRunDetail(): ScannerRunDetail {
         localHits: 10,
         networkFetches: 5,
       },
+      aiInterpretation: {
+        enabled: true,
+        status: 'completed',
+        topN: 1,
+        attemptedCandidates: 1,
+        generatedCandidates: 1,
+        failedCandidates: 0,
+        skippedCandidates: 0,
+        modelsUsed: ['gemini/gemini-2.5-flash'],
+        fallbackUsed: false,
+        message: '已为前 1 名候选生成 AI 解读。',
+      },
       scannerData: {
         universeResolution: {
           source: 'local_universe_cache',
@@ -166,6 +178,19 @@ function makeRunDetail(): ScannerRunDetail {
         appearedInRecentRuns: 1,
         lastTradeDate: '2026-04-10',
         scanTimestamp: '2026-04-13T08:30:00',
+        aiInterpretation: {
+          available: true,
+          status: 'generated',
+          summary: 'AI 认为这更像趋势延续中的临界突破，今天值得优先看竞价和开盘量能。',
+          opportunityType: '临界突破',
+          riskInterpretation: '若竞价一步到位高开过多，容易演变成冲高回落。',
+          watchPlan: '盘前先看竞价承接，开盘后确认量比是否继续维持在强势区间。',
+          reviewCommentary: '后续表现跑赢基准，说明趋势与板块共振成立。',
+          provider: 'gemini',
+          model: 'gemini/gemini-2.5-flash',
+          generatedAt: '2026-04-13T08:30:10',
+          message: null,
+        },
         realizedOutcome: {
           reviewStatus: 'ready',
           outcomeLabel: 'strong',
@@ -185,6 +210,115 @@ function makeRunDetail(): ScannerRunDetail {
         diagnostics: {
           historySource: 'local_db',
           componentScores: { trend: 18.0 },
+        },
+      },
+    ],
+  };
+}
+
+function makeUsRunDetail(): ScannerRunDetail {
+  return {
+    ...makeRunDetail(),
+    id: 202,
+    market: 'us',
+    profile: 'us_preopen_v1',
+    profileLabel: 'US Pre-open Scanner v1',
+    runAt: '2026-04-13T21:20:00',
+    completedAt: '2026-04-13T21:21:00',
+    universeName: 'us_preopen_watchlist_v1',
+    universeSize: 180,
+    preselectedSize: 40,
+    evaluatedSize: 32,
+    sourceSummary: 'universe=local_us_history; snapshot=optional_us_realtime_quote; history=local_us_first',
+    headline: '今日美股盘前优先观察：NVDA NVIDIA',
+    universeNotes: ['优先读取本地可用的 US history universe。'],
+    scoringNotes: ['流动性、趋势延续、相对强度与 gap context 共同决定排序。'],
+    diagnostics: {
+      historyStats: {
+        localHits: 4,
+        networkFetches: 0,
+      },
+      aiInterpretation: {
+        enabled: true,
+        status: 'completed',
+        topN: 1,
+        attemptedCandidates: 1,
+        generatedCandidates: 1,
+        failedCandidates: 0,
+        skippedCandidates: 0,
+        modelsUsed: ['gemini/gemini-2.5-flash'],
+        fallbackUsed: false,
+        message: '已为前 1 名候选生成 AI 解读。',
+      },
+      scannerData: {
+        universeResolution: {
+          source: 'local_db_us_history',
+          attempts: [
+            { fetcher: 'local_us_parquet_dir', status: 'failed', reasonCode: 'local_us_universe_missing' },
+            { fetcher: 'local_db_us_history', status: 'success', rows: 4 },
+          ],
+        },
+        snapshotResolution: {
+          source: 'optional_us_realtime_quote',
+          attempts: [
+            { fetcher: 'YfinanceFetcher', status: 'success', rows: 1 },
+          ],
+        },
+        degradedModeUsed: false,
+      },
+      liveQuoteStats: {
+        attemptedCandidates: 1,
+        availableCandidates: 1,
+        unavailableCandidates: 0,
+        sources: ['yfinance'],
+      },
+    },
+    shortlist: [
+      {
+        ...makeRunDetail().shortlist[0],
+        symbol: 'NVDA',
+        name: 'NVIDIA',
+        reasonSummary: '价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。',
+        reasons: [
+          '价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。',
+          '20 日与 60 日动量都保持正向，更像可跟踪的趋势延续候选。',
+        ],
+        keyMetrics: [
+          { label: 'Price', value: '964.00' },
+          { label: 'Day change', value: '1.7%' },
+          { label: '20D avg $vol', value: '$39.5B' },
+        ],
+        featureSignals: [
+          { label: 'Trend', value: '18.4 / 20' },
+          { label: 'Momentum', value: '13.2 / 16' },
+        ],
+        riskNotes: ['Gap risk 偏高，若开盘后不能延续，容易出现快速回吐。'],
+        watchContext: [
+          { label: 'Pre-open', value: '先看是否仍靠近近 20 日高点，避免强 gap 后立即走弱。' },
+          { label: 'Open check', value: '开盘后优先看成交是否延续到日内前 15 分钟。' },
+        ],
+        boards: [],
+        aiInterpretation: {
+          available: true,
+          status: 'generated',
+          summary: 'AI 认为这更像高流动性趋势延续中的 pre-open follow-through setup。',
+          opportunityType: 'Trend continuation',
+          riskInterpretation: '若 gap 太大但开盘承接不跟，容易演变成冲高回落。',
+          watchPlan: '先看 pre-open 稳定性，再看开盘前 15 分钟的成交延续。',
+          reviewCommentary: '后续表现仍跑赢基准。',
+          provider: 'gemini',
+          model: 'gemini/gemini-2.5-flash',
+          generatedAt: '2026-04-13T21:20:10',
+          message: null,
+        },
+        realizedOutcome: {
+          ...makeRunDetail().shortlist[0].realizedOutcome,
+          benchmarkCode: 'SPY',
+        },
+        diagnostics: {
+          historySource: 'local_db',
+          benchmarkCode: 'SPY',
+          componentScores: { trend: 18.4 },
         },
       },
     ],
@@ -253,6 +387,31 @@ function makeHistoryResponse(): ScannerRunHistoryResponse {
           weakestSymbol: '600001',
           weakestReturnPct: 5.8,
         },
+      },
+    ],
+  };
+}
+
+function makeUsHistoryResponse(): ScannerRunHistoryResponse {
+  return {
+    total: 1,
+    page: 1,
+    limit: 6,
+    items: [
+      {
+        ...makeHistoryResponse().items[0],
+        id: 202,
+        market: 'us',
+        profile: 'us_preopen_v1',
+        profileLabel: 'US Pre-open Scanner v1',
+        runAt: '2026-04-13T21:20:00',
+        completedAt: '2026-04-13T21:21:00',
+        universeName: 'us_preopen_watchlist_v1',
+        universeSize: 180,
+        preselectedSize: 40,
+        evaluatedSize: 32,
+        headline: '今日美股盘前优先观察：NVDA NVIDIA',
+        topSymbols: ['NVDA'],
       },
     ],
   };
@@ -333,6 +492,35 @@ function makeStatusResponse(): ScannerOperationalStatus {
   };
 }
 
+function makeUsStatusResponse(): ScannerOperationalStatus {
+  return {
+    ...makeStatusResponse(),
+    market: 'us',
+    profile: 'us_preopen_v1',
+    profileLabel: 'US Pre-open Scanner v1',
+    scheduleTime: '21:20',
+    todayWatchlist: {
+      ...makeStatusResponse().todayWatchlist!,
+      id: 202,
+      headline: '今日美股盘前优先观察：NVDA NVIDIA',
+    },
+    lastRun: {
+      ...makeStatusResponse().lastRun!,
+      id: 202,
+      headline: '今日美股盘前优先观察：NVDA NVIDIA',
+    },
+    lastScheduledRun: {
+      ...makeStatusResponse().lastScheduledRun!,
+      id: 202,
+      headline: '今日美股盘前优先观察：NVDA NVIDIA',
+    },
+    qualitySummary: {
+      ...makeStatusResponse().qualitySummary,
+      benchmarkCode: 'SPY',
+    },
+  };
+}
+
 function renderScannerPage() {
   return render(
     <UiLanguageProvider>
@@ -367,6 +555,8 @@ describe('ScannerPage', () => {
 
     expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
     expect(screen.getByText('AI算力')).toBeInTheDocument();
+    expect(screen.getAllByText('AI 解读').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/临界突破/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('2026-04-13').length).toBeGreaterThan(0);
     expect(screen.getAllByText('推送成功').length).toBeGreaterThan(0);
     expect(screen.getAllByText('定时').length).toBeGreaterThan(0);
@@ -383,7 +573,53 @@ describe('ScannerPage', () => {
 
     expect(await screen.findByText('入选原因')).toBeInTheDocument();
     expect(screen.getByText('当日收盘')).toBeInTheDocument();
+    expect(screen.getByText('AI 总结')).toBeInTheDocument();
     expect(screen.getByText('诊断信息')).toBeInTheDocument();
+  });
+
+  it('renders clear fallback copy when ai interpretation is unavailable', async () => {
+    const fallbackRunDetail: ScannerRunDetail = {
+      ...makeRunDetail(),
+      diagnostics: {
+        ...makeRunDetail().diagnostics,
+        aiInterpretation: {
+          enabled: true,
+          status: 'unavailable',
+          topN: 1,
+          attemptedCandidates: 0,
+          generatedCandidates: 0,
+          failedCandidates: 0,
+          skippedCandidates: 1,
+          modelsUsed: [],
+          fallbackUsed: false,
+          message: 'AI provider 当前不可用，scanner 已自动回退为纯规则型结果。',
+        },
+      },
+      shortlist: [
+        {
+          ...makeRunDetail().shortlist[0],
+          aiInterpretation: {
+            available: false,
+            status: 'unavailable',
+            summary: null,
+            opportunityType: null,
+            riskInterpretation: null,
+            watchPlan: null,
+            reviewCommentary: null,
+            provider: null,
+            model: null,
+            generatedAt: null,
+            message: 'AI provider 当前不可用，scanner 已自动回退为纯规则型结果。',
+          },
+        },
+      ],
+    };
+    getRun.mockResolvedValue(fallbackRunDetail);
+    runScan.mockResolvedValue(fallbackRunDetail);
+
+    renderScannerPage();
+
+    expect(await screen.findByText('AI provider 当前不可用，scanner 已自动回退为纯规则型结果。')).toBeInTheDocument();
   });
 
   it('runs the scanner and renders the returned shortlist', async () => {
@@ -417,6 +653,47 @@ describe('ScannerPage', () => {
       });
     });
     expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
+  });
+
+  it('supports switching to the US profile and preserves market-specific defaults', async () => {
+    getRecentWatchlists.mockImplementation(async (params?: { market?: string }) => (
+      params?.market === 'us' ? makeUsHistoryResponse() : makeHistoryResponse()
+    ));
+    getStatus.mockImplementation(async (params?: { market?: string }) => (
+      params?.market === 'us' ? makeUsStatusResponse() : makeStatusResponse()
+    ));
+    runScan.mockResolvedValue(makeUsRunDetail());
+
+    renderScannerPage();
+
+    expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'us' } });
+
+    expect(screen.getByText('US Universe')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(getStatus).toHaveBeenLastCalledWith({
+        market: 'us',
+        profile: 'us_preopen_v1',
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '运行扫描' }));
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith({
+        market: 'us',
+        profile: 'us_preopen_v1',
+        shortlistSize: 5,
+        universeLimit: 180,
+        detailLimit: 40,
+      });
+    });
+
+    expect(await screen.findByText('NVDA')).toBeInTheDocument();
+    expect(screen.getAllByText('美股').length).toBeGreaterThan(0);
+    expect(screen.getByText(/SPY/)).toBeInTheDocument();
   });
 
   it('starts deeper analysis from a shortlist candidate', async () => {

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -216,6 +217,159 @@ class StructuredScannerDataManager(FakeScannerDataManager):
         if isinstance(attempts, list):
             cloned["attempts"] = [dict(item) for item in attempts]
         return cloned
+
+
+class FakeScannerAiService:
+    def interpret_shortlist(self, *, profile, candidates):  # noqa: ANN001
+        enriched = [dict(candidate) for candidate in candidates]
+        for candidate in enriched:
+            diagnostics = dict(candidate.get("_diagnostics") or {})
+            ai_payload = {
+                "status": "generated",
+                "summary": f"{candidate['symbol']} 更像趋势延续中的临界突破观察。",
+                "opportunity_type": "临界突破",
+                "risk_interpretation": "若竞价过高且量能不跟，容易冲高回落。",
+                "watch_plan": "盘前看竞价承接，开盘后看量比是否维持强势。",
+                "review_commentary": None,
+                "provider": "fake",
+                "model": "fake/scanner-ai",
+                "generated_at": "2026-04-13T08:30:00",
+                "message": None,
+                "fallback_used": False,
+                "attempt_trace": [],
+                "review_commentary_status": "pending_review_data",
+            }
+            diagnostics["ai_interpretation"] = ai_payload
+            candidate["_diagnostics"] = diagnostics
+            candidate["ai_interpretation"] = {
+                "available": True,
+                "status": "generated",
+                "summary": ai_payload["summary"],
+                "opportunity_type": ai_payload["opportunity_type"],
+                "risk_interpretation": ai_payload["risk_interpretation"],
+                "watch_plan": ai_payload["watch_plan"],
+                "review_commentary": None,
+                "provider": ai_payload["provider"],
+                "model": ai_payload["model"],
+                "generated_at": ai_payload["generated_at"],
+                "message": None,
+            }
+        return enriched, {
+            "enabled": True,
+            "status": "completed",
+            "top_n": len(enriched),
+            "attempted_candidates": len(enriched),
+            "generated_candidates": len(enriched),
+            "failed_candidates": 0,
+            "skipped_candidates": 0,
+            "models_used": ["fake/scanner-ai"],
+            "fallback_used": False,
+            "message": f"已为前 {len(enriched)} 名候选生成 AI 解读。",
+        }
+
+    def enrich_review_commentary(self, *, profile, candidate, realized_outcome):  # noqa: ANN001
+        _ = profile, realized_outcome
+        diagnostics = candidate.get("diagnostics") if isinstance(candidate.get("diagnostics"), dict) else {}
+        ai_payload = diagnostics.get("ai_interpretation") if isinstance(diagnostics.get("ai_interpretation"), dict) else None
+        if not isinstance(ai_payload, dict) or ai_payload.get("review_commentary"):
+            return ai_payload
+        ai_payload = dict(ai_payload)
+        ai_payload["review_commentary"] = "后续表现验证了量能和趋势共振。"
+        ai_payload["review_commentary_status"] = "generated"
+        return ai_payload
+
+    @staticmethod
+    def public_payload_from_diagnostics(payload):  # noqa: ANN001
+        if not isinstance(payload, dict):
+            return {
+                "available": False,
+                "status": "skipped",
+                "summary": None,
+                "opportunity_type": None,
+                "risk_interpretation": None,
+                "watch_plan": None,
+                "review_commentary": None,
+                "provider": None,
+                "model": None,
+                "generated_at": None,
+                "message": None,
+            }
+        return {
+            "available": payload.get("status") == "generated",
+            "status": payload.get("status"),
+            "summary": payload.get("summary"),
+            "opportunity_type": payload.get("opportunity_type"),
+            "risk_interpretation": payload.get("risk_interpretation"),
+            "watch_plan": payload.get("watch_plan"),
+            "review_commentary": payload.get("review_commentary"),
+            "provider": payload.get("provider"),
+            "model": payload.get("model"),
+            "generated_at": payload.get("generated_at"),
+            "message": payload.get("message"),
+        }
+
+
+class FakeUsScannerDataManager(FakeScannerDataManager):
+    def __init__(self):
+        super().__init__()
+        self._last_realtime_quote_trace: list[dict] = []
+        self.us_quotes = {
+            "NVDA": SimpleNamespace(
+                price=964.0,
+                pre_close=908.0,
+                change_pct=6.17,
+                volume=41_000_000,
+                amount=3.95e10,
+                name="NVIDIA",
+                source=SimpleNamespace(value="yfinance"),
+            ),
+            "AAPL": SimpleNamespace(
+                price=212.8,
+                pre_close=199.4,
+                change_pct=6.72,
+                volume=36_500_000,
+                amount=7.72e9,
+                name="Apple",
+                source=SimpleNamespace(value="yfinance"),
+            ),
+            "PLTR": SimpleNamespace(
+                price=27.4,
+                pre_close=25.6,
+                change_pct=7.03,
+                volume=28_000_000,
+                amount=7.67e8,
+                name="Palantir",
+                source=SimpleNamespace(value="yfinance"),
+            ),
+        }
+
+    def get_realtime_quote(self, symbol: str):
+        normalized = str(symbol or "").upper()
+        quote = self.us_quotes.get(normalized)
+        if quote is None:
+            self._last_realtime_quote_trace = [
+                {"fetcher": "YfinanceFetcher", "status": "failed", "reason_code": "quote_missing"}
+            ]
+            return None
+        self._last_realtime_quote_trace = [
+            {"fetcher": "YfinanceFetcher", "status": "success", "symbol": normalized}
+        ]
+        return quote
+
+    def get_last_realtime_quote_trace(self):
+        return list(self._last_realtime_quote_trace)
+
+
+def seed_us_local_history(stock_repo: StockRepository) -> None:
+    fixtures = {
+        "SPY": _make_history(start_price=485.0, slope=0.35, amount_base=3.4e10, volume_base=78_000_000, bars=130),
+        "NVDA": _make_history(start_price=710.0, slope=2.15, amount_base=2.9e10, volume_base=48_000_000, bars=130),
+        "AAPL": _make_history(start_price=175.0, slope=0.24, amount_base=8.1e9, volume_base=39_000_000, bars=130),
+        "PLTR": _make_history(start_price=18.0, slope=0.13, amount_base=7.6e8, volume_base=34_000_000, bars=130),
+        "SOFI": _make_history(start_price=6.8, slope=0.03, amount_base=1.2e7, volume_base=950_000, bars=130),
+    }
+    for code, dataframe in fixtures.items():
+        stock_repo.save_dataframe(dataframe.copy(), code, data_source="LocalUsFixture")
 
 
 class FetcherStub(BaseFetcher):
@@ -432,9 +586,92 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
         self.assertEqual(detail["shortlist"][0]["appeared_in_recent_runs"], 0)
 
-    def test_run_scan_rejects_unimplemented_market_profile(self) -> None:
+    def test_run_scan_ai_interpretation_remains_additive_to_ranking(self) -> None:
+        baseline_service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+        )
+        baseline_result = baseline_service.run_scan(
+            market="cn",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+        )
+        baseline_signature = [
+            (item["symbol"], item["rank"], round(float(item["score"]), 4))
+            for item in baseline_result["shortlist"]
+        ]
+
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=FakeScannerAiService(),
+        )
+
+        result = service.run_scan(
+            market="cn",
+            shortlist_size=3,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        self.assertEqual(
+            [
+                (item["symbol"], item["rank"], round(float(item["score"]), 4))
+                for item in result["shortlist"]
+            ],
+            baseline_signature,
+        )
+        self.assertEqual(result["diagnostics"]["ai_interpretation"]["status"], "completed")
+        self.assertTrue(result["shortlist"][0]["ai_interpretation"]["available"])
+        self.assertEqual(result["shortlist"][0]["ai_interpretation"]["opportunity_type"], "临界突破")
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertIn("review_commentary", detail["shortlist"][0]["ai_interpretation"])
+
+    def test_run_scan_supports_us_preopen_profile_and_preserves_market_context(self) -> None:
+        seed_us_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        result = service.run_scan(
+            market="us",
+            profile="us_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        self.assertEqual(result["market"], "us")
+        self.assertEqual(result["profile"], "us_preopen_v1")
+        self.assertTrue(result["headline"].startswith("今日美股盘前优先观察："))
+        self.assertEqual(result["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
+        self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 4)
+        self.assertGreaterEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 1)
+
+        shortlist_symbols = [item["symbol"] for item in result["shortlist"]]
+        self.assertEqual(len(shortlist_symbols), 2)
+        self.assertNotIn("SPY", shortlist_symbols)
+        self.assertIn(shortlist_symbols[0], {"NVDA", "AAPL", "PLTR"})
+        self.assertEqual(result["shortlist"][0]["diagnostics"]["benchmark_code"], "SPY")
+        self.assertTrue(any(metric["label"] == "20D avg $vol" for metric in result["shortlist"][0]["key_metrics"]))
+        self.assertTrue(any("Gap" in note or "实时" in note for note in result["shortlist"][0]["risk_notes"]))
+
+        history = service.list_runs(market="us", profile="us_preopen_v1", page=1, limit=10)
+        self.assertEqual(history["total"], 1)
+        self.assertEqual(history["items"][0]["market"], "us")
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertEqual(detail["market"], "us")
+        self.assertEqual(detail["profile_label"], "US Pre-open Scanner v1")
+
+    def test_run_scan_rejects_unknown_market_profile(self) -> None:
         with self.assertRaises(ValueError):
-            self.service.run_scan(market="us")
+            self.service.run_scan(market="hk")
 
     def test_run_scan_prefers_local_universe_cache_and_skips_online_stock_list(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()

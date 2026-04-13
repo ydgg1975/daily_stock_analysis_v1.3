@@ -29,9 +29,11 @@ class ScannerMarketProfile:
     min_turnover_rate: float = 0.8
     min_volume_ratio: float = 0.6
     min_avg_amount_20: float = 1.5e8
+    min_avg_volume_20: float = 0.0
 
     sector_context_limit: int = 10
     recent_run_limit: int = 5
+    benchmark_code: str = "000300"
 
 
 CN_A_PREOPEN_V1 = ScannerMarketProfile(
@@ -59,9 +61,23 @@ US_PREOPEN_V1 = ScannerMarketProfile(
     key="us_preopen_v1",
     market="us",
     label="US Pre-open Scanner v1",
-    description="Reserved extension point for a future US market scanner profile.",
-    implemented=False,
+    description="面向美股盘前候选发现的规则型扫描器，强调流动性、趋势延续、相对强度与可交易性。",
+    implemented=True,
     universe_name="us_preopen_watchlist_v1",
+    shortlist_size=5,
+    universe_limit=180,
+    detail_limit=40,
+    history_days=180,
+    min_history_bars=70,
+    min_price=5.0,
+    min_amount=2.5e7,
+    min_turnover_rate=0.0,
+    min_volume_ratio=0.0,
+    min_avg_amount_20=2.5e7,
+    min_avg_volume_20=1.5e6,
+    sector_context_limit=0,
+    recent_run_limit=5,
+    benchmark_code="SPY",
 )
 
 
@@ -94,3 +110,12 @@ def get_scanner_profile(*, market: str = "cn", profile: Optional[str] = None) ->
         raise ValueError(f"暂不支持市场: {market}")
     return resolved
 
+
+def get_scanner_profile_by_key(profile: str) -> ScannerMarketProfile:
+    """Resolve a scanner profile directly from its key."""
+
+    normalized_profile = (profile or "").strip().lower()
+    resolved = SCANNER_PROFILES.get(normalized_profile)
+    if resolved is None:
+        raise ValueError(f"未知扫描配置: {profile}")
+    return resolved

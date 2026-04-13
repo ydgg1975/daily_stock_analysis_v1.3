@@ -1,10 +1,10 @@
-# Market Scanner（A 股盘前扫描）
+# Market Scanner（A 股 + 美股盘前扫描）
 
 ## 产品定位
 
 Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
 
-> 今天开盘前，A 股里哪些标的值得优先观察？
+> 今天开盘前，当前市场里哪些标的值得优先观察？
 
 它和现有模块的边界如下：
 
@@ -25,7 +25,14 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
 
 ## 当前实现范围
 
-第一版 Scanner 聚焦 **中国 A 股盘前扫描**：
+当前已经落地两个明确分离的 market profile：
+
+- `cn_preopen_v1`：A 股盘前扫描，继续作为默认 profile
+- `us_preopen_v1`：美股盘前扫描，面向 pre-open shortlist / watchlist 生成
+
+它们共享 Scanner 的运行面板、持久化、schedule、notification、history/review/quality 设施，但不会被混成一个黑盒统一评分模型。
+
+当前共通能力包括：
 
 - 提供独立运行面板，不复用回测页
 - 提供 shortlist 视图，而不是原始表格 dump
@@ -36,7 +43,7 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
   - 跳转问股
   - 跳转回测并预填代码
 
-当前阶段保留了未来美股 profile 的扩展位，但不把美股作为本期交付重点。
+A 股仍然保持 A-share-first 的默认体验；美股则作为新增但清晰分离的 Scanner profile 接入，不改变已有 A 股 deterministic ranking 的主导地位。
 
 ## A 股 universe 定义
 
@@ -173,6 +180,107 @@ Scanner 输出的是“盘前观察名单”，不是自动交易命令。
 
 它用于帮助阅读顺序，不等同于买入信号强弱标签。
 
+## AI 二次解读层（Phase 1）
+
+在保持 A 股 `cn_preopen_v1` 规则型扫描不变的前提下，Scanner 现在支持一个**可选的 AI 二次解读层**。
+
+它的定位是：
+
+- 只解释 deterministic shortlist 中“为什么今天值得关注”
+- 用更接近交易员语言的方式总结机会类型、主要风险与观察计划
+- 在盘后 review 数据可用时，补一段轻量复盘点评
+
+它**不会**做的事：
+
+- 不替换原始 `rank / score`
+- 不把 AI 作为首轮选股或主排序逻辑
+- 不在 AI 不可用时阻断 Scanner
+- 不输出自动交易或执行指令
+
+### 当前 AI 输出范围
+
+当前 AI 仅对 shortlist 里的前 N 名候选做解读，默认上限为 `3`，并会在候选详情中追加：
+
+- `AI summary`
+- `opportunity type`
+- `AI risk interpretation`
+- `AI watch plan`
+- `AI review commentary`（仅在 review 数据就绪后补充）
+
+规则型字段如 `reason summary / reasons / risk notes / watch context` 会继续原样保留，方便用户并排对照 deterministic 解释与 AI 翻译层。
+
+### AI 降级与可见诊断
+
+AI 只是附加层，不是 Scanner 成功运行的前提：
+
+- 若 `SCANNER_AI_ENABLED=false`，Scanner 继续输出纯规则型 shortlist
+- 若 AI provider/model 暂时不可用，候选会显示明确 fallback 文案，而不是模糊失败
+- Web `/scanner` 的运行时诊断会显示 AI 是否启用、运行状态、覆盖候选数、使用的模型以及是否发生 fallback
+
+### AI 相关配置
+
+- `SCANNER_AI_ENABLED`
+- `SCANNER_AI_TOP_N`
+
+默认建议保持关闭或仅对少量高优先级候选启用，避免把成本和延迟扩散到整个 universe。
+
+## 美股 Scanner Profile（Phase 2）
+
+在不改变 A 股 `cn_preopen_v1` 主排序路径的前提下，Scanner 现在新增了一个独立的 `us_preopen_v1` profile。
+
+它的边界仍然清晰：
+
+- 仍然属于 Scanner，而不是 Backtest 或自动交易模块
+- 仍然先由 deterministic score 做 primary shortlist 生成
+- AI 若启用，依然只是 secondary interpretation
+- 不要求首版美股 profile 与 A 股 feature parity 完全一致，但要求结构清晰、市场语义正确
+
+### 美股 universe 与数据假设
+
+首版 `us_preopen_v1` 使用**本地优先**的 bounded universe：
+
+1. 优先从 `LOCAL_US_PARQUET_DIR`
+2. 未配置或目录缺失时回退 `US_STOCK_PARQUET_DIR`
+3. 若本地 parquet 不可用，再回退本地 `stock_daily` 里已经落库的美股日线
+
+当前默认不会为 universe 做“全网盲扫”，而是仅对本地可用的美股历史样本做解释型 scanner。
+
+同时会先过滤：
+
+- 价格过低标的
+- 20 日平均成交额不足
+- 20 日平均成交量不足
+- 历史样本不够
+- 基准 ticker（当前默认 `SPY`）不会进入候选排序本身
+
+### 美股首版关注因素
+
+`us_preopen_v1` 当前强调：
+
+- liquidity
+- recent trend / momentum continuation
+- volatility / tradability
+- benchmark-relative behavior（默认相对 `SPY`）
+- optional live quote / gap context
+
+如果 live quote 不可用，Scanner 仍会继续输出 shortlist，只是会在 risk notes 和运行时诊断里明确提示当前更偏历史视角。
+
+### 美股结果如何展示
+
+Web `/scanner` 现在可以显式切换：
+
+- 市场：`A股` / `美股`
+- 对应 profile：`cn_preopen_v1` / `us_preopen_v1`
+
+同时在以下位置保留 market/profile 上下文：
+
+- 当前 run badge
+- recent watchlists 历史项
+- status / quality / review 结果
+- 导出摘要
+
+美股候选的 reasons / risk notes / watch context 也改为使用更贴近 pre-open / gap / liquidity / open-check 的措辞，避免直接复用 A 股语义。
+
 ## 风险提示与观察触发条件
 
 第一版已经内置一些 A 股现实约束：
@@ -219,12 +327,16 @@ Scanner 现在不仅能“跑一次”，还可以支撑盘前日常工作流：
 
 Scanner 使用独立配置，不复用普通分析的调度语义：
 
-- `SCANNER_PROFILE`
+- `SCANNER_PROFILE`（当前支持 `cn_preopen_v1` / `us_preopen_v1`）
 - `SCANNER_SCHEDULE_ENABLED`
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
 - `SCANNER_NOTIFICATION_ENABLED`
 - `SCANNER_LOCAL_UNIVERSE_PATH`
+- `LOCAL_US_PARQUET_DIR`
+- `US_STOCK_PARQUET_DIR`（兼容旧变量名）
+- `SCANNER_AI_ENABLED`
+- `SCANNER_AI_TOP_N`
 
 默认建议把 A 股盘前 schedule 设在开盘前，例如 `08:40`。普通分析任务和 Scanner 可以在同一进程里并存调度，但仍然各自保持独立职责。
 
