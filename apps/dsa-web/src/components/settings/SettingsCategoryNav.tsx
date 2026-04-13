@@ -11,6 +11,7 @@ interface SettingsCategoryNavProps {
   activeCategory: string;
   onSelect: (category: string) => void;
   disabled?: boolean;
+  hideHeader?: boolean;
 }
 
 export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
@@ -19,14 +20,17 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
   activeCategory,
   onSelect,
   disabled = false,
+  hideHeader = false,
 }) => {
   const { language, t } = useI18n();
   return (
     <div className="h-full rounded-[1.5rem] border settings-border bg-card p-4 shadow-soft-card-strong">
-      <div className="mb-4">
-        <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.3em]">{t('settings.categoriesTitle')}</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-text">{t('settings.categoriesDesc')}</p>
-      </div>
+      {!hideHeader ? (
+        <div className="mb-4">
+          <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.3em]">{t('settings.categoriesTitle')}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-text">{t('settings.categoriesDesc')}</p>
+        </div>
+      ) : null}
 
       <div className="space-y-2.5">
         {categories.map((category) => {

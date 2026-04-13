@@ -6607,9 +6607,14 @@ html[data-theme] .product-empty-state {
   display: inline-flex;
   max-width: 100%;
   overflow-x: auto;
+  flex-wrap: nowrap;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .backtest-result-page__tabs .backtest-mode-toggle__button {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -6811,6 +6816,30 @@ html[data-theme] .product-empty-state {
 }
 
 @media (max-width: 767px) {
+  .backtest-header-toggles {
+    width: 100%;
+  }
+
+  .backtest-header-toggles .backtest-mode-toggle {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .backtest-header-toggles .backtest-mode-toggle__button {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .backtest-result-page__hero-actions {
+    width: 100%;
+  }
+
+  .backtest-result-page__hero-actions > * {
+    flex: 1 1 10.5rem;
+    justify-content: center;
+  }
+
   .backtest-result-viewer__metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6828,6 +6857,10 @@ html[data-theme] .product-empty-state {
   .backtest-result-viewer__dashboard.theme-card-surface,
   .backtest-result-page__hero {
     padding-inline: 0.62rem;
+  }
+
+  .backtest-result-page__hero-actions > * {
+    flex-basis: 100%;
   }
 }
 

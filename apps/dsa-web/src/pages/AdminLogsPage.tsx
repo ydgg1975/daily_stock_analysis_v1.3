@@ -170,20 +170,21 @@ const AdminLogsPage: React.FC = () => {
   return (
     <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 py-4 md:px-6">
       <section className="theme-panel-solid rounded-[1rem] border border-border/60 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,56rem)] xl:items-end">
           <div>
             <h1 className="text-lg font-semibold text-foreground">{t('adminLogs.title')}</h1>
             <p className="text-sm text-secondary-text">{t('adminLogs.subtitle')}</p>
+            <p className="mt-2 text-xs text-muted-text">{t('adminLogs.filterHint', { count: sessions.length })}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[9rem_12rem_minmax(0,1fr)_9rem_auto]">
             <input
-              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.stockFilter')}
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value)}
             />
             <select
-              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -198,13 +199,13 @@ const AdminLogsPage: React.FC = () => {
               <option value="system">{t('adminLogs.category.system')}</option>
             </select>
             <input
-              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.keywordFilter')}
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
             />
             <select
-              className="input-surface h-10 rounded-[var(--theme-control-radius)] px-3 text-sm"
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -215,7 +216,7 @@ const AdminLogsPage: React.FC = () => {
             </select>
             <button
               type="button"
-              className="btn-secondary px-3 py-1.5 text-sm"
+              className="btn-secondary h-10 px-3 py-1.5 text-sm sm:col-span-2 xl:col-span-1"
               onClick={() => void loadSessions()}
               disabled={isLoadingList}
             >
@@ -228,7 +229,7 @@ const AdminLogsPage: React.FC = () => {
       {error ? <ApiErrorAlert error={error} /> : null}
 
       <section className="grid gap-4 lg:grid-cols-[420px,minmax(0,1fr)]">
-        <div className="theme-panel-solid max-h-[72vh] overflow-y-auto rounded-[1rem] border border-border/60 p-3">
+        <div className="theme-panel-solid rounded-[1rem] border border-border/60 p-3 lg:max-h-[72vh] lg:overflow-y-auto">
           {sessions.length === 0 ? (
             <p className="px-2 py-3 text-sm text-muted-text">{t('adminLogs.noSessions')}</p>
           ) : (
@@ -282,7 +283,7 @@ const AdminLogsPage: React.FC = () => {
           )}
         </div>
 
-        <div className="theme-panel-solid max-h-[72vh] overflow-y-auto rounded-[1rem] border border-border/60 p-4">
+        <div className="theme-panel-solid rounded-[1rem] border border-border/60 p-4 lg:max-h-[72vh] lg:overflow-y-auto">
           {detailError ? <ApiErrorAlert error={detailError} /> : null}
           {isLoadingDetail ? (
             <p className="text-sm text-muted-text">{t('adminLogs.loading')}</p>

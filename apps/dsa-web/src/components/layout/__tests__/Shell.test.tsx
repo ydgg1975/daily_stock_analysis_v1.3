@@ -53,6 +53,7 @@ const ShellRailFixture = () => {
 };
 
 const settleDrawerMotion = () => new Promise((resolve) => window.setTimeout(resolve, 260));
+const settleDrawerStability = () => new Promise((resolve) => window.setTimeout(resolve, 480));
 
 describe('Shell', () => {
   it('renders the streamlined navigation and completion badge without the old theme control', () => {
@@ -129,6 +130,30 @@ describe('Shell', () => {
 
     expect(await screen.findByRole('button', { name: '切换语言' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '退出' })).toBeInTheDocument();
+  });
+
+  it('keeps the mobile navigation drawer open until the user closes it or navigates away', async () => {
+    window.innerWidth = 375;
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ThemeProvider>
+          <Shell>
+            <div>page content</div>
+          </Shell>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '打开导航菜单' }));
+    expect(await screen.findByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
+
+    await act(async () => {
+      await settleDrawerStability();
+    });
+
+    expect(screen.getByRole('heading', { name: '导航菜单' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '切换语言' })).toBeInTheDocument();
   });
 
   it('adds a dedicated content-frame modifier for the backtest route', () => {

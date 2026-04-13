@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react';
-import { Badge, Button, Checkbox } from '../../components/common';
+import { Badge, Button, Checkbox, Disclosure } from '../../components/common';
 import type {
   AssumptionMap,
   BacktestResultItem,
@@ -52,6 +52,8 @@ const HISTORICAL_STATUS_LABELS: Record<string, string> = {
   error: '执行异常',
   insufficient_data: '样本不足',
 };
+
+export { Disclosure };
 
 export function pct(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return '--';
@@ -484,17 +486,6 @@ export const Banner: React.FC<{
     </div>
     {actions ? <div className="product-banner__actions">{actions}</div> : null}
   </div>
-);
-
-export const Disclosure: React.FC<{
-  summary: React.ReactNode;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}> = ({ summary, children, defaultOpen = false }) => (
-  <details className="product-disclosure" open={defaultOpen}>
-    <summary className="product-disclosure__summary">{summary}</summary>
-    <div className="product-disclosure__body">{children}</div>
-  </details>
 );
 
 export const AssumptionList: React.FC<{

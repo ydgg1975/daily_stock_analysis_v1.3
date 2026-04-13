@@ -4,7 +4,7 @@
  * restrained text-first navigation system.
  */
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Drawer } from '../common/Drawer';
@@ -56,6 +56,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   const location = useLocation();
   const isBacktestRoute = location.pathname.startsWith('/backtest');
   const isDesktop = useIsDesktopViewport();
+  const previousPathnameRef = useRef(location.pathname);
+  const didInitializeViewportRef = useRef(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [railContent, setRailContent] = useState<React.ReactNode | null>(null);
@@ -92,7 +94,22 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    if (!mobileNavOpen && !railOpen) {
+    if (location.pathname === previousPathnameRef.current) {
+      return;
+    }
+
+    previousPathnameRef.current = location.pathname;
+    const timer = window.setTimeout(() => {
+      setMobileNavOpen(false);
+      setRailOpen(false);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!didInitializeViewportRef.current) {
+      didInitializeViewportRef.current = true;
       return;
     }
 
@@ -102,7 +119,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [isDesktop, location.pathname, mobileNavOpen, railOpen]);
+  }, [isDesktop]);
 
   return (
     <ShellRailContext.Provider value={railContextValue}>
@@ -152,6 +169,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
             width="max-w-xs"
             zIndex={90}
             side="left"
+            closeOnBackdropClick={false}
           >
             <SidebarNav
               layout="drawer"

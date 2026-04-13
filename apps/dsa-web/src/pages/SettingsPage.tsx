@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
-import { ApiErrorAlert, Button, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button, Disclosure, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
+import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
 import { useAuth, useSystemConfig } from '../hooks';
@@ -16,7 +17,7 @@ import {
   parseGatewayFromModel as parseGatewayFromModelId,
   supportsCustomModelId,
 } from '../utils/aiRouting';
-import { getCategoryDescription } from '../utils/systemConfigI18n';
+import { getCategoryDescription, getCategoryTitle } from '../utils/systemConfigI18n';
 import {
   AuthSettingsCard,
   ChangePasswordCard,
@@ -546,6 +547,7 @@ const MARKET_COLOR_OPTIONS: Array<{
 ];
 
 const SettingsPage: React.FC = () => {
+  const isDesktopViewport = useIsDesktopViewport();
   const { language, setLanguage, t } = useI18n();
   const { passwordChangeable, setupState } = useAuth();
   const { marketColorConvention, setMarketColorConvention } = useUiPreferences();
@@ -722,6 +724,22 @@ const SettingsPage: React.FC = () => {
       : activeCategory === 'agent'
         ? rawActiveItems.filter((item) => !AGENT_HIDDEN_KEYS.has(item.key))
       : rawActiveItems;
+  const activeCategoryDescription = getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc');
+  const activeCategoryLabel = getCategoryTitle(
+    language,
+    activeCategory as SystemConfigCategory,
+    categories.find((category) => category.category === activeCategory)?.title || '',
+  );
+  const shouldCollapseRawFields = ['ai_model', 'data_source', 'notification', 'system', 'base'].includes(activeCategory);
+  const rawFieldsSectionTitle = shouldCollapseRawFields
+    ? t('settings.rawFieldsSectionTitle')
+    : t('settings.currentCategory');
+  const rawFieldsSectionDescription = shouldCollapseRawFields
+    ? t('settings.rawFieldsSectionDesc')
+    : activeCategoryDescription;
+  const rawFieldsToggleLabel = activeCategory === 'ai_model'
+    ? t('settings.aiRawFieldsToggle')
+    : t('settings.rawFieldsToggle');
 
   useEffect(() => {
     const inferredDomain = categoryDomainMap.get(activeCategory) || 'advanced';
@@ -3315,18 +3333,38 @@ const SettingsPage: React.FC = () => {
             </SettingsSectionCard>
           ) : null}
 
-          <div className="workspace-split-layout">
-          <aside className="workspace-split-rail">
-            <SettingsCategoryNav
-              categories={domainCategories}
-              itemsByCategory={itemsByCategory}
-              activeCategory={activeCategory}
-              onSelect={setActiveCategory}
-              disabled={adminLocked}
-            />
-          </aside>
+          <div className={isDesktopViewport ? 'workspace-split-layout' : 'workspace-split-layout workspace-split-layout--main-only'}>
+          {isDesktopViewport ? (
+            <aside className="workspace-split-rail">
+              <SettingsCategoryNav
+                categories={domainCategories}
+                itemsByCategory={itemsByCategory}
+                activeCategory={activeCategory}
+                onSelect={setActiveCategory}
+                disabled={adminLocked}
+              />
+            </aside>
+          ) : null}
 
           <section className="workspace-split-main space-y-4">
+            {!isDesktopViewport ? (
+              <Disclosure
+                summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
+                className="settings-surface rounded-[1.5rem] border settings-border shadow-soft-card-strong"
+                bodyClassName="space-y-3"
+              >
+                <p className="text-xs leading-5 text-muted-text">{t('settings.categoriesDesc')}</p>
+                <SettingsCategoryNav
+                  categories={domainCategories}
+                  itemsByCategory={itemsByCategory}
+                  activeCategory={activeCategory}
+                  onSelect={setActiveCategory}
+                  disabled={adminLocked}
+                  hideHeader
+                />
+              </Disclosure>
+            ) : null}
+
             {saveError ? (
               <ApiErrorAlert
                 className="mt-4"
@@ -3362,32 +3400,31 @@ const SettingsPage: React.FC = () => {
 
             {activeItems.length ? (
               <SettingsSectionCard
-                title={t('settings.currentCategory')}
-                description={getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc')}
+                title={rawFieldsSectionTitle}
+                description={rawFieldsSectionDescription}
               >
-                {activeCategory === 'ai_model' ? (
-                  <details className="group rounded-xl border border-border/50 bg-base/40 px-3 py-3">
-                    <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
-                      {t('settings.aiRawFieldsToggle')}
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {activeItems.map((item) => (
-                        <SettingsField
-                          key={item.key}
-                          item={item}
-                          value={item.value}
-                          disabled={isSaving || adminLocked}
-                          onChange={(key, value) => {
-                            if (adminLocked) {
-                              return;
-                            }
-                            setDraftValue(key, value);
-                          }}
-                          issues={issueByKey[item.key] || []}
-                        />
-                      ))}
-                    </div>
-                  </details>
+                {shouldCollapseRawFields ? (
+                  <Disclosure
+                    summary={rawFieldsToggleLabel}
+                    className="rounded-xl border border-border/50 bg-base/40"
+                    bodyClassName="space-y-3"
+                  >
+                    {activeItems.map((item) => (
+                      <SettingsField
+                        key={item.key}
+                        item={item}
+                        value={item.value}
+                        disabled={isSaving || adminLocked}
+                        onChange={(key, value) => {
+                          if (adminLocked) {
+                            return;
+                          }
+                          setDraftValue(key, value);
+                        }}
+                        issues={issueByKey[item.key] || []}
+                      />
+                    ))}
+                  </Disclosure>
                 ) : (
                   activeItems.map((item) => (
                     <SettingsField
@@ -3408,14 +3445,12 @@ const SettingsPage: React.FC = () => {
               </SettingsSectionCard>
             ) : (
               <div className="settings-panel-muted rounded-[1.5rem] border p-5 shadow-soft-card">
-                <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">
-                  {t('settings.currentCategory')}
-                </p>
+                <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">
                   {t('settings.noItems')}
                 </p>
                 <p className="mt-2 text-xs leading-6 text-muted-text">
-                  {getCategoryDescription(language, activeCategory as SystemConfigCategory, '') || t('settings.currentCategoryDesc')}
+                  {activeCategoryDescription}
                 </p>
               </div>
             )}

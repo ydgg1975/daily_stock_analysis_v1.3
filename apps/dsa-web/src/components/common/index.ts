@@ -4,6 +4,7 @@ export * from './Checkbox';
 export { Input } from './Input';
 export * from './EyeToggleIcon';
 export * from './Drawer';
+export * from './Disclosure';
 export * from './ScrollArea';
 export * from './ApiErrorAlert';
 export * from './ScoreGauge';

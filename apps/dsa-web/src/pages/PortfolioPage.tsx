@@ -4,7 +4,7 @@ import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recha
 import { portfolioApi } from '../api/portfolio';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
-import { ApiErrorAlert, Card, Badge, ConfirmDialog, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Card, Badge, ConfirmDialog, Disclosure, WorkspacePageHeader } from '../components/common';
 import { toDateInputValue } from '../utils/format';
 import { getMarketDirectionColor } from '../utils/marketColors';
 import type {
@@ -729,6 +729,20 @@ const PortfolioPage: React.FC = () => {
       }
     }
   };
+  const showOperationsDisclosureByDefault = !hasAccounts
+    || showCreateAccount
+    || Boolean(accountCreateError)
+    || Boolean(accountCreateSuccess)
+    || Boolean(csvParseResult)
+    || Boolean(csvCommitResult);
+  const showEventAuditDisclosureByDefault = eventLoading
+    || currentEventCount > 0
+    || Boolean(eventDateFrom)
+    || Boolean(eventDateTo)
+    || Boolean(eventSymbol)
+    || Boolean(eventSide)
+    || Boolean(eventDirection)
+    || Boolean(eventActionType);
 
   return (
     <div className="workspace-page workspace-page--portfolio">
@@ -1030,270 +1044,284 @@ const PortfolioPage: React.FC = () => {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-        <Card padding="md">
-          <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：交易</h3>
-          <form className="space-y-2" onSubmit={handleTradeSubmit}>
-            <input className="input-terminal w-full text-sm" placeholder="股票代码（例如 600519）" value={tradeForm.symbol}
-              onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="date" value={tradeForm.tradeDate}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
-              <select className="input-terminal text-sm" value={tradeForm.side}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
-                <option value="buy">买入</option>
-                <option value="sell">卖出</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="数量（必填）" value={tradeForm.quantity}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
-              <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="成交价（必填）" value={tradeForm.price}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="手续费（可选）" value={tradeForm.fee}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
-              <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="税费（可选）" value={tradeForm.tax}
-                onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
-            </div>
-            <p className="text-xs text-secondary">手续费和税费可留空，系统将按 0 处理。</p>
-            <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交交易</button>
-          </form>
-        </Card>
+      <section className="space-y-3">
+        <Disclosure summary="录入与导入" defaultOpen={showOperationsDisclosureByDefault}>
+          <div className="space-y-3">
+            <p className="text-xs leading-5 text-secondary">
+              默认先聚焦组合快照与风险摘要；需要补录交易、资金流水、公司行为或导入券商 CSV 时再展开。
+            </p>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+              <Card padding="md">
+                <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：交易</h3>
+                <form className="space-y-2" onSubmit={handleTradeSubmit}>
+                  <input className="input-terminal w-full text-sm" placeholder="股票代码（例如 600519）" value={tradeForm.symbol}
+                    onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className="input-terminal text-sm" type="date" value={tradeForm.tradeDate}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+                    <select className="input-terminal text-sm" value={tradeForm.side}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
+                      <option value="buy">买入</option>
+                      <option value="sell">卖出</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="数量（必填）" value={tradeForm.quantity}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="成交价（必填）" value={tradeForm.price}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, price: e.target.value }))} required />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="手续费（可选）" value={tradeForm.fee}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, fee: e.target.value }))} />
+                    <input className="input-terminal text-sm" type="number" min="0" step="0.0001" placeholder="税费（可选）" value={tradeForm.tax}
+                      onChange={(e) => setTradeForm((prev) => ({ ...prev, tax: e.target.value }))} />
+                  </div>
+                  <p className="text-xs text-secondary">手续费和税费可留空，系统将按 0 处理。</p>
+                  <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交交易</button>
+                </form>
+              </Card>
 
-        <Card padding="md">
-          <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：资金流水</h3>
-          <form className="space-y-2" onSubmit={handleCashSubmit}>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
-                onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
-              <select className="input-terminal text-sm" value={cashForm.direction}
-                onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
-                <option value="in">流入</option>
-                <option value="out">流出</option>
-              </select>
-            </div>
-            <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder="金额"
-              value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
-            <input className="input-terminal w-full text-sm" placeholder={`币种（可选，默认 ${writableAccount?.baseCurrency || '账户基准币'}）`} value={cashForm.currency}
-              onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
-            <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交资金流水</button>
-          </form>
-        </Card>
+              <Card padding="md">
+                <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：资金流水</h3>
+                <form className="space-y-2" onSubmit={handleCashSubmit}>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className="input-terminal text-sm" type="date" value={cashForm.eventDate}
+                      onChange={(e) => setCashForm((prev) => ({ ...prev, eventDate: e.target.value }))} required />
+                    <select className="input-terminal text-sm" value={cashForm.direction}
+                      onChange={(e) => setCashForm((prev) => ({ ...prev, direction: e.target.value as PortfolioCashDirection }))}>
+                      <option value="in">流入</option>
+                      <option value="out">流出</option>
+                    </select>
+                  </div>
+                  <input className="input-terminal w-full text-sm" type="number" min="0" step="0.0001" placeholder="金额"
+                    value={cashForm.amount} onChange={(e) => setCashForm((prev) => ({ ...prev, amount: e.target.value }))} required />
+                  <input className="input-terminal w-full text-sm" placeholder={`币种（可选，默认 ${writableAccount?.baseCurrency || '账户基准币'}）`} value={cashForm.currency}
+                    onChange={(e) => setCashForm((prev) => ({ ...prev, currency: e.target.value }))} />
+                  <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交资金流水</button>
+                </form>
+              </Card>
 
-        <Card padding="md">
-          <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：公司行为</h3>
-          <form className="space-y-2" onSubmit={handleCorporateSubmit}>
-            <input className="input-terminal w-full text-sm" placeholder="股票代码" value={corpForm.symbol}
-              onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="date" value={corpForm.effectiveDate}
-                onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
-              <select className="input-terminal text-sm" value={corpForm.actionType}
-                onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
-                <option value="cash_dividend">现金分红</option>
-                <option value="split_adjustment">拆并股调整</option>
-              </select>
+              <Card padding="md">
+                <h3 className="text-sm font-semibold text-foreground mb-3">手工录入：公司行为</h3>
+                <form className="space-y-2" onSubmit={handleCorporateSubmit}>
+                  <input className="input-terminal w-full text-sm" placeholder="股票代码" value={corpForm.symbol}
+                    onChange={(e) => setCorpForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input className="input-terminal text-sm" type="date" value={corpForm.effectiveDate}
+                      onChange={(e) => setCorpForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} required />
+                    <select className="input-terminal text-sm" value={corpForm.actionType}
+                      onChange={(e) => setCorpForm((prev) => ({ ...prev, actionType: e.target.value as PortfolioCorporateActionType }))}>
+                      <option value="cash_dividend">现金分红</option>
+                      <option value="split_adjustment">拆并股调整</option>
+                    </select>
+                  </div>
+                  {corpForm.actionType === 'cash_dividend' ? (
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="每股分红"
+                      value={corpForm.cashDividendPerShare}
+                      onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
+                  ) : (
+                    <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="拆并股比例"
+                      value={corpForm.splitRatio}
+                      onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
+                  )}
+                  <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交企业行为</button>
+                </form>
+              </Card>
             </div>
-            {corpForm.actionType === 'cash_dividend' ? (
-              <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="每股分红"
-                value={corpForm.cashDividendPerShare}
-                onChange={(e) => setCorpForm((prev) => ({ ...prev, cashDividendPerShare: e.target.value, splitRatio: '' }))} required />
-            ) : (
-              <input className="input-terminal w-full text-sm" type="number" min="0" step="0.000001" placeholder="拆并股比例"
-                value={corpForm.splitRatio}
-                onChange={(e) => setCorpForm((prev) => ({ ...prev, splitRatio: e.target.value, cashDividendPerShare: '' }))} required />
-            )}
-            <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId}>提交企业行为</button>
-          </form>
-        </Card>
-      </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        <Card padding="md">
-          <h3 className="text-sm font-semibold text-foreground mb-3">券商 CSV 导入</h3>
-          <div className="space-y-2">
-            {brokerLoadWarning ? (
-              <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-2 py-1">
-                {brokerLoadWarning}
+            <Card padding="md">
+              <h3 className="text-sm font-semibold text-foreground mb-3">券商 CSV 导入</h3>
+              <div className="space-y-2">
+                {brokerLoadWarning ? (
+                  <div className="text-xs text-[hsl(var(--accent-warning-hsl))] rounded-lg border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-2 py-1">
+                    {brokerLoadWarning}
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select className="input-terminal text-sm" value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
+                    {brokers.length > 0 ? (
+                      brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName)}</option>)
+                    ) : (
+                      <option value="huatai">huatai（华泰）</option>
+                    )}
+                  </select>
+                  <label className="input-terminal text-sm flex items-center justify-center cursor-pointer">
+                    选择 CSV
+                    <input type="file" accept=".csv" className="hidden"
+                      onChange={(e) => setCsvFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-secondary">
+                  <input id="csv-dry-run" type="checkbox" checked={csvDryRun} onChange={(e) => setCsvDryRun(e.target.checked)} />
+                  <label htmlFor="csv-dry-run">仅预演（不写入）</label>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary flex-1" disabled={!csvFile || csvParsing} onClick={() => void handleParseCsv()}>
+                    {csvParsing ? '解析中...' : '解析文件'}
+                  </button>
+                  <button type="button" className="btn-secondary flex-1"
+                    disabled={!csvFile || !writableAccountId || csvCommitting} onClick={() => void handleCommitCsv()}>
+                    {csvCommitting ? '提交中...' : '提交导入'}
+                  </button>
+                </div>
+                {csvParseResult ? (
+                  <div className="text-xs text-secondary rounded-lg border border-white/10 p-2">
+                    解析结果：有效 {csvParseResult.recordCount} 条，跳过 {csvParseResult.skippedCount} 条，错误 {csvParseResult.errorCount} 条
+                  </div>
+                ) : null}
+                {csvCommitResult ? (
+                  <div className="text-xs text-secondary rounded-lg border border-white/10 p-2">
+                    提交结果：写入 {csvCommitResult.insertedCount} 条，重复 {csvCommitResult.duplicateCount} 条，失败 {csvCommitResult.failedCount} 条
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            <div className="grid grid-cols-2 gap-2">
-              <select className="input-terminal text-sm" value={selectedBroker} onChange={(e) => setSelectedBroker(e.target.value)}>
-                {brokers.length > 0 ? (
-                  brokers.map((item) => <option key={item.broker} value={item.broker}>{formatBrokerLabel(item.broker, item.displayName)}</option>)
-                ) : (
-                  <option value="huatai">huatai（华泰）</option>
-                )}
-              </select>
-              <label className="input-terminal text-sm flex items-center justify-center cursor-pointer">
-                选择 CSV
-                <input type="file" accept=".csv" className="hidden"
-                  onChange={(e) => setCsvFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-              </label>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-secondary">
-              <input id="csv-dry-run" type="checkbox" checked={csvDryRun} onChange={(e) => setCsvDryRun(e.target.checked)} />
-              <label htmlFor="csv-dry-run">仅预演（不写入）</label>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" className="btn-secondary flex-1" disabled={!csvFile || csvParsing} onClick={() => void handleParseCsv()}>
-                {csvParsing ? '解析中...' : '解析文件'}
-              </button>
-              <button type="button" className="btn-secondary flex-1"
-                disabled={!csvFile || !writableAccountId || csvCommitting} onClick={() => void handleCommitCsv()}>
-                {csvCommitting ? '提交中...' : '提交导入'}
-              </button>
-            </div>
-            {csvParseResult ? (
-              <div className="text-xs text-secondary rounded-lg border border-white/10 p-2">
-                解析结果：有效 {csvParseResult.recordCount} 条，跳过 {csvParseResult.skippedCount} 条，错误 {csvParseResult.errorCount} 条
-              </div>
-            ) : null}
-            {csvCommitResult ? (
-              <div className="text-xs text-secondary rounded-lg border border-white/10 p-2">
-                提交结果：写入 {csvCommitResult.insertedCount} 条，重复 {csvCommitResult.duplicateCount} 条，失败 {csvCommitResult.failedCount} 条
-              </div>
-            ) : null}
+            </Card>
           </div>
-        </Card>
+        </Disclosure>
 
-        <Card padding="md">
-          <h3 className="text-sm font-semibold text-foreground mb-3">事件记录</h3>
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
-                <option value="trade">交易流水</option>
-                <option value="cash">资金流水</option>
-                <option value="corporate">公司行为</option>
-              </select>
-              <button type="button" className="btn-secondary text-sm" onClick={() => void loadEvents()} disabled={eventLoading}>
-                {eventLoading ? '加载中...' : '刷新流水'}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input-terminal text-sm" type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
-              <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
-            </div>
-            {(eventType === 'trade' || eventType === 'corporate') ? (
-              <input className="input-terminal text-sm w-full" placeholder="按股票代码筛选" value={eventSymbol}
-                onChange={(e) => setEventSymbol(e.target.value)} />
-            ) : null}
-            {eventType === 'trade' ? (
-              <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
-                <option value="">全部买卖方向</option>
-                <option value="buy">买入</option>
-                <option value="sell">卖出</option>
-              </select>
-            ) : null}
-            {eventType === 'cash' ? (
-              <select className="input-terminal text-sm w-full" value={eventDirection}
-                onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
-                <option value="">全部资金方向</option>
-                <option value="in">流入</option>
-                <option value="out">流出</option>
-              </select>
-            ) : null}
-            {eventType === 'corporate' ? (
-              <select className="input-terminal text-sm w-full" value={eventActionType}
-                onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
-                <option value="">全部公司行为</option>
-                <option value="cash_dividend">现金分红</option>
-                <option value="split_adjustment">拆并股调整</option>
-              </select>
-            ) : null}
-            <div className="text-[11px] text-secondary">
-              {writeBlocked ? '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。' : '如有错误流水，可直接删除后重新录入。'}
-            </div>
-            <div className="rounded-lg border border-white/10 p-2 max-h-none overflow-visible lg:max-h-64 lg:overflow-auto">
-              {eventType === 'trade' && tradeEvents.map((item) => (
-                <div key={`t-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
-                  <div className="min-w-0">
-                    {item.tradeDate} {formatSideLabel(item.side)} {item.symbol} 数量={item.quantity} 价格={item.price}
-                  </div>
-                  {!writeBlocked ? (
-                    <button
-                      type="button"
-                      className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                      onClick={() => openDeleteDialog({
-                        eventType: 'trade',
-                        id: item.id,
-                        message: `确认删除 ${item.tradeDate} 的${formatSideLabel(item.side)}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
-                      })}
-                    >
-                      删除
-                    </button>
-                  ) : null}
+        <Disclosure summary="流水与审计" defaultOpen={showEventAuditDisclosureByDefault}>
+          <div className="space-y-3">
+            <p className="text-xs leading-5 text-secondary">
+              只在核对历史流水、删除错误记录或复盘导入结果时展开，避免默认状态占据过多页面高度。
+            </p>
+            <Card padding="md">
+              <h3 className="text-sm font-semibold text-foreground mb-3">事件记录</h3>
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select className="input-terminal text-sm" value={eventType} onChange={(e) => setEventType(e.target.value as EventType)}>
+                    <option value="trade">交易流水</option>
+                    <option value="cash">资金流水</option>
+                    <option value="corporate">公司行为</option>
+                  </select>
+                  <button type="button" className="btn-secondary text-sm" onClick={() => void loadEvents()} disabled={eventLoading}>
+                    {eventLoading ? '加载中...' : '刷新流水'}
+                  </button>
                 </div>
-              ))}
-              {eventType === 'cash' && cashEvents.map((item) => (
-                <div key={`c-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
-                  <div className="min-w-0">
-                    {item.eventDate} {formatCashDirectionLabel(item.direction)} {item.amount} {item.currency}
-                  </div>
-                  {!writeBlocked ? (
-                    <button
-                      type="button"
-                      className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                      onClick={() => openDeleteDialog({
-                        eventType: 'cash',
-                        id: item.id,
-                        message: `确认删除 ${item.eventDate} 的资金流水（${formatCashDirectionLabel(item.direction)} ${item.amount} ${item.currency}）吗？`,
-                      })}
-                    >
-                      删除
-                    </button>
-                  ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input className="input-terminal text-sm" type="date" value={eventDateFrom} onChange={(e) => setEventDateFrom(e.target.value)} />
+                  <input className="input-terminal text-sm" type="date" value={eventDateTo} onChange={(e) => setEventDateTo(e.target.value)} />
                 </div>
-              ))}
-              {eventType === 'corporate' && corporateEvents.map((item) => (
-                <div key={`ca-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
-                  <div className="min-w-0">
-                    {item.effectiveDate} {formatCorporateActionLabel(item.actionType)} {item.symbol}
-                  </div>
-                  {!writeBlocked ? (
-                    <button
-                      type="button"
-                      className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
-                      onClick={() => openDeleteDialog({
-                        eventType: 'corporate',
-                        id: item.id,
-                        message: `确认删除 ${item.effectiveDate} 的公司行为 ${formatCorporateActionLabel(item.actionType)}（${item.symbol}）吗？`,
-                      })}
-                    >
-                      删除
-                    </button>
-                  ) : null}
+                {(eventType === 'trade' || eventType === 'corporate') ? (
+                  <input className="input-terminal text-sm w-full" placeholder="按股票代码筛选" value={eventSymbol}
+                    onChange={(e) => setEventSymbol(e.target.value)} />
+                ) : null}
+                {eventType === 'trade' ? (
+                  <select className="input-terminal text-sm w-full" value={eventSide} onChange={(e) => setEventSide(e.target.value as '' | PortfolioSide)}>
+                    <option value="">全部买卖方向</option>
+                    <option value="buy">买入</option>
+                    <option value="sell">卖出</option>
+                  </select>
+                ) : null}
+                {eventType === 'cash' ? (
+                  <select className="input-terminal text-sm w-full" value={eventDirection}
+                    onChange={(e) => setEventDirection(e.target.value as '' | PortfolioCashDirection)}>
+                    <option value="">全部资金方向</option>
+                    <option value="in">流入</option>
+                    <option value="out">流出</option>
+                  </select>
+                ) : null}
+                {eventType === 'corporate' ? (
+                  <select className="input-terminal text-sm w-full" value={eventActionType}
+                    onChange={(e) => setEventActionType(e.target.value as '' | PortfolioCorporateActionType)}>
+                    <option value="">全部公司行为</option>
+                    <option value="cash_dividend">现金分红</option>
+                    <option value="split_adjustment">拆并股调整</option>
+                  </select>
+                ) : null}
+                <div className="text-[11px] text-secondary">
+                  {writeBlocked ? '删除修正仅在单账户视图可用。请先选择具体账户后再删除错误流水。' : '如有错误流水，可直接删除后重新录入。'}
                 </div>
-              ))}
-              {!eventLoading
-                && ((eventType === 'trade' && tradeEvents.length === 0)
-                  || (eventType === 'cash' && cashEvents.length === 0)
-                  || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
-                    <div className="px-2 py-3 text-center">
-                      <p className="text-sm font-medium text-foreground">暂无流水记录</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-text">
-                        调整筛选条件，或先录入一条交易、资金流水或公司行为。
-                      </p>
+                <div className="rounded-lg border border-white/10 p-2 max-h-none overflow-visible lg:max-h-64 lg:overflow-auto">
+                  {eventType === 'trade' && tradeEvents.map((item) => (
+                    <div key={`t-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
+                      <div className="min-w-0">
+                        {item.tradeDate} {formatSideLabel(item.side)} {item.symbol} 数量={item.quantity} 价格={item.price}
+                      </div>
+                      {!writeBlocked ? (
+                        <button
+                          type="button"
+                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
+                          onClick={() => openDeleteDialog({
+                            eventType: 'trade',
+                            id: item.id,
+                            message: `确认删除 ${item.tradeDate} 的${formatSideLabel(item.side)}流水 ${item.symbol}（数量 ${item.quantity}，价格 ${item.price}）吗？`,
+                          })}
+                        >
+                          删除
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
-            </div>
-            <div className="flex items-center justify-between text-xs text-secondary">
-              <span>第 {eventPage} / {totalEventPages} 页</span>
-              <div className="flex gap-2">
-                <button type="button" className="btn-secondary text-xs px-3 py-1" disabled={eventPage <= 1}
-                  onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
-                  上一页
-                </button>
-                <button type="button" className="btn-secondary text-xs px-3 py-1" disabled={eventPage >= totalEventPages}
-                  onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
-                  下一页
-                </button>
+                  ))}
+                  {eventType === 'cash' && cashEvents.map((item) => (
+                    <div key={`c-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
+                      <div className="min-w-0">
+                        {item.eventDate} {formatCashDirectionLabel(item.direction)} {item.amount} {item.currency}
+                      </div>
+                      {!writeBlocked ? (
+                        <button
+                          type="button"
+                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
+                          onClick={() => openDeleteDialog({
+                            eventType: 'cash',
+                            id: item.id,
+                            message: `确认删除 ${item.eventDate} 的资金流水（${formatCashDirectionLabel(item.direction)} ${item.amount} ${item.currency}）吗？`,
+                          })}
+                        >
+                          删除
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {eventType === 'corporate' && corporateEvents.map((item) => (
+                    <div key={`ca-${item.id}`} className="flex items-start justify-between gap-3 border-b border-white/5 py-2 text-xs text-secondary">
+                      <div className="min-w-0">
+                        {item.effectiveDate} {formatCorporateActionLabel(item.actionType)} {item.symbol}
+                      </div>
+                      {!writeBlocked ? (
+                        <button
+                          type="button"
+                          className="btn-secondary shrink-0 !px-3 !py-1 !text-[11px]"
+                          onClick={() => openDeleteDialog({
+                            eventType: 'corporate',
+                            id: item.id,
+                            message: `确认删除 ${item.effectiveDate} 的公司行为 ${formatCorporateActionLabel(item.actionType)}（${item.symbol}）吗？`,
+                          })}
+                        >
+                          删除
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {!eventLoading
+                    && ((eventType === 'trade' && tradeEvents.length === 0)
+                      || (eventType === 'cash' && cashEvents.length === 0)
+                      || (eventType === 'corporate' && corporateEvents.length === 0)) ? (
+                        <div className="px-2 py-3 text-center">
+                          <p className="text-sm font-medium text-foreground">暂无流水记录</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-text">
+                            调整筛选条件，或先录入一条交易、资金流水或公司行为。
+                          </p>
+                        </div>
+                      ) : null}
+                </div>
+                <div className="flex flex-col gap-2 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
+                  <span>第 {eventPage} / {totalEventPages} 页</span>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary text-xs px-3 py-1" disabled={eventPage <= 1}
+                      onClick={() => setEventPage((prev) => Math.max(1, prev - 1))}>
+                      上一页
+                    </button>
+                    <button type="button" className="btn-secondary text-xs px-3 py-1" disabled={eventPage >= totalEventPages}
+                      onClick={() => setEventPage((prev) => Math.min(totalEventPages, prev + 1))}>
+                      下一页
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            </Card>
           </div>
-        </Card>
+        </Disclosure>
       </section>
       <ConfirmDialog
         isOpen={Boolean(pendingDelete)}

@@ -4,11 +4,12 @@
  * with restrained header typography and lighter close controls.
  */
 import type React from 'react';
-import { useEffect, useCallback, useId, useState } from 'react';
+import { useEffect, useCallback, useId, useRef, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { useI18n } from '../../contexts/UiLanguageContext';
 
 let activeDrawerCount = 0;
+const BACKDROP_INTERACTION_GUARD_MS = 420;
 
 interface DrawerProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface DrawerProps {
   width?: string;
   zIndex?: number;
   side?: 'left' | 'right';
+  closeOnBackdropClick?: boolean;
 }
 
 export const Drawer: React.FC<DrawerProps> = ({
@@ -28,11 +30,14 @@ export const Drawer: React.FC<DrawerProps> = ({
   width = 'max-w-2xl',
   zIndex = 50,
   side = 'right',
+  closeOnBackdropClick = true,
 }) => {
   const { t } = useI18n();
   const generatedId = useId();
   const [isMounted, setIsMounted] = useState(isOpen);
   const [uiState, setUiState] = useState<'open' | 'closed'>(isOpen ? 'open' : 'closed');
+  const backdropGuardRef = useRef(isOpen);
+  const backdropGuardTimerRef = useRef<number | null>(null);
 
   // Close the drawer when Escape is pressed.
   const handleKeyDown = useCallback(
@@ -46,11 +51,25 @@ export const Drawer: React.FC<DrawerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      backdropGuardRef.current = true;
+      if (backdropGuardTimerRef.current != null) {
+        window.clearTimeout(backdropGuardTimerRef.current);
+      }
+      backdropGuardTimerRef.current = window.setTimeout(() => {
+        backdropGuardRef.current = false;
+        backdropGuardTimerRef.current = null;
+      }, BACKDROP_INTERACTION_GUARD_MS);
       window.requestAnimationFrame(() => {
         setIsMounted(true);
         window.requestAnimationFrame(() => setUiState('open'));
       });
       return;
+    }
+
+    backdropGuardRef.current = false;
+    if (backdropGuardTimerRef.current != null) {
+      window.clearTimeout(backdropGuardTimerRef.current);
+      backdropGuardTimerRef.current = null;
     }
 
     if (!isMounted) {
@@ -62,6 +81,12 @@ export const Drawer: React.FC<DrawerProps> = ({
     }, 190);
     return () => window.clearTimeout(timer);
   }, [isOpen, isMounted]);
+
+  useEffect(() => () => {
+    if (backdropGuardTimerRef.current != null) {
+      window.clearTimeout(backdropGuardTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isMounted) {
@@ -81,6 +106,16 @@ export const Drawer: React.FC<DrawerProps> = ({
       }
     };
   }, [isMounted, handleKeyDown]);
+
+  const handleBackdropClick = useCallback(() => {
+    if (!closeOnBackdropClick) {
+      return;
+    }
+    if (backdropGuardRef.current) {
+      return;
+    }
+    onClose();
+  }, [closeOnBackdropClick, onClose]);
 
   if (!isMounted) return null;
 
@@ -102,9 +137,9 @@ export const Drawer: React.FC<DrawerProps> = ({
         data-state={uiState}
         className={cn(
           'theme-overlay-backdrop absolute inset-0 transition-opacity duration-200 ease-out',
-          uiState === 'open' ? 'opacity-100' : 'opacity-0',
+          uiState === 'open' ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onClick={onClose}
+        onClick={handleBackdropClick}
       />
 
       <div className={cn('drawer__frame absolute inset-y-0 flex w-full', sidePositionClass, width)}>

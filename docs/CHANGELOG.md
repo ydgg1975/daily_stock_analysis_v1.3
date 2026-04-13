@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 📱 **Web 移动端导航与核心页面响应式稳定性收口** — 修复移动端共享导航抽屉在点击汉堡菜单后短暂打开又立即关闭的问题：`Shell` 现在只会在真实路由切换或断点变化时重置移动抽屉状态，并跳过首次挂载时的误关闭；移动导航抽屉同时改为显式关闭优先，不再响应 backdrop 点击，从而规避触摸设备上的 ghost click / delayed outside-click 误触。Scanner 短列表卡片也同步收口了小屏布局：分数区、CTA 按钮组和历史统计在窄屏下会自动纵向/双列重排，减少挤压与错位；Backtest 页面则补上了小屏 toggle 分组、结果页 tabs 横向滚动和 hero action 换行规则，降低移动端横向裁切和触达成本。
+- 🧭 **Web 设置/持仓/管理员日志完成一轮高信号减负与移动端收口** — Settings 页现在把分类导航在移动端收进折叠面板，并把 `base / system / ai_model / data_source / notification` 这些已有高层编辑入口的原始配置项统一下沉到“原始配置与兼容层”，减少默认暴露的低价值字段；Portfolio 页把手工录入、CSV 导入和流水审计改成渐进展开区块，小屏表单同步改为单列优先，降低页面首屏噪音与长滚动负担；管理员日志页则改为响应式筛选工具栏，并去掉移动端堆叠场景下的双重滚动面板，提升窄屏可用性。
 - 🛡️ **Market Scanner A 股运行时韧性修复** — Scanner 不再把 `Tushare stock_basic` 权限作为 A 股 universe 的硬依赖，新增 `SCANNER_LOCAL_UNIVERSE_PATH` 本地 universe cache，并在 `Tushare -> 本地数据库/内置映射 -> Akshare` 之间做显式 fallback。A 股全市场快照也改为保留 `Akshare(东财 -> 新浪) -> efinance -> local_history_degraded` 的尝试链路；失败运行会持久化 `tushare_permission_denied / akshare_snapshot_fetch_failed / efinance_snapshot_fetch_failed / no_realtime_snapshot_available` 等更明确的 reason code，`/scanner` 页面同步展示 universe/snapshot 来源、尝试链路和是否启用 degraded mode，不再只看到模糊的 `no_supported_fetcher`。
 - ⏱️ **Intraday replay/session contracts now respect explicit caller classification** — `_build_time_context()` 在有标准化 `session_type` 入参时会优先保留调用方已确认的 `intraday_snapshot / last_completed_session` 语义，不再在回放、历史重建或测试场景里被当前墙上时钟二次改写；默认实时推导路径仍保持不变。
 - 🧹 **Baseline cleanup: generated artifacts and stray helper entrypoints removed from the main repo surface** — 停止把 `backtest_outputs/` 下的生成产物、根目录审计草稿和设计参考残留继续保留在主仓默认面；Execution Trace/P3 辅助脚本统一收口到 `scripts/`，根目录不再散落一次性工具入口，减少检索噪音与误导性“看起来可直接运行”的历史残留。

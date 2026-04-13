@@ -385,6 +385,8 @@ function buildAiConfigItem(key: string, value: string) {
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.innerWidth = 1280;
+    window.dispatchEvent(new Event('resize'));
     window.sessionStorage.clear();
     window.sessionStorage.setItem('dsa-admin-settings-unlock-token', 'unit-test-token');
     window.sessionStorage.setItem('dsa-admin-settings-unlock-expires-at', String(Date.now() + 60_000));
@@ -536,6 +538,24 @@ describe('SettingsPage', () => {
     expect(resetDraft).toHaveBeenCalledTimes(1);
     expect(load).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('keeps base raw fields behind disclosure while keeping smart import visible', () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'base' }));
+
+    render(<SettingsPage />);
+
+    expect(screen.getByRole('button', { name: 'merge stock list' })).toBeInTheDocument();
+    const summary = screen.getByText('展开原始字段与兼容键');
+    const disclosure = summary.closest('details');
+
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute('open');
+
+    fireEvent.click(summary.closest('summary') ?? summary);
+
+    expect(disclosure).toHaveAttribute('open');
+    expect(screen.getByText('STOCK_LIST')).toBeInTheDocument();
   });
 
   it('refreshes server state after intelligent import merges stock list', async () => {

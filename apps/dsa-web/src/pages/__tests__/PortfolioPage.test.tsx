@@ -240,6 +240,24 @@ describe('PortfolioPage FX refresh', () => {
     expect(screen.getByRole('button', { name: '刷新汇率' })).toBeInTheDocument();
   });
 
+  it('keeps manual entry tools collapsed by default once accounts are available', async () => {
+    render(<PortfolioPage />);
+
+    await waitForInitialLoad();
+
+    const summary = screen.getByText('录入与导入');
+    const disclosure = summary.closest('details');
+
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute('open');
+
+    fireEvent.click(summary.closest('summary') ?? summary);
+
+    expect(disclosure).toHaveAttribute('open');
+    expect(screen.getByText('手工录入：交易')).toBeInTheDocument();
+    expect(screen.getByText('券商 CSV 导入')).toBeInTheDocument();
+  });
+
   it('refreshes FX for a single selected account and only reloads snapshot/risk', async () => {
     getSnapshot
       .mockResolvedValueOnce(makeSnapshot({ fxStale: true }))

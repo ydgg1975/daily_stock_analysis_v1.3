@@ -790,7 +790,7 @@ const ScannerPage: React.FC = () => {
                             </p>
                           </div>
                         </div>
-                        <div className="min-w-[88px] text-right">
+                        <div className="w-full sm:w-auto sm:min-w-[88px] text-left sm:text-right">
                           <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Scanner Score</p>
                           <p className="mt-1 text-3xl leading-none text-foreground">{candidate.score.toFixed(1)}</p>
                         </div>
@@ -883,13 +883,14 @@ const ScannerPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => void handleStartAnalysis(candidate)}>
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                        <Button size="sm" className="w-full sm:w-auto" onClick={() => void handleStartAnalysis(candidate)}>
                           {t('scanner.actionAnalyze')}
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="w-full sm:w-auto"
                           onClick={() => navigate(`/chat?stock=${encodeURIComponent(candidate.symbol)}&name=${encodeURIComponent(candidate.name)}`)}
                         >
                           {t('scanner.actionAsk')}
@@ -897,6 +898,7 @@ const ScannerPage: React.FC = () => {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="w-full sm:w-auto"
                           onClick={() => navigate('/backtest', { state: { prefillCode: candidate.symbol, prefillName: candidate.name } })}
                         >
                           {t('scanner.actionBacktest')}
@@ -904,6 +906,7 @@ const ScannerPage: React.FC = () => {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="w-full sm:w-auto"
                           onClick={() => setSelectedCandidate(candidate)}
                         >
                           {t('scanner.actionDetail')}
@@ -1027,7 +1030,7 @@ const ScannerPage: React.FC = () => {
                               </p>
                             ) : null}
                           </div>
-                          <div className="text-right text-xs text-secondary-text">
+                          <div className="w-full sm:w-auto text-left sm:text-right text-xs text-secondary-text">
                             <p>{`${t('scanner.metricUniverse')} ${item.universeSize}`}</p>
                             <p>{`${t('scanner.metricDetail')} ${item.evaluatedSize}`}</p>
                             <p>{`${t('scanner.metricShortlist')} ${item.shortlistSize}`}</p>
