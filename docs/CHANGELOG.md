@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 新功能
+
+- 🔎 **Market Scanner（A 股盘前扫描）首个生产版上线** — 新增独立 `Scanner` 产品能力与 `/scanner` 页面、`/api/v1/scanner/*` API、轻量 run 历史与候选详情抽屉。第一阶段聚焦 A 股盘前观察：先用受控 universe 和全市场快照做预筛，再用本地优先的日线历史做规则型评分，输出 `rank / scanner score / reason summary / key metrics / risk notes / watch context / run metadata`，并允许从 shortlist 继续进入深度分析、问股与回测。Scanner 明确保持为主动发现层，不并入 Backtest。
+- ⏰ **Market Scanner P9 运营层上线** — Scanner 新增独立盘前定时任务、每日 watchlist 聚合查询（today / recent）、通知投递记录与运营状态摘要。定时运行会按 `watchlist_date` 保留 daily shortlist，并记录 `trigger_mode`、通知成功/失败、基础失败原因与空结果状态；Web `/scanner` 现在可以直接查看今日观察名单、近期 watchlists、最近定时运行和通知状态，CLI 也新增 `--scanner` / `--scanner-schedule` 入口，继续保持 Scanner 与 Backtest 的边界不变。
+- 📋 **Market Scanner Route A 日常工作流增强** — `/scanner` 现在会把“今天 shortlist 了什么”继续延伸到“和前几天相比变化了什么、后来表现如何、最近是否仍有效”。页面新增跨日 watchlist 对比（新入选 / 连续入选 / 掉出名单）、候选 follow-through 结果跟踪（same-day / next-day / review window / max favorable / max adverse）、近期 quality summary（平均 shortlist 收益、hit rate、跑赢基准率、兑现/未兑现候选均分）以及紧凑 Markdown 日评导出。整套实现继续复用现有 scanner 持久化与本地 `stock_daily`，保持 Scanner 与 Backtest 的产品边界不变。
+
 ### 修复
 
+- 🛡️ **Market Scanner A 股运行时韧性修复** — Scanner 不再把 `Tushare stock_basic` 权限作为 A 股 universe 的硬依赖，新增 `SCANNER_LOCAL_UNIVERSE_PATH` 本地 universe cache，并在 `Tushare -> 本地数据库/内置映射 -> Akshare` 之间做显式 fallback。A 股全市场快照也改为保留 `Akshare(东财 -> 新浪) -> efinance -> local_history_degraded` 的尝试链路；失败运行会持久化 `tushare_permission_denied / akshare_snapshot_fetch_failed / efinance_snapshot_fetch_failed / no_realtime_snapshot_available` 等更明确的 reason code，`/scanner` 页面同步展示 universe/snapshot 来源、尝试链路和是否启用 degraded mode，不再只看到模糊的 `no_supported_fetcher`。
 - ⏱️ **Intraday replay/session contracts now respect explicit caller classification** — `_build_time_context()` 在有标准化 `session_type` 入参时会优先保留调用方已确认的 `intraday_snapshot / last_completed_session` 语义，不再在回放、历史重建或测试场景里被当前墙上时钟二次改写；默认实时推导路径仍保持不变。
 - 🧹 **Baseline cleanup: generated artifacts and stray helper entrypoints removed from the main repo surface** — 停止把 `backtest_outputs/` 下的生成产物、根目录审计草稿和设计参考残留继续保留在主仓默认面；Execution Trace/P3 辅助脚本统一收口到 `scripts/`，根目录不再散落一次性工具入口，减少检索噪音与误导性“看起来可直接运行”的历史残留。
 - 🌐 **Proxy config path simplified to one authoritative runtime shape** — `setup_env()` 现在会统一把兼容的 `USE_PROXY/PROXY_HOST/PROXY_PORT` 归一到标准 `HTTP_PROXY/HTTPS_PROXY`，`main.py` 与 `test_env.py` 不再各自维护重复代理注入逻辑；`.env.example` 与 FAQ 也同步改为优先推荐标准代理变量。
@@ -161,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 🧾 **Web 报告透明度区复制按钮层级修复**（#749）— `ReportDetails` 中“原始分析结果 / 分析快照”的复制按钮补齐可点击层级，避免被下方 JSON 内容覆盖后出现按钮可见但无法点击的问题。
 - 🧾 **Web 报告详情复制提示按面板独立** — `ReportDetails` 中“原始分析结果”和“分析快照”的复制提示不再共享同一个 `copied` 状态；当两个面板同时展开时，复制其中一个只会更新对应按钮文案，避免两个按钮同时显示“已复制”的误导反馈。
 - 📊 **Agent backtest tool semantics** — `get_skill_backtest_summary` 现在要求显式传入 `skill_id`，缺失时会返回明确的校验提示；当仓库尚未持久化真实 skill 级汇总时会返回明确的 unsupported/info 响应，而不再复用 overall 指标。成功返回路径会同时保留 normalized 指标和 `*_pct` 兼容字段，相关工具错误返回也改为稳定通用文案，避免向 agent 或用户暴露底层异常细节。
+
+### 文档
+
+- 新增 Market Scanner 中英专题文档：`docs/market-scanner.md` / `docs/market-scanner_EN.md`，明确产品边界、A 股 universe、打分逻辑、结果解释、已知限制与未来美股扩展路径；`README.md`、`docs/README_EN.md` 与 `docs/INDEX_EN.md` 也同步补上入口。
+- 补充 Scanner P9 运营层文档：更新 `.env.example`、`README.md`、`docs/market-scanner.md`、`docs/market-scanner_EN.md`、`docs/full-guide.md`、`docs/full-guide_EN.md`、`docs/README_EN.md`、`docs/INDEX_EN.md`，补齐调度、daily watchlist、通知、失败/空结果语义与运行方式说明。
 
 ## [3.9.0] - 2026-03-20
 

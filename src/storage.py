@@ -575,6 +575,67 @@ class RuleBacktestTrade(Base):
     )
 
 
+class MarketScannerRun(Base):
+    """Persisted market scanner run metadata."""
+
+    __tablename__ = 'market_scanner_runs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    market = Column(String(8), nullable=False, default='cn', index=True)
+    profile = Column(String(32), nullable=False, default='cn_preopen_v1', index=True)
+    universe_name = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, default='completed', index=True)
+
+    shortlist_size = Column(Integer, nullable=False, default=5)
+    universe_size = Column(Integer, default=0)
+    preselected_size = Column(Integer, default=0)
+    evaluated_size = Column(Integer, default=0)
+
+    run_at = Column(DateTime, default=datetime.now, index=True)
+    completed_at = Column(DateTime, index=True)
+
+    source_summary = Column(String(255))
+    summary_json = Column(Text)
+    diagnostics_json = Column(Text)
+    universe_notes_json = Column(Text)
+    scoring_notes_json = Column(Text)
+
+    __table_args__ = (
+        Index('ix_market_scanner_run_market_time', 'market', 'run_at'),
+        Index('ix_market_scanner_run_profile_time', 'profile', 'run_at'),
+    )
+
+
+class MarketScannerCandidate(Base):
+    """Persisted shortlisted candidate rows for one market scanner run."""
+
+    __tablename__ = 'market_scanner_candidates'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey('market_scanner_runs.id'), nullable=False, index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    name = Column(String(64))
+    rank = Column(Integer, nullable=False, index=True)
+    score = Column(Float, nullable=False)
+    quality_hint = Column(String(16))
+    reason_summary = Column(Text)
+
+    reasons_json = Column(Text)
+    key_metrics_json = Column(Text)
+    feature_signals_json = Column(Text)
+    risk_notes_json = Column(Text)
+    watch_context_json = Column(Text)
+    boards_json = Column(Text)
+    diagnostics_json = Column(Text)
+
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_market_scanner_candidate_run_rank', 'run_id', 'rank'),
+        Index('ix_market_scanner_candidate_symbol_created', 'symbol', 'created_at'),
+    )
+
+
 class PortfolioAccount(Base):
     """Portfolio account metadata."""
 

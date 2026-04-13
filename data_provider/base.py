@@ -231,6 +231,36 @@ class RateLimitError(DataFetchError):
     pass
 
 
+def classify_cn_stock_list_failure(fetcher_name: str, error_type: str, error_reason: str) -> str:
+    """Classify stock-list failures into stable scanner-friendly reason codes."""
+    lowered_fetcher = (fetcher_name or "").strip().lower()
+    lowered_reason = (error_reason or "").strip().lower()
+
+    if "tushare" in lowered_fetcher:
+        if any(token in lowered_reason for token in ("权限", "permission", "denied", "积分", "insufficient", "stock_basic")):
+            return "tushare_permission_denied"
+        return "tushare_stock_list_failed"
+    if "akshare" in lowered_fetcher:
+        return "akshare_stock_list_failed"
+    return "stock_list_fetch_failed"
+
+
+def classify_cn_snapshot_failure(fetcher_name: str, error_type: str, error_reason: str) -> str:
+    """Classify snapshot failures into stable scanner-friendly reason codes."""
+    lowered_fetcher = (fetcher_name or "").strip().lower()
+    lowered_reason = (error_reason or "").strip().lower()
+
+    if "akshare" in lowered_fetcher:
+        if any(token in lowered_reason for token in ("no module named", "importerror", "modulenotfounderror")):
+            return "akshare_dependency_unavailable"
+        return "akshare_snapshot_fetch_failed"
+    if "efinance" in lowered_fetcher:
+        if any(token in lowered_reason for token in ("no module named", "importerror", "modulenotfounderror")):
+            return "efinance_dependency_unavailable"
+        return "efinance_snapshot_fetch_failed"
+    return "snapshot_fetch_failed"
+
+
 class DataSourceUnavailableError(DataFetchError):
     """数据源不可用异常"""
     pass
@@ -321,6 +351,21 @@ class BaseFetcher(ABC):
 
         Returns:
             Tuple: (领涨板块列表, 领跌板块列表)
+        """
+        return None
+
+    def get_stock_list(self) -> Optional[pd.DataFrame]:
+        """
+        获取 A 股股票列表（可选能力）。
+
+        Returns:
+            DataFrame: 至少包含 ``code`` 与 ``name`` 两列。
+        """
+        return None
+
+    def get_a_share_spot_snapshot(self) -> Optional[pd.DataFrame]:
+        """
+        获取标准化 A 股全市场快照（可选能力）。
         """
         return None
 
@@ -1730,6 +1775,249 @@ class DataFetcherManager:
         
         logger.info(f"[股票名称] 批量获取完成，成功 {len(result)}/{len(stock_codes)}")
         return result
+
+    def get_cn_stock_list(self) -> Tuple[pd.DataFrame, str]:
+        """
+        获取 A 股股票列表（自动切换数据源）。
+
+        Returns:
+            Tuple[pd.DataFrame, str]: (股票列表, 成功数据源名称)
+
+        Raises:
+            DataFetchError: 所有支持的数据源都失败时抛出
+        """
+        result = self.try_get_cn_stock_list()
+        if result.get("success"):
+            return result["data"], result["source"]
+
+        attempts = result.get("attempts") or []
+        errors = [str(item.get("summary")) for item in attempts if item.get("summary")]
+        error_summary = "所有数据源获取 A 股股票列表失败:\n" + "\n".join(errors or ["no_supported_fetcher"])
+        raise DataFetchError(error_summary)
+
+    def get_cn_realtime_snapshot(self) -> Tuple[pd.DataFrame, str]:
+        """
+        获取标准化 A 股全市场快照（自动切换数据源）。
+
+        Returns:
+            Tuple[pd.DataFrame, str]: (标准化快照, 成功数据源名称)
+
+        Raises:
+            DataFetchError: 所有支持的数据源都失败时抛出
+        """
+        result = self.try_get_cn_realtime_snapshot()
+        if result.get("success"):
+            return result["data"], result["source"]
+
+        attempts = result.get("attempts") or []
+        errors = [str(item.get("summary")) for item in attempts if item.get("summary")]
+        error_summary = "所有数据源获取 A 股全市场快照失败:\n" + "\n".join(errors or ["no_supported_fetcher"])
+        raise DataFetchError(error_summary)
+
+    def try_get_cn_stock_list(
+        self,
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Try to resolve an A-share stock list and return structured diagnostics."""
+        attempts: List[Dict[str, Any]] = []
+        candidates = self._select_fetchers_with_capability(
+            capability="get_stock_list",
+            preferred_fetchers=preferred_fetchers,
+        )
+
+        if not candidates:
+            return {
+                "success": False,
+                "source": None,
+                "data": None,
+                "attempts": [],
+                "error_code": "no_supported_fetcher",
+                "error_message": "当前环境没有支持 A 股股票列表的可用 fetcher。",
+            }
+
+        for fetcher in candidates:
+            try:
+                stock_list = fetcher.get_stock_list()
+                if stock_list is None or stock_list.empty:
+                    attempts.append(
+                        {
+                            "fetcher": fetcher.name,
+                            "status": "failed",
+                            "reason_code": classify_cn_stock_list_failure(fetcher.name, "EmptyResult", "empty stock list"),
+                            "error_type": "EmptyResult",
+                            "error_reason": "empty stock list",
+                            "summary": f"[{fetcher.name}] (EmptyResult) empty stock list",
+                        }
+                    )
+                    continue
+
+                if "code" not in stock_list.columns or "name" not in stock_list.columns:
+                    raise ValueError("stock list missing required code/name columns")
+
+                normalized = stock_list.copy()
+                normalized["code"] = normalized["code"].astype(str).str.strip()
+                normalized["name"] = normalized["name"].astype(str).str.strip()
+                normalized = normalized[normalized["code"] != ""]
+                normalized = normalized[normalized["name"] != ""]
+                normalized = normalized.drop_duplicates(subset=["code"], keep="first")
+
+                attempts.append(
+                    {
+                        "fetcher": fetcher.name,
+                        "status": "success",
+                        "rows": int(len(normalized)),
+                    }
+                )
+                logger.info(f"[{fetcher.name}] 获取 A 股股票列表成功: {len(normalized)} 条")
+                return {
+                    "success": True,
+                    "source": fetcher.name,
+                    "data": normalized.reset_index(drop=True),
+                    "attempts": attempts,
+                    "error_code": None,
+                    "error_message": None,
+                }
+            except Exception as e:
+                error_type, error_reason = summarize_exception(e)
+                reason_code = classify_cn_stock_list_failure(fetcher.name, error_type, error_reason)
+                logger.warning(
+                    f"[{fetcher.name}] 获取 A 股股票列表失败: error_type={error_type}, reason={error_reason}"
+                )
+                attempts.append(
+                    {
+                        "fetcher": fetcher.name,
+                        "status": "failed",
+                        "reason_code": reason_code,
+                        "error_type": error_type,
+                        "error_reason": error_reason,
+                        "summary": f"[{fetcher.name}] ({error_type}) {error_reason}",
+                    }
+                )
+
+        reason_codes = [str(item.get("reason_code") or "").strip() for item in attempts if item.get("reason_code")]
+        return {
+            "success": False,
+            "source": None,
+            "data": None,
+            "attempts": attempts,
+            "error_code": reason_codes[0] if len(reason_codes) == 1 else "universe_source_unavailable",
+            "error_message": "无法从在线数据源加载 A 股股票列表。",
+        }
+
+    def try_get_cn_realtime_snapshot(
+        self,
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Try to resolve an A-share snapshot and return structured diagnostics."""
+        attempts: List[Dict[str, Any]] = []
+        candidates = self._select_fetchers_with_capability(
+            capability="get_a_share_spot_snapshot",
+            preferred_fetchers=preferred_fetchers,
+        )
+
+        if not candidates:
+            return {
+                "success": False,
+                "source": None,
+                "data": None,
+                "attempts": [],
+                "error_code": "no_supported_fetcher",
+                "error_message": "当前环境没有支持 A 股全市场快照的可用 fetcher。",
+            }
+
+        for fetcher in candidates:
+            try:
+                snapshot = fetcher.get_a_share_spot_snapshot()
+                if snapshot is None or snapshot.empty:
+                    attempts.append(
+                        {
+                            "fetcher": fetcher.name,
+                            "status": "failed",
+                            "reason_code": classify_cn_snapshot_failure(fetcher.name, "EmptyResult", "empty snapshot"),
+                            "error_type": "EmptyResult",
+                            "error_reason": "empty snapshot",
+                            "summary": f"[{fetcher.name}] (EmptyResult) empty snapshot",
+                        }
+                    )
+                    continue
+
+                required_cols = {"code", "name", "price", "amount"}
+                if not required_cols.issubset(set(snapshot.columns)):
+                    missing = sorted(required_cols.difference(set(snapshot.columns)))
+                    raise ValueError(f"snapshot missing required columns: {', '.join(missing)}")
+
+                normalized = snapshot.copy()
+                normalized["code"] = normalized["code"].astype(str).str.strip()
+                normalized["name"] = normalized["name"].astype(str).str.strip()
+                normalized = normalized[normalized["code"] != ""]
+                normalized = normalized.drop_duplicates(subset=["code"], keep="first")
+
+                attempts.append(
+                    {
+                        "fetcher": fetcher.name,
+                        "status": "success",
+                        "rows": int(len(normalized)),
+                    }
+                )
+                logger.info(f"[{fetcher.name}] 获取 A 股全市场快照成功: {len(normalized)} 条")
+                return {
+                    "success": True,
+                    "source": fetcher.name,
+                    "data": normalized.reset_index(drop=True),
+                    "attempts": attempts,
+                    "error_code": None,
+                    "error_message": None,
+                }
+            except Exception as e:
+                error_type, error_reason = summarize_exception(e)
+                reason_code = classify_cn_snapshot_failure(fetcher.name, error_type, error_reason)
+                logger.warning(
+                    f"[{fetcher.name}] 获取 A 股全市场快照失败: error_type={error_type}, reason={error_reason}"
+                )
+                attempts.append(
+                    {
+                        "fetcher": fetcher.name,
+                        "status": "failed",
+                        "reason_code": reason_code,
+                        "error_type": error_type,
+                        "error_reason": error_reason,
+                        "summary": f"[{fetcher.name}] ({error_type}) {error_reason}",
+                    }
+                )
+
+        reason_codes = [str(item.get("reason_code") or "").strip() for item in attempts if item.get("reason_code")]
+        return {
+            "success": False,
+            "source": None,
+            "data": None,
+            "attempts": attempts,
+            "error_code": reason_codes[0] if len(reason_codes) == 1 else "no_realtime_snapshot_available",
+            "error_message": "无法从免费实时数据源加载 A 股全市场快照。",
+        }
+
+    def _select_fetchers_with_capability(
+        self,
+        *,
+        capability: str,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """Return fetchers that implement a capability, honoring scanner-specific order when provided."""
+        supported = [fetcher for fetcher in self._fetchers if hasattr(fetcher, capability)]
+        if not preferred_fetchers:
+            return supported
+
+        ordered: List[Any] = []
+        remaining = list(supported)
+        for name in preferred_fetchers:
+            match = next((fetcher for fetcher in remaining if fetcher.name == name), None)
+            if match is None:
+                continue
+            ordered.append(match)
+            remaining.remove(match)
+        ordered.extend(remaining)
+        return ordered
 
     def get_main_indices(self, region: str = "cn") -> List[Dict[str, Any]]:
         """获取主要指数实时行情（自动切换数据源）"""

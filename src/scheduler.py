@@ -79,7 +79,6 @@ class Scheduler:
         
         self.schedule_time = schedule_time
         self.shutdown_handler = GracefulShutdown()
-        self._task_callback: Optional[Callable] = None
         self._running = False
         
     def set_daily_task(self, task: Callable, run_immediately: bool = True):
@@ -90,32 +89,54 @@ class Scheduler:
             task: 要执行的任务函数（无参数）
             run_immediately: 是否在设置后立即执行一次
         """
-        self._task_callback = task
-        
-        # 设置每日定时任务
-        self.schedule.every().day.at(self.schedule_time).do(self._safe_run_task)
-        logger.info(f"已设置每日定时任务，执行时间: {self.schedule_time}")
-        
+        self.add_daily_task(
+            task=task,
+            schedule_time=self.schedule_time,
+            run_immediately=run_immediately,
+            label="daily-task",
+        )
+
+    def add_daily_task(
+        self,
+        task: Callable,
+        *,
+        schedule_time: str,
+        run_immediately: bool = False,
+        label: Optional[str] = None,
+    ):
+        """Register an additional daily task without replacing existing jobs."""
+        task_label = label or schedule_time
+        self.schedule.every().day.at(schedule_time).do(self._safe_run_task, task, task_label)
+        logger.info("已设置每日定时任务 [%s]，执行时间: %s", task_label, schedule_time)
+
         if run_immediately:
-            logger.info("立即执行一次任务...")
-            self._safe_run_task()
+            logger.info("立即执行一次任务 [%s]...", task_label)
+            self._safe_run_task(task, task_label)
     
-    def _safe_run_task(self):
+    def _safe_run_task(self, task: Callable, label: Optional[str] = None):
         """安全执行任务（带异常捕获）"""
-        if self._task_callback is None:
+        if task is None:
             return
         
         try:
             logger.info("=" * 50)
-            logger.info(f"定时任务开始执行 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                "定时任务开始执行 [%s] - %s",
+                label or "task",
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            )
             logger.info("=" * 50)
             
-            self._task_callback()
+            task()
             
-            logger.info(f"定时任务执行完成 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                "定时任务执行完成 [%s] - %s",
+                label or "task",
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            )
             
         except Exception as e:
-            logger.exception(f"定时任务执行失败: {e}")
+            logger.exception("定时任务执行失败 [%s]: %s", label or "task", e)
     
     def run(self):
         """

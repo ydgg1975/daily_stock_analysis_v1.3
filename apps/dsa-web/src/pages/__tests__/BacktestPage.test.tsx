@@ -105,7 +105,9 @@ vi.mock('../../api/backtest', () => ({
   },
 }));
 
-function renderBacktestRoutes(initialEntries: string[] = ['/backtest']) {
+function renderBacktestRoutes(
+  initialEntries: Array<string | { pathname: string; state?: unknown }> = ['/backtest'],
+) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
@@ -891,6 +893,12 @@ describe('BacktestPage', () => {
     expect(screen.getByTestId('backtest-normal-step-summaries')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-normal-step-summary-setup')).toBeInTheDocument();
     expect(screen.getByTestId('backtest-display-section-history')).toBeInTheDocument();
+  });
+
+  it('prefills the symbol when navigated from scanner context', async () => {
+    renderBacktestRoutes([{ pathname: '/backtest', state: { prefillCode: '600001', prefillName: '算力龙头' } }]);
+
+    expect(await screen.findByDisplayValue('600001')).toBeInTheDocument();
   });
 
   it('updates the visible deterministic step in Normal Mode', async () => {

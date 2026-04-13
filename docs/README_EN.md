@@ -20,7 +20,7 @@ Analyze your watchlist daily → generate a decision dashboard → push to multi
 
 **Zero-cost deployment** · Runs on GitHub Actions · No server required
 
-[**Quick Start**](#-quick-start) · [**Key Features**](#-key-features) · [**Sample Output**](#-sample-output) · [**Full Guide**](full-guide_EN.md) · [**FAQ**](FAQ_EN.md) · [**Contributing**](CONTRIBUTING_EN.md) · [**All Docs**](INDEX_EN.md)
+[**Quick Start**](#-quick-start) · [**Key Features**](#-key-features) · [**Sample Output**](#-sample-output) · [**Market Scanner**](market-scanner_EN.md) · [**Full Guide**](full-guide_EN.md) · [**FAQ**](FAQ_EN.md) · [**Contributing**](CONTRIBUTING_EN.md) · [**All Docs**](INDEX_EN.md)
 
 English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 
@@ -43,6 +43,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Analysis | Multi-dimensional Analysis | Technicals + chip distribution + sentiment + real-time quotes |
 | Market | Global Markets | A-shares, Hong Kong stocks, US stocks |
 | Review | Market Review | Daily overview, sectors, northbound capital flow |
+| Scanner | Market Scanner | Separate pre-open discovery layer for A-shares, with ranked shortlist, daily watchlists, scheduled runs, and notification-ready summaries |
 | Backtest | AI Backtest Validation | Auto-evaluate historical analysis accuracy, direction win rate, SL/TP hit rates |
 | Agent Q&A | Strategy Chat | Multi-turn strategy chat with 11 built-in trading strategies (internally loaded as skills) (Web/Bot/API) |
 | Notifications | Multi-channel Push | Telegram, Discord, Slack, Email, WeChat Work, Feishu, etc. |
@@ -64,6 +65,14 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Trend trading | Bull alignment: MA5 > MA10 > MA20 |
 | Precise levels | Entry, stop loss, target |
 | Checklist | Each condition marked as Pass / Watch / Fail |
+
+## 🔎 Market Scanner
+
+The Web app now includes a dedicated `/scanner` page for pre-open candidate discovery. Scanner is intentionally separate from Backtest: Scanner answers what to watch today before the open, while Backtest still answers whether a rule or strategy has worked historically.
+
+The first production version is A-share first. It builds a bounded China universe, scores candidates with deterministic rule-based signals, and returns a small shortlist with `rank / score / reasons / risk notes / watch context / run metadata`. P9 extended that into an operational workflow with scheduled pre-open runs, persistent daily watchlists, recent watchlist review, and notification delivery through the repo's existing channels.
+
+Route A continues that productization work: `/scanner` now also supports cross-day watchlist comparison, local daily-bar follow-through review, lightweight hit-rate / quality metrics, and compact Markdown export for manual review. Users can continue directly into deeper analysis, stock Q&A, and backtest from each shortlisted name while Scanner remains separate from Backtest. See [Market Scanner (EN)](market-scanner_EN.md) for details.
 
 ## 🚀 Quick Start
 

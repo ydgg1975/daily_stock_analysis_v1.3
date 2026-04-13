@@ -11,6 +11,7 @@
 | Document | Description |
 |----------|-------------|
 | [README (EN)](README_EN.md) | Project overview, quick start, features, sample output |
+| [Market Scanner (EN)](market-scanner_EN.md) | Product boundary, A-share universe, scoring, daily watchlists, notifications, and future extension path |
 | [Full Guide (EN)](full-guide_EN.md) | Complete setup and usage walkthrough |
 | [Deploy Guide (EN)](DEPLOY_EN.md) | Server deployment (Docker, systemd, Supervisor) |
 | [LLM Config Guide (EN)](LLM_CONFIG_GUIDE_EN.md) | AI model configuration (Gemini, OpenAI-compatible, DeepSeek, Ollama, etc.) |

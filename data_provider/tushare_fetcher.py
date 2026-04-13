@@ -540,7 +540,7 @@ class TushareFetcher(BaseFetcher):
         """
         if self._api is None:
             logger.warning("Tushare API 未初始化，无法获取股票列表")
-            return None
+            raise DataFetchError("Tushare API 未初始化，无法获取股票列表")
         
         try:
             # 速率限制检查
@@ -552,24 +552,25 @@ class TushareFetcher(BaseFetcher):
                 list_status='L',
                 fields='ts_code,name,industry,area,market'
             )
+
+            if df is None or df.empty:
+                raise DataFetchError("Tushare stock_basic returned empty stock list")
+
+            # 转换 ts_code 为标准代码格式
+            df['code'] = df['ts_code'].apply(lambda x: x.split('.')[0])
             
-            if df is not None and not df.empty:
-                # 转换 ts_code 为标准代码格式
-                df['code'] = df['ts_code'].apply(lambda x: x.split('.')[0])
-                
-                # 更新缓存
-                if not hasattr(self, '_stock_name_cache'):
-                    self._stock_name_cache = {}
-                for _, row in df.iterrows():
-                    self._stock_name_cache[row['code']] = row['name']
-                
-                logger.info(f"Tushare 获取股票列表成功: {len(df)} 条")
-                return df[['code', 'name', 'industry', 'area', 'market']]
+            # 更新缓存
+            if not hasattr(self, '_stock_name_cache'):
+                self._stock_name_cache = {}
+            for _, row in df.iterrows():
+                self._stock_name_cache[row['code']] = row['name']
+            
+            logger.info(f"Tushare 获取股票列表成功: {len(df)} 条")
+            return df[['code', 'name', 'industry', 'area', 'market']]
             
         except Exception as e:
             logger.warning(f"Tushare 获取股票列表失败: {e}")
-        
-        return None
+            raise DataFetchError(f"Tushare stock_basic failed: {e}") from e
     
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
         """

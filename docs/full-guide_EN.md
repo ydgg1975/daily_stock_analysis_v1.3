@@ -268,6 +268,12 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `MARKET_REVIEW_REGION` | Market review region: cn (A-shares), us (US stocks), both | `cn` |
 | `SCHEDULE_ENABLED` | Enable scheduled tasks | `false` |
 | `SCHEDULE_TIME` | Scheduled execution time | `18:00` |
+| `SCANNER_PROFILE` | Default scanner profile (keep `cn_preopen_v1` for this phase) | `cn_preopen_v1` |
+| `SCANNER_SCHEDULE_ENABLED` | Enable the Scanner schedule | `false` |
+| `SCANNER_SCHEDULE_TIME` | Scanner pre-open execution time | `08:40` |
+| `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | Run Scanner once on process startup | `false` |
+| `SCANNER_NOTIFICATION_ENABLED` | Send notification after scheduled Scanner runs | `true` |
+| `SCANNER_LOCAL_UNIVERSE_PATH` | Local A-share universe cache path for Scanner | `./data/scanner_cn_universe_cache.csv` |
 | `LOG_DIR` | Log directory | `./logs` |
 
 > Behavior notes:
@@ -435,6 +441,47 @@ python main.py --schedule
 crontab -e
 # Add: 0 18 * * 1-5 cd /path/to/project && python main.py
 ```
+
+### Scanner Pre-open Schedule
+
+Market Scanner uses a separate schedule instead of sharing semantics with the normal analysis workflow:
+
+```bash
+# Run one manual A-share scanner job
+python main.py --scanner
+
+# Start the Scanner schedule
+python main.py --scanner-schedule
+
+# Run both the analysis schedule and the Scanner schedule
+python main.py --schedule --scanner-schedule
+```
+
+The intended first setup is a pre-open run such as `08:40`. Each run produces a persistent daily watchlist that can later be reviewed from `/scanner`, `GET /api/v1/scanner/watchlists/today`, and `GET /api/v1/scanner/watchlists/recent`.
+
+### Scanner Schedule Environment Variables
+
+| Variable | Description | Default | Example |
+|--------|------|:-------:|:-----:|
+| `SCANNER_SCHEDULE_ENABLED` | Enable the Scanner schedule | `false` | `true` |
+| `SCANNER_SCHEDULE_TIME` | Scanner daily pre-open time (HH:MM) | `08:40` | `08:40` |
+| `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | Run one Scanner job on startup | `false` | `true` |
+| `SCANNER_NOTIFICATION_ENABLED` | Send a notification after scheduled Scanner runs | `true` | `true` |
+| `SCANNER_LOCAL_UNIVERSE_PATH` | Local A-share universe cache path for Scanner | `./data/scanner_cn_universe_cache.csv` | `./data/scanner_cn_universe_cache.csv` |
+
+### Scanner Daily Watchlists And Notifications
+
+With P9, Scanner output is treated as a persistent daily watchlist instead of an ephemeral table dump.
+
+- `today watchlist`: the preferred run for the current watchlist date
+- `recent watchlists`: lightweight day-level review of recent shortlists
+- `trigger_mode`: distinguishes `manual` from `scheduled`
+- `notification`: stores delivery success/failure
+- `failure`: stores a basic failure reason when a run fails
+
+The notification layer reuses the existing notification infrastructure. If the repo already has WeChat / Feishu / Telegram / Email / Slack or another supported channel configured, a scheduled Scanner run can push a compact pre-open shortlist automatically.
+
+If no candidate passes the threshold, the run is stored as `empty` instead of silently disappearing. If the run fails, it is stored as `failed` with a persisted failure reason.
 
 ---
 

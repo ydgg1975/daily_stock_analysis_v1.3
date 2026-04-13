@@ -611,35 +611,7 @@ class EfinanceFetcher(BaseFetcher):
             return None
         
         try:
-            # 检查缓存
-            current_time = time.time()
-            if (_realtime_cache['data'] is not None and 
-                current_time - _realtime_cache['timestamp'] < _realtime_cache['ttl']):
-                df = _realtime_cache['data']
-                cache_age = int(current_time - _realtime_cache['timestamp'])
-                logger.debug(f"[缓存命中] 实时行情(efinance) - 缓存年龄 {cache_age}s/{_realtime_cache['ttl']}s")
-            else:
-                # 触发全量刷新
-                logger.info(f"[缓存未命中] 触发全量刷新 实时行情(efinance)")
-                # 防封禁策略
-                self._set_random_user_agent()
-                self._enforce_rate_limit()
-                
-                logger.info(f"[API调用] ef.stock.get_realtime_quotes() 获取实时行情...")
-                import time as _time
-                api_start = _time.time()
-                
-                # efinance 的实时行情 API (with timeout to avoid indefinite hangs)
-                df = _ef_call_with_timeout(ef.stock.get_realtime_quotes)
-                
-                api_elapsed = _time.time() - api_start
-                logger.info(f"[API返回] ef.stock.get_realtime_quotes 成功: 返回 {len(df)} 只股票, 耗时 {api_elapsed:.2f}s")
-                circuit_breaker.record_success(source_key)
-                
-                # 更新缓存
-                _realtime_cache['data'] = df
-                _realtime_cache['timestamp'] = current_time
-                logger.info(f"[缓存更新] 实时行情(efinance) 缓存已刷新，TTL={_realtime_cache['ttl']}s")
+            df = self._load_realtime_snapshot_frame()
             
             # 查找指定股票
             # efinance 返回的列名可能是 '股票代码' 或 'code'
@@ -702,6 +674,116 @@ class EfinanceFetcher(BaseFetcher):
             logger.error(f"[API错误] 获取 {stock_code} 实时行情(efinance)失败: {e}")
             circuit_breaker.record_failure(source_key, str(e))
             return None
+
+    def _load_realtime_snapshot_frame(self) -> pd.DataFrame:
+        """
+        加载 efinance 全市场实时快照，复用现有缓存与限流逻辑。
+        """
+        import efinance as ef
+
+        circuit_breaker = get_realtime_circuit_breaker()
+        source_key = "efinance"
+        current_time = time.time()
+
+        if (
+            _realtime_cache["data"] is not None
+            and current_time - _realtime_cache["timestamp"] < _realtime_cache["ttl"]
+        ):
+            df = _realtime_cache["data"]
+            cache_age = int(current_time - _realtime_cache["timestamp"])
+            logger.debug(f"[缓存命中] 实时行情(efinance) - 缓存年龄 {cache_age}s/{_realtime_cache['ttl']}s")
+            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+
+        logger.info("[缓存未命中] 触发全量刷新 实时行情(efinance)")
+        self._set_random_user_agent()
+        self._enforce_rate_limit()
+
+        logger.info("[API调用] ef.stock.get_realtime_quotes() 获取实时行情...")
+        api_start = time.time()
+        df = _ef_call_with_timeout(ef.stock.get_realtime_quotes)
+        api_elapsed = time.time() - api_start
+        logger.info(f"[API返回] ef.stock.get_realtime_quotes 成功: 返回 {len(df)} 只股票, 耗时 {api_elapsed:.2f}s")
+        circuit_breaker.record_success(source_key)
+
+        _realtime_cache["data"] = df
+        _realtime_cache["timestamp"] = current_time
+        logger.info(f"[缓存更新] 实时行情(efinance) 缓存已刷新，TTL={_realtime_cache['ttl']}s")
+        return df
+
+    def get_a_share_spot_snapshot(self) -> Optional[pd.DataFrame]:
+        """
+        获取标准化 A 股全市场快照，供 Market Scanner 等模块复用。
+        """
+        try:
+            df = self._load_realtime_snapshot_frame()
+            if df is None or df.empty:
+                raise DataFetchError("ef.stock.get_realtime_quotes returned empty snapshot")
+
+            code_col = '股票代码' if '股票代码' in df.columns else 'code'
+            name_col = '股票名称' if '股票名称' in df.columns else 'name'
+            price_col = '最新价' if '最新价' in df.columns else 'price'
+            pct_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+            chg_col = '涨跌额' if '涨跌额' in df.columns else 'change'
+            vol_col = '成交量' if '成交量' in df.columns else 'volume'
+            amt_col = '成交额' if '成交额' in df.columns else 'amount'
+            turn_col = '换手率' if '换手率' in df.columns else 'turnover_rate'
+            amp_col = '振幅' if '振幅' in df.columns else 'amplitude'
+            high_col = '最高' if '最高' in df.columns else 'high'
+            low_col = '最低' if '最低' in df.columns else 'low'
+            open_col = '开盘' if '开盘' in df.columns else 'open'
+            vol_ratio_col = '量比' if '量比' in df.columns else 'volume_ratio'
+            pe_col = '市盈率' if '市盈率' in df.columns else 'pe_ratio'
+            total_mv_col = '总市值' if '总市值' in df.columns else 'total_mv'
+            circ_mv_col = '流通市值' if '流通市值' in df.columns else 'circ_mv'
+
+            snapshot = pd.DataFrame({
+                "code": df.get(code_col),
+                "name": df.get(name_col),
+                "price": df.get(price_col),
+                "change_pct": df.get(pct_col),
+                "change_amount": df.get(chg_col),
+                "volume": df.get(vol_col),
+                "amount": df.get(amt_col),
+                "turnover_rate": df.get(turn_col),
+                "volume_ratio": df.get(vol_ratio_col),
+                "amplitude": df.get(amp_col),
+                "open_price": df.get(open_col),
+                "high": df.get(high_col),
+                "low": df.get(low_col),
+                "pe_ratio": df.get(pe_col),
+                "total_mv": df.get(total_mv_col),
+                "circ_mv": df.get(circ_mv_col),
+            })
+
+            numeric_cols = [
+                "price",
+                "change_pct",
+                "change_amount",
+                "volume",
+                "amount",
+                "turnover_rate",
+                "volume_ratio",
+                "amplitude",
+                "open_price",
+                "high",
+                "low",
+                "pe_ratio",
+                "total_mv",
+                "circ_mv",
+            ]
+            for col in numeric_cols:
+                snapshot[col] = pd.to_numeric(snapshot[col], errors="coerce")
+
+            snapshot["code"] = snapshot["code"].astype(str).str.strip()
+            snapshot["name"] = snapshot["name"].astype(str).str.strip()
+            snapshot["source"] = RealtimeSource.EFINANCE.value
+            snapshot = snapshot.dropna(subset=["code"]).reset_index(drop=True)
+            if snapshot.empty:
+                raise DataFetchError("ef.stock.get_realtime_quotes normalized to empty snapshot")
+            return snapshot
+        except Exception as e:
+            logger.warning(f"[efinance] 获取 A 股全市场快照失败: {e}")
+            raise DataFetchError(f"efinance realtime snapshot failed: {e}") from e
 
     def _get_etf_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
         """

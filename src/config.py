@@ -717,6 +717,12 @@ class Config:
     schedule_enabled: bool = False            # 是否启用定时任务
     schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     schedule_run_immediately: bool = True     # 启动时是否立即执行一次
+    scanner_profile: str = "cn_preopen_v1"    # 市场扫描默认 profile
+    scanner_local_universe_path: str = "./data/scanner_cn_universe_cache.csv"  # Scanner 本地 universe 缓存路径
+    scanner_schedule_enabled: bool = False    # 是否启用 Scanner 定时任务
+    scanner_schedule_time: str = "08:40"      # Scanner 盘前执行时间（HH:MM）
+    scanner_schedule_run_immediately: bool = False  # 启动时是否立即执行一次 Scanner
+    scanner_notification_enabled: bool = True  # Scanner 定时运行后是否发送通知
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
     # 大盘复盘市场区域：cn(A股)、us(美股)、both(两者)，us 适合仅关注美股的用户
@@ -1376,6 +1382,12 @@ class Config:
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             schedule_run_immediately=schedule_run_immediately,
+            scanner_profile=os.getenv('SCANNER_PROFILE', 'cn_preopen_v1'),
+            scanner_local_universe_path=os.getenv('SCANNER_LOCAL_UNIVERSE_PATH', './data/scanner_cn_universe_cache.csv'),
+            scanner_schedule_enabled=os.getenv('SCANNER_SCHEDULE_ENABLED', 'false').lower() == 'true',
+            scanner_schedule_time=os.getenv('SCANNER_SCHEDULE_TIME', '08:40'),
+            scanner_schedule_run_immediately=os.getenv('SCANNER_SCHEDULE_RUN_IMMEDIATELY', 'false').lower() == 'true',
+            scanner_notification_enabled=os.getenv('SCANNER_NOTIFICATION_ENABLED', 'true').lower() == 'true',
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
             market_review_region=cls._parse_market_review_region(

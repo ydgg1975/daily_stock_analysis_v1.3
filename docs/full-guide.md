@@ -295,6 +295,12 @@ daily_stock_analysis/
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：默认 `true`，非交易日跳过执行；设为 `false` 或使用 `--force-run` 可强制执行（Issue #373） | `true` |
 | `SCHEDULE_ENABLED` | 启用定时任务 | `false` |
 | `SCHEDULE_TIME` | 定时执行时间 | `18:00` |
+| `SCANNER_PROFILE` | Scanner 默认 profile（当前阶段建议保持 `cn_preopen_v1`） | `cn_preopen_v1` |
+| `SCANNER_SCHEDULE_ENABLED` | 启用 Scanner 定时任务 | `false` |
+| `SCANNER_SCHEDULE_TIME` | Scanner 盘前执行时间 | `08:40` |
+| `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | 启动时是否立即执行一次 Scanner | `false` |
+| `SCANNER_NOTIFICATION_ENABLED` | Scanner 定时运行后是否发送通知 | `true` |
+| `SCANNER_LOCAL_UNIVERSE_PATH` | Scanner 本地 A 股 universe 缓存路径 | `./data/scanner_cn_universe_cache.csv` |
 | `LOG_DIR` | 日志目录 | `./logs` |
 
 ---
@@ -490,6 +496,23 @@ python main.py --schedule
 python main.py --schedule --no-run-immediately
 ```
 
+#### Scanner 盘前定时任务
+
+Market Scanner 使用独立的 schedule，不会和个股/大盘分析调度混为一体：
+
+```bash
+# 手动运行一次 A 股盘前 Scanner
+python main.py --scanner
+
+# 启动 Scanner 定时任务
+python main.py --scanner-schedule
+
+# 同时启用普通分析 schedule 与 Scanner schedule
+python main.py --schedule --scanner-schedule
+```
+
+Scanner 适合设置在盘前，例如 `08:40`。运行后会生成一个 daily watchlist，并可通过 `/api/v1/scanner/watchlists/today`、`/api/v1/scanner/watchlists/recent` 和 Web `/scanner` 页面查看。
+
 #### 环境变量方式
 
 你也可以通过环境变量配置定时行为（适用于 Docker 或 .env）：
@@ -500,12 +523,27 @@ python main.py --schedule --no-run-immediately
 | `SCHEDULE_TIME` | 每日执行时间 (HH:MM) | `18:00` | `09:30` |
 | `SCHEDULE_RUN_IMMEDIATELY` | 启动服务时是否立即运行一次 | `true` | `false` |
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：非交易日跳过执行；设为 `false` 可强制执行 | `true` | `false` |
+| `SCANNER_SCHEDULE_ENABLED` | 是否启用 Scanner 定时任务 | `false` | `true` |
+| `SCANNER_SCHEDULE_TIME` | Scanner 每日盘前执行时间 (HH:MM) | `08:40` | `08:40` |
+| `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | 启动时是否立即执行一次 Scanner | `false` | `true` |
+| `SCANNER_NOTIFICATION_ENABLED` | Scanner 定时运行后是否发送通知 | `true` | `true` |
+| `SCANNER_LOCAL_UNIVERSE_PATH` | Scanner 本地 A 股 universe cache 路径 | `./data/scanner_cn_universe_cache.csv` | `./data/scanner_cn_universe_cache.csv` |
 
 例如在 Docker 中配置：
 
 ```bash
 # 设置启动时不立即分析
 docker run -e SCHEDULE_ENABLED=true -e SCHEDULE_RUN_IMMEDIATELY=false ...
+```
+
+如果还要同时启用盘前 Scanner，可继续追加：
+
+```bash
+docker run \
+  -e SCANNER_SCHEDULE_ENABLED=true \
+  -e SCANNER_SCHEDULE_TIME=08:40 \
+  -e SCANNER_NOTIFICATION_ENABLED=true \
+  ...
 ```
 
 #### 交易日判断（Issue #373）
@@ -524,6 +562,20 @@ docker run -e SCHEDULE_ENABLED=true -e SCHEDULE_RUN_IMMEDIATELY=false ...
 crontab -e
 # 添加：0 18 * * 1-5 cd /path/to/project && python main.py
 ```
+
+### Scanner daily watchlist 与通知
+
+P9 之后，Scanner 的盘前输出会被当作 daily watchlist 持久化，而不是一次性临时结果。
+
+- `today watchlist`：按 `watchlist_date` 选择当日最佳 run
+- `recent watchlists`：按交易日聚合展示近期 shortlist
+- `trigger_mode`：区分 `manual` 与 `scheduled`
+- `notification`：记录推送是否成功
+- `failure`：失败时保留基础原因
+
+当前通知层复用现有通知基础设施。只要仓库已经配置了 WeChat / Feishu / Telegram / Email / Slack 等任何可用渠道，就可以让 Scanner 定时运行后自动推送一份紧凑的盘前观察名单摘要。
+
+若当日没有候选满足规则阈值，系统会把结果记为 `empty`，而不是静默失败；若数据源或运行流程出错，则会记为 `failed` 并保留失败原因。
 
 ---
 

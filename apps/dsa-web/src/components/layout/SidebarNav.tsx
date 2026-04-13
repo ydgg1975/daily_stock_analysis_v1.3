@@ -11,6 +11,7 @@ import {
   Home,
   LogOut,
   MessageSquareText,
+  Radar,
   Settings2,
   TestTubeDiagonal,
 } from 'lucide-react';
@@ -54,6 +55,7 @@ const BrandWordmark: React.FC<{
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', labelKey: 'nav.home', to: '/', icon: Home },
+  { key: 'scanner', labelKey: 'nav.scanner', to: '/scanner', icon: Radar },
   { key: 'chat', labelKey: 'nav.chat', to: '/chat', icon: MessageSquareText, badge: 'completion' },
   { key: 'portfolio', labelKey: 'nav.portfolio', to: '/portfolio', icon: BriefcaseBusiness },
   { key: 'backtest', labelKey: 'nav.backtest', to: '/backtest', icon: TestTubeDiagonal },

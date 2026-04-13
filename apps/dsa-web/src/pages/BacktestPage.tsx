@@ -40,6 +40,8 @@ type ActiveModule = 'historical' | 'rule';
 type ControlPanelMode = 'normal' | 'professional';
 type BacktestPageLocationState = {
   draftRun?: RuleBacktestRunResponse;
+  prefillCode?: string;
+  prefillName?: string;
 };
 
 type PerformanceNotice = {
@@ -456,8 +458,16 @@ const BacktestPage: React.FC = () => {
   useEffect(() => {
     const state = location.state as BacktestPageLocationState | null;
     const draftRun = state?.draftRun;
-    if (!draftRun) return;
-    applyRuleRunDraft(draftRun);
+    if (draftRun) {
+      applyRuleRunDraft(draftRun);
+      return;
+    }
+
+    const prefillCode = state?.prefillCode?.trim().toUpperCase();
+    if (!prefillCode) return;
+
+    setActiveModule('rule');
+    setCodeFilter(prefillCode);
   }, [applyRuleRunDraft, location.state]);
 
   const fetchPerformance = useCallback(async (code?: string, windowBars?: number, options: { showNotice?: boolean } = {}) => {
