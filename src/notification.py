@@ -16,7 +16,7 @@ A股自选股智能分析系统 - 通知层
 """
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Iterable, List, Dict, Any, Optional, Tuple
 from enum import Enum
 
 from src.config import get_config
@@ -126,7 +126,35 @@ class NotificationService(
     注意：所有已配置的渠道都会收到推送
     """
     
-    def __init__(self, source_message: Optional[BotMessage] = None):
+    @staticmethod
+    def _normalize_channel_allowlist(
+        channels: Optional[Iterable[NotificationChannel | str]],
+    ) -> Optional[set[NotificationChannel]]:
+        if channels is None:
+            return None
+
+        normalized: set[NotificationChannel] = set()
+        for item in channels:
+            if isinstance(item, NotificationChannel):
+                normalized.add(item)
+                continue
+            key = str(item or "").strip().lower()
+            if not key:
+                continue
+            try:
+                normalized.add(NotificationChannel(key))
+            except ValueError:
+                logger.debug("Skip unknown notification channel in allowlist: %s", item)
+        return normalized
+
+    def __init__(
+        self,
+        source_message: Optional[BotMessage] = None,
+        *,
+        channel_allowlist: Optional[Iterable[NotificationChannel | str]] = None,
+        email_receivers_override: Optional[List[str]] = None,
+        discord_webhook_url_override: Optional[str] = None,
+    ):
         """
         初始化通知服务
         
@@ -135,6 +163,7 @@ class NotificationService(
         config = get_config()
         self._source_message = source_message
         self._context_channels: List[str] = []
+        self._channel_allowlist = self._normalize_channel_allowlist(channel_allowlist)
 
         # Markdown 转图片（Issue #289）
         self._markdown_to_image_channels = set(
@@ -162,8 +191,27 @@ class NotificationService(
         TelegramSender.__init__(self, config)
         WechatSender.__init__(self, config)
 
+        if email_receivers_override is not None:
+            self._email_config['receivers'] = [
+                str(receiver).strip()
+                for receiver in email_receivers_override
+                if str(receiver).strip()
+            ]
+        if discord_webhook_url_override is not None:
+            normalized_webhook = str(discord_webhook_url_override).strip() or None
+            self._discord_config['webhook_url'] = normalized_webhook
+            # User-owned webhook delivery should not silently fall back to shared bot channels.
+            self._discord_config['bot_token'] = None
+            self._discord_config['channel_id'] = None
+
         # 检测所有已配置的渠道
         self._available_channels = self._detect_all_channels()
+        if self._channel_allowlist is not None:
+            self._available_channels = [
+                channel
+                for channel in self._available_channels
+                if channel in self._channel_allowlist
+            ]
         if self._has_context_channel():
             self._context_channels.append("钉钉会话")
 

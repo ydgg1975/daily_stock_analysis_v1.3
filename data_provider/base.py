@@ -26,6 +26,7 @@ import pandas as pd
 import numpy as np
 from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from .fundamental_adapter import AkshareFundamentalAdapter
+from .provider_credentials import get_provider_credentials
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -546,6 +547,12 @@ class DataFetcherManager:
         self._tickflow_fetcher = None
         self._tickflow_api_key: Optional[str] = None
         self._tickflow_lock = RLock()
+        self._alpaca_fetcher = None
+        self._alpaca_credentials: Optional[Tuple[str, str, str]] = None
+        self._alpaca_lock = RLock()
+        self._twelve_data_fetcher = None
+        self._twelve_data_api_key: Optional[str] = None
+        self._twelve_data_lock = RLock()
         self._fundamental_cache: Dict[str, Dict[str, Any]] = {}
         self._fundamental_cache_lock = RLock()
         self._fundamental_timeout_worker_limit = 8
@@ -598,6 +605,70 @@ class DataFetcherManager:
                 self._tickflow_api_key = None
                 return None
 
+    def _get_alpaca_fetcher(self):
+        """Lazily create an Alpaca fetcher for US market-data enrichment."""
+        credentials = get_provider_credentials("alpaca")
+        if not credentials.is_configured:
+            with self._alpaca_lock:
+                self._alpaca_fetcher = None
+                self._alpaca_credentials = None
+            return None
+
+        signature = (
+            str(credentials.key_id or ""),
+            str(credentials.secret_key or ""),
+            str(credentials.extras.get("data_feed") or "iex"),
+        )
+        with self._alpaca_lock:
+            current_fetcher = getattr(self, "_alpaca_fetcher", None)
+            current_signature = getattr(self, "_alpaca_credentials", None)
+            if current_fetcher is not None and current_signature == signature:
+                return current_fetcher
+            try:
+                from .alpaca_fetcher import AlpacaFetcher
+
+                fetcher = AlpacaFetcher(
+                    api_key_id=signature[0],
+                    secret_key=signature[1],
+                    data_feed=signature[2],
+                )
+                self._alpaca_fetcher = fetcher
+                self._alpaca_credentials = signature
+                return fetcher
+            except Exception as exc:
+                logger.warning("[AlpacaFetcher] 初始化失败: %s", exc)
+                self._alpaca_fetcher = None
+                self._alpaca_credentials = None
+                return None
+
+    def _get_twelve_data_fetcher(self):
+        """Lazily create a Twelve Data fetcher for HK/US scanner enrichment."""
+        credentials = get_provider_credentials("twelve_data")
+        api_key = str(credentials.primary_api_key or "").strip()
+        if not api_key:
+            with self._twelve_data_lock:
+                self._twelve_data_fetcher = None
+                self._twelve_data_api_key = None
+            return None
+
+        with self._twelve_data_lock:
+            current_fetcher = getattr(self, "_twelve_data_fetcher", None)
+            current_api_key = getattr(self, "_twelve_data_api_key", None)
+            if current_fetcher is not None and current_api_key == api_key:
+                return current_fetcher
+            try:
+                from .twelve_data_fetcher import TwelveDataFetcher
+
+                fetcher = TwelveDataFetcher(api_key=api_key)
+                self._twelve_data_fetcher = fetcher
+                self._twelve_data_api_key = api_key
+                return fetcher
+            except Exception as exc:
+                logger.warning("[TwelveDataFetcher] 初始化失败: %s", exc)
+                self._twelve_data_fetcher = None
+                self._twelve_data_api_key = None
+                return None
+
     def close(self) -> None:
         """Best-effort release of manager-owned resources."""
         if not hasattr(self, "_tickflow_lock") or self._tickflow_lock is None:
@@ -607,12 +678,30 @@ class DataFetcherManager:
             current_fetcher = getattr(self, "_tickflow_fetcher", None)
             self._tickflow_fetcher = None
             self._tickflow_api_key = None
+        with self._alpaca_lock:
+            current_alpaca_fetcher = getattr(self, "_alpaca_fetcher", None)
+            self._alpaca_fetcher = None
+            self._alpaca_credentials = None
+        with self._twelve_data_lock:
+            current_twelve_data_fetcher = getattr(self, "_twelve_data_fetcher", None)
+            self._twelve_data_fetcher = None
+            self._twelve_data_api_key = None
 
         if current_fetcher is not None and hasattr(current_fetcher, "close"):
             try:
                 current_fetcher.close()
             except Exception as exc:
                 logger.debug("[TickFlowFetcher] 关闭管理器资源失败: %s", exc)
+        if current_alpaca_fetcher is not None and hasattr(current_alpaca_fetcher, "close"):
+            try:
+                current_alpaca_fetcher.close()
+            except Exception as exc:
+                logger.debug("[AlpacaFetcher] 关闭管理器资源失败: %s", exc)
+        if current_twelve_data_fetcher is not None and hasattr(current_twelve_data_fetcher, "close"):
+            try:
+                current_twelve_data_fetcher.close()
+            except Exception as exc:
+                logger.debug("[TwelveDataFetcher] 关闭管理器资源失败: %s", exc)
 
     def __del__(self) -> None:
         try:
@@ -911,42 +1000,96 @@ class DataFetcherManager:
         total_fetchers = len(self._fetchers)
         request_start = time.time()
 
-        # 快速路径：美股指数与美股股票直接路由到 YfinanceFetcher
+        # 快速路径：美股指数/美股股票走受控 provider 链路
         if is_us_index_code(stock_code) or is_us_stock_code(stock_code):
-            for attempt, fetcher in enumerate(self._fetchers, start=1):
-                if fetcher.name == "YfinanceFetcher":
-                    try:
+            us_candidates: List[Tuple[str, Any]] = []
+            if is_us_stock_code(stock_code):
+                alpaca_credentials = get_provider_credentials("alpaca")
+                if alpaca_credentials.is_partial:
+                    errors.append("[AlpacaFetcher] (ConfigError) incomplete_credentials")
+                elif alpaca_credentials.is_configured:
+                    alpaca_fetcher = self._get_alpaca_fetcher()
+                    if alpaca_fetcher is None:
+                        errors.append("[AlpacaFetcher] (InitializationError) initialization_failed")
+                    else:
+                        us_candidates.append(("AlpacaFetcher", alpaca_fetcher))
+
+            yfinance_fetcher = next((fetcher for fetcher in self._fetchers if fetcher.name == "YfinanceFetcher"), None)
+            if yfinance_fetcher is not None:
+                us_candidates.append(("YfinanceFetcher", yfinance_fetcher))
+
+            for attempt, (fetcher_name, fetcher) in enumerate(us_candidates, start=1):
+                try:
+                    logger.info(
+                        f"[数据源尝试 {attempt}/{max(len(us_candidates), 1)}] [{fetcher_name}] "
+                        f"美股/美股指数 {stock_code} 直接路由..."
+                    )
+                    df = fetcher.get_daily_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days,
+                    )
+                    if isinstance(df, tuple) and len(df) == 2:
+                        df, resolved_source = df
+                    else:
+                        resolved_source = fetcher_name
+                    if df is not None and not df.empty:
+                        elapsed = time.time() - request_start
                         logger.info(
-                            f"[数据源尝试 {attempt}/{total_fetchers}] [{fetcher.name}] "
-                            f"美股/美股指数 {stock_code} 直接路由..."
+                            f"[数据源完成] {stock_code} 使用 [{resolved_source}] 获取成功: "
+                            f"rows={len(df)}, elapsed={elapsed:.2f}s"
                         )
-                        df = fetcher.get_daily_data(
-                            stock_code=stock_code,
-                            start_date=start_date,
-                            end_date=end_date,
-                            days=days,
-                        )
-                        if df is not None and not df.empty:
-                            elapsed = time.time() - request_start
-                            logger.info(
-                                f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
-                                f"rows={len(df)}, elapsed={elapsed:.2f}s"
-                            )
-                            return df, fetcher.name
-                    except Exception as e:
-                        error_type, error_reason = summarize_exception(e)
-                        error_msg = f"[{fetcher.name}] ({error_type}) {error_reason}"
-                        logger.warning(
-                            f"[数据源失败 {attempt}/{total_fetchers}] [{fetcher.name}] {stock_code}: "
-                            f"error_type={error_type}, reason={error_reason}"
-                        )
-                        errors.append(error_msg)
-                    break
-            # YfinanceFetcher failed or not found
+                        return df, str(resolved_source)
+                except Exception as e:
+                    error_type, error_reason = summarize_exception(e)
+                    error_msg = f"[{fetcher_name}] ({error_type}) {error_reason}"
+                    logger.warning(
+                        f"[数据源失败 {attempt}/{max(len(us_candidates), 1)}] [{fetcher_name}] {stock_code}: "
+                        f"error_type={error_type}, reason={error_reason}"
+                    )
+                    errors.append(error_msg)
+
+            # 所有美股 provider 均失败或不可用
             error_summary = f"美股/美股指数 {stock_code} 获取失败:\n" + "\n".join(errors)
             elapsed = time.time() - request_start
             logger.error(f"[数据源终止] {stock_code} 获取失败: elapsed={elapsed:.2f}s\n{error_summary}")
             raise DataFetchError(error_summary)
+
+        # 港股优先尝试 Twelve Data，再回退到现有 fetcher 链
+        if _is_hk_market(stock_code):
+            twelve_data_fetcher = self._get_twelve_data_fetcher()
+            if twelve_data_fetcher is not None:
+                try:
+                    logger.info(
+                        f"[数据源尝试 1/{total_fetchers + 1}] [TwelveDataFetcher] "
+                        f"港股 {stock_code} 优先路由..."
+                    )
+                    df = twelve_data_fetcher.get_daily_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        days=days,
+                    )
+                    if isinstance(df, tuple) and len(df) == 2:
+                        df, resolved_source = df
+                    else:
+                        resolved_source = "TwelveDataFetcher"
+                    if df is not None and not df.empty:
+                        elapsed = time.time() - request_start
+                        logger.info(
+                            f"[数据源完成] {stock_code} 使用 [{resolved_source}] 获取成功: "
+                            f"rows={len(df)}, elapsed={elapsed:.2f}s"
+                        )
+                        return df, str(resolved_source)
+                except Exception as e:
+                    error_type, error_reason = summarize_exception(e)
+                    error_msg = f"[TwelveDataFetcher] ({error_type}) {error_reason}"
+                    logger.warning(
+                        f"[数据源失败 1/{total_fetchers + 1}] [TwelveDataFetcher] {stock_code}: "
+                        f"error_type={error_type}, reason={error_reason}"
+                    )
+                    errors.append(error_msg)
 
         for attempt, fetcher in enumerate(self._fetchers, start=1):
             try:
@@ -1194,12 +1337,91 @@ class DataFetcherManager:
 
         # 美股单独处理，使用 YfinanceFetcher
         if _is_us_code(stock_code):
+            alpaca_credentials = get_provider_credentials("alpaca")
+            route_steps: List[str] = []
+            if alpaca_credentials.is_configured:
+                route_steps.append("alpaca")
+            elif alpaca_credentials.is_partial:
+                route_steps.append("alpaca(incomplete)")
+            route_steps.append("yfinance")
             append_trace(
                 provider="market_route",
                 action="selected",
                 outcome="ok",
-                message="US stock route selected: yfinance only.",
+                message=f"US stock route selected: {' -> '.join(route_steps)}.",
             )
+            if alpaca_credentials.is_partial:
+                append_trace(
+                    provider="alpaca",
+                    action="skipped",
+                    outcome="not_configured",
+                    reason="incomplete_credentials",
+                    message="Skipped Alpaca because both key ID and secret key are required.",
+                )
+            elif not alpaca_credentials.is_configured:
+                append_trace(
+                    provider="alpaca",
+                    action="skipped",
+                    outcome="not_configured",
+                    reason="provider_not_configured",
+                    message="Skipped Alpaca because it is not configured.",
+                )
+            else:
+                alpaca_fetcher = self._get_alpaca_fetcher()
+                if alpaca_fetcher is None:
+                    append_trace(
+                        provider="alpaca",
+                        action="failed",
+                        outcome="failed",
+                        reason="initialization_failed",
+                        message="Alpaca credentials were present but the fetcher failed to initialize.",
+                    )
+                else:
+                    append_trace(
+                        provider="alpaca",
+                        action="attempting",
+                        outcome="unknown",
+                        message=f"Attempting realtime quote from alpaca for {stock_code}.",
+                    )
+                    try:
+                        quote = alpaca_fetcher.get_realtime_quote(stock_code)
+                        if quote is not None and quote.has_basic_data():
+                            source = getattr(getattr(quote, "source", None), "value", "alpaca")
+                            logger.info(f"[实时行情] 美股 {stock_code} 成功获取 (来源: {source})")
+                            append_trace(
+                                provider=str(source).lower(),
+                                action="succeeded",
+                                outcome="ok",
+                                message=f"Realtime quote accepted from {source}.",
+                            )
+                            self._set_last_realtime_quote_trace(trace_entries)
+                            return quote
+                        if quote is None:
+                            append_trace(
+                                provider="alpaca",
+                                action="failed",
+                                outcome="empty_result",
+                                reason="provider_returned_none",
+                                message="Provider returned no realtime quote.",
+                            )
+                        else:
+                            append_trace(
+                                provider="alpaca",
+                                action="failed",
+                                outcome="insufficient_fields",
+                                reason="basic_fields_missing",
+                                message="Provider returned quote but basic fields were insufficient.",
+                            )
+                    except Exception as e:
+                        outcome, reason = self._classify_provider_error(e)
+                        logger.warning(f"[实时行情] 美股 {stock_code} 获取失败 (alpaca): {e}")
+                        append_trace(
+                            provider="alpaca",
+                            action="failed",
+                            outcome=outcome,
+                            reason=reason,
+                            message=f"Realtime quote failed on alpaca: {reason}",
+                        )
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, 'get_realtime_quote'):
@@ -1251,15 +1473,65 @@ class DataFetcherManager:
             self._set_last_realtime_quote_trace(trace_entries)
             return None
 
-        # 港股实时行情只走港股专用入口，避免按 A 股 source_priority
-        # 反复触发同一个 ak.stock_hk_spot_em() 接口。
+        # 港股实时行情走专用入口：优先 Twelve Data，再回退 akshare_hk。
         if _is_hk_market(stock_code):
+            route_steps: List[str] = []
+            if self._get_twelve_data_fetcher() is not None:
+                route_steps.append("twelve_data")
+            route_steps.append("akshare_hk")
             append_trace(
                 provider="market_route",
                 action="selected",
                 outcome="ok",
-                message="HK route selected: akshare_hk only.",
+                message=f"HK route selected: {' -> '.join(route_steps)}.",
             )
+            twelve_data_fetcher = self._get_twelve_data_fetcher()
+            if twelve_data_fetcher is not None:
+                append_trace(
+                    provider="twelve_data",
+                    action="attempting",
+                    outcome="unknown",
+                    message=f"Attempting realtime quote from twelve_data for {stock_code}.",
+                )
+                try:
+                    quote = twelve_data_fetcher.get_realtime_quote(stock_code)
+                    if quote is not None and quote.has_basic_data():
+                        source = getattr(getattr(quote, "source", None), "value", "twelve_data")
+                        logger.info(f"[实时行情] 港股 {stock_code} 成功获取 (来源: {source})")
+                        append_trace(
+                            provider=str(source).lower(),
+                            action="succeeded",
+                            outcome="ok",
+                            message=f"Realtime quote accepted from {source}.",
+                        )
+                        self._set_last_realtime_quote_trace(trace_entries)
+                        return quote
+                    if quote is None:
+                        append_trace(
+                            provider="twelve_data",
+                            action="failed",
+                            outcome="empty_result",
+                            reason="provider_returned_none",
+                            message="Provider returned no realtime quote.",
+                        )
+                    else:
+                        append_trace(
+                            provider="twelve_data",
+                            action="failed",
+                            outcome="insufficient_fields",
+                            reason="basic_fields_missing",
+                            message="Provider returned quote but basic fields were insufficient.",
+                        )
+                except Exception as e:
+                    outcome, reason = self._classify_provider_error(e)
+                    logger.warning(f"[实时行情] 港股 {stock_code} 获取失败 (twelve_data): {e}")
+                    append_trace(
+                        provider="twelve_data",
+                        action="failed",
+                        outcome=outcome,
+                        reason=reason,
+                        message=f"Realtime quote failed on twelve_data: {reason}",
+                    )
             for fetcher in self._fetchers:
                 if fetcher.name != "AkshareFetcher":
                     continue

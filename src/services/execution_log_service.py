@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, ROLE_ADMIN, ROLE_USER
 from src.storage import get_db
 
 _SECRET_PATTERNS = [
@@ -145,9 +146,23 @@ class ExecutionLogService:
         stock_code: str,
         stock_name: Optional[str],
         configured_execution: Optional[Dict[str, Any]],
+        owner_id: Optional[str] = None,
+        actor: Optional[Dict[str, Any]] = None,
+        subsystem: str = "analysis",
     ) -> str:
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
+        summary = self._merge_summary(
+            {
+                "configured_execution": configured_execution or {},
+            },
+            self._summary_meta(
+                owner_id=owner_id,
+                actor=actor,
+                session_kind="user_activity",
+                subsystem=subsystem,
+            ),
+        )
         self.db.create_execution_log_session(
             session_id=session_id,
             task_id=task_id,
@@ -155,7 +170,7 @@ class ExecutionLogService:
             name=stock_name,
             overall_status="running",
             truth_level="mixed",
-            summary={"configured_execution": configured_execution or {}},
+            summary=summary,
             started_at=started_at,
         )
         self.db.append_execution_log_event(
@@ -170,6 +185,216 @@ class ExecutionLogService:
             event_at=started_at,
         )
         self._append_configured_events(session_id, configured_execution or {})
+        return session_id
+
+    def _resolve_actor(self, owner_id: Optional[str], actor: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        actor_payload = dict(actor or {})
+        user_id = _as_str(actor_payload.get("user_id")) or _as_str(owner_id)
+        username = _as_str(actor_payload.get("username"))
+        display_name = _as_str(actor_payload.get("display_name"))
+        role = _as_str(actor_payload.get("role")).lower()
+
+        if user_id:
+            user_row = self.db.get_app_user(user_id)
+            if user_row is not None:
+                username = username or _as_str(getattr(user_row, "username", None))
+                display_name = display_name or _as_str(getattr(user_row, "display_name", None))
+                role = role or _as_str(getattr(user_row, "role", None)).lower()
+
+        if role not in {ROLE_ADMIN, ROLE_USER}:
+            role = ROLE_ADMIN if user_id == BOOTSTRAP_ADMIN_USER_ID else ROLE_USER
+
+        return {
+            "user_id": user_id or None,
+            "username": username or None,
+            "display_name": display_name or username or user_id or None,
+            "role": role,
+        }
+
+    def _summary_meta(
+        self,
+        *,
+        owner_id: Optional[str] = None,
+        actor: Optional[Dict[str, Any]] = None,
+        session_kind: str,
+        subsystem: str,
+        action_name: Optional[str] = None,
+        destructive: bool = False,
+    ) -> Dict[str, Any]:
+        actor_payload = self._resolve_actor(owner_id, actor)
+        return {
+            "meta": {
+                "actor_user_id": actor_payload.get("user_id"),
+                "actor_username": actor_payload.get("username"),
+                "actor_display": actor_payload.get("display_name"),
+                "actor_role": actor_payload.get("role"),
+                "session_kind": session_kind,
+                "subsystem": subsystem,
+                "action_name": action_name,
+                "destructive": bool(destructive),
+            }
+        }
+
+    @staticmethod
+    def _merge_summary(*parts: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        merged: Dict[str, Any] = {}
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            for key, value in part.items():
+                if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                    merged[key] = {**merged[key], **value}
+                else:
+                    merged[key] = value
+        return merged
+
+    def record_admin_action(
+        self,
+        *,
+        action: str,
+        message: str,
+        actor: Optional[Dict[str, Any]] = None,
+        subsystem: str = "system_control",
+        destructive: bool = False,
+        detail: Optional[Dict[str, Any]] = None,
+        overall_status: str = "completed",
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        summary = self._merge_summary(
+            {"admin_action": detail or {}},
+            self._summary_meta(
+                actor=actor,
+                session_kind="admin_action",
+                subsystem=subsystem,
+                action_name=action,
+                destructive=destructive,
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id=action,
+            code=None,
+            name=action,
+            overall_status=overall_status,
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="system",
+            step=action,
+            target=subsystem,
+            status=overall_status,
+            truth_level="actual",
+            message=message,
+            detail={
+                "category": "system",
+                "action": action,
+                "outcome": _outcome_from_status(overall_status),
+                "destructive": destructive,
+                **(detail or {}),
+            },
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=overall_status,
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
+        return session_id
+
+    def record_scanner_run(
+        self,
+        *,
+        run_detail: Dict[str, Any],
+        actor: Optional[Dict[str, Any]] = None,
+        session_kind: str = "user_activity",
+    ) -> str:
+        session_id = uuid.uuid4().hex
+        started_at = datetime.now()
+        diagnostics = run_detail.get("diagnostics") if isinstance(run_detail.get("diagnostics"), dict) else {}
+        coverage = diagnostics.get("coverage_summary") if isinstance(diagnostics.get("coverage_summary"), dict) else {}
+        providers = diagnostics.get("provider_diagnostics") if isinstance(diagnostics.get("provider_diagnostics"), dict) else {}
+        provider_list = [
+            str(item)
+            for item in (providers.get("providers_used") or [])
+            if str(item).strip()
+        ]
+        coverage_summary = (
+            f"Scanned {int(coverage.get('input_universe_size') or 0)} symbols, "
+            f"shortlisted {int(coverage.get('shortlisted_count') or 0)}."
+        )
+        summary = self._merge_summary(
+            {
+                "scanner_run": {
+                    "scanner_run_id": run_detail.get("id"),
+                    "market": run_detail.get("market"),
+                    "profile": run_detail.get("profile"),
+                    "profile_label": run_detail.get("profile_label"),
+                    "trigger_mode": run_detail.get("trigger_mode"),
+                    "status": run_detail.get("status"),
+                    "shortlist_count": run_detail.get("shortlist_size"),
+                    "coverage_summary": coverage_summary,
+                    "coverage": coverage,
+                    "providers_used": provider_list,
+                    "provider_diagnostics": providers,
+                    "fallback_count": int(providers.get("fallback_count") or 0),
+                    "provider_failure_count": int(providers.get("provider_failure_count") or 0),
+                    "warning_summary": list(providers.get("provider_warnings") or []),
+                }
+            },
+            self._summary_meta(
+                actor=actor,
+                session_kind=session_kind,
+                subsystem="scanner",
+                action_name="scanner_run",
+                destructive=False,
+            ),
+        )
+        self.db.create_execution_log_session(
+            session_id=session_id,
+            task_id="scanner_run",
+            code=str(run_detail.get("market") or "").strip() or None,
+            name="Scanner run",
+            overall_status=str(run_detail.get("status") or "completed"),
+            truth_level="actual",
+            summary=summary,
+            started_at=started_at,
+        )
+        self.db.append_execution_log_event(
+            session_id=session_id,
+            phase="scanner",
+            step="scanner_run",
+            target=str(run_detail.get("profile_label") or run_detail.get("profile") or "scanner"),
+            status=str(run_detail.get("status") or "completed"),
+            truth_level="actual",
+            message=coverage_summary,
+            detail={
+                "category": "scanner",
+                "action": "scanner_run",
+                "outcome": _outcome_from_status(run_detail.get("status")),
+                "scanner_run_id": run_detail.get("id"),
+                "market": run_detail.get("market"),
+                "shortlist_count": run_detail.get("shortlist_size"),
+                "coverage": coverage,
+                "providers_used": provider_list,
+                "fallback_count": int(providers.get("fallback_count") or 0),
+                "provider_failure_count": int(providers.get("provider_failure_count") or 0),
+                "warnings": list(providers.get("provider_warnings") or []),
+            },
+            event_at=started_at,
+        )
+        self.db.finalize_execution_log_session(
+            session_id=session_id,
+            overall_status=str(run_detail.get("status") or "completed"),
+            truth_level="actual",
+            summary=summary,
+            ended_at=started_at,
+        )
         return session_id
 
     def _append_configured_events(self, session_id: str, configured: Dict[str, Any]) -> None:
@@ -400,15 +625,20 @@ class ExecutionLogService:
         self._append_data_events(session_id, data)
         self._append_notification_events(session_id, notification)
 
+        existing_detail = self.db.get_execution_log_session_detail(session_id) or {}
+        existing_summary = existing_detail.get("summary") if isinstance(existing_detail.get("summary"), dict) else {}
         self.db.finalize_execution_log_session(
             session_id=session_id,
             overall_status=overall_status,
             truth_level="mixed",
             query_id=query_id,
-            summary={
-                "runtime_execution": runtime,
-                "notification_result": notification,
-            },
+            summary=self._merge_summary(
+                existing_summary,
+                {
+                    "runtime_execution": runtime,
+                    "notification_result": notification,
+                },
+            ),
             ended_at=datetime.now(),
         )
         self.db.attach_execution_session_to_query(session_id=session_id, query_id=query_id)
@@ -761,6 +991,7 @@ class ExecutionLogService:
         summary: Dict[str, Any],
         events: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        meta = summary.get("meta") if isinstance(summary.get("meta"), dict) else {}
         runtime = self._runtime_from_summary(summary)
         ai = runtime.get("ai") if isinstance(runtime.get("ai"), dict) else {}
         final_ai_model = _as_str(ai.get("model")) or None
@@ -791,6 +1022,7 @@ class ExecutionLogService:
             notification_classification = "failed"
 
         failure_reason = self._top_failure_reason(events=events, summary=summary)
+        scanner_run = summary.get("scanner_run") if isinstance(summary.get("scanner_run"), dict) else {}
 
         narrative_parts: List[str] = []
         ai_attempts = self._phase_attempt_events(events or [], "ai_model")
@@ -844,10 +1076,24 @@ class ExecutionLogService:
 
         if failure_reason:
             narrative_parts.append(f"Top failure reason: {failure_reason}")
+        scanner_coverage_summary = _as_str(scanner_run.get("coverage_summary")) or None
+        if scanner_coverage_summary:
+            narrative_parts.append(scanner_coverage_summary)
+        scanner_warning_summary = scanner_run.get("warning_summary") if isinstance(scanner_run.get("warning_summary"), list) else []
+        if scanner_warning_summary:
+            narrative_parts.append(f"Scanner warnings: {'; '.join(str(item) for item in scanner_warning_summary[:3])}")
 
         summary_paragraph = " ".join(part for part in narrative_parts if part).strip()
 
         return {
+            "actor_user_id": _as_str(meta.get("actor_user_id")) or None,
+            "actor_username": _as_str(meta.get("actor_username")) or None,
+            "actor_display": _as_str(meta.get("actor_display")) or None,
+            "actor_role": _as_str(meta.get("actor_role")) or None,
+            "session_kind": _as_str(meta.get("session_kind")) or "user_activity",
+            "subsystem": _as_str(meta.get("subsystem")) or "analysis",
+            "action_name": _as_str(meta.get("action_name")) or None,
+            "destructive": bool(meta.get("destructive")),
             "final_ai_model": final_ai_model,
             "ai_attempts_count": ai_attempts_count,
             "ai_fallback_used": ai_fallback_used,
@@ -858,6 +1104,15 @@ class ExecutionLogService:
             "data_fallback_used": data_fallback_used,
             "notification_classification": notification_classification,
             "top_failure_reason": failure_reason,
+            "scanner_run_id": scanner_run.get("scanner_run_id"),
+            "scanner_market": scanner_run.get("market"),
+            "scanner_profile": scanner_run.get("profile"),
+            "scanner_profile_label": scanner_run.get("profile_label"),
+            "scanner_shortlist_count": scanner_run.get("shortlist_count"),
+            "scanner_fallback_count": scanner_run.get("fallback_count"),
+            "scanner_provider_failure_count": scanner_run.get("provider_failure_count"),
+            "scanner_providers_used": scanner_run.get("providers_used") if isinstance(scanner_run.get("providers_used"), list) else [],
+            "scanner_coverage_summary": scanner_coverage_summary,
             "summary_paragraph": summary_paragraph or None,
             "status": _as_str(overall_status) or "unknown",
         }

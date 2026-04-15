@@ -53,6 +53,32 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_load_from_env_reads_twelve_data_alias_and_alpaca_pair(
+        self,
+        _mock_parse_litellm_yaml,
+        _mock_setup_env,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "TWELVEDATA_API_KEY": "td-legacy-key",
+                "ALPACA_API_KEY_ID": "alpaca-id",
+                "ALPACA_API_SECRET_KEY": "alpaca-secret",
+                "ALPACA_DATA_FEED": "sip",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.twelve_data_api_keys, ["td-legacy-key"])
+        self.assertEqual(config.twelve_data_api_key, "td-legacy-key")
+        self.assertEqual(config.alpaca_api_key_id, "alpaca-id")
+        self.assertEqual(config.alpaca_api_secret_key, "alpaca-secret")
+        self.assertEqual(config.alpaca_data_feed, "sip")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_schedule_run_immediately_falls_back_to_legacy_run_immediately(
         self,
         _mock_parse_yaml,

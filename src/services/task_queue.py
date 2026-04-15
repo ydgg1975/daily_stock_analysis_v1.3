@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from asyncio import Queue as AsyncQueue
 
 from data_provider.base import canonical_stock_code, normalize_stock_code
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.services.execution_log_service import ExecutionLogService
 from src.utils.analysis_metadata import SELECTION_SOURCES
 
@@ -47,11 +48,13 @@ def _parse_provider_from_model(model: Optional[str]) -> Optional[str]:
     return None
 
 
-def _build_configured_execution_summary() -> Dict[str, Any]:
+def _build_configured_execution_summary(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """Build best-known in-progress execution state from current config."""
     from src.config import get_config
+    from src.storage import DatabaseManager
 
     config = get_config()
+    db = DatabaseManager.get_instance()
 
     primary_model = str(getattr(config, "litellm_model", "") or "").strip() or None
     fallback_models = [
@@ -91,21 +94,37 @@ def _build_configured_execution_summary() -> Dict[str, Any]:
     sentiment_route.append("local_inference")
 
     notification_channels: List[str] = []
-    if getattr(config, "discord_webhook_url", None) or (
-        getattr(config, "discord_bot_token", None)
-        and getattr(config, "discord_main_channel_id", None)
-    ):
-        notification_channels.append("discord")
-    if getattr(config, "feishu_webhook_url", None):
-        notification_channels.append("feishu")
-    if getattr(config, "wechat_webhook_url", None):
-        notification_channels.append("wechat")
-    if getattr(config, "telegram_bot_token", None) and getattr(config, "telegram_chat_id", None):
-        notification_channels.append("telegram")
-    if getattr(config, "email_sender", None) and getattr(config, "email_receivers", None):
-        notification_channels.append("email")
-    if getattr(config, "pushplus_token", None):
-        notification_channels.append("pushplus")
+    normalized_owner_id = str(owner_id or "").strip()
+    if normalized_owner_id and normalized_owner_id != BOOTSTRAP_ADMIN_USER_ID:
+        preferences = db.get_user_notification_preferences(normalized_owner_id)
+        if (
+            bool(preferences.get("email_enabled"))
+            and str(preferences.get("email") or "").strip()
+            and getattr(config, "email_sender", None)
+            and getattr(config, "email_password", None)
+        ):
+            notification_channels.append("email")
+        if (
+            bool(preferences.get("discord_enabled"))
+            and str(preferences.get("discord_webhook") or "").strip()
+        ):
+            notification_channels.append("discord")
+    else:
+        if getattr(config, "discord_webhook_url", None) or (
+            getattr(config, "discord_bot_token", None)
+            and getattr(config, "discord_main_channel_id", None)
+        ):
+            notification_channels.append("discord")
+        if getattr(config, "feishu_webhook_url", None):
+            notification_channels.append("feishu")
+        if getattr(config, "wechat_webhook_url", None):
+            notification_channels.append("wechat")
+        if getattr(config, "telegram_bot_token", None) and getattr(config, "telegram_chat_id", None):
+            notification_channels.append("telegram")
+        if getattr(config, "email_sender", None) and getattr(config, "email_receivers", None):
+            notification_channels.append("email")
+        if getattr(config, "pushplus_token", None):
+            notification_channels.append("pushplus")
 
     return {
         "ai": {
@@ -167,14 +186,16 @@ def _build_configured_execution_summary() -> Dict[str, Any]:
     }
 
 
-def _dedupe_stock_code_key(stock_code: str) -> str:
+def _dedupe_stock_code_key(stock_code: str, owner_id: Optional[str] = None) -> str:
     """
     Build the internal duplicate-detection key for a stock code.
 
     The task queue should treat equivalent market code shapes as the same
     underlying stock, e.g. ``600519`` and ``600519.SH``.
     """
-    return canonical_stock_code(normalize_stock_code(stock_code))
+    normalized_stock_code = canonical_stock_code(normalize_stock_code(stock_code))
+    normalized_owner_id = str(owner_id or "").strip() or "__global__"
+    return f"{normalized_owner_id}:{normalized_stock_code}"
 
 
 class TaskStatus(str, Enum):
@@ -208,6 +229,7 @@ class TaskInfo:
     selection_source: Optional[str] = None
     execution: Optional[Dict[str, Any]] = None
     execution_session_id: Optional[str] = None
+    owner_id: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task info into an API-friendly dictionary."""
@@ -228,6 +250,7 @@ class TaskInfo:
             "execution": self.execution,
             "result": self.result,
             "execution_session_id": self.execution_session_id,
+            "owner_id": self.owner_id,
         }
     
     def copy(self) -> 'TaskInfo':
@@ -249,6 +272,7 @@ class TaskInfo:
             selection_source=self.selection_source,
             execution=self.execution,
             execution_session_id=self.execution_session_id,
+            owner_id=self.owner_id,
         )
 
 
@@ -391,7 +415,7 @@ class AnalysisTaskQueue:
     
     # ========== 任务提交与查询 ==========
     
-    def is_analyzing(self, stock_code: str) -> bool:
+    def is_analyzing(self, stock_code: str, owner_id: Optional[str] = None) -> bool:
         """
         检查股票是否正在分析中
         
@@ -401,11 +425,11 @@ class AnalysisTaskQueue:
         Returns:
             True 表示正在分析中
         """
-        dedupe_key = _dedupe_stock_code_key(stock_code)
+        dedupe_key = _dedupe_stock_code_key(stock_code, owner_id)
         with self._data_lock:
             return dedupe_key in self._analyzing_stocks
-    
-    def get_analyzing_task_id(self, stock_code: str) -> Optional[str]:
+
+    def get_analyzing_task_id(self, stock_code: str, owner_id: Optional[str] = None) -> Optional[str]:
         """
         获取正在分析该股票的任务 ID
         
@@ -415,7 +439,7 @@ class AnalysisTaskQueue:
         Returns:
             任务 ID，如果没有则返回 None
         """
-        dedupe_key = _dedupe_stock_code_key(stock_code)
+        dedupe_key = _dedupe_stock_code_key(stock_code, owner_id)
         with self._data_lock:
             return self._analyzing_stocks.get(dedupe_key)
 
@@ -443,6 +467,7 @@ class AnalysisTaskQueue:
         selection_source: Optional[str] = None,
         report_type: str = "detailed",
         force_refresh: bool = False,
+        owner_id: Optional[str] = None,
     ) -> TaskInfo:
         """
         Submit a single analysis task.
@@ -472,6 +497,7 @@ class AnalysisTaskQueue:
             selection_source=selection_source,
             report_type=report_type,
             force_refresh=force_refresh,
+            owner_id=owner_id,
         )
         if duplicates:
             raise duplicates[0]
@@ -485,6 +511,7 @@ class AnalysisTaskQueue:
         selection_source: Optional[str] = None,
         report_type: str = "detailed",
         force_refresh: bool = False,
+        owner_id: Optional[str] = None,
     ) -> Tuple[List[TaskInfo], List[DuplicateTaskError]]:
         """
         Submit analysis tasks in batch.
@@ -505,7 +532,7 @@ class AnalysisTaskQueue:
 
         with self._data_lock:
             for stock_code in canonical_codes:
-                dedupe_key = _dedupe_stock_code_key(stock_code)
+                dedupe_key = _dedupe_stock_code_key(stock_code, owner_id)
                 if dedupe_key in self._analyzing_stocks:
                     existing_task_id = self._analyzing_stocks[dedupe_key]
                     duplicates.append(DuplicateTaskError(stock_code, existing_task_id))
@@ -521,6 +548,7 @@ class AnalysisTaskQueue:
                     report_type=report_type,
                     original_query=original_query,
                     selection_source=selection_source,
+                    owner_id=owner_id,
                 )
                 self._tasks[task_id] = task_info
                 self._analyzing_stocks[dedupe_key] = task_id
@@ -532,6 +560,7 @@ class AnalysisTaskQueue:
                         stock_code,
                         report_type,
                         force_refresh,
+                        owner_id,
                     )
                 except Exception:
                     # Roll back the current batch to avoid partial submission.
@@ -560,11 +589,11 @@ class AnalysisTaskQueue:
 
             task = self._tasks.pop(task_id, None)
             if task:
-                dedupe_key = _dedupe_stock_code_key(task.stock_code)
-                if self._analyzing_stocks.get(dedupe_key) == task_id:
-                    del self._analyzing_stocks[dedupe_key]
+                    dedupe_key = _dedupe_stock_code_key(task.stock_code, task.owner_id)
+                    if self._analyzing_stocks.get(dedupe_key) == task_id:
+                        del self._analyzing_stocks[dedupe_key]
     
-    def get_task(self, task_id: str) -> Optional[TaskInfo]:
+    def get_task(self, task_id: str, owner_id: Optional[str] = None) -> Optional[TaskInfo]:
         """
         获取任务信息
         
@@ -576,9 +605,11 @@ class AnalysisTaskQueue:
         """
         with self._data_lock:
             task = self._tasks.get(task_id)
+            if task and owner_id and str(task.owner_id or "").strip() != str(owner_id).strip():
+                return None
             return task.copy() if task else None
     
-    def list_pending_tasks(self) -> List[TaskInfo]:
+    def list_pending_tasks(self, owner_id: Optional[str] = None) -> List[TaskInfo]:
         """
         获取所有进行中的任务（pending + processing）
         
@@ -589,9 +620,10 @@ class AnalysisTaskQueue:
             return [
                 task.copy() for task in self._tasks.values()
                 if task.status in (TaskStatus.PENDING, TaskStatus.PROCESSING)
+                and (not owner_id or str(task.owner_id or "").strip() == str(owner_id).strip())
             ]
     
-    def list_all_tasks(self, limit: int = 50) -> List[TaskInfo]:
+    def list_all_tasks(self, limit: int = 50, owner_id: Optional[str] = None) -> List[TaskInfo]:
         """
         获取所有任务（按创建时间倒序）
         
@@ -603,13 +635,16 @@ class AnalysisTaskQueue:
         """
         with self._data_lock:
             tasks = sorted(
-                self._tasks.values(),
+                [
+                    task for task in self._tasks.values()
+                    if not owner_id or str(task.owner_id or "").strip() == str(owner_id).strip()
+                ],
                 key=lambda t: t.created_at,
                 reverse=True
             )
             return [t.copy() for t in tasks[:limit]]
-    
-    def get_task_stats(self) -> Dict[str, int]:
+
+    def get_task_stats(self, owner_id: Optional[str] = None) -> Dict[str, int]:
         """
         获取任务统计信息
         
@@ -618,13 +653,16 @@ class AnalysisTaskQueue:
         """
         with self._data_lock:
             stats = {
-                "total": len(self._tasks),
+                "total": 0,
                 "pending": 0,
                 "processing": 0,
                 "completed": 0,
                 "failed": 0,
             }
             for task in self._tasks.values():
+                if owner_id and str(task.owner_id or "").strip() != str(owner_id).strip():
+                    continue
+                stats["total"] += 1
                 stats[task.status.value] = stats.get(task.status.value, 0) + 1
             return stats
 
@@ -651,7 +689,7 @@ class AnalysisTaskQueue:
         }
 
     def _release_analyzing_stock_locked(self, task: TaskInfo) -> None:
-        dedupe_key = _dedupe_stock_code_key(task.stock_code)
+        dedupe_key = _dedupe_stock_code_key(task.stock_code, task.owner_id)
         if self._analyzing_stocks.get(dedupe_key) == task.task_id:
             del self._analyzing_stocks[dedupe_key]
 
@@ -664,12 +702,13 @@ class AnalysisTaskQueue:
             task.started_at = datetime.now()
             task.message = "正在初始化研究会话..."
             task.progress = 5
-            task.execution = _build_configured_execution_summary()
+            task.execution = _build_configured_execution_summary(task.owner_id)
             task.execution_session_id = self._execution_log_service.start_session(
                 task_id=task_id,
                 stock_code=stock_code,
                 stock_name=task.stock_name,
                 configured_execution=task.execution,
+                owner_id=task.owner_id,
             )
             return task.to_dict()
 
@@ -738,6 +777,7 @@ class AnalysisTaskQueue:
         stock_code: str,
         report_type: str,
         force_refresh: bool,
+        owner_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行分析任务（在线程池中运行）
@@ -777,6 +817,7 @@ class AnalysisTaskQueue:
                 force_refresh=force_refresh,
                 query_id=task_id,
                 progress_callback=progress_callback,
+                owner_id=owner_id,
             )
             
             if result:

@@ -94,6 +94,7 @@ class AgentMemory:
         self,
         stock_code: str,
         limit: int = 5,
+        owner_id: Optional[str] = None,
     ) -> List[AnalysisMemoryEntry]:
         """Retrieve recent analysis results for a stock.
 
@@ -106,7 +107,7 @@ class AgentMemory:
         try:
             from src.storage import get_db
             db = get_db()
-            records = db.get_analysis_history(code=stock_code, limit=limit)
+            records = db.get_analysis_history(code=stock_code, limit=limit, owner_id=owner_id)
             entries = []
             for r in records:
                 raw_result: Dict[str, Any] = {}

@@ -2,7 +2,9 @@ import apiClient from './index';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from './error';
 import { toCamelCase } from './utils';
 import type {
+  FactoryResetSystemRequest,
   SystemConfigConflictResponse,
+  SystemAdminActionResponse,
   SystemConfigResponse,
   SystemConfigValidationErrorResponse,
   TestLLMChannelRequest,
@@ -98,6 +100,12 @@ function toSnakeTestChannelPayload(payload: TestLLMChannelRequest): Record<strin
   };
 }
 
+function toSnakeFactoryResetPayload(payload: FactoryResetSystemRequest): Record<string, unknown> {
+  return {
+    confirmation_phrase: payload.confirmationPhrase,
+  };
+}
+
 export const systemConfigApi = {
   async getConfig(includeSchema = true): Promise<SystemConfigResponse> {
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/system/config', {
@@ -168,5 +176,21 @@ export const systemConfigApi = {
 
       throw error;
     }
+  },
+
+  async resetRuntimeCaches(): Promise<SystemAdminActionResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/actions/runtime-cache/reset',
+      {},
+    );
+    return toCamelCase<SystemAdminActionResponse>(response.data);
+  },
+
+  async factoryResetSystem(payload: FactoryResetSystemRequest): Promise<SystemAdminActionResponse> {
+    const response = await apiClient.post<Record<string, unknown>>(
+      '/api/v1/system/actions/factory-reset',
+      toSnakeFactoryResetPayload(payload),
+    );
+    return toCamelCase<SystemAdminActionResponse>(response.data);
   },
 };

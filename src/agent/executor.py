@@ -315,7 +315,14 @@ class AgentExecutor:
 
         return self._run_loop(messages, tool_decls, parse_dashboard=True)
 
-    def chat(self, message: str, session_id: str, progress_callback: Optional[Callable] = None, context: Optional[Dict[str, Any]] = None) -> AgentResult:
+    def chat(
+        self,
+        message: str,
+        session_id: str,
+        progress_callback: Optional[Callable] = None,
+        context: Optional[Dict[str, Any]] = None,
+        owner_id: Optional[str] = None,
+    ) -> AgentResult:
         """Execute the agent loop for a free-form chat message.
 
         Args:
@@ -347,7 +354,7 @@ class AgentExecutor:
         tool_decls = self.tool_registry.to_openai_tools()
 
         # Get conversation history
-        session = conversation_manager.get_or_create(session_id)
+        session = conversation_manager.get_or_create(session_id, owner_id=owner_id)
         history = session.get_history()
 
         # Initialize conversation
@@ -383,16 +390,16 @@ class AgentExecutor:
         messages.append({"role": "user", "content": message})
 
         # Persist the user turn immediately so the session appears in history during processing
-        conversation_manager.add_message(session_id, "user", message)
+        conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
 
         result = self._run_loop(messages, tool_decls, parse_dashboard=False, progress_callback=progress_callback)
 
         # Persist assistant reply (or error note) for context continuity
         if result.success:
-            conversation_manager.add_message(session_id, "assistant", result.content)
+            conversation_manager.add_message(session_id, "assistant", result.content, owner_id=owner_id)
         else:
             error_note = f"[分析失败] {result.error or '未知错误'}"
-            conversation_manager.add_message(session_id, "assistant", error_note)
+            conversation_manager.add_message(session_id, "assistant", error_note, owner_id=owner_id)
 
         return result
 

@@ -1,17 +1,43 @@
 import apiClient from './index';
 
+export type CurrentUser = {
+  id: string;
+  username: string;
+  displayName?: string | null;
+  role: 'admin' | 'user' | string;
+  isAdmin: boolean;
+  isAuthenticated: boolean;
+  transitional: boolean;
+  authEnabled: boolean;
+  legacyAdmin?: boolean;
+};
+
 export type AuthStatusResponse = {
   authEnabled: boolean;
   loggedIn: boolean;
   passwordSet?: boolean;
   passwordChangeable?: boolean;
   setupState: 'enabled' | 'password_retained' | 'no_password';
+  currentUser?: CurrentUser | null;
 };
 
 export type VerifyAdminPasswordResponse = {
   ok: boolean;
   unlockToken: string;
   expiresInSeconds: number;
+};
+
+export type UserNotificationPreferences = {
+  channel: 'email' | 'discord' | 'multi' | string;
+  enabled: boolean;
+  email?: string | null;
+  emailEnabled: boolean;
+  discordEnabled: boolean;
+  discordWebhook?: string | null;
+  deliveryAvailable: boolean;
+  emailDeliveryAvailable: boolean;
+  discordDeliveryAvailable: boolean;
+  updatedAt?: string | null;
 };
 
 export const authApi = {
@@ -45,10 +71,57 @@ export const authApi = {
     return data;
   },
 
-  async login(password: string, passwordConfirm?: string): Promise<void> {
-    const body: { password: string; passwordConfirm?: string } = { password };
-    if (passwordConfirm !== undefined) {
-      body.passwordConfirm = passwordConfirm;
+  async getCurrentUser(): Promise<CurrentUser> {
+    const { data } = await apiClient.get<CurrentUser>('/api/v1/auth/me');
+    return data;
+  },
+
+  async getNotificationPreferences(): Promise<UserNotificationPreferences> {
+    const { data } = await apiClient.get<UserNotificationPreferences>('/api/v1/auth/preferences/notifications');
+    return data;
+  },
+
+  async updateNotificationPreferences(
+    payload: {
+      enabled?: boolean;
+      email?: string | null;
+      emailEnabled?: boolean;
+      discordEnabled?: boolean;
+      discordWebhook?: string | null;
+    },
+  ): Promise<UserNotificationPreferences> {
+    const body = {
+      enabled: payload.enabled ?? payload.emailEnabled ?? false,
+      email: payload.email ?? null,
+      emailEnabled: payload.emailEnabled ?? payload.enabled ?? false,
+      discordEnabled: payload.discordEnabled ?? false,
+      discordWebhook: payload.discordWebhook ?? null,
+    };
+    const { data } = await apiClient.put<UserNotificationPreferences>('/api/v1/auth/preferences/notifications', body);
+    return data;
+  },
+
+  async login(params: {
+    username?: string;
+    displayName?: string;
+    password: string;
+    passwordConfirm?: string;
+    createUser?: boolean;
+  }): Promise<void> {
+    const body: {
+      username?: string;
+      displayName?: string;
+      password: string;
+      passwordConfirm?: string;
+      createUser?: boolean;
+    } = {
+      username: params.username,
+      displayName: params.displayName,
+      password: params.password,
+      createUser: params.createUser,
+    };
+    if (params.passwordConfirm !== undefined) {
+      body.passwordConfirm = params.passwordConfirm;
     }
     await apiClient.post('/api/v1/auth/login', body);
   },

@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from data_provider.base import canonical_stock_code
 from src.config import get_config
 from src.repositories.portfolio_repo import (
+    DuplicateBrokerConnectionRefError,
     DuplicateTradeDedupHashError,
     DuplicateTradeUidError,
     PortfolioBusyError as RepoPortfolioBusyError,
@@ -29,11 +31,14 @@ except Exception:  # pragma: no cover - optional dependency path
     yf = None
 
 EPS = 1e-8
-VALID_MARKETS = {"cn", "hk", "us"}
+VALID_ACCOUNT_MARKETS = {"cn", "hk", "us", "global"}
+VALID_EVENT_MARKETS = {"cn", "hk", "us"}
 VALID_COST_METHODS = {"fifo", "avg"}
 VALID_SIDES = {"buy", "sell"}
 VALID_CASH_DIRECTIONS = {"in", "out"}
 VALID_CORPORATE_ACTIONS = {"cash_dividend", "split_adjustment"}
+VALID_BROKER_CONNECTION_STATUSES = {"active", "disabled", "error"}
+VALID_BROKER_IMPORT_MODES = {"file", "manual", "api"}
 PORTFOLIO_FX_REFRESH_DISABLED_REASON = "portfolio_fx_update_disabled"
 
 
@@ -73,8 +78,25 @@ class _AvgState:
 class PortfolioService:
     """Business logic for account CRUD, event writes, and snapshot replay."""
 
-    def __init__(self, repo: Optional[PortfolioRepository] = None):
+    def __init__(
+        self,
+        repo: Optional[PortfolioRepository] = None,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ):
         self.repo = repo or PortfolioRepository()
+        self.owner_id = owner_id
+        self.include_all_owners = bool(include_all_owners)
+
+    def _owner_kwargs(self) -> Dict[str, Any]:
+        return {
+            "owner_id": self.owner_id,
+            "include_all_owners": self.include_all_owners,
+        }
+
+    def _resolve_owner_id(self, owner_id: Optional[str] = None) -> str:
+        return self.repo.db.require_user_id(self.owner_id if owner_id is None else owner_id)
 
     # ------------------------------------------------------------------
     # Account CRUD
@@ -91,20 +113,30 @@ class PortfolioService:
         name_norm = (name or "").strip()
         if not name_norm:
             raise ValueError("name is required")
-        market_norm = self._normalize_market(market)
+        market_norm = self._normalize_account_market(market)
         base_currency_norm = self._normalize_currency(base_currency)
         row = self.repo.create_account(
             name=name_norm,
             broker=(broker or "").strip() or None,
             market=market_norm,
             base_currency=base_currency_norm,
-            owner_id=(owner_id or "").strip() or None,
+            owner_id=self._resolve_owner_id(owner_id),
         )
         return self._account_to_dict(row)
 
     def list_accounts(self, include_inactive: bool = False) -> List[Dict[str, Any]]:
-        rows = self.repo.list_accounts(include_inactive=include_inactive)
+        rows = self.repo.list_accounts(include_inactive=include_inactive, **self._owner_kwargs())
         return [self._account_to_dict(r) for r in rows]
+
+    def get_account(self, account_id: int, *, include_inactive: bool = False) -> Optional[Dict[str, Any]]:
+        row = self.repo.get_account(
+            account_id,
+            include_inactive=include_inactive,
+            **self._owner_kwargs(),
+        )
+        if row is None:
+            return None
+        return self._account_to_dict(row)
 
     def update_account(
         self,
@@ -126,23 +158,294 @@ class PortfolioService:
         if broker is not None:
             fields["broker"] = broker.strip() or None
         if market is not None:
-            fields["market"] = self._normalize_market(market)
+            fields["market"] = self._normalize_account_market(market)
         if base_currency is not None:
             fields["base_currency"] = self._normalize_currency(base_currency)
         if owner_id is not None:
-            fields["owner_id"] = owner_id.strip() or None
+            fields["owner_id"] = self._resolve_owner_id(owner_id)
         if is_active is not None:
             fields["is_active"] = bool(is_active)
         if not fields:
             raise ValueError("No fields provided for update")
 
-        row = self.repo.update_account(account_id, fields)
+        row = self.repo.update_account(account_id, fields, **self._owner_kwargs())
         if row is None:
             return None
         return self._account_to_dict(row)
 
     def deactivate_account(self, account_id: int) -> bool:
-        return self.repo.deactivate_account(account_id)
+        return self.repo.deactivate_account(account_id, **self._owner_kwargs())
+
+    # ------------------------------------------------------------------
+    # Broker connection CRUD
+    # ------------------------------------------------------------------
+    def create_broker_connection(
+        self,
+        *,
+        portfolio_account_id: int,
+        broker_type: str,
+        connection_name: str,
+        broker_name: Optional[str] = None,
+        broker_account_ref: Optional[str] = None,
+        import_mode: str = "file",
+        status: str = "active",
+        sync_metadata: Optional[Dict[str, Any]] = None,
+        owner_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        resolved_owner_id = self._resolve_owner_id(owner_id)
+        account = self.repo.get_account(
+            portfolio_account_id,
+            include_inactive=False,
+            owner_id=resolved_owner_id,
+            include_all_owners=self.include_all_owners,
+        )
+        if account is None:
+            raise ValueError(f"Active account not found: {portfolio_account_id}")
+        try:
+            row = self.repo.create_broker_connection(
+                portfolio_account_id=int(account.id),
+                broker_type=self._normalize_broker_type(broker_type),
+                broker_name=(broker_name or "").strip() or None,
+                connection_name=self._normalize_connection_name(connection_name),
+                broker_account_ref=self._normalize_broker_account_ref(broker_account_ref),
+                import_mode=self._normalize_import_mode(import_mode),
+                status=self._normalize_broker_connection_status(status),
+                sync_metadata_json=self._serialize_sync_metadata(sync_metadata),
+                owner_id=resolved_owner_id,
+            )
+        except DuplicateBrokerConnectionRefError as exc:
+            raise PortfolioConflictError(str(exc)) from exc
+        return self._broker_connection_to_dict(row, portfolio_account_name=account.name)
+
+    def list_broker_connections(
+        self,
+        *,
+        portfolio_account_id: Optional[int] = None,
+        broker_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if portfolio_account_id is not None:
+            self.repo.get_account(
+                portfolio_account_id,
+                include_inactive=True,
+                **self._owner_kwargs(),
+            ) or self._raise_missing_account(portfolio_account_id)
+        broker_type_norm = self._normalize_broker_type(broker_type) if broker_type is not None else None
+        status_norm = (
+            self._normalize_broker_connection_status(status)
+            if status is not None and str(status).strip()
+            else None
+        )
+        rows = self.repo.list_broker_connections(
+            portfolio_account_id=portfolio_account_id,
+            broker_type=broker_type_norm,
+            status=status_norm,
+            **self._owner_kwargs(),
+        )
+        account_lookup = self._account_name_lookup()
+        return [
+            self._broker_connection_to_dict(
+                row,
+                portfolio_account_name=account_lookup.get(int(row.portfolio_account_id)),
+            )
+            for row in rows
+        ]
+
+    def update_broker_connection(
+        self,
+        connection_id: int,
+        *,
+        portfolio_account_id: Optional[int] = None,
+        connection_name: Optional[str] = None,
+        broker_name: Optional[str] = None,
+        broker_account_ref: Optional[str] = None,
+        import_mode: Optional[str] = None,
+        status: Optional[str] = None,
+        sync_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        fields: Dict[str, Any] = {}
+        portfolio_account_name: Optional[str] = None
+        if portfolio_account_id is not None:
+            account = self.repo.get_account(
+                portfolio_account_id,
+                include_inactive=False,
+                **self._owner_kwargs(),
+            )
+            if account is None:
+                raise ValueError(f"Active account not found: {portfolio_account_id}")
+            fields["portfolio_account_id"] = int(account.id)
+            portfolio_account_name = account.name
+        if connection_name is not None:
+            fields["connection_name"] = self._normalize_connection_name(connection_name)
+        if broker_name is not None:
+            fields["broker_name"] = broker_name.strip() or None
+        if broker_account_ref is not None:
+            fields["broker_account_ref"] = self._normalize_broker_account_ref(broker_account_ref)
+        if import_mode is not None:
+            fields["import_mode"] = self._normalize_import_mode(import_mode)
+        if status is not None:
+            fields["status"] = self._normalize_broker_connection_status(status)
+        if sync_metadata is not None:
+            fields["sync_metadata_json"] = self._serialize_sync_metadata(sync_metadata)
+        if not fields:
+            raise ValueError("No fields provided for update")
+
+        try:
+            row = self.repo.update_broker_connection(connection_id, fields, **self._owner_kwargs())
+        except DuplicateBrokerConnectionRefError as exc:
+            raise PortfolioConflictError(str(exc)) from exc
+        if row is None:
+            return None
+        if portfolio_account_name is None:
+            portfolio_account_name = self._account_name_lookup().get(int(row.portfolio_account_id))
+        return self._broker_connection_to_dict(row, portfolio_account_name=portfolio_account_name)
+
+    def get_broker_connection_by_ref(
+        self,
+        *,
+        broker_type: str,
+        broker_account_ref: str,
+    ) -> Optional[Dict[str, Any]]:
+        broker_type_norm = self._normalize_broker_type(broker_type)
+        broker_account_ref_norm = self._normalize_broker_account_ref(broker_account_ref)
+        if broker_account_ref_norm is None:
+            raise ValueError("broker_account_ref is required")
+        row = self.repo.get_broker_connection_by_ref(
+            broker_type=broker_type_norm,
+            broker_account_ref=broker_account_ref_norm,
+            **self._owner_kwargs(),
+        )
+        if row is None:
+            return None
+        account_name = self._account_name_lookup().get(int(row.portfolio_account_id))
+        return self._broker_connection_to_dict(row, portfolio_account_name=account_name)
+
+    def get_broker_connection(self, connection_id: int) -> Optional[Dict[str, Any]]:
+        row = self.repo.get_broker_connection(connection_id, **self._owner_kwargs())
+        if row is None:
+            return None
+        account_name = self._account_name_lookup().get(int(row.portfolio_account_id))
+        return self._broker_connection_to_dict(row, portfolio_account_name=account_name)
+
+    def mark_broker_connection_imported(
+        self,
+        connection_id: int,
+        *,
+        import_source: str,
+        import_fingerprint: Optional[str] = None,
+        sync_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        fields: Dict[str, Any] = {
+            "last_imported_at": datetime.now(),
+            "last_import_source": (import_source or "").strip().lower() or "file",
+            "last_import_fingerprint": (import_fingerprint or "").strip() or None,
+            "status": "active",
+        }
+        if sync_metadata is not None:
+            fields["sync_metadata_json"] = self._serialize_sync_metadata(sync_metadata)
+        row = self.repo.update_broker_connection(connection_id, fields, **self._owner_kwargs())
+        if row is None:
+            return None
+        account_name = self._account_name_lookup().get(int(row.portfolio_account_id))
+        return self._broker_connection_to_dict(row, portfolio_account_name=account_name)
+
+    def mark_broker_connection_synced(
+        self,
+        connection_id: int,
+        *,
+        sync_source: str,
+        sync_status: str,
+        sync_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        connection = self.get_broker_connection(connection_id)
+        if connection is None:
+            return None
+
+        metadata = dict(connection.get("sync_metadata") or {})
+        if sync_metadata:
+            metadata.update(sync_metadata)
+        metadata["last_sync_source"] = (sync_source or "").strip().lower() or "api"
+        metadata["last_sync_status"] = (sync_status or "").strip().lower() or "success"
+        metadata["last_sync_at"] = datetime.now().isoformat()
+
+        row = self.repo.update_broker_connection(
+            connection_id,
+            {"sync_metadata_json": self._serialize_sync_metadata(metadata)},
+            **self._owner_kwargs(),
+        )
+        if row is None:
+            return None
+        account_name = self._account_name_lookup().get(int(row.portfolio_account_id))
+        return self._broker_connection_to_dict(row, portfolio_account_name=account_name)
+
+    def replace_broker_sync_state(
+        self,
+        *,
+        broker_connection_id: int,
+        portfolio_account_id: int,
+        broker_type: str,
+        broker_account_ref: Optional[str],
+        sync_source: str,
+        sync_status: str,
+        snapshot_date: date,
+        synced_at: datetime,
+        base_currency: str,
+        total_cash: float,
+        total_market_value: float,
+        total_equity: float,
+        realized_pnl: float,
+        unrealized_pnl: float,
+        fx_stale: bool,
+        payload: Optional[Dict[str, Any]],
+        positions: Iterable[Dict[str, Any]],
+        cash_balances: Iterable[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        connection = self.get_broker_connection(broker_connection_id)
+        if connection is None:
+            raise ValueError(f"Broker connection not found: {broker_connection_id}")
+        if int(connection["portfolio_account_id"]) != int(portfolio_account_id):
+            raise PortfolioConflictError(
+                "Broker sync state cannot be written to a different portfolio account than the linked broker connection"
+            )
+        row = self.repo.replace_broker_sync_state(
+            broker_connection_id=broker_connection_id,
+            portfolio_account_id=portfolio_account_id,
+            broker_type=self._normalize_broker_type(broker_type),
+            broker_account_ref=self._normalize_broker_account_ref(broker_account_ref),
+            sync_source=(sync_source or "").strip().lower() or "api",
+            sync_status=(sync_status or "").strip().lower() or "success",
+            snapshot_date=snapshot_date,
+            synced_at=synced_at,
+            base_currency=self._normalize_currency(base_currency),
+            total_cash=float(total_cash),
+            total_market_value=float(total_market_value),
+            total_equity=float(total_equity),
+            realized_pnl=float(realized_pnl),
+            unrealized_pnl=float(unrealized_pnl),
+            fx_stale=bool(fx_stale),
+            payload_json=json.dumps(payload or {}, ensure_ascii=False, sort_keys=True),
+            positions=list(positions),
+            cash_balances=list(cash_balances),
+            **self._owner_kwargs(),
+        )
+        return self._broker_sync_state_row_to_dict(row)
+
+    def get_latest_broker_sync_state(self, *, portfolio_account_id: int) -> Optional[Dict[str, Any]]:
+        row = self.repo.get_latest_broker_sync_state_for_account(
+            portfolio_account_id=portfolio_account_id,
+            **self._owner_kwargs(),
+        )
+        if row is None:
+            return None
+        positions = self.repo.list_broker_sync_positions(
+            broker_connection_id=int(row.broker_connection_id),
+            **self._owner_kwargs(),
+        )
+        cash_balances = self.repo.list_broker_sync_cash_balances(
+            broker_connection_id=int(row.broker_connection_id),
+            **self._owner_kwargs(),
+        )
+        return self._broker_sync_bundle_to_dict(row, positions=positions, cash_balances=cash_balances)
 
     # ------------------------------------------------------------------
     # Event writes
@@ -179,7 +482,10 @@ class PortfolioService:
         try:
             with self.repo.portfolio_write_session() as session:
                 account = self._require_active_account_in_session(session=session, account_id=account_id)
-                market_norm = self._normalize_market(market or account.market)
+                market_hint = market
+                if market_hint is None and str(account.market or "").strip().lower() == "global":
+                    market_hint = self._infer_market_from_symbol(symbol_norm)
+                market_norm = self._normalize_event_market(market_hint or account.market)
                 currency_norm = self._normalize_currency(currency or self._default_currency_for_market(market_norm))
                 self._validate_trade_identity(
                     account_id=account_id,
@@ -271,7 +577,11 @@ class PortfolioService:
                 raise ValueError("split_ratio must be > 0 for split_adjustment")
         with self.repo.portfolio_write_session() as session:
             account = self._require_active_account_in_session(session=session, account_id=account_id)
-            market_norm = self._normalize_market(market or account.market)
+            market_hint = market
+            if market_hint is None and str(account.market or "").strip().lower() == "global":
+                symbol_norm = canonical_stock_code(symbol)
+                market_hint = self._infer_market_from_symbol(symbol_norm)
+            market_norm = self._normalize_event_market(market_hint or account.market)
             currency_norm = self._normalize_currency(currency or self._default_currency_for_market(market_norm))
             symbol_norm = canonical_stock_code(symbol)
             if not symbol_norm:
@@ -292,15 +602,27 @@ class PortfolioService:
 
     def delete_trade_event(self, trade_id: int) -> bool:
         with self.repo.portfolio_write_session() as session:
-            return self.repo.delete_trade_in_session(session=session, trade_id=trade_id)
+            return self.repo.delete_trade_in_session(
+                session=session,
+                trade_id=trade_id,
+                **self._owner_kwargs(),
+            )
 
     def delete_cash_ledger_event(self, entry_id: int) -> bool:
         with self.repo.portfolio_write_session() as session:
-            return self.repo.delete_cash_ledger_in_session(session=session, entry_id=entry_id)
+            return self.repo.delete_cash_ledger_in_session(
+                session=session,
+                entry_id=entry_id,
+                **self._owner_kwargs(),
+            )
 
     def delete_corporate_action_event(self, action_id: int) -> bool:
         with self.repo.portfolio_write_session() as session:
-            return self.repo.delete_corporate_action_in_session(session=session, action_id=action_id)
+            return self.repo.delete_corporate_action_in_session(
+                session=session,
+                action_id=action_id,
+                **self._owner_kwargs(),
+            )
 
     def list_trade_events(
         self,
@@ -339,6 +661,7 @@ class PortfolioService:
             side=side_norm,
             page=page,
             page_size=page_size,
+            **self._owner_kwargs(),
         )
         return {
             "items": [self._trade_row_to_dict(row) for row in rows],
@@ -376,6 +699,7 @@ class PortfolioService:
             direction=direction_norm,
             page=page,
             page_size=page_size,
+            **self._owner_kwargs(),
         )
         return {
             "items": [self._cash_ledger_row_to_dict(row) for row in rows],
@@ -421,6 +745,7 @@ class PortfolioService:
             action_type=action_norm,
             page=page,
             page_size=page_size,
+            **self._owner_kwargs(),
         )
         return {
             "items": [self._corporate_action_row_to_dict(row) for row in rows],
@@ -446,10 +771,13 @@ class PortfolioService:
             account = self._require_active_account(account_id)
             account_rows = [account]
         else:
-            account_rows = self.repo.list_accounts(include_inactive=False)
+            account_rows = self.repo.list_accounts(include_inactive=False, **self._owner_kwargs())
 
         accounts_payload: List[Dict[str, Any]] = []
-        aggregate_currency = "CNY"
+        aggregate_currency = self._resolve_snapshot_currency(
+            account_rows=account_rows,
+            requested_account_id=account_id,
+        )
         aggregate = {
             "total_cash": 0.0,
             "total_market_value": 0.0,
@@ -462,7 +790,11 @@ class PortfolioService:
         }
 
         for account in account_rows:
-            account_snapshot = self._replay_account(account=account, as_of_date=as_of_date, cost_method=method)
+            account_snapshot = self._build_account_snapshot(
+                account=account,
+                as_of_date=as_of_date,
+                cost_method=method,
+            )
 
             self.repo.replace_positions_lots_and_snapshot(
                 account_id=account.id,
@@ -576,7 +908,7 @@ class PortfolioService:
         if account_id is not None:
             account_rows = [self._require_active_account(account_id)]
         else:
-            account_rows = self.repo.list_accounts(include_inactive=False)
+            account_rows = self.repo.list_accounts(include_inactive=False, **self._owner_kwargs())
 
         summary = {
             "as_of": as_of_date.isoformat(),
@@ -629,7 +961,7 @@ class PortfolioService:
     ) -> None:
         key = (
             canonical_stock_code(symbol),
-            self._normalize_market(market),
+            self._normalize_event_market(market),
             self._normalize_currency(currency),
         )
         available_quantity = self._calculate_available_quantity(
@@ -669,7 +1001,7 @@ class PortfolioService:
         for row in corporate_actions:
             event_key = (
                 canonical_stock_code(row.symbol),
-                self._normalize_market(row.market),
+                self._normalize_event_market(row.market),
                 self._normalize_currency(row.currency),
             )
             if event_key == key:
@@ -677,7 +1009,7 @@ class PortfolioService:
         for row in trades:
             event_key = (
                 canonical_stock_code(row.symbol),
-                self._normalize_market(row.market),
+                self._normalize_event_market(row.market),
                 self._normalize_currency(row.currency),
             )
             if event_key == key:
@@ -766,7 +1098,7 @@ class PortfolioService:
             if event_type == "trade":
                 key = (
                     canonical_stock_code(event.symbol),
-                    self._normalize_market(event.market),
+                    self._normalize_event_market(event.market),
                     self._normalize_currency(event.currency),
                 )
                 qty = float(event.quantity or 0.0)
@@ -846,7 +1178,7 @@ class PortfolioService:
             if event_type == "corp":
                 key = (
                     canonical_stock_code(event.symbol),
-                    self._normalize_market(event.market),
+                    self._normalize_event_market(event.market),
                     self._normalize_currency(event.currency),
                 )
                 action_type = (event.action_type or "").strip().lower()
@@ -934,6 +1266,87 @@ class PortfolioService:
             "fee_total": float(fees_total_base),
             "tax_total": float(taxes_total_base),
             "fx_stale": fx_stale,
+        }
+
+    def _build_account_snapshot(self, *, account: Any, as_of_date: date, cost_method: str) -> Dict[str, Any]:
+        sync_state = self.get_latest_broker_sync_state(portfolio_account_id=int(account.id))
+        if sync_state is not None and self._should_use_broker_sync_state(sync_state=sync_state, as_of_date=as_of_date):
+            return self._build_synced_account_snapshot(
+                account=account,
+                sync_state=sync_state,
+                cost_method=cost_method,
+                as_of_date=as_of_date,
+            )
+        return self._replay_account(account=account, as_of_date=as_of_date, cost_method=cost_method)
+
+    @staticmethod
+    def _should_use_broker_sync_state(*, sync_state: Dict[str, Any], as_of_date: date) -> bool:
+        if str(sync_state.get("sync_status") or "").strip().lower() != "success":
+            return False
+        snapshot_date_raw = str(sync_state.get("snapshot_date") or "").strip()
+        if not snapshot_date_raw:
+            return False
+        try:
+            snapshot_date = date.fromisoformat(snapshot_date_raw)
+        except ValueError:
+            return False
+        return snapshot_date == as_of_date
+
+    def _build_synced_account_snapshot(
+        self,
+        *,
+        account: Any,
+        sync_state: Dict[str, Any],
+        cost_method: str,
+        as_of_date: date,
+    ) -> Dict[str, Any]:
+        positions = [
+            {
+                "symbol": item["symbol"],
+                "market": item["market"],
+                "currency": item["currency"],
+                "quantity": float(item["quantity"]),
+                "avg_cost": float(item["avg_cost"]),
+                "total_cost": round(float(item["quantity"]) * float(item["avg_cost"]), 8),
+                "last_price": float(item["last_price"]),
+                "market_value_base": float(item["market_value_base"]),
+                "unrealized_pnl_base": float(item["unrealized_pnl_base"]),
+                "valuation_currency": item["valuation_currency"],
+            }
+            for item in list(sync_state.get("positions") or [])
+        ]
+        payload = {
+            "account_id": account.id,
+            "account_name": account.name,
+            "owner_id": account.owner_id,
+            "broker": account.broker,
+            "market": account.market,
+            "base_currency": sync_state.get("base_currency") or account.base_currency,
+            "as_of": as_of_date.isoformat(),
+            "cost_method": cost_method,
+            "total_cash": round(float(sync_state.get("total_cash", 0.0) or 0.0), 6),
+            "total_market_value": round(float(sync_state.get("total_market_value", 0.0) or 0.0), 6),
+            "total_equity": round(float(sync_state.get("total_equity", 0.0) or 0.0), 6),
+            "realized_pnl": round(float(sync_state.get("realized_pnl", 0.0) or 0.0), 6),
+            "unrealized_pnl": round(float(sync_state.get("unrealized_pnl", 0.0) or 0.0), 6),
+            "fee_total": 0.0,
+            "tax_total": 0.0,
+            "fx_stale": bool(sync_state.get("fx_stale")),
+            "positions": positions,
+        }
+        return {
+            "public": payload,
+            "payload": payload,
+            "positions_cache": positions,
+            "lots_cache": [],
+            "total_cash": float(payload["total_cash"]),
+            "total_market_value": float(payload["total_market_value"]),
+            "total_equity": float(payload["total_equity"]),
+            "realized_pnl": float(payload["realized_pnl"]),
+            "unrealized_pnl": float(payload["unrealized_pnl"]),
+            "fee_total": 0.0,
+            "tax_total": 0.0,
+            "fx_stale": bool(payload["fx_stale"]),
         }
 
     def _build_positions(
@@ -1277,7 +1690,7 @@ class PortfolioService:
         return value
 
     def _require_active_account(self, account_id: int) -> Any:
-        account = self.repo.get_account(account_id, include_inactive=False)
+        account = self.repo.get_account(account_id, include_inactive=False, **self._owner_kwargs())
         if account is None:
             raise ValueError(f"Active account not found: {account_id}")
         return account
@@ -1287,6 +1700,7 @@ class PortfolioService:
             session=session,
             account_id=account_id,
             include_inactive=False,
+            **self._owner_kwargs(),
         )
         if account is None:
             raise ValueError(f"Active account not found: {account_id}")
@@ -1312,6 +1726,14 @@ class PortfolioService:
             dedup_hash=dedup_hash,
         )
 
+    def _account_name_lookup(self) -> Dict[int, str]:
+        rows = self.repo.list_accounts(include_inactive=True, **self._owner_kwargs())
+        return {int(row.id): str(row.name) for row in rows}
+
+    @staticmethod
+    def _raise_missing_account(account_id: int) -> None:
+        raise ValueError(f"Account not found: {account_id}")
+
     @staticmethod
     def _account_to_dict(row: Any) -> Dict[str, Any]:
         return {
@@ -1325,6 +1747,99 @@ class PortfolioService:
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
+
+    @staticmethod
+    def _broker_connection_to_dict(row: Any, *, portfolio_account_name: Optional[str] = None) -> Dict[str, Any]:
+        sync_metadata: Dict[str, Any] = {}
+        if getattr(row, "sync_metadata_json", None):
+            try:
+                parsed = json.loads(row.sync_metadata_json)
+                if isinstance(parsed, dict):
+                    sync_metadata = parsed
+            except Exception:
+                sync_metadata = {}
+        return {
+            "id": int(row.id),
+            "owner_id": row.owner_id,
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "portfolio_account_name": portfolio_account_name,
+            "broker_type": row.broker_type,
+            "broker_name": row.broker_name,
+            "connection_name": row.connection_name,
+            "broker_account_ref": row.broker_account_ref,
+            "import_mode": row.import_mode,
+            "status": row.status,
+            "last_imported_at": row.last_imported_at.isoformat() if row.last_imported_at else None,
+            "last_import_source": row.last_import_source,
+            "last_import_fingerprint": row.last_import_fingerprint,
+            "sync_metadata": sync_metadata,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    @staticmethod
+    def _broker_sync_state_row_to_dict(row: Any) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if getattr(row, "payload_json", None):
+            try:
+                parsed = json.loads(row.payload_json)
+                if isinstance(parsed, dict):
+                    payload = parsed
+            except Exception:
+                payload = {}
+        return {
+            "id": int(row.id),
+            "owner_id": row.owner_id,
+            "broker_connection_id": int(row.broker_connection_id),
+            "portfolio_account_id": int(row.portfolio_account_id),
+            "broker_type": row.broker_type,
+            "broker_account_ref": row.broker_account_ref,
+            "sync_source": row.sync_source,
+            "sync_status": row.sync_status,
+            "snapshot_date": row.snapshot_date.isoformat() if row.snapshot_date else None,
+            "synced_at": row.synced_at.isoformat() if row.synced_at else None,
+            "base_currency": row.base_currency,
+            "total_cash": float(row.total_cash or 0.0),
+            "total_market_value": float(row.total_market_value or 0.0),
+            "total_equity": float(row.total_equity or 0.0),
+            "realized_pnl": float(row.realized_pnl or 0.0),
+            "unrealized_pnl": float(row.unrealized_pnl or 0.0),
+            "fx_stale": bool(row.fx_stale),
+            "payload": payload,
+        }
+
+    @staticmethod
+    def _broker_sync_bundle_to_dict(
+        row: Any,
+        *,
+        positions: Iterable[Any],
+        cash_balances: Iterable[Any],
+    ) -> Dict[str, Any]:
+        data = PortfolioService._broker_sync_state_row_to_dict(row)
+        data["positions"] = [
+            {
+                "broker_position_ref": item.broker_position_ref,
+                "symbol": item.symbol,
+                "market": item.market,
+                "currency": item.currency,
+                "quantity": float(item.quantity or 0.0),
+                "avg_cost": float(item.avg_cost or 0.0),
+                "last_price": float(item.last_price or 0.0),
+                "market_value_base": float(item.market_value_base or 0.0),
+                "unrealized_pnl_base": float(item.unrealized_pnl_base or 0.0),
+                "valuation_currency": item.valuation_currency,
+            }
+            for item in positions
+        ]
+        data["cash_balances"] = [
+            {
+                "currency": item.currency,
+                "amount": float(item.amount or 0.0),
+                "amount_base": float(item.amount_base or 0.0),
+            }
+            for item in cash_balances
+        ]
+        return data
 
     @staticmethod
     def _trade_row_to_dict(row: Any) -> Dict[str, Any]:
@@ -1385,11 +1900,85 @@ class PortfolioService:
         return page, page_size
 
     @staticmethod
-    def _normalize_market(value: str) -> str:
+    def _normalize_account_market(value: str) -> str:
         market = (value or "").strip().lower()
-        if market not in VALID_MARKETS:
+        if market not in VALID_ACCOUNT_MARKETS:
+            raise ValueError("market must be one of: cn, hk, us, global")
+        return market
+
+    @staticmethod
+    def _normalize_event_market(value: str) -> str:
+        market = (value or "").strip().lower()
+        if market not in VALID_EVENT_MARKETS:
             raise ValueError("market must be one of: cn, hk, us")
         return market
+
+    @staticmethod
+    def _infer_market_from_symbol(symbol: str) -> str:
+        normalized = canonical_stock_code(symbol)
+        if normalized.startswith("HK"):
+            return "hk"
+        if normalized.isdigit():
+            if len(normalized) <= 5:
+                return "hk"
+            return "cn"
+        return "us"
+
+    def _resolve_snapshot_currency(
+        self,
+        *,
+        account_rows: List[Any],
+        requested_account_id: Optional[int],
+    ) -> str:
+        if not account_rows:
+            return "CNY"
+        if requested_account_id is not None or len(account_rows) == 1:
+            return self._normalize_currency(account_rows[0].base_currency)
+        currencies = {self._normalize_currency(row.base_currency) for row in account_rows}
+        if len(currencies) == 1:
+            return next(iter(currencies))
+        return "CNY"
+
+    @staticmethod
+    def _normalize_broker_type(value: str) -> str:
+        broker_type = (value or "").strip().lower()
+        if not broker_type or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,31}", broker_type):
+            raise ValueError("broker_type must use 2-32 lowercase letters, numbers, _ or -")
+        return broker_type
+
+    @staticmethod
+    def _normalize_connection_name(value: str) -> str:
+        connection_name = (value or "").strip()
+        if not connection_name:
+            raise ValueError("connection_name is required")
+        return connection_name[:64]
+
+    @staticmethod
+    def _normalize_broker_account_ref(value: Optional[str]) -> Optional[str]:
+        broker_account_ref = (value or "").strip()
+        return broker_account_ref[:128] or None
+
+    @staticmethod
+    def _normalize_broker_connection_status(value: str) -> str:
+        status = (value or "").strip().lower()
+        if status not in VALID_BROKER_CONNECTION_STATUSES:
+            raise ValueError("status must be one of: active, disabled, error")
+        return status
+
+    @staticmethod
+    def _normalize_import_mode(value: str) -> str:
+        import_mode = (value or "").strip().lower()
+        if import_mode not in VALID_BROKER_IMPORT_MODES:
+            raise ValueError("import_mode must be one of: file, manual, api")
+        return import_mode
+
+    @staticmethod
+    def _serialize_sync_metadata(value: Optional[Dict[str, Any]]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("sync_metadata must be an object")
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
     def _normalize_currency(value: str) -> str:

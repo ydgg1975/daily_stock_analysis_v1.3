@@ -17,6 +17,8 @@ const {
   refreshStatus,
   setThemeStyle,
   testLLMChannel,
+  resetRuntimeCaches,
+  factoryResetSystem,
   useAuthMock,
   useSystemConfigMock,
 } = vi.hoisted(() => ({
@@ -33,6 +35,8 @@ const {
   refreshStatus: vi.fn(),
   setThemeStyle: vi.fn(),
   testLLMChannel: vi.fn(),
+  resetRuntimeCaches: vi.fn(),
+  factoryResetSystem: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
 }));
@@ -44,6 +48,8 @@ vi.mock('../../api/systemConfig', async (importOriginal) => {
     systemConfigApi: {
       ...actual.systemConfigApi,
       testLLMChannel,
+      resetRuntimeCaches,
+      factoryResetSystem,
     },
   };
 });
@@ -350,10 +356,15 @@ async function openAdvancedConfigDrawer() {
 }
 
 async function openQuickProviderDrawer(providerName: string) {
-  const providerSection = screen.getByText('Provider 快速配置').closest('div.settings-surface');
-  expect(providerSection).not.toBeNull();
-  const providerCard = within(providerSection as HTMLElement).getByText(providerName).closest('div.rounded-xl');
-  expect(providerCard).not.toBeNull();
+  const providerKey = providerName === 'AIHubMix'
+    ? 'aihubmix'
+    : providerName === 'OpenAI'
+      ? 'openai'
+      : providerName === 'GLM / Zhipu'
+        ? 'zhipu'
+        : providerName.toLowerCase();
+  const providerSection = screen.getByTestId('ai-provider-quick-section');
+  const providerCard = within(providerSection).getByTestId(`ai-provider-card-${providerKey}`);
   fireEvent.click(within(providerCard as HTMLElement).getByRole('button', { name: '打开快速配置' }));
   await waitFor(() => {
     expect(screen.getByRole('dialog', { name: `${providerName} 快速配置` })).toBeInTheDocument();
@@ -382,14 +393,33 @@ function buildAiConfigItem(key: string, value: string) {
   };
 }
 
+function buildDataSourceConfigItem(key: string, value: string) {
+  return {
+    key,
+    value,
+    rawValueExists: value.trim().length > 0,
+    isMasked: /KEY/i.test(key),
+    schema: {
+      key,
+      category: 'data_source',
+      dataType: 'string',
+      uiControl: 'text',
+      isSensitive: /KEY/i.test(key),
+      isRequired: false,
+      isEditable: true,
+      options: [],
+      validation: {},
+      displayOrder: 1,
+    },
+  };
+}
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.innerWidth = 1280;
     window.dispatchEvent(new Event('resize'));
     window.sessionStorage.clear();
-    window.sessionStorage.setItem('dsa-admin-settings-unlock-token', 'unit-test-token');
-    window.sessionStorage.setItem('dsa-admin-settings-unlock-expires-at', String(Date.now() + 60_000));
     useAuthMock.mockReturnValue({
       authEnabled: true,
       passwordChangeable: true,
@@ -403,31 +433,102 @@ describe('SettingsPage', () => {
       resolvedModel: 'gemini/gemini-2.5-flash',
       latencyMs: 123,
     });
+    resetRuntimeCaches.mockResolvedValue({
+      success: true,
+      action: 'reset_runtime_caches',
+      message: '运行时 provider/search 缓存已重置。',
+      cleared: ['data_fetcher_manager', 'search_service'],
+    });
+    factoryResetSystem.mockResolvedValue({
+      success: true,
+      action: 'factory_reset_system',
+      message: 'Factory reset completed',
+      cleared: ['non_bootstrap_users', 'user_sessions', 'analysis_history'],
+      preserved: ['bootstrap_admin_access', 'system_configuration', 'execution_logs'],
+      counts: {
+        users: 2,
+        sessions: 3,
+        analysisHistory: 4,
+      },
+      confirmationPhrase: 'FACTORY RESET',
+    });
   });
 
   it('renders category navigation and auth settings modules', async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: '系统设置' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '系统控制面' })).toBeInTheDocument();
     expect(await screen.findByText('认证与登录保护')).toBeInTheDocument();
     expect(await screen.findByText('修改密码')).toBeInTheDocument();
     expect(load).toHaveBeenCalled();
   });
 
-  it('keeps admin controls locked by default without unlock token', () => {
+  it('renders the admin control plane directly without a second unlock wall', async () => {
     window.sessionStorage.clear();
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'system',
-      isAdminUnlocked: false,
+      hasDirty: false,
       adminUnlockToken: null,
       adminUnlockExpiresAt: null,
     }));
 
     render(<SettingsPage />);
 
-    expect(screen.getByText('锁定状态下仅可浏览，无法修改系统级配置。')).toBeInTheDocument();
-    expect(screen.queryByText('认证与登录保护')).not.toBeInTheDocument();
-    expect(screen.queryByText('修改密码')).not.toBeInTheDocument();
+    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
+    expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
+    expect(screen.getByText('认证与登录保护')).toBeInTheDocument();
+    expect(screen.getByText('修改密码')).toBeInTheDocument();
+    expect(screen.queryByText('锁定状态下仅可浏览，无法修改系统级配置。')).not.toBeInTheDocument();
+  });
+
+  it('keeps the admin control plane focused on global domains without personal notification settings', async () => {
+    render(<SettingsPage />);
+
+    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '通知与告警' })).not.toBeInTheDocument();
+    expect(screen.queryByText('个人通知渠道')).not.toBeInTheDocument();
+  });
+
+  it('confirms and runs bounded admin maintenance actions at action level', async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '重置运行时缓存' }));
+
+    expect(await screen.findByText('确认重置运行时缓存')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    await waitFor(() => {
+      expect(resetRuntimeCaches).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/成功:运行时 provider\/search 缓存已重置。/)).toBeInTheDocument();
+    });
+  });
+
+  it('separates safe maintenance from factory reset and requires a typed phrase before destructive execution', async () => {
+    render(<SettingsPage />);
+
+    expect(screen.getByText('维护操作')).toBeInTheDocument();
+    expect(screen.getByText('工厂重置 / 系统初始化')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '执行工厂重置' }));
+
+    expect(await screen.findByText('确认工厂重置')).toBeInTheDocument();
+    const confirmButton = screen.getByRole('button', { name: '确认执行' });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'WRONG' } });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('输入确认短语'), { target: { value: 'FACTORY RESET' } });
+    expect(confirmButton).not.toBeDisabled();
+
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(factoryResetSystem).toHaveBeenCalledWith({ confirmationPhrase: 'FACTORY RESET' });
+    });
   });
 
   it('resets local drafts from the page header button', () => {
@@ -727,7 +828,6 @@ describe('SettingsPage', () => {
 
     await openAiRoutingDrawer();
     const aiSection = screen.getByRole('dialog', { name: '任务路由编辑' });
-    expect(screen.getByText('当前按 Provider 默认/自动模式保存，解析到模型 zhipu/glm-4-flash。')).toBeInTheDocument();
 
     fireEvent.click(within(aiSection).getAllByRole('button', { name: '显式模型 ID' })[0] as HTMLButtonElement);
     fireEvent.click(within(aiSection).getAllByRole('button', { name: '预设选择' })[0] as HTMLButtonElement);
@@ -807,8 +907,8 @@ describe('SettingsPage', () => {
 
     expect(primaryGateway).toBeDisabled();
     expect(backupGateway).toBeDisabled();
-    expect(screen.getByText(/至少一个 AI Provider 凭据/)).toBeInTheDocument();
-    expect(screen.getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
+    expect(within(aiSection).getByText('无主路由网关。请先配置 AI Provider 凭据。')).toBeInTheDocument();
+    expect(within(aiSection).getByText('备用路由需要至少两个已配置 AI Provider。')).toBeInTheDocument();
   });
 
   it('saves primary-only AI route and keeps legacy channel list stable', async () => {
@@ -1311,7 +1411,7 @@ describe('SettingsPage', () => {
     expect(dataSection).not.toBeNull();
 
     fireEvent.click(within(dataSection as HTMLElement).getByRole('button', { name: '添加数据源' }));
-    const drawer = await screen.findByRole('dialog', { name: '添加数据源' });
+    const drawer = await screen.findByRole('dialog', { name: '注册数据源' });
 
     fireEvent.change(within(drawer).getByLabelText('显示名称'), { target: { value: 'Demo News API' } });
     fireEvent.change(within(drawer).getByLabelText('API Key / 凭据'), { target: { value: 'demo-news-key' } });
@@ -1324,12 +1424,21 @@ describe('SettingsPage', () => {
         expect.arrayContaining([
           expect.objectContaining({
             key: 'CUSTOM_DATA_SOURCE_LIBRARY',
-            value: expect.stringContaining('Demo News API'),
+            value: expect.stringContaining('"name":"Demo News API"'),
           }),
         ]),
         expect.stringContaining('数据源库已更新'),
       );
     });
+    expect(saveExternalItems).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'CUSTOM_DATA_SOURCE_LIBRARY',
+          value: expect.stringContaining('"credentialSchema":"single_key"'),
+        }),
+      ]),
+      expect.any(String),
+    );
 
     const customCard = within(dataSection as HTMLElement).getByTestId('data-source-card-demo_news_api');
     expect(within(customCard).getByText('自定义源')).toBeInTheDocument();
@@ -1343,6 +1452,151 @@ describe('SettingsPage', () => {
     const marketGroup = within(dataSection as HTMLElement).getByText('行情数据').closest('div.flex.items-start');
     expect(marketGroup).not.toBeNull();
     expect(within(marketGroup as HTMLElement).queryAllByRole('option', { name: /Demo News Api/i }).length).toBe(0);
+  });
+
+  it('supports custom key-secret data sources and persists both credentials', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+
+    fireEvent.click(within(dataSection as HTMLElement).getByRole('button', { name: '添加数据源' }));
+    const drawer = await screen.findByRole('dialog', { name: '注册数据源' });
+
+    fireEvent.click(within(drawer).getByRole('button', { name: /Key \+ Secret/ }));
+    fireEvent.change(within(drawer).getByLabelText('显示名称'), { target: { value: 'Demo Market Broker' } });
+    fireEvent.change(within(drawer).getByLabelText('API Key / 凭据'), { target: { value: 'demo-market-key' } });
+    fireEvent.change(within(drawer).getByLabelText('Secret Key'), { target: { value: 'demo-market-secret' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: '行情' }));
+    fireEvent.click(within(drawer).getByRole('button', { name: '创建并保存' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: 'CUSTOM_DATA_SOURCE_LIBRARY',
+            value: expect.stringContaining('"credentialSchema":"key_secret"'),
+          }),
+        ]),
+        expect.stringContaining('数据源库已更新'),
+      );
+    });
+    expect(saveExternalItems).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'CUSTOM_DATA_SOURCE_LIBRARY',
+          value: expect.stringContaining('"secret":"demo-market-secret"'),
+        }),
+      ]),
+      expect.any(String),
+    );
+  });
+
+  it('manages Alpaca built-in credentials with key-secret plus feed fields', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'alpaca,yahoo'),
+          buildDataSourceConfigItem('ALPACA_API_KEY_ID', ''),
+          buildDataSourceConfigItem('ALPACA_API_SECRET_KEY', ''),
+          buildDataSourceConfigItem('ALPACA_DATA_FEED', 'iex'),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+    const alpacaCard = within(dataSection as HTMLElement).getByTestId('data-source-card-alpaca');
+
+    fireEvent.click(within(alpacaCard).getByRole('button', { name: '管理' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Alpaca 数据源管理' });
+
+    fireEvent.change(within(drawer).getByLabelText(/Alpaca Key ID/i), { target: { value: 'alpaca-key-id' } });
+    fireEvent.change(within(drawer).getByLabelText(/Secret Key/i), { target: { value: 'alpaca-secret-key' } });
+    fireEvent.change(within(drawer).getByLabelText(/Feed/i), { target: { value: 'sip' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: '保存更改' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith([
+        { key: 'ALPACA_API_KEY_ID', value: 'alpaca-key-id' },
+        { key: 'ALPACA_API_SECRET_KEY', value: 'alpaca-secret-key' },
+        { key: 'ALPACA_DATA_FEED', value: 'sip' },
+      ], '数据源库已更新');
+    });
+  });
+
+  it('stores Twelve Data credentials in the singular key when one token is provided', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'twelve_data,yahoo'),
+          buildDataSourceConfigItem('TWELVE_DATA_API_KEY', ''),
+          buildDataSourceConfigItem('TWELVE_DATA_API_KEYS', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+    const twelveDataCard = within(dataSection as HTMLElement).getByTestId('data-source-card-twelve_data');
+
+    fireEvent.click(within(twelveDataCard).getByRole('button', { name: '管理' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Twelve Data 数据源管理' });
+
+    fireEvent.change(within(drawer).getByLabelText('API Key / 凭据'), { target: { value: 'twelve-single-key' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: '保存更改' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith([
+        { key: 'TWELVE_DATA_API_KEY', value: 'twelve-single-key' },
+        { key: 'TWELVE_DATA_API_KEYS', value: '' },
+      ], '数据源库已更新');
+    });
+  });
+
+  it('stores Twelve Data credentials in the plural key when multiple tokens are provided', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'data_source',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        data_source: [
+          buildDataSourceConfigItem('REALTIME_SOURCE_PRIORITY', 'twelve_data,yahoo'),
+          buildDataSourceConfigItem('TWELVE_DATA_API_KEY', ''),
+          buildDataSourceConfigItem('TWELVE_DATA_API_KEYS', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const dataSection = screen.getByRole('heading', { name: '数据源配置' }).closest('section');
+    expect(dataSection).not.toBeNull();
+    const twelveDataCard = within(dataSection as HTMLElement).getByTestId('data-source-card-twelve_data');
+
+    fireEvent.click(within(twelveDataCard).getByRole('button', { name: '管理' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Twelve Data 数据源管理' });
+
+    fireEvent.change(within(drawer).getByLabelText('API Key / 凭据'), { target: { value: 'key-one,key-two' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: '保存更改' }));
+
+    await waitFor(() => {
+      expect(saveExternalItems).toHaveBeenCalledWith([
+        { key: 'TWELVE_DATA_API_KEY', value: '' },
+        { key: 'TWELVE_DATA_API_KEYS', value: 'key-one,key-two' },
+      ], '数据源库已更新');
+    });
   });
 
   it('shows quick-api status and advanced-channel count on provider cards', async () => {
@@ -1365,15 +1619,12 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    const providerSection = screen.getByText('Provider 快速配置').closest('div.settings-surface');
-    expect(providerSection).not.toBeNull();
-    const geminiCard = within(providerSection as HTMLElement).getByText('Gemini').closest('div.rounded-xl');
-    expect(geminiCard).not.toBeNull();
+    const providerSection = screen.getByTestId('ai-provider-quick-section');
+    const geminiCard = within(providerSection).getByTestId('ai-provider-card-gemini');
     expect(within(geminiCard as HTMLElement).getByText(/Quick API/)).toBeInTheDocument();
     expect(within(geminiCard as HTMLElement).getByText(/高级渠道数: 0/)).toBeInTheDocument();
 
-    const aihubmixCard = within(providerSection as HTMLElement).getByText('AIHubMix').closest('div.rounded-xl');
-    expect(aihubmixCard).not.toBeNull();
+    const aihubmixCard = within(providerSection).getByTestId('ai-provider-card-aihubmix');
     expect(within(aihubmixCard as HTMLElement).getByText(/高级渠道数: 1/)).toBeInTheDocument();
   });
 
@@ -1579,7 +1830,7 @@ describe('SettingsPage', () => {
     fireEvent.click(within(providerDrawer).getByRole('button', { name: '测试连接' }));
 
     await waitFor(() => {
-      expect(within(providerDrawer).getByText(/快速测试仅验证直连路径/)).toBeInTheDocument();
+      expect(within(providerDrawer).getByText(/自定义协议测试需经高级渠道/)).toBeInTheDocument();
     });
   });
 
@@ -1617,11 +1868,11 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     await openAiRoutingDrawer();
-    const aiSection = screen.getByRole('dialog', { name: '任务路由编辑' });
-    expect(screen.getAllByText(/问股路由：与分析主路由共用/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/gemini\/gemini-2\.5-flash/).length).toBeGreaterThan(0);
-    expect(within(aiSection).getByText('Stock Chat')).toBeInTheDocument();
-    expect(screen.getAllByText('与分析共用').length).toBeGreaterThan(0);
+    const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
+    expect(within(stockTaskRow).getByText('Stock Chat')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('与分析共用')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('Gemini / gemini/gemini-2.5-flash')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText(/问股路由：继承分析主路由/)).toBeInTheDocument();
   });
 
   it('shows Stock Chat as dedicated when AGENT_LITELLM_MODEL is set', async () => {
@@ -1658,11 +1909,11 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     await openAiRoutingDrawer();
-    expect(screen.getAllByText(/问股路由：使用 AGENT_LITELLM_MODEL 独立模型/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/openai\/gpt-4\.1-mini/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('独立模型').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Stock Chat').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0);
+    const stockTaskRow = screen.getByTestId('ai-task-row-stock_chat');
+    expect(within(stockTaskRow).getByText('Stock Chat')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('独立模型')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText('OpenAI / openai/gpt-4.1-mini')).toBeInTheDocument();
+    expect(within(stockTaskRow).getByText(/问股路由：使用独立模型（openai\/gpt-4\.1-mini）/)).toBeInTheDocument();
   });
 
   it('saves Stock Chat task override route independently', async () => {
@@ -1702,8 +1953,7 @@ describe('SettingsPage', () => {
 
     await openAiRoutingDrawer();
     const aiSection = screen.getByRole('dialog', { name: '任务路由编辑' });
-    const stockTaskCard = within(aiSection).getByText('Stock Chat').closest('div.rounded-xl');
-    expect(stockTaskCard).not.toBeNull();
+    const stockTaskCard = within(aiSection).getByTestId('ai-task-card-stock_chat');
 
     fireEvent.click(within(stockTaskCard as HTMLElement).getByRole('button', { name: '独立覆盖' }));
     fireEvent.click(within(stockTaskCard as HTMLElement).getByRole('button', { name: '显式模型 ID' }));
@@ -1715,7 +1965,7 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(saveExternalItems).toHaveBeenCalledWith([
         { key: 'AGENT_LITELLM_MODEL', value: 'openai/gpt-4.1-mini' },
-      ], expect.stringContaining('Stock Chat'));
+      ], expect.stringContaining('OpenAI / openai/gpt-4.1-mini'));
     });
   });
 
@@ -1740,8 +1990,7 @@ describe('SettingsPage', () => {
 
     await openAiRoutingDrawer();
     const aiSection = screen.getByRole('dialog', { name: '任务路由编辑' });
-    const backtestTaskCard = within(aiSection).getByText('Backtesting').closest('div.rounded-xl');
-    expect(backtestTaskCard).not.toBeNull();
+    const backtestTaskCard = within(aiSection).getByTestId('ai-task-card-backtest');
 
     fireEvent.click(within(backtestTaskCard as HTMLElement).getByRole('button', { name: '继承 Analysis' }));
     fireEvent.click(within(backtestTaskCard as HTMLElement).getByRole('button', { name: '保存任务模型' }));
@@ -1749,7 +1998,7 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(saveExternalItems).toHaveBeenCalledWith([
         { key: 'BACKTEST_LITELLM_MODEL', value: '' },
-      ], expect.stringContaining('Backtesting'));
+      ], '已恢复继承 Analysis 主路由');
     });
   });
 
@@ -1829,7 +2078,7 @@ describe('SettingsPage', () => {
 
     expect(saveExternalItems).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(screen.getByText('备用路由配置不完整：请同时设置网关和模型，或同时清空。')).toBeInTheDocument();
+      expect(screen.getByText('备用路由配置缺失：需同时设置网关与模型，或全部清空。')).toBeInTheDocument();
     });
   });
 });

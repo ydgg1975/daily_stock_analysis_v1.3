@@ -9117,6 +9117,7 @@ button[data-variant='danger-subtle']:hover {
   overflow: hidden;
   display: block;
   border-radius: 999px;
+  border-radius: var(--theme-panel-radius-md);
   background: hsl(var(--accent-primary-hsl) / 0.06);
 }
 
@@ -10433,6 +10434,8 @@ html[data-theme='spacex'] .shell-masthead {
   width: 100%;
   backdrop-filter: blur(14px);
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.74) 0%, rgba(0, 0, 0, 0.18) 100%);
+  backdrop-filter: none;
+  background: #000000;
 }
 
 html[data-theme='spacex'] .shell-masthead__inner,
@@ -10534,6 +10537,7 @@ html[data-theme='spacex'] .shell-drawer-action {
   min-height: 2.45rem;
   padding: 0.55rem 0.92rem;
   border-radius: 999px;
+  border-radius: var(--theme-control-radius);
   border: 1px solid transparent;
   color: rgba(240, 240, 250, 0.72);
   font-size: 0.74rem;
@@ -10562,6 +10566,7 @@ html[data-theme='spacex'] .shell-nav-dot {
   width: 0.42rem;
   height: 0.42rem;
   border-radius: 999px;
+  border-radius: 0;
   background: rgba(240, 240, 250, 0.94);
 }
 
@@ -10585,6 +10590,7 @@ html[data-theme='spacex'] .shell-mobile-button {
   height: 2.6rem;
   align-items: center;
   border-radius: 999px;
+  border-radius: var(--theme-control-radius);
 }
 
 html[data-theme='spacex'] .shell-mobile-button--archive {
@@ -11088,6 +11094,8 @@ html[data-theme='spacex'] .app-boot-splash__inner {
   border: 1px solid rgba(240, 240, 250, 0.12);
   background: rgba(0, 0, 0, 0.46);
   backdrop-filter: blur(12px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .home-command-surface {
@@ -11151,6 +11159,7 @@ html[data-theme='spacex'] .theme-task-status {
 html[data-theme='spacex'] .workspace-status-step {
   min-height: 3rem;
   border-radius: 0.5rem;
+  border-radius: var(--theme-panel-radius-md);
   border: 1px solid rgba(240, 240, 250, 0.08);
   background: rgba(132, 132, 144, 0.08);
   color: rgba(240, 240, 250, 0.66);
@@ -11270,6 +11279,8 @@ html[data-theme='spacex'] .report-generation-preview {
   border: 1px solid rgba(240, 240, 250, 0.12);
   background: rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(12px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .report-generation-preview__header {
@@ -11326,6 +11337,7 @@ html[data-theme='spacex'] .report-generation-preview__section-badge {
   min-height: 2rem;
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
+  border-radius: var(--theme-control-radius);
   border: 1px solid rgba(240, 240, 250, 0.16);
   background: rgba(240, 240, 250, 0.05);
   color: rgba(240, 240, 250, 0.84);
@@ -11402,6 +11414,7 @@ html[data-theme='spacex'] .report-generation-preview__step-dot {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 999px;
+  border-radius: 0;
   flex-shrink: 0;
   background: rgba(240, 240, 250, 0.2);
 }
@@ -11985,6 +11998,8 @@ html[data-theme='spacex'] .workspace-statusboard {
   border: 1px solid rgba(240, 240, 250, 0.1);
   background: rgba(240, 240, 250, 0.03);
   backdrop-filter: blur(10px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .workspace-statusboard[data-layout='split'] {
@@ -12190,6 +12205,8 @@ html[data-theme='spacex'] .home-research-shell__side .history-archive-panel {
   border: 1px solid rgba(240, 240, 250, 0.1);
   background: rgba(240, 240, 250, 0.03);
   backdrop-filter: blur(10px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .home-research-shell__side .history-archive-panel__header {
@@ -12652,6 +12669,8 @@ html[data-theme='spacex'] .shell-masthead {
   border-bottom: 1px solid rgba(240, 240, 250, 0.08);
   background: rgba(0, 0, 0, 0.88);
   backdrop-filter: blur(12px);
+  background: #000000;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .shell-content-frame {
@@ -12983,6 +13002,7 @@ html[data-theme='spacex'] .workspace-status-dot {
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 999px;
+  border-radius: 0;
   background: rgba(240, 240, 250, 0.18);
 }
 
@@ -13444,35 +13464,32 @@ html[data-theme='spacex'] .workspace-page--chat .workspace-header-actions > span
 /* SpaceX home workspace override: final-pass spectral layout for command, status, history, and progressive report surfaces. */
 html[data-theme='spacex'] {
   --layout-page-max: 1500px;
-  --theme-panel-radius-lg: 0.4rem;
-  --theme-panel-radius-md: 0.4rem;
-  --theme-control-radius: 0.35rem;
-  --theme-button-radius: 999px;
-  --theme-panel-backdrop-blur: blur(18px);
-  --theme-shell-bg:
-    radial-gradient(circle at top left, rgba(240, 240, 250, 0.06), transparent 24%),
-    radial-gradient(circle at 82% 0%, rgba(240, 240, 250, 0.045), transparent 22%),
-    linear-gradient(180deg, #070709 0%, #000000 46%, #050507 100%);
-  --theme-panel-solid-bg: rgba(10, 10, 13, 0.76);
-  --theme-panel-glass-bg: rgba(10, 10, 12, 0.78);
-  --theme-panel-subtle-bg: rgba(240, 240, 250, 0.028);
-  --theme-panel-solid-border: rgba(240, 240, 250, 0.08);
-  --theme-panel-glass-border: rgba(240, 240, 250, 0.1);
-  --theme-panel-subtle-border: rgba(240, 240, 250, 0.08);
-  --theme-button-primary-bg: rgba(240, 240, 250, 0.07);
+  --theme-panel-radius-lg: 2px;
+  --theme-panel-radius-md: 2px;
+  --theme-control-radius: 2px;
+  --theme-button-radius: 2px;
+  --theme-panel-backdrop-blur: none;
+  --theme-shell-bg: #000000;
+  --theme-panel-solid-bg: #0a0a0c;
+  --theme-panel-glass-bg: #0a0a0c;
+  --theme-panel-subtle-bg: #060608;
+  --theme-panel-solid-border: rgba(255, 255, 255, 0.08);
+  --theme-panel-glass-border: rgba(255, 255, 255, 0.08);
+  --theme-panel-subtle-border: rgba(255, 255, 255, 0.04);
+  --theme-button-primary-bg: rgba(255, 255, 255, 0.1);
   --theme-button-primary-border: rgba(240, 240, 250, 0.16);
-  --theme-button-secondary-bg: rgba(240, 240, 250, 0.04);
-  --theme-button-secondary-border: rgba(240, 240, 250, 0.12);
+  --theme-button-secondary-bg: transparent;
+  --theme-button-secondary-border: rgba(255, 255, 255, 0.15);
   --theme-button-secondary-text: #f0f0fa;
-  --input-bg: rgba(240, 240, 250, 0.03);
-  --input-surface-bg: rgba(240, 240, 250, 0.03);
-  --input-border: rgba(240, 240, 250, 0.12);
-  --input-surface-border: rgba(240, 240, 250, 0.12);
-  --input-surface-border-hover: rgba(240, 240, 250, 0.18);
-  --input-surface-border-focus: rgba(240, 240, 250, 0.24);
-  --input-surface-focus-ring: 0 0 0 1px rgba(240, 240, 250, 0.18);
-  --overlay-hover: rgba(240, 240, 250, 0.04);
-  --overlay-selected: rgba(240, 240, 250, 0.08);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-surface-bg: rgba(255, 255, 255, 0.04);
+  --input-border: rgba(255, 255, 255, 0.1);
+  --input-surface-border: rgba(255, 255, 255, 0.1);
+  --input-surface-border-hover: rgba(255, 255, 255, 0.2);
+  --input-surface-border-focus: rgba(255, 255, 255, 0.3);
+  --input-surface-focus-ring: 0 0 0 1px rgba(255, 255, 255, 0.2);
+  --overlay-hover: rgba(255, 255, 255, 0.06);
+  --overlay-selected: rgba(255, 255, 255, 0.1);
   --spacex-copy-strong: rgba(240, 240, 250, 0.94);
   --spacex-copy-body: rgba(240, 240, 250, 0.76);
   --spacex-copy-muted: rgba(240, 240, 250, 0.54);
@@ -13486,11 +13503,7 @@ html[data-theme='spacex'] {
 }
 
 html[data-theme='spacex'] body::before {
-  background:
-    radial-gradient(circle at top left, rgba(240, 240, 250, 0.06), transparent 22%),
-    linear-gradient(90deg, rgba(240, 240, 250, 0.018) 0 1px, transparent 1px 96px),
-    linear-gradient(180deg, rgba(240, 240, 250, 0.014) 0 1px, transparent 1px 96px),
-    linear-gradient(180deg, rgba(8, 8, 10, 1) 0%, rgba(0, 0, 0, 1) 100%);
+  display: none;
 }
 
 html[data-theme='spacex'] body,
@@ -13586,8 +13599,11 @@ html[data-theme='spacex'] :is(
   border: 1px solid var(--spacex-divider);
   border-radius: 0.45rem;
   background: var(--spacex-panel-bg);
+  border-radius: var(--theme-panel-radius-md);
+  background: #0a0a0c;
   box-shadow: none;
   backdrop-filter: blur(18px);
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] :is(
@@ -13722,7 +13738,7 @@ html[data-theme='spacex'] .workspace-statusboard__heading {
 html[data-theme='spacex'] .workspace-status-badge {
   min-height: 1.9rem;
   padding: 0.24rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--theme-control-radius);
   border: 1px solid var(--spacex-ghost-border);
   background: rgba(240, 240, 250, 0.06);
   color: #f0f0fa;
@@ -13837,7 +13853,7 @@ html[data-theme='spacex'] .workspace-status-dot {
   width: 0.42rem;
   height: 0.42rem;
   margin-top: 0.34rem;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(240, 240, 250, 0.18);
 }
 
@@ -14138,7 +14154,7 @@ html[data-theme='spacex'] .report-generation-preview__section-badge {
   align-items: center;
   min-height: 1.75rem;
   padding: 0.2rem 0.6rem;
-  border-radius: 999px;
+  border-radius: var(--theme-control-radius);
   border: 1px solid var(--spacex-ghost-border);
   background: rgba(240, 240, 250, 0.05);
   color: #f0f0fa;
@@ -14274,7 +14290,7 @@ html[data-theme='spacex'] .report-generation-preview__section {
   gap: 0.72rem;
   padding: 0.9rem;
   border: 1px solid var(--spacex-divider);
-  border-radius: 0.35rem;
+  border-radius: var(--theme-panel-radius-md);
   background: rgba(240, 240, 250, 0.02);
   animation: spacex-draft-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--reveal-index, 1) * 60ms);
@@ -14327,7 +14343,7 @@ html[data-theme='spacex'] .report-generation-preview__skeleton {
 
 html[data-theme='spacex'] .report-generation-preview__skeleton > span {
   height: 0.45rem;
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgba(240, 240, 250, 0.08);
 }
 
@@ -14442,6 +14458,8 @@ html[data-theme='spacex'] .shell-masthead {
   border-bottom: 1px solid rgba(240, 240, 250, 0.06);
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.84) 0%, rgba(0, 0, 0, 0.58) 72%, rgba(0, 0, 0, 0.14) 100%);
   backdrop-filter: blur(18px);
+  background: #000000;
+  backdrop-filter: none;
   padding-top: max(0.65rem, env(safe-area-inset-top));
 }
 
@@ -14565,6 +14583,11 @@ html[data-theme='spacex'] .shell-header-action:hover::after {
   transform: scaleX(1);
 }
 
+html[data-theme='spacex'] .shell-header-link.is-active,
+html[data-theme='spacex'] .shell-header-action.is-active {
+  color: #f0f0fa !important;
+}
+
 html[data-theme='spacex'] .shell-header-link__label {
   font-size: inherit;
   letter-spacing: inherit;
@@ -14577,6 +14600,7 @@ html[data-theme='spacex'] .shell-header-action--danger {
 html[data-theme='spacex'] .shell-nav-dot {
   width: 0.32rem;
   height: 0.32rem;
+  border-radius: 0;
   background: rgba(240, 240, 250, 0.9);
 }
 
@@ -14791,6 +14815,8 @@ html[data-theme='spacex'] .confirm-dialog__surface {
   border-color: rgba(240, 240, 250, 0.08);
   background: linear-gradient(180deg, rgba(10, 10, 13, 0.9), rgba(7, 7, 9, 0.82));
   backdrop-filter: blur(24px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .drawer__header {
@@ -14902,9 +14928,9 @@ html[data-theme='spacex'] .home-dashboard-primary {
   align-content: start;
   padding: 0.82rem 0.92rem 0.78rem;
   border: 1px solid rgba(240, 240, 250, 0.08);
-  border-radius: 0.45rem;
+  border-radius: var(--theme-panel-radius-md);
   background: linear-gradient(180deg, rgba(10, 10, 13, 0.8), rgba(6, 6, 8, 0.68));
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .home-workflow-strip {
@@ -15244,16 +15270,18 @@ html[data-theme='spacex'] .home-decision-summary__metrics {
 html[data-theme='spacex'] .home-decision-summary__metric {
   display: grid;
   gap: 0.22rem;
-  padding-top: 0.68rem;
-  border-top: 1px solid rgba(240, 240, 250, 0.08);
+  padding: 0.85rem;
+  border: 1px solid rgba(240, 240, 250, 0.08);
+  border-radius: var(--theme-panel-radius-md);
+  background: rgba(240, 240, 250, 0.02);
   align-content: start;
 }
 
 html[data-theme='spacex'] .home-decision-summary__metric-value {
   margin: 0;
   color: #f0f0fa;
-  font-family: var(--font-display);
-  font-size: 0.92rem;
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.1;
@@ -15271,14 +15299,14 @@ html[data-theme='spacex'] .home-decision-summary__metric-meter {
   overflow: hidden;
   height: 0.22rem;
   margin-top: 0.16rem;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(240, 240, 250, 0.08);
 }
 
 html[data-theme='spacex'] .home-decision-summary__metric-meter-fill {
   display: block;
   height: 100%;
-  border-radius: inherit;
+  border-radius: 0;
   background: linear-gradient(90deg, rgba(240, 240, 250, 0.28), var(--accent-primary));
 }
 
@@ -15290,6 +15318,8 @@ html[data-theme='spacex'] .home-task-queue {
   border: 1px solid rgba(240, 240, 250, 0.08);
   background: linear-gradient(180deg, rgba(10, 10, 13, 0.76), rgba(6, 6, 8, 0.62));
   backdrop-filter: blur(18px);
+  background: #0a0a0c;
+  backdrop-filter: none;
 }
 
 html[data-theme='spacex'] .home-task-queue__header {
@@ -15339,7 +15369,7 @@ html[data-theme='spacex'] .home-task-queue__item {
   min-width: 0;
   padding: 0.38rem 0.42rem 0.36rem;
   border: 1px solid rgba(240, 240, 250, 0.08);
-  border-radius: 0.38rem;
+  border-radius: var(--theme-control-radius);
   background: linear-gradient(180deg, rgba(240, 240, 250, 0.03), rgba(240, 240, 250, 0.012));
   transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
 }
@@ -15415,7 +15445,7 @@ html[data-theme='spacex'] .home-task-queue__overflow-label {
   min-height: 1.1rem;
   padding: 0.08rem 0.34rem;
   border: 1px solid rgba(240, 240, 250, 0.12);
-  border-radius: 999px;
+  border-radius: var(--theme-control-radius);
   color: rgba(240, 240, 250, 0.76);
   font-size: 0.41rem;
   font-weight: 700;
@@ -15435,7 +15465,7 @@ html[data-theme='spacex'] .home-task-queue__status-indicator {
   min-width: 0.78rem;
   height: 0.78rem;
   border: 1px solid rgba(240, 240, 250, 0.12);
-  border-radius: 999px;
+  border-radius: 2px;
   background: rgba(240, 240, 250, 0.08);
   box-shadow: inset 0 0 0 1px rgba(10, 10, 13, 0.12);
 }
@@ -15495,6 +15525,8 @@ html[data-theme='spacex'] .home-dashboard-history .history-archive-panel {
   border: 1px solid rgba(240, 240, 250, 0.08);
   background: linear-gradient(180deg, rgba(10, 10, 13, 0.78), rgba(6, 6, 8, 0.66));
   backdrop-filter: blur(18px);
+  background: #0a0a0c;
+  backdrop-filter: none;
   overflow: hidden;
 }
 
@@ -15509,6 +15541,7 @@ html[data-theme='spacex'] .home-dashboard-history .history-archive-panel__header
   top: 0;
   z-index: 1;
   background: linear-gradient(180deg, rgba(10, 10, 13, 0.98), rgba(10, 10, 13, 0.84));
+  background: #0a0a0c;
 }
 
 html[data-theme='spacex'] .home-workspace-flow {

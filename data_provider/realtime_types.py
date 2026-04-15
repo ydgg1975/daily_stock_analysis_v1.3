@@ -101,8 +101,10 @@ class RealtimeSource(str, Enum):
     TENCENT = "tencent"             # 腾讯直连
     SINA = "sina"                   # 新浪直连
     STOOQ = "stooq"                 # Stooq 美股兜底
+    ALPACA = "alpaca"               # Alpaca 美股 snapshot / quote
     FINNHUB = "finnhub"             # Finnhub 美股补数
     FMP = "fmp"                     # Financial Modeling Prep 美股补数
+    TWELVE_DATA = "twelve_data"     # Twelve Data 美股/港股补数
     FALLBACK = "fallback"           # 降级兜底
 
 

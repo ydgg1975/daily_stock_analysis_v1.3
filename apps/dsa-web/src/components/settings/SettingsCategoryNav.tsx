@@ -1,7 +1,6 @@
 import type React from 'react';
-import { Badge } from '../common';
 import { useI18n } from '../../contexts/UiLanguageContext';
-import { getCategoryDescription, getCategoryTitle } from '../../utils/systemConfigI18n';
+import { getCategoryTitle } from '../../utils/systemConfigI18n';
 import type { SystemConfigCategorySchema, SystemConfigItem } from '../../types/systemConfig';
 import { cn } from '../../utils/cn';
 
@@ -24,30 +23,28 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
 }) => {
   const { language, t } = useI18n();
   return (
-    <div className="h-full rounded-[1.5rem] border settings-border bg-card p-4 shadow-soft-card-strong">
+    <div className="flex h-full flex-col overflow-hidden rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/30">
       {!hideHeader ? (
-        <div className="mb-4">
-          <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.3em]">{t('settings.categoriesTitle')}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-text">{t('settings.categoriesDesc')}</p>
+        <div className="border-b border-[var(--theme-panel-subtle-border)] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-secondary-text">{t('settings.categoriesTitle')}</p>
         </div>
       ) : null}
 
-      <div className="space-y-2.5">
+      <div className="flex-1 overflow-y-auto py-2">
         {categories.map((category) => {
           const isActive = category.category === activeCategory;
           const count = (itemsByCategory[category.category] || []).length;
           const title = getCategoryTitle(language, category.category, category.title);
-          const description = getCategoryDescription(language, category.category, category.description);
 
           return (
             <button
               key={category.category}
               type="button"
               className={cn(
-                'w-full rounded-[1.1rem] border px-3 py-3 text-left transition-all duration-200',
+                'w-full flex items-center justify-between border-l-[3px] border-y-0 border-r-0 px-4 py-2.5 text-left transition-colors bg-transparent',
                 isActive
-                  ? 'settings-accent-badge-soft settings-shadow-accent'
-                  : 'settings-border settings-surface hover:settings-border-strong hover:settings-surface-hover',
+                  ? 'border-l-[var(--accent-primary)] bg-[var(--overlay-selected)]'
+                  : 'border-l-transparent hover:border-l-[var(--border-muted)] hover:bg-[var(--overlay-hover)]',
                 disabled ? 'pointer-events-none opacity-60' : '',
               )}
               onClick={() => {
@@ -58,23 +55,14 @@ export const SettingsCategoryNav: React.FC<SettingsCategoryNavProps> = ({
               }}
               disabled={disabled}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className={cn('text-sm font-semibold tracking-tight', isActive ? 'text-foreground' : 'text-secondary-text')}>
-                    {title}
-                  </p>
-                  {description ? (
-                    <p className={cn('mt-1 line-clamp-2 text-xs leading-5', isActive ? 'text-secondary-text' : 'text-muted-text')}>{description}</p>
-                  ) : null}
-                </div>
-                <Badge
-                  variant={isActive ? 'info' : 'default'}
-                  size="sm"
-                  className={isActive ? 'settings-accent-badge' : 'settings-border settings-surface-hover text-muted-text'}
-                >
-                  {count}
-                </Badge>
+              <div className="min-w-0 flex-1">
+                <p className={cn('text-[12px] font-semibold tracking-wide uppercase', isActive ? 'text-foreground' : 'text-secondary-text')}>
+                  {title}
+                </p>
               </div>
+              <span className="text-[10px] font-mono text-muted-text ml-3">
+                {count}
+              </span>
             </button>
           );
         })}

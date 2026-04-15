@@ -71,6 +71,33 @@ function makeRunDetail(): ScannerRunDetail {
     universeNotes: ['剔除 ST 与停牌近似状态。'],
     scoringNotes: ['趋势、量能、活跃度共同决定排序。'],
     diagnostics: {
+      coverageSummary: {
+        inputUniverseSize: 300,
+        eligibleAfterUniverseFetch: 182,
+        eligibleAfterLiquidityFilter: 60,
+        eligibleAfterDataAvailabilityFilter: 40,
+        rankedCandidateCount: 40,
+        shortlistedCount: 1,
+        excludedTotal: 260,
+        excludedByReason: [
+          { reason: 'filtered_by_profile_constraints', label: 'Profile filters', count: 240 },
+          { reason: 'missing_history', label: 'Missing history', count: 20 },
+        ],
+        likelyBottleneck: 'filtering',
+        likelyBottleneckLabel: '多数标的在 profile / liquidity 过滤阶段被淘汰',
+      },
+      providerDiagnostics: {
+        configuredPrimaryProvider: 'AkshareFetcher',
+        providersUsed: ['AkshareFetcher', 'EfinanceFetcher', 'FakeDailySource'],
+        quoteSourceUsed: 'EfinanceFetcher',
+        snapshotSourceUsed: 'EfinanceFetcher',
+        historySourceUsed: 'local_db',
+        fallbackOccurred: true,
+        fallbackCount: 1,
+        providerFailureCount: 1,
+        missingDataSymbolCount: 20,
+        providerWarnings: ['AkshareFetcher snapshot failed, switched to EfinanceFetcher'],
+      },
       historyStats: {
         localHits: 10,
         networkFetches: 5,
@@ -325,6 +352,102 @@ function makeUsRunDetail(): ScannerRunDetail {
   };
 }
 
+function makeHkRunDetail(): ScannerRunDetail {
+  return {
+    ...makeRunDetail(),
+    id: 303,
+    market: 'hk',
+    profile: 'hk_preopen_v1',
+    profileLabel: '港股盘前扫描 v1',
+    runAt: '2026-04-15T09:10:00',
+    completedAt: '2026-04-15T09:11:00',
+    universeName: 'hk_preopen_watchlist_v1',
+    universeSize: 120,
+    preselectedSize: 30,
+    evaluatedSize: 18,
+    sourceSummary: 'universe=local_db_hk_history+curated_hk_liquid_seed; snapshot=optional_hk_realtime_quote; history=local_hk_first',
+    headline: '今日港股开盘优先观察：HK00700 Tencent Holdings',
+    universeNotes: ['优先读取本地 HK history universe，并在覆盖不足时补入受控 seed。'],
+    scoringNotes: ['流动性、趋势延续、相对强度与开盘 context 共同决定排序。'],
+    diagnostics: {
+      historyStats: {
+        localHits: 4,
+        networkFetches: 0,
+      },
+      aiInterpretation: {
+        enabled: true,
+        status: 'completed',
+        topN: 1,
+        attemptedCandidates: 1,
+        generatedCandidates: 1,
+        failedCandidates: 0,
+        skippedCandidates: 0,
+        modelsUsed: ['gemini/gemini-2.5-flash'],
+        fallbackUsed: false,
+        message: '已为前 1 名候选生成 AI 解读。',
+      },
+      scannerData: {
+        universeResolution: {
+          source: 'local_db_hk_history+curated_hk_liquid_seed',
+          attempts: [
+            { fetcher: 'local_db_hk_history', status: 'success', rows: 4 },
+            { fetcher: 'curated_hk_liquid_seed', status: 'success', rows: 20 },
+          ],
+        },
+        snapshotResolution: {
+          source: 'optional_hk_realtime_quote',
+          attempts: [
+            { fetcher: 'TwelveDataFetcher', status: 'success', rows: 1 },
+          ],
+        },
+        degradedModeUsed: false,
+      },
+      liveQuoteStats: {
+        attemptedCandidates: 1,
+        availableCandidates: 1,
+        unavailableCandidates: 0,
+        sources: ['twelve_data'],
+      },
+    },
+    shortlist: [
+      {
+        ...makeRunDetail().shortlist[0],
+        symbol: 'HK00700',
+        name: 'Tencent Holdings',
+        reasonSummary: '价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。',
+        reasons: [
+          '价格仍站在 MA20/MA60 上方，趋势延续结构尚未破坏。',
+          '20 日与 60 日动量同步转强，更像可持续跟踪的港股趋势候选。',
+        ],
+        keyMetrics: [
+          { label: '价格', value: '503.50' },
+          { label: '日涨跌幅', value: '1.5%' },
+          { label: '20日均成交额', value: 'HK$6.2B' },
+        ],
+        featureSignals: [
+          { label: '趋势', value: '18.2 / 20' },
+          { label: '动量', value: '12.6 / 16' },
+        ],
+        riskNotes: ['开盘跳空幅度偏大，若承接不足，容易走成冲高回落。'],
+        watchContext: [
+          { label: '开盘前', value: '先看是否仍靠近近 20 日高点，避免高开后迅速走弱。' },
+          { label: '开盘确认', value: '开盘后优先看前 15 分钟成交是否延续。' },
+        ],
+        boards: [],
+        realizedOutcome: {
+          ...makeRunDetail().shortlist[0].realizedOutcome,
+          benchmarkCode: 'HK02800',
+        },
+        diagnostics: {
+          historySource: 'local_db',
+          benchmarkCode: 'HK02800',
+          componentScores: { trend: 18.2 },
+        },
+      },
+    ],
+  };
+}
+
 function makeHistoryResponse(): ScannerRunHistoryResponse {
   return {
     total: 1,
@@ -412,6 +535,31 @@ function makeUsHistoryResponse(): ScannerRunHistoryResponse {
         evaluatedSize: 32,
         headline: '今日美股盘前优先观察：NVDA NVIDIA',
         topSymbols: ['NVDA'],
+      },
+    ],
+  };
+}
+
+function makeHkHistoryResponse(): ScannerRunHistoryResponse {
+  return {
+    total: 1,
+    page: 1,
+    limit: 6,
+    items: [
+      {
+        ...makeHistoryResponse().items[0],
+        id: 303,
+        market: 'hk',
+        profile: 'hk_preopen_v1',
+        profileLabel: '港股盘前扫描 v1',
+        runAt: '2026-04-15T09:10:00',
+        completedAt: '2026-04-15T09:11:00',
+        universeName: 'hk_preopen_watchlist_v1',
+        universeSize: 120,
+        preselectedSize: 30,
+        evaluatedSize: 18,
+        headline: '今日港股开盘优先观察：HK00700 Tencent Holdings',
+        topSymbols: ['HK00700'],
       },
     ],
   };
@@ -521,6 +669,35 @@ function makeUsStatusResponse(): ScannerOperationalStatus {
   };
 }
 
+function makeHkStatusResponse(): ScannerOperationalStatus {
+  return {
+    ...makeStatusResponse(),
+    market: 'hk',
+    profile: 'hk_preopen_v1',
+    profileLabel: '港股盘前扫描 v1',
+    scheduleTime: '09:10',
+    todayWatchlist: {
+      ...makeStatusResponse().todayWatchlist!,
+      id: 303,
+      headline: '今日港股开盘优先观察：HK00700 Tencent Holdings',
+    },
+    lastRun: {
+      ...makeStatusResponse().lastRun!,
+      id: 303,
+      headline: '今日港股开盘优先观察：HK00700 Tencent Holdings',
+    },
+    lastScheduledRun: {
+      ...makeStatusResponse().lastScheduledRun!,
+      id: 303,
+      headline: '今日港股开盘优先观察：HK00700 Tencent Holdings',
+    },
+    qualitySummary: {
+      ...makeStatusResponse().qualitySummary,
+      benchmarkCode: 'HK02800',
+    },
+  };
+}
+
 function renderScannerPage() {
   return render(
     <UiLanguageProvider>
@@ -622,6 +799,20 @@ describe('ScannerPage', () => {
     expect(await screen.findByText('AI provider 当前不可用，scanner 已自动回退为纯规则型结果。')).toBeInTheDocument();
   });
 
+  it('renders bounded run diagnostics for coverage and provider fallback', async () => {
+    renderScannerPage();
+
+    expect(await screen.findByText('本次扫描诊断')).toBeInTheDocument();
+    expect(screen.getByText('输入池')).toBeInTheDocument();
+    expect(screen.getByText('通过流动性/约束')).toBeInTheDocument();
+    expect(screen.getByText('进入最终 shortlist')).toBeInTheDocument();
+    expect(screen.getByText('多数标的在 profile / liquidity 过滤阶段被淘汰')).toBeInTheDocument();
+    expect(screen.getByText(/过滤 260 只/)).toBeInTheDocument();
+    expect(screen.getAllByText(/AkshareFetcher/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/EfinanceFetcher/).length).toBeGreaterThan(0);
+    expect(screen.getByText('发生 1 次 fallback')).toBeInTheDocument();
+  });
+
   it('runs the scanner and renders the returned shortlist', async () => {
     getRecentWatchlists.mockResolvedValueOnce({
       total: 0,
@@ -670,7 +861,7 @@ describe('ScannerPage', () => {
 
     fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'us' } });
 
-    expect(screen.getByText('US Universe')).toBeInTheDocument();
+    expect(screen.getByText('美股盘前扫描高流动性、相对强度候选，生成 Pre-open Watchlist。')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(getStatus).toHaveBeenLastCalledWith({
@@ -694,6 +885,55 @@ describe('ScannerPage', () => {
     expect(await screen.findByText('NVDA')).toBeInTheDocument();
     expect(screen.getAllByText('美股').length).toBeGreaterThan(0);
     expect(screen.getByText(/SPY/)).toBeInTheDocument();
+  });
+
+  it('supports switching to the HK profile and preserves market-specific defaults', async () => {
+    getRecentWatchlists.mockImplementation(async (params?: { market?: string }) => (
+      params?.market === 'hk'
+        ? makeHkHistoryResponse()
+        : params?.market === 'us'
+          ? makeUsHistoryResponse()
+          : makeHistoryResponse()
+    ));
+    getStatus.mockImplementation(async (params?: { market?: string }) => (
+      params?.market === 'hk'
+        ? makeHkStatusResponse()
+        : params?.market === 'us'
+          ? makeUsStatusResponse()
+          : makeStatusResponse()
+    ));
+    runScan.mockResolvedValue(makeHkRunDetail());
+
+    renderScannerPage();
+
+    expect((await screen.findAllByText('算力龙头')).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('市场'), { target: { value: 'hk' } });
+
+    expect(screen.getByText('港股开盘前扫描高流动性、强趋势候选，生成 Opening Watchlist。')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(getStatus).toHaveBeenLastCalledWith({
+        market: 'hk',
+        profile: 'hk_preopen_v1',
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '运行扫描' }));
+
+    await waitFor(() => {
+      expect(runScan).toHaveBeenCalledWith({
+        market: 'hk',
+        profile: 'hk_preopen_v1',
+        shortlistSize: 5,
+        universeLimit: 120,
+        detailLimit: 30,
+      });
+    });
+
+    expect(await screen.findByText('HK00700')).toBeInTheDocument();
+    expect(screen.getAllByText('港股').length).toBeGreaterThan(0);
+    expect(screen.getByText(/HK02800/)).toBeInTheDocument();
   });
 
   it('starts deeper analysis from a shortlist candidate', async () => {

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class ScannerRunRequest(BaseModel):
-    market: Literal["cn", "us"] = Field("cn", description="目标市场，当前阶段实现 cn 与 us profile")
+    market: Literal["cn", "us", "hk"] = Field("cn", description="目标市场，当前阶段实现 cn / us / hk profile")
     profile: Optional[str] = Field(None, description="扫描配置 key，默认按市场选择")
     shortlist_size: int = Field(5, ge=1, le=20, description="输出观察名单数量")
     universe_limit: Optional[int] = Field(None, ge=50, le=1000, description="进入详细评估前的候选池上限")

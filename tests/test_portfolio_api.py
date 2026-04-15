@@ -23,6 +23,7 @@ except ModuleNotFoundError:
 import src.auth as auth
 from api.app import create_app
 from src.config import Config
+from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError
 from src.services.portfolio_service import PortfolioBusyError
 from src.storage import DatabaseManager
 
@@ -89,6 +90,22 @@ class PortfolioApiTestCase(unittest.TestCase):
         )
         self.db.save_daily_data(df, code=symbol, data_source="portfolio-api-test")
 
+    @staticmethod
+    def _ibkr_flex_xml_bytes() -> bytes:
+        xml_text = """<?xml version="1.0" encoding="UTF-8"?>
+<FlexStatements>
+  <FlexStatement accountId="U1234567" fromDate="2026-01-01" toDate="2026-01-31" currency="USD">
+    <Trades>
+      <Trade assetCategory="STK" symbol="AAPL" exchange="NASDAQ" currency="USD" tradeDate="2026-01-03" buySell="BUY" quantity="10" tradePrice="150" ibCommission="1.25" taxes="0" ibExecID="AAPL-1" description="AAPL BUY"/>
+    </Trades>
+    <CashTransactions>
+      <CashTransaction reportDate="2026-01-02" currency="USD" amount="5000" description="Deposit"/>
+    </CashTransactions>
+  </FlexStatement>
+</FlexStatements>
+"""
+        return xml_text.encode("utf-8")
+
     def test_account_event_snapshot_flow(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",
@@ -149,6 +166,206 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         detail = resp.json()
         self.assertEqual(detail.get("error"), "validation_error")
+
+    def test_broker_connection_api_flow(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        create_resp = self.client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": account_id,
+                "broker_type": "ibkr",
+                "broker_name": "Interactive Brokers",
+                "connection_name": "Primary IBKR",
+                "broker_account_ref": "U1234567",
+                "import_mode": "file",
+                "status": "active",
+                "sync_metadata": {"source": "flex"},
+            },
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        created = create_resp.json()
+        self.assertEqual(created["portfolio_account_id"], account_id)
+        self.assertEqual(created["broker_type"], "ibkr")
+        self.assertEqual(created["sync_metadata"], {"source": "flex"})
+
+        list_resp = self.client.get("/api/v1/portfolio/broker-connections")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(len(list_resp.json()["connections"]), 1)
+        self.assertEqual(list_resp.json()["connections"][0]["portfolio_account_name"], "Global")
+
+        update_resp = self.client.put(
+            f"/api/v1/portfolio/broker-connections/{created['id']}",
+            json={
+                "connection_name": "IBKR Flex",
+                "status": "disabled",
+                "sync_metadata": {"source": "flex", "scope": "global"},
+            },
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        updated = update_resp.json()
+        self.assertEqual(updated["connection_name"], "IBKR Flex")
+        self.assertEqual(updated["status"], "disabled")
+        self.assertEqual(updated["sync_metadata"]["scope"], "global")
+
+        duplicate_resp = self.client.post(
+            "/api/v1/portfolio/broker-connections",
+            json={
+                "portfolio_account_id": account_id,
+                "broker_type": "ibkr",
+                "connection_name": "Duplicate Ref",
+                "broker_account_ref": "U1234567",
+                "sync_metadata": {},
+            },
+        )
+        self.assertEqual(duplicate_resp.status_code, 409)
+        detail = duplicate_resp.json()
+        self.assertEqual(detail.get("error"), "conflict")
+
+    def test_generic_broker_import_endpoints_support_ibkr(self) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        broker_list_resp = self.client.get("/api/v1/portfolio/imports/brokers")
+        self.assertEqual(broker_list_resp.status_code, 200)
+        brokers = {item["broker"] for item in broker_list_resp.json()["brokers"]}
+        self.assertIn("ibkr", brokers)
+
+        parse_resp = self.client.post(
+            "/api/v1/portfolio/imports/parse",
+            data={"broker": "ibkr"},
+            files={"file": ("ibkr-flex.xml", self._ibkr_flex_xml_bytes(), "application/xml")},
+        )
+        self.assertEqual(parse_resp.status_code, 200)
+        parsed = parse_resp.json()
+        self.assertEqual(parsed["broker"], "ibkr")
+        self.assertEqual(parsed["record_count"], 1)
+        self.assertEqual(parsed["cash_record_count"], 1)
+        self.assertEqual(parsed["metadata"]["broker_account_ref"], "U1234567")
+
+        commit_resp = self.client.post(
+            "/api/v1/portfolio/imports/commit",
+            data={"account_id": str(account_id), "broker": "ibkr", "dry_run": "false"},
+            files={"file": ("ibkr-flex.xml", self._ibkr_flex_xml_bytes(), "application/xml")},
+        )
+        self.assertEqual(commit_resp.status_code, 200)
+        committed = commit_resp.json()
+        self.assertEqual(committed["inserted_count"], 1)
+        self.assertEqual(committed["cash_inserted_count"], 1)
+        self.assertIsNotNone(committed["broker_connection_id"])
+
+    @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
+    def test_ibkr_sync_endpoint_contract(self, sync_mock: MagicMock) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        sync_mock.return_value = {
+            "account_id": account_id,
+            "broker_connection_id": 9,
+            "broker_account_ref": "U1234567",
+            "connection_name": "IBKR U1234567",
+            "snapshot_date": "2026-04-15",
+            "synced_at": "2026-04-15T09:00:00",
+            "base_currency": "USD",
+            "total_cash": 5000.0,
+            "total_market_value": 1600.0,
+            "total_equity": 6600.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 100.0,
+            "position_count": 1,
+            "cash_balance_count": 1,
+            "fx_stale": False,
+            "snapshot_overlay_active": True,
+            "used_existing_connection": False,
+            "api_base_url": "https://localhost:5000/v1/api",
+            "verify_ssl": False,
+            "warnings": [],
+        }
+
+        resp = self.client.post(
+            "/api/v1/portfolio/sync/ibkr",
+            json={
+                "account_id": account_id,
+                "session_token": "unit-test-session",
+                "api_base_url": "https://localhost:5000",
+                "verify_ssl": False,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["broker_account_ref"], "U1234567")
+        self.assertTrue(payload["snapshot_overlay_active"])
+        sync_mock.assert_called_once()
+
+    @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
+    def test_ibkr_sync_endpoint_surfaces_structured_session_error(self, sync_mock: MagicMock) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        sync_mock.side_effect = PortfolioIbkrSyncError(
+            code="ibkr_session_expired",
+            message="当前 IBKR session 已失效、未授权或未连上可访问账户。",
+            status_code=400,
+        )
+
+        resp = self.client.post(
+            "/api/v1/portfolio/sync/ibkr",
+            json={
+                "account_id": account_id,
+                "session_token": "expired-session",
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.json(),
+            {
+                "error": "ibkr_session_expired",
+                "message": "当前 IBKR session 已失效、未授权或未连上可访问账户。",
+            },
+        )
+
+    @patch("api.v1.endpoints.portfolio.PortfolioIbkrSyncService.sync_read_only_account_state")
+    def test_ibkr_sync_endpoint_surfaces_mapping_conflict(self, sync_mock: MagicMock) -> None:
+        account_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Global", "broker": "IBKR", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(account_resp.status_code, 200)
+        account_id = account_resp.json()["id"]
+
+        sync_mock.side_effect = PortfolioIbkrSyncError(
+            code="ibkr_account_mapping_conflict",
+            message="该 broker account ref 已绑定到当前用户的另一持仓账户。",
+            status_code=409,
+        )
+
+        resp = self.client.post(
+            "/api/v1/portfolio/sync/ibkr",
+            json={
+                "account_id": account_id,
+                "session_token": "unit-test-session",
+                "broker_account_ref": "U1234567",
+            },
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.json()["error"], "ibkr_account_mapping_conflict")
 
     def test_duplicate_trade_uid_returns_409(self) -> None:
         create_resp = self.client.post(

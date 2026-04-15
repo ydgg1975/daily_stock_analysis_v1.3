@@ -1,5 +1,5 @@
 export interface ScannerRunRequest {
-  market?: 'cn' | 'us';
+  market?: 'cn' | 'us' | 'hk';
   profile?: string;
   shortlistSize?: number;
   universeLimit?: number;
@@ -111,6 +111,44 @@ export interface ScannerQualitySummary {
   negativeCandidateAvgScore?: number | null;
 }
 
+export interface ScannerCoverageReason {
+  reason: string;
+  label?: string | null;
+  count: number;
+}
+
+export interface ScannerCoverageSummary {
+  inputUniverseSize: number;
+  eligibleAfterUniverseFetch: number;
+  eligibleAfterLiquidityFilter: number;
+  eligibleAfterDataAvailabilityFilter: number;
+  rankedCandidateCount: number;
+  shortlistedCount: number;
+  excludedTotal: number;
+  excludedByReason: ScannerCoverageReason[];
+  likelyBottleneck?: string | null;
+  likelyBottleneckLabel?: string | null;
+}
+
+export interface ScannerProviderDiagnostics {
+  configuredPrimaryProvider?: string | null;
+  quoteSourceUsed?: string | null;
+  snapshotSourceUsed?: string | null;
+  historySourceUsed?: string | null;
+  providersUsed: string[];
+  fallbackOccurred: boolean;
+  fallbackCount: number;
+  providerFailureCount: number;
+  missingDataSymbolCount: number;
+  providerWarnings: string[];
+}
+
+export interface ScannerRunDiagnostics {
+  coverageSummary?: ScannerCoverageSummary;
+  providerDiagnostics?: ScannerProviderDiagnostics;
+  [key: string]: unknown;
+}
+
 export interface ScannerCandidate {
   symbol: string;
   name: string;
@@ -129,7 +167,7 @@ export interface ScannerCandidate {
   scanTimestamp?: string | null;
   aiInterpretation: ScannerAiInterpretation;
   realizedOutcome: ScannerCandidateOutcome;
-  diagnostics: Record<string, unknown>;
+  diagnostics: ScannerRunDiagnostics;
 }
 
 export interface ScannerRunDetail {

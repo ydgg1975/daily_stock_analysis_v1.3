@@ -6,31 +6,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from api.deps import CurrentUser, require_admin_user
 from api.v1.schemas.admin_logs import (
     ExecutionLogSessionDetailModel,
     ExecutionLogSessionListResponse,
 )
-from src.auth import verify_admin_unlock_token
 from src.services.execution_log_service import ExecutionLogService
 
 router = APIRouter()
-
-
-def require_admin_unlock(
-    admin_unlock_token: str | None = Header(default=None, alias="X-Admin-Unlock-Token"),
-) -> None:
-    """Require a valid admin unlock token for observability details."""
-    if admin_unlock_token and verify_admin_unlock_token(admin_unlock_token):
-        return
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": "admin_unlock_required",
-            "message": "Admin settings are locked. Verify admin password to access logs center.",
-        },
-    )
 
 
 def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -67,7 +52,7 @@ def list_execution_log_sessions(
     date_to: Optional[str] = Query(default=None, description="ISO datetime end"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    _: None = Depends(require_admin_unlock),
+    _: CurrentUser = Depends(require_admin_user),
 ):
     service = ExecutionLogService()
     items, total = service.list_sessions(
@@ -92,7 +77,7 @@ def list_execution_log_sessions(
 )
 def get_execution_log_session_detail(
     session_id: str,
-    _: None = Depends(require_admin_unlock),
+    _: CurrentUser = Depends(require_admin_user),
 ):
     service = ExecutionLogService()
     detail = service.get_session_detail(session_id)

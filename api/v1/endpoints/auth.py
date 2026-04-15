@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from api.deps import get_system_config_service
+from api.deps import get_system_config_service, resolve_current_user
 from src.auth import (
     ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT,
     COOKIE_NAME,
@@ -21,7 +23,9 @@ from src.auth import (
     create_admin_unlock_token,
     create_session,
     get_client_ip,
+    get_session_expiry_datetime,
     has_stored_password,
+    hash_password_for_storage,
     is_auth_enabled,
     is_password_changeable,
     is_password_set,
@@ -29,12 +33,15 @@ from src.auth import (
     refresh_auth_state,
     rotate_session_secret,
     set_initial_password,
-    verify_password,
+    get_session_identity,
+    verify_password_hash_string,
     verify_stored_password,
-    verify_session,
+    ensure_bootstrap_admin_user_password_hash,
 )
 from src.config import Config, setup_env
 from src.core.config_manager import ConfigManager
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN, ROLE_USER
+from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +49,14 @@ router = APIRouter()
 
 
 class LoginRequest(BaseModel):
-    """Login request body. For first-time setup use password + password_confirm."""
+    """Login or account-bootstrap request body."""
 
     model_config = {"populate_by_name": True}
 
-    password: str = Field(default="", description="Admin password")
+    username: str = Field(default="", description="Username")
+    display_name: str | None = Field(default=None, alias="displayName", description="Display name for first account creation")
+    create_user: bool = Field(default=False, alias="createUser", description="Whether to create a new normal user account")
+    password: str = Field(default="", description="Password")
     password_confirm: str | None = Field(default=None, alias="passwordConfirm", description="Confirm (first-time)")
 
 
@@ -78,6 +88,45 @@ class VerifyPasswordRequest(BaseModel):
 
     password: str = Field(default="", description="Admin password")
     password_confirm: str | None = Field(default=None, alias="passwordConfirm", description="Confirm password when setting initial secret")
+
+
+class CurrentUserResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str | None = Field(default=None, alias="displayName")
+    role: str
+    is_admin: bool = Field(alias="isAdmin")
+    is_authenticated: bool = Field(alias="isAuthenticated")
+    transitional: bool = False
+    auth_enabled: bool = Field(alias="authEnabled")
+    legacy_admin: bool = Field(default=False, alias="legacyAdmin")
+
+
+class UserNotificationPreferencesRequest(BaseModel):
+    """Update current-user notification preferences."""
+
+    model_config = {"populate_by_name": True}
+
+    enabled: bool = Field(default=False)
+    email: str | None = Field(default=None)
+    email_enabled: bool | None = Field(default=None, alias="emailEnabled")
+    discord_enabled: bool = Field(default=False, alias="discordEnabled")
+    discord_webhook: str | None = Field(default=None, alias="discordWebhook")
+
+
+class UserNotificationPreferencesResponse(BaseModel):
+    """Current-user notification preferences."""
+
+    channel: str = Field(default="email")
+    enabled: bool = Field(default=False)
+    email: str | None = Field(default=None)
+    email_enabled: bool = Field(default=False, alias="emailEnabled")
+    discord_enabled: bool = Field(default=False, alias="discordEnabled")
+    discord_webhook: str | None = Field(default=None, alias="discordWebhook")
+    delivery_available: bool = Field(default=False, alias="deliveryAvailable")
+    email_delivery_available: bool = Field(default=False, alias="emailDeliveryAvailable")
+    discord_delivery_available: bool = Field(default=True, alias="discordDeliveryAvailable")
+    updated_at: str | None = Field(default=None, alias="updatedAt")
 
 
 def _cookie_params(request: Request) -> dict:
@@ -165,13 +214,125 @@ def _set_session_cookie(response: Response, session_value: str, request: Request
     )
 
 
+def _normalize_username(value: str | None) -> str:
+    return str(value or "").strip()
+
+
+def _serialize_current_user(request: Request) -> dict | None:
+    current_user = resolve_current_user(request)
+    if current_user is None:
+        return None
+    return CurrentUserResponse(
+        id=current_user.user_id,
+        username=current_user.username,
+        displayName=current_user.display_name,
+        role=current_user.role,
+        isAdmin=current_user.is_admin,
+        isAuthenticated=current_user.is_authenticated,
+        transitional=current_user.transitional,
+        authEnabled=current_user.auth_enabled,
+        legacyAdmin=current_user.legacy_admin,
+    ).model_dump(by_alias=True)
+
+
+def _clear_current_user_cache(request: Request) -> None:
+    state = getattr(request, "state", None)
+    if state is not None and hasattr(state, "current_user"):
+        delattr(state, "current_user")
+
+
+def _normalize_notification_email(value: str | None) -> str | None:
+    email = str(value or "").strip()
+    if not email:
+        return None
+    if "@" not in email or email.startswith("@") or email.endswith("@"):
+        raise ValueError("请输入有效的邮箱地址")
+    return email
+
+
+def _normalize_discord_webhook(value: str | None) -> str | None:
+    webhook = str(value or "").strip()
+    if not webhook:
+        return None
+
+    parsed = urlparse(webhook)
+    host = str(parsed.netloc or "").lower()
+    path = str(parsed.path or "")
+    if (
+        parsed.scheme != "https"
+        or not host
+        or "/api/webhooks/" not in path
+        or not (host.endswith("discord.com") or host.endswith("discordapp.com"))
+    ):
+        raise ValueError("请输入有效的 Discord Webhook URL")
+    return webhook
+
+
+def _notification_delivery_available() -> bool:
+    config = Config.get_instance()
+    return bool(getattr(config, "email_sender", None) and getattr(config, "email_password", None))
+
+
+def _serialize_user_notification_preferences(user_id: str) -> dict:
+    db = DatabaseManager.get_instance()
+    preferences = db.get_user_notification_preferences(user_id)
+    email_delivery_available = _notification_delivery_available()
+    return UserNotificationPreferencesResponse(
+        channel=str(preferences.get("channel") or "email"),
+        enabled=bool(preferences.get("enabled")),
+        email=preferences.get("email"),
+        emailEnabled=bool(preferences.get("email_enabled")),
+        discordEnabled=bool(preferences.get("discord_enabled")),
+        discordWebhook=preferences.get("discord_webhook"),
+        deliveryAvailable=email_delivery_available,
+        emailDeliveryAvailable=email_delivery_available,
+        discordDeliveryAvailable=True,
+        updatedAt=preferences.get("updated_at"),
+    ).model_dump(by_alias=True)
+
+
+def _require_admin_current_user(request: Request):
+    current_user = resolve_current_user(request)
+    if current_user is None:
+        return None, JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+    if not current_user.is_admin:
+        return None, JSONResponse(
+            status_code=403,
+            content={"error": "admin_required", "message": "Admin access required"},
+        )
+    return current_user, None
+
+
+def _persist_session_for_user(*, request: Request, user_id: str, username: str, role: str) -> str:
+    session_id = secrets.token_hex(16)
+    expires_at = get_session_expiry_datetime()
+    db = DatabaseManager.get_instance()
+    db.create_app_user_session(
+        session_id=session_id,
+        user_id=user_id,
+        expires_at=expires_at,
+    )
+    return create_session(
+        user_id=user_id,
+        username=username,
+        role=role,
+        session_id=session_id,
+        expires_at=int(expires_at.timestamp()),
+    )
+
+
+def _delete_session_cookie(response: Response) -> None:
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+
+
 def _get_auth_status_dict(request: Request | None = None) -> dict:
     """Helper to build consistent auth status response body."""
     auth_enabled = is_auth_enabled()
-    logged_in = False
-    if auth_enabled and request:
-        cookie_val = request.cookies.get(COOKIE_NAME)
-        logged_in = verify_session(cookie_val) if cookie_val else False
+    current_user_payload = _serialize_current_user(request) if request is not None else None
+    logged_in = bool(current_user_payload and current_user_payload.get("isAuthenticated"))
 
     # setupState determination:
     # - enabled: auth is active
@@ -190,6 +351,7 @@ def _get_auth_status_dict(request: Request | None = None) -> dict:
         "passwordSet": _password_set_for_response(auth_enabled),
         "passwordChangeable": is_password_changeable() if auth_enabled else False,
         "setupState": setup_state,
+        "currentUser": current_user_payload,
     }
 
 
@@ -203,6 +365,88 @@ async def auth_status(request: Request):
     return _get_auth_status_dict(request)
 
 
+@router.get(
+    "/me",
+    summary="Get current user",
+    description="Returns the resolved current user identity for the request.",
+)
+async def auth_me(request: Request):
+    current_user = _serialize_current_user(request)
+    if current_user is None:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+    return current_user
+
+
+@router.get(
+    "/preferences/notifications",
+    summary="Get current-user notification preferences",
+    description="Returns the personal notification target configuration for the authenticated user.",
+)
+async def auth_get_notification_preferences(request: Request):
+    current_user = resolve_current_user(request)
+    if current_user is None or not current_user.is_authenticated:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+    return _serialize_user_notification_preferences(current_user.user_id)
+
+
+@router.put(
+    "/preferences/notifications",
+    summary="Update current-user notification preferences",
+    description="Updates the personal notification target configuration for the authenticated user.",
+)
+async def auth_update_notification_preferences(request: Request, body: UserNotificationPreferencesRequest):
+    current_user = resolve_current_user(request)
+    if current_user is None or not current_user.is_authenticated:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
+        )
+
+    try:
+        normalized_email = _normalize_notification_email(body.email)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_error", "message": str(exc)},
+        )
+    try:
+        normalized_discord_webhook = _normalize_discord_webhook(body.discord_webhook)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_error", "message": str(exc)},
+        )
+
+    email_enabled = body.email_enabled if body.email_enabled is not None else body.enabled
+
+    if email_enabled and not normalized_email:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_error", "message": "启用邮件通知前请先填写邮箱地址"},
+        )
+    if body.discord_enabled and not normalized_discord_webhook:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_error", "message": "启用 Discord 通知前请先填写 Webhook URL"},
+        )
+
+    DatabaseManager.get_instance().upsert_user_notification_preferences(
+        current_user.user_id,
+        email=normalized_email,
+        enabled=email_enabled,
+        channel="multi" if email_enabled and body.discord_enabled else ("discord" if body.discord_enabled else "email"),
+        discord_webhook=normalized_discord_webhook,
+        discord_enabled=body.discord_enabled,
+    )
+    return _serialize_user_notification_preferences(current_user.user_id)
+
+
 @router.post(
     "/verify-password",
     summary="Verify admin password for settings unlock",
@@ -214,6 +458,10 @@ async def auth_status(request: Request):
 )
 async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
     """Verify or initialize admin password and return a short-lived unlock token."""
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+
     password = (body.password or "").strip()
     if not password:
         return JSONResponse(
@@ -231,7 +479,9 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
             },
         )
 
-    if not has_stored_password():
+    bootstrap_admin = current_user.user_id == BOOTSTRAP_ADMIN_USER_ID
+
+    if bootstrap_admin and not has_stored_password():
         confirm = (body.password_confirm or "").strip()
         if not confirm:
             return JSONResponse(
@@ -254,15 +504,27 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
                 status_code=400,
                 content={"error": "invalid_password", "message": err},
             )
-    elif not verify_stored_password(password):
-        record_login_failure(ip)
-        return JSONResponse(
-            status_code=401,
-            content={"error": "invalid_password", "message": "管理员密码错误"},
-        )
+    else:
+        verified = False
+        if bootstrap_admin:
+            ensure_bootstrap_admin_user_password_hash()
+            verified = verify_stored_password(password)
+        else:
+            user_row = DatabaseManager.get_instance().get_app_user(current_user.user_id)
+            verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
+        if not verified:
+            record_login_failure(ip)
+            return JSONResponse(
+                status_code=401,
+                content={"error": "invalid_password", "message": "管理员密码错误"},
+            )
 
     clear_rate_limit(ip)
-    unlock_token = create_admin_unlock_token()
+    unlock_token = create_admin_unlock_token(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        role=current_user.role,
+    )
     if not unlock_token:
         return JSONResponse(
             status_code=500,
@@ -293,6 +555,10 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
 )
 async def auth_update_settings(request: Request, body: AuthSettingsRequest):
     """Manage auth enablement from the settings page."""
+    current_user, error_response = _require_admin_current_user(request)
+    if error_response is not None:
+        return error_response
+
     target_enabled = body.auth_enabled
     current_enabled = is_auth_enabled()
     stored_password_exists = has_stored_password()
@@ -347,7 +613,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
             # This triggers whenever trying to enable/keep enabled an existing auth setup.
             cookie_val = request.cookies.get(COOKIE_NAME)
             # if target_enabled is True here, they are requesting to enable or keep auth enabled
-            is_valid_session = cookie_val and verify_session(cookie_val)
+            is_valid_session = cookie_val and get_session_identity(cookie_val) is not None
             
             if not is_valid_session:
                 if not current_password:
@@ -374,7 +640,7 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
     else:
         if current_enabled:
             cookie_val = request.cookies.get(COOKIE_NAME)
-            is_valid_session = cookie_val and verify_session(cookie_val)
+            is_valid_session = cookie_val and get_session_identity(cookie_val) is not None
 
             if not is_valid_session:
                 if not current_password:
@@ -421,7 +687,12 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
             )
 
     if target_enabled:
-        session_val = create_session()
+        session_val = _persist_session_for_user(
+            request=request,
+            user_id=current_user.user_id,
+            username=current_user.username,
+            role=current_user.role,
+        )
         if not session_val:
             rollback_ok = _apply_auth_enabled(current_enabled, request=request)
             if not rollback_ok:
@@ -430,34 +701,50 @@ async def auth_update_settings(request: Request, body: AuthSettingsRequest):
                 status_code=500,
                 content={"error": "internal_error", "message": "Failed to create session"},
             )
+        _clear_current_user_cache(request)
         # We manually set loggedIn=True because the cookie is being set in this response
         # and won't be visible in request.cookies until the NEXT request.
         content = _get_auth_status_dict(request)
         content["loggedIn"] = True
+        content["currentUser"] = CurrentUserResponse(
+            id=current_user.user_id,
+            username=current_user.username,
+            displayName=current_user.display_name,
+            role=current_user.role,
+            isAdmin=current_user.is_admin,
+            isAuthenticated=True,
+            transitional=False,
+            authEnabled=True,
+            legacyAdmin=current_user.legacy_admin,
+        ).model_dump(by_alias=True)
         resp = JSONResponse(content=content)
         _set_session_cookie(resp, session_val, request)
         return resp
 
+    _clear_current_user_cache(request)
     resp = JSONResponse(content=_get_auth_status_dict(request))
-    resp.delete_cookie(key=COOKIE_NAME, path="/")
+    _delete_session_cookie(resp)
     return resp
 
 
 
 @router.post(
     "/login",
-    summary="Login or set initial password",
-    description="Verify password and set session cookie. If password not set yet, accepts password+passwordConfirm.",
+    summary="Login or create initial user credentials",
+    description="Verify a user password and set the session cookie. Can bootstrap the admin password or create a new normal-user account.",
 )
 async def auth_login(request: Request, body: LoginRequest):
-    """Verify password or set initial password, set cookie on success. Returns 401 or 429 on failure."""
+    """Login or create a minimal app-user credential and issue an authenticated session."""
     if not is_auth_enabled():
         return JSONResponse(
             status_code=400,
             content={"error": "auth_disabled", "message": "Authentication is not configured"},
         )
 
+    username = _normalize_username(body.username) or BOOTSTRAP_ADMIN_USERNAME
     password = (body.password or "").strip()
+    confirm = (body.password_confirm or "").strip()
+    create_user = bool(body.create_user)
     if not password:
         return JSONResponse(
             status_code=400,
@@ -474,41 +761,146 @@ async def auth_login(request: Request, body: LoginRequest):
             },
         )
 
-    password_set = is_password_set()
+    db = DatabaseManager.get_instance()
+    user_row = db.get_app_user_by_username(username)
+    created_user = False
 
-    if not password_set:
-        # First-time setup: require passwordConfirm
-        confirm = (body.password_confirm or "").strip()
-        if password != confirm:
-            record_login_failure(ip)
-            return JSONResponse(
-                status_code=400,
-                content={"error": "password_mismatch", "message": "Passwords do not match"},
-            )
-        err = set_initial_password(password)
-        if err:
-            record_login_failure(ip)
-            return JSONResponse(
-                status_code=400,
-                content={"error": "invalid_password", "message": err},
-            )
-    else:
-        if not verify_password(password):
+    if username == BOOTSTRAP_ADMIN_USERNAME:
+        ensure_bootstrap_admin_user_password_hash()
+        if user_row is None:
+            user_row = db.ensure_bootstrap_admin_user()
+        if not has_stored_password():
+            if not confirm:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "password_confirm_required", "message": "请确认管理员初始密码"},
+                )
+            if password != confirm:
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
+                )
+            err = set_initial_password(password)
+            if err:
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "invalid_password", "message": err},
+                )
+            ensure_bootstrap_admin_user_password_hash()
+            user_row = db.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+            created_user = True
+        elif not verify_stored_password(password):
             record_login_failure(ip)
             return JSONResponse(
                 status_code=401,
-                content={"error": "invalid_password", "message": "密码错误"},
+                content={"error": "invalid_password", "message": "管理员密码错误"},
             )
+    else:
+        if user_row is None:
+            if not create_user and not confirm:
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "user_not_found", "message": "用户不存在，请先创建账户"},
+                )
+            if password != confirm:
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
+                )
+            try:
+                password_hash = hash_password_for_storage(password)
+            except ValueError as exc:
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "invalid_password", "message": str(exc)},
+                )
+            user_row = db.create_or_update_app_user(
+                user_id=f"user-{secrets.token_hex(8)}",
+                username=username,
+                display_name=(body.display_name or "").strip() or username,
+                role=ROLE_USER,
+                password_hash=password_hash,
+                is_active=True,
+            )
+            created_user = True
+        else:
+            if not getattr(user_row, "is_active", True):
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "user_inactive", "message": "该账户已停用"},
+                )
+            stored_hash = getattr(user_row, "password_hash", None)
+            if not stored_hash:
+                if not confirm:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "password_not_initialized", "message": "该账户尚未设置密码"},
+                    )
+                if password != confirm:
+                    record_login_failure(ip)
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "password_mismatch", "message": "两次输入的密码不一致"},
+                    )
+                try:
+                    password_hash = hash_password_for_storage(password)
+                except ValueError as exc:
+                    record_login_failure(ip)
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "invalid_password", "message": str(exc)},
+                    )
+                user_row = db.create_or_update_app_user(
+                    user_id=str(user_row.id),
+                    username=str(user_row.username),
+                    display_name=getattr(user_row, "display_name", None) or str(user_row.username),
+                    role=str(user_row.role),
+                    password_hash=password_hash,
+                    is_active=bool(getattr(user_row, "is_active", True)),
+                )
+            elif not verify_password_hash_string(password, stored_hash):
+                record_login_failure(ip)
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "invalid_password", "message": "密码错误"},
+                )
 
     clear_rate_limit(ip)
-    session_val = create_session()
+    session_val = _persist_session_for_user(
+        request=request,
+        user_id=str(user_row.id),
+        username=str(user_row.username),
+        role=str(user_row.role),
+    )
     if not session_val:
         return JSONResponse(
             status_code=500,
             content={"error": "internal_error", "message": "Failed to create session"},
         )
 
-    resp = JSONResponse(content={"ok": True})
+    resp = JSONResponse(
+        content={
+            "ok": True,
+            "createdUser": created_user,
+            "currentUser": CurrentUserResponse(
+                id=str(user_row.id),
+                username=str(user_row.username),
+                displayName=getattr(user_row, "display_name", None),
+                role=str(user_row.role),
+                isAdmin=str(user_row.role) == ROLE_ADMIN,
+                isAuthenticated=True,
+                transitional=False,
+                authEnabled=True,
+                legacyAdmin=False,
+            ).model_dump(by_alias=True),
+        }
+    )
     _set_session_cookie(resp, session_val, request)
     return resp
 
@@ -518,7 +910,7 @@ async def auth_login(request: Request, body: LoginRequest):
     summary="Change password",
     description="Change password. Requires valid session.",
 )
-async def auth_change_password(body: ChangePasswordRequest):
+async def auth_change_password(request: Request, body: ChangePasswordRequest):
     """Change password. Requires login."""
     if not is_password_changeable():
         return JSONResponse(
@@ -541,12 +933,51 @@ async def auth_change_password(body: ChangePasswordRequest):
             content={"error": "password_mismatch", "message": "两次输入的新密码不一致"},
         )
 
-    err = change_password(current, new_pwd)
-    if err:
+    current_user = resolve_current_user(request)
+    if current_user is None:
         return JSONResponse(
-            status_code=400,
-            content={"error": "invalid_password", "message": err},
+            status_code=401,
+            content={"error": "unauthorized", "message": "Login required"},
         )
+
+    if current_user.user_id == BOOTSTRAP_ADMIN_USER_ID:
+        err = change_password(current, new_pwd)
+        if err:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_password", "message": err},
+            )
+    else:
+        db = DatabaseManager.get_instance()
+        user_row = db.get_app_user(current_user.user_id)
+        if user_row is None:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "user_not_found", "message": "Current user not found"},
+            )
+        if not verify_password_hash_string(current, getattr(user_row, "password_hash", None)):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_password", "message": "当前密码错误"},
+            )
+        try:
+            new_hash = hash_password_for_storage(new_pwd)
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_password", "message": str(exc)},
+            )
+        db.create_or_update_app_user(
+            user_id=str(user_row.id),
+            username=str(user_row.username),
+            display_name=getattr(user_row, "display_name", None) or str(user_row.username),
+            role=str(user_row.role),
+            password_hash=new_hash,
+            is_active=bool(getattr(user_row, "is_active", True)),
+        )
+        if current_user.session_id:
+            db.revoke_all_app_user_sessions(current_user.user_id)
+
     return Response(status_code=204)
 
 
@@ -557,11 +988,9 @@ async def auth_change_password(body: ChangePasswordRequest):
 )
 async def auth_logout(request: Request):
     """Clear session cookie."""
-    if is_auth_enabled() and not rotate_session_secret():
-        return JSONResponse(
-            status_code=500,
-            content={"error": "internal_error", "message": "Failed to invalidate session"},
-        )
+    current_user = resolve_current_user(request)
+    if current_user and current_user.session_id:
+        DatabaseManager.get_instance().revoke_app_user_session(current_user.session_id)
     resp = Response(status_code=204)
-    resp.delete_cookie(key=COOKIE_NAME, path="/")
+    _delete_session_cookie(resp)
     return resp

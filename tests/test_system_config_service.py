@@ -4,8 +4,10 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from tests.litellm_stub import ensure_litellm_stub
 
@@ -13,6 +15,8 @@ ensure_litellm_stub()
 
 from src.config import Config
 from src.core.config_manager import ConfigManager
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
+from src.storage import AnalysisHistory, AppUserSession, ConversationSessionRecord, DatabaseManager, UserPreference
 from src.services.system_config_service import ConfigConflictError, SystemConfigService
 
 
@@ -79,6 +83,112 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(current_map["STOCK_LIST"], "600519,300750")
         self.assertEqual(current_map["GEMINI_API_KEY"], "secret-key-value")
 
+    def test_reset_runtime_caches_returns_bounded_action_payload(self) -> None:
+        with patch.object(SystemConfigService, "_reload_runtime_singletons") as mock_reload:
+            response = self.service.reset_runtime_caches()
+
+        self.assertTrue(response["success"])
+        self.assertEqual(response["action"], "reset_runtime_caches")
+        self.assertEqual(response["cleared"], ["data_fetcher_manager", "search_service"])
+        mock_reload.assert_called_once_with()
+
+    def test_factory_reset_requires_exact_confirmation_phrase(self) -> None:
+        with self.assertRaises(ValueError):
+            self.service.factory_reset_system(
+                confirmation_phrase="RESET",
+                actor_user_id=BOOTSTRAP_ADMIN_USER_ID,
+                actor_display_name="Bootstrap Admin",
+            )
+
+    def test_factory_reset_returns_bounded_scope_and_preserves_bootstrap_admin(self) -> None:
+        mock_db = MagicMock()
+        mock_db.factory_reset_non_bootstrap_state.return_value = {
+            "cleared": [
+                "non_bootstrap_users",
+                "user_sessions",
+                "analysis_history",
+                "conversation_history",
+            ],
+            "counts": {
+                "users": 2,
+                "sessions": 3,
+                "analysis_history": 4,
+                "conversation_sessions": 1,
+            },
+        }
+        mock_logs = MagicMock()
+
+        with patch("src.services.system_config_service.get_db", create=True, return_value=mock_db), patch(
+            "src.services.system_config_service.ExecutionLogService",
+            create=True,
+            return_value=mock_logs,
+        ):
+            response = self.service.factory_reset_system(
+                confirmation_phrase="FACTORY RESET",
+                actor_user_id=BOOTSTRAP_ADMIN_USER_ID,
+                actor_display_name="Bootstrap Admin",
+            )
+
+        self.assertTrue(response["success"])
+        self.assertEqual(response["action"], "factory_reset_system")
+        self.assertIn("non_bootstrap_users", response["cleared"])
+        self.assertIn("bootstrap_admin_access", response["preserved"])
+        self.assertEqual(response["counts"]["users"], 2)
+        mock_db.factory_reset_non_bootstrap_state.assert_called_once_with()
+        mock_logs.record_admin_action.assert_called_once()
+
+    def test_factory_reset_clears_bounded_non_bootstrap_state_and_keeps_bootstrap_admin(self) -> None:
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        db.ensure_bootstrap_admin_user()
+        db.create_or_update_app_user(user_id="user-1", username="alice", display_name="Alice")
+        db.create_app_user_session(
+            session_id="session-user-1",
+            user_id="user-1",
+            expires_at=datetime.now() + timedelta(hours=1),
+        )
+        db.upsert_user_notification_preferences("user-1", email="alice@example.com", enabled=True)
+        db.save_analysis_history(
+            SimpleNamespace(
+                code="AAPL",
+                name="Apple",
+                sentiment_score=66,
+                operation_advice="buy",
+                trend_prediction="up",
+                analysis_summary="summary",
+                raw_result={"summary": "summary"},
+                ideal_buy=None,
+                secondary_buy=None,
+                stop_loss=10.0,
+                take_profit=12.0,
+            ),
+            query_id="query-1",
+            report_type="daily",
+            news_content="news",
+            owner_id="user-1",
+        )
+        db.save_conversation_message("chat-user-1", "user", "hello", owner_id="user-1")
+
+        with patch("src.services.system_config_service.get_db", return_value=db):
+            response = self.service.factory_reset_system(
+                confirmation_phrase="FACTORY RESET",
+                actor_user_id=BOOTSTRAP_ADMIN_USER_ID,
+                actor_display_name="Bootstrap Admin",
+            )
+
+        self.assertTrue(response["success"])
+        self.assertIsNone(db.get_app_user("user-1"))
+        self.assertIsNotNone(db.get_app_user(BOOTSTRAP_ADMIN_USER_ID))
+        self.assertEqual(db.get_app_user_session("session-user-1"), None)
+        with db.get_session() as session:
+            self.assertEqual(session.query(AppUserSession).count(), 0)
+            self.assertEqual(session.query(UserPreference).count(), 0)
+            self.assertEqual(session.query(AnalysisHistory).count(), 0)
+            self.assertEqual(session.query(ConversationSessionRecord).count(), 0)
+        sessions, _ = db.list_execution_log_sessions(limit=10)
+        self.assertTrue(any(item["task_id"] == "factory_reset_system" for item in sessions))
+        DatabaseManager.reset_instance()
+
     def test_validate_reports_invalid_time(self) -> None:
         validation = self.service.validate(items=[{"key": "SCHEDULE_TIME", "value": "25:70"}])
         self.assertFalse(validation["valid"])
@@ -107,6 +217,31 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(response["success"])
         current_map = self.manager.read_config_map()
         self.assertEqual(current_map["SEARXNG_PUBLIC_INSTANCES_ENABLED"], "false")
+
+    def test_validate_requires_complete_alpaca_credential_pair(self) -> None:
+        validation = self.service.validate(
+            items=[{"key": "ALPACA_API_KEY_ID", "value": "alpaca-id"}]
+        )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            any(
+                issue["key"] == "ALPACA_API_SECRET_KEY" and issue["code"] == "missing_dependency"
+                for issue in validation["issues"]
+            )
+        )
+
+    def test_validate_accepts_complete_alpaca_credentials(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "ALPACA_API_KEY_ID", "value": "alpaca-id"},
+                {"key": "ALPACA_API_SECRET_KEY", "value": "alpaca-secret"},
+                {"key": "ALPACA_DATA_FEED", "value": "iex"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
 
     def test_validate_reports_invalid_llm_channel_definition(self) -> None:
         validation = self.service.validate(

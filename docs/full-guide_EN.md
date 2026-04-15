@@ -117,6 +117,11 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Auto-discover public SearXNG instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `true`) | Optional |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key for CN market review index enhancement; market breadth also uses TickFlow when the plan supports universe queries | Optional |
+| `TWELVE_DATA_API_KEY` | Twelve Data API key for HK scanner quote/history enrichment | Optional |
+| `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | Optional |
+| `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner market-data enrichment | Optional |
+| `ALPACA_API_SECRET_KEY` | Alpaca secret paired with `ALPACA_API_KEY_ID` | Optional |
+| `ALPACA_DATA_FEED` | Alpaca data feed selector (`iex` / `sip`) | Optional |
 
 #### ✅ Minimum Configuration Example
 
@@ -231,6 +236,11 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 |--------|------|--------|:----:|
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | Optional |
 | `TICKFLOW_API_KEY` | TickFlow API key; CN market review indices prefer TickFlow when configured, and market breadth does so only when the plan supports universe queries | - | Optional |
+| `TWELVE_DATA_API_KEY` | Twelve Data single-key config for HK scanner quote / daily-history enrichment | - | Optional |
+| `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | - | Optional |
+| `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner quote / daily-history enrichment | - | Optional |
+| `ALPACA_API_SECRET_KEY` | Alpaca secret paired with `ALPACA_API_KEY_ID` | - | Optional |
+| `ALPACA_DATA_FEED` | Alpaca data feed selector (`iex` / `sip`) | `iex` | Optional |
 | `ENABLE_REALTIME_QUOTE` | Enable real-time quotes (if disabled, uses historical closing prices for analysis) | `true` | Optional |
 | `ENABLE_REALTIME_TECHNICAL_INDICATORS` | Intraday real-time technicals: Calculate MA5/MA10/MA20 and bull trends using real-time prices when enabled (Issue #234); uses yesterday's close if disabled. | `true` | Optional |
 | `ENABLE_CHIP_DISTRIBUTION` | Enable chip distribution analysis (this API is unstable, recommended to disable for cloud deployment). GitHub Actions users must set `ENABLE_CHIP_DISTRIBUTION=true` in Repository Variables to enable; disabled by default in workflows. | `true` | Optional |
@@ -268,7 +278,7 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `MARKET_REVIEW_REGION` | Market review region: cn (A-shares), us (US stocks), both | `cn` |
 | `SCHEDULE_ENABLED` | Enable scheduled tasks | `false` |
 | `SCHEDULE_TIME` | Scheduled execution time | `18:00` |
-| `SCANNER_PROFILE` | Default scanner profile (keep `cn_preopen_v1` for this phase) | `cn_preopen_v1` |
+| `SCANNER_PROFILE` | Default scanner profile (`cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`) | `cn_preopen_v1` |
 | `SCANNER_SCHEDULE_ENABLED` | Enable the Scanner schedule | `false` |
 | `SCANNER_SCHEDULE_TIME` | Scanner pre-open execution time | `08:40` |
 | `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | Run Scanner once on process startup | `false` |
@@ -447,7 +457,7 @@ crontab -e
 Market Scanner uses a separate schedule instead of sharing semantics with the normal analysis workflow:
 
 ```bash
-# Run one manual A-share scanner job
+# Run one Scanner job (market resolved by `SCANNER_PROFILE` or request parameters)
 python main.py --scanner
 
 # Start the Scanner schedule
@@ -468,6 +478,29 @@ The intended first setup is a pre-open run such as `08:40`. Each run produces a 
 | `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | Run one Scanner job on startup | `false` | `true` |
 | `SCANNER_NOTIFICATION_ENABLED` | Send a notification after scheduled Scanner runs | `true` | `true` |
 | `SCANNER_LOCAL_UNIVERSE_PATH` | Local A-share universe cache path for Scanner | `./data/scanner_cn_universe_cache.csv` | `./data/scanner_cn_universe_cache.csv` |
+
+### Scanner Market Profiles And Providers
+
+- `SCANNER_PROFILE` currently supports `cn_preopen_v1`, `us_preopen_v1`, and `hk_preopen_v1`
+- A-shares remain the bounded local-first default
+- US scanner uses local-first history and adds a bounded liquid seed supplement when local coverage is too thin
+- Hong Kong scanner uses a separate HK bounded universe and `HK02800` as the current benchmark
+
+Optional market-data provider settings for Scanner:
+
+| Variable | Purpose |
+|--------|------|
+| `TWELVE_DATA_API_KEY` | Twelve Data single-key config for HK scanner quote/history enrichment |
+| `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data keys; takes priority over the single-key field |
+| `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner quote/daily enrichment |
+| `ALPACA_API_SECRET_KEY` | Alpaca secret paired with `ALPACA_API_KEY_ID` |
+| `ALPACA_DATA_FEED` | Alpaca data feed selector, default `iex` |
+
+Notes:
+
+- Alpaca is used only for market-data enrichment, not trading or execution
+- Twelve Data is currently used mainly for Hong Kong scanner quote / daily-history paths
+- If these providers are not configured, Scanner still uses local-first data plus the existing free-source fallbacks
 
 ### Scanner Daily Watchlists And Notifications
 
@@ -625,7 +658,21 @@ System defaults to AkShare (free), also supports other data sources:
 ### YFinance
 - Free, no configuration needed
 - Supports US/HK stock data
-- US stock historical and real-time data both use YFinance exclusively to avoid technical indicator errors from akshare's US stock adjustment issues
+- Still serves as a general US/HK fallback data source
+- The current US scanner path tries Alpaca first for quote / daily-history enrichment when configured, then falls back to YFinance
+
+### Twelve Data
+- Requires `TWELVE_DATA_API_KEY` or `TWELVE_DATA_API_KEYS`
+- Currently used mainly for Hong Kong scanner quote / daily-history enrichment
+- Supports either a single key or a comma-separated multi-key configuration
+- The Web `/settings/system` provider/data-source form renders this as the single-key schema
+
+### Alpaca
+- Requires both `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`
+- `ALPACA_DATA_FEED` defaults to `iex`
+- Currently used only for US scanner market-data enrichment (quote / snapshot-style context / daily history)
+- Does not add any trading or execution capability
+- The Web `/settings/system` provider/data-source form renders this as the key+secret schema instead of flattening it into one key field
 
 ---
 
@@ -944,6 +991,19 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 ## Web Product Experience Notes
 
 - The Web app now runs on one shared product shell and design system: login, boot loading, sidebar navigation, home, portfolio, backtest, and admin logs use the same typography, spacing, surface layering, and state-feedback language.
+- Guest preview still follows the "no persistent user history" rule: `/api/v1/analysis/preview` now issues a lightweight anonymous session cookie so preview query chains are isolated per visitor without mapping guests onto a shared user or the bootstrap admin.
+- `/settings` now remains the personal-preference surface, and signed-in users can store their own notification email target and Discord webhook there. System notification providers, webhooks, and operator channels stay in admin-only system settings instead of being reused as personal notification targets.
+- Admin accounts now default to the safer `User Mode` product surface. `/settings/system`, `/admin/logs`, and other operator pages only appear after Admin Mode is enabled explicitly.
+- `/settings/system` is now treated as the true global control plane rather than a dressed-up personal settings page: normal users cannot enter it, and admins in `User Mode` do not receive system-wide content.
+- Once an authenticated admin switches into `Admin Mode`, `/settings/system` no longer asks for an extra "system settings unlock". Risky operations now use per-action confirmation instead of a generic page-wide unlock wall.
+- `/settings/system` no longer mixes in personal notification-channel editing or other user-preference style content. Personal notification targets remain under ordinary `/settings`.
+- The current system control plane groups global provider/data-source management, a global admin-log entry point, and a split admin-actions area: runtime cache reset remains the safe maintenance action, while factory reset / system initialization is now a separate destructive path.
+- Admin logs now serve true global observability: in `Admin Mode`, admins can inspect cross-user and system activity instead of a self-only feed, and each log item can surface actor, activity type, subsystem, and destructive admin-action metadata when available.
+- Factory reset now uses a strong typed confirmation phrase, `FACTORY RESET`. It clears non-bootstrap users, their sessions, user preferences / notification targets, analysis history, chat history, and user-owned scanner / backtest / portfolio usage state, while preserving bootstrap admin access, essential system configuration, and execution logs.
+- Provider/data-source forms under `/settings/system` are now rendered by credential shape: `single_key` and `key_secret` are both supported. Twelve Data keeps the single-key or multi-key path, while Alpaca requires the `ALPACA_API_KEY_ID + ALPACA_API_SECRET_KEY` pair.
+- Normal-user task surfaces now emphasize symbol, stage, progress, and recency instead of exposing raw long task IDs by default. Technical identifiers remain available in admin/operator diagnostics where debugging still matters.
+- Login-return flows, 401/403 states, and admin-route guards now provide more explicit next-step guidance. When a normal user, or an admin still in `User Mode`, hits an operator route, the UI explains how to continue instead of failing silently.
+- After logout, the Web app now explicitly returns to the guest home surface so guest-mode navigation and locked cards are restored immediately instead of leaving users inside a protected shell.
 - The backtest product flow now treats deterministic configuration and deterministic result analysis as two separate pages: `/backtest` stays configuration-first, while `/backtest/results/:runId` owns the full-width chart workspace and audit flow.
 - On mobile, navigation now consistently uses the shared drawer shell, and loading states favor structured skeleton/status surfaces instead of unrelated spinner-only treatments.
 
@@ -955,6 +1015,117 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 - The button calls the existing `POST /api/v1/portfolio/fx/refresh` endpoint and reloads snapshot/risk data only.
 - If upstream FX fetch fails, the page may still remain stale after refresh and will explain the fallback result inline.
 - When `PORTFOLIO_FX_UPDATE_ENABLED=false`, the refresh API returns an explicit disabled status and the page shows that online FX refresh is disabled instead of implying that no refreshable pairs exist.
+
+### User-owned broker connections and IBKR import
+
+- Portfolio broker integrations now have a minimal user-owned connection model instead of relying on shared/global import state.
+- Each connection is attached to the authenticated user's portfolio account and stores broker identity, broker account reference, import mode/status, and last-import metadata for future read-only sync expansion.
+- New API surface:
+  - `POST /api/v1/portfolio/broker-connections`
+  - `GET /api/v1/portfolio/broker-connections`
+  - `PUT /api/v1/portfolio/broker-connections/{connection_id}`
+- The import flow now exposes generic broker endpoints:
+  - `GET /api/v1/portfolio/imports/brokers`
+  - `POST /api/v1/portfolio/imports/parse`
+  - `POST /api/v1/portfolio/imports/commit`
+- Existing A-share CSV imports remain supported through compatibility wrappers; this phase adds `ibkr` as the first global-market broker.
+- First supported IBKR artifact: Flex Query XML.
+  - The importer can normalize trades, multi-currency cash entries, and safely mappable split corporate actions.
+  - If the file only has open positions, the importer can seed a bounded synthetic opening trade so the existing ledger model remains usable.
+  - Repeat-import protection is enforced per broker connection with `last_import_fingerprint`.
+- Portfolio accounts now allow `market=global` for cross-market brokers like IBKR, while event rows still keep explicit `cn` / `hk` / `us` market labels.
+- For single-account snapshots and risk reports, the aggregate reporting currency now follows the account `base_currency` instead of always assuming `CNY`.
+- On the existing Web `/portfolio` page, IBKR is available in the current import block, the upload control switches to XML when `ibkr` is selected, and the selected-account panel shows saved broker connections plus market/base-currency context before import.
+
+### IBKR read-only API sync foundation
+
+- The next portfolio phase adds a manual, read-only IBKR sync path without changing the existing ownership/authz baseline.
+- Existing user-owned `portfolio_broker_connections` remain the anchor object for IBKR. API sync stores only non-secret defaults in `sync_metadata`, such as:
+  - `api_base_url`
+  - `verify_ssl`
+  - last sync time / last broker account reference
+- The transient `session_token` used for an IBKR sync request is not persisted.
+- New API endpoint:
+  - `POST /api/v1/portfolio/sync/ibkr`
+
+### First sync scope
+
+- account summary / balances
+- positions / holdings
+- multi-currency cash balances
+- The first implementation stays manual-trigger only and targets IBKR Client Portal style read-only portfolio endpoints.
+
+### Account mapping and coexistence with Flex import
+
+- API sync reuses the current user's existing IBKR connection when possible, or resolves the user-provided `broker_account_ref` inside that user's own portfolio scope.
+- If the same `broker_account_ref` is already linked to another portfolio account owned by the same user, the sync returns a clear conflict instead of writing into the wrong account.
+- Flex import and API sync are intentionally complementary:
+  - imported ledger/history remains on the file-import path
+  - API sync maintains a separate current sync-state
+  - the current-day snapshot can overlay the latest sync-state, while historical dates continue to replay from the existing ledger/import model
+- This avoids duplicate account creation, avoids repeated-sync position duplication, and avoids forcing synthetic trade writes for API data.
+
+### Minimal Web exposure on `/portfolio`
+
+- The existing `Data Sync` block on `/portfolio` is reused; no new portfolio page is introduced.
+- When `ibkr` is selected, the page now exposes:
+  - API base URL
+  - optional broker account ref
+  - one-time session token
+  - SSL verification toggle
+  - `Read-only IBKR Sync` action
+- The page shows an inline sync summary after success and explicitly keeps the feature positioned as read-only sync, not trading or execution.
+
+### Hardening and verification notes for this phase
+
+- The backend now returns bounded, user-safe sync outcomes instead of leaking raw exceptions for the main manual read-only failure modes:
+  - missing or expired session
+  - empty account list or ambiguous multi-account session
+  - unsupported payload or missing account identifier
+  - broker account mapping conflict
+  - empty positions / empty cash that are still valid current-state sync results with warnings
+- One bounded same-user multi-account path is now explicitly covered:
+  - one user can sync more than one IBKR account from the same session
+  - each account must use an explicit `broker_account_ref` or an already-bound connection
+  - repeated sync still replaces the current sync overlay instead of appending duplicate overlay rows
+  - reusing the same `broker_account_ref` on another portfolio account is rejected explicitly
+- A bounded browser happy-path smoke now exists at `apps/dsa-web/e2e/portfolio-ibkr-sync.spec.ts`.
+  - If a restricted local environment cannot launch Chromium, use the manual checklist below instead of introducing a larger E2E framework.
+
+### What still needs real IBKR validation
+
+- Repository tests use controlled fixtures and route stubs; they do not replace a real IBKR Paper / Gateway session.
+- A real environment is still needed to verify:
+  - Client Portal / Gateway session creation and expiry behavior
+  - localhost TLS / self-signed certificate handling with `verify_ssl`
+  - whether live multi-account payloads still fit the currently supported shapes
+  - whether live summary / ledger / positions responses include additional field variants
+
+### Manual sync verification checklist
+
+1. Sign in as a normal user and open `/portfolio` on an IBKR-owned portfolio account.
+2. In `Data Sync`, switch the broker selector to `ibkr` and confirm the UI stays on a read-only sync form, not a trading surface.
+3. Enter a valid session token and, when needed, a `broker_account_ref`, then submit `Read-only IBKR Sync`.
+4. Confirm a visible success or warning result card appears and that the broker selector does not snap away from `ibkr` during metadata refresh.
+5. Confirm the returned ref, cash, market value, equity, and position summary match the current overlay shown on the page.
+6. Run the same sync again and confirm the overlay is replaced cleanly rather than duplicated.
+7. If the same user has a second IBKR account, sync that account with a different `broker_account_ref` and confirm each account keeps its own isolated overlay.
+8. Switch back to a historical snapshot date and confirm historical results still come from the Flex import / ledger path instead of being rewritten by API sync.
+9. Retry with an empty or expired session token and confirm the page shows an actionable validation message rather than a raw traceback.
+
+### Current boundaries
+
+- API sync is still manual, read-only, and current-state overlay only; it is not a historical replay engine.
+- Session tokens are not persisted, and there are still no order, execution, or broker write operations.
+- When the session exposes multiple IBKR accounts, the user must provide `broker_account_ref` or reuse an already-linked connection.
+- If the upstream payload shape is not safely supported, the sync is rejected and the user is pointed back to Flex import.
+
+### What Flex import still owns
+
+- historical ledger / trade / cash / corporate action writes
+- replayable historical snapshot semantics
+- repeatable, auditable source-of-record ingestion
+- the safe fallback path when API payloads are unsupported
 
 ---
 

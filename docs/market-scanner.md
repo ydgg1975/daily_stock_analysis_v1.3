@@ -1,4 +1,4 @@
-# Market Scanner（A 股 + 美股盘前扫描）
+# Market Scanner（A 股 + 美股 + 港股盘前扫描）
 
 ## 产品定位
 
@@ -25,10 +25,11 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
 
 ## 当前实现范围
 
-当前已经落地两个明确分离的 market profile：
+当前已经落地三个明确分离的 market profile：
 
 - `cn_preopen_v1`：A 股盘前扫描，继续作为默认 profile
 - `us_preopen_v1`：美股盘前扫描，面向 pre-open shortlist / watchlist 生成
+- `hk_preopen_v1`：港股盘前扫描，面向 HK pre-open shortlist / watchlist 生成
 
 它们共享 Scanner 的运行面板、持久化、schedule、notification、history/review/quality 设施，但不会被混成一个黑盒统一评分模型。
 
@@ -43,7 +44,7 @@ Market Scanner 是 WolfyStock 的独立产品能力，用于在盘前回答：
   - 跳转问股
   - 跳转回测并预填代码
 
-A 股仍然保持 A-share-first 的默认体验；美股则作为新增但清晰分离的 Scanner profile 接入，不改变已有 A 股 deterministic ranking 的主导地位。
+A 股仍然保持 A-share-first 的默认体验；美股和港股则作为新增但清晰分离的 Scanner profile 接入，不改变已有 A 股 deterministic ranking 的主导地位。
 
 ## A 股 universe 定义
 
@@ -217,6 +218,43 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 - 若 AI provider/model 暂时不可用，候选会显示明确 fallback 文案，而不是模糊失败
 - Web `/scanner` 的运行时诊断会显示 AI 是否启用、运行状态、覆盖候选数、使用的模型以及是否发生 fallback
 
+## Run 诊断与 Admin Observability
+
+当前 `/scanner` 会为每次 run 额外展示一组紧凑的 explainability 诊断，而不是只展示最终 shortlist：
+
+- `input universe size`：这次 run 一开始纳入评估的 symbol 数
+- `eligible after universe fetch`：完成初始 universe 解析后仍可进入下一阶段的数量
+- `eligible after liquidity/profile filter`：通过流动性与 profile 约束后的候选数
+- `eligible after data-availability filter`：在历史 / quote / snapshot 等必要数据仍可用时可继续评估的数量
+- `ranked candidate count`：真正进入排序池的数量
+- `shortlisted count`：最终落入 shortlist 的数量
+- `excluded by reason`：按有界理由汇总的淘汰数，例如 `filtered_by_profile_constraints`、`missing_history`、`missing_quote_or_snapshot`
+
+这些数字的目标是帮助用户回答：
+
+- 本次到底扫描了多少 symbol
+- shortlist 偏小是因为输入池本来就小、过滤过严、还是数据可用性不足
+- 当前 UI 显示的是“最终 shortlist”，不是“所有进入过扫描流程的 symbol”
+
+同时，run metadata 现在会保留有界 provider attribution：
+
+- `configured primary provider`
+- `quote / snapshot / history source used`
+- `providers used`
+- `fallback count`
+- `provider failure count`
+- `missing data symbol count`
+
+这里的 attribution 当前仍以 **run-level summary** 为主，而不是完整 symbol-level provider trace；它只陈述当前 Scanner 架构真实记录到的数据，不会伪造更细粒度来源。
+
+`/admin/logs` 也会把 Scanner run 作为独立的 `scanner` subsystem 写入 observability：
+
+- 可区分 scanner activity 与普通分析/系统动作
+- 能看到 scanner run id、market/profile、coverage summary、shortlist count
+- 能看到 providers used、是否 fallback、provider failure count
+
+这让管理员可以从全局日志直接判断某次 scanner run 是否因为 provider 失败、fallback 或数据缺口导致 shortlist 变小。
+
 ### AI 相关配置
 
 - `SCANNER_AI_ENABLED`
@@ -224,7 +262,22 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 
 默认建议保持关闭或仅对少量高优先级候选启用，避免把成本和延迟扩散到整个 universe。
 
-## 美股 Scanner Profile（Phase 2）
+## Scanner 市场数据 Provider 扩展
+
+本阶段新增了两个面向 Scanner 的实用 market-data provider 接口，但**不改变**现有单股分析主链路的 fallback 语义：
+
+- `Twelve Data`：保持 single-key 模式，主要用于港股 Scanner 的 quote / daily history 补强，也保留给后续 US/HK 扩展使用
+- `Alpaca`：使用 `key_id + secret_key` 模式，主要用于美股 Scanner 的 realtime quote / snapshot-style enrichment / daily history 补强
+
+当前 credential 约束保持最小化：
+
+- `TWELVE_DATA_API_KEY` 或 `TWELVE_DATA_API_KEYS`
+- `ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY`
+- `ALPACA_DATA_FEED`（默认 `iex`）
+
+如果这些 provider 未配置，Scanner 仍会继续走 local-first + 现有免费源 fallback，不会把 provider 配置变成硬依赖。
+
+## 美股 Scanner Profile
 
 在不改变 A 股 `cn_preopen_v1` 主排序路径的前提下，Scanner 现在新增了一个独立的 `us_preopen_v1` profile。
 
@@ -242,8 +295,9 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 1. 优先从 `LOCAL_US_PARQUET_DIR`
 2. 未配置或目录缺失时回退 `US_STOCK_PARQUET_DIR`
 3. 若本地 parquet 不可用，再回退本地 `stock_daily` 里已经落库的美股日线
+4. 若本地 universe 过薄，再补入一组 bounded 的 liquid seed symbols，避免退化成极小样本 shortlist
 
-当前默认不会为 universe 做“全网盲扫”，而是仅对本地可用的美股历史样本做解释型 scanner。
+当前默认不会为 universe 做“全网盲扫”，而是仅对本地可用历史样本 + 有界 liquid seed supplement 做解释型 scanner。
 
 同时会先过滤：
 
@@ -265,12 +319,83 @@ AI 只是附加层，不是 Scanner 成功运行的前提：
 
 如果 live quote 不可用，Scanner 仍会继续输出 shortlist，只是会在 risk notes 和运行时诊断里明确提示当前更偏历史视角。
 
+### 美股 market-data provider 与诊断
+
+当前美股 Scanner 的数据路径是：
+
+1. local-first history / parquet / `stock_daily`
+2. 若配置 Alpaca，则优先尝试 Alpaca 做 realtime quote 与 daily history 补强
+3. 若 Alpaca 不可用或未配置，则继续回退 YFinance
+
+运行时诊断会显式保留：
+
+- `coverage_strategy`
+- `local_symbol_count`
+- `seed_supplement_count`
+- live quote provider 尝试链路
+- Alpaca 是否配置完整、是否被接受或跳过
+
+这意味着即便 live provider 不可用，`us_preopen_v1` 也不会悄悄退化成“看起来跑了但不知道为什么 shortlist 很薄”的黑盒状态。
+
+## 港股 Scanner Profile
+
+在保持 A 股 / 美股 profile 分离的前提下，Scanner 现在新增独立的 `hk_preopen_v1`。
+
+它的边界同样清晰：
+
+- 不并入 A 股或美股评分模型
+- 继续由 deterministic score 生成 primary shortlist
+- 继续复用现有 run persistence、today/recent watchlist、review/quality、schedule、notification 与 diagnostics 基建
+- 继续保持 explainable、bounded、local-first，而不是尝试做全市场盲扫
+
+### 港股 universe 与数据假设
+
+首版 `hk_preopen_v1` 使用单独的 HK bounded universe：
+
+1. 优先复用本地 HK 历史样本（如 `stock_daily` / 本地扫描历史）
+2. 若本地 universe 不足，则补入一组 bounded、可解释的 HK seed list
+3. benchmark 当前使用 `HK02800`
+4. quote / daily history 优先尝试 Twelve Data，失败后回退现有免费源与本地历史
+
+当前默认不会做“港股全市场在线盲扫”，而是强调：
+
+- 有界 universe
+- 本地优先
+- provider 可解释 fallback
+- 盘前可读的 shortlist，而不是全市场 dump
+
+### 港股首版关注因素
+
+`hk_preopen_v1` 当前强调：
+
+- liquidity
+- recent trend / momentum continuation
+- benchmark-relative behavior（默认相对 `HK02800`）
+- open confirmation / gap risk
+- optional realtime quote context
+
+### 港股结果如何展示
+
+Web `/scanner` 现在可以显式切换：
+
+- 市场：`A股` / `美股` / `港股`
+- 对应 profile：`cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`
+
+同时在以下位置保留 market/profile 上下文：
+
+- 当前 run badge
+- recent watchlists 历史项
+- status / quality / review 结果
+- 导出摘要
+
+港股候选的 reasons / risk notes / watch context 也改为使用更贴近 open confirmation / liquidity / gap follow-through 的措辞，避免直接复用 A 股语义。
+
 ### 美股结果如何展示
 
 Web `/scanner` 现在可以显式切换：
 
-- 市场：`A股` / `美股`
-- 对应 profile：`cn_preopen_v1` / `us_preopen_v1`
+- 市场：`A股` / `美股` / `港股`
+- 对应 profile：`cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`
 
 同时在以下位置保留 market/profile 上下文：
 
@@ -327,7 +452,7 @@ Scanner 现在不仅能“跑一次”，还可以支撑盘前日常工作流：
 
 Scanner 使用独立配置，不复用普通分析的调度语义：
 
-- `SCANNER_PROFILE`（当前支持 `cn_preopen_v1` / `us_preopen_v1`）
+- `SCANNER_PROFILE`（当前支持 `cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`）
 - `SCANNER_SCHEDULE_ENABLED`
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
@@ -335,6 +460,8 @@ Scanner 使用独立配置，不复用普通分析的调度语义：
 - `SCANNER_LOCAL_UNIVERSE_PATH`
 - `LOCAL_US_PARQUET_DIR`
 - `US_STOCK_PARQUET_DIR`（兼容旧变量名）
+- `TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`
+- `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` / `ALPACA_DATA_FEED`
 - `SCANNER_AI_ENABLED`
 - `SCANNER_AI_TOP_N`
 
@@ -437,6 +564,8 @@ Scanner 尽量复用仓库已有的 local-first 模式：
 - snapshot 来源
 - fetcher 尝试链路
 - 是否启用了 degraded mode
+- coverage summary 与主要淘汰原因
+- run-level provider attribution / fallback 统计
 
 常见 reason code 包括：
 
@@ -567,12 +696,12 @@ Scanner 尽量复用仓库已有的 local-first 模式：
 - benchmark 对比只在本地存在对应指数日线时启用，不会伪造结果
 - 当前主要基于日线 close/high/low 做 follow-through 统计，不判断竞价细节、分时路径或真实可成交性
 
-## 面向未来的美股扩展路径
+## 面向未来的扩展路径
 
-当前代码已保留 `us_preopen_v1` profile 作为架构扩展点，但尚未实现具体 scanner 逻辑。未来若增加美股支持，建议沿以下方向扩展：
+当前版本已经落地 `cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`，但仍有几条明确的下一步扩展方向：
 
-- 新增独立的 `ScannerMarketProfile`
-- 使用适合美股盘前的 universe 构建规则
-- 替换 A 股特有的涨跌停 / 板块语义
-- 引入更适合美股的 pre-market / news / earnings / gap 特征
-- 保持 Scanner / Analysis / Backtest / Execution 的边界不变
+- 继续扩大 US / HK 的 bounded universe，而不是直接跳到全市场实时盲扫
+- 为 Twelve Data 增加更完整的多 key 轮转与 provider 健康诊断
+- 为美股 / 港股补充更贴近盘前场景的 event / earnings / gap features
+- 继续强化 diagnostics，让 provider 使用、fallback 与 universe 薄样本原因更直观
+- 继续保持 Scanner / Analysis / Backtest / Execution 的边界不变

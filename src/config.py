@@ -501,6 +501,11 @@ class Config:
     # === 数据源 API Token ===
     tushare_token: Optional[str] = None
     tickflow_api_key: Optional[str] = None
+    twelve_data_api_keys: List[str] = field(default_factory=list)
+    twelve_data_api_key: Optional[str] = None
+    alpaca_api_key_id: Optional[str] = None
+    alpaca_api_secret_key: Optional[str] = None
+    alpaca_data_feed: str = "iex"
 
     # === AI 分析配置 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-2.5-flash)
@@ -1126,6 +1131,15 @@ class Config:
             if single_gnews:
                 gnews_api_keys = [single_gnews]
 
+        twelve_data_keys_str = os.getenv('TWELVE_DATA_API_KEYS', '') or os.getenv('TWELVEDATA_API_KEYS', '')
+        twelve_data_api_keys = [k.strip() for k in twelve_data_keys_str.split(',') if k.strip()]
+        single_twelve_data = (
+            os.getenv('TWELVE_DATA_API_KEY', '').strip()
+            or os.getenv('TWELVEDATA_API_KEY', '').strip()
+        )
+        if not twelve_data_api_keys and single_twelve_data:
+            twelve_data_api_keys = [single_twelve_data]
+
         finnhub_keys_str = os.getenv('FINNHUB_API_KEYS', '')
         finnhub_api_keys = [k.strip() for k in finnhub_keys_str.split(',') if k.strip()]
         if not finnhub_api_keys:
@@ -1201,6 +1215,11 @@ class Config:
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
             tushare_token=os.getenv('TUSHARE_TOKEN'),
             tickflow_api_key=os.getenv('TICKFLOW_API_KEY'),
+            twelve_data_api_keys=twelve_data_api_keys,
+            twelve_data_api_key=single_twelve_data or (twelve_data_api_keys[0] if twelve_data_api_keys else None),
+            alpaca_api_key_id=os.getenv('ALPACA_API_KEY_ID') or None,
+            alpaca_api_secret_key=os.getenv('ALPACA_API_SECRET_KEY') or None,
+            alpaca_data_feed=(os.getenv('ALPACA_DATA_FEED', 'iex').strip().lower() or 'iex'),
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),

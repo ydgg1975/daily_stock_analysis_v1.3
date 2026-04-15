@@ -272,13 +272,28 @@ class _IndicatorStrategySpecPayload:
 class RuleBacktestService:
     """Orchestrate parsing, deterministic execution, persistence, and async submissions."""
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None, llm_adapter: Optional[LLMToolAdapter] = None):
+    def __init__(
+        self,
+        db_manager: Optional[DatabaseManager] = None,
+        llm_adapter: Optional[LLMToolAdapter] = None,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ):
         self.db = db_manager or DatabaseManager.get_instance()
         self.repo = RuleBacktestRepository(self.db)
         self.stock_repo = StockRepository(self.db)
         self.parser = RuleBacktestParser()
         self.engine = RuleBacktestEngine()
         self._llm_adapter = llm_adapter
+        self.owner_id = owner_id
+        self.include_all_owners = bool(include_all_owners)
+
+    def _owner_kwargs(self) -> Dict[str, Any]:
+        return {
+            "owner_id": self.owner_id,
+            "include_all_owners": self.include_all_owners,
+        }
 
     def parse_strategy(
         self,
@@ -433,6 +448,7 @@ class RuleBacktestService:
         )
 
         run = RuleBacktestRun(
+            owner_id=self.db.require_user_id(self.owner_id),
             code=normalized_code,
             strategy_text=raw_text,
             parsed_strategy_json=self._serialize_json(parsed.to_dict() if parsed is not None else {}),
@@ -468,7 +484,7 @@ class RuleBacktestService:
     def process_submitted_run(self, run_id: int) -> None:
         """Continue a submitted run in the background."""
 
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             logger.warning("Rule backtest submission %s no longer exists.", run_id)
             return
@@ -564,7 +580,12 @@ class RuleBacktestService:
 
     def list_runs(self, *, code: Optional[str] = None, page: int = 1, limit: int = 20) -> Dict[str, Any]:
         offset = max(page - 1, 0) * limit
-        rows, total = self.repo.get_runs_paginated(code=code, offset=offset, limit=limit)
+        rows, total = self.repo.get_runs_paginated(
+            code=code,
+            offset=offset,
+            limit=limit,
+            **self._owner_kwargs(),
+        )
         return {
             "total": total,
             "page": page,
@@ -573,20 +594,20 @@ class RuleBacktestService:
         }
 
     def get_run(self, run_id: int) -> Optional[Dict[str, Any]]:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return None
         return self._run_row_to_dict(row, include_trades=True)
 
     def get_run_status(self, run_id: int) -> Optional[Dict[str, Any]]:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return None
         summary = self._load_summary_payload(row.summary_json)
         return self._build_run_status_payload(row=row, summary=summary)
 
     def cancel_run(self, run_id: int) -> Optional[Dict[str, Any]]:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return None
 
@@ -1186,6 +1207,7 @@ class RuleBacktestService:
 
         if existing_run_id is None:
             run = RuleBacktestRun(
+                owner_id=self.db.require_user_id(self.owner_id),
                 code=code,
                 strategy_text=strategy_text,
                 parsed_strategy_json=self._serialize_json(result.parsed_strategy.to_dict()),
@@ -1217,7 +1239,7 @@ class RuleBacktestService:
             )
             run = self.repo.save_run(run)
         else:
-            existing = self.repo.get_run(existing_run_id)
+            existing = self.repo.get_run(existing_run_id, **self._owner_kwargs())
             merged_summary = self._update_summary_payload(
                 self._load_summary_payload(existing.summary_json if existing is not None else None),
                 request_payload=summary_patch.get("request"),
@@ -1236,6 +1258,7 @@ class RuleBacktestService:
             )
             run = self.repo.update_run(
                 existing_run_id,
+                **self._owner_kwargs(),
                 parsed_strategy_json=self._serialize_json(result.parsed_strategy.to_dict()),
                 strategy_hash=strategy_hash,
                 timeframe=result.parsed_strategy.timeframe,
@@ -1343,7 +1366,7 @@ class RuleBacktestService:
         no_result_reason: Optional[str] = None,
         no_result_message: Optional[str] = None,
     ) -> None:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return
         summary = self._update_summary_payload(
@@ -1379,6 +1402,7 @@ class RuleBacktestService:
         )
         self.repo.update_run(
             run_id,
+            **self._owner_kwargs(),
             status=status,
             parsed_strategy_json=(
                 self._serialize_json(parsed_strategy.to_dict())
@@ -1403,7 +1427,7 @@ class RuleBacktestService:
         )
 
     def _mark_run_failed(self, run_id: int, *, no_result_reason: str, no_result_message: str) -> None:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return
         summary = self._update_summary_payload(
@@ -1415,6 +1439,7 @@ class RuleBacktestService:
         )
         self.repo.update_run(
             run_id,
+            **self._owner_kwargs(),
             status="failed",
             completed_at=datetime.now(),
             no_result_reason=no_result_reason,
@@ -1423,7 +1448,7 @@ class RuleBacktestService:
         )
 
     def _mark_run_cancelled(self, run_id: int, *, no_result_message: str) -> None:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return
         if self._is_run_cancelled_status(row.status):
@@ -1439,6 +1464,7 @@ class RuleBacktestService:
         )
         self.repo.update_run(
             run_id,
+            **self._owner_kwargs(),
             status="cancelled",
             completed_at=row.completed_at or datetime.now(),
             no_result_reason="cancelled",
@@ -1455,7 +1481,7 @@ class RuleBacktestService:
         return cls._normalize_run_status(status) == "cancelled"
 
     def _should_stop_run_processing(self, run_id: int) -> bool:
-        row = self.repo.get_run(run_id)
+        row = self.repo.get_run(run_id, **self._owner_kwargs())
         if row is None:
             return True
         return self._is_run_cancelled_status(row.status)

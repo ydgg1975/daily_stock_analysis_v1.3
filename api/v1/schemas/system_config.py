@@ -148,6 +148,23 @@ class TestLLMChannelResponse(BaseModel):
     latency_ms: Optional[int] = None
 
 
+class SystemAdminActionResponse(BaseModel):
+    """Response payload for bounded admin maintenance actions."""
+
+    success: bool
+    action: str
+    message: str
+    cleared: List[str] = Field(default_factory=list)
+    preserved: List[str] = Field(default_factory=list)
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class FactoryResetSystemRequest(BaseModel):
+    """Confirmation payload for destructive factory reset."""
+
+    confirmation_phrase: str = Field(..., min_length=1)
+
+
 class SystemConfigValidationErrorResponse(BaseModel):
     """Error payload for failed update validation."""
 

@@ -5,7 +5,6 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -15,7 +14,12 @@ from tests.litellm_stub import ensure_litellm_stub
 ensure_litellm_stub()
 
 from api.v1.endpoints import system_config
-from api.v1.schemas.system_config import TestLLMChannelRequest, UpdateSystemConfigRequest
+from api.deps import CurrentUser
+from api.v1.schemas.system_config import (
+    FactoryResetSystemRequest,
+    TestLLMChannelRequest,
+    UpdateSystemConfigRequest,
+)
 from src.config import Config
 from src.core.config_manager import ConfigManager
 from src.services.system_config_service import SystemConfigService
@@ -56,29 +60,6 @@ class SystemConfigApiTestCase(unittest.TestCase):
         item_map = {item["key"]: item for item in payload["items"]}
         self.assertEqual(item_map["GEMINI_API_KEY"]["value"], "secret-key-value")
         self.assertFalse(item_map["GEMINI_API_KEY"]["is_masked"])
-
-    def test_require_admin_unlock_rejects_missing_token(self) -> None:
-        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
-        with self.assertRaises(HTTPException) as context:
-            system_config.require_admin_unlock(request=request, admin_unlock_token=None)
-
-        self.assertEqual(context.exception.status_code, 403)
-        self.assertEqual(context.exception.detail["error"], "admin_unlock_required")
-
-    def test_require_admin_unlock_rejects_invalid_token(self) -> None:
-        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
-        with patch("api.v1.endpoints.system_config.verify_admin_unlock_token", return_value=False):
-            with self.assertRaises(HTTPException) as context:
-                system_config.require_admin_unlock(request=request, admin_unlock_token="invalid-token")
-
-        self.assertEqual(context.exception.status_code, 403)
-        self.assertEqual(context.exception.detail["error"], "admin_unlock_required")
-
-    def test_require_admin_unlock_accepts_valid_token(self) -> None:
-        request = SimpleNamespace(url=SimpleNamespace(path="/api/v1/system/config"))
-        with patch("api.v1.endpoints.system_config.verify_admin_unlock_token", return_value=True):
-            # No exception means token is accepted.
-            system_config.require_admin_unlock(request=request, admin_unlock_token="valid-token")
 
     def test_put_config_updates_secret_and_plain_field(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()
@@ -175,6 +156,64 @@ class SystemConfigApiTestCase(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["resolved_model"], "openai/gpt-4o-mini")
         mock_test.assert_called_once()
+
+    def test_reset_runtime_caches_returns_service_payload(self) -> None:
+        with patch.object(
+            self.service,
+            "reset_runtime_caches",
+            return_value={
+                "success": True,
+                "action": "reset_runtime_caches",
+                "message": "Runtime provider/search caches were reset",
+                "cleared": ["data_fetcher_manager", "search_service"],
+            },
+        ) as mock_reset:
+            payload = system_config.reset_runtime_caches(service=self.service).model_dump()
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["action"], "reset_runtime_caches")
+        self.assertEqual(payload["cleared"], ["data_fetcher_manager", "search_service"])
+        mock_reset.assert_called_once()
+
+    def test_factory_reset_endpoint_returns_service_payload(self) -> None:
+        current_user = CurrentUser(
+            user_id="bootstrap-admin",
+            username="admin",
+            display_name="Bootstrap Admin",
+            role="admin",
+            is_admin=True,
+            is_authenticated=True,
+            transitional=False,
+            auth_enabled=True,
+            session_id="session-1",
+            legacy_admin=False,
+        )
+        with patch.object(
+            self.service,
+            "factory_reset_system",
+            return_value={
+                "success": True,
+                "action": "factory_reset_system",
+                "message": "Factory reset completed",
+                "cleared": ["non_bootstrap_users", "user_sessions"],
+                "preserved": ["bootstrap_admin_access", "system_configuration"],
+                "counts": {"users": 2, "sessions": 3},
+            },
+        ) as mock_reset:
+            payload = system_config.factory_reset_system(
+                request=FactoryResetSystemRequest(confirmation_phrase="FACTORY RESET"),
+                service=self.service,
+                current_user=current_user,
+            ).model_dump()
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["action"], "factory_reset_system")
+        self.assertEqual(payload["counts"]["users"], 2)
+        mock_reset.assert_called_once_with(
+            confirmation_phrase="FACTORY RESET",
+            actor_user_id="bootstrap-admin",
+            actor_display_name="Bootstrap Admin",
+        )
 
 
 if __name__ == "__main__":

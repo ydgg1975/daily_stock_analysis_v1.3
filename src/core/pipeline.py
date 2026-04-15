@@ -30,6 +30,7 @@ from data_provider import DataFetcherManager
 from data_provider.realtime_types import ChipDistribution, RealtimeSource, UnifiedRealtimeQuote
 from src.analyzer import GeminiAnalyzer, AnalysisResult, fill_chip_structure_if_needed, fill_price_position_if_needed
 from src.data.stock_mapping import STOCK_NAME_MAP
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 from src.notification import NotificationService, NotificationChannel
 from src.report_language import (
     get_unknown_text,
@@ -89,7 +90,9 @@ class StockAnalysisPipeline:
         source_message: Optional[BotMessage] = None,
         query_id: Optional[str] = None,
         query_source: Optional[str] = None,
-        save_context_snapshot: Optional[bool] = None
+        save_context_snapshot: Optional[bool] = None,
+        owner_id: Optional[str] = None,
+        persist_history: bool = True,
     ):
         """
         初始化调度器
@@ -103,6 +106,8 @@ class StockAnalysisPipeline:
         self.source_message = source_message
         self.query_id = query_id
         self.query_source = self._resolve_query_source(query_source)
+        self.owner_id = owner_id
+        self.persist_history = bool(persist_history)
         self.save_context_snapshot = (
             self.config.save_context_snapshot if save_context_snapshot is None else save_context_snapshot
         )
@@ -113,7 +118,7 @@ class StockAnalysisPipeline:
         # 不再单独创建 akshare_fetcher，统一使用 fetcher_manager 获取增强数据
         self.trend_analyzer = StockTrendAnalyzer()  # 趋势分析器
         self.analyzer = GeminiAnalyzer()
-        self.notifier = NotificationService(source_message=source_message)
+        self.notifier = self._build_notification_service(source_message=source_message)
         
         # 初始化搜索服务
         self.search_service = SearchService(
@@ -153,6 +158,42 @@ class StockAnalysisPipeline:
         )
         if self.social_sentiment_service.is_available:
             logger.info("Social sentiment service enabled (Reddit/X/Polymarket, US stocks only)")
+
+    def _build_notification_service(self, *, source_message: Optional[BotMessage] = None) -> NotificationService:
+        owner_id = str(self.owner_id or "").strip()
+        if not owner_id or owner_id == BOOTSTRAP_ADMIN_USER_ID:
+            return NotificationService(source_message=source_message)
+
+        preferences = self.db.get_user_notification_preferences(owner_id)
+        email = str(preferences.get("email") or "").strip() or None
+        email_enabled = bool(preferences.get("email_enabled")) and bool(email)
+        discord_webhook = str(preferences.get("discord_webhook") or "").strip() or None
+        discord_enabled = bool(preferences.get("discord_enabled")) and bool(discord_webhook)
+
+        channel_allowlist: List[NotificationChannel] = []
+        email_receivers_override: Optional[List[str]] = None
+        discord_webhook_url_override: Optional[str] = None
+
+        if email_enabled and email:
+            channel_allowlist.append(NotificationChannel.EMAIL)
+            email_receivers_override = [email]
+        if discord_enabled and discord_webhook:
+            channel_allowlist.append(NotificationChannel.DISCORD)
+            discord_webhook_url_override = discord_webhook
+
+        if channel_allowlist:
+            return NotificationService(
+                source_message=source_message,
+                channel_allowlist=channel_allowlist,
+                email_receivers_override=email_receivers_override,
+                discord_webhook_url_override=discord_webhook_url_override,
+            )
+
+        # User-owned notifications should not silently fall back to operator channels.
+        return NotificationService(
+            source_message=source_message,
+            channel_allowlist=[],
+        )
 
     def fetch_and_save_stock_data(
         self, 
@@ -755,7 +796,7 @@ class StockAnalysisPipeline:
                 )
 
             # Step 8: 保存分析历史记录
-            if result:
+            if result and self.persist_history:
                 try:
                     self._emit_progress(
                         progress_callback,
@@ -775,7 +816,8 @@ class StockAnalysisPipeline:
                         report_type=report_type.value,
                         news_content=news_context,
                         context_snapshot=context_snapshot,
-                        save_snapshot=self.save_context_snapshot
+                        save_snapshot=self.save_context_snapshot,
+                        owner_id=self.owner_id,
                     )
                 except Exception as e:
                     logger.warning(f"{stock_name}({code}) 保存分析历史失败: {e}")
@@ -3467,7 +3509,8 @@ class StockAnalysisPipeline:
                         report_type=report_type.value,
                         news_content=None,
                         context_snapshot=initial_context,
-                        save_snapshot=self.save_context_snapshot
+                        save_snapshot=self.save_context_snapshot,
+                        owner_id=self.owner_id,
                     )
                 except Exception as e:
                     logger.warning(f"[{code}] 保存 Agent 分析历史失败: {e}")

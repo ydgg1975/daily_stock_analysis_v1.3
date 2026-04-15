@@ -355,6 +355,93 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
         self.assertIn("Duplicate trade_uid", str(ctx.exception))
 
+    def test_broker_connection_crud_roundtrip(self) -> None:
+        account = self.service.create_account(name="Main", broker="Demo", market="us", base_currency="USD")
+        aid = account["id"]
+
+        created = self.service.create_broker_connection(
+            portfolio_account_id=aid,
+            broker_type="ibkr",
+            broker_name="Interactive Brokers",
+            connection_name="Primary IBKR",
+            broker_account_ref="U1234567",
+            import_mode="file",
+            sync_metadata={"source": "flex"},
+        )
+
+        self.assertEqual(created["owner_id"], account["owner_id"])
+        self.assertEqual(created["portfolio_account_id"], aid)
+        self.assertEqual(created["broker_type"], "ibkr")
+        self.assertEqual(created["connection_name"], "Primary IBKR")
+        self.assertEqual(created["sync_metadata"], {"source": "flex"})
+
+        listed = self.service.list_broker_connections(portfolio_account_id=aid)
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0]["portfolio_account_name"], "Main")
+
+        updated = self.service.update_broker_connection(
+            created["id"],
+            connection_name="IBKR Flex",
+            status="disabled",
+            sync_metadata={"source": "flex", "region": "global"},
+        )
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated["connection_name"], "IBKR Flex")
+        self.assertEqual(updated["status"], "disabled")
+        self.assertEqual(updated["sync_metadata"]["region"], "global")
+
+        with self.assertRaises(PortfolioConflictError):
+            self.service.create_broker_connection(
+                portfolio_account_id=aid,
+                broker_type="ibkr",
+                connection_name="Duplicate Ref",
+                broker_account_ref="U1234567",
+            )
+
+    def test_event_delete_respects_owner_scope(self) -> None:
+        self.db.create_or_update_app_user(user_id="user-a", username="alice")
+        self.db.create_or_update_app_user(user_id="user-b", username="bob")
+        service_a = PortfolioService(owner_id="user-a")
+        service_b = PortfolioService(owner_id="user-b")
+
+        account = service_a.create_account(name="Alice Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+
+        trade_id = service_a.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=date(2026, 1, 2),
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )["id"]
+        cash_id = service_a.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 2),
+            direction="in",
+            amount=1000,
+            currency="CNY",
+        )["id"]
+        action_id = service_a.record_corporate_action(
+            account_id=aid,
+            symbol="600519",
+            effective_date=date(2026, 1, 3),
+            action_type="cash_dividend",
+            market="cn",
+            currency="CNY",
+            cash_dividend_per_share=1.0,
+        )["id"]
+
+        self.assertFalse(service_b.delete_trade_event(trade_id))
+        self.assertFalse(service_b.delete_cash_ledger_event(cash_id))
+        self.assertFalse(service_b.delete_corporate_action_event(action_id))
+
+        self.assertTrue(service_a.delete_trade_event(trade_id))
+        self.assertTrue(service_a.delete_cash_ledger_event(cash_id))
+        self.assertTrue(service_a.delete_corporate_action_event(action_id))
+
     def test_backdated_trade_write_invalidates_future_cache(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]

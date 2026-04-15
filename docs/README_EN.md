@@ -42,8 +42,9 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | AI | Decision Dashboard | One-sentence conclusion + precise entry/exit levels + action checklist |
 | Analysis | Multi-dimensional Analysis | Technicals + chip distribution + sentiment + real-time quotes |
 | Market | Global Markets | A-shares, Hong Kong stocks, US stocks |
+| Portfolio | User-owned portfolio ledger | User-owned broker connections, existing A-share CSV / IBKR Flex import, and manual IBKR read-only sync for account state and holdings only |
 | Review | Market Review | Daily overview, sectors, northbound capital flow |
-| Scanner | Market Scanner | Separate pre-open discovery layer for A-shares, with ranked shortlist, daily watchlists, scheduled runs, and notification-ready summaries |
+| Scanner | Market Scanner | Separate pre-open discovery layer for A-shares, US, and Hong Kong markets, with distinct profiles, ranked shortlists, daily watchlists, scheduled runs, and notification-ready summaries |
 | Backtest | AI Backtest Validation | Auto-evaluate historical analysis accuracy, direction win rate, SL/TP hit rates |
 | Agent Q&A | Strategy Chat | Multi-turn strategy chat with 11 built-in trading strategies (internally loaded as skills) (Web/Bot/API) |
 | Notifications | Multi-channel Push | Telegram, Discord, Slack, Email, WeChat Work, Feishu, etc. |
@@ -54,7 +55,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Type | Supported |
 |------|----------|
 | LLMs | Gemini (free), OpenAI-compatible, DeepSeek, Qwen, Claude, Ollama |
-| Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance |
+| Market Data | AkShare, Tushare, Pytdx, Baostock, YFinance, Alpaca, Twelve Data |
 | News Search | Tavily, SerpAPI, Bocha, Brave, MiniMax |
 
 ### Built-in Trading Rules
@@ -70,7 +71,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 
 The Web app now includes a dedicated `/scanner` page for pre-open candidate discovery. Scanner is intentionally separate from Backtest: Scanner answers what to watch today before the open, while Backtest still answers whether a rule or strategy has worked historically.
 
-The first production version is A-share first. It builds a bounded China universe, scores candidates with deterministic rule-based signals, and returns a small shortlist with `rank / score / reasons / risk notes / watch context / run metadata`. P9 extended that into an operational workflow with scheduled pre-open runs, persistent daily watchlists, recent watchlist review, and notification delivery through the repo's existing channels.
+Scanner now runs three explicit market profiles: `cn_preopen_v1`, `us_preopen_v1`, and `hk_preopen_v1`. A-shares remain the default bounded-universe profile; the US profile uses local-first history plus a bounded liquid seed supplement and can optionally enrich quote/daily paths through Alpaca (`ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY`); the Hong Kong profile uses a separate HK universe and can optionally enrich quote/history through Twelve Data (`TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`). P9 extended the product into an operational workflow with scheduled pre-open runs, persistent daily watchlists, recent watchlist review, and notification delivery through the repo's existing channels.
 
 Route A continues that productization work: `/scanner` now also supports cross-day watchlist comparison, local daily-bar follow-through review, lightweight hit-rate / quality metrics, and compact Markdown export for manual review. Users can continue directly into deeper analysis, stock Q&A, and backtest from each shortlisted name while Scanner remains separate from Backtest. See [Market Scanner (EN)](market-scanner_EN.md) for details.
 
@@ -148,6 +149,11 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | Auto-discover public SearXNG instances from `searx.space` when `SEARXNG_BASE_URLS` is empty (default `true`) | Optional |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | Optional |
 | `TICKFLOW_API_KEY` | [TickFlow](https://tickflow.org) API key (CN market review index enhancement; breadth also uses TickFlow when the plan supports universe queries) | Optional |
+| `TWELVE_DATA_API_KEY` | Twelve Data API key for HK scanner quote/history enrichment | Optional |
+| `TWELVE_DATA_API_KEYS` | Comma-separated Twelve Data API keys; takes priority over `TWELVE_DATA_API_KEY` | Optional |
+| `ALPACA_API_KEY_ID` | Alpaca key ID for US scanner market-data enrichment | Optional |
+| `ALPACA_API_SECRET_KEY` | Alpaca secret paired with `ALPACA_API_KEY_ID` | Optional |
+| `ALPACA_DATA_FEED` | Alpaca data feed selector (`iex` or `sip`, default `iex`) | Optional |
 | `WECHAT_MSG_TYPE` | WeChat Work message type, default `markdown`, set to `text` for plain markdown text | Optional |
 | `AGENT_MODE` | Enable Agent strategy chat mode (internally normalized as `skill`, `true`/`false`, default `false`) | Optional |
 | `AGENT_LITELLM_MODEL` | Optional Agent-only primary model; when empty it inherits `LITELLM_MODEL`, and bare names are normalized to `openai/<model>` | Optional |

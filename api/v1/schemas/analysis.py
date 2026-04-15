@@ -15,6 +15,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
+from api.v1.schemas.history import AnalysisReport
 
 
 class TaskStatusEnum(str, Enum):
@@ -112,6 +113,40 @@ class AnalysisResultResponse(BaseModel):
     market_session_date: Optional[str] = Field(None, description="市场会话日期（YYYY-MM-DD）")
     news_published_at: Optional[str] = Field(None, description="新闻发布时间（ISO 8601, aware）")
     report_generated_at: Optional[str] = Field(None, description="报告生成时间（ISO 8601, aware）")
+
+
+class AnalysisPreviewRequest(BaseModel):
+    """Public guest-preview request shape."""
+
+    stock_code: str = Field(
+        ...,
+        description="股票代码或名称输入",
+        json_schema_extra={"example": "AAPL"},
+    )
+    stock_name: Optional[str] = Field(
+        None,
+        description="前端已解析的股票名称（可选）",
+        json_schema_extra={"example": "Apple"},
+    )
+    report_type: str = Field(
+        "brief",
+        description="预览报告类型，默认 brief",
+        pattern="^(simple|detailed|full|brief)$",
+    )
+    force_refresh: bool = Field(
+        False,
+        description="是否强制刷新基础数据缓存",
+    )
+
+
+class AnalysisPreviewResponse(BaseModel):
+    """Trimmed report contract for guest-mode preview."""
+
+    query_id: str = Field(..., description="预览请求 ID")
+    stock_code: str = Field(..., description="股票代码")
+    stock_name: Optional[str] = Field(None, description="股票名称")
+    report: AnalysisReport = Field(..., description="仅含 meta/summary/strategy 的预览报告")
+    preview_scope: str = Field("guest", description="预览作用域标识")
 
 
 class TaskAccepted(BaseModel):

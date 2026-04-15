@@ -94,11 +94,16 @@ class AuthSessionTestCase(unittest.TestCase):
             tok = auth.create_session()
             self.assertTrue(tok, "session token should be non-empty")
             parts = tok.split(".")
-            self.assertEqual(len(parts), 3, "format: nonce.ts.signature")
-            nonce, ts, sig = parts
-            self.assertTrue(nonce)
-            self.assertTrue(ts.isdigit())
+            self.assertEqual(len(parts), 3, "format: v2.payload.signature")
+            version, payload_b64, sig = parts
+            self.assertEqual(version, auth.SESSION_TOKEN_VERSION)
+            self.assertTrue(payload_b64)
             self.assertTrue(sig)
+
+            identity = auth.get_session_identity(tok)
+            self.assertIsNotNone(identity)
+            self.assertEqual(identity.user_id, auth.BOOTSTRAP_ADMIN_USER_ID)
+            self.assertEqual(identity.username, auth.BOOTSTRAP_ADMIN_USERNAME)
             return tok
 
         self._patch_env_and_run(test_fn=run)

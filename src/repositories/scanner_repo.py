@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, desc, func, or_, select
 
+from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER, normalize_scope
 from src.storage import (
     DatabaseManager,
     MarketScannerCandidate,
@@ -27,6 +28,11 @@ class ScannerRepository:
         run: MarketScannerRun,
         candidates: List[MarketScannerCandidate],
     ) -> MarketScannerRun:
+        run.scope = normalize_scope(getattr(run, "scope", None))
+        if run.scope == OWNERSHIP_SCOPE_USER:
+            run.owner_id = self.db.require_user_id(getattr(run, "owner_id", None))
+        else:
+            run.owner_id = None
         with self.db.get_session() as session:
             session.add(run)
             session.flush()
@@ -44,9 +50,16 @@ class ScannerRepository:
         profile: Optional[str],
         offset: int,
         limit: int,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[MarketScannerRun], int]:
         with self.db.get_session() as session:
-            conditions = []
+            conditions = self._build_run_visibility_conditions(
+                scope=scope,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
             if market:
                 conditions.append(MarketScannerRun.market == market)
             if profile:
@@ -65,11 +78,26 @@ class ScannerRepository:
             ).scalars().all()
             return list(rows), int(total)
 
-    def get_run(self, run_id: int) -> Optional[MarketScannerRun]:
+    def get_run(
+        self,
+        run_id: int,
+        *,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[MarketScannerRun]:
         with self.db.get_session() as session:
+            conditions = [MarketScannerRun.id == run_id]
+            conditions.extend(
+                self._build_run_visibility_conditions(
+                    scope=scope,
+                    owner_id=owner_id,
+                    include_all_owners=include_all_owners,
+                )
+            )
             return session.execute(
                 select(MarketScannerRun)
-                .where(MarketScannerRun.id == run_id)
+                .where(and_(*conditions))
                 .limit(1)
             ).scalar_one_or_none()
 
@@ -79,9 +107,16 @@ class ScannerRepository:
         market: Optional[str],
         profile: Optional[str],
         limit: int = 20,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[MarketScannerRun]:
         with self.db.get_session() as session:
-            conditions = []
+            conditions = self._build_run_visibility_conditions(
+                scope=scope,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
             if market:
                 conditions.append(MarketScannerRun.market == market)
             if profile:
@@ -104,14 +139,22 @@ class ScannerRepository:
         run_at: datetime,
         run_id: int,
         limit: int = 20,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[MarketScannerRun]:
         with self.db.get_session() as session:
-            conditions = [
+            conditions = self._build_run_visibility_conditions(
+                scope=scope,
+                owner_id=owner_id,
+                include_all_owners=include_all_owners,
+            )
+            conditions.append(
                 or_(
                     MarketScannerRun.run_at < run_at,
                     and_(MarketScannerRun.run_at == run_at, MarketScannerRun.id < run_id),
                 )
-            ]
+            )
             if market:
                 conditions.append(MarketScannerRun.market == market)
             if profile:
@@ -142,12 +185,20 @@ class ScannerRepository:
         profile: str,
         exclude_run_id: Optional[int] = None,
         recent_run_limit: int = 5,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> int:
         with self.db.get_session() as session:
             recent_run_query = (
                 select(MarketScannerRun.id)
                 .where(
                     and_(
+                        *self._build_run_visibility_conditions(
+                            scope=scope,
+                            owner_id=owner_id,
+                            include_all_owners=include_all_owners,
+                        ),
                         MarketScannerRun.market == market,
                         MarketScannerRun.profile == profile,
                     )
@@ -208,11 +259,22 @@ class ScannerRepository:
         universe_size: Optional[int] = None,
         preselected_size: Optional[int] = None,
         evaluated_size: Optional[int] = None,
+        scope: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Optional[MarketScannerRun]:
         with self.db.get_session() as session:
+            conditions = [MarketScannerRun.id == run_id]
+            conditions.extend(
+                self._build_run_visibility_conditions(
+                    scope=scope,
+                    owner_id=owner_id,
+                    include_all_owners=include_all_owners,
+                )
+            )
             run = session.execute(
                 select(MarketScannerRun)
-                .where(MarketScannerRun.id == run_id)
+                .where(and_(*conditions))
                 .limit(1)
             ).scalar_one_or_none()
             if run is None:
@@ -245,3 +307,31 @@ class ScannerRepository:
             session.commit()
             session.refresh(run)
             return run
+
+    def _build_run_visibility_conditions(
+        self,
+        *,
+        scope: Optional[str],
+        owner_id: Optional[str],
+        include_all_owners: bool,
+    ) -> List[Any]:
+        if include_all_owners:
+            return []
+
+        normalized_scope = str(scope or "").strip().lower() or None
+        if normalized_scope == OWNERSHIP_SCOPE_SYSTEM:
+            return [MarketScannerRun.scope == OWNERSHIP_SCOPE_SYSTEM]
+        if normalized_scope == OWNERSHIP_SCOPE_USER:
+            return [
+                MarketScannerRun.scope == OWNERSHIP_SCOPE_USER,
+                MarketScannerRun.owner_id == self.db.require_user_id(owner_id),
+            ]
+        return [
+            or_(
+                and_(
+                    MarketScannerRun.scope == OWNERSHIP_SCOPE_USER,
+                    MarketScannerRun.owner_id == self.db.require_user_id(owner_id),
+                ),
+                MarketScannerRun.scope == OWNERSHIP_SCOPE_SYSTEM,
+            )
+        ]

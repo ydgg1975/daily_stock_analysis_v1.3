@@ -37,6 +37,27 @@ function getErrorGuidance(
     ];
   }
 
+  if (error.category === 'auth_required') {
+    return [
+      '请先登录，再重新进入刚才的页面。',
+      '如果登录后仍被拦截，请确认当前会话没有过期。',
+    ];
+  }
+
+  if (error.category === 'admin_unlock_required') {
+    return [
+      '请先在系统设置中重新验证管理员密码。',
+      '验证完成后，再重试刚才的系统配置或日志操作。',
+    ];
+  }
+
+  if (error.category === 'access_denied') {
+    return [
+      '请返回当前角色允许访问的页面继续使用。',
+      '如果你本应拥有权限，请切换到正确账户后再试。',
+    ];
+  }
+
   return [];
 }
 

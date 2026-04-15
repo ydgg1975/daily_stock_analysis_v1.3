@@ -134,6 +134,19 @@ export interface TestLLMChannelResponse {
   latencyMs?: number | null;
 }
 
+export interface SystemAdminActionResponse {
+  success: boolean;
+  action: string;
+  message: string;
+  cleared: string[];
+  preserved: string[];
+  counts: Record<string, number>;
+}
+
+export interface FactoryResetSystemRequest {
+  confirmationPhrase: string;
+}
+
 export interface SystemConfigValidationErrorResponse {
   error: string;
   message: string;

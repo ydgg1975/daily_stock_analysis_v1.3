@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from src.notification import NotificationChannel
 from src.repositories.stock_repo import StockRepository
+from src.services.execution_log_service import ExecutionLogService
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager
@@ -250,6 +251,40 @@ class MarketScannerOperationsServiceTestCase(unittest.TestCase):
         self.assertEqual(status["market"], "us")
         self.assertEqual(status["profile"], "us_preopen_v1")
         self.assertEqual(status["today_watchlist"]["id"], detail["id"])
+
+    def test_manual_scan_records_scanner_run_observability_for_admin_logs(self) -> None:
+        ops_service = MarketScannerOperationsService(
+            scanner_service=self.scanner_service,
+            config=_make_config(scanner_notification_enabled=False),
+            notifier_factory=lambda: FakeNotifier(available=False),
+        )
+
+        detail = ops_service.run_manual_scan(
+            market="cn",
+            profile="cn_preopen_v1",
+            notify=False,
+        )
+
+        logs = ExecutionLogService()
+        sessions, total = logs.list_sessions(limit=20)
+
+        self.assertGreaterEqual(total, 1)
+        scanner_session = next(
+            item for item in sessions
+            if item["readable_summary"]["subsystem"] == "scanner"
+        )
+        readable = scanner_session["readable_summary"]
+        self.assertEqual(readable["action_name"], "scanner_run")
+        self.assertEqual(readable["scanner_run_id"], detail["id"])
+        self.assertEqual(readable["scanner_market"], "cn")
+        self.assertEqual(readable["scanner_shortlist_count"], detail["shortlist_size"])
+        self.assertEqual(readable["scanner_fallback_count"], 0)
+
+        detail_payload = logs.get_session_detail(scanner_session["session_id"])
+        self.assertIsNotNone(detail_payload)
+        assert detail_payload is not None
+        self.assertEqual(detail_payload["events"][0]["category"], "scanner")
+        self.assertEqual(detail_payload["events"][0]["detail"]["scanner_run_id"], detail["id"])
 
 
 if __name__ == "__main__":

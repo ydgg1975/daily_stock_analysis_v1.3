@@ -33,12 +33,16 @@ class BacktestRepository:
         eval_window_days: int,
         engine_version: str,
         force: bool,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[AnalysisHistory]:
         """Return AnalysisHistory rows eligible for backtest."""
         cutoff_dt = datetime.now() - timedelta(days=min_age_days)
 
         with self.db.get_session() as session:
             conditions = [AnalysisHistory.created_at <= cutoff_dt]
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.db.require_user_id(owner_id))
             if code:
                 conditions.append(AnalysisHistory.code == code)
 
@@ -58,6 +62,7 @@ class BacktestRepository:
             return list(rows)
 
     def save_run(self, run: BacktestRun) -> BacktestRun:
+        run.owner_id = self.db.require_user_id(getattr(run, "owner_id", None))
         with self.db.get_session() as session:
             session.add(run)
             session.commit()
@@ -70,9 +75,13 @@ class BacktestRepository:
         code: Optional[str] = None,
         offset: int,
         limit: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[BacktestRun], int]:
         with self.db.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(BacktestRun.owner_id == self.db.require_user_id(owner_id))
             if code:
                 conditions.append(BacktestRun.code == code)
             where_clause = and_(*conditions) if conditions else True
@@ -87,74 +96,133 @@ class BacktestRepository:
             ).scalars().all()
             return list(rows), int(total)
 
-    def get_run(self, run_id: int) -> Optional[BacktestRun]:
+    def get_run(
+        self,
+        run_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[BacktestRun]:
         with self.db.get_session() as session:
+            conditions = [BacktestRun.id == run_id]
+            if not include_all_owners:
+                conditions.append(BacktestRun.owner_id == self.db.require_user_id(owner_id))
             return session.execute(
-                select(BacktestRun).where(BacktestRun.id == run_id).limit(1)
+                select(BacktestRun).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
 
-    def delete_runs_by_code(self, *, code: str) -> int:
+    def delete_runs_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [BacktestRun.code == code]
+            if not include_all_owners:
+                conditions.append(BacktestRun.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(BacktestRun).where(BacktestRun.code == code)
+                delete(BacktestRun).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)
 
-    def delete_results_by_code(self, *, code: str) -> int:
+    def delete_results_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [BacktestResult.code == code]
+            if not include_all_owners:
+                conditions.append(BacktestResult.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(BacktestResult).where(BacktestResult.code == code)
+                delete(BacktestResult).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)
 
-    def delete_results_by_analysis_ids(self, analysis_ids: List[int]) -> int:
+    def delete_results_by_analysis_ids(
+        self,
+        analysis_ids: List[int],
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         if not analysis_ids:
             return 0
         with self.db.get_session() as session:
+            conditions = [BacktestResult.analysis_history_id.in_(analysis_ids)]
+            if not include_all_owners:
+                conditions.append(BacktestResult.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(analysis_ids))
+                delete(BacktestResult).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)
 
-    def delete_summaries_by_code(self, *, code: str) -> int:
+    def delete_summaries_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [
+                BacktestSummary.scope == "stock",
+                BacktestSummary.code == code,
+            ]
+            if not include_all_owners:
+                conditions.append(BacktestSummary.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(BacktestSummary).where(
-                    and_(
-                        BacktestSummary.scope == "stock",
-                        BacktestSummary.code == code,
-                    )
-                )
+                delete(BacktestSummary).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)
 
-    def delete_all_summaries_for_window(self, *, eval_window_days: int, engine_version: str) -> int:
+    def delete_all_summaries_for_window(
+        self,
+        *,
+        eval_window_days: int,
+        engine_version: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [
+                BacktestSummary.eval_window_days == eval_window_days,
+                BacktestSummary.engine_version == engine_version,
+            ]
+            if not include_all_owners:
+                conditions.append(BacktestSummary.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(BacktestSummary).where(
-                    and_(
-                        BacktestSummary.eval_window_days == eval_window_days,
-                        BacktestSummary.engine_version == engine_version,
-                    )
-                )
+                delete(BacktestSummary).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)
 
-    def list_backtest_codes(self, *, eval_window_days: int, engine_version: str) -> List[str]:
+    def list_backtest_codes(
+        self,
+        *,
+        eval_window_days: int,
+        engine_version: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[str]:
         with self.db.get_session() as session:
+            conditions = [
+                BacktestResult.eval_window_days == eval_window_days,
+                BacktestResult.engine_version == engine_version,
+            ]
+            if not include_all_owners:
+                conditions.append(BacktestResult.owner_id == self.db.require_user_id(owner_id))
             rows = session.execute(
                 select(BacktestResult.code)
-                .where(
-                    and_(
-                        BacktestResult.eval_window_days == eval_window_days,
-                        BacktestResult.engine_version == engine_version,
-                    )
-                )
+                .where(and_(*conditions))
                 .distinct()
             ).scalars().all()
             return [str(code) for code in rows if code]
@@ -164,10 +232,14 @@ class BacktestRepository:
         *,
         code: Optional[str] = None,
         created_before: Optional[datetime] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> int:
         """Count analysis history rows matching optional filters."""
         with self.db.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.db.require_user_id(owner_id))
             if code:
                 conditions.append(AnalysisHistory.code == code)
             if created_before is not None:
@@ -179,6 +251,7 @@ class BacktestRepository:
             return int(session.execute(query).scalar() or 0)
 
     def save_result(self, result: BacktestResult) -> None:
+        result.owner_id = self.db.require_user_id(getattr(result, "owner_id", None))
         with self.db.get_session() as session:
             session.add(result)
             session.commit()
@@ -189,6 +262,8 @@ class BacktestRepository:
 
         with self.db.get_session() as session:
             try:
+                for result in results:
+                    result.owner_id = self.db.require_user_id(getattr(result, "owner_id", None))
                 if replace_existing:
                     analysis_ids = sorted({r.analysis_history_id for r in results if r.analysis_history_id is not None})
                     key_pairs = sorted({(r.eval_window_days, r.engine_version) for r in results})
@@ -222,16 +297,25 @@ class BacktestRepository:
         days: Optional[int],
         offset: int,
         limit: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[BacktestResult], int]:
         with self.db.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(BacktestResult.owner_id == self.db.require_user_id(owner_id))
             if code:
                 conditions.append(BacktestResult.code == code)
             if eval_window_days is not None:
                 conditions.append(BacktestResult.eval_window_days == eval_window_days)
             if run_id is not None:
                 run = session.execute(
-                    select(BacktestRun).where(BacktestRun.id == run_id).limit(1)
+                    select(BacktestRun).where(
+                        and_(
+                            BacktestRun.id == run_id,
+                            BacktestRun.owner_id == self.db.require_user_id(owner_id),
+                        ) if not include_all_owners else BacktestRun.id == run_id
+                    ).limit(1)
                 ).scalar_one_or_none()
                 if run is None:
                     return [], 0
@@ -252,19 +336,37 @@ class BacktestRepository:
             ).scalars().all()
             return list(rows), int(total)
 
-    def get_sample_rows(self, *, code: str) -> List[AnalysisHistory]:
+    def get_sample_rows(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[AnalysisHistory]:
         with self.db.get_session() as session:
+            conditions = [AnalysisHistory.query_id.like(f"bt-sample:{code}:%")]
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.db.require_user_id(owner_id))
             rows = session.execute(
                 select(AnalysisHistory)
-                .where(AnalysisHistory.query_id.like(f"bt-sample:{code}:%"))
+                .where(and_(*conditions))
                 .order_by(desc(AnalysisHistory.created_at))
             ).scalars().all()
             return list(rows)
 
-    def delete_sample_rows(self, *, code: str) -> int:
+    def delete_sample_rows(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [AnalysisHistory.query_id.like(f"bt-sample:{code}:%")]
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.db.require_user_id(owner_id))
             analysis_rows = session.execute(
-                select(AnalysisHistory.id).where(AnalysisHistory.query_id.like(f"bt-sample:{code}:%"))
+                select(AnalysisHistory.id).where(and_(*conditions))
             ).scalars().all()
             if analysis_rows:
                 session.execute(delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(analysis_rows)))
@@ -278,11 +380,13 @@ class BacktestRepository:
 
     def upsert_summary(self, summary: BacktestSummary) -> None:
         """Insert or replace summary row by unique key."""
+        summary.owner_id = self.db.require_user_id(getattr(summary, "owner_id", None))
         with self.db.get_session() as session:
             existing = session.execute(
                 select(BacktestSummary)
                 .where(
                     and_(
+                        BacktestSummary.owner_id == summary.owner_id,
                         BacktestSummary.scope == summary.scope,
                         BacktestSummary.code == summary.code,
                         BacktestSummary.eval_window_days == summary.eval_window_days,
@@ -329,6 +433,8 @@ class BacktestRepository:
         code: Optional[str],
         eval_window_days: Optional[int] = None,
         engine_version: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Optional[BacktestSummary]:
         with self.db.get_session() as session:
             conditions = [
@@ -336,6 +442,8 @@ class BacktestRepository:
                 BacktestSummary.code == code,
                 BacktestSummary.engine_version == engine_version,
             ]
+            if not include_all_owners:
+                conditions.append(BacktestSummary.owner_id == self.db.require_user_id(owner_id))
             if eval_window_days is not None:
                 conditions.append(BacktestSummary.eval_window_days == eval_window_days)
 

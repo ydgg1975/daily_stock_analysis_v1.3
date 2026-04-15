@@ -157,7 +157,7 @@ export const Drawer: React.FC<DrawerProps> = ({
         >
           <div className="drawer__header flex items-center justify-between border-b border-[var(--theme-panel-subtle-border)] px-4 py-3 sm:px-5 [padding-top:max(0.9rem,env(safe-area-inset-top))]">
             {title ? (
-              <h2 id={titleId} className="drawer__title text-base font-semibold uppercase tracking-[0.16em] text-foreground sm:text-lg">
+              <h2 id={titleId} className="drawer__title text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary-text">
                 {title}
               </h2>
             ) : <div />}

@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from starlette.requests import Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import get_system_config_service
+from api.deps import CurrentUser, get_system_config_service, require_admin_user
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.system_config import (
+    FactoryResetSystemRequest,
+    SystemAdminActionResponse,
     SystemConfigConflictResponse,
     SystemConfigResponse,
     SystemConfigSchemaResponse,
@@ -22,30 +23,15 @@ from api.v1.schemas.system_config import (
     ValidateSystemConfigRequest,
     ValidateSystemConfigResponse,
 )
-from src.auth import verify_admin_unlock_token
-from src.services.system_config_service import ConfigConflictError, ConfigValidationError, SystemConfigService
+from src.services.system_config_service import (
+    ConfigConflictError,
+    ConfigValidationError,
+    SystemConfigService,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def require_admin_unlock(
-    request: Request,
-    admin_unlock_token: str | None = Header(default=None, alias="X-Admin-Unlock-Token"),
-) -> None:
-    """Require a valid admin unlock token for write-sensitive config operations."""
-    if admin_unlock_token and verify_admin_unlock_token(admin_unlock_token):
-        return
-
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": "admin_unlock_required",
-            "message": "Admin settings are locked. Verify admin password to continue.",
-            "path": str(request.url.path),
-        },
-    )
 
 
 @router.get(
@@ -62,6 +48,7 @@ def require_admin_unlock(
 def get_system_config(
     include_schema: bool = Query(True, description="Whether to include schema metadata"),
     service: SystemConfigService = Depends(get_system_config_service),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> SystemConfigResponse:
     """Load and return current system configuration."""
     try:
@@ -84,7 +71,7 @@ def get_system_config(
     responses={
         200: {"description": "Configuration updated"},
         400: {"description": "Validation failed", "model": SystemConfigValidationErrorResponse},
-        403: {"description": "Admin unlock required", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
         409: {"description": "Version conflict", "model": SystemConfigConflictResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
@@ -94,7 +81,7 @@ def get_system_config(
 def update_system_config(
     request: UpdateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: None = Depends(require_admin_unlock),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
     try:
@@ -139,7 +126,7 @@ def update_system_config(
     response_model=ValidateSystemConfigResponse,
     responses={
         200: {"description": "Validation completed"},
-        403: {"description": "Admin unlock required", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
     summary="Validate system configuration",
@@ -148,7 +135,7 @@ def update_system_config(
 def validate_system_config(
     request: ValidateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: None = Depends(require_admin_unlock),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> ValidateSystemConfigResponse:
     """Run pre-save validation only."""
     try:
@@ -170,7 +157,7 @@ def validate_system_config(
     response_model=TestLLMChannelResponse,
     responses={
         200: {"description": "Channel test completed"},
-        403: {"description": "Admin unlock required", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
         500: {"description": "Internal server error", "model": ErrorResponse},
     },
     summary="Test one LLM channel",
@@ -179,7 +166,7 @@ def validate_system_config(
 def test_llm_channel(
     request: TestLLMChannelRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: None = Depends(require_admin_unlock),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> TestLLMChannelResponse:
     """Validate and test one channel definition without writing `.env`."""
     try:
@@ -224,6 +211,7 @@ def test_llm_channel(
 )
 def get_system_config_schema(
     service: SystemConfigService = Depends(get_system_config_service),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> SystemConfigSchemaResponse:
     """Return schema metadata for system configuration fields."""
     try:
@@ -238,3 +226,79 @@ def get_system_config_schema(
                 "message": "Failed to load system configuration schema",
             },
         )
+
+
+@router.post(
+    "/actions/runtime-cache/reset",
+    response_model=SystemAdminActionResponse,
+    responses={
+        200: {"description": "Runtime caches reset"},
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    summary="Reset bounded runtime caches",
+    description="Reset safe in-process runtime caches so provider/search config changes take effect immediately.",
+)
+def reset_runtime_caches(
+    service: SystemConfigService = Depends(get_system_config_service),
+    _: CurrentUser = Depends(require_admin_user),
+) -> SystemAdminActionResponse:
+    """Run a bounded admin maintenance action for runtime cache reset."""
+    try:
+        payload = service.reset_runtime_caches()
+        return SystemAdminActionResponse.model_validate(payload)
+    except Exception as exc:
+        logger.error("Failed to reset runtime caches: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Failed to reset runtime caches",
+            },
+        )
+
+
+@router.post(
+    "/actions/factory-reset",
+    response_model=SystemAdminActionResponse,
+    responses={
+        200: {"description": "Factory reset completed"},
+        400: {"description": "Invalid confirmation phrase", "model": ErrorResponse},
+        401: {"description": "Unauthorized", "model": ErrorResponse},
+        403: {"description": "Admin access required", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    summary="Factory reset bounded non-bootstrap user-owned state",
+    description="Destructive admin-only reset that clears bounded non-bootstrap user-owned state while preserving bootstrap admin access and essential system configuration.",
+)
+def factory_reset_system(
+    request: FactoryResetSystemRequest,
+    service: SystemConfigService = Depends(get_system_config_service),
+    current_user: CurrentUser = Depends(require_admin_user),
+) -> SystemAdminActionResponse:
+    """Run the bounded destructive factory reset flow."""
+    try:
+        payload = service.factory_reset_system(
+            confirmation_phrase=request.confirmation_phrase,
+            actor_user_id=current_user.user_id,
+            actor_display_name=current_user.display_name,
+        )
+        return SystemAdminActionResponse.model_validate(payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "validation_error",
+                "message": str(exc),
+            },
+        ) from exc
+    except Exception as exc:
+        logger.error("Failed to run factory reset: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Failed to run factory reset",
+            },
+        ) from exc

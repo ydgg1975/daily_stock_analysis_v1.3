@@ -1,9 +1,8 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { authApi } from '../api/auth';
 import { getParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigValidationError } from '../api/systemConfig';
-import { ApiErrorAlert, Button, Disclosure, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
+import { ApiErrorAlert, Button, ConfirmDialog, Disclosure, Drawer, Input, Select, WorkspacePageHeader } from '../components/common';
 import { useIsDesktopViewport } from '../components/layout/useIsDesktopViewport';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { useUiPreferences } from '../contexts/UiPreferencesContext';
@@ -32,7 +31,7 @@ import {
 } from '../components/settings';
 import type { MarketColorConvention } from '../utils/marketColors';
 
-type SettingsDomain = 'ai_models' | 'data_sources' | 'notifications' | 'advanced';
+type SettingsDomain = 'ai_models' | 'data_sources' | 'advanced';
 type RoutingTier = 'primary' | 'backup' | 'fallback';
 type RouteModelMode = 'provider_default' | 'explicit';
 type ModelInputMode = 'preset' | 'custom';
@@ -51,6 +50,7 @@ type AdvancedNavigationContext = {
 };
 type DataRouteKey = 'market' | 'fundamentals' | 'news' | 'sentiment';
 type DataSourceCapability = DataRouteKey | 'local';
+type DataSourceCredentialSchema = 'none' | 'single_key' | 'key_secret';
 type DataSourceValidationState = 'not_configured' | 'configured_pending' | 'validated' | 'failed' | 'builtin';
 type DataSourceKind = 'builtin' | 'custom';
 type CustomDataSourceValidation = {
@@ -58,16 +58,41 @@ type CustomDataSourceValidation = {
   message?: string;
   checkedAt?: string;
 };
+type DataSourceCredentialFieldName = 'credential' | 'secret';
+type DataSourceCredentialFieldDefinition = {
+  name: DataSourceCredentialFieldName;
+  labelKey: string;
+  hintKey: string;
+  placeholder?: string;
+};
+type DataSourceBuiltinExtraFieldDefinition = {
+  key: string;
+  envKey: string;
+  labelKey: string;
+  hintKey: string;
+  defaultValue: string;
+  options: Array<{ label: string; value: string }>;
+};
+type DataSourceBuiltinManagementDefinition = {
+  credentialSchema: Exclude<DataSourceCredentialSchema, 'none'>;
+  credentialEnvKey: string;
+  pluralCredentialEnvKey?: string;
+  secretEnvKey?: string;
+  fields: DataSourceCredentialFieldDefinition[];
+  extraField?: DataSourceBuiltinExtraFieldDefinition;
+};
 type CustomDataSourceRecord = {
   id: string;
   name: string;
+  credentialSchema: Exclude<DataSourceCredentialSchema, 'none'>;
   credential: string;
+  secret: string;
   baseUrl: string;
   description: string;
   capabilities: DataSourceCapability[];
   validation?: CustomDataSourceValidation;
 };
-type DataSourceEditorMode = 'create' | 'edit' | 'view';
+type DataSourceEditorMode = 'create' | 'edit' | 'view' | 'manage_builtin';
 type DataSourceLibraryEntry = {
   key: string;
   label: string;
@@ -84,6 +109,8 @@ type DataSourceLibraryEntry = {
   description: string;
   credentialRequired: boolean;
   credentialValue: string;
+  credentialSchema: DataSourceCredentialSchema;
+  management?: DataSourceBuiltinManagementDefinition;
   customRecord?: CustomDataSourceRecord;
 };
 
@@ -118,12 +145,12 @@ type RoutingDraftState = {
   };
 };
 
-const DOMAIN_ORDER: SettingsDomain[] = ['ai_models', 'data_sources', 'notifications', 'advanced'];
+const DOMAIN_ORDER: SettingsDomain[] = ['ai_models', 'data_sources', 'advanced'];
 
 const CATEGORY_TO_DOMAIN: Partial<Record<SystemConfigCategory, SettingsDomain>> = {
   ai_model: 'ai_models',
   data_source: 'data_sources',
-  notification: 'notifications',
+  notification: 'advanced',
   system: 'advanced',
   agent: 'advanced',
   backtest: 'advanced',
@@ -149,6 +176,8 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
   credentialPatterns: RegExp[];
   builtin?: boolean;
   requireCredential?: boolean;
+  credentialSchema?: DataSourceCredentialSchema;
+  management?: DataSourceBuiltinManagementDefinition;
 }> = [
   {
     key: 'alpha_vantage',
@@ -200,6 +229,62 @@ const DATA_SOURCE_LIBRARY_ITEMS: Array<{
     requireCredential: true,
   },
   {
+    key: 'alpaca',
+    routeKeys: ['market'],
+    capabilityKeys: ['market'],
+    credentialPatterns: [/^ALPACA_API_KEY_ID$/i, /^ALPACA_API_SECRET_KEY$/i],
+    requireCredential: true,
+    credentialSchema: 'key_secret',
+    management: {
+      credentialSchema: 'key_secret',
+      credentialEnvKey: 'ALPACA_API_KEY_ID',
+      secretEnvKey: 'ALPACA_API_SECRET_KEY',
+      fields: [
+        {
+          name: 'credential',
+          labelKey: 'settings.dataSourceFieldAlpacaKeyId',
+          hintKey: 'settings.dataSourceFieldAlpacaKeyIdHint',
+        },
+        {
+          name: 'secret',
+          labelKey: 'settings.dataSourceFieldSecretKey',
+          hintKey: 'settings.dataSourceFieldAlpacaSecretHint',
+        },
+      ],
+      extraField: {
+        key: 'feed',
+        envKey: 'ALPACA_DATA_FEED',
+        labelKey: 'settings.dataSourceFieldAlpacaFeed',
+        hintKey: 'settings.dataSourceFieldAlpacaFeedHint',
+        defaultValue: 'iex',
+        options: [
+          { label: 'IEX', value: 'iex' },
+          { label: 'SIP', value: 'sip' },
+        ],
+      },
+    },
+  },
+  {
+    key: 'twelve_data',
+    routeKeys: ['market'],
+    capabilityKeys: ['market'],
+    credentialPatterns: [/^TWELVE_DATA_API_KEY$/i, /^TWELVE_DATA_API_KEYS$/i, /^TWELVEDATA_API_KEY$/i, /^TWELVEDATA_API_KEYS$/i],
+    requireCredential: true,
+    credentialSchema: 'single_key',
+    management: {
+      credentialSchema: 'single_key',
+      credentialEnvKey: 'TWELVE_DATA_API_KEY',
+      pluralCredentialEnvKey: 'TWELVE_DATA_API_KEYS',
+      fields: [
+        {
+          name: 'credential',
+          labelKey: 'settings.dataSourceFieldApiKey',
+          hintKey: 'settings.dataSourceFieldTwelveDataKeyHint',
+        },
+      ],
+    },
+  },
+  {
     key: 'local_inference',
     routeKeys: ['sentiment'],
     capabilityKeys: ['sentiment', 'local'],
@@ -216,6 +301,22 @@ const DATA_SOURCE_CAPABILITY_LABEL_KEYS: Record<DataSourceCapability, string> = 
   local: 'settings.dataSourceCapability.local',
 };
 const DATA_SOURCE_CAPABILITY_OPTIONS: DataSourceCapability[] = ['market', 'fundamentals', 'news', 'sentiment', 'local'];
+const DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS: Array<{
+  value: Exclude<DataSourceCredentialSchema, 'none'>;
+  labelKey: string;
+  descriptionKey: string;
+}> = [
+  {
+    value: 'single_key',
+    labelKey: 'settings.dataSourceSchemaSingleKey',
+    descriptionKey: 'settings.dataSourceSchemaSingleKeyDesc',
+  },
+  {
+    value: 'key_secret',
+    labelKey: 'settings.dataSourceSchemaKeySecret',
+    descriptionKey: 'settings.dataSourceSchemaKeySecretDesc',
+  },
+];
 
 const DATA_SOURCE_ROUTING_CAPABILITY_MAP: Record<DataSourceCapability, DataRouteKey | null> = {
   market: 'market',
@@ -302,6 +403,11 @@ const parseDataSourceCapabilities = (value: unknown): DataSourceCapability[] => 
   return result;
 };
 
+const normalizeDataSourceCredentialSchema = (value: unknown): Exclude<DataSourceCredentialSchema, 'none'> => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'key_secret' ? 'key_secret' : 'single_key';
+};
+
 const normalizeDataSourceValidationState = (value: unknown): CustomDataSourceValidation | undefined => {
   if (!value || typeof value !== 'object') {
     return undefined;
@@ -341,7 +447,9 @@ const parseCustomDataSourceLibrary = (rawValue: string): CustomDataSourceRecord[
       return [{
         id,
         name,
+        credentialSchema: normalizeDataSourceCredentialSchema(source.credentialSchema || source.credential_schema),
         credential: String(source.credential || '').trim(),
+        secret: String(source.secret || source.secretKey || source.secret_key || '').trim(),
         baseUrl: String(source.baseUrl || source.base_url || '').trim(),
         description: String(source.description || '').trim(),
         capabilities: parseDataSourceCapabilities(source.capabilities),
@@ -356,7 +464,9 @@ const parseCustomDataSourceLibrary = (rawValue: string): CustomDataSourceRecord[
 const serializeCustomDataSourceLibrary = (items: CustomDataSourceRecord[]): string => JSON.stringify(items.map((item) => ({
   id: item.id,
   name: item.name,
+  credentialSchema: item.credentialSchema,
   credential: item.credential,
+  secret: item.secret,
   baseUrl: item.baseUrl,
   description: item.description,
   capabilities: item.capabilities,
@@ -366,19 +476,24 @@ const serializeCustomDataSourceLibrary = (items: CustomDataSourceRecord[]): stri
 const createEmptyCustomDataSource = (): CustomDataSourceRecord => ({
   id: '',
   name: '',
+  credentialSchema: 'single_key',
   credential: '',
+  secret: '',
   baseUrl: '',
   description: '',
   capabilities: [],
   validation: { status: 'pending' },
 });
 
-const validateCustomDataSource = (record: CustomDataSourceRecord): { valid: boolean; issue?: 'name' | 'credential' | 'capabilities' | 'baseUrl' } => {
+const validateCustomDataSource = (record: CustomDataSourceRecord): { valid: boolean; issue?: 'name' | 'credential' | 'secret' | 'capabilities' | 'baseUrl' } => {
   if (!record.name.trim()) {
     return { valid: false, issue: 'name' };
   }
   if (!record.credential.trim()) {
     return { valid: false, issue: 'credential' };
+  }
+  if (record.credentialSchema === 'key_secret' && !record.secret.trim()) {
+    return { valid: false, issue: 'secret' };
   }
   if (!record.capabilities.length) {
     return { valid: false, issue: 'capabilities' };
@@ -549,15 +664,8 @@ const MARKET_COLOR_OPTIONS: Array<{
 const SettingsPage: React.FC = () => {
   const isDesktopViewport = useIsDesktopViewport();
   const { language, setLanguage, t } = useI18n();
-  const { passwordChangeable, setupState } = useAuth();
+  const { passwordChangeable } = useAuth();
   const { marketColorConvention, setMarketColorConvention } = useUiPreferences();
-
-  const [adminPassword, setAdminPassword] = useState('');
-  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
-  const [isUnlocking, setIsUnlocking] = useState(false);
-  const [adminUnlockError, setAdminUnlockError] = useState<string | null>(null);
-
-  const requiresInitialPasswordConfirm = setupState === 'no_password';
 
   const {
     categories,
@@ -581,24 +689,8 @@ const SettingsPage: React.FC = () => {
     resetDraft,
     setDraftValue,
     adminUnlockToken,
-    adminUnlockExpiresAt,
-    isAdminUnlocked,
-    setAdminUnlockSession,
-    clearAdminUnlockSession,
   } = useSystemConfig();
   const [activeDomain, setActiveDomain] = useState<SettingsDomain>('advanced');
-
-  const clearAdminUnlockState = useCallback(() => {
-    setAdminPassword('');
-    setAdminPasswordConfirm('');
-    clearAdminUnlockSession();
-  }, [clearAdminUnlockSession]);
-
-  const relockAdminSettings = useCallback(() => {
-    clearAdminUnlockState();
-    setAdminUnlockError(null);
-    resetDraft();
-  }, [clearAdminUnlockState, resetDraft]);
 
   useEffect(() => {
     document.title = t('settings.documentTitle');
@@ -621,15 +713,6 @@ const SettingsPage: React.FC = () => {
       window.clearTimeout(timer);
     };
   }, [clearToast, toast]);
-
-  useEffect(() => {
-    if (saveError?.status !== 403) {
-      return;
-    }
-
-    clearAdminUnlockState();
-    setAdminUnlockError(t('settings.adminUnlockExpired'));
-  }, [clearAdminUnlockState, saveError?.status, t]);
 
   const rawActiveItems = itemsByCategory[activeCategory] || [];
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
@@ -769,11 +852,6 @@ const SettingsPage: React.FC = () => {
       domain: 'data_sources' as const,
       title: t('settings.domainDataTitle'),
       desc: t('settings.domainDataDesc'),
-    },
-    {
-      domain: 'notifications' as const,
-      title: t('settings.domainNotificationTitle'),
-      desc: t('settings.domainNotificationDesc'),
     },
     {
       domain: 'advanced' as const,
@@ -1044,10 +1122,10 @@ const SettingsPage: React.FC = () => {
 
     const builtInEntries = DATA_SOURCE_LIBRARY_ITEMS.map((source) => {
       const credentialValue = hasCredential(source.credentialPatterns) ? 'configured' : '';
-      const configured = source.builtin ? true : Boolean(credentialValue);
+      const configured = source.requireCredential ? Boolean(credentialValue) : true;
       const runtimeValidation = dataSourceValidationStatus[source.key];
       const validationState = runtimeValidation || (
-      source.builtin
+      source.builtin && !source.requireCredential
         ? 'builtin'
         : configured
           ? 'configured_pending'
@@ -1055,7 +1133,7 @@ const SettingsPage: React.FC = () => {
       );
       const capabilityLabels = source.capabilityKeys.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
       const routeUsage = source.routeKeys.filter((routeKey) => dataSummary[routeKey].includes(source.key));
-      const usable = source.builtin
+      const usable = source.builtin && !source.requireCredential
         ? true
         : configured && validationState !== 'failed';
       return {
@@ -1079,9 +1157,13 @@ const SettingsPage: React.FC = () => {
         routeUsage,
         capabilityKeys: source.capabilityKeys,
         capabilityLabels,
-        description: t('settings.dataSourceBuiltinDesc'),
+        description: source.management
+          ? t('settings.dataSourceCredentialDesc')
+          : t('settings.dataSourceBuiltinDesc'),
         credentialRequired: Boolean(source.requireCredential),
         credentialValue,
+        credentialSchema: source.credentialSchema || 'none',
+        management: source.management,
       } satisfies DataSourceLibraryEntry;
     });
 
@@ -1089,7 +1171,12 @@ const SettingsPage: React.FC = () => {
       const normalizedValidation = record.validation?.status || 'pending';
       const localValidation = dataSourceValidationStatus[record.id];
       const validationState = localValidation || normalizedValidation;
-      const configured = Boolean(record.name.trim() && record.credential.trim() && record.capabilities.length);
+      const configured = Boolean(
+        record.name.trim()
+        && record.credential.trim()
+        && (record.credentialSchema !== 'key_secret' || record.secret.trim())
+        && record.capabilities.length,
+      );
       const capabilityLabels = record.capabilities.map((capability) => t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability]));
       const routeUsage = record.capabilities
         .map((capability) => DATA_SOURCE_ROUTING_CAPABILITY_MAP[capability])
@@ -1122,6 +1209,7 @@ const SettingsPage: React.FC = () => {
         description: record.description || t('settings.dataSourceCustomDesc'),
         credentialRequired: true,
         credentialValue: record.credential,
+        credentialSchema: record.credentialSchema,
         customRecord: record,
       } satisfies DataSourceLibraryEntry;
     });
@@ -1213,6 +1301,22 @@ const SettingsPage: React.FC = () => {
   const [dataSourceLibraryDrawerOpen, setDataSourceLibraryDrawerOpen] = useState(false);
   const [dataSourceEditorId, setDataSourceEditorId] = useState<string | null>(null);
   const [dataSourceEditorDraft, setDataSourceEditorDraft] = useState<CustomDataSourceRecord>(createEmptyCustomDataSource());
+  const [managedBuiltinDataSourceDraft, setManagedBuiltinDataSourceDraft] = useState({
+    credential: '',
+    secret: '',
+    extraValue: '',
+  });
+  const [adminActionDialog, setAdminActionDialog] = useState<'runtime_cache' | 'factory_reset' | null>(null);
+  const [adminActionMessage, setAdminActionMessage] = useState<string | null>(null);
+  const [adminActionTone, setAdminActionTone] = useState<'success' | 'error'>('success');
+  const [isRunningAdminAction, setIsRunningAdminAction] = useState(false);
+  const [factoryResetConfirmation, setFactoryResetConfirmation] = useState('');
+  const dataSourceEditorEntry = useMemo(
+    () => (dataSourceEditorId && dataSourceEditorId !== 'new'
+      ? dataSourceLibraryMap.get(dataSourceEditorId) || null
+      : null),
+    [dataSourceEditorId, dataSourceLibraryMap],
+  );
 
   useEffect(() => {
     const primaryChannel = aiSummary.primaryChannel || '';
@@ -1281,70 +1385,12 @@ const SettingsPage: React.FC = () => {
     setShowRuntimeExecutionSummary(isEnabledValue(allItemMap.get(runtimeSummaryVisibilityKey)));
   }, [allItemMap, runtimeSummaryVisibilityKey]);
 
-  const adminLocked = !isAdminUnlocked;
-  const adminSaveDisabled = adminLocked || !hasDirty || isSaving || isLoading;
-
-  const adminUnlockExpiresText = useMemo(() => {
-    if (!adminUnlockExpiresAt) {
-      return null;
-    }
-    try {
-      return new Date(adminUnlockExpiresAt).toLocaleTimeString(language === 'zh' ? 'zh-CN' : 'en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-    } catch {
-      return null;
-    }
-  }, [adminUnlockExpiresAt, language]);
-
-  const handleUnlockSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAdminUnlockError(null);
-
-    if (!adminPassword.trim()) {
-      setAdminUnlockError(t('settings.adminPasswordRequired'));
-      return;
-    }
-
-    if (requiresInitialPasswordConfirm && adminPassword.trim() !== adminPasswordConfirm.trim()) {
-      setAdminUnlockError(t('settings.adminPasswordConfirmMismatch'));
-      return;
-    }
-
-    setIsUnlocking(true);
-    try {
-      const payload = await authApi.verifyAdminPassword(
-        adminPassword.trim(),
-        requiresInitialPasswordConfirm ? adminPasswordConfirm.trim() : undefined,
-      );
-
-      const expiresAt = Date.now() + Math.max(60, payload.expiresInSeconds) * 1000;
-      setAdminUnlockSession(payload.unlockToken, expiresAt);
-      setAdminPassword('');
-      setAdminPasswordConfirm('');
-    } catch (error: unknown) {
-      const parsed = getParsedApiError(error);
-      setAdminUnlockError(parsed.message || t('settings.adminUnlockErrorGeneric'));
-    } finally {
-      setIsUnlocking(false);
-    }
-  }, [
-    adminPassword,
-    adminPasswordConfirm,
-    requiresInitialPasswordConfirm,
-    setAdminUnlockSession,
-    t,
-  ]);
+  const adminLocked = false;
+  const adminSaveDisabled = !hasDirty || isSaving || isLoading;
 
   const handleSave = useCallback(() => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     void save();
-  }, [adminLocked, save, t]);
+  }, [save]);
 
   const priorityLabel = useCallback((index: number): string => {
     if (index === 0) return t('settings.sourcePrimary');
@@ -1853,10 +1899,6 @@ const SettingsPage: React.FC = () => {
     }));
   }, []);
   const saveTaskRoute = useCallback(async (task: OverrideTaskKey) => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     const draft = taskRoutingDraft[task];
     if (draft.inherit) {
       const key = task === 'stock_chat' ? 'AGENT_LITELLM_MODEL' : 'BACKTEST_LITELLM_MODEL';
@@ -1881,13 +1923,9 @@ const SettingsPage: React.FC = () => {
       route: formatRouteLine(gateway, model),
     }));
     setTaskRoutingError((prev) => ({ ...prev, [task]: null }));
-  }, [adminLocked, formatRouteLine, saveExternalItems, t, taskRoutingDraft]);
+  }, [formatRouteLine, saveExternalItems, t, taskRoutingDraft]);
 
   const saveAiRouting = useCallback(async () => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     setAiRoutingError(null);
     const primaryGateway = routingDraft.ai.primaryChannel.trim();
     const backupGateway = routingDraft.ai.backupChannel.trim();
@@ -1935,37 +1973,19 @@ const SettingsPage: React.FC = () => {
       const parsed = getParsedApiError(error);
       setAiRoutingError(parsed.message || t('settings.aiRouteSaveFailed'));
     }
-  }, [adminLocked, aiRoutingScope, aiRoutingKeys.backupGateway, aiRoutingKeys.backupModel, aiRoutingKeys.primaryGateway, aiRoutingKeys.primaryModel, allItemMap, backupRouteCompatibilityIssue, effectiveRoute, formatRouteLine, routingDraft.ai.backupChannel, routingDraft.ai.backupModel, routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel, saveExternalItems, t]);
+  }, [aiRoutingScope, aiRoutingKeys.backupGateway, aiRoutingKeys.backupModel, aiRoutingKeys.primaryGateway, aiRoutingKeys.primaryModel, allItemMap, backupRouteCompatibilityIssue, effectiveRoute, formatRouteLine, routingDraft.ai.backupChannel, routingDraft.ai.backupModel, routingDraft.ai.primaryChannel, routingDraft.ai.primaryModel, saveExternalItems, t]);
 
   const saveDataRouting = useCallback(async (
     key: string,
     values: Array<string | undefined | null>,
   ) => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     await saveExternalItems([{ key, value: effectiveRoute(values).join(',') }], t('settings.routeSaved'));
-  }, [adminLocked, effectiveRoute, saveExternalItems, t]);
-
-  const saveNotificationRouting = useCallback(async () => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
-    await saveExternalItems([
-      { key: dataPriorityKeys.notification, value: effectiveRoute([routingDraft.notification.primary, routingDraft.notification.backup]).join(',') },
-    ], t('settings.routeSaved'));
-  }, [adminLocked, dataPriorityKeys.notification, effectiveRoute, routingDraft.notification.backup, routingDraft.notification.primary, saveExternalItems, t]);
+  }, [effectiveRoute, saveExternalItems, t]);
   const saveRuntimeSummaryVisibility = useCallback(async () => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     await saveExternalItems([
       { key: runtimeSummaryVisibilityKey, value: showRuntimeExecutionSummary ? 'true' : 'false' },
     ], t('settings.routeSaved'));
-  }, [adminLocked, runtimeSummaryVisibilityKey, saveExternalItems, showRuntimeExecutionSummary, t]);
+  }, [runtimeSummaryVisibilityKey, saveExternalItems, showRuntimeExecutionSummary, t]);
   const directProviderKeyValues = useMemo(() => ({
     aihubmix: allItemMap.get('AIHUBMIX_KEY') || '',
     gemini: allItemMap.get('GEMINI_API_KEY') || '',
@@ -2173,10 +2193,6 @@ const SettingsPage: React.FC = () => {
     t,
   ]);
   const saveDirectProviderKeys = useCallback(async () => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
-      return;
-    }
     await saveExternalItems([
       { key: 'AIHUBMIX_KEY', value: directProviderDraft.aihubmix.trim() },
       { key: 'GEMINI_API_KEY', value: directProviderDraft.gemini.trim() },
@@ -2185,7 +2201,7 @@ const SettingsPage: React.FC = () => {
       { key: 'DEEPSEEK_API_KEY', value: directProviderDraft.deepseek.trim() },
       { key: 'ZHIPU_API_KEY', value: directProviderDraft.zhipu.trim() },
     ], t('settings.aiDirectProviderSaved'));
-  }, [adminLocked, directProviderDraft.aihubmix, directProviderDraft.anthropic, directProviderDraft.deepseek, directProviderDraft.gemini, directProviderDraft.openai, directProviderDraft.zhipu, saveExternalItems, t]);
+  }, [directProviderDraft.aihubmix, directProviderDraft.anthropic, directProviderDraft.deepseek, directProviderDraft.gemini, directProviderDraft.openai, directProviderDraft.zhipu, saveExternalItems, t]);
   const jumpToAiChannelConfig = useCallback(() => {
     setActiveDomain('ai_models');
     setActiveCategory('ai_model');
@@ -2289,16 +2305,63 @@ const SettingsPage: React.FC = () => {
     setDataSourceEditorId(null);
   }, []);
   const saveDataSourceEditor = useCallback(async () => {
-    if (adminLocked) {
-      setAdminUnlockError(t('settings.adminSaveLocked'));
+    if (dataSourceEditorEntry?.management) {
+      const { management } = dataSourceEditorEntry;
+      const missingCredential = !managedBuiltinDataSourceDraft.credential.trim();
+      const missingSecret = management.credentialSchema === 'key_secret' && !managedBuiltinDataSourceDraft.secret.trim();
+      const message = missingCredential
+        ? t('settings.dataSourceValidationMissingCredential')
+        : missingSecret
+          ? t('settings.dataSourceValidationMissingSecret')
+          : '';
+      if (message) {
+        setDataSourceValidationStatus((prev) => ({
+          ...prev,
+          [dataSourceEditorEntry.key]: 'failed',
+        }));
+        return;
+      }
+
+      const credentialValue = managedBuiltinDataSourceDraft.credential.trim();
+      const saveToPlural = Boolean(management.pluralCredentialEnvKey && credentialValue.includes(','));
+      const updatedItems = [
+        { key: management.credentialEnvKey, value: saveToPlural ? '' : credentialValue },
+      ];
+      if (management.pluralCredentialEnvKey) {
+        updatedItems.push({
+          key: management.pluralCredentialEnvKey,
+          value: saveToPlural ? credentialValue : '',
+        });
+      }
+      if (management.secretEnvKey) {
+        updatedItems.push({
+          key: management.secretEnvKey,
+          value: managedBuiltinDataSourceDraft.secret.trim(),
+        });
+      }
+      if (management.extraField) {
+        updatedItems.push({
+          key: management.extraField.envKey,
+          value: managedBuiltinDataSourceDraft.extraValue.trim() || management.extraField.defaultValue,
+        });
+      }
+
+      setDataSourceValidationStatus((prev) => ({
+        ...prev,
+        [dataSourceEditorEntry.key]: 'configured_pending',
+      }));
+      await saveExternalItems(updatedItems, t('settings.dataSourceSaved'));
       return;
     }
+
     const validation = validateCustomDataSource(dataSourceEditorDraft);
     if (!validation.valid) {
       const message = validation.issue === 'name'
         ? t('settings.dataSourceValidationMissingName')
         : validation.issue === 'credential'
           ? t('settings.dataSourceValidationMissingCredential')
+          : validation.issue === 'secret'
+            ? t('settings.dataSourceValidationMissingSecret')
           : validation.issue === 'capabilities'
             ? t('settings.dataSourceValidationMissingCapabilities')
             : t('settings.dataSourceValidationInvalidBaseUrl');
@@ -2324,7 +2387,9 @@ const SettingsPage: React.FC = () => {
     const nextRecord: CustomDataSourceRecord = {
       id: finalId,
       name: dataSourceEditorDraft.name.trim(),
+      credentialSchema: dataSourceEditorDraft.credentialSchema,
       credential: dataSourceEditorDraft.credential.trim(),
+      secret: dataSourceEditorDraft.secret.trim(),
       baseUrl: dataSourceEditorDraft.baseUrl.trim(),
       description: dataSourceEditorDraft.description.trim(),
       capabilities: uniqueValues(dataSourceEditorDraft.capabilities).map((capability) => capability as DataSourceCapability),
@@ -2347,7 +2412,7 @@ const SettingsPage: React.FC = () => {
     await saveExternalItems([
       { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
     ], t('settings.dataSourceSaved'));
-  }, [adminLocked, customDataSourceLibraryDraft, dataSourceEditorDraft, dataSourceEditorId, dataSourceLibrary, saveExternalItems, t]);
+  }, [customDataSourceLibraryDraft, dataSourceEditorDraft, dataSourceEditorEntry, dataSourceEditorId, dataSourceLibrary, managedBuiltinDataSourceDraft, saveExternalItems, t]);
   const validateDataSourceEntry = useCallback(async (sourceId: string) => {
     const source = dataSourceLibraryMap.get(sourceId);
     if (!source) {
@@ -2362,6 +2427,8 @@ const SettingsPage: React.FC = () => {
           ? t('settings.dataSourceValidationMissingName')
           : validation.issue === 'credential'
             ? t('settings.dataSourceValidationMissingCredential')
+            : validation.issue === 'secret'
+              ? t('settings.dataSourceValidationMissingSecret')
             : validation.issue === 'capabilities'
               ? t('settings.dataSourceValidationMissingCapabilities')
               : t('settings.dataSourceValidationInvalidBaseUrl');
@@ -2383,11 +2450,59 @@ const SettingsPage: React.FC = () => {
       return;
     }
 
+    if (source.management) {
+      const sourceState = source.management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
+        ? String(allItemMap.get(source.management.pluralCredentialEnvKey) || '')
+        : String(allItemMap.get(source.management.credentialEnvKey) || '');
+      const hasCredential = Boolean(sourceState.trim());
+      const hasSecret = source.management.secretEnvKey
+        ? Boolean(String(allItemMap.get(source.management.secretEnvKey) || '').trim())
+        : true;
+      const nextStatus: DataSourceValidationState = hasCredential && hasSecret ? 'validated' : 'failed';
+      setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
+      return;
+    }
+
     const nextStatus: DataSourceValidationState = source.usable
       ? (source.builtin ? 'builtin' : 'validated')
       : 'failed';
     setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: nextStatus }));
-  }, [customDataSourceLibraryDraft, dataSourceLibraryMap, saveExternalItems, t]);
+  }, [allItemMap, customDataSourceLibraryDraft, dataSourceLibraryMap, saveExternalItems, t]);
+  const runResetRuntimeCaches = useCallback(async () => {
+    setIsRunningAdminAction(true);
+    setAdminActionMessage(null);
+    try {
+      const payload = await systemConfigApi.resetRuntimeCaches();
+      setAdminActionTone('success');
+      setAdminActionMessage(payload.message || t('settings.adminActionResetRuntimeCachesSuccess'));
+      setAdminActionDialog(null);
+    } catch (error: unknown) {
+      const parsed = getParsedApiError(error);
+      setAdminActionTone('error');
+      setAdminActionMessage(parsed.message || t('settings.adminActionResetRuntimeCachesFailed'));
+    } finally {
+      setIsRunningAdminAction(false);
+    }
+  }, [t]);
+  const runFactoryResetSystem = useCallback(async () => {
+    setIsRunningAdminAction(true);
+    setAdminActionMessage(null);
+    try {
+      const payload = await systemConfigApi.factoryResetSystem({
+        confirmationPhrase: factoryResetConfirmation,
+      });
+      setAdminActionTone('success');
+      setAdminActionMessage(payload.message || t('settings.adminActionFactoryResetSuccess'));
+      setFactoryResetConfirmation('');
+      setAdminActionDialog(null);
+    } catch (error: unknown) {
+      const parsed = getParsedApiError(error);
+      setAdminActionTone('error');
+      setAdminActionMessage(parsed.message || t('settings.adminActionFactoryResetFailed'));
+    } finally {
+      setIsRunningAdminAction(false);
+    }
+  }, [factoryResetConfirmation, t]);
   const providerReadinessByGateway = useMemo(
     () => new Map(aiGatewayReadiness.map((provider) => [provider.gateway, provider])),
     [aiGatewayReadiness],
@@ -2396,16 +2511,32 @@ const SettingsPage: React.FC = () => {
     () => PROVIDER_LIBRARY_ITEMS.find((provider) => provider.key === quickProviderDrawerProvider) || null,
     [quickProviderDrawerProvider],
   );
-  const dataSourceEditorEntry = useMemo(
-    () => (dataSourceEditorId && dataSourceEditorId !== 'new'
-      ? dataSourceLibraryMap.get(dataSourceEditorId) || null
-      : null),
-    [dataSourceEditorId, dataSourceLibraryMap],
-  );
+  const managedBuiltinSourceState = useMemo(() => {
+    if (!dataSourceEditorEntry?.management) {
+      return null;
+    }
+    const { management } = dataSourceEditorEntry;
+    const credentialValue = management.pluralCredentialEnvKey && hasConfigValue(allItemMap.get(management.pluralCredentialEnvKey) || '')
+      ? String(allItemMap.get(management.pluralCredentialEnvKey) || '')
+      : String(allItemMap.get(management.credentialEnvKey) || '');
+    const secretValue = management.secretEnvKey
+      ? String(allItemMap.get(management.secretEnvKey) || '')
+      : '';
+    const extraValue = management.extraField
+      ? String(allItemMap.get(management.extraField.envKey) || management.extraField.defaultValue || '')
+      : '';
+    return {
+      credential: credentialValue,
+      secret: secretValue,
+      extraValue,
+    };
+  }, [allItemMap, dataSourceEditorEntry]);
   const dataSourceEditorMode: DataSourceEditorMode = dataSourceEditorId === 'new'
     ? 'create'
-    : dataSourceEditorEntry?.builtin
+    : dataSourceEditorEntry?.builtin && !dataSourceEditorEntry.management
       ? 'view'
+      : dataSourceEditorEntry?.builtin
+        ? 'manage_builtin'
       : 'edit';
 
   useEffect(() => {
@@ -2420,10 +2551,14 @@ const SettingsPage: React.FC = () => {
       setDataSourceEditorDraft(dataSourceEditorEntry.customRecord);
       return;
     }
+    if (managedBuiltinSourceState) {
+      setManagedBuiltinDataSourceDraft(managedBuiltinSourceState);
+      return;
+    }
     if (dataSourceEditorEntry?.builtin) {
       setDataSourceEditorDraft(createEmptyCustomDataSource());
     }
-  }, [dataSourceEditorEntry, dataSourceEditorId, dataSourceLibraryDrawerOpen]);
+  }, [dataSourceEditorEntry, dataSourceEditorId, dataSourceLibraryDrawerOpen, managedBuiltinSourceState]);
 
   const primarySummaryModel = aiSummary.primaryChannel ? aiSummary.primaryModel : '';
   const backupSummaryModel = aiSummary.backupChannel ? aiSummary.backupModel : '';
@@ -2463,6 +2598,24 @@ const SettingsPage: React.FC = () => {
     if (!model) return t('settings.aiRouteProviderDefaultUnavailable');
     return t('settings.aiRouteProviderDefaultHint', { model });
   }, [t]);
+  const globalAdminStats = useMemo(() => ([
+    {
+      key: 'providers',
+      label: t('settings.controlPlaneStatProviders'),
+      value: String(aiSummary.configuredProviders.length),
+      detail: aiSummary.configuredProviders.length
+        ? aiSummary.configuredProviders.map(([name]) => providerLabel(name)).join(' · ')
+        : t('settings.notConfigured'),
+    },
+    {
+      key: 'data',
+      label: t('settings.controlPlaneStatDataSources'),
+      value: String(dataSourceLibrary.filter((source) => source.usable).length),
+      detail: dataSourceLibrary.filter((source) => source.usable).length
+        ? dataSourceLibrary.filter((source) => source.usable).map((source) => source.label).slice(0, 4).join(' · ')
+        : t('settings.dataSourceNoUsableSources'),
+    },
+  ]), [aiSummary.configuredProviders, dataSourceLibrary, t]);
   return (
     <div className="workspace-page workspace-page--settings">
       <WorkspacePageHeader
@@ -2472,9 +2625,6 @@ const SettingsPage: React.FC = () => {
         description={t('settings.subtitle')}
         actions={(
           <>
-            <p className="workspace-header-actions-note">
-              {adminLocked ? t('settings.adminSaveLocked') : t('settings.adminSaveReady')}
-            </p>
             <Button
               type="button"
               variant="settings-secondary"
@@ -2499,20 +2649,132 @@ const SettingsPage: React.FC = () => {
       />
 
       <SettingsSectionCard
+        title={t('settings.controlPlaneTitle')}
+        description={t('settings.controlPlaneDesc')}
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
+          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-positive-hsl))]">
+                  {t('settings.adminSurfaceActiveLabel')}
+                </p>
+                <p className="mt-1 text-base font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
+              </div>
+              <span className="rounded-full border border-[hsl(var(--accent-positive-hsl)/0.36)] bg-[hsl(var(--accent-positive-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-positive-hsl))]">
+                {t('settings.adminSurfaceGlobalScope')}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {globalAdminStats.map((item) => (
+                <div key={item.key} className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/35 px-3 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.12em] text-muted-text">{item.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
+                  <p className="mt-2 text-xs leading-5 text-secondary-text">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
+              <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="settings-secondary"
+                  onClick={() => window.location.assign('/admin/logs')}
+                >
+                  {t('settings.viewAdminLogs')}
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-warning-hsl)/0.28)] bg-[hsl(var(--accent-warning-hsl)/0.08)] px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
+                    {t('settings.adminActionsTitle')}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminActionsDesc')}</p>
+                  <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.adminActionsSafetyDesc')}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-[var(--theme-panel-radius-md)] border border-border/40 bg-base/30 px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{t('settings.adminMaintenanceTitle')}</p>
+                      <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminMaintenanceDesc')}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="settings-secondary"
+                      onClick={() => setAdminActionDialog('runtime_cache')}
+                      disabled={isRunningAdminAction}
+                    >
+                      {isRunningAdminAction && adminActionDialog === 'runtime_cache'
+                        ? t('settings.saving')
+                        : t('settings.adminActionResetRuntimeCaches')}
+                    </Button>
+                  </div>
+                  <p className="mt-3 text-xs text-secondary-text">{t('settings.adminActionResetRuntimeCachesHint')}</p>
+                </div>
+                <div className="rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-danger-hsl)/0.22)] bg-[hsl(var(--accent-danger-hsl)/0.08)] px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{t('settings.adminFactoryResetTitle')}</p>
+                      <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminFactoryResetDesc')}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger-subtle"
+                      onClick={() => setAdminActionDialog('factory_reset')}
+                      disabled={isRunningAdminAction}
+                    >
+                      {isRunningAdminAction && adminActionDialog === 'factory_reset'
+                        ? t('settings.saving')
+                        : t('settings.adminActionFactoryReset')}
+                    </Button>
+                  </div>
+                  <p className="mt-3 text-xs text-[hsl(var(--accent-danger-hsl))]">{t('settings.adminActionFactoryResetHint')}</p>
+                </div>
+              </div>
+              {adminActionMessage ? (
+                <div className="mt-3">
+                  <SettingsAlert
+                    title={adminActionTone === 'success' ? t('settings.success') : t('settings.adminActionErrorTitle')}
+                    message={adminActionMessage}
+                    variant={adminActionTone === 'success' ? 'success' : 'error'}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </SettingsSectionCard>
+
+      <SettingsSectionCard
         title={t('settings.basicTitle')}
         description={t('settings.basicDesc')}
       >
         <div className="grid gap-4 xl:grid-cols-2">
-          <div className="settings-surface rounded-[1rem] border settings-border px-4 py-4">
-            <p className="text-sm font-semibold text-foreground">{t('settings.languageTitle')}</p>
+          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.languageTitle')}</p>
             <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.languageDesc')}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setLanguage('zh')}
                 className={language === 'zh'
-                  ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-sm text-foreground shadow-[var(--glow-soft)]'
-                  : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
+                  : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                 aria-pressed={language === 'zh'}
               >
                 {t('language.zh')}
@@ -2521,8 +2783,8 @@ const SettingsPage: React.FC = () => {
                 type="button"
                 onClick={() => setLanguage('en')}
                 className={language === 'en'
-                  ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-sm text-foreground shadow-[var(--glow-soft)]'
-                  : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
+                  : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                 aria-pressed={language === 'en'}
               >
                 {t('language.en')}
@@ -2530,8 +2792,8 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="settings-surface rounded-[1rem] border settings-border px-4 py-4">
-            <p className="text-sm font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
+          <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
+            <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.marketColorTitle')}</p>
             <p className="mt-1 text-xs leading-5 text-muted-text">{t('settings.marketColorDesc')}</p>
             <div className="mt-3 space-y-2">
               {MARKET_COLOR_OPTIONS.map((option) => {
@@ -2542,8 +2804,8 @@ const SettingsPage: React.FC = () => {
                     type="button"
                     onClick={() => setMarketColorConvention(option.value)}
                     className={active
-                      ? 'w-full rounded-xl border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
-                      : 'w-full rounded-xl border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-left hover:border-[var(--border-strong)]'}
+                      ? 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
+                      : 'w-full rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-left hover:border-[var(--border-strong)]'}
                     aria-pressed={active}
                   >
                     <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
@@ -2556,97 +2818,25 @@ const SettingsPage: React.FC = () => {
         </div>
 
         <FontSizeSettingsCard />
-      </SettingsSectionCard>
 
-      <SettingsSectionCard
-        title={t('settings.adminTitle')}
-        description={t('settings.adminDesc')}
-        actions={(
-          <div className="flex items-center gap-2">
-            <span className={isAdminUnlocked
-              ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.48)] bg-[hsl(var(--accent-positive-hsl)/0.18)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-positive-hsl))]'
-              : 'rounded-full border border-[hsl(var(--accent-warning-hsl)/0.48)] bg-[hsl(var(--accent-warning-hsl)/0.18)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]'}
-            >
-              {isAdminUnlocked ? t('settings.adminUnlocked') : t('settings.adminLocked')}
-            </span>
-            {isAdminUnlocked ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="settings-secondary"
-                onClick={relockAdminSettings}
-              >
-                {t('settings.adminRelock')}
-              </Button>
-            ) : null}
-          </div>
-        )}
-      >
-        <form className="space-y-3" onSubmit={handleUnlockSubmit}>
-          <Input
-            type="password"
-            allowTogglePassword
-            iconType="password"
-            label={t('settings.adminPassword')}
-            placeholder={t('settings.adminPasswordPlaceholder')}
-            value={adminPassword}
-            onChange={(event) => setAdminPassword(event.target.value)}
-            autoComplete={requiresInitialPasswordConfirm ? 'new-password' : 'current-password'}
-            disabled={isUnlocking || isAdminUnlocked}
-          />
-          {requiresInitialPasswordConfirm ? (
-            <Input
-              type="password"
-              allowTogglePassword
-              iconType="password"
-              label={t('settings.adminPasswordConfirm')}
-              placeholder={t('settings.adminPasswordConfirmPlaceholder')}
-              value={adminPasswordConfirm}
-              onChange={(event) => setAdminPasswordConfirm(event.target.value)}
-              autoComplete="new-password"
-              disabled={isUnlocking || isAdminUnlocked}
-            />
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!isAdminUnlocked ? (
-              <Button
-                type="submit"
-                variant="settings-primary"
-                disabled={isUnlocking}
-                isLoading={isUnlocking}
-                loadingText={t('settings.adminUnlocking')}
-              >
-                {t('settings.adminUnlock')}
-              </Button>
-            ) : null}
-            {isAdminUnlocked ? (
-              <p className="text-xs text-secondary-text">
-                {adminUnlockExpiresText
-                  ? t('settings.adminUnlockHint', { time: adminUnlockExpiresText })
-                  : t('settings.adminUnlockHintNoTime')}
+        <div className="mt-4 rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-positive-hsl)/0.2)] bg-[hsl(var(--accent-positive-hsl)/0.08)] px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-positive-hsl))]">
+                {t('settings.adminSurfaceActiveLabel')}
               </p>
-            ) : (
-              <p className="text-xs text-muted-text">{t('settings.adminLockedHint')}</p>
-            )}
+              <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
+              <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="settings-secondary"
+              onClick={() => window.location.assign('/admin/logs')}
+            >
+              {t('settings.viewAdminLogs')}
+            </Button>
           </div>
-
-          {adminUnlockError ? (
-            <SettingsAlert
-              title={t('settings.adminUnlockErrorTitle')}
-              message={adminUnlockError}
-              variant="error"
-            />
-          ) : null}
-        </form>
-        <div className="mt-3 flex justify-end">
-          <button
-            type="button"
-            onClick={() => window.location.assign('/admin/logs')}
-            className="inline-flex items-center rounded-md border border-border/60 bg-muted/30 px-3 py-1.5 text-xs font-medium text-secondary-text transition-colors hover:text-foreground"
-          >
-            {t('settings.viewAdminLogs')}
-          </button>
         </div>
       </SettingsSectionCard>
 
@@ -2667,7 +2857,7 @@ const SettingsPage: React.FC = () => {
             title={t('settings.domainTitle')}
             description={t('settings.domainDesc')}
           >
-            <div className="grid gap-3 xl:grid-cols-4">
+            <div className="grid gap-2 grid-cols-2 xl:grid-cols-4">
               {DOMAIN_ORDER.map((domain) => {
                 const nav = domainNavItems.find((item) => item.domain === domain);
                 if (!nav) {
@@ -2680,8 +2870,8 @@ const SettingsPage: React.FC = () => {
                     key={domain}
                     type="button"
                     className={isActive
-                      ? 'rounded-[1rem] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-3 text-left shadow-[var(--glow-soft)]'
-                      : 'rounded-[1rem] border settings-border settings-surface px-3 py-3 text-left hover:settings-surface-hover'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2.5 text-left transition-colors'
+                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--surface-1)] px-3 py-2.5 text-left transition-colors hover:border-[var(--border-default)] hover:bg-[var(--overlay-hover)]'}
                     onClick={() => {
                       setActiveDomain(domain);
                       const firstCategory = categories.find(
@@ -2692,9 +2882,11 @@ const SettingsPage: React.FC = () => {
                       }
                     }}
                   >
-                    <p className="text-sm font-semibold text-foreground">{nav.title}</p>
-                    <p className="mt-1 text-xs leading-5 text-secondary-text">{nav.desc}</p>
-                    <p className="mt-2 text-[11px] uppercase tracking-[0.1em] text-muted-text">{count}</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{nav.title}</p>
+                      <p className="text-[10px] font-mono text-muted-text">{count}</p>
+                    </div>
+                    <p className="text-xs text-secondary-text truncate">{nav.desc}</p>
                   </button>
                 );
               })}
@@ -2707,7 +2899,7 @@ const SettingsPage: React.FC = () => {
               description={t('settings.aiEffectiveDesc')}
             >
               <div className="space-y-3">
-                <div className="settings-surface rounded-xl border settings-border px-4 py-4">
+                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyTaskTitle')}</p>
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -2832,7 +3024,7 @@ const SettingsPage: React.FC = () => {
                   ) : null}
                 </div>
 
-                <div className="settings-surface rounded-xl border settings-border px-4 py-4">
+                <div className="settings-surface rounded-xl border settings-border px-4 py-4" data-testid="ai-provider-quick-section">
                   <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">{t('settings.aiHierarchyProviderTitle')}</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.aiDirectProviderTitle')}</p>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -2845,7 +3037,11 @@ const SettingsPage: React.FC = () => {
                       const suggestedTestModel = resolveQuickProviderTestModel(provider.key);
                       const advancedChannelCount = (advancedChannelsByProvider[provider.key] || []).length;
                       return (
-                        <div key={provider.key} className="rounded-xl border border-border/50 bg-base/40 px-3 py-3">
+                        <div
+                          key={provider.key}
+                          className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/40 px-3 py-3"
+                          data-testid={`ai-provider-card-${provider.key}`}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-foreground">{provider.label}</p>
                             <span className={isReady
@@ -2913,7 +3109,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div ref={aiChannelConfigRef} className="rounded-xl border border-border/40 bg-muted/10 px-4 py-3">
+                <div ref={aiChannelConfigRef} className="rounded-[var(--theme-panel-radius-md)] border border-border/40 bg-muted/10 px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-text">{t('settings.aiHierarchyAdvancedTitle')}</p>
@@ -2940,7 +3136,7 @@ const SettingsPage: React.FC = () => {
               description={t('settings.dataEffectiveDesc')}
             >
               <div className="space-y-3">
-                <div className="settings-surface rounded-xl border settings-border px-4 py-4">
+                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -3087,7 +3283,7 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="settings-surface rounded-xl border settings-border px-4 py-4">
+                <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.1em] text-secondary-text">
@@ -3108,7 +3304,7 @@ const SettingsPage: React.FC = () => {
                     {dataSourceLibrary.map((source) => (
                       <div
                         key={source.key}
-                        className="rounded-2xl border border-border/50 bg-base/40 px-3 py-3"
+                        className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-3 py-3"
                         data-testid={`data-source-card-${source.key}`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -3212,97 +3408,20 @@ const SettingsPage: React.FC = () => {
             </SettingsSectionCard>
           ) : null}
 
-          {activeDomain === 'notifications' ? (
-            <SettingsSectionCard
-              title={t('settings.notificationEffectiveTitle')}
-              description={t('settings.notificationEffectiveDesc')}
-            >
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
-                  <p className="text-xs text-muted-text">{t('settings.notificationEnabledChannels')}</p>
-                  <p className="mt-1 break-words text-sm font-semibold text-foreground">
-                    {notificationSummary.enabledChannels.length
-                      ? notificationSummary.enabledChannels.map((key) => prettySourceLabel(key)).join(' · ')
-                      : (notificationSummary.configuredChannels.length ? t('settings.configuredNoPriority') : t('settings.notConfigured'))}
-                  </p>
-                </div>
-                <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
-                  <p className="text-xs text-muted-text">{t('settings.notificationPrimaryChannel')}</p>
-                  <p className="mt-1 break-words text-sm font-semibold text-foreground">
-                    {routingDraft.notification.primary ? prettySourceLabel(routingDraft.notification.primary) : t('settings.notConfigured')}
-                  </p>
-                  <p className="mt-2 text-xs text-secondary-text">
-                    {t('settings.notificationBackupChannels')}: {routingDraft.notification.backup
-                      ? prettySourceLabel(routingDraft.notification.backup)
-                      : t('settings.notConfigured')}
-                  </p>
-                </div>
-                <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
-                  <p className="text-xs text-muted-text">{t('settings.notificationDestinations')}</p>
-                  <p className="mt-1 break-words text-sm font-semibold text-foreground">
-                    {notificationSummary.destinations.length
-                      ? notificationSummary.destinations.map((key) => titleCase(key)).join(' · ')
-                      : t('settings.notConfigured')}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
-                  <p className="text-xs text-muted-text">{t('settings.notificationPrimaryChannel')}</p>
-                  <Select
-                    value={routingDraft.notification.primary}
-                    onChange={(value) => setRouteTier('notification', 'primary', value)}
-                    options={notificationSummary.configuredChannels.map((channel) => ({
-                      value: channel,
-                      label: prettySourceLabel(channel),
-                    }))}
-                    placeholder={notificationSummary.configuredChannels.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                    disabled={adminLocked || isSaving || notificationSummary.configuredChannels.length === 0}
-                  />
-                </div>
-                <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
-                  <p className="text-xs text-muted-text">{t('settings.notificationBackupChannels')}</p>
-                  <Select
-                    value={routingDraft.notification.backup}
-                    onChange={(value) => setRouteTier('notification', 'backup', value)}
-                    options={notificationSummary.configuredChannels
-                      .filter((channel) => channel !== routingDraft.notification.primary)
-                      .map((channel) => ({
-                        value: channel,
-                        label: prettySourceLabel(channel),
-                      }))}
-                    placeholder={notificationSummary.configuredChannels.length ? t('settings.selectPlaceholder') : t('settings.notConfigured')}
-                    disabled={adminLocked || isSaving || notificationSummary.configuredChannels.length < 2}
-                  />
-                </div>
-              </div>
-              <div className="mt-3 flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="settings-primary"
-                  disabled={adminLocked || isSaving}
-                  onClick={() => void saveNotificationRouting()}
-                >
-                  {t('settings.saveRoute')}
-                </Button>
-              </div>
-            </SettingsSectionCard>
-          ) : null}
           {activeDomain === 'advanced' ? (
             <SettingsSectionCard
               title={t('settings.runtimeSummaryVisibilityTitle')}
               description={t('settings.runtimeSummaryVisibilityDesc')}
             >
-              <div className="settings-surface rounded-xl border settings-border px-3.5 py-3">
+              <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-3.5 py-3">
                 <p className="text-xs text-muted-text">{t('settings.runtimeSummaryVisibilityTitle')}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setShowRuntimeExecutionSummary(true)}
                     className={showRuntimeExecutionSummary
-                      ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-sm text-foreground shadow-[var(--glow-soft)]'
-                      : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
+                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                     disabled={adminLocked || isSaving}
                   >
                     {t('settings.runtimeSummaryVisibleOn')}
@@ -3311,8 +3430,8 @@ const SettingsPage: React.FC = () => {
                     type="button"
                     onClick={() => setShowRuntimeExecutionSummary(false)}
                     className={!showRuntimeExecutionSummary
-                      ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-sm text-foreground shadow-[var(--glow-soft)]'
-                      : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-sm text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-foreground shadow-[var(--glow-soft)]'
+                      : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs font-semibold uppercase tracking-widest text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                     disabled={adminLocked || isSaving}
                   >
                     {t('settings.runtimeSummaryVisibleOff')}
@@ -3350,7 +3469,7 @@ const SettingsPage: React.FC = () => {
             {!isDesktopViewport ? (
               <Disclosure
                 summary={`${t('settings.categoriesTitle')} · ${activeCategoryLabel}`}
-                className="settings-surface rounded-[1.5rem] border settings-border shadow-soft-card-strong"
+                className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border"
                 bodyClassName="space-y-3"
               >
                 <p className="text-xs leading-5 text-muted-text">{t('settings.categoriesDesc')}</p>
@@ -3374,7 +3493,7 @@ const SettingsPage: React.FC = () => {
               />
             ) : null}
 
-            {activeCategory === 'system' && isAdminUnlocked ? <AuthSettingsCard /> : null}
+            {activeCategory === 'system' ? <AuthSettingsCard /> : null}
             {activeCategory === 'base' ? (
               <SettingsSectionCard
                 title={t('settings.importTitle')}
@@ -3394,7 +3513,7 @@ const SettingsPage: React.FC = () => {
                 />
               </SettingsSectionCard>
             ) : null}
-            {activeCategory === 'system' && passwordChangeable && isAdminUnlocked ? (
+            {activeCategory === 'system' && passwordChangeable ? (
               <ChangePasswordCard />
             ) : null}
 
@@ -3406,7 +3525,7 @@ const SettingsPage: React.FC = () => {
                 {shouldCollapseRawFields ? (
                   <Disclosure
                     summary={rawFieldsToggleLabel}
-                    className="rounded-xl border border-border/50 bg-base/40"
+                    className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/40"
                     bodyClassName="space-y-3"
                   >
                     {activeItems.map((item) => (
@@ -3444,7 +3563,7 @@ const SettingsPage: React.FC = () => {
                 )}
               </SettingsSectionCard>
             ) : (
-              <div className="settings-panel-muted rounded-[1.5rem] border p-5 shadow-soft-card">
+              <div className="settings-panel-muted rounded-[var(--theme-panel-radius-lg)] border p-5">
                 <p className="settings-accent-text text-xs font-semibold uppercase tracking-[0.22em]">{rawFieldsSectionTitle}</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">
                   {t('settings.noItems')}
@@ -3467,7 +3586,7 @@ const SettingsPage: React.FC = () => {
         zIndex={78}
       >
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-3">
+          <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
             <p className="text-sm font-semibold text-foreground">{t('settings.aiAnalysisRouteTitle')}</p>
             <p className="mt-1 text-xs text-secondary-text">
               {t('settings.aiRouteScopeLabel')}: {t(`settings.aiRouteScope.${aiRoutingScope}`)}
@@ -3476,7 +3595,7 @@ const SettingsPage: React.FC = () => {
           </div>
 
           <div className="grid gap-3 xl:grid-cols-2">
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
               <p className="text-sm font-semibold text-foreground">{t('settings.aiPrimaryRoute')}</p>
               <div className="mt-3 space-y-2">
                 <Select
@@ -3518,8 +3637,8 @@ const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     className={aiRouteModelMode.primary === 'provider_default'
-                      ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                      : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                      : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                     onClick={() => setAiRouteModelMode((prev) => ({ ...prev, primary: 'provider_default' }))}
                     disabled={adminLocked || isSaving || !routingDraft.ai.primaryChannel}
                   >
@@ -3528,8 +3647,8 @@ const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     className={aiRouteModelMode.primary === 'explicit'
-                      ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                      : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                      : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                     onClick={() => setAiRouteModelMode((prev) => ({ ...prev, primary: 'explicit' }))}
                     disabled={adminLocked || isSaving || !routingDraft.ai.primaryChannel}
                   >
@@ -3548,8 +3667,8 @@ const SettingsPage: React.FC = () => {
                       <button
                         type="button"
                         className={aiModelMode.primary === 'preset'
-                          ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                          : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                         onClick={() => setAiModelMode((prev) => ({ ...prev, primary: 'preset' }))}
                         disabled={adminLocked || isSaving || !routingDraft.ai.primaryChannel}
                       >
@@ -3558,8 +3677,8 @@ const SettingsPage: React.FC = () => {
                       <button
                         type="button"
                         className={aiModelMode.primary === 'custom'
-                          ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                          : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                         onClick={() => setAiModelMode((prev) => ({ ...prev, primary: 'custom' }))}
                         disabled={adminLocked || isSaving || !routingDraft.ai.primaryChannel || !canUsePrimaryCustomModel}
                       >
@@ -3614,7 +3733,7 @@ const SettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{t('settings.aiBackupRoute')}</p>
                 <Button
@@ -3675,8 +3794,8 @@ const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     className={aiRouteModelMode.backup === 'provider_default'
-                      ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                      : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                      : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                     onClick={() => setAiRouteModelMode((prev) => ({ ...prev, backup: 'provider_default' }))}
                     disabled={adminLocked || isSaving || !routingDraft.ai.backupChannel}
                   >
@@ -3685,8 +3804,8 @@ const SettingsPage: React.FC = () => {
                   <button
                     type="button"
                     className={aiRouteModelMode.backup === 'explicit'
-                      ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                      : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                      ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                      : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                     onClick={() => setAiRouteModelMode((prev) => ({ ...prev, backup: 'explicit' }))}
                     disabled={adminLocked || isSaving || !routingDraft.ai.backupChannel}
                   >
@@ -3705,8 +3824,8 @@ const SettingsPage: React.FC = () => {
                       <button
                         type="button"
                         className={aiModelMode.backup === 'preset'
-                          ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                          : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                         onClick={() => setAiModelMode((prev) => ({ ...prev, backup: 'preset' }))}
                         disabled={adminLocked || isSaving || !routingDraft.ai.backupChannel}
                       >
@@ -3715,8 +3834,8 @@ const SettingsPage: React.FC = () => {
                       <button
                         type="button"
                         className={aiModelMode.backup === 'custom'
-                          ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                          : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                         onClick={() => setAiModelMode((prev) => ({ ...prev, backup: 'custom' }))}
                         disabled={adminLocked || isSaving || !routingDraft.ai.backupChannel || !canUseBackupCustomModel}
                       >
@@ -3791,7 +3910,7 @@ const SettingsPage: React.FC = () => {
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-4">
+          <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
             <p className="text-sm font-semibold text-foreground">{t('settings.aiTaskModelTitle')}</p>
             <p className="mt-1 text-xs text-secondary-text">{t('settings.aiTaskModelDesc')}</p>
             <div className="mt-3 grid gap-3 xl:grid-cols-2">
@@ -3815,7 +3934,11 @@ const SettingsPage: React.FC = () => {
                 const supportsCustom = Boolean(draft.gateway) && supportsCustomModelId(draft.gateway);
                 const disabledTaskEditor = adminLocked || isSaving;
                 return (
-                  <div key={task.key} className="rounded-xl border border-border/50 bg-base/40 px-3.5 py-3">
+                  <div
+                    key={task.key}
+                    className="rounded-[var(--theme-panel-radius-md)] border border-border/50 bg-base/40 px-3.5 py-3"
+                    data-testid={`ai-task-card-${task.key}`}
+                  >
                     <p className="text-sm font-semibold text-foreground">{t(`settings.aiTaskName.${task.key}`)}</p>
                     <p className="mt-1 text-xs text-secondary-text">
                       {t('settings.aiTaskEffectiveRoute')}: {formatRouteLine(task.effectiveGateway, task.effectiveModel)}
@@ -3825,8 +3948,8 @@ const SettingsPage: React.FC = () => {
                         type="button"
                         onClick={() => setTaskRouteInherit(task.key, true)}
                         className={draft.inherit
-                          ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
-                          : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                         disabled={disabledTaskEditor}
                       >
                         {t('settings.aiTaskInheritFromAnalysis')}
@@ -3835,8 +3958,8 @@ const SettingsPage: React.FC = () => {
                         type="button"
                         onClick={() => setTaskRouteInherit(task.key, false)}
                         className={!draft.inherit
-                          ? 'rounded-lg border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
-                          : 'rounded-lg border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
+                          ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-xs text-foreground'
+                          : 'rounded-[var(--theme-control-radius)] border border-[var(--border-muted)] bg-[var(--pill-bg)] px-3 py-2 text-xs text-secondary-text hover:border-[var(--border-strong)] hover:text-foreground'}
                         disabled={disabledTaskEditor}
                       >
                         {t('settings.aiTaskOverride')}
@@ -3860,8 +3983,8 @@ const SettingsPage: React.FC = () => {
                           <button
                             type="button"
                             className={routeMode === 'provider_default'
-                              ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                              : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                              ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                              : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                             onClick={() => setTaskRouteModelMode((prev) => ({ ...prev, [task.key]: 'provider_default' }))}
                             disabled={disabledTaskEditor || !draft.gateway}
                           >
@@ -3870,8 +3993,8 @@ const SettingsPage: React.FC = () => {
                           <button
                             type="button"
                             className={routeMode === 'explicit'
-                              ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                              : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                              ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                              : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                             onClick={() => setTaskRouteModelMode((prev) => ({ ...prev, [task.key]: 'explicit' }))}
                             disabled={disabledTaskEditor || !draft.gateway}
                           >
@@ -3890,8 +4013,8 @@ const SettingsPage: React.FC = () => {
                               <button
                                 type="button"
                                 className={mode === 'preset'
-                                  ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                                  : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                                  : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                                 onClick={() => setTaskModelMode((prev) => ({ ...prev, [task.key]: 'preset' }))}
                                 disabled={disabledTaskEditor || !draft.gateway}
                               >
@@ -3900,8 +4023,8 @@ const SettingsPage: React.FC = () => {
                               <button
                                 type="button"
                                 className={mode === 'custom'
-                                  ? 'rounded-md border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
-                                  : 'rounded-md border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
+                                  ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-2.5 py-1.5 text-xs font-medium text-foreground'
+                                  : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-2.5 py-1.5 text-xs text-secondary-text'}
                                 onClick={() => setTaskModelMode((prev) => ({ ...prev, [task.key]: 'custom' }))}
                                 disabled={disabledTaskEditor || !draft.gateway || !supportsCustom}
                               >
@@ -3977,7 +4100,7 @@ const SettingsPage: React.FC = () => {
       >
         {quickProviderDrawerItem ? (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-3">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">{quickProviderDrawerItem.label}</p>
                 <span className={resolveQuickProviderCredential(quickProviderDrawerItem.key)
@@ -4004,7 +4127,7 @@ const SettingsPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-4">
               <Input
                 type="password"
                 allowTogglePassword
@@ -4079,7 +4202,7 @@ const SettingsPage: React.FC = () => {
         zIndex={80}
       >
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-3">
+          <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
             <p className="text-sm font-semibold text-foreground">{t('settings.aiAdvancedChannelLayerTitle')}</p>
             <p className="mt-1 text-xs text-secondary-text">{t('settings.aiAdvancedLayerDesc')}</p>
             {advancedNavigationContext ? (
@@ -4145,7 +4268,7 @@ const SettingsPage: React.FC = () => {
       >
         {dataSourceEditorMode === 'view' && dataSourceEditorEntry ? (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-3">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
@@ -4186,9 +4309,105 @@ const SettingsPage: React.FC = () => {
               </Button>
             </div>
           </div>
+        ) : dataSourceEditorMode === 'manage_builtin' && dataSourceEditorEntry?.management ? (
+          <div className="space-y-4">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{dataSourceEditorEntry.label}</p>
+                  <p className="mt-1 text-xs text-secondary-text">{t('settings.dataSourceBuiltinManageDesc')}</p>
+                </div>
+                <span className={dataSourceEditorEntry.configured
+                  ? 'rounded-full border border-[hsl(var(--accent-positive-hsl)/0.4)] bg-[hsl(var(--accent-positive-hsl)/0.16)] px-2 py-0.5 text-[11px] text-[hsl(var(--accent-positive-hsl))]'
+                  : 'rounded-full border border-border/60 bg-base/70 px-2 py-0.5 text-[11px] text-muted-text'}
+                >
+                  {dataSourceEditorEntry.credentialSchema === 'key_secret'
+                    ? t('settings.dataSourceSchemaKeySecret')
+                    : t('settings.dataSourceSchemaSingleKey')}
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {dataSourceEditorEntry.capabilityLabels.map((capability) => (
+                  <span
+                    key={`builtin-${dataSourceEditorEntry.key}-${capability}`}
+                    className="rounded-full border border-border/50 bg-surface/45 px-2 py-0.5 text-[11px] text-secondary-text"
+                  >
+                    {capability}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-secondary-text">
+                {t('settings.dataSourceUsedByLabel')}: {dataSourceEditorEntry.routeUsage.length
+                  ? dataSourceEditorEntry.routeUsage.map((routeKey) => t(`settings.dataRouteName.${routeKey}`)).join(' · ')
+                  : t('settings.dataSourceNotRouted')}
+              </p>
+              <p className="mt-1 text-xs text-muted-text">{dataSourceEditorEntry.description}</p>
+            </div>
+
+            <div className="space-y-3">
+              {dataSourceEditorEntry.management.fields.map((field) => (
+                <Input
+                  key={field.name}
+                  type="password"
+                  allowTogglePassword
+                  iconType="key"
+                  label={t(field.labelKey)}
+                  value={field.name === 'secret' ? managedBuiltinDataSourceDraft.secret : managedBuiltinDataSourceDraft.credential}
+                  onChange={(event) => setManagedBuiltinDataSourceDraft((prev) => ({
+                    ...prev,
+                    [field.name === 'secret' ? 'secret' : 'credential']: event.target.value,
+                  }))}
+                  disabled={isSaving}
+                  hint={t(field.hintKey)}
+                  placeholder={field.placeholder}
+                />
+              ))}
+              {dataSourceEditorEntry.management.extraField ? (
+                <div className="space-y-2">
+                  <Select
+                    label={t(dataSourceEditorEntry.management.extraField.labelKey)}
+                    value={managedBuiltinDataSourceDraft.extraValue || dataSourceEditorEntry.management.extraField.defaultValue}
+                    onChange={(value) => setManagedBuiltinDataSourceDraft((prev) => ({
+                      ...prev,
+                      extraValue: value,
+                    }))}
+                    options={dataSourceEditorEntry.management.extraField.options}
+                    disabled={isSaving}
+                  />
+                  <p className="text-xs text-muted-text">
+                    {t(dataSourceEditorEntry.management.extraField.hintKey)}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-secondary-text">{dataSourceEditorEntry.validationMessage}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="settings-secondary"
+                  onClick={() => void validateDataSourceEntry(dataSourceEditorEntry.key)}
+                  disabled={isSaving}
+                >
+                  {t('settings.dataSourceValidateAction')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="settings-primary"
+                  onClick={() => void saveDataSourceEditor()}
+                  disabled={isSaving}
+                >
+                  {t('settings.dataSourceEditorSaveAction')}
+                </Button>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border/50 bg-base/40 px-4 py-3">
+            <div className="rounded-[var(--theme-panel-radius-lg)] border border-border/50 bg-base/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
@@ -4207,6 +4426,29 @@ const SettingsPage: React.FC = () => {
                     : t('settings.notConfigured')}
                 </span>
               </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {DATA_SOURCE_CUSTOM_SCHEMA_OPTIONS.map((option) => {
+                  const active = dataSourceEditorDraft.credentialSchema === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={active
+                        ? 'rounded-[var(--theme-control-radius)] border border-[var(--border-strong)] bg-[var(--pill-active-bg)] px-3 py-2 text-left shadow-[var(--glow-soft)]'
+                        : 'rounded-[var(--theme-control-radius)] border border-border/60 bg-base/60 px-3 py-2 text-left'}
+                      onClick={() => setDataSourceEditorDraft((prev) => ({
+                        ...prev,
+                        credentialSchema: option.value,
+                        secret: option.value === 'key_secret' ? prev.secret : '',
+                      }))}
+                      disabled={isSaving}
+                    >
+                      <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
+                      <p className="mt-1 text-xs text-secondary-text">{t(option.descriptionKey)}</p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -4214,23 +4456,35 @@ const SettingsPage: React.FC = () => {
                 label={t('settings.dataSourceEditorName')}
                 value={dataSourceEditorDraft.name}
                 onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, name: event.target.value }))}
-                disabled={adminLocked || isSaving}
+                disabled={isSaving}
               />
               <Input
                 type="password"
                 allowTogglePassword
                 iconType="key"
-                label={t('settings.dataSourceEditorCredential')}
+                label={t('settings.dataSourceFieldApiKey')}
                 value={dataSourceEditorDraft.credential}
                 onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, credential: event.target.value }))}
-                disabled={adminLocked || isSaving}
+                disabled={isSaving}
                 hint={t('settings.dataSourceEditorCredentialHint')}
               />
+              {dataSourceEditorDraft.credentialSchema === 'key_secret' ? (
+                <Input
+                  type="password"
+                  allowTogglePassword
+                  iconType="key"
+                  label={t('settings.dataSourceFieldSecretKey')}
+                  value={dataSourceEditorDraft.secret}
+                  onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, secret: event.target.value }))}
+                  disabled={isSaving}
+                  hint={t('settings.dataSourceFieldSecretKeyHint')}
+                />
+              ) : null}
               <Input
                 label={t('settings.dataSourceEditorBaseUrl')}
                 value={dataSourceEditorDraft.baseUrl}
                 onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
-                disabled={adminLocked || isSaving}
+                disabled={isSaving}
                 hint={t('settings.dataSourceEditorBaseUrlHint')}
                 placeholder="https://example.com/v1"
               />
@@ -4239,7 +4493,7 @@ const SettingsPage: React.FC = () => {
                 <textarea
                   value={dataSourceEditorDraft.description}
                   onChange={(event) => setDataSourceEditorDraft((prev) => ({ ...prev, description: event.target.value }))}
-                  disabled={adminLocked || isSaving}
+                  disabled={isSaving}
                   className="min-h-[7rem] w-full rounded-xl border border-subtle bg-card px-4 py-3 text-sm text-foreground shadow-soft-card transition-all focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
@@ -4261,7 +4515,7 @@ const SettingsPage: React.FC = () => {
                             : [...prev.capabilities, capability];
                           return { ...prev, capabilities: nextCapabilities };
                         })}
-                        disabled={adminLocked || isSaving}
+                        disabled={isSaving}
                       >
                         {t(DATA_SOURCE_CAPABILITY_LABEL_KEYS[capability])}
                       </button>
@@ -4287,7 +4541,7 @@ const SettingsPage: React.FC = () => {
                   size="sm"
                   variant="settings-primary"
                   onClick={() => void saveDataSourceEditor()}
-                  disabled={adminLocked || isSaving}
+                  disabled={isSaving}
                 >
                   {dataSourceEditorId === 'new'
                     ? t('settings.dataSourceEditorCreateAction')
@@ -4298,6 +4552,31 @@ const SettingsPage: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      <ConfirmDialog
+        isOpen={adminActionDialog !== null}
+        title={adminActionDialog === 'factory_reset'
+          ? t('settings.adminActionFactoryResetConfirmTitle')
+          : t('settings.adminActionResetRuntimeCachesConfirmTitle')}
+        message={adminActionDialog === 'factory_reset'
+          ? t('settings.adminActionFactoryResetConfirmBody')
+          : t('settings.adminActionResetRuntimeCachesConfirmBody')}
+        confirmText={t('settings.adminActionConfirm')}
+        isDanger
+        confirmationLabel={adminActionDialog === 'factory_reset' ? t('settings.adminActionFactoryResetConfirmationLabel') : undefined}
+        confirmationHint={adminActionDialog === 'factory_reset' ? t('settings.adminActionFactoryResetConfirmationHint') : undefined}
+        confirmationPhrase={adminActionDialog === 'factory_reset' ? 'FACTORY RESET' : undefined}
+        confirmationValue={factoryResetConfirmation}
+        onConfirmationValueChange={setFactoryResetConfirmation}
+        onConfirm={() => void (adminActionDialog === 'factory_reset' ? runFactoryResetSystem() : runResetRuntimeCaches())}
+        onCancel={() => {
+          if (isRunningAdminAction) {
+            return;
+          }
+          setAdminActionDialog(null);
+          setFactoryResetConfirmation('');
+        }}
+      />
 
       {toast ? (
         <div className="fixed bottom-5 right-5 z-50 w-[320px] max-w-[calc(100vw-24px)]">

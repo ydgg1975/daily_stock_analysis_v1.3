@@ -42,6 +42,7 @@ from sqlalchemy import (
     desc,
     asc,
     func,
+    inspect,
 )
 from sqlalchemy.orm import (
     declarative_base,
@@ -52,6 +53,17 @@ from sqlalchemy.exc import IntegrityError
 
 from src.config import get_config
 from src.core.trading_calendar import MARKET_TIMEZONE, get_market_for_stock
+from src.multi_user import (
+    BOOTSTRAP_ADMIN_DISPLAY_NAME,
+    BOOTSTRAP_ADMIN_USER_ID,
+    BOOTSTRAP_ADMIN_USERNAME,
+    OWNERSHIP_SCOPE_SYSTEM,
+    OWNERSHIP_SCOPE_USER,
+    ROLE_ADMIN,
+    ROLE_USER,
+    normalize_role,
+    normalize_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +220,55 @@ class FundamentalSnapshot(Base):
         return f"<FundamentalSnapshot(query_id={self.query_id}, code={self.code})>"
 
 
+class AppUser(Base):
+    """Persisted application user identity for the multi-user foundation."""
+
+    __tablename__ = 'app_users'
+
+    id = Column(String(64), primary_key=True)
+    username = Column(String(128), nullable=False, unique=True, index=True)
+    display_name = Column(String(128))
+    password_hash = Column(String(255))
+    role = Column(String(16), nullable=False, default=ROLE_USER, index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index('ix_app_user_role_active', 'role', 'is_active'),
+    )
+
+
+class AppUserSession(Base):
+    """Persistent authenticated session record for cookie-based auth."""
+
+    __tablename__ = 'app_user_sessions'
+
+    session_id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    last_seen_at = Column(DateTime, default=datetime.now, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, index=True)
+
+    __table_args__ = (
+        Index('ix_app_user_session_user_expiry', 'user_id', 'expires_at'),
+        Index('ix_app_user_session_revoked', 'revoked_at'),
+    )
+
+
+class UserPreference(Base):
+    """User-owned preferences kept separate from global system configuration."""
+
+    __tablename__ = 'user_preferences'
+
+    user_id = Column(String(64), ForeignKey('app_users.id'), primary_key=True)
+    ui_preferences_json = Column(Text)
+    notification_preferences_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class AnalysisHistory(Base):
     """
     分析结果历史记录模型
@@ -217,6 +278,7 @@ class AnalysisHistory(Base):
     __tablename__ = 'analysis_history'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
 
     # 关联查询链路
     query_id = Column(String(64), index=True)
@@ -246,6 +308,8 @@ class AnalysisHistory(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
+        Index('ix_analysis_owner_created', 'owner_id', 'created_at'),
+        Index('ix_analysis_owner_query', 'owner_id', 'query_id'),
         Index('ix_analysis_code_time', 'code', 'created_at'),
     )
 
@@ -253,6 +317,7 @@ class AnalysisHistory(Base):
         """转换为字典"""
         return {
             'id': self.id,
+            'owner_id': self.owner_id,
             'query_id': self.query_id,
             'code': self.code,
             'name': self.name,
@@ -338,6 +403,7 @@ class BacktestResult(Base):
     __tablename__ = 'backtest_results'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
 
     analysis_history_id = Column(
         Integer,
@@ -396,6 +462,7 @@ class BacktestResult(Base):
             'engine_version',
             name='uix_backtest_analysis_window_version',
         ),
+        Index('ix_backtest_result_owner_evaluated', 'owner_id', 'evaluated_at'),
         Index('ix_backtest_code_date', 'code', 'analysis_date'),
     )
 
@@ -406,6 +473,7 @@ class BacktestSummary(Base):
     __tablename__ = 'backtest_summaries'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), nullable=False, index=True, default=BOOTSTRAP_ADMIN_USER_ID)
 
     scope = Column(String(16), nullable=False, index=True)  # overall/stock
     code = Column(String(16), index=True)
@@ -446,11 +514,12 @@ class BacktestSummary(Base):
 
     __table_args__ = (
         UniqueConstraint(
+            'owner_id',
             'scope',
             'code',
             'eval_window_days',
             'engine_version',
-            name='uix_backtest_summary_scope_code_window_version',
+            name='uix_backtest_summary_owner_scope_code_window_version',
         ),
     )
 
@@ -461,6 +530,7 @@ class BacktestRun(Base):
     __tablename__ = 'backtest_runs'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
 
     code = Column(String(16), index=True)
     eval_window_days = Column(Integer, nullable=False, default=10, index=True)
@@ -497,6 +567,7 @@ class BacktestRun(Base):
     summary_json = Column(Text)
 
     __table_args__ = (
+        Index('ix_backtest_run_owner_time', 'owner_id', 'run_at'),
         Index('ix_backtest_run_code_time', 'code', 'run_at'),
     )
 
@@ -507,6 +578,7 @@ class RuleBacktestRun(Base):
     __tablename__ = 'rule_backtest_runs'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
     code = Column(String(16), nullable=False, index=True)
     strategy_text = Column(Text, nullable=False)
     parsed_strategy_json = Column(Text, nullable=False)
@@ -542,6 +614,7 @@ class RuleBacktestRun(Base):
     equity_curve_json = Column(Text)
 
     __table_args__ = (
+        Index('ix_rule_backtest_owner_time', 'owner_id', 'run_at'),
         Index('ix_rule_backtest_run_code_time', 'code', 'run_at'),
         Index('ix_rule_backtest_run_code_status', 'code', 'status'),
     )
@@ -581,6 +654,8 @@ class MarketScannerRun(Base):
     __tablename__ = 'market_scanner_runs'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    scope = Column(String(16), nullable=False, default=OWNERSHIP_SCOPE_USER, index=True)
     market = Column(String(8), nullable=False, default='cn', index=True)
     profile = Column(String(32), nullable=False, default='cn_preopen_v1', index=True)
     universe_name = Column(String(64), nullable=False)
@@ -601,6 +676,8 @@ class MarketScannerRun(Base):
     scoring_notes_json = Column(Text)
 
     __table_args__ = (
+        Index('ix_market_scanner_run_scope_time', 'scope', 'run_at'),
+        Index('ix_market_scanner_run_owner_time', 'owner_id', 'run_at'),
         Index('ix_market_scanner_run_market_time', 'market', 'run_at'),
         Index('ix_market_scanner_run_profile_time', 'profile', 'run_at'),
     )
@@ -642,7 +719,7 @@ class PortfolioAccount(Base):
     __tablename__ = 'portfolio_accounts'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_id = Column(String(64), index=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
     name = Column(String(64), nullable=False)
     broker = Column(String(64))
     market = Column(String(8), nullable=False, default='cn', index=True)  # cn/hk/us
@@ -653,6 +730,130 @@ class PortfolioAccount(Base):
 
     __table_args__ = (
         Index('ix_portfolio_account_owner_active', 'owner_id', 'is_active'),
+    )
+
+
+class PortfolioBrokerConnection(Base):
+    """User-owned broker connection metadata for file import and future read-only sync."""
+
+    __tablename__ = 'portfolio_broker_connections'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    portfolio_account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    broker_type = Column(String(32), nullable=False, index=True)
+    broker_name = Column(String(64))
+    connection_name = Column(String(64), nullable=False)
+    broker_account_ref = Column(String(128), index=True)
+    import_mode = Column(String(16), nullable=False, default='file')
+    status = Column(String(16), nullable=False, default='active', index=True)
+    last_imported_at = Column(DateTime)
+    last_import_source = Column(String(32))
+    last_import_fingerprint = Column(String(64))
+    sync_metadata_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'owner_id',
+            'broker_type',
+            'broker_account_ref',
+            name='uix_portfolio_broker_connection_owner_ref',
+        ),
+        Index('ix_portfolio_broker_connection_owner_status', 'owner_id', 'status'),
+    )
+
+
+class PortfolioBrokerSyncState(Base):
+    """Current read-only broker sync snapshot kept separate from ledger source events."""
+
+    __tablename__ = 'portfolio_broker_sync_states'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    broker_connection_id = Column(Integer, ForeignKey('portfolio_broker_connections.id'), nullable=False, index=True)
+    portfolio_account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    broker_type = Column(String(32), nullable=False, index=True)
+    broker_account_ref = Column(String(128), index=True)
+    sync_source = Column(String(32), nullable=False, default='api', index=True)
+    sync_status = Column(String(16), nullable=False, default='success', index=True)
+    snapshot_date = Column(Date, nullable=False, index=True)
+    synced_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+    base_currency = Column(String(8), nullable=False, default='USD')
+    total_cash = Column(Float, nullable=False, default=0.0)
+    total_market_value = Column(Float, nullable=False, default=0.0)
+    total_equity = Column(Float, nullable=False, default=0.0)
+    realized_pnl = Column(Float, nullable=False, default=0.0)
+    unrealized_pnl = Column(Float, nullable=False, default=0.0)
+    fx_stale = Column(Boolean, nullable=False, default=False)
+    payload_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint('broker_connection_id', name='uix_portfolio_broker_sync_connection'),
+        Index('ix_portfolio_broker_sync_owner_account_time', 'owner_id', 'portfolio_account_id', 'synced_at'),
+    )
+
+
+class PortfolioBrokerSyncPosition(Base):
+    """Current synced positions for one broker connection."""
+
+    __tablename__ = 'portfolio_broker_sync_positions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    broker_connection_id = Column(Integer, ForeignKey('portfolio_broker_connections.id'), nullable=False, index=True)
+    portfolio_account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    broker_position_ref = Column(String(64), index=True)
+    symbol = Column(String(16), nullable=False, index=True)
+    market = Column(String(8), nullable=False, default='us')
+    currency = Column(String(8), nullable=False, default='USD')
+    quantity = Column(Float, nullable=False, default=0.0)
+    avg_cost = Column(Float, nullable=False, default=0.0)
+    last_price = Column(Float, nullable=False, default=0.0)
+    market_value_base = Column(Float, nullable=False, default=0.0)
+    unrealized_pnl_base = Column(Float, nullable=False, default=0.0)
+    valuation_currency = Column(String(8), nullable=False, default='USD')
+    payload_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'broker_connection_id',
+            'symbol',
+            'market',
+            'currency',
+            name='uix_portfolio_broker_sync_position_key',
+        ),
+        Index('ix_portfolio_broker_sync_position_owner_account', 'owner_id', 'portfolio_account_id'),
+    )
+
+
+class PortfolioBrokerSyncCashBalance(Base):
+    """Current synced cash balances for one broker connection."""
+
+    __tablename__ = 'portfolio_broker_sync_cash_balances'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    broker_connection_id = Column(Integer, ForeignKey('portfolio_broker_connections.id'), nullable=False, index=True)
+    portfolio_account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    currency = Column(String(8), nullable=False, default='USD')
+    amount = Column(Float, nullable=False, default=0.0)
+    amount_base = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'broker_connection_id',
+            'currency',
+            name='uix_portfolio_broker_sync_cash_key',
+        ),
+        Index('ix_portfolio_broker_sync_cash_owner_account', 'owner_id', 'portfolio_account_id'),
     )
 
 
@@ -848,6 +1049,23 @@ class ConversationMessage(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
 
+class ConversationSessionRecord(Base):
+    """First-class chat session ownership row for user-scoped conversation history."""
+
+    __tablename__ = 'conversation_sessions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False, unique=True, index=True)
+    owner_id = Column(String(64), ForeignKey('app_users.id'), index=True, default=BOOTSTRAP_ADMIN_USER_ID)
+    title = Column(String(255))
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+
+    __table_args__ = (
+        Index('ix_conversation_session_owner_updated', 'owner_id', 'updated_at'),
+    )
+
+
 class LLMUsage(Base):
     """One row per litellm.completion() call — token-usage audit log."""
 
@@ -914,6 +1132,7 @@ class DatabaseManager:
         
         # 创建所有表
         Base.metadata.create_all(self._engine)
+        self._run_multi_user_migrations()
 
         self._initialized = True
         logger.info(f"数据库初始化完成: {db_url}")
@@ -987,6 +1206,780 @@ class DatabaseManager:
             raise
         finally:
             session.close()
+
+    def _run_multi_user_migrations(self) -> None:
+        """Apply lightweight SQLite-safe schema migrations for Phase 1 ownership."""
+        bootstrap_user_id = BOOTSTRAP_ADMIN_USER_ID
+        with self._engine.begin() as conn:
+            self._ensure_bootstrap_admin_user_row(conn)
+
+            self._add_column_if_missing(conn, "analysis_history", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "backtest_results", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "backtest_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "rule_backtest_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(conn, "market_scanner_runs", "owner_id", "VARCHAR(64)")
+            self._add_column_if_missing(
+                conn,
+                "market_scanner_runs",
+                "scope",
+                f"VARCHAR(16) NOT NULL DEFAULT '{OWNERSHIP_SCOPE_USER}'",
+            )
+
+            self._create_index_if_missing(
+                conn,
+                "ix_analysis_owner_created",
+                "analysis_history",
+                "owner_id, created_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_analysis_owner_query",
+                "analysis_history",
+                "owner_id, query_id",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_backtest_result_owner_evaluated",
+                "backtest_results",
+                "owner_id, evaluated_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_backtest_run_owner_time",
+                "backtest_runs",
+                "owner_id, run_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_rule_backtest_owner_time",
+                "rule_backtest_runs",
+                "owner_id, run_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_market_scanner_run_scope_time",
+                "market_scanner_runs",
+                "scope, run_at",
+            )
+            self._create_index_if_missing(
+                conn,
+                "ix_market_scanner_run_owner_time",
+                "market_scanner_runs",
+                "owner_id, run_at",
+            )
+
+            self._migrate_backtest_summaries_table(conn, bootstrap_user_id=bootstrap_user_id)
+
+            conn.exec_driver_sql(
+                "UPDATE portfolio_accounts SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE analysis_history SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE backtest_results SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE backtest_runs SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            conn.exec_driver_sql(
+                "UPDATE rule_backtest_runs SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+
+            self._backfill_market_scanner_ownership(conn, bootstrap_user_id=bootstrap_user_id)
+            self._backfill_conversation_sessions(conn, bootstrap_user_id=bootstrap_user_id)
+
+    @staticmethod
+    def _table_columns(conn, table_name: str) -> set[str]:
+        rows = conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row[1]) for row in rows}
+
+    def _add_column_if_missing(self, conn, table_name: str, column_name: str, column_sql: str) -> None:
+        if column_name in self._table_columns(conn, table_name):
+            return
+        conn.exec_driver_sql(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}"
+        )
+
+    @staticmethod
+    def _create_index_if_missing(conn, index_name: str, table_name: str, columns_sql: str) -> None:
+        conn.exec_driver_sql(
+            f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_sql})"
+        )
+
+    @staticmethod
+    def _ensure_bootstrap_admin_user_row(conn) -> None:
+        now = datetime.now()
+        conn.exec_driver_sql(
+            """
+            INSERT OR IGNORE INTO app_users (
+                id,
+                username,
+                display_name,
+                password_hash,
+                role,
+                is_active,
+                created_at,
+                updated_at
+            ) VALUES (
+                :id,
+                :username,
+                :display_name,
+                NULL,
+                :role,
+                1,
+                :created_at,
+                :updated_at
+            )
+            """,
+            {
+                "id": BOOTSTRAP_ADMIN_USER_ID,
+                "username": BOOTSTRAP_ADMIN_USERNAME,
+                "display_name": BOOTSTRAP_ADMIN_DISPLAY_NAME,
+                "role": ROLE_ADMIN,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+
+    def _migrate_backtest_summaries_table(self, conn, *, bootstrap_user_id: str) -> None:
+        columns = self._table_columns(conn, "backtest_summaries")
+        if "owner_id" in columns:
+            conn.exec_driver_sql(
+                "UPDATE backtest_summaries SET owner_id = :owner_id "
+                "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+                {"owner_id": bootstrap_user_id},
+            )
+            return
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE backtest_summaries__new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id VARCHAR(64) NOT NULL,
+                scope VARCHAR(16) NOT NULL,
+                code VARCHAR(16),
+                eval_window_days INTEGER NOT NULL DEFAULT 10,
+                engine_version VARCHAR(16) NOT NULL DEFAULT 'v1',
+                computed_at DATETIME,
+                total_evaluations INTEGER DEFAULT 0,
+                completed_count INTEGER DEFAULT 0,
+                insufficient_count INTEGER DEFAULT 0,
+                long_count INTEGER DEFAULT 0,
+                cash_count INTEGER DEFAULT 0,
+                win_count INTEGER DEFAULT 0,
+                loss_count INTEGER DEFAULT 0,
+                neutral_count INTEGER DEFAULT 0,
+                direction_accuracy_pct FLOAT,
+                win_rate_pct FLOAT,
+                neutral_rate_pct FLOAT,
+                avg_stock_return_pct FLOAT,
+                avg_simulated_return_pct FLOAT,
+                stop_loss_trigger_rate FLOAT,
+                take_profit_trigger_rate FLOAT,
+                ambiguous_rate FLOAT,
+                avg_days_to_first_hit FLOAT,
+                advice_breakdown_json TEXT,
+                diagnostics_json TEXT,
+                CONSTRAINT uix_backtest_summary_owner_scope_code_window_version
+                    UNIQUE (owner_id, scope, code, eval_window_days, engine_version)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            INSERT INTO backtest_summaries__new (
+                id,
+                owner_id,
+                scope,
+                code,
+                eval_window_days,
+                engine_version,
+                computed_at,
+                total_evaluations,
+                completed_count,
+                insufficient_count,
+                long_count,
+                cash_count,
+                win_count,
+                loss_count,
+                neutral_count,
+                direction_accuracy_pct,
+                win_rate_pct,
+                neutral_rate_pct,
+                avg_stock_return_pct,
+                avg_simulated_return_pct,
+                stop_loss_trigger_rate,
+                take_profit_trigger_rate,
+                ambiguous_rate,
+                avg_days_to_first_hit,
+                advice_breakdown_json,
+                diagnostics_json
+            )
+            SELECT
+                id,
+                :owner_id,
+                scope,
+                code,
+                eval_window_days,
+                engine_version,
+                computed_at,
+                total_evaluations,
+                completed_count,
+                insufficient_count,
+                long_count,
+                cash_count,
+                win_count,
+                loss_count,
+                neutral_count,
+                direction_accuracy_pct,
+                win_rate_pct,
+                neutral_rate_pct,
+                avg_stock_return_pct,
+                avg_simulated_return_pct,
+                stop_loss_trigger_rate,
+                take_profit_trigger_rate,
+                ambiguous_rate,
+                avg_days_to_first_hit,
+                advice_breakdown_json,
+                diagnostics_json
+            FROM backtest_summaries
+            """,
+            {"owner_id": bootstrap_user_id},
+        )
+        conn.exec_driver_sql("DROP TABLE backtest_summaries")
+        conn.exec_driver_sql("ALTER TABLE backtest_summaries__new RENAME TO backtest_summaries")
+
+    def _backfill_market_scanner_ownership(self, conn, *, bootstrap_user_id: str) -> None:
+        rows = conn.exec_driver_sql(
+            """
+            SELECT id, owner_id, scope, summary_json, diagnostics_json
+            FROM market_scanner_runs
+            ORDER BY id ASC
+            """
+        ).fetchall()
+        for row in rows:
+            row_id = int(row[0])
+            owner_id = str(row[1] or "").strip() or None
+            current_scope = str(row[2] or "").strip().lower()
+            summary = self._safe_json_loads(row[3], {})
+            diagnostics = self._safe_json_loads(row[4], {})
+            operation = diagnostics.get("operation") if isinstance(diagnostics, dict) else {}
+            trigger_mode = ""
+            request_source = ""
+            if isinstance(operation, dict):
+                trigger_mode = str(operation.get("trigger_mode") or "").strip().lower()
+                request_source = str(operation.get("request_source") or "").strip().lower()
+            if not trigger_mode and isinstance(summary, dict):
+                trigger_mode = str(summary.get("trigger_mode") or "").strip().lower()
+                request_source = request_source or str(summary.get("request_source") or "").strip().lower()
+
+            inferred_scope = OWNERSHIP_SCOPE_SYSTEM if (
+                trigger_mode == "scheduled" or request_source in {"scheduler", "system"}
+            ) else OWNERSHIP_SCOPE_USER
+            if inferred_scope == OWNERSHIP_SCOPE_SYSTEM:
+                next_scope = OWNERSHIP_SCOPE_SYSTEM
+            elif current_scope in {OWNERSHIP_SCOPE_USER, OWNERSHIP_SCOPE_SYSTEM}:
+                next_scope = current_scope
+            else:
+                next_scope = inferred_scope
+            next_owner_id = None if next_scope == OWNERSHIP_SCOPE_SYSTEM else (owner_id or bootstrap_user_id)
+            conn.exec_driver_sql(
+                "UPDATE market_scanner_runs SET owner_id = :owner_id, scope = :scope WHERE id = :id",
+                {"id": row_id, "owner_id": next_owner_id, "scope": next_scope},
+            )
+
+    def _backfill_conversation_sessions(self, conn, *, bootstrap_user_id: str) -> None:
+        rows = conn.exec_driver_sql(
+            """
+            SELECT
+                session_id,
+                MIN(created_at) AS created_at,
+                MAX(created_at) AS updated_at
+            FROM conversation_messages
+            GROUP BY session_id
+            """
+        ).fetchall()
+        for row in rows:
+            session_id = str(row[0] or "").strip()
+            if not session_id:
+                continue
+            title_row = conn.exec_driver_sql(
+                """
+                SELECT content
+                FROM conversation_messages
+                WHERE session_id = :session_id AND role = 'user'
+                ORDER BY created_at ASC, id ASC
+                LIMIT 1
+                """,
+                {"session_id": session_id},
+            ).fetchone()
+            title = str(title_row[0])[:255] if title_row and title_row[0] else None
+            conn.exec_driver_sql(
+                """
+                INSERT OR IGNORE INTO conversation_sessions (
+                    session_id,
+                    owner_id,
+                    title,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    :session_id,
+                    :owner_id,
+                    :title,
+                    :created_at,
+                    :updated_at
+                )
+                """,
+                {
+                    "session_id": session_id,
+                    "owner_id": bootstrap_user_id,
+                    "title": title,
+                    "created_at": row[1],
+                    "updated_at": row[2],
+                },
+            )
+        conn.exec_driver_sql(
+            "UPDATE conversation_sessions SET owner_id = :owner_id "
+            "WHERE owner_id IS NULL OR TRIM(owner_id) = ''",
+            {"owner_id": bootstrap_user_id},
+        )
+
+    @staticmethod
+    def _safe_json_loads(value: Any, fallback: Any) -> Any:
+        if not value:
+            return fallback
+        try:
+            return json.loads(value)
+        except Exception:
+            return fallback
+
+    def ensure_bootstrap_admin_user(self) -> AppUser:
+        existing = self.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+        if existing is not None:
+            return existing
+        return self.create_or_update_app_user(
+            user_id=BOOTSTRAP_ADMIN_USER_ID,
+            username=BOOTSTRAP_ADMIN_USERNAME,
+            role=ROLE_ADMIN,
+            display_name=BOOTSTRAP_ADMIN_DISPLAY_NAME,
+            password_hash=None,
+            is_active=True,
+        )
+
+    def get_default_owner_id(self) -> str:
+        user = self.ensure_bootstrap_admin_user()
+        return str(user.id)
+
+    def require_user_id(self, owner_id: Optional[str], *, allow_none: bool = False) -> Optional[str]:
+        normalized = str(owner_id or "").strip()
+        if not normalized:
+            return None if allow_none else self.get_default_owner_id()
+        if self.get_app_user(normalized) is None:
+            raise ValueError(f"Unknown app user: {normalized}")
+        return normalized
+
+    def get_app_user(self, user_id: str) -> Optional[AppUser]:
+        normalized = str(user_id or "").strip()
+        if not normalized:
+            return None
+        with self.get_session() as session:
+            return session.execute(
+                select(AppUser).where(AppUser.id == normalized).limit(1)
+            ).scalar_one_or_none()
+
+    def get_app_user_by_username(self, username: str) -> Optional[AppUser]:
+        normalized = str(username or "").strip()
+        if not normalized:
+            return None
+        with self.get_session() as session:
+            return session.execute(
+                select(AppUser).where(AppUser.username == normalized).limit(1)
+            ).scalar_one_or_none()
+
+    def create_or_update_app_user(
+        self,
+        *,
+        user_id: str,
+        username: str,
+        role: str = ROLE_USER,
+        display_name: Optional[str] = None,
+        password_hash: Optional[str] = None,
+        is_active: bool = True,
+    ) -> AppUser:
+        normalized_id = str(user_id or "").strip()
+        normalized_username = str(username or "").strip()
+        if not normalized_id:
+            raise ValueError("user_id is required")
+        if not normalized_username:
+            raise ValueError("username is required")
+        normalized_role = normalize_role(role)
+
+        with self.get_session() as session:
+            row = session.execute(
+                select(AppUser).where(AppUser.id == normalized_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = AppUser(
+                    id=normalized_id,
+                    username=normalized_username,
+                    display_name=(display_name or "").strip() or None,
+                    password_hash=password_hash,
+                    role=normalized_role,
+                    is_active=bool(is_active),
+                )
+                session.add(row)
+            else:
+                row.username = normalized_username
+                row.display_name = (display_name or "").strip() or row.display_name
+                row.password_hash = password_hash if password_hash is not None else row.password_hash
+                row.role = normalized_role
+                row.is_active = bool(is_active)
+                row.updated_at = datetime.now()
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def create_app_user_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        expires_at: datetime,
+    ) -> AppUserSession:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            raise ValueError("session_id is required")
+        resolved_user_id = self.require_user_id(user_id)
+        if not isinstance(expires_at, datetime):
+            raise ValueError("expires_at must be a datetime")
+
+        with self.get_session() as session:
+            row = session.execute(
+                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
+            ).scalar_one_or_none()
+            now = datetime.now()
+            if row is None:
+                row = AppUserSession(
+                    session_id=normalized_session_id,
+                    user_id=resolved_user_id,
+                    created_at=now,
+                    last_seen_at=now,
+                    expires_at=expires_at,
+                    revoked_at=None,
+                )
+                session.add(row)
+            else:
+                row.user_id = resolved_user_id
+                row.last_seen_at = now
+                row.expires_at = expires_at
+                row.revoked_at = None
+            session.commit()
+            session.refresh(row)
+            return row
+
+    def get_app_user_session(self, session_id: str) -> Optional[AppUserSession]:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return None
+        with self.get_session() as session:
+            return session.execute(
+                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
+            ).scalar_one_or_none()
+
+    def touch_app_user_session(self, session_id: str) -> bool:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return False
+        with self.get_session() as session:
+            row = session.execute(
+                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+            row.last_seen_at = datetime.now()
+            session.commit()
+            return True
+
+    def revoke_app_user_session(self, session_id: str) -> bool:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return False
+        with self.get_session() as session:
+            row = session.execute(
+                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+            row.revoked_at = datetime.now()
+            row.last_seen_at = datetime.now()
+            session.commit()
+            return True
+
+    def revoke_all_app_user_sessions(self, user_id: str) -> int:
+        resolved_user_id = self.require_user_id(user_id)
+        with self.get_session() as session:
+            rows = session.execute(
+                select(AppUserSession).where(
+                    and_(
+                        AppUserSession.user_id == resolved_user_id,
+                        AppUserSession.revoked_at.is_(None),
+                    )
+                )
+            ).scalars().all()
+            if not rows:
+                return 0
+            now = datetime.now()
+            for row in rows:
+                row.revoked_at = now
+                row.last_seen_at = now
+            session.commit()
+            return len(rows)
+
+    def factory_reset_non_bootstrap_state(self) -> Dict[str, Any]:
+        """Clear bounded non-bootstrap user-owned state while preserving system bootstrap rows."""
+        with self.session_scope() as session:
+            user_ids = [
+                str(value)
+                for value in session.execute(
+                    select(AppUser.id).where(AppUser.id != BOOTSTRAP_ADMIN_USER_ID)
+                ).scalars().all()
+                if str(value or "").strip()
+            ]
+            if not user_ids:
+                return {
+                    "cleared": [],
+                    "counts": {},
+                }
+
+            counts: Dict[str, int] = {}
+
+            session_ids = session.execute(
+                select(ConversationSessionRecord.session_id)
+                .where(ConversationSessionRecord.owner_id.in_(user_ids))
+            ).scalars().all()
+            if session_ids:
+                counts["conversation_messages"] = session.execute(
+                    delete(ConversationMessage).where(ConversationMessage.session_id.in_(session_ids))
+                ).rowcount or 0
+            else:
+                counts["conversation_messages"] = 0
+            counts["conversation_sessions"] = session.execute(
+                delete(ConversationSessionRecord).where(ConversationSessionRecord.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            analysis_ids = session.execute(
+                select(AnalysisHistory.id).where(AnalysisHistory.owner_id.in_(user_ids))
+            ).scalars().all()
+            if analysis_ids:
+                counts["backtest_results"] = session.execute(
+                    delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(analysis_ids))
+                ).rowcount or 0
+            else:
+                counts["backtest_results"] = 0
+            counts["analysis_history"] = session.execute(
+                delete(AnalysisHistory).where(AnalysisHistory.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["backtest_summaries"] = session.execute(
+                delete(BacktestSummary).where(BacktestSummary.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["backtest_runs"] = session.execute(
+                delete(BacktestRun).where(BacktestRun.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            rule_run_ids = session.execute(
+                select(RuleBacktestRun.id).where(RuleBacktestRun.owner_id.in_(user_ids))
+            ).scalars().all()
+            if rule_run_ids:
+                counts["rule_backtest_trades"] = session.execute(
+                    delete(RuleBacktestTrade).where(RuleBacktestTrade.run_id.in_(rule_run_ids))
+                ).rowcount or 0
+            else:
+                counts["rule_backtest_trades"] = 0
+            counts["rule_backtest_runs"] = session.execute(
+                delete(RuleBacktestRun).where(RuleBacktestRun.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            scanner_run_ids = session.execute(
+                select(MarketScannerRun.id).where(MarketScannerRun.owner_id.in_(user_ids))
+            ).scalars().all()
+            if scanner_run_ids:
+                counts["scanner_candidates"] = session.execute(
+                    delete(MarketScannerCandidate).where(MarketScannerCandidate.run_id.in_(scanner_run_ids))
+                ).rowcount or 0
+            else:
+                counts["scanner_candidates"] = 0
+            counts["scanner_runs"] = session.execute(
+                delete(MarketScannerRun).where(MarketScannerRun.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            account_ids = session.execute(
+                select(PortfolioAccount.id).where(PortfolioAccount.owner_id.in_(user_ids))
+            ).scalars().all()
+            connection_ids = session.execute(
+                select(PortfolioBrokerConnection.id).where(PortfolioBrokerConnection.owner_id.in_(user_ids))
+            ).scalars().all()
+
+            counts["portfolio_sync_positions"] = session.execute(
+                delete(PortfolioBrokerSyncPosition).where(PortfolioBrokerSyncPosition.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["portfolio_sync_cash_balances"] = session.execute(
+                delete(PortfolioBrokerSyncCashBalance).where(PortfolioBrokerSyncCashBalance.owner_id.in_(user_ids))
+            ).rowcount or 0
+            counts["portfolio_sync_states"] = session.execute(
+                delete(PortfolioBrokerSyncState).where(PortfolioBrokerSyncState.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            if account_ids:
+                counts["portfolio_position_lots"] = session.execute(
+                    delete(PortfolioPositionLot).where(PortfolioPositionLot.account_id.in_(account_ids))
+                ).rowcount or 0
+                counts["portfolio_positions"] = session.execute(
+                    delete(PortfolioPosition).where(PortfolioPosition.account_id.in_(account_ids))
+                ).rowcount or 0
+                counts["portfolio_daily_snapshots"] = session.execute(
+                    delete(PortfolioDailySnapshot).where(PortfolioDailySnapshot.account_id.in_(account_ids))
+                ).rowcount or 0
+                counts["portfolio_corporate_actions"] = session.execute(
+                    delete(PortfolioCorporateAction).where(PortfolioCorporateAction.account_id.in_(account_ids))
+                ).rowcount or 0
+                counts["portfolio_cash_ledger"] = session.execute(
+                    delete(PortfolioCashLedger).where(PortfolioCashLedger.account_id.in_(account_ids))
+                ).rowcount or 0
+                counts["portfolio_trades"] = session.execute(
+                    delete(PortfolioTrade).where(PortfolioTrade.account_id.in_(account_ids))
+                ).rowcount or 0
+            else:
+                counts["portfolio_position_lots"] = 0
+                counts["portfolio_positions"] = 0
+                counts["portfolio_daily_snapshots"] = 0
+                counts["portfolio_corporate_actions"] = 0
+                counts["portfolio_cash_ledger"] = 0
+                counts["portfolio_trades"] = 0
+
+            if connection_ids:
+                counts["portfolio_broker_connections"] = session.execute(
+                    delete(PortfolioBrokerConnection).where(PortfolioBrokerConnection.id.in_(connection_ids))
+                ).rowcount or 0
+            else:
+                counts["portfolio_broker_connections"] = 0
+            counts["portfolio_accounts"] = session.execute(
+                delete(PortfolioAccount).where(PortfolioAccount.owner_id.in_(user_ids))
+            ).rowcount or 0
+
+            counts["user_preferences"] = session.execute(
+                delete(UserPreference).where(UserPreference.user_id.in_(user_ids))
+            ).rowcount or 0
+            counts["app_user_sessions"] = session.execute(
+                delete(AppUserSession).where(AppUserSession.user_id.in_(user_ids))
+            ).rowcount or 0
+            counts["app_users"] = session.execute(
+                delete(AppUser).where(AppUser.id.in_(user_ids))
+            ).rowcount or 0
+
+            cleared = [key for key, value in counts.items() if int(value or 0) > 0]
+            return {
+                "cleared": cleared,
+                "counts": counts,
+            }
+
+    def get_user_notification_preferences(self, user_id: str) -> Dict[str, Any]:
+        resolved_user_id = self.require_user_id(user_id)
+        with self.get_session() as session:
+            row = session.execute(
+                select(UserPreference).where(UserPreference.user_id == resolved_user_id).limit(1)
+            ).scalar_one_or_none()
+
+        payload = self._safe_json_loads(
+            getattr(row, "notification_preferences_json", None),
+            {},
+        )
+        if not isinstance(payload, dict):
+            payload = {}
+
+        email = str(payload.get("email") or "").strip() or None
+        email_enabled = bool(payload.get("email_enabled", payload.get("enabled"))) and bool(email)
+        discord_webhook = str(payload.get("discord_webhook") or "").strip() or None
+        discord_enabled = bool(payload.get("discord_enabled")) and bool(discord_webhook)
+        channel = str(payload.get("channel") or "email").strip().lower() or "email"
+        if email_enabled and discord_enabled:
+            channel = "multi"
+        elif discord_enabled and not email_enabled:
+            channel = "discord"
+        else:
+            channel = "email"
+        updated_at = getattr(row, "updated_at", None)
+        return {
+            "channel": channel,
+            "enabled": email_enabled,
+            "email": email,
+            "email_enabled": email_enabled,
+            "discord_webhook": discord_webhook,
+            "discord_enabled": discord_enabled,
+            "updated_at": updated_at.isoformat() if updated_at else None,
+        }
+
+    def upsert_user_notification_preferences(
+        self,
+        user_id: str,
+        *,
+        email: Optional[str],
+        enabled: bool,
+        channel: str = "email",
+        discord_webhook: Optional[str] = None,
+        discord_enabled: bool = False,
+    ) -> Dict[str, Any]:
+        resolved_user_id = self.require_user_id(user_id)
+        normalized_channel = str(channel or "email").strip().lower() or "email"
+        if normalized_channel not in {"email", "discord", "multi"}:
+            raise ValueError("unsupported notification channel")
+
+        normalized_email = str(email or "").strip() or None
+        normalized_enabled = bool(enabled) and bool(normalized_email)
+        normalized_discord_webhook = str(discord_webhook or "").strip() or None
+        normalized_discord_enabled = bool(discord_enabled) and bool(normalized_discord_webhook)
+        if normalized_enabled and normalized_discord_enabled:
+            normalized_channel = "multi"
+        elif normalized_discord_enabled and not normalized_enabled:
+            normalized_channel = "discord"
+        else:
+            normalized_channel = "email"
+        payload = {
+            "version": 2,
+            "channel": normalized_channel,
+            "enabled": normalized_enabled,
+            "email": normalized_email,
+            "email_enabled": normalized_enabled,
+            "discord_webhook": normalized_discord_webhook,
+            "discord_enabled": normalized_discord_enabled,
+        }
+
+        with self.get_session() as session:
+            row = session.execute(
+                select(UserPreference).where(UserPreference.user_id == resolved_user_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = UserPreference(
+                    user_id=resolved_user_id,
+                    notification_preferences_json=json.dumps(payload, ensure_ascii=False),
+                )
+                session.add(row)
+            else:
+                row.notification_preferences_json = json.dumps(payload, ensure_ascii=False)
+                row.updated_at = datetime.now()
+            session.commit()
+
+        return self.get_user_notification_preferences(resolved_user_id)
     
     def has_today_data(self, code: str, target_date: Optional[date] = None) -> bool:
         """
@@ -1306,7 +2299,8 @@ class DatabaseManager:
         report_type: str,
         news_content: Optional[str],
         context_snapshot: Optional[Dict[str, Any]] = None,
-        save_snapshot: bool = True
+        save_snapshot: bool = True,
+        owner_id: Optional[str] = None,
     ) -> int:
         """
         保存分析结果历史记录
@@ -1321,6 +2315,7 @@ class DatabaseManager:
             context_text = self._safe_json_dumps(context_snapshot)
 
         record = AnalysisHistory(
+            owner_id=self.require_user_id(owner_id),
             query_id=query_id,
             code=result.code,
             name=result.name,
@@ -1356,6 +2351,8 @@ class DatabaseManager:
         days: int = 30,
         limit: int = 50,
         exclude_query_id: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[AnalysisHistory]:
         """
         Query analysis history records.
@@ -1369,6 +2366,8 @@ class DatabaseManager:
 
         with self.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
 
             if query_id:
                 conditions.append(AnalysisHistory.query_id == query_id)
@@ -1397,7 +2396,9 @@ class DatabaseManager:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
@@ -1416,6 +2417,8 @@ class DatabaseManager:
         
         with self.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
             
             if code:
                 conditions.append(AnalysisHistory.code == code)
@@ -1445,7 +2448,12 @@ class DatabaseManager:
             
             return list(results), total
     
-    def get_analysis_history_by_id(self, record_id: int) -> Optional[AnalysisHistory]:
+    def get_analysis_history_by_id(
+        self,
+        record_id: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[AnalysisHistory]:
         """
         根据数据库主键 ID 查询单条分析历史记录
         
@@ -1459,12 +2467,20 @@ class DatabaseManager:
             AnalysisHistory 对象，不存在返回 None
         """
         with self.get_session() as session:
+            conditions = [AnalysisHistory.id == record_id]
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
             result = session.execute(
-                select(AnalysisHistory).where(AnalysisHistory.id == record_id)
+                select(AnalysisHistory).where(and_(*conditions))
             ).scalars().first()
             return result
 
-    def delete_analysis_history_records(self, record_ids: List[int]) -> int:
+    def delete_analysis_history_records(
+        self,
+        record_ids: List[int],
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         """
         删除指定的分析历史记录。
 
@@ -1481,15 +2497,30 @@ class DatabaseManager:
             return 0
 
         with self.session_scope() as session:
+            owner_filter = []
+            if not include_all_owners:
+                owner_filter.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
+            matching_analysis_ids = session.execute(
+                select(AnalysisHistory.id).where(
+                    and_(AnalysisHistory.id.in_(ids), *owner_filter) if owner_filter else AnalysisHistory.id.in_(ids)
+                )
+            ).scalars().all()
+            if not matching_analysis_ids:
+                return 0
             session.execute(
-                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(ids))
+                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(matching_analysis_ids))
             )
             result = session.execute(
-                delete(AnalysisHistory).where(AnalysisHistory.id.in_(ids))
+                delete(AnalysisHistory).where(AnalysisHistory.id.in_(matching_analysis_ids))
             )
             return result.rowcount or 0
 
-    def get_latest_analysis_by_query_id(self, query_id: str) -> Optional[AnalysisHistory]:
+    def get_latest_analysis_by_query_id(
+        self,
+        query_id: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[AnalysisHistory]:
         """
         根据 query_id 查询最新一条分析历史记录
 
@@ -1502,9 +2533,12 @@ class DatabaseManager:
             AnalysisHistory 对象，不存在返回 None
         """
         with self.get_session() as session:
+            conditions = [AnalysisHistory.query_id == query_id]
+            if not include_all_owners:
+                conditions.append(AnalysisHistory.owner_id == self.require_user_id(owner_id))
             result = session.execute(
                 select(AnalysisHistory)
-                .where(AnalysisHistory.query_id == query_id)
+                .where(and_(*conditions))
                 .order_by(desc(AnalysisHistory.created_at))
                 .limit(1)
             ).scalars().first()
@@ -2240,23 +3274,95 @@ class DatabaseManager:
         digest = hashlib.md5(raw_key.encode("utf-8")).hexdigest()
         return f"no-url:{code}:{digest}"
 
-    def save_conversation_message(self, session_id: str, role: str, content: str) -> None:
+    def ensure_conversation_session(
+        self,
+        session_id: str,
+        *,
+        owner_id: Optional[str] = None,
+        title: Optional[str] = None,
+        session: Optional[Session] = None,
+    ) -> ConversationSessionRecord:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            raise ValueError("session_id is required")
+        resolved_owner_id = self.require_user_id(owner_id)
+
+        def _upsert(active_session: Session) -> ConversationSessionRecord:
+            row = active_session.execute(
+                select(ConversationSessionRecord)
+                .where(ConversationSessionRecord.session_id == normalized_session_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = ConversationSessionRecord(
+                    session_id=normalized_session_id,
+                    owner_id=resolved_owner_id,
+                    title=(title or "").strip()[:255] or None,
+                )
+                active_session.add(row)
+                active_session.flush()
+            else:
+                if resolved_owner_id and row.owner_id and resolved_owner_id != row.owner_id:
+                    raise ValueError(
+                        f"Conversation session {normalized_session_id} belongs to another owner"
+                    )
+                if row.owner_id is None:
+                    row.owner_id = resolved_owner_id
+                if title and not row.title:
+                    row.title = title.strip()[:255] or row.title
+                row.updated_at = datetime.now()
+                active_session.flush()
+            return row
+
+        if session is not None:
+            return _upsert(session)
+        with self.session_scope() as active_session:
+            return _upsert(active_session)
+
+    def save_conversation_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        owner_id: Optional[str] = None,
+    ) -> None:
         """
         保存 Agent 对话消息
         """
         with self.session_scope() as session:
+            session_row = self.ensure_conversation_session(
+                session_id,
+                owner_id=owner_id,
+                title=content if role == "user" else None,
+                session=session,
+            )
             msg = ConversationMessage(
                 session_id=session_id,
                 role=role,
                 content=content
             )
             session.add(msg)
+            session_row.updated_at = datetime.now()
+            if role == "user" and not session_row.title:
+                session_row.title = str(content or "").strip()[:255] or None
 
-    def get_conversation_history(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_conversation_history(
+        self,
+        session_id: str,
+        limit: int = 20,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[Dict[str, Any]]:
         """
         获取 Agent 对话历史
         """
         with self.session_scope() as session:
+            if not include_all_owners:
+                self._require_conversation_session_access(
+                    session=session,
+                    session_id=session_id,
+                    owner_id=owner_id,
+                )
             stmt = select(ConversationMessage).filter(
                 ConversationMessage.session_id == session_id
             ).order_by(ConversationMessage.created_at.desc()).limit(limit)
@@ -2269,8 +3375,8 @@ class DatabaseManager:
         """Return True when at least one message exists for the given session."""
         with self.session_scope() as session:
             stmt = (
-                select(ConversationMessage.id)
-                .where(ConversationMessage.session_id == session_id)
+                select(ConversationSessionRecord.id)
+                .where(ConversationSessionRecord.session_id == session_id)
                 .limit(1)
             )
             return session.execute(stmt).scalar() is not None
@@ -2280,6 +3386,8 @@ class DatabaseManager:
         limit: int = 50,
         session_prefix: Optional[str] = None,
         extra_session_ids: Optional[List[str]] = None,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         获取聊天会话列表（从 conversation_messages 聚合）
@@ -2295,69 +3403,73 @@ class DatabaseManager:
         Returns:
             按最近活跃时间倒序的会话列表，每条包含 session_id, title, message_count, last_active
         """
-        from sqlalchemy import func
-
         with self.session_scope() as session:
             normalized_prefix = None
             if session_prefix:
                 normalized_prefix = session_prefix if session_prefix.endswith(":") else f"{session_prefix}:"
             exact_ids = [sid for sid in (extra_session_ids or []) if sid]
 
-            # 聚合每个 session 的消息数和最后活跃时间
-            base = (
-                select(
-                    ConversationMessage.session_id,
-                    func.count(ConversationMessage.id).label("message_count"),
-                    func.min(ConversationMessage.created_at).label("created_at"),
-                    func.max(ConversationMessage.created_at).label("last_active"),
+            ownership_conditions = []
+            if not include_all_owners:
+                ownership_conditions.append(
+                    ConversationSessionRecord.owner_id == self.require_user_id(owner_id)
                 )
-            )
-            conditions = []
+            session_id_filters = []
             if normalized_prefix:
-                conditions.append(ConversationMessage.session_id.startswith(normalized_prefix))
+                session_id_filters.append(
+                    ConversationSessionRecord.session_id.startswith(normalized_prefix)
+                )
             if exact_ids:
-                conditions.append(ConversationMessage.session_id.in_(exact_ids))
-            if conditions:
-                base = base.where(or_(*conditions))
+                session_id_filters.append(ConversationSessionRecord.session_id.in_(exact_ids))
+            query = select(ConversationSessionRecord)
+            if ownership_conditions:
+                query = query.where(and_(*ownership_conditions))
+            if session_id_filters:
+                query = query.where(or_(*session_id_filters))
             stmt = (
-                base
-                .group_by(ConversationMessage.session_id)
-                .order_by(desc(func.max(ConversationMessage.created_at)))
+                query
+                .order_by(desc(ConversationSessionRecord.updated_at), desc(ConversationSessionRecord.id))
                 .limit(limit)
             )
-            rows = session.execute(stmt).all()
+            rows = session.execute(stmt).scalars().all()
 
             results = []
             for row in rows:
                 sid = row.session_id
-                # 取该会话第一条 user 消息作为标题
-                first_user_msg = session.execute(
-                    select(ConversationMessage.content)
-                    .where(
-                        and_(
-                            ConversationMessage.session_id == sid,
-                            ConversationMessage.role == "user",
-                        )
-                    )
-                    .order_by(ConversationMessage.created_at)
-                    .limit(1)
-                ).scalar()
-                title = (first_user_msg or "新对话")[:60]
+                message_count = int(
+                    session.execute(
+                        select(func.count(ConversationMessage.id))
+                        .where(ConversationMessage.session_id == sid)
+                    ).scalar() or 0
+                )
+                title = ((row.title or "新对话")[:60]) if row.title else "新对话"
 
                 results.append({
                     "session_id": sid,
                     "title": title,
-                    "message_count": row.message_count,
+                    "message_count": message_count,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
-                    "last_active": row.last_active.isoformat() if row.last_active else None,
+                    "last_active": row.updated_at.isoformat() if row.updated_at else None,
                 })
             return results
 
-    def get_conversation_messages(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_conversation_messages(
+        self,
+        session_id: str,
+        limit: int = 100,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> List[Dict[str, Any]]:
         """
         获取单个会话的完整消息列表（用于前端恢复历史）
         """
         with self.session_scope() as session:
+            if not include_all_owners:
+                self._require_conversation_session_access(
+                    session=session,
+                    session_id=session_id,
+                    owner_id=owner_id,
+                )
             stmt = (
                 select(ConversationMessage)
                 .where(ConversationMessage.session_id == session_id)
@@ -2375,7 +3487,12 @@ class DatabaseManager:
                 for msg in messages
             ]
 
-    def delete_conversation_session(self, session_id: str) -> int:
+    def delete_conversation_session(
+        self,
+        session_id: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         """
         删除指定会话的所有消息
 
@@ -2383,12 +3500,45 @@ class DatabaseManager:
             删除的消息数
         """
         with self.session_scope() as session:
+            if not include_all_owners:
+                self._require_conversation_session_access(
+                    session=session,
+                    session_id=session_id,
+                    owner_id=owner_id,
+                )
             result = session.execute(
                 delete(ConversationMessage).where(
                     ConversationMessage.session_id == session_id
                 )
             )
+            session.execute(
+                delete(ConversationSessionRecord).where(
+                    ConversationSessionRecord.session_id == session_id
+                )
+            )
             return result.rowcount
+
+    def _require_conversation_session_access(
+        self,
+        *,
+        session: Session,
+        session_id: str,
+        owner_id: Optional[str] = None,
+    ) -> ConversationSessionRecord:
+        resolved_owner_id = self.require_user_id(owner_id)
+        row = session.execute(
+            select(ConversationSessionRecord)
+            .where(
+                and_(
+                    ConversationSessionRecord.session_id == session_id,
+                    ConversationSessionRecord.owner_id == resolved_owner_id,
+                )
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            raise ValueError(f"Conversation session not found for owner: {session_id}")
+        return row
 
     # ------------------------------------------------------------------
     # LLM usage tracking

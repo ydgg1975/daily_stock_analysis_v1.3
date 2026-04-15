@@ -41,10 +41,24 @@ class BacktestSourceMetadata:
 class BacktestService:
     """Service layer for historical analysis evaluation and sample preparation."""
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(
+        self,
+        db_manager: Optional[DatabaseManager] = None,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ):
         self.db = db_manager or DatabaseManager.get_instance()
         self.repo = BacktestRepository(self.db)
         self.stock_repo = StockRepository(self.db)
+        self.owner_id = owner_id
+        self.include_all_owners = bool(include_all_owners)
+
+    def _owner_kwargs(self) -> Dict[str, Any]:
+        return {
+            "owner_id": self.owner_id,
+            "include_all_owners": self.include_all_owners,
+        }
 
     def run_backtest(
         self,
@@ -64,6 +78,7 @@ class BacktestService:
         )
         cutoff_dt = datetime.now() - timedelta(days=settings.min_age_days)
         run_at = datetime.now()
+        resolved_owner_id = self.db.require_user_id(self.owner_id)
 
         eval_config = EvaluationConfig(
             eval_window_days=settings.eval_window_days,
@@ -71,8 +86,12 @@ class BacktestService:
             engine_version=settings.engine_version,
         )
 
-        total_history_count = self.repo.count_analysis_history(code=code)
-        age_eligible_count = self.repo.count_analysis_history(code=code, created_before=cutoff_dt)
+        total_history_count = self.repo.count_analysis_history(code=code, **self._owner_kwargs())
+        age_eligible_count = self.repo.count_analysis_history(
+            code=code,
+            created_before=cutoff_dt,
+            **self._owner_kwargs(),
+        )
 
         candidates = self.repo.get_candidates(
             code=code,
@@ -81,6 +100,7 @@ class BacktestService:
             eval_window_days=settings.eval_window_days,
             engine_version=settings.engine_version,
             force=force,
+            **self._owner_kwargs(),
         )
         sample_observability = self._build_sample_observability(
             code=code,
@@ -110,6 +130,7 @@ class BacktestService:
                     errors += 1
                     results_to_save.append(
                         BacktestResult(
+                            owner_id=resolved_owner_id,
                             analysis_history_id=analysis.id,
                             code=analysis.code,
                             eval_window_days=settings.eval_window_days,
@@ -139,6 +160,7 @@ class BacktestService:
                     run_fallback_used = run_fallback_used or analysis_fallback_used
                     results_to_save.append(
                         BacktestResult(
+                            owner_id=resolved_owner_id,
                             analysis_history_id=analysis.id,
                             code=analysis.code,
                             analysis_date=analysis_date,
@@ -194,6 +216,7 @@ class BacktestService:
 
                 results_to_save.append(
                     BacktestResult(
+                        owner_id=resolved_owner_id,
                         analysis_history_id=analysis.id,
                         code=analysis.code,
                         analysis_date=evaluation.get("analysis_date"),
@@ -232,6 +255,7 @@ class BacktestService:
                 run_fallback_used = run_fallback_used or analysis_fallback_used
                 results_to_save.append(
                     BacktestResult(
+                        owner_id=resolved_owner_id,
                         analysis_history_id=analysis.id,
                         code=analysis.code,
                         analysis_date=self._resolve_analysis_date(analysis),
@@ -290,6 +314,7 @@ class BacktestService:
             )
 
         run_record = BacktestRun(
+            owner_id=resolved_owner_id,
             code=code,
             eval_window_days=settings.eval_window_days,
             min_age_days=settings.min_age_days,
@@ -356,19 +381,35 @@ class BacktestService:
 
     def list_backtest_runs(self, *, code: Optional[str] = None, page: int = 1, limit: int = 20) -> Dict[str, Any]:
         offset = max(page - 1, 0) * limit
-        rows, total = self.repo.get_runs_paginated(code=code, offset=offset, limit=limit)
+        rows, total = self.repo.get_runs_paginated(
+            code=code,
+            offset=offset,
+            limit=limit,
+            **self._owner_kwargs(),
+        )
         items = [self._run_to_dict(row) for row in rows]
         return {"total": total, "page": page, "limit": limit, "items": items}
 
-    def get_run_results(self, *, run_id: int, page: int = 1, limit: int = 20) -> Dict[str, Any]:
+    def get_run_results(self, *, run_id: int, page: int = 1, limit: int = 20) -> Optional[Dict[str, Any]]:
+        run = self.repo.get_run(run_id, **self._owner_kwargs())
+        if run is None:
+            return None
         offset = max(page - 1, 0) * limit
-        rows, total = self.repo.get_results_paginated(code=None, eval_window_days=None, run_id=run_id, days=None, offset=offset, limit=limit)
+        rows, total = self.repo.get_results_paginated(
+            code=None,
+            eval_window_days=None,
+            run_id=run_id,
+            days=None,
+            offset=offset,
+            limit=limit,
+            **self._owner_kwargs(),
+        )
         items = [self._result_to_dict(r) for r in rows]
         return {"total": total, "page": page, "limit": limit, "items": items}
 
     def get_sample_status(self, *, code: str) -> Dict[str, Any]:
         settings = self._resolve_runtime_settings()
-        rows = self.repo.get_sample_rows(code=code)
+        rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         parsed_dates: List[date] = []
         latest_created_at: Optional[datetime] = None
         for row in rows:
@@ -413,7 +454,14 @@ class BacktestService:
 
     def get_recent_evaluations(self, *, code: Optional[str], eval_window_days: Optional[int] = None, limit: int = 50, page: int = 1) -> Dict[str, Any]:
         offset = max(page - 1, 0) * limit
-        rows, total = self.repo.get_results_paginated(code=code, eval_window_days=eval_window_days, days=None, offset=offset, limit=limit)
+        rows, total = self.repo.get_results_paginated(
+            code=code,
+            eval_window_days=eval_window_days,
+            days=None,
+            offset=offset,
+            limit=limit,
+            **self._owner_kwargs(),
+        )
         items = [self._result_to_dict(r) for r in rows]
         return {"total": total, "page": page, "limit": limit, "items": items}
 
@@ -426,6 +474,7 @@ class BacktestService:
             code=lookup_code,
             eval_window_days=eval_window_days,
             engine_version=engine_version,
+            **self._owner_kwargs(),
         )
         if summary is None:
             return None
@@ -516,12 +565,18 @@ class BacktestService:
         skipped_existing = 0
         now = datetime.now()
 
+        resolved_owner_id = self.db.require_user_id(self.owner_id)
         with self.db.get_session() as session:
             for index, row_index in enumerate(selected_rows):
                 row = rows[row_index]
                 query_id = self._prepare_sample_query_id(normalized_code, row.date, settings.eval_window_days)
                 existing = session.execute(
-                    select(AnalysisHistory).where(AnalysisHistory.query_id == query_id).limit(1)
+                    select(AnalysisHistory).where(
+                        and_(
+                            AnalysisHistory.query_id == query_id,
+                            AnalysisHistory.owner_id == resolved_owner_id,
+                        )
+                    ).limit(1)
                 ).scalar_one_or_none()
                 if existing is not None and not force_refresh:
                     skipped_existing += 1
@@ -536,6 +591,7 @@ class BacktestService:
                         eval_window_days=settings.eval_window_days,
                         created_at=now - timedelta(days=settings.min_age_days + 1 + index),
                         query_id=query_id,
+                        owner_id=resolved_owner_id,
                     )
                     existing.name = sample.name
                     existing.report_type = sample.report_type
@@ -563,6 +619,7 @@ class BacktestService:
                     eval_window_days=settings.eval_window_days,
                     created_at=now - timedelta(days=settings.min_age_days + 1 + index),
                     query_id=query_id,
+                    owner_id=resolved_owner_id,
                 )
                 session.add(sample)
                 prepared += 1
@@ -577,7 +634,7 @@ class BacktestService:
         sample_observability = self._build_sample_observability(
             code=normalized_code,
             settings=settings,
-            sample_rows=self.repo.get_sample_rows(code=normalized_code),
+            sample_rows=self.repo.get_sample_rows(code=normalized_code, **self._owner_kwargs()),
             stock_rows=rows,
         )
 
@@ -683,10 +740,10 @@ class BacktestService:
 
     def _clear_backtest_artifacts(self, *, code: str, include_samples: bool) -> Dict[str, Any]:
         normalized_code = self._require_code(code)
-        deleted_runs = self.repo.delete_runs_by_code(code=normalized_code)
-        deleted_results = self.repo.delete_results_by_code(code=normalized_code)
-        deleted_samples = self.repo.delete_sample_rows(code=normalized_code) if include_samples else 0
-        deleted_summaries = self.repo.delete_summaries_by_code(code=normalized_code)
+        deleted_runs = self.repo.delete_runs_by_code(code=normalized_code, **self._owner_kwargs())
+        deleted_results = self.repo.delete_results_by_code(code=normalized_code, **self._owner_kwargs())
+        deleted_samples = self.repo.delete_sample_rows(code=normalized_code, **self._owner_kwargs()) if include_samples else 0
+        deleted_summaries = self.repo.delete_summaries_by_code(code=normalized_code, **self._owner_kwargs())
         self._recompute_global_summaries_if_needed()
         return {
             "code": normalized_code,
@@ -831,8 +888,8 @@ class BacktestService:
     def _prepare_sample_query_id(code: str, sample_date: date, eval_window_days: int) -> str:
         return f"bt-sample:{code}:{sample_date.isoformat()}:w{int(eval_window_days)}"
 
-    @staticmethod
     def _build_prepared_analysis_sample(
+        self,
         *,
         code: str,
         row: StockDaily,
@@ -842,6 +899,7 @@ class BacktestService:
         eval_window_days: int,
         created_at: datetime,
         query_id: str,
+        owner_id: str,
     ) -> AnalysisHistory:
         if row.close is None:
             operation_advice = "持有"
@@ -896,6 +954,7 @@ class BacktestService:
         }
 
         return AnalysisHistory(
+            owner_id=owner_id,
             query_id=query_id,
             code=code,
             name=code,
@@ -927,19 +986,19 @@ class BacktestService:
         return sum(closes) / len(closes)
 
     def _prepared_sample_start_date(self, code: str) -> Optional[str]:
-        rows = self.repo.get_sample_rows(code=code)
+        rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         dates = [self.repo.parse_analysis_date_from_snapshot(row.context_snapshot) for row in rows]
         dates = [d for d in dates if d is not None]
         return min(dates).isoformat() if dates else None
 
     def _prepared_sample_end_date(self, code: str) -> Optional[str]:
-        rows = self.repo.get_sample_rows(code=code)
+        rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         dates = [self.repo.parse_analysis_date_from_snapshot(row.context_snapshot) for row in rows]
         dates = [d for d in dates if d is not None]
         return max(dates).isoformat() if dates else None
 
     def _latest_prepared_at(self, code: str) -> Optional[str]:
-        rows = self.repo.get_sample_rows(code=code)
+        rows = self.repo.get_sample_rows(code=code, **self._owner_kwargs())
         latest = None
         for row in rows:
             if row.created_at and (latest is None or row.created_at > latest):
@@ -964,15 +1023,19 @@ class BacktestService:
                 "excluded_recent_message": None,
             }
 
-        sample_rows = sample_rows if sample_rows is not None else self.repo.get_sample_rows(code=normalized_code)
+        sample_rows = sample_rows if sample_rows is not None else self.repo.get_sample_rows(
+            code=normalized_code,
+            **self._owner_kwargs(),
+        )
         stock_rows = stock_rows if stock_rows is not None else self._load_stock_daily_rows(normalized_code)
         candidates = candidates if candidates is not None else self.repo.get_candidates(
             code=normalized_code,
             min_age_days=settings.min_age_days,
-            limit=max(self.repo.count_analysis_history(code=normalized_code), 1),
+            limit=max(self.repo.count_analysis_history(code=normalized_code, **self._owner_kwargs()), 1),
             eval_window_days=settings.eval_window_days,
             engine_version=settings.engine_version,
             force=True,
+            **self._owner_kwargs(),
         )
 
         prepared_dates = [
@@ -1028,10 +1091,12 @@ class BacktestService:
         self._recompute_summaries_for_window(eval_window_days=eval_window_days, engine_version=engine_version)
 
     def _recompute_summaries_for_window(self, *, eval_window_days: int, engine_version: str) -> None:
+        resolved_owner_id = self.db.require_user_id(self.owner_id)
         with self.db.get_session() as session:
             overall_rows = session.execute(
                 select(BacktestResult).where(
                     and_(
+                        BacktestResult.owner_id == resolved_owner_id,
                         BacktestResult.eval_window_days == eval_window_days,
                         BacktestResult.engine_version == engine_version,
                     )
@@ -1041,6 +1106,7 @@ class BacktestService:
                 self.repo.delete_all_summaries_for_window(
                     eval_window_days=eval_window_days,
                     engine_version=engine_version,
+                    owner_id=resolved_owner_id,
                 )
                 return
             overall_data = BacktestEngine.compute_summary(
@@ -1051,14 +1117,19 @@ class BacktestService:
                 engine_version=engine_version,
             )
             overall_data.update(self._build_source_metadata_for_result_rows(overall_rows, code=None))
-            overall_summary = self._build_summary_model(overall_data)
+            overall_summary = self._build_summary_model(overall_data, owner_id=resolved_owner_id)
             self.repo.upsert_summary(overall_summary)
 
-            codes = self.repo.list_backtest_codes(eval_window_days=eval_window_days, engine_version=engine_version)
+            codes = self.repo.list_backtest_codes(
+                eval_window_days=eval_window_days,
+                engine_version=engine_version,
+                owner_id=resolved_owner_id,
+            )
             for code in codes:
                 rows = session.execute(
                     select(BacktestResult).where(
                         and_(
+                            BacktestResult.owner_id == resolved_owner_id,
                             BacktestResult.code == code,
                             BacktestResult.eval_window_days == eval_window_days,
                             BacktestResult.engine_version == engine_version,
@@ -1073,15 +1144,17 @@ class BacktestService:
                     engine_version=engine_version,
                 )
                 data.update(self._build_source_metadata_for_result_rows(rows, code=code))
-                summary = self._build_summary_model(data)
+                summary = self._build_summary_model(data, owner_id=resolved_owner_id)
                 self.repo.upsert_summary(summary)
 
     def _recompute_summaries(self, *, touched_codes: List[str], eval_window_days: int, engine_version: str) -> None:
+        resolved_owner_id = self.db.require_user_id(self.owner_id)
         with self.db.get_session() as session:
             # overall
             overall_rows = session.execute(
                 select(BacktestResult).where(
                     and_(
+                        BacktestResult.owner_id == resolved_owner_id,
                         BacktestResult.eval_window_days == eval_window_days,
                         BacktestResult.engine_version == engine_version,
                     )
@@ -1095,13 +1168,14 @@ class BacktestService:
                 engine_version=engine_version,
             )
             overall_data.update(self._build_source_metadata_for_result_rows(overall_rows, code=None))
-            overall_summary = self._build_summary_model(overall_data)
+            overall_summary = self._build_summary_model(overall_data, owner_id=resolved_owner_id)
             self.repo.upsert_summary(overall_summary)
 
             for code in touched_codes:
                 rows = session.execute(
                     select(BacktestResult).where(
                         and_(
+                            BacktestResult.owner_id == resolved_owner_id,
                             BacktestResult.code == code,
                             BacktestResult.eval_window_days == eval_window_days,
                             BacktestResult.engine_version == engine_version,
@@ -1116,16 +1190,17 @@ class BacktestService:
                     engine_version=engine_version,
                 )
                 data.update(self._build_source_metadata_for_result_rows(rows, code=code))
-                summary = self._build_summary_model(data)
+                summary = self._build_summary_model(data, owner_id=resolved_owner_id)
                 self.repo.upsert_summary(summary)
 
     @staticmethod
-    def _build_summary_model(summary_data: Dict[str, Any]) -> BacktestSummary:
+    def _build_summary_model(summary_data: Dict[str, Any], *, owner_id: str) -> BacktestSummary:
         diagnostics = dict(summary_data.get("diagnostics") or {})
         for key in ("requested_mode", "resolved_source", "fallback_used"):
             if key in summary_data:
                 diagnostics[key] = summary_data.get(key)
         return BacktestSummary(
+            owner_id=owner_id,
             scope=summary_data.get("scope"),
             code=summary_data.get("code"),
             eval_window_days=summary_data.get("eval_window_days"),

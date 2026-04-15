@@ -7,14 +7,19 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
+from api.deps import CurrentUser, get_current_user
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.portfolio import (
     PortfolioAccountCreateRequest,
     PortfolioAccountItem,
     PortfolioAccountListResponse,
     PortfolioAccountUpdateRequest,
+    PortfolioBrokerConnectionCreateRequest,
+    PortfolioBrokerConnectionItem,
+    PortfolioBrokerConnectionListResponse,
+    PortfolioBrokerConnectionUpdateRequest,
     PortfolioCashLedgerListResponse,
     PortfolioCashLedgerCreateRequest,
     PortfolioCorporateActionListResponse,
@@ -26,12 +31,15 @@ from api.v1.schemas.portfolio import (
     PortfolioImportCommitResponse,
     PortfolioImportParseResponse,
     PortfolioImportTradeItem,
+    PortfolioIbkrSyncRequest,
+    PortfolioIbkrSyncResponse,
     PortfolioRiskResponse,
     PortfolioSnapshotResponse,
     PortfolioTradeListResponse,
     PortfolioTradeCreateRequest,
 )
 from src.services.portfolio_import_service import PortfolioImportService
+from src.services.portfolio_ibkr_sync_service import PortfolioIbkrSyncError, PortfolioIbkrSyncService
 from src.services.portfolio_risk_service import PortfolioRiskService
 from src.services.portfolio_service import (
     PortfolioBusyError,
@@ -43,6 +51,16 @@ from src.services.portfolio_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _get_portfolio_service(current_user: CurrentUser) -> PortfolioService:
+    return PortfolioService(owner_id=current_user.user_id)
+
+
+def _assert_owned_request(owner_id: Optional[str], current_user: CurrentUser) -> None:
+    normalized_owner_id = str(owner_id or "").strip()
+    if normalized_owner_id and normalized_owner_id != current_user.user_id:
+        raise ValueError("owner_id must match the authenticated user")
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -67,6 +85,13 @@ def _conflict_error(*, error: str, message: str) -> HTTPException:
     )
 
 
+def _ibkr_sync_error(exc: PortfolioIbkrSyncError) -> HTTPException:
+    return HTTPException(
+        status_code=max(400, int(exc.status_code or 400)),
+        detail={"error": exc.code, "message": str(exc)},
+    )
+
+
 def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
     payload = dict(item)
     trade_date = payload.get("trade_date")
@@ -77,21 +102,64 @@ def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
     return PortfolioImportTradeItem(**payload)
 
 
+def _serialize_import_cash_entry(item: dict) -> dict:
+    payload = dict(item)
+    event_date = payload.get("event_date")
+    if isinstance(event_date, date):
+        payload["event_date"] = event_date.isoformat()
+    else:
+        payload["event_date"] = str(event_date)
+    return payload
+
+
+def _serialize_import_corporate_action(item: dict) -> dict:
+    payload = dict(item)
+    effective_date = payload.get("effective_date")
+    if isinstance(effective_date, date):
+        payload["effective_date"] = effective_date.isoformat()
+    else:
+        payload["effective_date"] = str(effective_date)
+    return payload
+
+
+def _build_import_parse_response(parsed: dict) -> PortfolioImportParseResponse:
+    return PortfolioImportParseResponse(
+        broker=parsed["broker"],
+        record_count=parsed["record_count"],
+        skipped_count=parsed["skipped_count"],
+        error_count=parsed["error_count"],
+        records=[_serialize_import_record(item) for item in parsed.get("records", [])],
+        cash_record_count=int(parsed.get("cash_record_count", 0)),
+        cash_entries=[_serialize_import_cash_entry(item) for item in parsed.get("cash_entries", [])],
+        corporate_action_count=int(parsed.get("corporate_action_count", 0)),
+        corporate_actions=[
+            _serialize_import_corporate_action(item) for item in parsed.get("corporate_actions", [])
+        ],
+        warnings=list(parsed.get("warnings", [])),
+        metadata=dict(parsed.get("metadata", {})),
+        errors=list(parsed.get("errors", [])),
+    )
+
+
 @router.post(
     "/accounts",
     response_model=PortfolioAccountItem,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Create portfolio account",
 )
-def create_account(request: PortfolioAccountCreateRequest) -> PortfolioAccountItem:
-    service = PortfolioService()
+def create_account(
+    request: PortfolioAccountCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioAccountItem:
+    service = _get_portfolio_service(current_user)
     try:
+        _assert_owned_request(request.owner_id, current_user)
         row = service.create_account(
             name=request.name,
             broker=request.broker,
             market=request.market,
             base_currency=request.base_currency,
-            owner_id=request.owner_id,
+            owner_id=current_user.user_id,
         )
         return PortfolioAccountItem(**row)
     except ValueError as exc:
@@ -108,8 +176,9 @@ def create_account(request: PortfolioAccountCreateRequest) -> PortfolioAccountIt
 )
 def list_accounts(
     include_inactive: bool = Query(False, description="Whether to include inactive accounts"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioAccountListResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         rows = service.list_accounts(include_inactive=include_inactive)
         return PortfolioAccountListResponse(accounts=[PortfolioAccountItem(**item) for item in rows])
@@ -123,16 +192,21 @@ def list_accounts(
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Update portfolio account",
 )
-def update_account(account_id: int, request: PortfolioAccountUpdateRequest) -> PortfolioAccountItem:
-    service = PortfolioService()
+def update_account(
+    account_id: int,
+    request: PortfolioAccountUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioAccountItem:
+    service = _get_portfolio_service(current_user)
     try:
+        _assert_owned_request(request.owner_id, current_user)
         updated = service.update_account(
             account_id,
             name=request.name,
             broker=request.broker,
             market=request.market,
             base_currency=request.base_currency,
-            owner_id=request.owner_id,
+            owner_id=current_user.user_id if request.owner_id is not None else None,
             is_active=request.is_active,
         )
         if updated is None:
@@ -154,8 +228,8 @@ def update_account(account_id: int, request: PortfolioAccountUpdateRequest) -> P
     responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Deactivate portfolio account",
 )
-def delete_account(account_id: int):
-    service = PortfolioService()
+def delete_account(account_id: int, current_user: CurrentUser = Depends(get_current_user)):
+    service = _get_portfolio_service(current_user)
     try:
         ok = service.deactivate_account(account_id)
         if not ok:
@@ -171,13 +245,150 @@ def delete_account(account_id: int):
 
 
 @router.post(
+    "/broker-connections",
+    response_model=PortfolioBrokerConnectionItem,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Create user-owned broker connection",
+)
+def create_broker_connection(
+    request: PortfolioBrokerConnectionCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioBrokerConnectionItem:
+    service = _get_portfolio_service(current_user)
+    try:
+        row = service.create_broker_connection(
+            portfolio_account_id=request.portfolio_account_id,
+            broker_type=request.broker_type,
+            broker_name=request.broker_name,
+            connection_name=request.connection_name,
+            broker_account_ref=request.broker_account_ref,
+            import_mode=request.import_mode,
+            status=request.status,
+            sync_metadata=request.sync_metadata,
+            owner_id=current_user.user_id,
+        )
+        return PortfolioBrokerConnectionItem(**row)
+    except PortfolioConflictError as exc:
+        raise _conflict_error(error="conflict", message=str(exc))
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Create broker connection failed", exc)
+
+
+@router.get(
+    "/broker-connections",
+    response_model=PortfolioBrokerConnectionListResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="List user-owned broker connections",
+)
+def list_broker_connections(
+    portfolio_account_id: Optional[int] = Query(None, description="Optional account id"),
+    broker_type: Optional[str] = Query(None, description="Optional broker type"),
+    status: Optional[str] = Query(None, description="Optional status filter"),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioBrokerConnectionListResponse:
+    service = _get_portfolio_service(current_user)
+    try:
+        rows = service.list_broker_connections(
+            portfolio_account_id=portfolio_account_id,
+            broker_type=broker_type,
+            status=status,
+        )
+        return PortfolioBrokerConnectionListResponse(
+            connections=[PortfolioBrokerConnectionItem(**item) for item in rows]
+        )
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("List broker connections failed", exc)
+
+
+@router.put(
+    "/broker-connections/{connection_id}",
+    response_model=PortfolioBrokerConnectionItem,
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Update user-owned broker connection",
+)
+def update_broker_connection(
+    connection_id: int,
+    request: PortfolioBrokerConnectionUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioBrokerConnectionItem:
+    service = _get_portfolio_service(current_user)
+    try:
+        updated = service.update_broker_connection(
+            connection_id,
+            portfolio_account_id=request.portfolio_account_id,
+            broker_name=request.broker_name,
+            connection_name=request.connection_name,
+            broker_account_ref=request.broker_account_ref,
+            import_mode=request.import_mode,
+            status=request.status,
+            sync_metadata=request.sync_metadata,
+        )
+        if updated is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "not_found", "message": f"Broker connection not found: {connection_id}"},
+            )
+        return PortfolioBrokerConnectionItem(**updated)
+    except HTTPException:
+        raise
+    except PortfolioConflictError as exc:
+        raise _conflict_error(error="conflict", message=str(exc))
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Update broker connection failed", exc)
+
+
+@router.post(
+    "/sync/ibkr",
+    response_model=PortfolioIbkrSyncResponse,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Trigger read-only IBKR portfolio sync into the current user's account",
+)
+def sync_ibkr_account_state(
+    request: PortfolioIbkrSyncRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioIbkrSyncResponse:
+    sync_service = PortfolioIbkrSyncService(portfolio_service=_get_portfolio_service(current_user))
+    try:
+        data = sync_service.sync_read_only_account_state(
+            account_id=request.account_id,
+            broker_connection_id=request.broker_connection_id,
+            broker_account_ref=request.broker_account_ref,
+            session_token=request.session_token,
+            api_base_url=request.api_base_url,
+            verify_ssl=request.verify_ssl,
+        )
+        return PortfolioIbkrSyncResponse(**data)
+    except PortfolioIbkrSyncError as exc:
+        raise _ibkr_sync_error(exc)
+    except PortfolioConflictError as exc:
+        raise _conflict_error(error="conflict", message=str(exc))
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        logger.error("IBKR sync failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "ibkr_sync_internal_error", "message": "IBKR 同步暂时失败，请稍后重试。"},
+        )
+
+
+@router.post(
     "/trades",
     response_model=PortfolioEventCreatedResponse,
     responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Record trade event",
 )
-def create_trade(request: PortfolioTradeCreateRequest) -> PortfolioEventCreatedResponse:
-    service = PortfolioService()
+def create_trade(
+    request: PortfolioTradeCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioEventCreatedResponse:
+    service = _get_portfolio_service(current_user)
     try:
         data = service.record_trade(
             account_id=request.account_id,
@@ -220,8 +431,9 @@ def list_trades(
     side: Optional[str] = Query(None, description="Optional side filter: buy/sell"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioTradeListResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         data = service.list_trade_events(
             account_id=account_id,
@@ -245,8 +457,11 @@ def list_trades(
     responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Delete trade event",
 )
-def delete_trade(trade_id: int) -> PortfolioDeleteResponse:
-    service = PortfolioService()
+def delete_trade(
+    trade_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioDeleteResponse:
+    service = _get_portfolio_service(current_user)
     try:
         ok = service.delete_trade_event(trade_id)
         if not ok:
@@ -269,8 +484,11 @@ def delete_trade(trade_id: int) -> PortfolioDeleteResponse:
     responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Record cash event",
 )
-def create_cash_ledger(request: PortfolioCashLedgerCreateRequest) -> PortfolioEventCreatedResponse:
-    service = PortfolioService()
+def create_cash_ledger(
+    request: PortfolioCashLedgerCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioEventCreatedResponse:
+    service = _get_portfolio_service(current_user)
     try:
         data = service.record_cash_ledger(
             account_id=request.account_id,
@@ -302,8 +520,9 @@ def list_cash_ledger(
     direction: Optional[str] = Query(None, description="Optional direction filter: in/out"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioCashLedgerListResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         data = service.list_cash_ledger_events(
             account_id=account_id,
@@ -326,8 +545,11 @@ def list_cash_ledger(
     responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Delete cash ledger event",
 )
-def delete_cash_ledger(entry_id: int) -> PortfolioDeleteResponse:
-    service = PortfolioService()
+def delete_cash_ledger(
+    entry_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioDeleteResponse:
+    service = _get_portfolio_service(current_user)
     try:
         ok = service.delete_cash_ledger_event(entry_id)
         if not ok:
@@ -350,8 +572,11 @@ def delete_cash_ledger(entry_id: int) -> PortfolioDeleteResponse:
     responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Record corporate action event",
 )
-def create_corporate_action(request: PortfolioCorporateActionCreateRequest) -> PortfolioEventCreatedResponse:
-    service = PortfolioService()
+def create_corporate_action(
+    request: PortfolioCorporateActionCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioEventCreatedResponse:
+    service = _get_portfolio_service(current_user)
     try:
         data = service.record_corporate_action(
             account_id=request.account_id,
@@ -387,8 +612,9 @@ def list_corporate_actions(
     action_type: Optional[str] = Query(None, description="Optional action type filter"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioCorporateActionListResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         data = service.list_corporate_action_events(
             account_id=account_id,
@@ -412,8 +638,11 @@ def list_corporate_actions(
     responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Delete corporate action event",
 )
-def delete_corporate_action(action_id: int) -> PortfolioDeleteResponse:
-    service = PortfolioService()
+def delete_corporate_action(
+    action_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioDeleteResponse:
+    service = _get_portfolio_service(current_user)
     try:
         ok = service.delete_corporate_action_event(action_id)
         if not ok:
@@ -440,8 +669,9 @@ def get_snapshot(
     account_id: Optional[int] = Query(None, description="Optional account id, default returns all accounts"),
     as_of: Optional[date] = Query(None, description="Snapshot date, default today"),
     cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioSnapshotResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         data = service.get_portfolio_snapshot(
             account_id=account_id,
@@ -456,6 +686,78 @@ def get_snapshot(
 
 
 @router.post(
+    "/imports/parse",
+    response_model=PortfolioImportParseResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Parse broker file import into normalized portfolio records",
+)
+def parse_broker_import(
+    broker: str = Form(..., description="Broker id, for example huatai or ibkr"),
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioImportParseResponse:
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
+    try:
+        content = file.file.read()
+        parsed = importer.parse_import_file(broker=broker, content=content)
+        return _build_import_parse_response(parsed)
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Parse broker import failed", exc)
+
+
+@router.get(
+    "/imports/brokers",
+    response_model=PortfolioImportBrokerListResponse,
+    responses={500: {"model": ErrorResponse}},
+    summary="List supported broker import parsers",
+)
+def list_import_brokers(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioImportBrokerListResponse:
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
+    try:
+        return PortfolioImportBrokerListResponse(brokers=importer.list_supported_brokers())
+    except Exception as exc:
+        raise _internal_error("List broker imports failed", exc)
+
+
+@router.post(
+    "/imports/commit",
+    response_model=PortfolioImportCommitResponse,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Parse and commit broker file import",
+)
+def commit_broker_import(
+    account_id: int = Form(...),
+    broker: str = Form(..., description="Broker id, for example huatai or ibkr"),
+    dry_run: bool = Form(False),
+    broker_connection_id: Optional[int] = Form(None),
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioImportCommitResponse:
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
+    try:
+        content = file.file.read()
+        parsed = importer.parse_import_file(broker=broker, content=content)
+        result = importer.commit_import_records(
+            account_id=account_id,
+            broker=parsed["broker"],
+            parsed_payload=parsed,
+            dry_run=dry_run,
+            broker_connection_id=broker_connection_id,
+        )
+        return PortfolioImportCommitResponse(**result)
+    except PortfolioConflictError as exc:
+        raise _conflict_error(error="conflict", message=str(exc))
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Commit broker import failed", exc)
+
+
+@router.post(
     "/imports/csv/parse",
     response_model=PortfolioImportParseResponse,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
@@ -464,19 +766,13 @@ def get_snapshot(
 def parse_csv_import(
     broker: str = Form(..., description="Broker id: huatai/citic/cmb"),
     file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportParseResponse:
-    importer = PortfolioImportService()
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
         content = file.file.read()
         parsed = importer.parse_trade_csv(broker=broker, content=content)
-        return PortfolioImportParseResponse(
-            broker=parsed["broker"],
-            record_count=parsed["record_count"],
-            skipped_count=parsed["skipped_count"],
-            error_count=parsed["error_count"],
-            records=[_serialize_import_record(item) for item in parsed.get("records", [])],
-            errors=list(parsed.get("errors", [])),
-        )
+        return _build_import_parse_response(parsed)
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -489,10 +785,12 @@ def parse_csv_import(
     responses={500: {"model": ErrorResponse}},
     summary="List supported broker CSV parsers",
 )
-def list_csv_brokers() -> PortfolioImportBrokerListResponse:
-    importer = PortfolioImportService()
+def list_csv_brokers(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PortfolioImportBrokerListResponse:
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
-        return PortfolioImportBrokerListResponse(brokers=importer.list_supported_brokers())
+        return PortfolioImportBrokerListResponse(brokers=importer.list_supported_csv_brokers())
     except Exception as exc:
         raise _internal_error("List CSV brokers failed", exc)
 
@@ -508,18 +806,21 @@ def commit_csv_import(
     broker: str = Form(..., description="Broker id: huatai/citic/cmb"),
     dry_run: bool = Form(False),
     file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioImportCommitResponse:
-    importer = PortfolioImportService()
+    importer = PortfolioImportService(portfolio_service=_get_portfolio_service(current_user))
     try:
         content = file.file.read()
         parsed = importer.parse_trade_csv(broker=broker, content=content)
-        result = importer.commit_trade_records(
+        result = importer.commit_import_records(
             account_id=account_id,
             broker=parsed["broker"],
-            records=list(parsed.get("records", [])),
+            parsed_payload=parsed,
             dry_run=dry_run,
         )
         return PortfolioImportCommitResponse(**result)
+    except PortfolioConflictError as exc:
+        raise _conflict_error(error="conflict", message=str(exc))
     except ValueError as exc:
         raise _bad_request(exc)
     except Exception as exc:
@@ -535,8 +836,9 @@ def commit_csv_import(
 def refresh_fx_rates(
     account_id: Optional[int] = Query(None, description="Optional account id"),
     as_of: Optional[date] = Query(None, description="Rate date, default today"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioFxRefreshResponse:
-    service = PortfolioService()
+    service = _get_portfolio_service(current_user)
     try:
         data = service.refresh_fx_rates(account_id=account_id, as_of=as_of)
         return PortfolioFxRefreshResponse(**data)
@@ -556,8 +858,9 @@ def get_risk_report(
     account_id: Optional[int] = Query(None, description="Optional account id"),
     as_of: Optional[date] = Query(None, description="Risk report date, default today"),
     cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioRiskResponse:
-    service = PortfolioRiskService()
+    service = PortfolioRiskService(portfolio_service=_get_portfolio_service(current_user))
     try:
         data = service.get_risk_report(account_id=account_id, as_of=as_of, cost_method=cost_method)
         return PortfolioRiskResponse(**data)

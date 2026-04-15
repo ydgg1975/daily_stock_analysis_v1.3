@@ -18,6 +18,7 @@ import {
 import { useI18n } from '../contexts/UiLanguageContext';
 import type {
   ScannerCandidate,
+  ScannerCoverageReason,
   ScannerOperationalStatus,
   ScannerRunDetail,
   ScannerRunHistoryItem,
@@ -36,6 +37,12 @@ const PROFILE_DEFAULTS = {
     shortlistSize: '5',
     universeLimit: '180',
     detailLimit: '40',
+  },
+  hk: {
+    profile: 'hk_preopen_v1',
+    shortlistSize: '5',
+    universeLimit: '120',
+    detailLimit: '30',
   },
 } as const;
 
@@ -102,8 +109,9 @@ function aiStatusVariant(status?: string | null): 'success' | 'info' | 'warning'
   return 'info';
 }
 
-function marketBadgeVariant(market?: string | null): 'info' | 'success' | 'history' {
+function marketBadgeVariant(market?: string | null): 'info' | 'success' | 'warning' | 'history' {
   if (market === 'us') return 'success';
+  if (market === 'hk') return 'warning';
   if (market === 'cn') return 'info';
   return 'history';
 }
@@ -154,7 +162,7 @@ const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  const [market, setMarket] = useState<'cn' | 'us'>('cn');
+  const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
   const [shortlistSize, setShortlistSize] = useState('5');
   const [universeLimit, setUniverseLimit] = useState('300');
@@ -181,7 +189,9 @@ const ScannerPage: React.FC = () => {
   const profileOptions = useMemo(() => (
     market === 'us'
       ? [{ value: 'us_preopen_v1', label: t('scanner.profileOptionUs') }]
-      : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
+      : market === 'hk'
+        ? [{ value: 'hk_preopen_v1', label: t('scanner.profileOptionHk') }]
+        : [{ value: 'cn_preopen_v1', label: t('scanner.profileOptionCn') }]
   ), [market, t]);
 
   const universeOptions = useMemo(() => (
@@ -191,6 +201,12 @@ const ScannerPage: React.FC = () => {
         { value: '180', label: '180' },
         { value: '240', label: '240' },
       ]
+      : market === 'hk'
+        ? [
+          { value: '80', label: '80' },
+          { value: '120', label: '120' },
+          { value: '180', label: '180' },
+        ]
       : [
         { value: '200', label: '200 只' },
         { value: '300', label: '300 只' },
@@ -205,6 +221,12 @@ const ScannerPage: React.FC = () => {
         { value: '40', label: '40' },
         { value: '60', label: '60' },
       ]
+      : market === 'hk'
+        ? [
+          { value: '20', label: '20' },
+          { value: '30', label: '30' },
+          { value: '40', label: '40' },
+        ]
       : [
         { value: '40', label: '40 只' },
         { value: '60', label: '60 只' },
@@ -221,6 +243,14 @@ const ScannerPage: React.FC = () => {
         runHint: t('scanner.runHintUs'),
         currentRunFallback: t('scanner.currentRunFallbackUs'),
       }
+      : market === 'hk'
+        ? {
+          subtitle: t('scanner.subtitleHk'),
+          universeTitle: t('scanner.universeTitleHk'),
+          universeBody: t('scanner.universeBodyHk'),
+          runHint: t('scanner.runHintHk'),
+          currentRunFallback: t('scanner.currentRunFallbackHk'),
+        }
       : {
         subtitle: t('scanner.subtitleCn'),
         universeTitle: t('scanner.universeTitleCn'),
@@ -231,7 +261,7 @@ const ScannerPage: React.FC = () => {
   ), [market, t]);
 
   const handleMarketChange = useCallback((nextMarket: string) => {
-    const normalizedMarket = nextMarket === 'us' ? 'us' : 'cn';
+    const normalizedMarket = nextMarket === 'us' ? 'us' : nextMarket === 'hk' ? 'hk' : 'cn';
     const defaults = PROFILE_DEFAULTS[normalizedMarket];
     setMarket(normalizedMarket);
     setProfile(defaults.profile);
@@ -355,6 +385,8 @@ const ScannerPage: React.FC = () => {
   );
 
   const latestDiagnostics = (runDetail?.diagnostics || {}) as Record<string, unknown>;
+  const coverageSummary = (latestDiagnostics.coverageSummary || {}) as Record<string, unknown>;
+  const providerDiagnostics = (latestDiagnostics.providerDiagnostics || {}) as Record<string, unknown>;
   const historyStats = (latestDiagnostics.historyStats || {}) as Record<string, unknown>;
   const scannerData = (latestDiagnostics.scannerData || {}) as Record<string, unknown>;
   const aiDiagnostics = (latestDiagnostics.aiInterpretation || {}) as Record<string, unknown>;
@@ -380,6 +412,24 @@ const ScannerPage: React.FC = () => {
   const liveQuoteSources = Array.isArray(liveQuoteStats.sources)
     ? liveQuoteStats.sources.map((item) => String(item)).filter((item) => item.trim().length > 0)
     : [];
+  const coverageReasons: ScannerCoverageReason[] = Array.isArray(coverageSummary.excludedByReason)
+    ? coverageSummary.excludedByReason as ScannerCoverageReason[]
+    : [];
+  const providerList = Array.isArray(providerDiagnostics.providersUsed)
+    ? providerDiagnostics.providersUsed.map((item) => String(item)).filter((item) => item.trim().length > 0)
+    : [];
+  const providerWarnings = Array.isArray(providerDiagnostics.providerWarnings)
+    ? providerDiagnostics.providerWarnings.map((item) => String(item)).filter((item) => item.trim().length > 0)
+    : [];
+  const fallbackCount = typeof providerDiagnostics.fallbackCount === 'number' ? providerDiagnostics.fallbackCount : 0;
+  const providerFailureCount = typeof providerDiagnostics.providerFailureCount === 'number' ? providerDiagnostics.providerFailureCount : 0;
+  const missingDataSymbolCount = typeof providerDiagnostics.missingDataSymbolCount === 'number' ? providerDiagnostics.missingDataSymbolCount : 0;
+  const showRunDiagnosticsPanel = Boolean(runDetail) && (
+    typeof coverageSummary.inputUniverseSize === 'number'
+    || typeof providerDiagnostics.configuredPrimaryProvider === 'string'
+    || providerList.length > 0
+    || providerWarnings.length > 0
+  );
   const showRuntimeDiagnostics = Boolean(runDetail) && (
     typeof universeResolution.source === 'string'
     || typeof snapshotResolution.source === 'string'
@@ -406,7 +456,11 @@ const ScannerPage: React.FC = () => {
     const comparison = runDetail.comparisonToPrevious;
     const review = runDetail.reviewSummary;
     const exportHeadline = runDetail.headline
-      || (runDetail.market === 'us' ? t('scanner.currentRunFallbackUs') : t('scanner.currentRunFallbackCn'));
+      || (runDetail.market === 'us'
+        ? t('scanner.currentRunFallbackUs')
+        : runDetail.market === 'hk'
+          ? t('scanner.currentRunFallbackHk')
+          : t('scanner.currentRunFallbackCn'));
     const lines = [
       `# ${exportHeadline}`,
       '',
@@ -494,6 +548,7 @@ const ScannerPage: React.FC = () => {
                   options={[
                     { value: 'cn', label: t('scanner.marketCn') },
                     { value: 'us', label: t('scanner.marketUs') },
+                    { value: 'hk', label: t('scanner.marketHk') },
                   ]}
                 />
                 <Select
@@ -526,21 +581,6 @@ const ScannerPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-2">
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{t('scanner.boundaryTitle')}</p>
-                  <p className="mt-2 text-sm leading-6 text-secondary-text">
-                    {t('scanner.boundaryBody')}
-                  </p>
-                </div>
-                <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/55 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">{selectedMarketCopy.universeTitle}</p>
-                  <p className="mt-2 text-sm leading-6 text-secondary-text">
-                    {selectedMarketCopy.universeBody}
-                  </p>
-                </div>
-              </div>
-
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-secondary-text">
                   {selectedMarketCopy.runHint}
@@ -565,7 +605,9 @@ const ScannerPage: React.FC = () => {
                 <>
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={marketBadgeVariant(runDetail.market)}>{runDetail.market === 'us' ? t('scanner.marketUs') : t('scanner.marketCn')}</Badge>
+                      <Badge variant={marketBadgeVariant(runDetail.market)}>
+                        {runDetail.market === 'us' ? t('scanner.marketUs') : runDetail.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
+                      </Badge>
                       <Badge variant="info">{runDetail.profileLabel || runDetail.profile}</Badge>
                       <Badge variant={runStatusVariant(runDetail.status)}>{t(`scanner.status.${runDetail.status}`)}</Badge>
                       {runDetail.triggerMode ? (
@@ -927,6 +969,70 @@ const ScannerPage: React.FC = () => {
           </section>
 
           <section className="space-y-4">
+            {showRunDiagnosticsPanel ? (
+              <Card
+                title="本次扫描诊断"
+                subtitle="Coverage / provider observability"
+                className="space-y-4"
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <MetricPair label="输入池" value={String(coverageSummary.inputUniverseSize ?? '--')} />
+                  <MetricPair label="完成 universe 获取" value={String(coverageSummary.eligibleAfterUniverseFetch ?? '--')} />
+                  <MetricPair label="通过流动性/约束" value={String(coverageSummary.eligibleAfterLiquidityFilter ?? '--')} />
+                  <MetricPair label="通过数据可用性" value={String(coverageSummary.eligibleAfterDataAvailabilityFilter ?? '--')} />
+                  <MetricPair label="进入排名池" value={String(coverageSummary.rankedCandidateCount ?? '--')} />
+                  <MetricPair label="进入最终 shortlist" value={String(coverageSummary.shortlistedCount ?? '--')} />
+                </div>
+
+                {coverageSummary.likelyBottleneckLabel ? (
+                  <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3 text-sm leading-6 text-secondary-text">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">为何 shortlist 偏小</p>
+                    <p className="mt-1 text-foreground">{String(coverageSummary.likelyBottleneckLabel)}</p>
+                    <p className="mt-1 text-xs text-secondary-text">
+                      {`过滤 ${coverageSummary.excludedTotal ?? 0} 只，缺数 ${missingDataSymbolCount} 只，最终 shortlist ${coverageSummary.shortlistedCount ?? 0} 只。`}
+                    </p>
+                  </div>
+                ) : null}
+
+                {coverageReasons.length ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">主要排除原因</p>
+                    <div className="flex flex-wrap gap-2">
+                      {coverageReasons.slice(0, 4).map((item) => (
+                        <Badge key={`${item.reason}-${item.count}`} variant="history">
+                          {`${item.label || item.reason} ${item.count}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2 rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-3 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Providers</p>
+                  <p className="text-sm text-foreground">
+                    {providerList.length ? providerList.join(' -> ') : String(providerDiagnostics.configuredPrimaryProvider || '--')}
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs text-secondary-text">
+                    {providerDiagnostics.snapshotSourceUsed ? (
+                      <span>{`Snapshot: ${String(providerDiagnostics.snapshotSourceUsed)}`}</span>
+                    ) : null}
+                    {providerDiagnostics.historySourceUsed ? (
+                      <span>{`History: ${String(providerDiagnostics.historySourceUsed)}`}</span>
+                    ) : null}
+                    <span>{`发生 ${fallbackCount} 次 fallback`}</span>
+                    <span>{`失败 ${providerFailureCount} 次`}</span>
+                  </div>
+                  {providerWarnings.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {providerWarnings.slice(0, 3).map((warning) => (
+                        <Badge key={warning} variant="warning">{warning}</Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </Card>
+            ) : null}
+
             <Card
               title={t('scanner.qualityTitle')}
               subtitle={t('scanner.qualityEyebrow')}
@@ -989,7 +1095,9 @@ const ScannerPage: React.FC = () => {
                           <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={isActive ? 'info' : 'history'}>{`#${item.id}`}</Badge>
-                              <Badge variant={marketBadgeVariant(item.market)}>{item.market === 'us' ? t('scanner.marketUs') : t('scanner.marketCn')}</Badge>
+                              <Badge variant={marketBadgeVariant(item.market)}>
+                                {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
+                              </Badge>
                               {item.watchlistDate ? <Badge variant="history">{item.watchlistDate}</Badge> : null}
                               {item.triggerMode ? (
                                 <Badge variant={item.triggerMode === 'scheduled' ? 'info' : 'history'}>
@@ -1005,7 +1113,11 @@ const ScannerPage: React.FC = () => {
                               <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
                             </div>
                             <p className="text-sm leading-6 text-foreground">
-                              {item.headline || (item.market === 'us' ? t('scanner.currentRunFallbackUs') : t('scanner.currentRunFallbackCn'))}
+                              {item.headline || (item.market === 'us'
+                                ? t('scanner.currentRunFallbackUs')
+                                : item.market === 'hk'
+                                  ? t('scanner.currentRunFallbackHk')
+                                  : t('scanner.currentRunFallbackCn'))}
                             </p>
                             <p className="text-xs leading-5 text-secondary-text">
                               {item.topSymbols.join(' / ') || t('scanner.noTopSymbols')}

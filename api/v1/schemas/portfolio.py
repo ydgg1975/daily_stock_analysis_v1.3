@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 class PortfolioAccountCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     broker: Optional[str] = Field(None, max_length=64)
-    market: Literal["cn", "hk", "us"] = "cn"
+    market: Literal["cn", "hk", "us", "global"] = "cn"
     base_currency: str = Field("CNY", min_length=3, max_length=8)
     owner_id: Optional[str] = Field(None, max_length=64)
 
@@ -20,7 +20,7 @@ class PortfolioAccountCreateRequest(BaseModel):
 class PortfolioAccountUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=64)
     broker: Optional[str] = Field(None, max_length=64)
-    market: Optional[Literal["cn", "hk", "us"]] = None
+    market: Optional[Literal["cn", "hk", "us", "global"]] = None
     base_currency: Optional[str] = Field(None, min_length=3, max_length=8)
     owner_id: Optional[str] = Field(None, max_length=64)
     is_active: Optional[bool] = None
@@ -40,6 +40,82 @@ class PortfolioAccountItem(BaseModel):
 
 class PortfolioAccountListResponse(BaseModel):
     accounts: List[PortfolioAccountItem] = Field(default_factory=list)
+
+
+class PortfolioBrokerConnectionCreateRequest(BaseModel):
+    portfolio_account_id: int
+    broker_type: str = Field(..., min_length=2, max_length=32)
+    broker_name: Optional[str] = Field(None, max_length=64)
+    connection_name: str = Field(..., min_length=1, max_length=64)
+    broker_account_ref: Optional[str] = Field(None, max_length=128)
+    import_mode: str = Field("file", min_length=3, max_length=16)
+    status: str = Field("active", min_length=3, max_length=16)
+    sync_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PortfolioBrokerConnectionUpdateRequest(BaseModel):
+    portfolio_account_id: Optional[int] = None
+    broker_name: Optional[str] = Field(None, max_length=64)
+    connection_name: Optional[str] = Field(None, min_length=1, max_length=64)
+    broker_account_ref: Optional[str] = Field(None, max_length=128)
+    import_mode: Optional[str] = Field(None, min_length=3, max_length=16)
+    status: Optional[str] = Field(None, min_length=3, max_length=16)
+    sync_metadata: Optional[Dict[str, Any]] = None
+
+
+class PortfolioBrokerConnectionItem(BaseModel):
+    id: int
+    owner_id: Optional[str] = None
+    portfolio_account_id: int
+    portfolio_account_name: Optional[str] = None
+    broker_type: str
+    broker_name: Optional[str] = None
+    connection_name: str
+    broker_account_ref: Optional[str] = None
+    import_mode: str
+    status: str
+    last_imported_at: Optional[str] = None
+    last_import_source: Optional[str] = None
+    last_import_fingerprint: Optional[str] = None
+    sync_metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PortfolioBrokerConnectionListResponse(BaseModel):
+    connections: List[PortfolioBrokerConnectionItem] = Field(default_factory=list)
+
+
+class PortfolioIbkrSyncRequest(BaseModel):
+    account_id: int
+    broker_connection_id: Optional[int] = None
+    broker_account_ref: Optional[str] = Field(None, max_length=128)
+    session_token: str = Field(..., min_length=1, max_length=512)
+    api_base_url: Optional[str] = Field(None, max_length=255)
+    verify_ssl: Optional[bool] = None
+
+
+class PortfolioIbkrSyncResponse(BaseModel):
+    account_id: int
+    broker_connection_id: int
+    broker_account_ref: str
+    connection_name: str
+    snapshot_date: str
+    synced_at: str
+    base_currency: str
+    total_cash: float
+    total_market_value: float
+    total_equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    position_count: int
+    cash_balance_count: int
+    fx_stale: bool
+    snapshot_overlay_active: bool
+    used_existing_connection: bool
+    api_base_url: str
+    verify_ssl: bool
+    warnings: List[str] = Field(default_factory=list)
 
 
 class PortfolioTradeCreateRequest(BaseModel):
@@ -208,7 +284,28 @@ class PortfolioImportTradeItem(BaseModel):
     tax: float
     trade_uid: Optional[str] = None
     dedup_hash: str
+    market: Optional[str] = None
     currency: Optional[str] = None
+    note: Optional[str] = None
+
+
+class PortfolioImportCashEntryItem(BaseModel):
+    event_date: str
+    direction: Literal["in", "out"]
+    amount: float
+    currency: str
+    note: Optional[str] = None
+
+
+class PortfolioImportCorporateActionItem(BaseModel):
+    effective_date: str
+    symbol: str
+    market: str
+    currency: str
+    action_type: Literal["cash_dividend", "split_adjustment"]
+    cash_dividend_per_share: Optional[float] = None
+    split_ratio: Optional[float] = None
+    note: Optional[str] = None
 
 
 class PortfolioImportParseResponse(BaseModel):
@@ -217,6 +314,12 @@ class PortfolioImportParseResponse(BaseModel):
     skipped_count: int
     error_count: int
     records: List[PortfolioImportTradeItem] = Field(default_factory=list)
+    cash_record_count: int = 0
+    cash_entries: List[PortfolioImportCashEntryItem] = Field(default_factory=list)
+    corporate_action_count: int = 0
+    corporate_actions: List[PortfolioImportCorporateActionItem] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     errors: List[str] = Field(default_factory=list)
 
 
@@ -226,7 +329,17 @@ class PortfolioImportCommitResponse(BaseModel):
     inserted_count: int
     duplicate_count: int
     failed_count: int
+    cash_record_count: int = 0
+    cash_inserted_count: int = 0
+    cash_failed_count: int = 0
+    corporate_action_count: int = 0
+    corporate_action_inserted_count: int = 0
+    corporate_action_failed_count: int = 0
     dry_run: bool
+    duplicate_import: bool = False
+    broker_connection_id: Optional[int] = None
+    warnings: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     errors: List[str] = Field(default_factory=list)
 
 
@@ -234,6 +347,7 @@ class PortfolioImportBrokerItem(BaseModel):
     broker: str
     aliases: List[str] = Field(default_factory=list)
     display_name: Optional[str] = None
+    file_extensions: List[str] = Field(default_factory=list)
 
 
 class PortfolioImportBrokerListResponse(BaseModel):

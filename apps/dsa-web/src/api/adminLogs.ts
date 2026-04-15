@@ -31,6 +31,14 @@ export interface ExecutionLogSessionSummary {
   endedAt?: string | null;
   summary?: Record<string, unknown>;
   readableSummary?: {
+    actorUserId?: string | null;
+    actorUsername?: string | null;
+    actorDisplay?: string | null;
+    actorRole?: string | null;
+    sessionKind?: string | null;
+    subsystem?: string | null;
+    actionName?: string | null;
+    destructive?: boolean;
     finalAiModel?: string | null;
     aiAttemptsCount?: number;
     aiFallbackUsed?: boolean;
@@ -41,6 +49,15 @@ export interface ExecutionLogSessionSummary {
     dataFallbackUsed?: boolean;
     notificationClassification?: string | null;
     topFailureReason?: string | null;
+    scannerRunId?: number | null;
+    scannerMarket?: string | null;
+    scannerProfile?: string | null;
+    scannerProfileLabel?: string | null;
+    scannerShortlistCount?: number | null;
+    scannerFallbackCount?: number | null;
+    scannerProviderFailureCount?: number | null;
+    scannerProvidersUsed?: string[];
+    scannerCoverageSummary?: string | null;
     summaryParagraph?: string | null;
     status?: string;
   };
@@ -55,18 +72,6 @@ export interface ExecutionLogSessionListResponse {
   items: ExecutionLogSessionSummary[];
 }
 
-function withAdminUnlockHeader(adminUnlockToken?: string | null) {
-  const normalizedToken = adminUnlockToken?.trim();
-  if (!normalizedToken) {
-    return {};
-  }
-  return {
-    headers: {
-      'X-Admin-Unlock-Token': normalizedToken,
-    },
-  };
-}
-
 export const adminLogsApi = {
   listSessions: async (
     params: {
@@ -79,22 +84,19 @@ export const adminLogsApi = {
       limit?: number;
       offset?: number;
     },
-    adminUnlockToken?: string | null,
   ): Promise<ExecutionLogSessionListResponse> => {
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/admin/logs/sessions',
       {
         params,
-        ...withAdminUnlockHeader(adminUnlockToken),
       },
     );
     return toCamelCase<ExecutionLogSessionListResponse>(response.data);
   },
 
-  getSessionDetail: async (sessionId: string, adminUnlockToken?: string | null): Promise<ExecutionLogSessionDetail> => {
+  getSessionDetail: async (sessionId: string): Promise<ExecutionLogSessionDetail> => {
     const response = await apiClient.get<Record<string, unknown>>(
       `/api/v1/admin/logs/sessions/${encodeURIComponent(sessionId)}`,
-      withAdminUnlockHeader(adminUnlockToken),
     );
     return toCamelCase<ExecutionLogSessionDetail>(response.data);
   },

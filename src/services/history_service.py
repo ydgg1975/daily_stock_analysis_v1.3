@@ -54,7 +54,13 @@ class HistoryService:
     Encapsulates query logic for historical analysis records.
     """
     
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(
+        self,
+        db_manager: Optional[DatabaseManager] = None,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ):
         """
         Initialize the history query service.
         
@@ -62,6 +68,8 @@ class HistoryService:
             db_manager: Database manager (optional, defaults to singleton instance)
         """
         self.db = db_manager or DatabaseManager.get_instance()
+        self.owner_id = owner_id
+        self.include_all_owners = bool(include_all_owners)
     
     def get_history_list(
         self,
@@ -110,7 +118,9 @@ class HistoryService:
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
-                limit=limit
+                limit=limit,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
             )
             
             # Convert to response format
@@ -151,13 +161,21 @@ class HistoryService:
         """
         try:
             int_id = int(record_id)
-            record = self.db.get_analysis_history_by_id(int_id)
+            record = self.db.get_analysis_history_by_id(
+                int_id,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+            )
             if record:
                 return record
         except (ValueError, TypeError):
             pass
         # Fall back to query_id lookup
-        return self.db.get_latest_analysis_by_query_id(record_id)
+        return self.db.get_latest_analysis_by_query_id(
+            record_id,
+            owner_id=self.owner_id,
+            include_all_owners=self.include_all_owners,
+        )
 
     def resolve_and_get_detail(self, record_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -213,7 +231,11 @@ class HistoryService:
             Complete analysis report dictionary, or None if not exists
         """
         try:
-            record = self.db.get_analysis_history_by_id(record_id)
+            record = self.db.get_analysis_history_by_id(
+                record_id,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+            )
             if not record:
                 return None
             return self._record_to_detail_dict(record)
@@ -786,7 +808,11 @@ class HistoryService:
             Exception: Re-raises any storage-layer exception so the API caller
                        receives a proper 500 error instead of a silent success.
         """
-        return self.db.delete_analysis_history_records(record_ids)
+        return self.db.delete_analysis_history_records(
+            record_ids,
+            owner_id=self.owner_id,
+            include_all_owners=self.include_all_owners,
+        )
 
     def get_news_intel(self, query_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """
@@ -837,7 +863,11 @@ class HistoryService:
         """
         try:
             # Look up the corresponding AnalysisHistory record by record_id
-            record = self.db.get_analysis_history_by_id(record_id)
+            record = self.db.get_analysis_history_by_id(
+                record_id,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+            )
             if not record:
                 logger.warning(f"No analysis record found for record_id={record_id}")
                 return []
@@ -857,7 +887,12 @@ class HistoryService:
         - URL-level dedup keeps one canonical news row across repeated analyses.
         - Legacy records may have different historical query_id strategies.
         """
-        records = self.db.get_analysis_history(query_id=query_id, limit=1)
+        records = self.db.get_analysis_history(
+            query_id=query_id,
+            limit=1,
+            owner_id=self.owner_id,
+            include_all_owners=self.include_all_owners,
+        )
         if not records:
             return []
 

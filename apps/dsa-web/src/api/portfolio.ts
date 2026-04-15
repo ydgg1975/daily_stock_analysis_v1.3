@@ -4,6 +4,7 @@ import type {
   PortfolioAccountItem,
   PortfolioAccountCreateRequest,
   PortfolioAccountListResponse,
+  PortfolioBrokerConnectionListResponse,
   PortfolioCashLedgerCreateRequest,
   PortfolioCashLedgerListResponse,
   PortfolioCorporateActionCreateRequest,
@@ -15,6 +16,8 @@ import type {
   PortfolioImportBrokerListResponse,
   PortfolioImportCommitResponse,
   PortfolioImportParseResponse,
+  PortfolioIbkrSyncRequest,
+  PortfolioIbkrSyncResponse,
   PortfolioRiskResponse,
   PortfolioSnapshotResponse,
   PortfolioTradeCreateRequest,
@@ -116,6 +119,13 @@ export const portfolioApi = {
       owner_id: payload.ownerId,
     });
     return toCamelCase<PortfolioAccountItem>(response.data);
+  },
+
+  async listBrokerConnections(portfolioAccountId?: number): Promise<PortfolioBrokerConnectionListResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/broker-connections', {
+      params: portfolioAccountId != null ? { portfolio_account_id: portfolioAccountId } : undefined,
+    });
+    return toCamelCase<PortfolioBrokerConnectionListResponse>(response.data);
   },
 
   async getSnapshot(query: SnapshotQuery = {}): Promise<PortfolioSnapshotResponse> {
@@ -233,7 +243,7 @@ export const portfolioApi = {
   },
 
   async listImportBrokers(): Promise<PortfolioImportBrokerListResponse> {
-    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/imports/csv/brokers');
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/imports/brokers');
     return toCamelCase<PortfolioImportBrokerListResponse>(response.data);
   },
 
@@ -241,7 +251,7 @@ export const portfolioApi = {
     const formData = new FormData();
     formData.append('broker', broker);
     formData.append('file', file);
-    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/csv/parse', formData, {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/parse', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return toCamelCase<PortfolioImportParseResponse>(response.data);
@@ -258,9 +268,21 @@ export const portfolioApi = {
     formData.append('broker', broker);
     formData.append('dry_run', dryRun ? 'true' : 'false');
     formData.append('file', file);
-    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/csv/commit', formData, {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/imports/commit', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return toCamelCase<PortfolioImportCommitResponse>(response.data);
+  },
+
+  async syncIbkrReadOnly(payload: PortfolioIbkrSyncRequest): Promise<PortfolioIbkrSyncResponse> {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/sync/ibkr', {
+      account_id: payload.accountId,
+      broker_connection_id: payload.brokerConnectionId,
+      broker_account_ref: payload.brokerAccountRef,
+      session_token: payload.sessionToken,
+      api_base_url: payload.apiBaseUrl,
+      verify_ssl: payload.verifySsl,
+    });
+    return toCamelCase<PortfolioIbkrSyncResponse>(response.data);
   },
 };

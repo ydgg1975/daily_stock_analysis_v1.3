@@ -224,7 +224,11 @@ class BaseAgent(ABC):
         if not self.memory.enabled or not ctx.stock_code:
             return ""
 
-        entries = self.memory.get_stock_history(ctx.stock_code, limit=3)
+        entries = self.memory.get_stock_history(
+            ctx.stock_code,
+            limit=3,
+            owner_id=str(ctx.meta.get("owner_id") or "").strip() or None,
+        )
         if not entries:
             return ""
 

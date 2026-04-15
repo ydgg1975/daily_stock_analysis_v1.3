@@ -8,7 +8,7 @@ export interface PortfolioAccountItem {
   ownerId?: string | null;
   name: string;
   broker?: string | null;
-  market: 'cn' | 'hk' | 'us';
+  market: 'cn' | 'hk' | 'us' | 'global';
   baseCurrency: string;
   isActive: boolean;
   createdAt?: string | null;
@@ -22,9 +22,64 @@ export interface PortfolioAccountListResponse {
 export interface PortfolioAccountCreateRequest {
   name: string;
   broker?: string;
-  market: 'cn' | 'hk' | 'us';
+  market: 'cn' | 'hk' | 'us' | 'global';
   baseCurrency: string;
   ownerId?: string;
+}
+
+export interface PortfolioBrokerConnectionItem {
+  id: number;
+  ownerId?: string | null;
+  portfolioAccountId: number;
+  portfolioAccountName?: string | null;
+  brokerType: string;
+  brokerName?: string | null;
+  connectionName: string;
+  brokerAccountRef?: string | null;
+  importMode: string;
+  status: string;
+  lastImportedAt?: string | null;
+  lastImportSource?: string | null;
+  lastImportFingerprint?: string | null;
+  syncMetadata: Record<string, unknown>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PortfolioBrokerConnectionListResponse {
+  connections: PortfolioBrokerConnectionItem[];
+}
+
+export interface PortfolioIbkrSyncRequest {
+  accountId: number;
+  brokerConnectionId?: number;
+  brokerAccountRef?: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+  verifySsl?: boolean;
+}
+
+export interface PortfolioIbkrSyncResponse {
+  accountId: number;
+  brokerConnectionId: number;
+  brokerAccountRef: string;
+  connectionName: string;
+  snapshotDate: string;
+  syncedAt: string;
+  baseCurrency: string;
+  totalCash: number;
+  totalMarketValue: number;
+  totalEquity: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  positionCount: number;
+  cashBalanceCount: number;
+  fxStale: boolean;
+  snapshotOverlayActive: boolean;
+  usedExistingConnection: boolean;
+  apiBaseUrl: string;
+  verifySsl: boolean;
+  warnings: string[];
 }
 
 export interface PortfolioPositionItem {
@@ -255,7 +310,28 @@ export interface PortfolioImportTradeItem {
   tax: number;
   tradeUid?: string | null;
   dedupHash: string;
+  market?: string | null;
   currency?: string | null;
+  note?: string | null;
+}
+
+export interface PortfolioImportCashEntryItem {
+  eventDate: string;
+  direction: PortfolioCashDirection;
+  amount: number;
+  currency: string;
+  note?: string | null;
+}
+
+export interface PortfolioImportCorporateActionItem {
+  effectiveDate: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  actionType: PortfolioCorporateActionType;
+  cashDividendPerShare?: number | null;
+  splitRatio?: number | null;
+  note?: string | null;
 }
 
 export interface PortfolioImportParseResponse {
@@ -264,6 +340,12 @@ export interface PortfolioImportParseResponse {
   skippedCount: number;
   errorCount: number;
   records: PortfolioImportTradeItem[];
+  cashRecordCount: number;
+  cashEntries: PortfolioImportCashEntryItem[];
+  corporateActionCount: number;
+  corporateActions: PortfolioImportCorporateActionItem[];
+  warnings: string[];
+  metadata: Record<string, unknown>;
   errors: string[];
 }
 
@@ -273,7 +355,17 @@ export interface PortfolioImportCommitResponse {
   insertedCount: number;
   duplicateCount: number;
   failedCount: number;
+  cashRecordCount: number;
+  cashInsertedCount: number;
+  cashFailedCount: number;
+  corporateActionCount: number;
+  corporateActionInsertedCount: number;
+  corporateActionFailedCount: number;
   dryRun: boolean;
+  duplicateImport: boolean;
+  brokerConnectionId?: number | null;
+  warnings: string[];
+  metadata: Record<string, unknown>;
   errors: string[];
 }
 
@@ -281,6 +373,7 @@ export interface PortfolioImportBrokerItem {
   broker: string;
   aliases: string[];
   displayName?: string;
+  fileExtensions?: string[];
 }
 
 export interface PortfolioImportBrokerListResponse {

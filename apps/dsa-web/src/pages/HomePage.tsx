@@ -354,6 +354,16 @@ const HomePage: React.FC = () => {
             : progressiveTask.status === 'failed'
               ? t('tasks.failed')
               : progressiveTask.status;
+      const lastUpdatedAt = progressiveTask.updatedAt || progressiveTask.startedAt || progressiveTask.createdAt;
+      const lastUpdatedLabel = lastUpdatedAt
+        ? new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(new Date(lastUpdatedAt))
+        : '--';
 
       return {
         eyebrow: t('home.decision.eyebrow'),
@@ -370,8 +380,8 @@ const HomePage: React.FC = () => {
             value: `${Math.min(progressiveTask.progress || 0, 100)}%`,
           },
           {
-            label: t('home.decision.task'),
-            value: progressiveTask.taskId,
+            label: t('home.decision.updated'),
+            value: lastUpdatedLabel,
           },
         ],
       };
@@ -397,15 +407,15 @@ const HomePage: React.FC = () => {
         },
       ],
     };
-  }, [displayReport, progressiveTask, reportLanguage, t]);
+  }, [displayReport, language, progressiveTask, reportLanguage, t]);
 
   return (
     <div data-testid="home-dashboard" className="workspace-page workspace-page--home">
       <section className="home-workspace-shell">
         <header className="home-workspace-intro workspace-header">
-          <p className="home-workspace-intro__eyebrow workspace-header__eyebrow">{t('home.eyebrow')}</p>
-          <h1 className="home-workspace-intro__title workspace-header__title">{t('home.title')}</h1>
-          <p className="home-workspace-intro__body workspace-header__body">{t('home.subtitle')}</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-1">{t('home.eyebrow')}</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold uppercase tracking-widest text-foreground">{t('home.title')}</h1>
+          <p className="mt-2 text-sm text-muted-text max-w-2xl leading-relaxed">{t('home.subtitle')}</p>
         </header>
 
         <section className="home-dashboard-layout" data-testid="home-dashboard-layout">
@@ -459,13 +469,13 @@ const HomePage: React.FC = () => {
             </section>
 
             <section className="home-decision-summary" aria-label={decisionSummaryBlock.eyebrow} data-testid="home-decision-summary">
-              <div className="home-decision-summary__header">
+              <div className="flex flex-wrap items-start justify-between gap-4 mb-4 pb-4 border-b border-[var(--border-muted)]">
                 <div>
-                  <p className="home-decision-summary__eyebrow">{decisionSummaryBlock.eyebrow}</p>
-                  <h2 className="home-decision-summary__title">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-1">{decisionSummaryBlock.eyebrow}</p>
+                  <h2 className="text-lg font-semibold text-foreground uppercase tracking-widest">
                     {decisionSummaryBlock.title}
                     {decisionSummaryBlock.code ? (
-                      <span className="home-decision-summary__code">{decisionSummaryBlock.code}</span>
+                      <span className="ml-3 font-mono text-sm text-muted-text">{decisionSummaryBlock.code}</span>
                     ) : null}
                   </h2>
                 </div>
@@ -474,25 +484,25 @@ const HomePage: React.FC = () => {
                     variant="home-action-report"
                     size="sm"
                     onClick={openMarkdownDrawer}
-                    className="home-decision-summary__button"
+                    className="text-[11px] uppercase tracking-widest"
                   >
                     {t('home.viewFullReport')}
                   </Button>
                 ) : null}
               </div>
 
-              <p className="home-decision-summary__body">{decisionSummaryBlock.body}</p>
+              <p className="text-sm leading-relaxed text-secondary-text mb-5">{decisionSummaryBlock.body}</p>
 
               <div className="home-decision-summary__metrics">
                 {decisionSummaryBlock.metrics.map((metric) => (
                   <div key={metric.label} className="home-decision-summary__metric">
-                    <p className="home-decision-summary__metric-label">{metric.label}</p>
-                    <p className="home-decision-summary__metric-value">{metric.value}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text mb-1">{metric.label}</p>
+                    <p className="home-decision-summary__metric-value text-lg font-mono font-semibold text-foreground tracking-wide">{metric.value}</p>
                     {metric.support ? (
-                      <p className="home-decision-summary__metric-support">{metric.support}</p>
+                      <p className="mt-1 text-xs text-muted-text">{metric.support}</p>
                     ) : null}
                     {typeof metric.meter === 'number' ? (
-                      <div className="home-decision-summary__metric-meter" aria-hidden="true">
+                      <div className="home-decision-summary__metric-meter mt-2" aria-hidden="true">
                         <span
                           className="home-decision-summary__metric-meter-fill"
                           style={{ width: `${metric.meter}%` }}

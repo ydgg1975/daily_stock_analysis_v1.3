@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
 import { systemConfigApi, SystemConfigConflictError, SystemConfigValidationError } from '../api/systemConfig';
 import type {
@@ -40,9 +40,6 @@ const CATEGORY_DISPLAY_ORDER: Record<string, number> = {
   backtest: 60,
   uncategorized: 99,
 };
-
-const ADMIN_UNLOCK_TOKEN_STORAGE_KEY = 'dsa-admin-settings-unlock-token';
-const ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY = 'dsa-admin-settings-unlock-expires-at';
 
 function sortItemsByOrder(items: SystemConfigItem[]): SystemConfigItem[] {
   return [...items].sort((a, b) => {
@@ -92,15 +89,11 @@ export function useSystemConfig() {
   const [retryAction, setRetryAction] = useState<RetryAction>(null);
   const serverItemByKeyRef = useRef<Record<string, SystemConfigItem>>({});
 
-  // Unlock/session state
-  const [adminUnlockToken, setAdminUnlockToken] = useState<string | null>(null);
-  const [adminUnlockExpiresAt, setAdminUnlockExpiresAt] = useState<number | null>(null);
-
-  const isAdminUnlocked = Boolean(
-    adminUnlockToken
-    && adminUnlockExpiresAt
-    && adminUnlockExpiresAt > Date.now(),
-  );
+  // Legacy unlock state is kept as always-open compatibility so system settings
+  // can rely on authenticated admin identity instead of a second page-level gate.
+  const adminUnlockToken = null;
+  const adminUnlockExpiresAt = null;
+  const isAdminUnlocked = true;
 
   const mergedItems = useMemo(() => {
     return sortItemsByOrder(
@@ -233,27 +226,6 @@ export function useSystemConfig() {
     [],
   );
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const storedToken = window.sessionStorage.getItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-    const rawExpiresAt = window.sessionStorage.getItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-    const parsedExpiresAt = Number(rawExpiresAt || '0');
-
-    if (!storedToken || !Number.isFinite(parsedExpiresAt) || parsedExpiresAt <= Date.now()) {
-      setAdminUnlockToken(null);
-      setAdminUnlockExpiresAt(null);
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-      return;
-    }
-
-    setAdminUnlockToken(storedToken);
-    setAdminUnlockExpiresAt(parsedExpiresAt);
-  }, []);
-
   const load = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -316,29 +288,11 @@ export function useSystemConfig() {
   }, [dirtyKeys, draftValues, serverItemByKey]);
 
   const setAdminUnlockSession = useCallback((token: string, expiresAt: number) => {
-    const normalizedToken = token.trim();
-    if (!normalizedToken || !Number.isFinite(expiresAt)) {
-      return;
-    }
-
-    setAdminUnlockToken(normalizedToken);
-    setAdminUnlockExpiresAt(expiresAt);
-
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY, normalizedToken);
-      window.sessionStorage.setItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY, String(expiresAt));
-    }
+    void token;
+    void expiresAt;
   }, []);
 
-  const clearAdminUnlockSession = useCallback(() => {
-    setAdminUnlockToken(null);
-    setAdminUnlockExpiresAt(null);
-
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-      window.sessionStorage.removeItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-    }
-  }, []);
+  const clearAdminUnlockSession = useCallback(() => {}, []);
 
   const persistItems = useCallback(async (
     changedItems: SystemConfigUpdateItem[],
@@ -349,7 +303,7 @@ export function useSystemConfig() {
     }
 
     if (options.validateBeforeSave) {
-      const validateResult = await systemConfigApi.validate({ items: changedItems }, { adminUnlockToken });
+      const validateResult = await systemConfigApi.validate({ items: changedItems });
       setValidationIssues(validateResult.issues || []);
 
       if (!validateResult.valid) {
@@ -367,7 +321,7 @@ export function useSystemConfig() {
       maskToken,
       reloadNow: true,
       items: changedItems,
-    }, { adminUnlockToken });
+    });
 
     const refreshed = await systemConfigApi.getConfig(true);
     applyServerPayload(refreshed.items, refreshed.configVersion, refreshed.maskToken, {
@@ -379,7 +333,7 @@ export function useSystemConfig() {
       ? `；警告：${updateResult.warnings.join('；')}`
       : '';
     setToast({ type: 'success', message: `${options.successMessage}${warningText}` });
-  }, [adminUnlockToken, applyServerPayload, configVersion, maskToken]);
+  }, [applyServerPayload, configVersion, maskToken]);
 
   const handleSaveFailure = useCallback((error: unknown, setRetryOnFailure: boolean) => {
     if (error instanceof SystemConfigValidationError) {

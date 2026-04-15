@@ -124,6 +124,11 @@ daily_stock_analysis/
 | `SEARXNG_BASE_URLS` | SearXNG 自建实例（无配额兜底，需在 settings.yml 启用 format: json）；留空时默认自动发现公共实例 | 可选 |
 | `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
+| `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote/history 补强 | 可选 |
+| `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | 可选 |
+| `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner market-data 补强 | 可选 |
+| `ALPACA_API_SECRET_KEY` | Alpaca Secret Key；需与 `ALPACA_API_KEY_ID` 成对配置 | 可选 |
+| `ALPACA_DATA_FEED` | Alpaca 数据 feed（`iex` / `sip`，默认 `iex`） | 可选 |
 | `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布（Actions 默认 false；需筹码数据时在 Variables 中设为 true，接口可能不稳定） | 可选 |
 
 #### ✅ 最小配置示例
@@ -249,6 +254,11 @@ daily_stock_analysis/
 |--------|------|--------|:----:|
 | `TUSHARE_TOKEN` | Tushare Pro Token | - | 可选 |
 | `TICKFLOW_API_KEY` | TickFlow API Key；配置后 A 股大盘复盘指数优先尝试 TickFlow，若套餐支持标的池查询则市场统计也会优先尝试 TickFlow | - | 可选 |
+| `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；用于港股 Scanner quote / daily history 补强 | - | 可选 |
+| `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先级高于 `TWELVE_DATA_API_KEY` | - | 可选 |
+| `ALPACA_API_KEY_ID` | Alpaca Key ID；用于美股 Scanner quote / daily history 补强 | - | 可选 |
+| `ALPACA_API_SECRET_KEY` | 与 `ALPACA_API_KEY_ID` 配对的 Alpaca Secret Key | - | 可选 |
+| `ALPACA_DATA_FEED` | Alpaca 数据 feed（`iex` / `sip`） | `iex` | 可选 |
 | `ENABLE_REALTIME_QUOTE` | 启用实时行情（关闭后使用历史收盘价分析） | `true` | 可选 |
 | `ENABLE_REALTIME_TECHNICAL_INDICATORS` | 盘中实时技术面：启用时用实时价计算 MA5/MA10/MA20 与多头排列（Issue #234）；关闭则用昨日收盘 | `true` | 可选 |
 | `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布分析（该接口不稳定，云端部署建议关闭）。GitHub Actions 用户需在 Repository Variables 中设置 `ENABLE_CHIP_DISTRIBUTION=true` 方可启用；workflow 默认关闭。 | `true` | 可选 |
@@ -295,7 +305,7 @@ daily_stock_analysis/
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：默认 `true`，非交易日跳过执行；设为 `false` 或使用 `--force-run` 可强制执行（Issue #373） | `true` |
 | `SCHEDULE_ENABLED` | 启用定时任务 | `false` |
 | `SCHEDULE_TIME` | 定时执行时间 | `18:00` |
-| `SCANNER_PROFILE` | Scanner 默认 profile（当前阶段建议保持 `cn_preopen_v1`） | `cn_preopen_v1` |
+| `SCANNER_PROFILE` | Scanner 默认 profile（支持 `cn_preopen_v1` / `us_preopen_v1` / `hk_preopen_v1`） | `cn_preopen_v1` |
 | `SCANNER_SCHEDULE_ENABLED` | 启用 Scanner 定时任务 | `false` |
 | `SCANNER_SCHEDULE_TIME` | Scanner 盘前执行时间 | `08:40` |
 | `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | 启动时是否立即执行一次 Scanner | `false` |
@@ -501,7 +511,7 @@ python main.py --schedule --no-run-immediately
 Market Scanner 使用独立的 schedule，不会和个股/大盘分析调度混为一体：
 
 ```bash
-# 手动运行一次 A 股盘前 Scanner
+# 手动运行一次 Scanner（具体市场由 `SCANNER_PROFILE` 或请求参数决定）
 python main.py --scanner
 
 # 启动 Scanner 定时任务
@@ -528,6 +538,29 @@ Scanner 适合设置在盘前，例如 `08:40`。运行后会生成一个 daily 
 | `SCANNER_SCHEDULE_RUN_IMMEDIATELY` | 启动时是否立即执行一次 Scanner | `false` | `true` |
 | `SCANNER_NOTIFICATION_ENABLED` | Scanner 定时运行后是否发送通知 | `true` | `true` |
 | `SCANNER_LOCAL_UNIVERSE_PATH` | Scanner 本地 A 股 universe cache 路径 | `./data/scanner_cn_universe_cache.csv` | `./data/scanner_cn_universe_cache.csv` |
+
+### Scanner 市场 profile 与数据源
+
+- `SCANNER_PROFILE` 当前支持 `cn_preopen_v1`、`us_preopen_v1`、`hk_preopen_v1`
+- A 股继续使用受控 universe + 本地优先历史特征计算
+- 美股继续使用 local-first 历史样本，并在本地 universe 过薄时补入 bounded liquid seed symbols
+- 港股新增独立 `hk_preopen_v1`，使用单独的 HK bounded universe 与 `HK02800` benchmark
+
+若希望补强 Scanner 的 market-data 路径，可额外配置：
+
+| 变量名 | 用途 |
+|--------|------|
+| `TWELVE_DATA_API_KEY` | Twelve Data 单 Key；港股 Scanner quote/history 补强 |
+| `TWELVE_DATA_API_KEYS` | Twelve Data 多 Key（逗号分隔）；优先于单 Key |
+| `ALPACA_API_KEY_ID` | Alpaca Key ID；美股 Scanner quote/daily 补强 |
+| `ALPACA_API_SECRET_KEY` | Alpaca Secret Key；需与 `ALPACA_API_KEY_ID` 配对 |
+| `ALPACA_DATA_FEED` | Alpaca 数据 feed，默认 `iex` |
+
+说明：
+
+- Alpaca 仅用于 market-data enrichment，不引入交易/执行能力
+- Twelve Data 当前主要用于港股 Scanner 的 quote / daily history 路径
+- 未配置这些 provider 时，Scanner 仍会继续走 local-first + 现有免费源 fallback
 
 例如在 Docker 中配置：
 
@@ -749,7 +782,21 @@ PUSHOVER_API_TOKEN=your_api_token
 ### YFinance
 - 免费，无需配置
 - 支持美股/港股数据
-- 美股历史数据与实时行情均统一使用 YFinance，以避免 akshare 美股复权异常导致的技术指标错误
+- 仍是通用美股/港股 fallback 数据源
+- 当前 Scanner 美股路径会在已配置 Alpaca 时优先尝试 Alpaca 做 quote / daily history 补强；未配置或失败时继续回退 YFinance
+
+### Twelve Data
+- 需要配置 `TWELVE_DATA_API_KEY` 或 `TWELVE_DATA_API_KEYS`
+- 当前主要用于港股 Scanner 的 quote / daily history 补强
+- 支持 single-key 或多 key 配置；多 key 模式优先使用 `TWELVE_DATA_API_KEYS`
+- Web `/settings/system` 中的 data-source/provider 表单会按该 single-key 形态渲染
+
+### Alpaca
+- 需要同时配置 `ALPACA_API_KEY_ID` 与 `ALPACA_API_SECRET_KEY`
+- `ALPACA_DATA_FEED` 默认使用 `iex`
+- 当前仅用于美股 Scanner 的 market-data enrichment（quote / snapshot-style context / daily history）
+- 不包含 trading / execution 能力
+- Web `/settings/system` 中的 data-source/provider 表单会按 key+secret 形态渲染，避免误当成单 Key provider
 
 ### 东财接口频繁失败时的处理
 
@@ -1088,6 +1135,19 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 ### Web 产品体验说明
 
 - Web 端现在使用统一的产品壳层与设计系统：登录页、启动加载、侧边导航、首页、持仓、回测和管理员日志共享同一套排版、留白、表面层级和状态反馈语言。
+- guest 公开预览仍然保持“不落正式用户历史”的原则；当前 `/api/v1/analysis/preview` 会为浏览器分配轻量匿名 session，用于隔离不同访客的 preview query 链路，而不会把 guest 映射成共享用户或 bootstrap-admin。
+- `/settings` 现在保留为个人偏好面，注册用户可在这里配置自己的个人通知邮箱与 Discord webhook；系统级通知 provider / webhook / operator 通道仍保留在管理员系统设置中，不再与个人通知目标混用。
+- 管理员账户默认先以 `User Mode` 进入产品，只有显式切到 `Admin Mode` 后才会暴露 `/settings/system`、`/admin/logs` 等 operator 页面，避免日常分析时误入系统控制面。
+- `/settings/system` 现在明确是全局 control-plane，而不是普通用户设置的变体：普通用户不可进入，管理员停留在 `User Mode` 时也不会获得系统级内容。
+- 已认证管理员一旦切到 `Admin Mode`，进入 `/settings/system` 不再需要额外的“system settings unlock”；危险操作改为逐动作确认，而不是继续用整页二次解锁墙。
+- `/settings/system` 不再混入个人通知渠道编辑或个人偏好式内容；普通用户的通知邮箱 / Discord webhook 仍保留在普通 `/settings`。
+- 当前 system control-plane 会集中展示全局 provider / data-source 管理、global admin logs 入口以及分离的 admin actions 区：`runtime cache reset` 继续作为安全 maintenance 动作，`factory reset / system initialization` 则是单独的破坏性入口。
+- admin logs 现在面向真正的全局可观测性：管理员在 `Admin Mode` 下看到的是跨用户 / 系统级活动流，而不只是自己的执行痕迹；可区分 actor、activity type、subsystem 与 destructive admin action。
+- 新增的 factory reset 使用强确认短语 `FACTORY RESET`；它会清空非 bootstrap 用户、其登录会话、用户偏好/通知目标、分析历史、聊天记录，以及用户拥有的 scanner / backtest / portfolio 使用状态，但保留 bootstrap admin、系统配置和 execution logs。
+- `/settings/system` 中的 provider / data-source 表单现在按凭据形态渲染：支持 single-key，以及 key+secret 两类 schema。Twelve Data 继续支持单 Key / 多 Key，Alpaca 需要 `ALPACA_API_KEY_ID + ALPACA_API_SECRET_KEY` 成对输入。
+- 普通用户的任务展示会优先显示标的、阶段、进度与更新时间，不再默认暴露长 task ID；技术标识仍保留在管理员日志等 operator 调试面中。
+- 登录回跳、401/403 拒绝态与 admin-route 拦截现在都会保留更明确的下一步提示；当普通用户或仍处于 `User Mode` 的管理员访问 operator 页面时，前端会给出显式引导而不是静默失败。
+- 退出登录后，Web 会显式回到 guest 首页，让访客态锁定卡片与导航立即恢复，而不是停留在受保护工作区的残留壳层中。
 - 回测页会继续保留“历史分析评估”与“确定性规则策略回测”的语义区分，但首屏信息结构已收紧，详细审计与执行假设更多通过折叠区和下层结果区查看。
 - 移动端会统一通过抽屉导航进入各个工作区，加载态优先使用结构化骨架/状态面板，而不是分散的随机 spinner。
 
@@ -1219,7 +1279,8 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 - Reworked parser logic into extensible parser registry.
 - Built-in adapters remain: `huatai`, `citic`, `cmb` with alias mapping.
 - Added parser discovery endpoint:
-  - `GET /api/v1/portfolio/imports/csv/brokers`
+  - `GET /api/v1/portfolio/imports/brokers`
+  - legacy `GET /api/v1/portfolio/imports/csv/brokers` remains as a compatibility wrapper
 
 ### Web closure
 - `/portfolio` page now includes:
@@ -1228,7 +1289,7 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
   - CSV parse + commit operations (supports `dry_run`)
   - event list panel with filters and pagination
   - single-account scoped event deletion for trade / cash / corporate action correction
-  - broker selector fallback to built-in brokers (`huatai/citic/cmb`) when broker list API fails or returns empty
+  - broker selector fallback to built-in brokers (`huatai/citic/cmb/ibkr`) when broker list API fails or returns empty
   - FX status card manual refresh action that calls existing `POST /api/v1/portfolio/fx/refresh`; if upstream FX fetch fails, the page may still show stale after refresh and will explain the result inline
   - when `PORTFOLIO_FX_UPDATE_ENABLED=false`, the refresh API now returns explicit disabled status and the page will show “汇率在线刷新已被禁用” instead of “当前范围无可刷新的汇率对”
 
@@ -1241,3 +1302,136 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 - Fail-open:
   - board lookup errors do not interrupt risk response.
   - response returns coverage/error details for explainability.
+
+## Portfolio P1 (User-Owned Broker Connections and IBKR Global Import)
+
+### User-owned broker connection foundation
+- Added a first-class `portfolio_broker_connections` model for user-owned broker integrations.
+- Each connection is scoped to the authenticated user and stores:
+  - `broker_type`, `broker_name`, `connection_name`
+  - `portfolio_account_id`
+  - `broker_account_ref`
+  - `import_mode`, `status`
+  - sync/import metadata such as `last_imported_at`, `last_import_source`, `last_import_fingerprint`
+- API closure:
+  - `POST /api/v1/portfolio/broker-connections`
+  - `GET /api/v1/portfolio/broker-connections`
+  - `PUT /api/v1/portfolio/broker-connections/{connection_id}`
+- Normal users can only list or mutate their own connections because portfolio service/repository resolution now stays owner-scoped end to end.
+
+### IBKR import path
+- Added generic import endpoints:
+  - `POST /api/v1/portfolio/imports/parse`
+  - `POST /api/v1/portfolio/imports/commit`
+- Legacy CSV endpoints remain as compatibility wrappers, so existing A-share broker imports do not break.
+- First-class new broker id: `ibkr`
+  - preferred artifact: IBKR Flex Query XML
+  - supported first pass mapping: trades, cash ledger, split corporate actions
+  - malformed or unsupported XML returns explicit validation errors instead of partial silent writes
+- Import flow semantics:
+  - parse -> preview -> commit stays aligned with the existing portfolio import workflow
+  - commit auto-creates or reuses the current user's broker connection by `broker_account_ref`
+  - same-file repeat import is blocked per broker connection via `last_import_fingerprint`
+  - if Flex data contains open positions but no trade history, the importer seeds a bounded synthetic opening trade to keep the existing ledger model usable
+
+### Multi-market and multi-currency hardening
+- Portfolio accounts now allow `market=global` for cross-market brokerage accounts such as IBKR.
+- Event-level market values remain concrete (`cn`, `hk`, `us`) so downstream ledgers and debugging stay explicit.
+- Manual writes under a global account infer event market from the symbol when possible.
+- Mixed-market IBKR imports automatically upgrade the target account to `global`.
+- Single-account snapshot/risk currency now follows the account `base_currency` instead of always defaulting to `CNY`.
+- Multi-currency cash balances remain account-scoped and continue using the existing FX fail-open behavior when a conversion rate is missing or stale.
+
+### Web exposure on `/portfolio`
+- The existing import block now surfaces IBKR alongside the current A-share brokers instead of introducing a new portfolio page.
+- Selecting `ibkr` switches the upload affordance to Flex XML and explains that imports bind to the current user's own broker connection.
+- The selected account panel shows saved broker connections, account market, and base currency so users can confirm where the import will land.
+- Account creation now allows `global` as a minimal market option for cross-market accounts.
+
+## Portfolio P2 (IBKR Read-only API Sync Foundation)
+
+### 目标与边界
+- 在不改动现有 multi-user ownership/auth/authz 基线的前提下，为 IBKR 增加用户手动触发的只读 API 同步基础能力。
+- 只同步账户状态、持仓与多币种现金上下文，不新增任何下单、执行、自动交易或后台守护同步逻辑。
+- 继续保留 Flex XML 文件导入路径，API sync 作为互补能力而不是替代现有导入工作流。
+
+### 连接与安全语义
+- 复用现有 user-owned `portfolio_broker_connections`，不新增共享/global broker state。
+- IBKR API sync 仅在 connection 的 `sync_metadata` 中保存非敏感默认配置，例如：
+  - `api_base_url`
+  - `verify_ssl`
+  - 最近同步时间 / 最近 broker account ref
+- 手动同步所需的 `session_token` 只用于当前请求，不会持久化到数据库。
+- 新增只读 endpoint：
+  - `POST /api/v1/portfolio/sync/ibkr`
+
+### 首版同步范围
+- 账户摘要 / summary
+- 持仓 / positions
+- 多币种现金余额 / ledger cash balances
+- 首版实现优先兼容 IBKR Client Portal 风格的只读 portfolio/account endpoints，并保持 manual trigger only。
+
+### 账户映射与导入共存
+- API sync 会优先复用当前用户现有的 IBKR connection；若用户显式提供 `broker_account_ref`，系统会在当前用户自己的账户范围内解析并校验映射。
+- 若同一 `broker_account_ref` 已绑定到该用户另一条 portfolio account，sync 会返回明确冲突，而不是静默写入错误账户。
+- 对于已经通过 Flex 导入落库的同一 IBKR 账户：
+  - ledger / 历史事件仍保持文件导入语义
+  - API sync 只维护当前 sync-state
+  - 当前日期 snapshot 可切换为 sync overlay 视图，历史日期仍使用原有 ledger replay
+- 这样可以避免重复生成 synthetic trades，也能避免 repeated sync 无控制地产生重复账户或重复持仓。
+
+### Web 端最小暴露
+- 继续复用现有 `/portfolio` 的“数据同步 / Data Sync”区块，不新增新页面。
+- 当 broker 选择为 `ibkr` 时，现有导入区块会额外展示：
+  - API base URL
+  - 可选 broker account ref
+  - 一次性 session token
+  - SSL 校验开关
+  - “只读同步 IBKR”按钮
+- 成功后页面会以内联方式展示同步摘要，并明确说明这是 `Read-only` 同步，不含任何交易能力。
+
+### 本轮硬化与验证要点
+- 后端现在会把以下高风险只读同步失败模式收口为可展示、可测试的结构化结果，而不是把原始异常直接抛到 UI：
+  - 缺少 / 失效 session
+  - 空账户列表 / 多账户歧义
+  - 不受支持或缺少账户标识的 payload
+  - broker account ref 映射冲突
+  - 空持仓 / 空现金但仍可视为有效当前状态的回退场景
+- 同一用户当前支持一个有边界的多账户同步路径：
+  - 同一 IBKR session 可同步多个账户
+  - 每个账户需要显式 `broker_account_ref`，或复用已绑定 connection
+  - repeated sync 继续执行“替换当前 sync overlay”，不会把 overlay 追加成重复行
+  - 若同一 `broker_account_ref` 试图绑定到该用户另一条 portfolio account，会显式拒绝
+- `/portfolio` 已补入一个有边界的浏览器 happy-path smoke：`apps/dsa-web/e2e/portfolio-ibkr-sync.spec.ts`。
+  - 若本地受限环境无法正常启动 Chromium，可改按下面的手工 checklist 做验收，而不是强行引入新的 E2E 框架。
+
+### 仍需真实 IBKR 环境验证的部分
+- 当前环境内的测试使用受控 fixture / route stub，不等同于真实 IBKR Paper / Gateway 会话。
+- 仍需在真实环境确认：
+  - Client Portal / Gateway 只读 session 的建立与过期行为
+  - 本地 TLS / 自签名证书与 `verify_ssl` 组合
+  - 真实多账户 payload 是否仍落在当前支持的数据结构范围内
+  - 真实 summary / ledger / positions 字段是否存在券商侧额外变体
+
+### 手工同步验收 checklist
+1. 以普通登录用户进入 `/portfolio`，选择一个属于自己的 IBKR 持仓账户。
+2. 在“数据同步 / Data Sync”中切换 broker 为 `ibkr`，确认页面显示的是只读同步输入区，而不是交易/执行入口。
+3. 填入当前可用的 `session token`、需要时填 `broker_account_ref`，提交“只读同步 IBKR”。
+4. 确认页面出现同步成功或带 warning 的结果卡，且 broker 选择器不会因为 metadata refresh 自动跳回其他 broker。
+5. 确认同步摘要中的账户 Ref、现金、市值、权益、持仓数量与当前 overlay 数据一致。
+6. 立刻再次执行同一账户同步，确认结果会替换当前 sync overlay，而不是新增重复 overlay 记录或重复持仓。
+7. 若同一用户有第二个 IBKR 账户，使用不同 `broker_account_ref` 对第二个 portfolio account 同步，确认两个账户的 overlay 互不污染。
+8. 切回历史日期快照，确认历史结果仍来自 Flex import / ledger，而不是被 API sync 改写成历史回放。
+9. 使用失效或空白 session token 再试一次，确认页面拿到的是可操作的错误提示，而不是原始 traceback。
+
+### 当前实现边界
+- API sync 仍是手动触发、只读、当前状态 overlay，不是历史流水回放引擎。
+- 不保存 session token，也不新增任何下单、撤单、执行或 broker 写操作。
+- 当 session 同时暴露多个账户时，必须显式提供 `broker_account_ref` 或复用已绑定 connection。
+- 若上游 payload 超出当前支持结构，系统会拒绝安全同步并提示改用 Flex 导入。
+
+### 仍由 Flex import 负责的能力
+- 历史 ledger / trade / cash / corporate action 落库
+- 可回放的历史快照语义
+- 可重复导入、可审计的 source-of-record
+- API payload 不受支持时的安全后备路径

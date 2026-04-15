@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 
-from api.deps import get_database_manager
+from api.deps import CurrentUser, get_database_manager, require_admin_user
 from api.v1.schemas.usage import UsageSummaryResponse
 from src.storage import DatabaseManager
 
@@ -42,6 +42,7 @@ def _date_range(period: str):
 def get_usage_summary(
     period: str = Query("month", description="'today' | 'month' | 'all'"),
     db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> UsageSummaryResponse:
     if period not in _VALID_PERIODS:
         period = "month"

@@ -33,8 +33,12 @@ from src.core.config_registry import (
     get_field_definition,
     get_registered_field_keys,
 )
+from src.services.execution_log_service import ExecutionLogService
+from src.storage import get_db
 
 logger = logging.getLogger(__name__)
+
+FACTORY_RESET_CONFIRMATION_PHRASE = "FACTORY RESET"
 
 
 class ConfigValidationError(Exception):
@@ -83,6 +87,69 @@ class SystemConfigService:
 
         reset_fetcher_manager()
         reset_search_service()
+
+    def reset_runtime_caches(self) -> Dict[str, Any]:
+        """Reset bounded runtime caches/singletons for admin maintenance."""
+        self._reload_runtime_singletons()
+        return {
+            "success": True,
+            "action": "reset_runtime_caches",
+            "message": "Runtime provider/search caches were reset",
+            "cleared": ["data_fetcher_manager", "search_service"],
+        }
+
+    def factory_reset_system(
+        self,
+        *,
+        confirmation_phrase: str,
+        actor_user_id: Optional[str] = None,
+        actor_display_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a bounded destructive factory reset while preserving bootstrap admin access."""
+        normalized_phrase = str(confirmation_phrase or "").strip()
+        if normalized_phrase != FACTORY_RESET_CONFIRMATION_PHRASE:
+            raise ValueError("Factory reset confirmation phrase did not match")
+
+        db = get_db()
+        result = db.factory_reset_non_bootstrap_state()
+        counts = result.get("counts") if isinstance(result.get("counts"), dict) else {}
+        cleared = [
+            str(item)
+            for item in (result.get("cleared") or [])
+            if str(item or "").strip()
+        ]
+        preserved = [
+            "bootstrap_admin_access",
+            "system_configuration",
+            "execution_logs",
+        ]
+
+        ExecutionLogService().record_admin_action(
+            action="factory_reset_system",
+            message="Factory reset completed for bounded non-bootstrap user-owned state.",
+            actor={
+                "user_id": actor_user_id,
+                "display_name": actor_display_name,
+                "role": "admin",
+            },
+            subsystem="system_control",
+            destructive=True,
+            detail={
+                "cleared": cleared,
+                "counts": counts,
+                "preserved": preserved,
+            },
+        )
+
+        return {
+            "success": True,
+            "action": "factory_reset_system",
+            "message": "Factory reset completed for bounded non-bootstrap user-owned state.",
+            "cleared": cleared,
+            "preserved": preserved,
+            "counts": counts,
+            "confirmation_phrase": FACTORY_RESET_CONFIRMATION_PHRASE,
+        }
 
     @classmethod
     def _normalize_display_value(cls, key: str, value: str) -> str:
@@ -756,6 +823,23 @@ class SystemConfigService:
                     "severity": "error",
                     "expected": "non-empty TELEGRAM_CHAT_ID",
                     "actual": chat_id_value,
+                }
+            )
+
+        alpaca_key_id = (effective_map.get("ALPACA_API_KEY_ID") or "").strip()
+        alpaca_secret = (effective_map.get("ALPACA_API_SECRET_KEY") or "").strip()
+        if (alpaca_key_id or alpaca_secret) and not (alpaca_key_id and alpaca_secret) and (
+            {"ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY", "ALPACA_DATA_FEED"} & updated_keys
+        ):
+            missing_key = "ALPACA_API_SECRET_KEY" if alpaca_key_id and not alpaca_secret else "ALPACA_API_KEY_ID"
+            issues.append(
+                {
+                    "key": missing_key,
+                    "code": "missing_dependency",
+                    "message": "Alpaca credentials require both ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY",
+                    "severity": "error",
+                    "expected": "complete Alpaca key ID + secret key pair",
+                    "actual": "partial Alpaca credential set",
                 }
             )
 

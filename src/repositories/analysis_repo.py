@@ -25,7 +25,13 @@ class AnalysisRepository:
     封装 AnalysisHistory 表的数据库操作
     """
     
-    def __init__(self, db_manager: Optional[DatabaseManager] = None):
+    def __init__(
+        self,
+        db_manager: Optional[DatabaseManager] = None,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ):
         """
         初始化数据访问层
         
@@ -33,6 +39,8 @@ class AnalysisRepository:
             db_manager: 数据库管理器（可选，默认使用单例）
         """
         self.db = db_manager or DatabaseManager.get_instance()
+        self.owner_id = owner_id
+        self.include_all_owners = bool(include_all_owners)
     
     def get_by_query_id(self, query_id: str) -> Optional[AnalysisHistory]:
         """
@@ -45,7 +53,12 @@ class AnalysisRepository:
             AnalysisHistory 对象，不存在返回 None
         """
         try:
-            records = self.db.get_analysis_history(query_id=query_id, limit=1)
+            records = self.db.get_analysis_history(
+                query_id=query_id,
+                limit=1,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+            )
             return records[0] if records else None
         except Exception as e:
             logger.error(f"查询分析记录失败: {e}")
@@ -72,7 +85,9 @@ class AnalysisRepository:
             return self.db.get_analysis_history(
                 code=code,
                 days=days,
-                limit=limit
+                limit=limit,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
             )
         except Exception as e:
             logger.error(f"获取分析列表失败: {e}")
@@ -105,7 +120,8 @@ class AnalysisRepository:
                 query_id=query_id,
                 report_type=report_type,
                 news_content=news_content,
-                context_snapshot=context_snapshot
+                context_snapshot=context_snapshot,
+                owner_id=self.owner_id,
             )
         except Exception as e:
             logger.error(f"保存分析结果失败: {e}")
@@ -123,7 +139,13 @@ class AnalysisRepository:
             记录数量
         """
         try:
-            records = self.db.get_analysis_history(code=code, days=days, limit=1000)
+            records = self.db.get_analysis_history(
+                code=code,
+                days=days,
+                limit=1000,
+                owner_id=self.owner_id,
+                include_all_owners=self.include_all_owners,
+            )
             return len(records)
         except Exception as e:
             logger.error(f"统计分析记录失败: {e}")

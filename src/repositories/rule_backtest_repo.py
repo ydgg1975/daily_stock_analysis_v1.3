@@ -17,16 +17,27 @@ class RuleBacktestRepository:
         self.db = db_manager or DatabaseManager.get_instance()
 
     def save_run(self, run: RuleBacktestRun) -> RuleBacktestRun:
+        run.owner_id = self.db.require_user_id(getattr(run, "owner_id", None))
         with self.db.get_session() as session:
             session.add(run)
             session.commit()
             session.refresh(run)
             return run
 
-    def update_run(self, run_id: int, **fields: Any) -> Optional[RuleBacktestRun]:
+    def update_run(
+        self,
+        run_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+        **fields: Any,
+    ) -> Optional[RuleBacktestRun]:
         with self.db.get_session() as session:
+            conditions = [RuleBacktestRun.id == run_id]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
             row = session.execute(
-                select(RuleBacktestRun).where(RuleBacktestRun.id == run_id).limit(1)
+                select(RuleBacktestRun).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
             if row is None:
                 return None
@@ -44,10 +55,19 @@ class RuleBacktestRepository:
             session.commit()
             return len(trades)
 
-    def get_run(self, run_id: int) -> Optional[RuleBacktestRun]:
+    def get_run(
+        self,
+        run_id: int,
+        *,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> Optional[RuleBacktestRun]:
         with self.db.get_session() as session:
+            conditions = [RuleBacktestRun.id == run_id]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
             return session.execute(
-                select(RuleBacktestRun).where(RuleBacktestRun.id == run_id).limit(1)
+                select(RuleBacktestRun).where(and_(*conditions)).limit(1)
             ).scalar_one_or_none()
 
     def get_runs_paginated(
@@ -56,9 +76,13 @@ class RuleBacktestRepository:
         code: Optional[str] = None,
         offset: int,
         limit: int,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
     ) -> Tuple[List[RuleBacktestRun], int]:
         with self.db.get_session() as session:
             conditions = []
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
             if code:
                 conditions.append(RuleBacktestRun.code == code)
             where_clause = and_(*conditions) if conditions else True
@@ -84,10 +108,19 @@ class RuleBacktestRepository:
             ).scalars().all()
             return list(rows)
 
-    def delete_runs_by_code(self, *, code: str) -> int:
+    def delete_runs_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
         with self.db.get_session() as session:
+            conditions = [RuleBacktestRun.code == code]
+            if not include_all_owners:
+                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
             deleted = session.execute(
-                delete(RuleBacktestRun).where(RuleBacktestRun.code == code)
+                delete(RuleBacktestRun).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
             return int(deleted)

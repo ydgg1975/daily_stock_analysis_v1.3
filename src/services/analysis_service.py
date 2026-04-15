@@ -41,6 +41,8 @@ class AnalysisService:
         query_id: Optional[str] = None,
         send_notification: bool = True,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
+        owner_id: Optional[str] = None,
+        persist_history: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -75,7 +77,9 @@ class AnalysisService:
             pipeline = StockAnalysisPipeline(
                 config=config,
                 query_id=query_id,
-                query_source="api"
+                query_source="api",
+                owner_id=owner_id,
+                persist_history=persist_history,
             )
             
             # 确定报告类型 (API: simple/detailed/full/brief -> ReportType)

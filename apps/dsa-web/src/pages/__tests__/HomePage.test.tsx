@@ -229,6 +229,9 @@ describe('HomePage', () => {
     expect(within(queue).getByLabelText('排队中')).toBeInTheDocument();
     expect(within(queue).getByText('行情')).toBeInTheDocument();
     expect(within(queue).getByText('排队')).toBeInTheDocument();
+    const decisionSummary = screen.getByTestId('home-decision-summary');
+    expect(within(decisionSummary).getByText('最近更新')).toBeInTheDocument();
+    expect(within(decisionSummary).queryByText('task-processing')).not.toBeInTheDocument();
   });
 
   it('renders a compact localized task queue in English mode', async () => {
@@ -443,7 +446,7 @@ describe('HomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '分析' }));
 
     expect(await screen.findByTestId('report-generation-preview')).toBeInTheDocument();
-    expect(screen.getByText('研究报告草稿')).toBeInTheDocument();
+    expect(screen.getByText('报告草稿')).toBeInTheDocument();
     expect(screen.getAllByText('决策摘要').length).toBeGreaterThan(0);
     expect(screen.getByText('市场上下文')).toBeInTheDocument();
   });

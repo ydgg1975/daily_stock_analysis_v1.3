@@ -1,4 +1,4 @@
-# Market Scanner (A-share + US Pre-open)
+# Market Scanner (A-share + US + Hong Kong Pre-open)
 
 ## Product Boundary
 
@@ -26,10 +26,11 @@ Current entry points:
 
 ## Scope In This Phase
 
-The current production scope now includes two explicit market profiles:
+The current production scope now includes three explicit market profiles:
 
 - `cn_preopen_v1`: the original A-share pre-open scanner and the default
 - `us_preopen_v1`: a new US pre-open scanner focused on practical watchlist generation
+- `hk_preopen_v1`: a Hong Kong pre-open scanner focused on practical HK watchlist generation
 
 Shared behavior remains intentionally stable:
 
@@ -42,7 +43,7 @@ Shared behavior remains intentionally stable:
   - stock Q&A
   - backtest with prefilled symbol
 
-A-share remains the default A-share-first experience, while the US profile is added as a clearly separate scanner profile without changing A-share ranking behavior.
+A-share remains the default A-share-first experience, while the US and Hong Kong profiles are added as clearly separate scanner profiles without changing A-share ranking behavior.
 
 ## A-share Universe Definition
 
@@ -199,7 +200,61 @@ AI is additive rather than mandatory:
 
 The recommended default is still a small bounded top-N coverage to keep latency and cost predictable.
 
-## US Scanner Profile (Phase 2)
+## Run Diagnostics And Admin Observability
+
+`/scanner` now exposes a compact run-diagnostics block so the page is not just a final-result view:
+
+- `input universe size`
+- `eligible after universe fetch`
+- `eligible after liquidity/profile filter`
+- `eligible after data-availability filter`
+- `ranked candidate count`
+- `shortlisted count`
+- `excluded by reason` with bounded categories such as `filtered_by_profile_constraints`, `missing_history`, and `missing_quote_or_snapshot`
+
+These fields are meant to answer, directly from the product:
+
+- how many symbols were actually scanned
+- whether a small shortlist came from a small universe, filtering pressure, or missing data
+- whether the user is looking at the final shortlist rather than the broader ranked pool
+
+Each run also keeps bounded provider attribution:
+
+- `configured primary provider`
+- `quote / snapshot / history source used`
+- `providers used`
+- `fallback count`
+- `provider failure count`
+- `missing data symbol count`
+
+This is intentionally a **run-level summary**, not a fake symbol-level provider trace. The surface only reports attribution the current Scanner pipeline actually records.
+
+`/admin/logs` now records Scanner runs as a separate `scanner` subsystem so admins can inspect:
+
+- scanner run id and market/profile
+- shortlist count and coverage summary
+- providers used
+- whether fallback happened
+- provider failure count / missing-data pressure
+
+The goal is bounded explainability, not a full telemetry warehouse.
+
+## Scanner Market-data Providers
+
+This phase adds two practical market-data providers for Scanner without changing the existing per-stock analysis fallback model:
+
+- `Twelve Data`: stays a single-key provider and is primarily used for Hong Kong scanner quote / daily-history enrichment
+- `Alpaca`: uses a `key_id + secret_key` credential pair and is primarily used for US scanner realtime quote / snapshot-style enrichment / daily-history enrichment
+
+The credential surface intentionally stays small:
+
+- `TWELVE_DATA_API_KEY` or `TWELVE_DATA_API_KEYS`
+- `ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY`
+- `ALPACA_DATA_FEED` (default `iex`)
+
+If these providers are not configured, Scanner still falls back to local-first data plus the existing free-source routes.
+
+## US Scanner Profile
 
 Without changing the original A-share `cn_preopen_v1` ranking path, Scanner now adds a separate `us_preopen_v1` profile.
 
@@ -217,8 +272,9 @@ The first US profile uses a **local-first bounded universe**:
 1. `LOCAL_US_PARQUET_DIR` when available
 2. `US_STOCK_PARQUET_DIR` as a compatibility fallback
 3. local `stock_daily` rows that already contain US ticker history
+4. a bounded liquid seed supplement when the local universe is too thin
 
-The scanner does not try to blind-scan the internet for a first-pass universe. It only evaluates locally available US history candidates.
+The scanner does not try to blind-scan the internet for a first-pass universe. It evaluates local history candidates plus a bounded liquid seed supplement when necessary.
 
 The current filters remove:
 
@@ -240,12 +296,68 @@ The current filters remove:
 
 If live quotes are unavailable, the scanner still returns a shortlist and explicitly marks the run as more history-driven in diagnostics and risk notes.
 
+### US Provider Path And Diagnostics
+
+The current US data path is:
+
+1. local-first history / parquet / `stock_daily`
+2. Alpaca first for realtime quote and daily-history enrichment when configured
+3. YFinance fallback when Alpaca is unavailable or unconfigured
+
+Runtime diagnostics now preserve:
+
+- `coverage_strategy`
+- `local_symbol_count`
+- `seed_supplement_count`
+- the live-quote provider attempt chain
+- whether Alpaca was fully configured, accepted, skipped, or failed
+
+This keeps thin-universe behavior explainable instead of making US shortlist quality look arbitrary.
+
+## Hong Kong Scanner Profile
+
+Scanner now also adds a dedicated `hk_preopen_v1` profile without merging HK logic into A-shares or US scoring.
+
+Its boundary stays explicit:
+
+- it is still a Scanner capability, not Backtest or execution
+- deterministic scoring still generates the primary shortlist
+- it reuses existing run persistence, today/recent watchlists, review/quality, schedule, notification, and diagnostics infrastructure
+- it stays bounded, explainable, and local-first instead of trying to blind-scan the whole exchange
+
+### Hong Kong Universe And Data Assumptions
+
+The first `hk_preopen_v1` profile uses a separate HK bounded universe:
+
+1. local HK history first where available
+2. a bounded, explainable HK seed list when local coverage is thin
+3. `HK02800` as the current benchmark
+4. Twelve Data first for quote / daily-history enrichment, then existing free-source fallbacks
+
+The first implementation intentionally prefers:
+
+- a bounded universe
+- local-first history
+- explicit provider fallback
+- readable pre-open shortlist output instead of an exchange-wide dump
+
+### What The Hong Kong Profile Optimizes For
+
+`hk_preopen_v1` currently emphasizes:
+
+- liquidity
+- recent trend / momentum continuation
+- benchmark-relative behavior versus `HK02800`
+- opening confirmation / gap risk
+- optional realtime quote context
+
 ### UX And Market Context
 
 The `/scanner` page now lets users switch explicitly between:
 
 - `A-share`
 - `US`
+- `Hong Kong`
 
 Market/profile context is preserved in:
 
@@ -254,7 +366,7 @@ Market/profile context is preserved in:
 - status / review / quality summaries
 - exported scanner summaries
 
-US reasons, risks, and watch-plan text also use market-appropriate wording such as pre-open context, gap risk, opening confirmation, and tradability instead of reusing A-share-specific phrasing.
+US and Hong Kong reasons, risks, and watch-plan text also use market-appropriate wording such as pre-open context, gap risk, opening confirmation, liquidity, and tradability instead of reusing A-share-specific phrasing.
 
 ## Risk Notes And Watch Context
 
@@ -302,7 +414,7 @@ Scanner now supports a practical pre-open daily workflow instead of only ad hoc 
 
 Scanner uses its own config surface instead of overloading the regular analysis schedule:
 
-- `SCANNER_PROFILE` (currently `cn_preopen_v1` or `us_preopen_v1`)
+- `SCANNER_PROFILE` (currently `cn_preopen_v1`, `us_preopen_v1`, or `hk_preopen_v1`)
 - `SCANNER_SCHEDULE_ENABLED`
 - `SCANNER_SCHEDULE_TIME`
 - `SCANNER_SCHEDULE_RUN_IMMEDIATELY`
@@ -310,6 +422,8 @@ Scanner uses its own config surface instead of overloading the regular analysis 
 - `SCANNER_LOCAL_UNIVERSE_PATH`
 - `LOCAL_US_PARQUET_DIR`
 - `US_STOCK_PARQUET_DIR` (legacy compatibility name)
+- `TWELVE_DATA_API_KEY` / `TWELVE_DATA_API_KEYS`
+- `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` / `ALPACA_DATA_FEED`
 - `SCANNER_AI_ENABLED`
 - `SCANNER_AI_TOP_N`
 
@@ -542,12 +656,12 @@ There are also a few explicit review limitations in the current implementation:
 - benchmark comparison only appears when the required local benchmark bars exist
 - realized follow-through is currently based on daily close/high/low data, not auction detail, intraday path, or actual fillability
 
-## Future US Extension Path
+## Future Expansion Path
 
-The code already includes a `us_preopen_v1` placeholder profile as the next architectural step. A future US scanner can be added by:
+The project now ships `cn_preopen_v1`, `us_preopen_v1`, and `hk_preopen_v1`, but a few next steps are still explicit:
 
-- defining a separate `ScannerMarketProfile`
-- introducing US-appropriate universe rules
-- replacing A-share-specific market rules and language
-- adding premarket / earnings / gap / news features that fit US workflows
-- keeping Scanner, Analysis, Backtest, and future Execution clearly separated
+- expand the bounded US / HK universes without jumping straight to exchange-wide live scanning
+- add fuller key rotation and provider-health diagnostics for Twelve Data
+- add richer pre-open event / earnings / gap features for US and Hong Kong workflows
+- continue improving diagnostics so provider fallback and thin-universe behavior stay transparent
+- keep Scanner, Analysis, Backtest, and future Execution clearly separated

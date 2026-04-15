@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 export type ApiErrorCategory =
+  | 'auth_required'
+  | 'access_denied'
+  | 'admin_unlock_required'
   | 'agent_disabled'
   | 'missing_params'
   | 'validation_error'
@@ -328,9 +331,9 @@ export function parseApiError(error: unknown): ParsedApiError {
   }
 
   if (
-    status === 409
-    || errorCode === 'duplicate_task'
+    errorCode === 'duplicate_task'
     || includesAny(matchText, ['正在分析中', 'duplicate task', 'duplicate_task'])
+    || (status === 409 && !errorCode)
   ) {
     return createParsedApiError({
       title: '分析任务已在进行中',
@@ -348,6 +351,119 @@ export function parseApiError(error: unknown): ParsedApiError {
       rawMessage,
       status,
       category: 'portfolio_oversell',
+    });
+  }
+
+  if (
+    errorCode === 'ibkr_session_required'
+    || errorCode === 'ibkr_session_invalid'
+    || errorCode === 'ibkr_session_expired'
+  ) {
+    return createParsedApiError({
+      title: 'IBKR 会话不可用',
+      message: '请先在本地 IBKR Client Portal / Gateway 中确认只读会话仍有效，再重新粘贴 session token 后重试。',
+      rawMessage,
+      status,
+      category: 'validation_error',
+    });
+  }
+
+  if (errorCode === 'ibkr_account_mapping_conflict') {
+    return createParsedApiError({
+      title: 'IBKR 账户映射冲突',
+      message: '该 broker account ref 已绑定到另一持仓账户。请先确认账户映射，再重新同步。',
+      rawMessage,
+      status,
+      category: 'validation_error',
+    });
+  }
+
+  if (
+    errorCode === 'ibkr_account_ambiguous'
+    || errorCode === 'ibkr_account_not_found'
+    || errorCode === 'ibkr_account_identifier_invalid'
+    || errorCode === 'ibkr_empty_accounts'
+    || errorCode === 'ibkr_connection_not_found'
+    || errorCode === 'ibkr_connection_type_invalid'
+  ) {
+    return createParsedApiError({
+      title: '无法确定要同步的 IBKR 账户',
+      message: '请确认当前 session 暴露了正确账户，并填写或复用正确的 broker account ref 后再试。',
+      rawMessage,
+      status,
+      category: 'validation_error',
+    });
+  }
+
+  if (errorCode === 'ibkr_payload_unsupported') {
+    return createParsedApiError({
+      title: '当前 IBKR 返回结构暂不受支持',
+      message: '本次只读同步没有拿到当前版本可安全解析的账户数据。请改用 Flex 导入，或等待后端适配后再试。',
+      rawMessage,
+      status,
+      category: 'validation_error',
+    });
+  }
+
+  if (errorCode === 'ibkr_upstream_error' || errorCode === 'ibkr_sync_internal_error') {
+    return createParsedApiError({
+      title: 'IBKR 只读同步暂时失败',
+      message: '本地工作台仍可用，但这次 IBKR 只读同步没有完成。请稍后重试，或先改用 Flex 导入。',
+      rawMessage,
+      status,
+      category: 'upstream_unavailable',
+    });
+  }
+
+  if (
+    errorCode === 'unauthorized'
+    || includesAny(matchText, ['login required', 'not authenticated'])
+  ) {
+    return createParsedApiError({
+      title: '需要登录',
+      message: '当前操作需要先登录后继续。登录成功后，请重新进入刚才的页面。',
+      rawMessage,
+      status,
+      category: 'auth_required',
+    });
+  }
+
+  if (
+    errorCode === 'admin_unlock_required'
+    || includesAny(matchText, ['admin settings are locked', 'verify admin password'])
+  ) {
+    return createParsedApiError({
+      title: '管理员验证已过期',
+      message: '请先重新验证管理员密码，再继续访问系统设置或管理员日志。',
+      rawMessage,
+      status,
+      category: 'admin_unlock_required',
+    });
+  }
+
+  if (
+    errorCode === 'admin_required'
+    || includesAny(matchText, ['admin access required'])
+  ) {
+    return createParsedApiError({
+      title: '需要管理员账户',
+      message: '当前页面或操作仅对管理员开放，请切换到管理员账户后再试。',
+      rawMessage,
+      status,
+      category: 'access_denied',
+    });
+  }
+
+  if (
+    errorCode === 'owner_mismatch'
+    || includesAny(matchText, ['owner_id does not match the current user'])
+  ) {
+    return createParsedApiError({
+      title: '无法访问其他用户的数据',
+      message: '当前账户只能访问自己的数据，请返回允许的页面继续使用。',
+      rawMessage,
+      status,
+      category: 'access_denied',
     });
   }
 
@@ -376,11 +492,11 @@ export function parseApiError(error: unknown): ParsedApiError {
     }
 
     return createParsedApiError({
-      title: '上游服务拒绝访问',
-      message: '外部模型或数据接口拒绝了本次请求，请检查权限、配额或相关配置。',
+      title: '当前账户无权执行该操作',
+      message: '该请求被拒绝。请返回允许的页面，或切换到具备权限的账户后再试。',
       rawMessage,
       status,
-      category: 'upstream_forbidden',
+      category: 'access_denied',
     });
   }
 

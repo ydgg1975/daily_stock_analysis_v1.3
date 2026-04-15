@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Web admin authentication module.
+Authentication helpers for cookie-backed multi-user web sessions.
 
-Single toggle (ADMIN_AUTH_ENABLED) + file-based credentials.
-First login sets initial password; supports web change-password and CLI reset.
+Phase 2 keeps the existing admin credential file for bootstrap compatibility,
+while normalizing runtime identity around ``app_users`` + signed session cookies.
 """
 
 from __future__ import annotations
@@ -12,16 +12,26 @@ import base64
 import getpass
 import hashlib
 import hmac
+import json
 import logging
 import os
 import secrets
 import sys
 import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 from src.utils.dotenv_loader import read_dotenv_values
+from src.multi_user import (
+    BOOTSTRAP_ADMIN_DISPLAY_NAME,
+    BOOTSTRAP_ADMIN_USER_ID,
+    BOOTSTRAP_ADMIN_USERNAME,
+    ROLE_ADMIN,
+    normalize_role,
+)
 
 COOKIE_NAME = "dsa_session"
 PBKDF2_ITERATIONS = 100_000
@@ -31,6 +41,9 @@ SESSION_MAX_AGE_HOURS_DEFAULT = 24
 ADMIN_UNLOCK_MAX_AGE_MINUTES_DEFAULT = 120
 ADMIN_UNLOCK_TOKEN_PURPOSE = "admin_settings_unlock"
 MIN_PASSWORD_LEN = 6
+SESSION_TOKEN_VERSION = "v2"
+SESSION_KIND = "session"
+ADMIN_UNLOCK_KIND = "admin_unlock"
 
 # Lazy-loaded state
 _auth_enabled: Optional[bool] = None
@@ -39,6 +52,25 @@ _password_hash_salt: Optional[bytes] = None
 _password_hash_stored: Optional[bytes] = None
 _rate_limit: dict[str, Tuple[int, float]] = {}
 _rate_limit_lock = None
+
+
+@dataclass(frozen=True)
+class SessionIdentity:
+    """Resolved identity carried by a signed cookie or unlock token."""
+
+    user_id: str
+    username: str
+    role: str
+    session_id: Optional[str]
+    issued_at: int
+    expires_at: int
+    token_kind: str = SESSION_KIND
+    legacy_admin: bool = False
+    transitional: bool = False
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == ROLE_ADMIN
 
 
 def _get_lock():
@@ -164,6 +196,37 @@ def _verify_password_hash(submitted: str, salt: bytes, stored_hash: bytes) -> bo
     return hmac.compare_digest(computed, stored_hash)
 
 
+def _build_password_hash_entry(password: str) -> str:
+    """Build the persisted salt:hash entry used by admin and app-user credentials."""
+    salt = secrets.token_bytes(32)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt=salt,
+        iterations=PBKDF2_ITERATIONS,
+    )
+    salt_b64 = base64.standard_b64encode(salt).decode("ascii")
+    hash_b64 = base64.standard_b64encode(derived).decode("ascii")
+    return f"{salt_b64}:{hash_b64}"
+
+
+def verify_password_hash_string(submitted: str, stored_value: Optional[str]) -> bool:
+    """Verify a password against a persisted app-user/admin hash string."""
+    parsed = _parse_password_hash(str(stored_value or "").strip())
+    if parsed is None:
+        return False
+    salt, stored_hash = parsed
+    return _verify_password_hash(submitted, salt, stored_hash)
+
+
+def hash_password_for_storage(password: str) -> str:
+    """Create a persisted password-hash string for app users."""
+    err = _validate_password(password)
+    if err:
+        raise ValueError(err)
+    return _build_password_hash_entry(password)
+
+
 def _load_credential_from_file() -> bool:
     """Load credential from file into module globals. Returns True if loaded."""
     global _password_hash_salt, _password_hash_stored
@@ -193,6 +256,39 @@ def refresh_auth_state() -> None:
     _auth_enabled = None
     _session_secret = None
     _load_credential_from_file()
+
+
+def _sync_bootstrap_admin_password_hash(password_hash: Optional[str]) -> None:
+    """Best-effort mirror of the legacy admin credential into app_users."""
+    try:
+        from src.storage import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        db.create_or_update_app_user(
+            user_id=BOOTSTRAP_ADMIN_USER_ID,
+            username=BOOTSTRAP_ADMIN_USERNAME,
+            role=ROLE_ADMIN,
+            display_name=BOOTSTRAP_ADMIN_DISPLAY_NAME,
+            password_hash=password_hash,
+            is_active=True,
+        )
+    except Exception as exc:  # pragma: no cover - defensive sync path
+        logger.warning("Failed to sync bootstrap admin credential into app_users: %s", exc)
+
+
+def ensure_bootstrap_admin_user_password_hash() -> Optional[str]:
+    """Mirror the legacy admin password file into the bootstrap admin user when available."""
+    if not has_stored_password():
+        return None
+    path = _get_credential_path()
+    try:
+        stored_value = path.read_text().strip()
+    except OSError:
+        return None
+    if not stored_value:
+        return None
+    _sync_bootstrap_admin_password_hash(stored_value)
+    return stored_value
 
 
 def is_auth_enabled() -> bool:
@@ -251,6 +347,235 @@ def _get_admin_unlock_max_age_seconds() -> int:
     return max(60, max_age_minutes * 60)
 
 
+def _get_session_max_age_seconds() -> int:
+    """Read session ttl from env."""
+    try:
+        max_age_hours = int(os.getenv("ADMIN_SESSION_MAX_AGE_HOURS", str(SESSION_MAX_AGE_HOURS_DEFAULT)))
+    except ValueError:
+        max_age_hours = SESSION_MAX_AGE_HOURS_DEFAULT
+    return max(300, max_age_hours * 3600)
+
+
+def get_session_expiry_datetime() -> datetime:
+    """Return the UTC expiration timestamp for a newly created app-user session."""
+    return datetime.now(timezone.utc) + timedelta(seconds=_get_session_max_age_seconds())
+
+
+def _urlsafe_b64encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _urlsafe_b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+
+
+def _sign_payload(secret: bytes, payload: str) -> str:
+    return hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _encode_token_payload(payload: dict) -> str:
+    return _urlsafe_b64encode(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
+
+
+def _decode_token_payload(value: str) -> Optional[dict]:
+    try:
+        raw = _urlsafe_b64decode(value)
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _build_signed_token(payload: dict) -> str:
+    secret = _get_session_secret()
+    if not secret:
+        return ""
+    encoded_payload = _encode_token_payload(payload)
+    signature = _sign_payload(secret, encoded_payload)
+    return f"{SESSION_TOKEN_VERSION}.{encoded_payload}.{signature}"
+
+
+def _build_identity_payload(
+    *,
+    token_kind: str,
+    user_id: str,
+    username: str,
+    role: str,
+    session_id: Optional[str],
+    issued_at: Optional[int] = None,
+    expires_at: Optional[int] = None,
+) -> dict:
+    issued_at = int(issued_at or time.time())
+    if expires_at is None:
+        ttl = _get_admin_unlock_max_age_seconds() if token_kind == ADMIN_UNLOCK_KIND else _get_session_max_age_seconds()
+        expires_at = issued_at + ttl
+    return {
+        "kind": token_kind,
+        "uid": user_id,
+        "usr": username,
+        "role": normalize_role(role, default=ROLE_ADMIN),
+        "sid": session_id,
+        "iat": issued_at,
+        "exp": int(expires_at),
+        "purpose": ADMIN_UNLOCK_TOKEN_PURPOSE if token_kind == ADMIN_UNLOCK_KIND else None,
+    }
+
+
+def _resolve_v2_identity(value: str, *, expected_kind: str) -> Optional[SessionIdentity]:
+    secret = _get_session_secret()
+    if not secret or not value:
+        return None
+    parts = value.split(".")
+    if len(parts) != 3 or parts[0] != SESSION_TOKEN_VERSION:
+        return None
+    _, payload_b64, signature = parts
+    expected_signature = _sign_payload(secret, payload_b64)
+    if not hmac.compare_digest(signature, expected_signature):
+        return None
+    payload = _decode_token_payload(payload_b64)
+    if not payload:
+        return None
+    token_kind = str(payload.get("kind") or "").strip()
+    if token_kind != expected_kind:
+        return None
+    if token_kind == ADMIN_UNLOCK_KIND and payload.get("purpose") != ADMIN_UNLOCK_TOKEN_PURPOSE:
+        return None
+    try:
+        issued_at = int(payload.get("iat"))
+        expires_at = int(payload.get("exp"))
+    except (TypeError, ValueError):
+        return None
+    if time.time() > expires_at:
+        return None
+    user_id = str(payload.get("uid") or "").strip()
+    username = str(payload.get("usr") or "").strip()
+    if not user_id or not username:
+        return None
+    try:
+        role = normalize_role(payload.get("role"), default=ROLE_ADMIN)
+    except ValueError:
+        return None
+    session_id = str(payload.get("sid") or "").strip() or None
+
+    if token_kind == SESSION_KIND and session_id:
+        try:
+            from src.storage import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            session_row = db.get_app_user_session(session_id)
+            if session_row is None or session_row.user_id != user_id:
+                return None
+            if session_row.revoked_at is not None:
+                return None
+            expires_at_dt = getattr(session_row, "expires_at", None)
+            if isinstance(expires_at_dt, datetime):
+                now_utc = datetime.now(timezone.utc)
+                expires_at_check = expires_at_dt if expires_at_dt.tzinfo else expires_at_dt.replace(tzinfo=timezone.utc)
+                if now_utc > expires_at_check:
+                    return None
+        except Exception as exc:  # pragma: no cover - defensive validation path
+            logger.warning("Failed to validate app_user_session %s: %s", session_id, exc)
+            return None
+
+    return SessionIdentity(
+        user_id=user_id,
+        username=username,
+        role=role,
+        session_id=session_id,
+        issued_at=issued_at,
+        expires_at=expires_at,
+        token_kind=token_kind,
+    )
+
+
+def _resolve_legacy_admin_session(value: str) -> Optional[SessionIdentity]:
+    secret = _get_session_secret()
+    if not secret or not value:
+        return None
+    parts = value.split(".")
+    if len(parts) != 3:
+        return None
+    nonce, ts_str, sig = parts
+    payload = f"{nonce}.{ts_str}"
+    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        ts = int(ts_str)
+    except ValueError:
+        return None
+    expires_at = ts + _get_session_max_age_seconds()
+    if time.time() > expires_at:
+        return None
+    ensure_bootstrap_admin_user_password_hash()
+    return SessionIdentity(
+        user_id=BOOTSTRAP_ADMIN_USER_ID,
+        username=BOOTSTRAP_ADMIN_USERNAME,
+        role=ROLE_ADMIN,
+        session_id=None,
+        issued_at=ts,
+        expires_at=expires_at,
+        token_kind=SESSION_KIND,
+        legacy_admin=True,
+    )
+
+
+def get_session_identity(value: str) -> Optional[SessionIdentity]:
+    """Resolve the signed cookie into a concrete current-user identity."""
+    identity = _resolve_v2_identity(value, expected_kind=SESSION_KIND)
+    if identity is not None:
+        return identity
+    return _resolve_legacy_admin_session(value)
+
+
+def get_admin_unlock_identity(value: str) -> Optional[SessionIdentity]:
+    """Resolve an admin unlock token into the issuing admin identity."""
+    identity = _resolve_v2_identity(value, expected_kind=ADMIN_UNLOCK_KIND)
+    if identity is not None and identity.is_admin:
+        return identity
+
+    secret = _get_admin_unlock_secret()
+    if not secret or not value:
+        return None
+
+    parts = value.split(".")
+    if len(parts) != 4:
+        return None
+
+    nonce, ts_str, purpose, sig = parts
+    if purpose != ADMIN_UNLOCK_TOKEN_PURPOSE or not nonce:
+        return None
+
+    payload = f"{nonce}.{ts_str}.{purpose}"
+    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+
+    try:
+        ts = int(ts_str)
+    except ValueError:
+        return None
+
+    expires_at = ts + _get_admin_unlock_max_age_seconds()
+    if time.time() > expires_at:
+        return None
+
+    ensure_bootstrap_admin_user_password_hash()
+    return SessionIdentity(
+        user_id=BOOTSTRAP_ADMIN_USER_ID,
+        username=BOOTSTRAP_ADMIN_USERNAME,
+        role=ROLE_ADMIN,
+        session_id=None,
+        issued_at=ts,
+        expires_at=expires_at,
+        token_kind=ADMIN_UNLOCK_KIND,
+        legacy_admin=True,
+    )
+
+
 def _validate_password(pwd: str) -> Optional[str]:
     """Return error message if invalid, None if valid."""
     if not pwd or not pwd.strip():
@@ -273,16 +598,7 @@ def set_initial_password(password: str) -> Optional[str]:
     data_dir.mkdir(parents=True, exist_ok=True)
     cred_path = _get_credential_path()
 
-    salt = secrets.token_bytes(32)
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt=salt,
-        iterations=PBKDF2_ITERATIONS,
-    )
-    salt_b64 = base64.standard_b64encode(salt).decode("ascii")
-    hash_b64 = base64.standard_b64encode(derived).decode("ascii")
-    content = f"{salt_b64}:{hash_b64}"
+    content = _build_password_hash_entry(password)
 
     try:
         tmp_path = cred_path.with_suffix(".tmp")
@@ -290,6 +606,7 @@ def set_initial_password(password: str) -> Optional[str]:
         tmp_path.chmod(0o600)
         tmp_path.replace(cred_path)
         _load_credential_from_file()
+        _sync_bootstrap_admin_password_hash(content)
         return None
     except OSError as e:
         logger.error("Failed to write credential file: %s", e)
@@ -322,16 +639,7 @@ def change_password(current: str, new: str) -> Optional[str]:
         return err
 
     cred_path = _get_credential_path()
-    salt = secrets.token_bytes(32)
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        new.encode("utf-8"),
-        salt=salt,
-        iterations=PBKDF2_ITERATIONS,
-    )
-    salt_b64 = base64.standard_b64encode(salt).decode("ascii")
-    hash_b64 = base64.standard_b64encode(derived).decode("ascii")
-    content = f"{salt_b64}:{hash_b64}"
+    content = _build_password_hash_entry(new)
 
     try:
         tmp_path = cred_path.with_suffix(".tmp")
@@ -340,91 +648,65 @@ def change_password(current: str, new: str) -> Optional[str]:
         tmp_path.replace(cred_path)
         # Reload into memory so subsequent verify_password uses new hash
         _load_credential_from_file()
+        _sync_bootstrap_admin_password_hash(content)
         return None
     except OSError as e:
         logger.error("Failed to write credential file: %s", e)
         return "密码保存失败"
 
 
-def create_session() -> str:
-    """Create a signed session payload. Format: nonce.ts.signature."""
-    secret = _get_session_secret()
-    if not secret:
-        return ""
-    nonce = secrets.token_urlsafe(32)
-    ts = str(int(time.time()))
-    payload = f"{nonce}.{ts}"
-    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+def create_session(
+    *,
+    user_id: str = BOOTSTRAP_ADMIN_USER_ID,
+    username: str = BOOTSTRAP_ADMIN_USERNAME,
+    role: str = ROLE_ADMIN,
+    session_id: Optional[str] = None,
+    issued_at: Optional[int] = None,
+    expires_at: Optional[int] = None,
+) -> str:
+    """Create a signed identity-bearing session cookie."""
+    payload = _build_identity_payload(
+        token_kind=SESSION_KIND,
+        user_id=user_id,
+        username=username,
+        role=role,
+        session_id=session_id,
+        issued_at=issued_at,
+        expires_at=expires_at,
+    )
+    return _build_signed_token(payload)
 
 
-def create_admin_unlock_token() -> str:
-    """Create a signed admin-unlock token for write-sensitive settings."""
-    secret = _get_admin_unlock_secret()
-    if not secret:
-        return ""
-
-    nonce = secrets.token_urlsafe(24)
-    ts = str(int(time.time()))
-    payload = f"{nonce}.{ts}.{ADMIN_UNLOCK_TOKEN_PURPOSE}"
-    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+def create_admin_unlock_token(
+    *,
+    user_id: str = BOOTSTRAP_ADMIN_USER_ID,
+    username: str = BOOTSTRAP_ADMIN_USERNAME,
+    role: str = ROLE_ADMIN,
+    issued_at: Optional[int] = None,
+    expires_at: Optional[int] = None,
+) -> str:
+    """Create a signed admin-unlock token bound to an admin identity."""
+    payload = _build_identity_payload(
+        token_kind=ADMIN_UNLOCK_KIND,
+        user_id=user_id,
+        username=username,
+        role=role,
+        session_id=None,
+        issued_at=issued_at,
+        expires_at=expires_at,
+    )
+    return _build_signed_token(payload)
 
 
 def verify_session(value: str) -> bool:
-    """Verify session cookie and check expiry."""
-    secret = _get_session_secret()
-    if not secret or not value:
-        return False
-    parts = value.split(".")
-    if len(parts) != 3:
-        return False
-    nonce, ts_str, sig = parts[0], parts[1], parts[2]
-    payload = f"{nonce}.{ts_str}"
-    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-    try:
-        ts = int(ts_str)
-    except ValueError:
-        return False
-    try:
-        max_age_hours = int(os.getenv("ADMIN_SESSION_MAX_AGE_HOURS", str(SESSION_MAX_AGE_HOURS_DEFAULT)))
-    except ValueError:
-        max_age_hours = SESSION_MAX_AGE_HOURS_DEFAULT
-    if time.time() - ts > max_age_hours * 3600:
-        return False
-    return True
+    """Verify session cookie and check expiry + revocation."""
+    return get_session_identity(value) is not None
 
 
 def verify_admin_unlock_token(value: str) -> bool:
     """Verify signed admin-unlock token and enforce expiry."""
-    secret = _get_admin_unlock_secret()
-    if not secret or not value:
-        return False
-
-    parts = value.split(".")
-    if len(parts) != 4:
-        return False
-
-    nonce, ts_str, purpose, sig = parts
-    if purpose != ADMIN_UNLOCK_TOKEN_PURPOSE or not nonce:
-        return False
-
-    payload = f"{nonce}.{ts_str}.{purpose}"
-    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return False
-
-    try:
-        ts = int(ts_str)
-    except ValueError:
-        return False
-
-    max_age = _get_admin_unlock_max_age_seconds()
-    if time.time() - ts > max_age:
-        return False
-    return True
+    identity = get_admin_unlock_identity(value)
+    return identity is not None and identity.is_admin
 
 
 def get_client_ip(request) -> str:
@@ -490,16 +772,7 @@ def overwrite_password(new_password: str) -> Optional[str]:
     data_dir.mkdir(parents=True, exist_ok=True)
     cred_path = _get_credential_path()
 
-    salt = secrets.token_bytes(32)
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        new_password.encode("utf-8"),
-        salt=salt,
-        iterations=PBKDF2_ITERATIONS,
-    )
-    salt_b64 = base64.standard_b64encode(salt).decode("ascii")
-    hash_b64 = base64.standard_b64encode(derived).decode("ascii")
-    content = f"{salt_b64}:{hash_b64}"
+    content = _build_password_hash_entry(new_password)
 
     try:
         tmp_path = cred_path.with_suffix(".tmp")
@@ -507,6 +780,7 @@ def overwrite_password(new_password: str) -> Optional[str]:
         tmp_path.chmod(0o600)
         tmp_path.replace(cred_path)
         _load_credential_from_file()
+        _sync_bootstrap_admin_password_hash(content)
         return None
     except OSError as e:
         logger.error("Failed to write credential file: %s", e)

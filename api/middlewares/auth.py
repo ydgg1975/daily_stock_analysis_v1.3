@@ -12,14 +12,17 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.auth import COOKIE_NAME, is_auth_enabled, verify_session
+from api.deps import resolve_current_user
+from src.auth import is_auth_enabled
 
 logger = logging.getLogger(__name__)
 
 EXEMPT_PATHS = frozenset({
     "/api/v1/auth/login",
     "/api/v1/auth/status",
+    "/api/v1/auth/me",
     "/api/v1/auth/verify-password",
+    "/api/v1/analysis/preview",
     "/api/health",
     "/health",
     "/docs",
@@ -42,18 +45,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable,
     ):
+        path = request.url.path
+        current_user = resolve_current_user(request)
+
         if not is_auth_enabled():
             return await call_next(request)
 
-        path = request.url.path
         if _path_exempt(path):
             return await call_next(request)
 
         if not path.startswith("/api/v1/"):
             return await call_next(request)
 
-        cookie_val = request.cookies.get(COOKIE_NAME)
-        if not cookie_val or not verify_session(cookie_val):
+        if current_user is None:
             return JSONResponse(
                 status_code=401,
                 content={

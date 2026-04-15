@@ -59,4 +59,20 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings', { replace: true }));
   });
+
+  it('enters create-account mode directly when requested by the route and shows destination context', () => {
+    useSearchParamsMock.mockReturnValue([new URLSearchParams('mode=create&redirect=%2Fscanner')]);
+    useAuthMock.mockReturnValue({
+      login: vi.fn(),
+      passwordSet: true,
+      setupState: 'enabled',
+    });
+
+    render(<LoginPage />);
+
+    expect(screen.getByRole('heading', { name: '创建账户并登录' })).toBeInTheDocument();
+    expect(screen.getByLabelText('用户名')).toBeInTheDocument();
+    expect(screen.getByLabelText('显示名称')).toBeInTheDocument();
+    expect(screen.getByText('登录后将继续进入：扫描器工作区')).toBeInTheDocument();
+  });
 });

@@ -71,6 +71,7 @@ class PortfolioRiskService:
             cost_method=cost_method,
             threshold_pct=thresholds["drawdown_alert_pct"],
             lookback_days=thresholds["lookback_days"],
+            report_currency=str(snapshot.get("currency") or "CNY"),
         )
         stop_loss = self._build_stop_loss(snapshot, thresholds)
 
@@ -125,7 +126,7 @@ class PortfolioRiskService:
                 current_date += timedelta(days=1)
             return
 
-        account_ids = [int(account.id) for account in self.repo.list_accounts(include_inactive=False)]
+        account_ids = [int(account["id"]) for account in self.portfolio_service.list_accounts(include_inactive=False)]
         if not account_ids:
             return
         existing_pairs = {(int(row.account_id), row.snapshot_date) for row in existing_rows}
@@ -154,8 +155,8 @@ class PortfolioRiskService:
             return max(window_start, first_activity or as_of_date)
 
         first_activity_candidates: List[date] = []
-        for account in self.repo.list_accounts(include_inactive=False):
-            first_activity = self.repo.get_first_activity_date(account_id=int(account.id), as_of=as_of_date)
+        for account in self.portfolio_service.list_accounts(include_inactive=False):
+            first_activity = self.repo.get_first_activity_date(account_id=int(account["id"]), as_of=as_of_date)
             if first_activity is not None:
                 first_activity_candidates.append(first_activity)
         if not first_activity_candidates:
@@ -164,6 +165,7 @@ class PortfolioRiskService:
 
     def _build_concentration(self, snapshot: Dict[str, Any], threshold_pct: float, *, as_of_date: date) -> Dict[str, Any]:
         total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
+        report_currency = str(snapshot.get("currency") or "CNY")
         exposure_by_symbol: Dict[str, float] = {}
         for account in snapshot.get("accounts", []):
             for pos in account.get("positions", []):
@@ -175,7 +177,7 @@ class PortfolioRiskService:
                 converted, _, _ = self.portfolio_service.convert_amount(
                     amount=market_value,
                     from_currency=valuation_currency,
-                    to_currency="CNY",
+                    to_currency=report_currency,
                     as_of_date=as_of_date,
                 )
                 exposure_by_symbol[symbol] = exposure_by_symbol.get(symbol, 0.0) + converted
@@ -209,6 +211,7 @@ class PortfolioRiskService:
         as_of_date: date,
     ) -> Dict[str, Any]:
         total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
+        report_currency = str(snapshot.get("currency") or "CNY")
         sector_exposure: Dict[str, float] = {}
         sector_symbols: Dict[str, set] = {}
         coverage = {
@@ -231,7 +234,7 @@ class PortfolioRiskService:
                 converted, _, _ = self.portfolio_service.convert_amount(
                     amount=market_value,
                     from_currency=valuation_currency,
-                    to_currency="CNY",
+                    to_currency=report_currency,
                     as_of_date=as_of_date,
                 )
 
@@ -354,6 +357,7 @@ class PortfolioRiskService:
         cost_method: str,
         threshold_pct: float,
         lookback_days: int,
+        report_currency: str,
     ) -> Dict[str, Any]:
         rows = self.repo.list_daily_snapshots_for_risk(
             as_of=as_of_date,
@@ -377,7 +381,7 @@ class PortfolioRiskService:
             converted, stale, _ = self.portfolio_service.convert_amount(
                 amount=float(row.total_equity or 0.0),
                 from_currency=str(row.base_currency or "CNY"),
-                to_currency="CNY",
+                to_currency=report_currency,
                 as_of_date=row.snapshot_date,
             )
             grouped[key] = grouped.get(key, 0.0) + converted

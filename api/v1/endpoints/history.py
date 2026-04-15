@@ -15,7 +15,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
 
-from api.deps import get_database_manager
+from api.deps import CurrentUser, get_current_user, get_database_manager
 from api.v1.schemas.history import (
     HistoryListResponse,
     HistoryItem,
@@ -46,6 +46,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _NUMBER_TOKEN_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _resolve_owner_id(current_user: object | None) -> str | None:
+    user_id = getattr(current_user, "user_id", None)
+    if not user_id:
+        return None
+    return str(user_id)
+
+
+def _build_history_service(db_manager: DatabaseManager, current_user: CurrentUser | object | None) -> HistoryService:
+    return HistoryService(db_manager, owner_id=_resolve_owner_id(current_user))
 
 
 def _extract_number(value: Optional[object]) -> Optional[float]:
@@ -86,7 +97,8 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> HistoryListResponse:
     """
     获取历史分析列表
@@ -105,7 +117,7 @@ def get_history_list(
         HistoryListResponse: 历史记录列表
     """
     try:
-        service = HistoryService(db_manager)
+        service = _build_history_service(db_manager, current_user)
         
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(
@@ -162,7 +174,8 @@ def get_history_list(
 )
 def delete_history_records(
     request: DeleteHistoryRequest = Body(...),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> DeleteHistoryResponse:
     """
     按主键 ID 批量删除历史分析记录。
@@ -178,7 +191,7 @@ def delete_history_records(
         )
 
     try:
-        service = HistoryService(db_manager)
+        service = _build_history_service(db_manager, current_user)
         deleted = service.delete_history_records(record_ids)
         return DeleteHistoryResponse(deleted=deleted)
     except HTTPException:
@@ -207,7 +220,8 @@ def delete_history_records(
 )
 def get_history_detail(
     record_id: str,
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> AnalysisReport:
     """
     获取历史报告详情
@@ -226,7 +240,7 @@ def get_history_detail(
         HTTPException: 404 - 报告不存在
     """
     try:
-        service = HistoryService(db_manager)
+        service = _build_history_service(db_manager, current_user)
         
         # Try integer ID first, fall back to query_id string lookup
         result = service.resolve_and_get_detail(record_id)
@@ -395,7 +409,8 @@ def get_history_detail(
 def get_history_news(
     record_id: str,
     limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> NewsIntelResponse:
     """
     获取历史报告关联新闻
@@ -412,7 +427,7 @@ def get_history_news(
         NewsIntelResponse: 新闻情报列表
     """
     try:
-        service = HistoryService(db_manager)
+        service = _build_history_service(db_manager, current_user)
         items = service.resolve_and_get_news(record_id=record_id, limit=limit)
 
         response_items = [
@@ -453,7 +468,8 @@ def get_history_news(
 )
 def get_history_markdown(
     record_id: str,
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> MarkdownReportResponse:
     """
     获取历史报告的 Markdown 格式内容
@@ -471,7 +487,7 @@ def get_history_markdown(
         HTTPException: 404 - 报告不存在
         HTTPException: 500 - 报告生成失败（服务器内部错误）
     """
-    service = HistoryService(db_manager)
+    service = _build_history_service(db_manager, current_user)
 
     try:
         markdown_content = service.get_markdown_report(record_id)

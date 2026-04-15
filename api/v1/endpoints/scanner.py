@@ -8,7 +8,14 @@ from typing import Callable, Optional, Type, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import get_database_manager
+from api.deps import (
+    CurrentUser,
+    get_current_user,
+    get_current_user_id,
+    get_database_manager,
+    is_admin_user,
+    require_admin_user,
+)
 from api.v1.schemas.common import ErrorResponse
 from api.v1.schemas.scanner import (
     ScannerOperationalStatusResponse,
@@ -18,11 +25,29 @@ from api.v1.schemas.scanner import (
 )
 from src.services.market_scanner_ops_service import MarketScannerOperationsService
 from src.services.market_scanner_service import MarketScannerService
+from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 ResponseT = TypeVar("ResponseT")
+
+
+def _build_scanner_service(
+    db_manager: DatabaseManager,
+    current_user: CurrentUser | object | None,
+) -> MarketScannerService:
+    return MarketScannerService(db_manager, owner_id=get_current_user_id(current_user))
+
+
+def _build_scanner_ops_service(
+    db_manager: DatabaseManager,
+    current_user: CurrentUser | object | None,
+) -> MarketScannerOperationsService:
+    return MarketScannerOperationsService(
+        db_manager=db_manager,
+        scanner_service=_build_scanner_service(db_manager, current_user),
+    )
 
 
 def _validation_error(exc: ValueError) -> HTTPException:
@@ -58,6 +83,20 @@ def _run_endpoint(action_label: str, operation: Callable[[], ResponseT]) -> Resp
         raise _internal_error(action_label, exc) from exc
 
 
+def _get_run_detail_payload(
+    *,
+    service: MarketScannerService,
+    run_id: int,
+    current_user: CurrentUser | object | None,
+) -> dict | None:
+    payload = service.get_run_detail(run_id, scope=OWNERSHIP_SCOPE_USER)
+    if payload is not None:
+        return payload
+    if is_admin_user(current_user):
+        return service.get_run_detail(run_id, scope=OWNERSHIP_SCOPE_SYSTEM)
+    return None
+
+
 @router.post(
     "/run",
     response_model=ScannerRunDetailResponse,
@@ -72,9 +111,10 @@ def _run_endpoint(action_label: str, operation: Callable[[], ResponseT]) -> Resp
 def run_market_scan(
     request: ScannerRunRequest,
     db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ScannerRunDetailResponse:
     def _operation() -> ScannerRunDetailResponse:
-        service = MarketScannerOperationsService(db_manager=db_manager)
+        service = _build_scanner_ops_service(db_manager, current_user)
         payload = service.run_manual_scan(
             market=request.market,
             profile=request.profile,
@@ -104,14 +144,16 @@ def get_market_scan_runs(
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(10, ge=1, le=50, description="每页数量"),
     db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ScannerRunHistoryResponse:
     def _operation() -> ScannerRunHistoryResponse:
-        service = MarketScannerService(db_manager)
+        service = _build_scanner_service(db_manager, current_user)
         payload = service.list_runs(
             market=market,
             profile=profile,
             page=page,
             limit=limit,
+            scope=OWNERSHIP_SCOPE_USER,
         )
         return ScannerRunHistoryResponse(**payload)
 
@@ -132,9 +174,10 @@ def get_today_watchlist(
     market: Optional[str] = Query("cn", description="市场过滤"),
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> ScannerRunDetailResponse:
     def _operation() -> ScannerRunDetailResponse:
-        service = MarketScannerService(db_manager)
+        service = _build_scanner_service(db_manager, None)
         payload = service.get_today_watchlist(
             market=market or "cn",
             profile=profile,
@@ -160,9 +203,10 @@ def get_recent_watchlists(
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     limit_days: int = Query(7, ge=1, le=30, description="最近天数"),
     db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> ScannerRunHistoryResponse:
     def _operation() -> ScannerRunHistoryResponse:
-        service = MarketScannerService(db_manager)
+        service = _build_scanner_service(db_manager, None)
         payload = service.list_recent_watchlists(
             market=market or "cn",
             profile=profile,
@@ -186,9 +230,10 @@ def get_scanner_operational_status(
     market: Optional[str] = Query("cn", description="市场过滤"),
     profile: Optional[str] = Query(None, description="扫描配置过滤"),
     db_manager: DatabaseManager = Depends(get_database_manager),
+    _: CurrentUser = Depends(require_admin_user),
 ) -> ScannerOperationalStatusResponse:
     def _operation() -> ScannerOperationalStatusResponse:
-        service = MarketScannerOperationsService(db_manager=db_manager)
+        service = _build_scanner_ops_service(db_manager, None)
         payload = service.get_operational_status(
             market=market or "cn",
             profile=profile,
@@ -211,10 +256,15 @@ def get_scanner_operational_status(
 def get_market_scan_run(
     run_id: int,
     db_manager: DatabaseManager = Depends(get_database_manager),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ScannerRunDetailResponse:
     def _operation() -> ScannerRunDetailResponse:
-        service = MarketScannerService(db_manager)
-        payload = service.get_run_detail(run_id)
+        service = _build_scanner_service(db_manager, current_user)
+        payload = _get_run_detail_payload(
+            service=service,
+            run_id=run_id,
+            current_user=current_user,
+        )
         if payload is None:
             raise _not_found_error(f"未找到扫描记录 {run_id}")
         return ScannerRunDetailResponse(**payload)

@@ -8,12 +8,14 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
-from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager
+from data_provider.base import BaseFetcher, DataFetchError, DataFetcherManager, normalize_stock_code
 from src.repositories.stock_repo import StockRepository
+from src.core.scanner_profile import get_scanner_profile
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager, MarketScannerRun
 
@@ -360,6 +362,57 @@ class FakeUsScannerDataManager(FakeScannerDataManager):
         return list(self._last_realtime_quote_trace)
 
 
+class FakeHkScannerDataManager(FakeScannerDataManager):
+    def __init__(self):
+        super().__init__()
+        self._last_realtime_quote_trace: list[dict] = []
+        self.hk_quotes = {
+            "HK00700": SimpleNamespace(
+                price=503.5,
+                pre_close=496.0,
+                change_pct=1.51,
+                volume=12_300_000,
+                amount=6.19e9,
+                name="Tencent Holdings",
+                source=SimpleNamespace(value="twelve_data"),
+            ),
+            "HK01810": SimpleNamespace(
+                price=18.9,
+                pre_close=18.1,
+                change_pct=4.42,
+                volume=68_000_000,
+                amount=1.27e9,
+                name="Xiaomi",
+                source=SimpleNamespace(value="twelve_data"),
+            ),
+            "HK03690": SimpleNamespace(
+                price=128.0,
+                pre_close=124.6,
+                change_pct=2.73,
+                volume=14_500_000,
+                amount=1.86e9,
+                name="Meituan",
+                source=SimpleNamespace(value="twelve_data"),
+            ),
+        }
+
+    def get_realtime_quote(self, symbol: str):
+        normalized = normalize_stock_code(str(symbol or "")).upper()
+        quote = self.hk_quotes.get(normalized)
+        if quote is None:
+            self._last_realtime_quote_trace = [
+                {"fetcher": "TwelveDataFetcher", "status": "failed", "reason_code": "quote_missing"}
+            ]
+            return None
+        self._last_realtime_quote_trace = [
+            {"fetcher": "TwelveDataFetcher", "status": "success", "symbol": normalized}
+        ]
+        return quote
+
+    def get_last_realtime_quote_trace(self):
+        return list(self._last_realtime_quote_trace)
+
+
 def seed_us_local_history(stock_repo: StockRepository) -> None:
     fixtures = {
         "SPY": _make_history(start_price=485.0, slope=0.35, amount_base=3.4e10, volume_base=78_000_000, bars=130),
@@ -370,6 +423,18 @@ def seed_us_local_history(stock_repo: StockRepository) -> None:
     }
     for code, dataframe in fixtures.items():
         stock_repo.save_dataframe(dataframe.copy(), code, data_source="LocalUsFixture")
+
+
+def seed_hk_local_history(stock_repo: StockRepository) -> None:
+    fixtures = {
+        "HK02800": _make_history(start_price=19.5, slope=0.03, amount_base=1.3e9, volume_base=82_000_000, bars=130),
+        "HK00700": _make_history(start_price=380.0, slope=0.85, amount_base=5.4e9, volume_base=12_000_000, bars=130),
+        "HK01810": _make_history(start_price=12.5, slope=0.06, amount_base=1.1e9, volume_base=64_000_000, bars=130),
+        "HK03690": _make_history(start_price=102.0, slope=0.28, amount_base=1.9e9, volume_base=16_000_000, bars=130),
+        "HK00981": _make_history(start_price=15.0, slope=0.05, amount_base=8.9e8, volume_base=42_000_000, bars=130),
+    }
+    for code, dataframe in fixtures.items():
+        stock_repo.save_dataframe(dataframe.copy(), code, data_source="LocalHkFixture")
 
 
 class FetcherStub(BaseFetcher):
@@ -651,6 +716,9 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(result["diagnostics"]["benchmark_context"]["benchmark_code"], "SPY")
         self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 4)
         self.assertGreaterEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 1)
+        self.assertEqual(result["diagnostics"]["universe_filter_stats"]["coverage_strategy"], "seed_supplemented")
+        self.assertGreater(result["diagnostics"]["universe_filter_stats"]["supplemented_seed_count"], 0)
+        self.assertIn("curated_us_liquid_seed", result["source_summary"])
 
         shortlist_symbols = [item["symbol"] for item in result["shortlist"]]
         self.assertEqual(len(shortlist_symbols), 2)
@@ -669,9 +737,75 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["market"], "us")
         self.assertEqual(detail["profile_label"], "US Pre-open Scanner v1")
 
+    def test_run_scan_supports_hk_preopen_profile_and_preserves_market_context(self) -> None:
+        seed_hk_local_history(self.stock_repo)
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeHkScannerDataManager(),
+        )
+
+        result = service.run_scan(
+            market="hk",
+            profile="hk_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        self.assertEqual(result["market"], "hk")
+        self.assertEqual(result["profile"], "hk_preopen_v1")
+        self.assertTrue(result["headline"].startswith("今日港股开盘优先观察："))
+        self.assertEqual(result["diagnostics"]["benchmark_context"]["benchmark_code"], "HK02800")
+        self.assertGreaterEqual(result["diagnostics"]["history_stats"]["local_hits"], 4)
+        self.assertGreaterEqual(result["diagnostics"]["live_quote_stats"]["available_candidates"], 1)
+        self.assertEqual(result["diagnostics"]["universe_filter_stats"]["coverage_strategy"], "seed_supplemented")
+        self.assertGreater(result["diagnostics"]["universe_filter_stats"]["supplemented_seed_count"], 0)
+        self.assertIn("curated_hk_liquid_seed", result["source_summary"])
+
+        shortlist_symbols = [item["symbol"] for item in result["shortlist"]]
+        self.assertEqual(len(shortlist_symbols), 2)
+        self.assertNotIn("HK02800", shortlist_symbols)
+        self.assertIn(shortlist_symbols[0], {"HK00700", "HK01810", "HK03690", "HK00981"})
+        self.assertTrue(any(metric["label"] == "20日均成交额" for metric in result["shortlist"][0]["key_metrics"]))
+        self.assertTrue(any("开盘" in note or "quote" in note for note in result["shortlist"][0]["risk_notes"]))
+
+        history = service.list_runs(market="hk", profile="hk_preopen_v1", page=1, limit=10)
+        self.assertEqual(history["total"], 1)
+        self.assertEqual(history["items"][0]["market"], "hk")
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertEqual(detail["market"], "hk")
+        self.assertEqual(detail["profile_label"], "港股盘前扫描 v1")
+
+    def test_resolve_us_stock_universe_supplements_thin_local_coverage(self) -> None:
+        profile = get_scanner_profile(market="us", profile="us_preopen_v1")
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeUsScannerDataManager(),
+        )
+
+        with patch.object(
+            MarketScannerService,
+            "_load_local_us_universe_from_parquet",
+            return_value=["NVDA", "AAPL"],
+        ):
+            with patch.object(service, "_load_local_us_universe_from_db", return_value=["PLTR"]):
+                result = service._resolve_us_stock_universe(profile=profile)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["coverage_strategy"], "seed_supplemented")
+        self.assertEqual(result["local_symbol_count"], 3)
+        self.assertGreater(result["supplemented_seed_count"], 0)
+        self.assertGreaterEqual(result["final_symbol_count"], 24)
+        self.assertTrue(result["source"].startswith("local_us_parquet_dir"))
+        self.assertIn("curated_us_liquid_seed", result["source"])
+        self.assertIn("NVDA", result["data"])
+        self.assertIn("PLTR", result["data"])
+
     def test_run_scan_rejects_unknown_market_profile(self) -> None:
         with self.assertRaises(ValueError):
-            self.service.run_scan(market="hk")
+            self.service.run_scan(market="sg")
 
     def test_run_scan_prefers_local_universe_cache_and_skips_online_stock_list(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -920,6 +1054,42 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertGreater(quality["avg_shortlist_return_pct"], 0.0)
         self.assertGreater(quality["hit_rate_pct"], 0.0)
         self.assertGreater(quality["positive_candidate_avg_score"], quality["negative_candidate_avg_score"])
+
+    def test_run_scan_returns_coverage_and_provider_diagnostics_summary(self) -> None:
+        detail = self.service.run_scan(
+            market="cn",
+            profile="cn_preopen_v1",
+            shortlist_size=2,
+            universe_limit=50,
+            detail_limit=10,
+        )
+
+        coverage = detail["diagnostics"].get("coverage_summary")
+        providers = detail["diagnostics"].get("provider_diagnostics")
+
+        self.assertIsInstance(coverage, dict)
+        self.assertEqual(coverage["input_universe_size"], 6)
+        self.assertEqual(coverage["eligible_after_universe_fetch"], 6)
+        self.assertEqual(coverage["eligible_after_liquidity_filter"], 4)
+        self.assertEqual(coverage["eligible_after_data_availability_filter"], 4)
+        self.assertEqual(coverage["ranked_candidate_count"], 4)
+        self.assertEqual(coverage["shortlisted_count"], 2)
+        self.assertEqual(coverage["excluded_total"], 2)
+        excluded_reasons = {item["reason"]: item["count"] for item in coverage["excluded_by_reason"]}
+        self.assertEqual(excluded_reasons["filtered_by_profile_constraints"], 2)
+
+        self.assertIsInstance(providers, dict)
+        self.assertEqual(providers["configured_primary_provider"], "FakeSnapshotSource")
+        self.assertEqual(providers["snapshot_source_used"], "FakeSnapshotSource")
+        self.assertEqual(providers["history_source_used"], "FakeDailySource")
+        self.assertFalse(providers["fallback_occurred"])
+        self.assertEqual(providers["fallback_count"], 0)
+        self.assertEqual(providers["provider_failure_count"], 0)
+        self.assertEqual(providers["missing_data_symbol_count"], 0)
+        self.assertEqual(
+            providers["providers_used"],
+            ["FakeDailySource", "FakeSnapshotSource", "local_db", "local_universe_cache"],
+        )
 
 
 if __name__ == "__main__":

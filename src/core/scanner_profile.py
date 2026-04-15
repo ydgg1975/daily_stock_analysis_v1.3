@@ -81,15 +81,41 @@ US_PREOPEN_V1 = ScannerMarketProfile(
 )
 
 
+HK_PREOPEN_V1 = ScannerMarketProfile(
+    key="hk_preopen_v1",
+    market="hk",
+    label="港股盘前扫描 v1",
+    description="面向港股开盘前候选发现的规则型扫描器，强调流动性、趋势延续、相对强度与开盘确认。",
+    implemented=True,
+    universe_name="hk_preopen_watchlist_v1",
+    shortlist_size=5,
+    universe_limit=120,
+    detail_limit=30,
+    history_days=180,
+    min_history_bars=70,
+    min_price=3.0,
+    min_amount=8.0e7,
+    min_turnover_rate=0.0,
+    min_volume_ratio=0.0,
+    min_avg_amount_20=8.0e7,
+    min_avg_volume_20=1.2e6,
+    sector_context_limit=0,
+    recent_run_limit=5,
+    benchmark_code="HK02800",
+)
+
+
 SCANNER_PROFILES: Dict[str, ScannerMarketProfile] = {
     CN_A_PREOPEN_V1.key: CN_A_PREOPEN_V1,
     US_PREOPEN_V1.key: US_PREOPEN_V1,
+    HK_PREOPEN_V1.key: HK_PREOPEN_V1,
 }
 
 
 DEFAULT_PROFILE_BY_MARKET: Dict[str, ScannerMarketProfile] = {
     "cn": CN_A_PREOPEN_V1,
     "us": US_PREOPEN_V1,
+    "hk": HK_PREOPEN_V1,
 }
 
 

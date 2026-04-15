@@ -16,6 +16,11 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
+  confirmationLabel?: string;
+  confirmationHint?: string;
+  confirmationValue?: string;
+  confirmationPhrase?: string;
+  onConfirmationValueChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -27,6 +32,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmText,
   cancelText,
   isDanger = false,
+  confirmationLabel,
+  confirmationHint,
+  confirmationValue = '',
+  confirmationPhrase,
+  onConfirmationValueChange,
   onConfirm,
   onCancel,
 }) => {
@@ -70,6 +80,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   }, [isMounted, onCancel]);
 
   if (!isMounted) return null;
+  const normalizedTypedValue = String(confirmationValue || '');
+  const requiresTypedConfirmation = Boolean(confirmationPhrase);
+  const typedConfirmationMatched = !requiresTypedConfirmation || normalizedTypedValue === confirmationPhrase;
 
   const dialog = (
     <div
@@ -95,11 +108,32 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <p className="confirm-dialog__message mb-6 mt-2 text-sm leading-6 text-secondary-text">
           {message}
         </p>
+        {requiresTypedConfirmation ? (
+          <div className="mb-6">
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              {confirmationLabel ?? t('common.confirm')}
+            </label>
+            <input
+              aria-label={confirmationLabel ?? t('common.confirm')}
+              value={normalizedTypedValue}
+              onChange={(event) => onConfirmationValueChange?.(event.target.value)}
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+            />
+            <p className="mt-2 text-xs text-muted-text">
+              {confirmationHint ?? confirmationPhrase}
+            </p>
+          </div>
+        ) : null}
         <div className="confirm-dialog__actions flex flex-wrap justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel}>
             {cancelText ?? t('common.cancel')}
           </Button>
-          <Button variant={isDanger ? 'danger-subtle' : 'primary'} size="sm" onClick={onConfirm}>
+          <Button
+            variant={isDanger ? 'danger-subtle' : 'primary'}
+            size="sm"
+            onClick={onConfirm}
+            disabled={!typedConfirmationMatched}
+          >
             {confirmText ?? t('common.confirm')}
           </Button>
         </div>

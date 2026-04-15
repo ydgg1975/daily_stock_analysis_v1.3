@@ -1,26 +1,9 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { adminLogsApi, type ExecutionLogSessionDetail, type ExecutionLogSessionSummary } from '../api/adminLogs';
 import { useI18n } from '../contexts/UiLanguageContext';
 import { ApiErrorAlert } from '../components/common';
 import type { ParsedApiError } from '../api/error';
-
-const ADMIN_UNLOCK_TOKEN_STORAGE_KEY = 'dsa-admin-settings-unlock-token';
-const ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY = 'dsa-admin-settings-unlock-expires-at';
-
-function getAdminUnlockToken(): string | null {
-  const token = window.sessionStorage.getItem(ADMIN_UNLOCK_TOKEN_STORAGE_KEY);
-  const expiresAtRaw = window.sessionStorage.getItem(ADMIN_UNLOCK_EXPIRES_AT_STORAGE_KEY);
-  if (!token || !expiresAtRaw) {
-    return null;
-  }
-  const expiresAt = Number(expiresAtRaw);
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    return null;
-  }
-  return token;
-}
 
 const STATUS_CLASS: Record<string, string> = {
   running: 'theme-log-status theme-log-status--running',
@@ -58,6 +41,7 @@ function resolveCategoryLabel(category: string, t: (key: string) => string): str
     data_news: 'adminLogs.category.data_news',
     data_sentiment: 'adminLogs.category.data_sentiment',
     notification: 'adminLogs.category.notification',
+    scanner: 'scanner',
     system: 'adminLogs.category.system',
   };
   return mapping[key] ? t(mapping[key]) : (category || '--');
@@ -84,6 +68,7 @@ function resolveActionLabel(action: string, t: (key: string) => string): string 
 
 const AdminLogsPage: React.FC = () => {
   const { language, t } = useI18n();
+  const [activityTypeFilter, setActivityTypeFilter] = useState<'all' | 'admin_action' | 'user_activity'>('all');
   const [stockFilter, setStockFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -95,10 +80,15 @@ const AdminLogsPage: React.FC = () => {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [detailError, setDetailError] = useState<ParsedApiError | null>(null);
-  const adminUnlockToken = useMemo(getAdminUnlockToken, []);
+
+  const filteredSessions = sessions.filter((item) => {
+    if (activityTypeFilter === 'all') {
+      return true;
+    }
+    return String(item.readableSummary?.sessionKind || '').trim() === activityTypeFilter;
+  });
 
   const loadSessions = useCallback(async () => {
-    if (!adminUnlockToken) return;
     setIsLoadingList(true);
     setError(null);
     try {
@@ -110,7 +100,6 @@ const AdminLogsPage: React.FC = () => {
           provider: keywordFilter.trim() || undefined,
           limit: 100,
         },
-        adminUnlockToken,
       );
       setSessions(response.items || []);
       if ((response.items || []).length) {
@@ -121,21 +110,31 @@ const AdminLogsPage: React.FC = () => {
     } finally {
       setIsLoadingList(false);
     }
-  }, [adminUnlockToken, categoryFilter, keywordFilter, statusFilter, stockFilter]);
+  }, [categoryFilter, keywordFilter, statusFilter, stockFilter]);
 
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
 
   useEffect(() => {
-    if (!selectedSessionId || !adminUnlockToken) {
+    if (filteredSessions.length === 0) {
+      setSelectedSessionId(null);
+      return;
+    }
+    if (!filteredSessions.some((item) => item.sessionId === selectedSessionId)) {
+      setSelectedSessionId(filteredSessions[0].sessionId);
+    }
+  }, [filteredSessions, selectedSessionId]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
       setDetail(null);
       return;
     }
     let cancelled = false;
     setIsLoadingDetail(true);
     setDetailError(null);
-    void adminLogsApi.getSessionDetail(selectedSessionId, adminUnlockToken)
+    void adminLogsApi.getSessionDetail(selectedSessionId)
       .then((res) => {
         if (!cancelled) setDetail(res);
       })
@@ -151,21 +150,7 @@ const AdminLogsPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [adminUnlockToken, selectedSessionId]);
-
-  if (!adminUnlockToken) {
-    return (
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 md:px-6">
-        <section className="theme-panel-solid rounded-[1rem] border border-border/60 p-4">
-          <h1 className="text-lg font-semibold text-foreground">{t('adminLogs.title')}</h1>
-          <p className="mt-2 text-sm text-secondary-text">{t('adminLogs.unlockRequired')}</p>
-          <Link className="mt-4 inline-flex text-sm font-medium text-accent hover:underline" to="/settings">
-            {t('adminLogs.goToSettings')}
-          </Link>
-        </section>
-      </main>
-    );
-  }
+  }, [selectedSessionId]);
 
   return (
     <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 py-4 md:px-6">
@@ -174,9 +159,22 @@ const AdminLogsPage: React.FC = () => {
           <div>
             <h1 className="text-lg font-semibold text-foreground">{t('adminLogs.title')}</h1>
             <p className="text-sm text-secondary-text">{t('adminLogs.subtitle')}</p>
+            <p className="mt-2 text-xs text-muted-text">{t('adminLogs.globalScopeTitle')}</p>
             <p className="mt-2 text-xs text-muted-text">{t('adminLogs.filterHint', { count: sessions.length })}</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[9rem_12rem_minmax(0,1fr)_9rem_auto]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[10rem_9rem_12rem_minmax(0,1fr)_9rem_auto]">
+            <label className="sr-only" htmlFor="admin-logs-activity-type">{t('adminLogs.activityTypeFilter')}</label>
+            <select
+              id="admin-logs-activity-type"
+              aria-label={t('adminLogs.activityTypeFilter')}
+              className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
+              value={activityTypeFilter}
+              onChange={(e) => setActivityTypeFilter(e.target.value as 'all' | 'admin_action' | 'user_activity')}
+            >
+              <option value="all">{t('adminLogs.activityType.all')}</option>
+              <option value="admin_action">{t('adminLogs.activityType.admin_action')}</option>
+              <option value="user_activity">{t('adminLogs.activityType.user_activity')}</option>
+            </select>
             <input
               className="input-surface h-10 w-full rounded-[var(--theme-control-radius)] px-3 text-sm"
               placeholder={t('adminLogs.stockFilter')}
@@ -196,6 +194,7 @@ const AdminLogsPage: React.FC = () => {
               <option value="data_news">{t('adminLogs.category.data_news')}</option>
               <option value="data_sentiment">{t('adminLogs.category.data_sentiment')}</option>
               <option value="notification">{t('adminLogs.category.notification')}</option>
+              <option value="scanner">scanner</option>
               <option value="system">{t('adminLogs.category.system')}</option>
             </select>
             <input
@@ -230,11 +229,11 @@ const AdminLogsPage: React.FC = () => {
 
       <section className="grid gap-4 lg:grid-cols-[420px,minmax(0,1fr)]">
         <div className="theme-panel-solid rounded-[1rem] border border-border/60 p-3 lg:max-h-[72vh] lg:overflow-y-auto">
-          {sessions.length === 0 ? (
+          {filteredSessions.length === 0 ? (
             <p className="px-2 py-3 text-sm text-muted-text">{t('adminLogs.noSessions')}</p>
           ) : (
             <div className="space-y-2">
-              {sessions.map((item) => {
+              {filteredSessions.map((item) => {
                 const cls = STATUS_CLASS[item.overallStatus] || STATUS_CLASS.running;
                 const selected = selectedSessionId === item.sessionId;
                 const summary = item.readableSummary || {};
@@ -258,7 +257,15 @@ const AdminLogsPage: React.FC = () => {
                     <p className="mt-1 text-xs text-secondary-text">
                       {(item.startedAt && new Date(item.startedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')) || '--'}
                     </p>
+                    <p className="mt-1 text-xs text-secondary-text">
+                      {summary.actorDisplay || '--'} · {summary.actorRole || '--'} · {summary.subsystem || '--'}
+                    </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-secondary-text">
+                      <span>{summary.sessionKind || '--'}</span>
+                      {summary.actionName ? <span>{summary.actionName}</span> : null}
+                      {summary.scannerRunId ? <span>{`run #${summary.scannerRunId}`}</span> : null}
+                      {summary.scannerMarket ? <span>{summary.scannerMarket}</span> : null}
+                      {summary.scannerShortlistCount != null ? <span>{`shortlist ${summary.scannerShortlistCount}`}</span> : null}
                       <span>{t('adminLogs.finalAiModel')}: {summary.finalAiModel || '--'}</span>
                       {summary.aiFallbackUsed ? (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
@@ -296,6 +303,12 @@ const AdminLogsPage: React.FC = () => {
                   <section className="rounded-lg border border-border/60 bg-muted/10 p-3">
                     <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.executiveSummary')}</h3>
                     <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
+                      <p className="text-secondary-text">{t('adminLogs.actor')}: <span className="text-foreground">{sourceText(readable.actorDisplay)}</span></p>
+                      <p className="text-secondary-text">{t('adminLogs.actorRole')}: <span className="text-foreground">{sourceText(readable.actorRole)}</span></p>
+                      <p className="text-secondary-text">{t('adminLogs.sessionKind')}: <span className="text-foreground">{sourceText(readable.sessionKind)}</span></p>
+                      <p className="text-secondary-text">{t('adminLogs.subsystem')}: <span className="text-foreground">{sourceText(readable.subsystem)}</span></p>
+                      <p className="text-secondary-text">{t('adminLogs.actionName')}: <span className="text-foreground">{sourceText(readable.actionName)}</span></p>
+                      <p className="text-secondary-text">{t('adminLogs.destructive')}: <span className="text-foreground">{readable.destructive ? t('common.confirm') : '--'}</span></p>
                       <p className="text-secondary-text">{t('adminLogs.finalAiModel')}: <span className="text-foreground">{sourceText(readable.finalAiModel)}</span></p>
                       <p className="text-secondary-text">{t('adminLogs.aiAttempts')}: <span className="text-foreground">{String(readable.aiAttemptsCount || 0)}</span></p>
                       <p className="text-secondary-text">{t('adminLogs.finalMarketSource')}: <span className="text-foreground">{sourceText(readable.finalMarketSource)}</span></p>
@@ -330,6 +343,14 @@ const AdminLogsPage: React.FC = () => {
                       <p className="mt-2 rounded-md border border-border/40 bg-base/60 px-2.5 py-2 text-xs leading-5 text-secondary-text">
                         {readable.summaryParagraph}
                       </p>
+                    ) : null}
+                    {readable.scannerCoverageSummary ? (
+                      <div className="mt-2 rounded-md border border-border/40 bg-base/60 px-2.5 py-2 text-xs leading-5 text-secondary-text">
+                        <p className="text-foreground">{readable.scannerCoverageSummary}</p>
+                        <p className="mt-1">
+                          {`Providers: ${(readable.scannerProvidersUsed || []).join(', ') || '--'} · fallback ${readable.scannerFallbackCount || 0} · failures ${readable.scannerProviderFailureCount || 0}`}
+                        </p>
+                      </div>
                     ) : null}
                   </section>
                 );

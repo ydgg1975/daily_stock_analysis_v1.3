@@ -929,7 +929,7 @@ const BacktestPage: React.FC = () => {
       <WorkspacePageHeader
         eyebrow="WolfyStock"
         title="回测"
-        description={`配置页现在只负责发起确定性回测，不再内嵌完整结果分析。普通模式提供引导式配置，专业模式提供密集控制；完整指标、图表、审计和导出统一落在独立结果页。当前基准默认按市场自动选择（${getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode)}）。`}
+        description={`配置确定性规则与评估参数。运行后进入独立控制台查看图表、审计与表现对比。当前基准: ${getBenchmarkModeLabel(ruleBenchmarkMode, normalizedCode, ruleBenchmarkCode)}`}
         className="backtest-v1-header"
         contentClassName="backtest-v1-header__layout"
         descriptionClassName="backtest-v1-header__description"

@@ -11,11 +11,17 @@ from zoneinfo import ZoneInfo
 from src.config import Config, get_config
 from src.core.scanner_profile import get_scanner_profile, get_scanner_profile_by_key
 from src.core.trading_calendar import MARKET_TIMEZONE, is_market_open
+from src.multi_user import OWNERSHIP_SCOPE_SYSTEM, OWNERSHIP_SCOPE_USER
 from src.notification import NotificationService
+from src.services.execution_log_service import ExecutionLogService
 from src.services.market_scanner_service import MarketScannerService, ScannerRuntimeError
 from src.storage import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+
+def _trigger_scope(trigger_mode: str) -> str:
+    return OWNERSHIP_SCOPE_SYSTEM if str(trigger_mode or "").strip().lower() == "scheduled" else OWNERSHIP_SCOPE_USER
 
 
 class MarketScannerOperationsService:
@@ -27,10 +33,12 @@ class MarketScannerOperationsService:
         scanner_service: Optional[MarketScannerService] = None,
         config: Optional[Config] = None,
         notifier_factory: Optional[Callable[[], NotificationService]] = None,
+        execution_log_service: Optional[ExecutionLogService] = None,
     ) -> None:
         self.config = config or get_config()
         self.scanner_service = scanner_service or MarketScannerService(db_manager=db_manager)
         self.notifier_factory = notifier_factory or NotificationService
+        self.execution_logs = execution_log_service or ExecutionLogService()
 
     def run_manual_scan(
         self,
@@ -140,6 +148,7 @@ class MarketScannerOperationsService:
                 shortlist_size=shortlist_size,
                 universe_limit=universe_limit,
                 detail_limit=detail_limit,
+                scope=_trigger_scope(trigger_mode),
             )
         except ValueError as exc:
             message = str(exc)
@@ -163,6 +172,7 @@ class MarketScannerOperationsService:
                     ],
                     scoring_notes=self.scanner_service._build_scoring_notes(profile=resolved_profile),
                     shortlist=[],
+                    scope=_trigger_scope(trigger_mode),
                 )
             else:
                 failure_diagnostics = dict(exc.diagnostics) if isinstance(exc, ScannerRuntimeError) else None
@@ -177,6 +187,7 @@ class MarketScannerOperationsService:
                     error_message=message,
                     diagnostics=failure_diagnostics,
                     source_summary=exc.source_summary if isinstance(exc, ScannerRuntimeError) else None,
+                    scope=_trigger_scope(trigger_mode),
                 )
                 if raise_on_failure:
                     raise
@@ -192,6 +203,7 @@ class MarketScannerOperationsService:
                 error_message=str(exc),
                 diagnostics=dict(exc.diagnostics) if isinstance(exc, ScannerRuntimeError) else None,
                 source_summary=exc.source_summary if isinstance(exc, ScannerRuntimeError) else None,
+                scope=_trigger_scope(trigger_mode),
             )
             if raise_on_failure:
                 raise
@@ -201,6 +213,7 @@ class MarketScannerOperationsService:
             trigger_mode=trigger_mode,
             watchlist_date=watchlist_date,
             request_source=request_source,
+            scope=_trigger_scope(trigger_mode),
         ) or detail
 
         if notify and updated_detail.get("status") in {"completed", "empty"}:
@@ -211,9 +224,28 @@ class MarketScannerOperationsService:
                 watchlist_date=watchlist_date,
                 request_source=request_source,
                 notification_result=notification_result,
+                scope=_trigger_scope(trigger_mode),
             ) or updated_detail
 
+        self._record_scanner_observability(updated_detail, trigger_mode=trigger_mode)
         return updated_detail
+
+    def _record_scanner_observability(
+        self,
+        detail: Dict[str, Any],
+        *,
+        trigger_mode: str,
+    ) -> None:
+        if not isinstance(detail, dict) or not detail.get("id"):
+            return
+        session_kind = "admin_action" if _trigger_scope(trigger_mode) == OWNERSHIP_SCOPE_SYSTEM else "user_activity"
+        try:
+            self.execution_logs.record_scanner_run(
+                run_detail=detail,
+                session_kind=session_kind,
+            )
+        except Exception as exc:
+            logger.warning("记录 scanner observability 日志失败: %s", exc)
 
     @staticmethod
     def _is_empty_watchlist_message(message: str) -> bool:
