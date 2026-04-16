@@ -558,6 +558,9 @@ class DataFetcherManager:
         self._fundamental_timeout_worker_limit = 8
         self._fundamental_timeout_slots = BoundedSemaphore(self._fundamental_timeout_worker_limit)
         self._last_realtime_quote_trace: List[Dict[str, Any]] = []
+        self._cn_stock_list_cache: Dict[Tuple[str, ...], Dict[str, Any]] = {}
+        self._cn_stock_list_cache_lock = RLock()
+        self._cn_stock_list_cache_ttl_seconds = 60.0
 
     def _get_tickflow_fetcher(self):
         """Lazily create a TickFlow fetcher for market-review-only calls."""
@@ -791,6 +794,89 @@ class DataFetcherManager:
                 )
                 for key, _ in sorted_items[:overflow]:
                     self._fundamental_cache.pop(key, None)
+
+    @staticmethod
+    def _clone_cn_stock_list_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+        cloned = dict(payload or {})
+        data = cloned.get("data")
+        if isinstance(data, pd.DataFrame):
+            cloned["data"] = data.copy()
+        attempts = cloned.get("attempts")
+        if isinstance(attempts, list):
+            cloned["attempts"] = [dict(item) for item in attempts if isinstance(item, dict)]
+        return cloned
+
+    @staticmethod
+    def _normalize_cn_stock_list_frame(stock_list: pd.DataFrame) -> pd.DataFrame:
+        if "code" not in stock_list.columns or "name" not in stock_list.columns:
+            raise ValueError("stock list missing required code/name columns")
+
+        normalized = stock_list.copy()
+        normalized["code"] = normalized["code"].astype(str).str.strip()
+        normalized["name"] = normalized["name"].astype(str).str.strip()
+        normalized = normalized[normalized["code"] != ""]
+        normalized = normalized[normalized["name"] != ""]
+        normalized = normalized.drop_duplicates(subset=["code"], keep="first")
+        return normalized.reset_index(drop=True)
+
+    @staticmethod
+    def _normalize_cn_stock_list_cache_key(
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> Tuple[str, ...]:
+        if not preferred_fetchers:
+            return ("__default__",)
+        normalized = tuple(
+            str(name or "").strip()
+            for name in preferred_fetchers
+            if str(name or "").strip()
+        )
+        return normalized or ("__default__",)
+
+    def _get_cached_cn_stock_list(
+        self,
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if not hasattr(self, "_cn_stock_list_cache_lock") or self._cn_stock_list_cache_lock is None:
+            self._cn_stock_list_cache_lock = RLock()
+        if not hasattr(self, "_cn_stock_list_cache") or self._cn_stock_list_cache is None:
+            self._cn_stock_list_cache = {}
+        ttl_seconds = float(getattr(self, "_cn_stock_list_cache_ttl_seconds", 60.0) or 0.0)
+        if ttl_seconds <= 0:
+            return None
+
+        cache_key = self._normalize_cn_stock_list_cache_key(preferred_fetchers)
+        now_ts = time.time()
+        with self._cn_stock_list_cache_lock:
+            cache_item = self._cn_stock_list_cache.get(cache_key)
+            if not cache_item:
+                return None
+            if now_ts - float(cache_item.get("ts", 0.0)) > ttl_seconds:
+                self._cn_stock_list_cache.pop(cache_key, None)
+                return None
+            payload = cache_item.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        return self._clone_cn_stock_list_result(payload)
+
+    def _put_cached_cn_stock_list(
+        self,
+        payload: Dict[str, Any],
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> None:
+        if not isinstance(payload, dict) or not payload.get("success"):
+            return
+        if not hasattr(self, "_cn_stock_list_cache_lock") or self._cn_stock_list_cache_lock is None:
+            self._cn_stock_list_cache_lock = RLock()
+        if not hasattr(self, "_cn_stock_list_cache") or self._cn_stock_list_cache is None:
+            self._cn_stock_list_cache = {}
+        cache_key = self._normalize_cn_stock_list_cache_key(preferred_fetchers)
+        with self._cn_stock_list_cache_lock:
+            self._cn_stock_list_cache[cache_key] = {
+                "ts": time.time(),
+                "payload": self._clone_cn_stock_list_result(payload),
+            }
 
     @staticmethod
     def _is_missing_board_value(value: Any) -> bool:
@@ -2018,14 +2104,31 @@ class DataFetcherManager:
         
         if not missing_codes:
             return result
-        
+
+        cached_stock_list = self._get_cached_cn_stock_list()
+        if cached_stock_list and isinstance(cached_stock_list.get("data"), pd.DataFrame):
+            stock_list = cached_stock_list["data"]
+            if not stock_list.empty:
+                for _, row in stock_list.iterrows():
+                    code = row.get('code')
+                    name = row.get('name')
+                    if code and name:
+                        self._stock_name_cache[code] = name
+                        if code in missing_codes:
+                            result[code] = name
+                            missing_codes.discard(code)
+
+        if not missing_codes:
+            return result
+
         # 2. 尝试批量获取股票列表
         for fetcher in self._fetchers:
             if hasattr(fetcher, 'get_stock_list') and missing_codes:
                 try:
                     stock_list = fetcher.get_stock_list()
                     if stock_list is not None and not stock_list.empty:
-                        for _, row in stock_list.iterrows():
+                        cache_rows = self._normalize_cn_stock_list_frame(stock_list)
+                        for _, row in cache_rows.iterrows():
                             code = row.get('code')
                             name = row.get('name')
                             if code and name:
@@ -2033,6 +2136,17 @@ class DataFetcherManager:
                                 if code in missing_codes:
                                     result[code] = name
                                     missing_codes.discard(code)
+
+                        self._put_cached_cn_stock_list(
+                            {
+                                "success": True,
+                                "source": fetcher.name,
+                                "data": cache_rows,
+                                "attempts": [{"fetcher": fetcher.name, "status": "success", "rows": int(len(cache_rows))}],
+                                "error_code": None,
+                                "error_message": None,
+                            }
+                        )
                         
                         if not missing_codes:
                             break
@@ -2096,6 +2210,10 @@ class DataFetcherManager:
         preferred_fetchers: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Try to resolve an A-share stock list and return structured diagnostics."""
+        cached = self._get_cached_cn_stock_list(preferred_fetchers=preferred_fetchers)
+        if cached is not None:
+            return cached
+
         attempts: List[Dict[str, Any]] = []
         candidates = self._select_fetchers_with_capability(
             capability="get_stock_list",
@@ -2128,15 +2246,7 @@ class DataFetcherManager:
                     )
                     continue
 
-                if "code" not in stock_list.columns or "name" not in stock_list.columns:
-                    raise ValueError("stock list missing required code/name columns")
-
-                normalized = stock_list.copy()
-                normalized["code"] = normalized["code"].astype(str).str.strip()
-                normalized["name"] = normalized["name"].astype(str).str.strip()
-                normalized = normalized[normalized["code"] != ""]
-                normalized = normalized[normalized["name"] != ""]
-                normalized = normalized.drop_duplicates(subset=["code"], keep="first")
+                normalized = self._normalize_cn_stock_list_frame(stock_list)
 
                 attempts.append(
                     {
@@ -2146,7 +2256,7 @@ class DataFetcherManager:
                     }
                 )
                 logger.info(f"[{fetcher.name}] 获取 A 股股票列表成功: {len(normalized)} 条")
-                return {
+                result = {
                     "success": True,
                     "source": fetcher.name,
                     "data": normalized.reset_index(drop=True),
@@ -2154,6 +2264,8 @@ class DataFetcherManager:
                     "error_code": None,
                     "error_message": None,
                 }
+                self._put_cached_cn_stock_list(result, preferred_fetchers=preferred_fetchers)
+                return result
             except Exception as e:
                 error_type, error_reason = summarize_exception(e)
                 reason_code = classify_cn_stock_list_failure(fetcher.name, error_type, error_reason)

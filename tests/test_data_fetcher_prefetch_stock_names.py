@@ -8,6 +8,8 @@ import sys
 import unittest
 from unittest.mock import MagicMock, call, patch
 
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from data_provider.base import DataFetcherManager
@@ -16,10 +18,28 @@ from data_provider.pytdx_fetcher import PytdxFetcher
 
 class _DummyFetcher:
     name = "DummyFetcher"
+    priority = 0
 
     @staticmethod
     def get_stock_name(_stock_code):
         return "测试股票"
+
+
+class _DummyListFetcher:
+    name = "DummyListFetcher"
+    priority = 0
+
+    def __init__(self):
+        self.stock_list_calls = 0
+
+    def get_stock_list(self):
+        self.stock_list_calls += 1
+        return pd.DataFrame(
+            [
+                {"code": "600519", "name": "贵州茅台"},
+                {"code": "000001", "name": "平安银行"},
+            ]
+        )
 
 
 class TestPrefetchStockNames(unittest.TestCase):
@@ -93,6 +113,30 @@ class TestPrefetchStockNames(unittest.TestCase):
         self.assertEqual(fetcher._stock_name_cache["300750"], "宁德时代")
         self.assertEqual(fetcher._stock_list_cache["300750"], "宁德时代")
         api.get_finance_info.assert_not_called()
+
+    def test_try_get_cn_stock_list_reuses_manager_cache(self):
+        fetcher = _DummyListFetcher()
+        manager = DataFetcherManager(fetchers=[fetcher])
+
+        first = manager.try_get_cn_stock_list()
+        second = manager.try_get_cn_stock_list()
+
+        self.assertTrue(first["success"])
+        self.assertTrue(second["success"])
+        self.assertEqual(fetcher.stock_list_calls, 1)
+        self.assertEqual(second["source"], "DummyListFetcher")
+        self.assertEqual(list(second["data"]["code"]), ["600519", "000001"])
+
+    def test_batch_get_stock_names_reuses_warm_cn_stock_list_cache(self):
+        fetcher = _DummyListFetcher()
+        manager = DataFetcherManager(fetchers=[fetcher])
+
+        warm = manager.try_get_cn_stock_list()
+        names = manager.batch_get_stock_names(["600519", "000001"])
+
+        self.assertTrue(warm["success"])
+        self.assertEqual(fetcher.stock_list_calls, 1)
+        self.assertEqual(names, {"600519": "贵州茅台", "000001": "平安银行"})
 
 
 if __name__ == "__main__":

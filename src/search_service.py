@@ -2001,9 +2001,18 @@ class SearchService:
         """检查是否有可用的搜索引擎"""
         return any(p.is_available for p in self._providers)
 
-    def _cache_key(self, query: str, max_results: int, days: int) -> str:
+    def _cache_key(
+        self,
+        query: str,
+        max_results: int,
+        days: int,
+        *,
+        scope: str = "default",
+    ) -> str:
         """Build a cache key from query parameters."""
-        return f"{query}|{max_results}|{days}"
+        normalized_query = " ".join(str(query or "").split()).lower()
+        normalized_scope = str(scope or "default").strip().lower()
+        return f"{normalized_scope}|{normalized_query}|{max_results}|{days}"
 
     def _get_cached(self, key: str) -> Optional['SearchResponse']:
         """Return cached SearchResponse if still valid, else None."""
@@ -2343,7 +2352,7 @@ class SearchService:
         )
 
         # Check cache first
-        cache_key = self._cache_key(query, max_results, search_days)
+        cache_key = self._cache_key(query, max_results, search_days, scope="stock_news")
         cached = self._get_cached(cache_key)
         if cached is not None:
             logger.info(f"使用缓存搜索结果: {stock_name}({stock_code})")
@@ -2625,6 +2634,20 @@ class SearchService:
             if not available_providers:
                 break
 
+            cache_key = self._cache_key(
+                dim["query"],
+                target_per_dimension,
+                search_days,
+                scope=f"intel:{dim['name']}:{'strict' if dim['strict_freshness'] else 'soft'}",
+            )
+            cached = self._get_cached(cache_key)
+            if cached is not None:
+                results[dim["name"]] = cached
+                search_count += 1
+                logger.info("[情报搜索] %s: 命中缓存，跳过重复 provider 请求", dim["desc"])
+                time.sleep(0.5)
+                continue
+
             last_response = SearchResponse(
                 query=dim["query"],
                 results=[],
@@ -2738,6 +2761,8 @@ class SearchService:
                 final_response = filtered_response
 
             final_response.attempts = attempt_trace
+            if final_response.success:
+                self._put_cache(cache_key, final_response)
 
             results[dim['name']] = final_response
             search_count += 1

@@ -152,6 +152,40 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         p1.search.assert_called_once()
         p2.search.assert_called_once()
 
+    def test_search_comprehensive_intel_reuses_cached_dimension_queries(self) -> None:
+        """Repeated comprehensive-intel runs should not refetch the same dimension queries."""
+        today = datetime.now().date().isoformat()
+
+        service = SearchService(
+            bocha_keys=["dummy_key"],
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+
+        provider = SimpleNamespace(
+            is_available=True,
+            name="P1",
+            search=MagicMock(return_value=_response([_result("fresh", today)])),
+        )
+        service._providers = [provider]
+
+        with patch("src.search_service.time.sleep"):
+            first = service.search_comprehensive_intel(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                max_searches=2,
+            )
+            second = service.search_comprehensive_intel(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                max_searches=2,
+            )
+
+        self.assertEqual(sorted(first.keys()), ["latest_news", "market_analysis"])
+        self.assertEqual(sorted(second.keys()), ["latest_news", "market_analysis"])
+        self.assertEqual(provider.search.call_count, 2)
+
     def test_search_comprehensive_intel_splits_strict_and_non_strict_filters(self) -> None:
         """Latest news stays strict while market analysis keeps undated results."""
         today = datetime.now().date()
