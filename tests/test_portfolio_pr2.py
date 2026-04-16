@@ -700,6 +700,101 @@ class PortfolioPr2TestCase(unittest.TestCase):
         with patch.object(PortfolioService, "_fetch_fx_rate_from_yfinance", side_effect=AssertionError("should not call")):
             self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
 
+    def test_snapshot_cache_refreshes_after_fx_rate_update(self) -> None:
+        account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+
+        first = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=8.0,
+            source="manual",
+            is_stale=False,
+        )
+        second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertAlmostEqual(first["accounts"][0]["total_market_value"], 700.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_market_value"], 800.0, places=6)
+        self.assertAlmostEqual(first["accounts"][0]["total_cash"], 6300.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_cash"], 7200.0, places=6)
+
+    def test_irrelevant_fx_rate_update_does_not_invalidate_warm_snapshot_cache(self) -> None:
+        account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_cash_ledger(
+            account_id=aid,
+            event_date=date(2026, 1, 1),
+            direction="in",
+            amount=1000.0,
+            currency="USD",
+        )
+        self.service.record_trade(
+            account_id=aid,
+            symbol="AAPL",
+            trade_date=date(2026, 1, 1),
+            side="buy",
+            quantity=1,
+            price=100,
+            market="us",
+            currency="USD",
+        )
+        self._save_close("AAPL", date(2026, 1, 1), 100.0)
+        self.service.repo.save_fx_rate(
+            from_currency="USD",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=7.0,
+            source="manual",
+            is_stale=False,
+        )
+        self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+        self.service.repo.save_fx_rate(
+            from_currency="EUR",
+            to_currency="CNY",
+            rate_date=date(2026, 1, 1),
+            rate=8.1,
+            source="manual",
+            is_stale=False,
+        )
+
+        with patch.object(
+            self.service,
+            "_build_account_snapshot",
+            side_effect=AssertionError("irrelevant FX update should not invalidate warm cache"),
+        ):
+            second = self.service.get_portfolio_snapshot(account_id=aid, as_of=date(2026, 1, 1), cost_method="fifo")
+
+        self.assertAlmostEqual(second["accounts"][0]["total_market_value"], 700.0, places=6)
+        self.assertAlmostEqual(second["accounts"][0]["total_cash"], 6300.0, places=6)
+
     def test_fx_refresh_fallback_marks_stale(self) -> None:
         account = self.service.create_account(name="US", broker="Demo", market="us", base_currency="CNY")
         aid = account["id"]

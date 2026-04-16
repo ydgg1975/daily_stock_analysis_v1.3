@@ -790,30 +790,36 @@ class PortfolioService:
         }
 
         for account in account_rows:
-            account_snapshot = self._build_account_snapshot(
+            account_snapshot = self._load_cached_account_snapshot(
                 account=account,
                 as_of_date=as_of_date,
                 cost_method=method,
             )
+            if account_snapshot is None:
+                account_snapshot = self._build_account_snapshot(
+                    account=account,
+                    as_of_date=as_of_date,
+                    cost_method=method,
+                )
 
-            self.repo.replace_positions_lots_and_snapshot(
-                account_id=account.id,
-                snapshot_date=as_of_date,
-                cost_method=method,
-                base_currency=account.base_currency,
-                total_cash=account_snapshot["total_cash"],
-                total_market_value=account_snapshot["total_market_value"],
-                total_equity=account_snapshot["total_equity"],
-                unrealized_pnl=account_snapshot["unrealized_pnl"],
-                realized_pnl=account_snapshot["realized_pnl"],
-                fee_total=account_snapshot["fee_total"],
-                tax_total=account_snapshot["tax_total"],
-                fx_stale=account_snapshot["fx_stale"],
-                payload=json.dumps(account_snapshot["payload"], ensure_ascii=False),
-                positions=account_snapshot["positions_cache"],
-                lots=account_snapshot["lots_cache"],
-                valuation_currency=account.base_currency,
-            )
+                self.repo.replace_positions_lots_and_snapshot(
+                    account_id=account.id,
+                    snapshot_date=as_of_date,
+                    cost_method=method,
+                    base_currency=account.base_currency,
+                    total_cash=account_snapshot["total_cash"],
+                    total_market_value=account_snapshot["total_market_value"],
+                    total_equity=account_snapshot["total_equity"],
+                    unrealized_pnl=account_snapshot["unrealized_pnl"],
+                    realized_pnl=account_snapshot["realized_pnl"],
+                    fee_total=account_snapshot["fee_total"],
+                    tax_total=account_snapshot["tax_total"],
+                    fx_stale=account_snapshot["fx_stale"],
+                    payload=json.dumps(account_snapshot["payload"], ensure_ascii=False),
+                    positions=account_snapshot["positions_cache"],
+                    lots=account_snapshot["lots_cache"],
+                    valuation_currency=account.base_currency,
+                )
 
             accounts_payload.append(account_snapshot["public"])
 
@@ -1079,6 +1085,7 @@ class PortfolioService:
         taxes_total_base = 0.0
         realized_pnl_base = 0.0
         fx_stale = False
+        fx_currencies_used: Set[str] = set()
 
         fifo_lots: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
         avg_state: Dict[Tuple[str, str, str], _AvgState] = defaultdict(_AvgState)
@@ -1153,6 +1160,8 @@ class PortfolioService:
                         to_currency=account.base_currency,
                         as_of_date=event_date,
                     )
+                    if self._normalize_currency(key[2]) != self._normalize_currency(account.base_currency):
+                        fx_currencies_used.add(self._normalize_currency(key[2]))
                     realized_pnl_base += realized_base
                     fx_stale = fx_stale or stale_realized
                 else:
@@ -1170,6 +1179,8 @@ class PortfolioService:
                     to_currency=account.base_currency,
                     as_of_date=event_date,
                 )
+                if self._normalize_currency(key[2]) != self._normalize_currency(account.base_currency):
+                    fx_currencies_used.add(self._normalize_currency(key[2]))
                 fees_total_base += fee_base
                 taxes_total_base += tax_base
                 fx_stale = fx_stale or stale_fee or stale_tax
@@ -1216,6 +1227,7 @@ class PortfolioService:
             cost_method=cost_method,
             fifo_lots=fifo_lots,
             avg_state=avg_state,
+            fx_currencies_used=fx_currencies_used,
         )
         fx_stale = fx_stale or stale_pos
 
@@ -1227,6 +1239,8 @@ class PortfolioService:
                 to_currency=account.base_currency,
                 as_of_date=as_of_date,
             )
+            if self._normalize_currency(currency) != self._normalize_currency(account.base_currency):
+                fx_currencies_used.add(self._normalize_currency(currency))
             total_cash_base += converted
             fx_stale = fx_stale or stale
 
@@ -1253,9 +1267,14 @@ class PortfolioService:
             "positions": position_rows,
         }
 
+        cache_payload = dict(account_payload)
+        cache_payload["_cache_meta"] = {
+            "fx_currencies": sorted(fx_currencies_used),
+        }
+
         return {
             "public": account_payload,
-            "payload": account_payload,
+            "payload": cache_payload,
             "positions_cache": position_rows,
             "lots_cache": lot_rows,
             "total_cash": float(total_cash_base),
@@ -1336,7 +1355,12 @@ class PortfolioService:
         }
         return {
             "public": payload,
-            "payload": payload,
+            "payload": {
+                **payload,
+                "_cache_meta": {
+                    "fx_currencies": [],
+                },
+            },
             "positions_cache": positions,
             "lots_cache": [],
             "total_cash": float(payload["total_cash"]),
@@ -1349,6 +1373,70 @@ class PortfolioService:
             "fx_stale": bool(payload["fx_stale"]),
         }
 
+    def _load_cached_account_snapshot(
+        self,
+        *,
+        account: Any,
+        as_of_date: date,
+        cost_method: str,
+    ) -> Optional[Dict[str, Any]]:
+        cached = self.repo.get_cached_snapshot_bundle(
+            account_id=int(account.id),
+            snapshot_date=as_of_date,
+            cost_method=cost_method,
+        )
+        if cached is None:
+            return None
+
+        snapshot_row = cached["snapshot"]
+        snapshot_updated_at = getattr(snapshot_row, "updated_at", None)
+        if snapshot_updated_at is None:
+            return None
+
+        payload_raw = self._parse_snapshot_payload(getattr(snapshot_row, "payload", None))
+        positions_cache = [self._cached_position_row_to_dict(row) for row in cached["positions"]]
+        latest_market_update = self.repo.get_latest_market_data_update(
+            symbols=[item["symbol"] for item in positions_cache],
+            as_of=as_of_date,
+        )
+        if latest_market_update is not None and latest_market_update > snapshot_updated_at:
+            return None
+
+        fx_currencies = self._extract_cached_fx_currencies(payload_raw)
+        latest_fx_update = self.repo.get_latest_fx_rate_update(
+            as_of=as_of_date,
+            base_currency=snapshot_row.base_currency or account.base_currency,
+            currencies=fx_currencies,
+        )
+        if latest_fx_update is None and payload_raw.get("_cache_meta") is None:
+            latest_fx_update = self.repo.get_latest_fx_rate_update(as_of=as_of_date)
+        if latest_fx_update is not None and latest_fx_update > snapshot_updated_at:
+            return None
+
+        lots_cache = [self._cached_lot_row_to_dict(row) for row in cached["lots"]]
+        payload = self._cached_snapshot_public_payload(
+            account=account,
+            snapshot_row=snapshot_row,
+            positions=positions_cache,
+            as_of_date=as_of_date,
+            cost_method=cost_method,
+            payload=payload_raw,
+        )
+        return {
+            "public": payload,
+            "payload": payload,
+            "positions_cache": positions_cache,
+            "lots_cache": lots_cache,
+            "total_cash": float(snapshot_row.total_cash or 0.0),
+            "total_market_value": float(snapshot_row.total_market_value or 0.0),
+            "total_equity": float(snapshot_row.total_equity or 0.0),
+            "realized_pnl": float(snapshot_row.realized_pnl or 0.0),
+            "unrealized_pnl": float(snapshot_row.unrealized_pnl or 0.0),
+            "fee_total": float(snapshot_row.fee_total or 0.0),
+            "tax_total": float(snapshot_row.tax_total or 0.0),
+            "fx_stale": bool(snapshot_row.fx_stale),
+        }
+
     def _build_positions(
         self,
         *,
@@ -1357,6 +1445,7 @@ class PortfolioService:
         cost_method: str,
         fifo_lots: Dict[Tuple[str, str, str], List[Dict[str, Any]]],
         avg_state: Dict[Tuple[str, str, str], _AvgState],
+        fx_currencies_used: Optional[Set[str]] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], float, float, bool]:
         position_rows: List[Dict[str, Any]] = []
         lot_rows: List[Dict[str, Any]] = []
@@ -1369,6 +1458,10 @@ class PortfolioService:
             keys = list(fifo_lots.keys())
         else:
             keys = list(avg_state.keys())
+        latest_closes = self.repo.get_latest_closes(
+            symbols=[key[0] for key in keys],
+            as_of=as_of_date,
+        )
 
         for key in sorted(keys):
             symbol, market, currency = key
@@ -1400,9 +1493,14 @@ class PortfolioService:
                     }
                 )
 
-            last_price = self.repo.get_latest_close(symbol=symbol, as_of=as_of_date)
+            last_price = latest_closes.get(symbol)
             if last_price is None or last_price <= 0:
                 last_price = avg_cost
+            if (
+                fx_currencies_used is not None
+                and self._normalize_currency(currency) != self._normalize_currency(account.base_currency)
+            ):
+                fx_currencies_used.add(self._normalize_currency(currency))
 
             local_market_value = qty * float(last_price)
             market_base, stale_market, _ = self._convert_amount(
@@ -1840,6 +1938,92 @@ class PortfolioService:
             for item in cash_balances
         ]
         return data
+
+    @staticmethod
+    def _cached_position_row_to_dict(row: Any) -> Dict[str, Any]:
+        return {
+            "symbol": row.symbol,
+            "market": row.market,
+            "currency": row.currency,
+            "quantity": round(float(row.quantity or 0.0), 8),
+            "avg_cost": round(float(row.avg_cost or 0.0), 8),
+            "total_cost": round(float(row.total_cost or 0.0), 8),
+            "last_price": round(float(row.last_price or 0.0), 8),
+            "market_value_base": round(float(row.market_value_base or 0.0), 8),
+            "unrealized_pnl_base": round(float(row.unrealized_pnl_base or 0.0), 8),
+            "valuation_currency": row.valuation_currency,
+        }
+
+    @staticmethod
+    def _cached_lot_row_to_dict(row: Any) -> Dict[str, Any]:
+        return {
+            "symbol": row.symbol,
+            "market": row.market,
+            "currency": row.currency,
+            "open_date": row.open_date,
+            "remaining_quantity": float(row.remaining_quantity or 0.0),
+            "unit_cost": float(row.unit_cost or 0.0),
+            "source_trade_id": row.source_trade_id,
+        }
+
+    @staticmethod
+    def _parse_snapshot_payload(payload_raw: Optional[str]) -> Dict[str, Any]:
+        if not payload_raw:
+            return {}
+        try:
+            payload = json.loads(payload_raw)
+        except Exception:
+            return {}
+        if isinstance(payload, dict):
+            return payload
+        return {}
+
+    def _cached_snapshot_public_payload(
+        self,
+        *,
+        account: Any,
+        snapshot_row: Any,
+        positions: List[Dict[str, Any]],
+        as_of_date: date,
+        cost_method: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        public_payload = dict(payload or self._parse_snapshot_payload(getattr(snapshot_row, "payload", None)))
+        public_payload.pop("_cache_meta", None)
+        public_payload.update(
+            {
+                "account_id": int(account.id),
+                "account_name": account.name,
+                "owner_id": account.owner_id,
+                "broker": account.broker,
+                "market": account.market,
+                "base_currency": snapshot_row.base_currency or account.base_currency,
+                "as_of": as_of_date.isoformat(),
+                "cost_method": cost_method,
+                "total_cash": round(float(snapshot_row.total_cash or 0.0), 6),
+                "total_market_value": round(float(snapshot_row.total_market_value or 0.0), 6),
+                "total_equity": round(float(snapshot_row.total_equity or 0.0), 6),
+                "realized_pnl": round(float(snapshot_row.realized_pnl or 0.0), 6),
+                "unrealized_pnl": round(float(snapshot_row.unrealized_pnl or 0.0), 6),
+                "fee_total": round(float(snapshot_row.fee_total or 0.0), 6),
+                "tax_total": round(float(snapshot_row.tax_total or 0.0), 6),
+                "fx_stale": bool(snapshot_row.fx_stale),
+                "positions": positions,
+            }
+        )
+        return public_payload
+
+    @staticmethod
+    def _extract_cached_fx_currencies(payload: Optional[Dict[str, Any]]) -> List[str]:
+        if not isinstance(payload, dict):
+            return []
+        meta = payload.get("_cache_meta")
+        if not isinstance(meta, dict):
+            return []
+        raw = meta.get("fx_currencies")
+        if not isinstance(raw, list):
+            return []
+        return sorted({str(item or "").strip().upper() for item in raw if str(item or "").strip()})
 
     @staticmethod
     def _trade_row_to_dict(row: Any) -> Dict[str, Any]:

@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import and_, delete, desc, func, select
+from sqlalchemy import and_, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from src.storage import (
@@ -211,6 +211,12 @@ class PortfolioRepository:
                 fields["owner_id"] = self.db.require_user_id(fields.get("owner_id"))
             for key, value in fields.items():
                 setattr(row, key, value)
+            if "base_currency" in fields:
+                self._invalidate_account_cache_in_session(
+                    session=session,
+                    account_id=int(row.id),
+                    from_date=date.min,
+                )
             row.updated_at = datetime.now()
             self.db.sync_phase_f_portfolio_account_shadow_from_session(
                 session=session,
@@ -393,6 +399,11 @@ class PortfolioRepository:
             )
             if account is None:
                 raise ValueError(f"Active account not found: {portfolio_account_id}")
+            self._invalidate_account_cache_in_session(
+                session=session,
+                account_id=portfolio_account_id,
+                from_date=snapshot_date,
+            )
 
             row = session.execute(
                 select(PortfolioBrokerSyncState)
@@ -1273,6 +1284,61 @@ class PortfolioRepository:
                 return None
             return float(row.close)
 
+    def get_latest_closes(self, *, symbols: Iterable[str], as_of: date) -> Dict[str, float]:
+        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return {}
+
+        latest_dates = (
+            select(
+                StockDaily.code.label("code"),
+                func.max(StockDaily.date).label("latest_date"),
+            )
+            .where(
+                and_(
+                    StockDaily.code.in_(normalized),
+                    StockDaily.date <= as_of,
+                )
+            )
+            .group_by(StockDaily.code)
+            .subquery()
+        )
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(StockDaily.code, StockDaily.close)
+                .join(
+                    latest_dates,
+                    and_(
+                        StockDaily.code == latest_dates.c.code,
+                        StockDaily.date == latest_dates.c.latest_date,
+                    ),
+                )
+            ).all()
+        return {
+            str(code).upper(): float(close)
+            for code, close in rows
+            if code is not None and close is not None
+        }
+
+    def get_latest_market_data_update(
+        self,
+        *,
+        symbols: Iterable[str],
+        as_of: date,
+    ) -> Optional[datetime]:
+        normalized = sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
+        if not normalized:
+            return None
+        with self.db.get_session() as session:
+            return session.execute(
+                select(func.max(StockDaily.updated_at)).where(
+                    and_(
+                        StockDaily.code.in_(normalized),
+                        StockDaily.date <= as_of,
+                    )
+                )
+            ).scalar_one()
+
     def save_fx_rate(
         self,
         *,
@@ -1333,6 +1399,40 @@ class PortfolioRepository:
             ).scalar_one_or_none()
             return row
 
+    def get_latest_fx_rate_update(
+        self,
+        *,
+        as_of: date,
+        base_currency: Optional[str] = None,
+        currencies: Optional[Iterable[str]] = None,
+    ) -> Optional[datetime]:
+        normalized_base = str(base_currency or "").strip().upper() or None
+        normalized_currencies = sorted(
+            {
+                str(currency or "").strip().upper()
+                for currency in (currencies or [])
+                if str(currency or "").strip()
+            }
+        )
+        if normalized_base is not None and not normalized_currencies:
+            return None
+        with self.db.get_session() as session:
+            query = select(func.max(PortfolioFxRate.updated_at)).where(PortfolioFxRate.rate_date <= as_of)
+            if normalized_base is not None:
+                query = query.where(
+                    or_(
+                        and_(
+                            PortfolioFxRate.from_currency == normalized_base,
+                            PortfolioFxRate.to_currency.in_(normalized_currencies),
+                        ),
+                        and_(
+                            PortfolioFxRate.to_currency == normalized_base,
+                            PortfolioFxRate.from_currency.in_(normalized_currencies),
+                        ),
+                    )
+                )
+            return session.execute(query).scalar_one()
+
     def list_daily_snapshots_for_risk(
         self,
         *,
@@ -1368,6 +1468,62 @@ class PortfolioRepository:
             # Keep only the latest N calendar days window for risk calculations.
             cutoff_ordinal = as_of.toordinal() - lookback_days
             return [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
+
+    def get_cached_snapshot_bundle(
+        self,
+        *,
+        account_id: int,
+        snapshot_date: date,
+        cost_method: str,
+    ) -> Optional[Dict[str, Any]]:
+        with self.db.get_session() as session:
+            snapshot = session.execute(
+                select(PortfolioDailySnapshot).where(
+                    and_(
+                        PortfolioDailySnapshot.account_id == account_id,
+                        PortfolioDailySnapshot.snapshot_date == snapshot_date,
+                        PortfolioDailySnapshot.cost_method == cost_method,
+                    )
+                ).limit(1)
+            ).scalar_one_or_none()
+            if snapshot is None:
+                return None
+            positions = session.execute(
+                select(PortfolioPosition)
+                .where(
+                    and_(
+                        PortfolioPosition.account_id == account_id,
+                        PortfolioPosition.cost_method == cost_method,
+                    )
+                )
+                .order_by(
+                    PortfolioPosition.symbol.asc(),
+                    PortfolioPosition.market.asc(),
+                    PortfolioPosition.currency.asc(),
+                    PortfolioPosition.id.asc(),
+                )
+            ).scalars().all()
+            lots = session.execute(
+                select(PortfolioPositionLot)
+                .where(
+                    and_(
+                        PortfolioPositionLot.account_id == account_id,
+                        PortfolioPositionLot.cost_method == cost_method,
+                    )
+                )
+                .order_by(
+                    PortfolioPositionLot.symbol.asc(),
+                    PortfolioPositionLot.market.asc(),
+                    PortfolioPositionLot.currency.asc(),
+                    PortfolioPositionLot.open_date.asc(),
+                    PortfolioPositionLot.id.asc(),
+                )
+            ).scalars().all()
+            return {
+                "snapshot": snapshot,
+                "positions": list(positions),
+                "lots": list(lots),
+            }
 
     # ------------------------------------------------------------------
     # Snapshot / position cache
