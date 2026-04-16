@@ -22,6 +22,24 @@ class ScannerRepository:
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
 
+    def _sync_phase_d_run_shadow(
+        self,
+        *,
+        run: Optional[MarketScannerRun],
+        candidates: List[MarketScannerCandidate],
+    ) -> None:
+        if run is None:
+            return
+        if not getattr(self.db, "_phase_d_enabled", False):
+            return
+        phase_d_store = getattr(self.db, "_phase_d_store", None)
+        if phase_d_store is None:
+            return
+        phase_d_store.upsert_scanner_run_shadow(
+            run_row=run,
+            candidate_rows=candidates,
+        )
+
     def save_run_with_candidates(
         self,
         *,
@@ -39,6 +57,8 @@ class ScannerRepository:
             for candidate in candidates:
                 candidate.run_id = run.id
             session.add_all(candidates)
+            session.flush()
+            self._sync_phase_d_run_shadow(run=run, candidates=candidates)
             session.commit()
             session.refresh(run)
             return run
@@ -240,6 +260,18 @@ class ScannerRepository:
 
             candidate.diagnostics_json = diagnostics_json
             session.add(candidate)
+            session.flush()
+            run = session.execute(
+                select(MarketScannerRun)
+                .where(MarketScannerRun.id == candidate.run_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            candidate_rows = session.execute(
+                select(MarketScannerCandidate)
+                .where(MarketScannerCandidate.run_id == candidate.run_id)
+                .order_by(MarketScannerCandidate.rank.asc(), MarketScannerCandidate.id.asc())
+            ).scalars().all()
+            self._sync_phase_d_run_shadow(run=run, candidates=list(candidate_rows))
             session.commit()
             session.refresh(candidate)
             return candidate
@@ -304,6 +336,13 @@ class ScannerRepository:
                 run.evaluated_size = int(evaluated_size)
 
             session.add(run)
+            session.flush()
+            candidate_rows = session.execute(
+                select(MarketScannerCandidate)
+                .where(MarketScannerCandidate.run_id == run.id)
+                .order_by(MarketScannerCandidate.rank.asc(), MarketScannerCandidate.id.asc())
+            ).scalars().all()
+            self._sync_phase_d_run_shadow(run=run, candidates=list(candidate_rows))
             session.commit()
             session.refresh(run)
             return run

@@ -284,9 +284,17 @@ def _common_board_name(item: Any) -> Optional[str]:
 
 def _market_date_string(market: str, reference: Optional[datetime] = None) -> str:
     tz_name = MARKET_TIMEZONE.get((market or "").strip().lower(), "Asia/Shanghai")
-    base_dt = reference or datetime.now()
+    target_tz = ZoneInfo(tz_name)
+    if reference is None:
+        return datetime.now(target_tz).date().isoformat()
+
+    base_dt = reference
     try:
-        localized = base_dt.astimezone(ZoneInfo(tz_name)) if base_dt.tzinfo else base_dt.replace(tzinfo=ZoneInfo(tz_name))
+        if base_dt.tzinfo:
+            localized = base_dt.astimezone(target_tz)
+        else:
+            local_tz = datetime.now().astimezone().tzinfo or target_tz
+            localized = base_dt.replace(tzinfo=local_tz).astimezone(target_tz)
     except Exception:
         localized = base_dt
     return localized.date().isoformat()

@@ -64,6 +64,12 @@ from src.multi_user import (
     normalize_role,
     normalize_scope,
 )
+from src.services.us_history_helper import LOCAL_US_PARQUET_SOURCE
+from src.postgres_phase_a import PostgresPhaseAStore
+from src.postgres_phase_b import PostgresPhaseBStore
+from src.postgres_phase_c import PostgresPhaseCStore
+from src.postgres_phase_d import PostgresPhaseDStore
+from src.postgres_phase_e import PostgresPhaseEStore
 
 logger = logging.getLogger(__name__)
 
@@ -1115,7 +1121,9 @@ class DatabaseManager:
         if db_url is None:
             config = get_config()
             db_url = config.get_db_url()
-        
+        else:
+            config = get_config()
+
         # 创建数据库引擎
         self._engine = create_engine(
             db_url,
@@ -1133,6 +1141,49 @@ class DatabaseManager:
         # 创建所有表
         Base.metadata.create_all(self._engine)
         self._run_multi_user_migrations()
+        self._phase_a_store: Optional[PostgresPhaseAStore] = None
+        self._phase_a_enabled = False
+        self._phase_b_store: Optional[PostgresPhaseBStore] = None
+        self._phase_b_enabled = False
+        self._phase_c_store: Optional[PostgresPhaseCStore] = None
+        self._phase_c_enabled = False
+        self._phase_d_store: Optional[PostgresPhaseDStore] = None
+        self._phase_d_enabled = False
+        self._phase_e_store: Optional[PostgresPhaseEStore] = None
+        self._phase_e_enabled = False
+        phase_a_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip()
+        if phase_a_url:
+            try:
+                self._phase_a_store = PostgresPhaseAStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_a_enabled = True
+                self._phase_b_store = PostgresPhaseBStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_b_enabled = True
+                self._phase_c_store = PostgresPhaseCStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_c_enabled = True
+                self._phase_d_store = PostgresPhaseDStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_d_enabled = True
+                self._phase_e_store = PostgresPhaseEStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_e_enabled = True
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to initialize PostgreSQL Phase A/B/C/D/E storage. "
+                    "Check POSTGRES_PHASE_A_URL / POSTGRES_PHASE_A_APPLY_SCHEMA configuration."
+                ) from exc
 
         self._initialized = True
         logger.info(f"数据库初始化完成: {db_url}")
@@ -1151,6 +1202,16 @@ class DatabaseManager:
     def reset_instance(cls) -> None:
         """重置单例（用于测试）"""
         if cls._instance is not None:
+            if getattr(cls._instance, "_phase_a_store", None) is not None:
+                cls._instance._phase_a_store.dispose()
+            if getattr(cls._instance, "_phase_b_store", None) is not None:
+                cls._instance._phase_b_store.dispose()
+            if getattr(cls._instance, "_phase_c_store", None) is not None:
+                cls._instance._phase_c_store.dispose()
+            if getattr(cls._instance, "_phase_d_store", None) is not None:
+                cls._instance._phase_d_store.dispose()
+            if getattr(cls._instance, "_phase_e_store", None) is not None:
+                cls._instance._phase_e_store.dispose()
             if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
                 cls._instance._engine.dispose()
             cls._instance._initialized = False
@@ -1564,32 +1625,7 @@ class DatabaseManager:
         except Exception:
             return fallback
 
-    def ensure_bootstrap_admin_user(self) -> AppUser:
-        existing = self.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
-        if existing is not None:
-            return existing
-        return self.create_or_update_app_user(
-            user_id=BOOTSTRAP_ADMIN_USER_ID,
-            username=BOOTSTRAP_ADMIN_USERNAME,
-            role=ROLE_ADMIN,
-            display_name=BOOTSTRAP_ADMIN_DISPLAY_NAME,
-            password_hash=None,
-            is_active=True,
-        )
-
-    def get_default_owner_id(self) -> str:
-        user = self.ensure_bootstrap_admin_user()
-        return str(user.id)
-
-    def require_user_id(self, owner_id: Optional[str], *, allow_none: bool = False) -> Optional[str]:
-        normalized = str(owner_id or "").strip()
-        if not normalized:
-            return None if allow_none else self.get_default_owner_id()
-        if self.get_app_user(normalized) is None:
-            raise ValueError(f"Unknown app user: {normalized}")
-        return normalized
-
-    def get_app_user(self, user_id: str) -> Optional[AppUser]:
+    def _sqlite_get_app_user(self, user_id: str) -> Optional[AppUser]:
         normalized = str(user_id or "").strip()
         if not normalized:
             return None
@@ -1598,7 +1634,7 @@ class DatabaseManager:
                 select(AppUser).where(AppUser.id == normalized).limit(1)
             ).scalar_one_or_none()
 
-    def get_app_user_by_username(self, username: str) -> Optional[AppUser]:
+    def _sqlite_get_app_user_by_username(self, username: str) -> Optional[AppUser]:
         normalized = str(username or "").strip()
         if not normalized:
             return None
@@ -1607,7 +1643,7 @@ class DatabaseManager:
                 select(AppUser).where(AppUser.username == normalized).limit(1)
             ).scalar_one_or_none()
 
-    def create_or_update_app_user(
+    def _sqlite_create_or_update_app_user(
         self,
         *,
         user_id: str,
@@ -1650,12 +1686,24 @@ class DatabaseManager:
             session.refresh(row)
             return row
 
-    def create_app_user_session(
+    def _sqlite_get_app_user_session(self, session_id: str) -> Optional[AppUserSession]:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return None
+        with self.get_session() as session:
+            return session.execute(
+                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
+            ).scalar_one_or_none()
+
+    def _sqlite_create_or_update_app_user_session(
         self,
         *,
         session_id: str,
         user_id: str,
         expires_at: datetime,
+        created_at: Optional[datetime] = None,
+        last_seen_at: Optional[datetime] = None,
+        revoked_at: Optional[datetime] = None,
     ) -> AppUserSession:
         normalized_session_id = str(session_id or "").strip()
         if not normalized_session_id:
@@ -1673,31 +1721,22 @@ class DatabaseManager:
                 row = AppUserSession(
                     session_id=normalized_session_id,
                     user_id=resolved_user_id,
-                    created_at=now,
-                    last_seen_at=now,
+                    created_at=created_at or now,
+                    last_seen_at=last_seen_at or now,
                     expires_at=expires_at,
-                    revoked_at=None,
+                    revoked_at=revoked_at,
                 )
                 session.add(row)
             else:
                 row.user_id = resolved_user_id
-                row.last_seen_at = now
+                row.last_seen_at = last_seen_at or now
                 row.expires_at = expires_at
-                row.revoked_at = None
+                row.revoked_at = revoked_at
             session.commit()
             session.refresh(row)
             return row
 
-    def get_app_user_session(self, session_id: str) -> Optional[AppUserSession]:
-        normalized_session_id = str(session_id or "").strip()
-        if not normalized_session_id:
-            return None
-        with self.get_session() as session:
-            return session.execute(
-                select(AppUserSession).where(AppUserSession.session_id == normalized_session_id).limit(1)
-            ).scalar_one_or_none()
-
-    def touch_app_user_session(self, session_id: str) -> bool:
+    def _sqlite_touch_app_user_session(self, session_id: str) -> bool:
         normalized_session_id = str(session_id or "").strip()
         if not normalized_session_id:
             return False
@@ -1711,7 +1750,7 @@ class DatabaseManager:
             session.commit()
             return True
 
-    def revoke_app_user_session(self, session_id: str) -> bool:
+    def _sqlite_revoke_app_user_session(self, session_id: str) -> bool:
         normalized_session_id = str(session_id or "").strip()
         if not normalized_session_id:
             return False
@@ -1726,7 +1765,7 @@ class DatabaseManager:
             session.commit()
             return True
 
-    def revoke_all_app_user_sessions(self, user_id: str) -> int:
+    def _sqlite_revoke_all_app_user_sessions(self, user_id: str) -> int:
         resolved_user_id = self.require_user_id(user_id)
         with self.get_session() as session:
             rows = session.execute(
@@ -1746,22 +1785,259 @@ class DatabaseManager:
             session.commit()
             return len(rows)
 
-    def factory_reset_non_bootstrap_state(self) -> Dict[str, Any]:
-        """Clear bounded non-bootstrap user-owned state while preserving system bootstrap rows."""
-        with self.session_scope() as session:
-            user_ids = [
+    def _sqlite_get_user_preference_row(self, user_id: str) -> Optional[UserPreference]:
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return None
+        with self.get_session() as session:
+            return session.execute(
+                select(UserPreference).where(UserPreference.user_id == normalized_user_id).limit(1)
+            ).scalar_one_or_none()
+
+    def _collect_known_user_ids(self) -> List[str]:
+        with self.get_session() as session:
+            sqlite_user_ids = {
                 str(value)
                 for value in session.execute(
                     select(AppUser.id).where(AppUser.id != BOOTSTRAP_ADMIN_USER_ID)
                 ).scalars().all()
                 if str(value or "").strip()
-            ]
-            if not user_ids:
-                return {
-                    "cleared": [],
-                    "counts": {},
-                }
+            }
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            sqlite_user_ids.update(self._phase_a_store.list_non_bootstrap_user_ids())
+        return sorted(sqlite_user_ids)
 
+    def _sync_phase_a_user_from_legacy(self, row: AppUser) -> Any:
+        if not self._phase_a_enabled or self._phase_a_store is None or row is None:
+            return row
+        return self._phase_a_store.upsert_app_user(
+            user_id=str(row.id),
+            username=str(row.username),
+            role=str(row.role),
+            display_name=getattr(row, "display_name", None),
+            password_hash=getattr(row, "password_hash", None),
+            is_active=bool(getattr(row, "is_active", True)),
+            created_at=getattr(row, "created_at", None),
+            updated_at=getattr(row, "updated_at", None),
+        )
+
+    def _sync_phase_a_session_from_legacy(self, row: AppUserSession) -> Any:
+        if not self._phase_a_enabled or self._phase_a_store is None or row is None:
+            return row
+        user_row = self.get_app_user(str(row.user_id))
+        if user_row is None:
+            return None
+        return self._phase_a_store.upsert_app_user_session(
+            session_id=str(row.session_id),
+            user_id=str(row.user_id),
+            expires_at=row.expires_at,
+            created_at=getattr(row, "created_at", None),
+            last_seen_at=getattr(row, "last_seen_at", None),
+            revoked_at=getattr(row, "revoked_at", None),
+        )
+
+    def _sync_phase_a_notification_preferences_from_legacy(self, user_id: str) -> Optional[Dict[str, Any]]:
+        if not self._phase_a_enabled or self._phase_a_store is None:
+            return None
+        row = self._sqlite_get_user_preference_row(user_id)
+        if row is None:
+            return None
+        payload = self._safe_json_loads(
+            getattr(row, "notification_preferences_json", None),
+            {},
+        )
+        if not isinstance(payload, dict):
+            return None
+        self.get_app_user(user_id)
+        return self._phase_a_store.import_legacy_notification_preferences(
+            user_id,
+            payload,
+            updated_at=getattr(row, "updated_at", None),
+        )
+
+    def ensure_bootstrap_admin_user(self) -> AppUser:
+        existing = self.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+        if existing is not None:
+            return existing
+        return self.create_or_update_app_user(
+            user_id=BOOTSTRAP_ADMIN_USER_ID,
+            username=BOOTSTRAP_ADMIN_USERNAME,
+            role=ROLE_ADMIN,
+            display_name=BOOTSTRAP_ADMIN_DISPLAY_NAME,
+            password_hash=None,
+            is_active=True,
+        )
+
+    def get_default_owner_id(self) -> str:
+        user = self.ensure_bootstrap_admin_user()
+        return str(user.id)
+
+    def require_user_id(self, owner_id: Optional[str], *, allow_none: bool = False) -> Optional[str]:
+        normalized = str(owner_id or "").strip()
+        if not normalized:
+            return None if allow_none else self.get_default_owner_id()
+        if self.get_app_user(normalized) is None:
+            raise ValueError(f"Unknown app user: {normalized}")
+        return normalized
+
+    def get_app_user(self, user_id: str) -> Optional[AppUser]:
+        normalized = str(user_id or "").strip()
+        if not normalized:
+            return None
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            row = self._phase_a_store.get_app_user(normalized)
+            if row is not None:
+                return row
+            legacy_row = self._sqlite_get_app_user(normalized)
+            if legacy_row is None:
+                return None
+            return self._sync_phase_a_user_from_legacy(legacy_row)
+        return self._sqlite_get_app_user(normalized)
+
+    def get_app_user_by_username(self, username: str) -> Optional[AppUser]:
+        normalized = str(username or "").strip()
+        if not normalized:
+            return None
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            row = self._phase_a_store.get_app_user_by_username(normalized)
+            if row is not None:
+                return row
+            legacy_row = self._sqlite_get_app_user_by_username(normalized)
+            if legacy_row is None:
+                return None
+            return self._sync_phase_a_user_from_legacy(legacy_row)
+        return self._sqlite_get_app_user_by_username(normalized)
+
+    def create_or_update_app_user(
+        self,
+        *,
+        user_id: str,
+        username: str,
+        role: str = ROLE_USER,
+        display_name: Optional[str] = None,
+        password_hash: Optional[str] = None,
+        is_active: bool = True,
+    ) -> AppUser:
+        normalized_id = str(user_id or "").strip()
+        normalized_username = str(username or "").strip()
+        if not normalized_id:
+            raise ValueError("user_id is required")
+        if not normalized_username:
+            raise ValueError("username is required")
+        normalized_role = normalize_role(role)
+
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            return self._phase_a_store.upsert_app_user(
+                user_id=normalized_id,
+                username=normalized_username,
+                role=normalized_role,
+                display_name=display_name,
+                password_hash=password_hash,
+                is_active=bool(is_active),
+            )
+
+        return self._sqlite_create_or_update_app_user(
+            user_id=normalized_id,
+            username=normalized_username,
+            role=normalized_role,
+            display_name=display_name,
+            password_hash=password_hash,
+            is_active=bool(is_active),
+        )
+
+    def create_app_user_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        expires_at: datetime,
+    ) -> AppUserSession:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            raise ValueError("session_id is required")
+        resolved_user_id = self.require_user_id(user_id)
+        if not isinstance(expires_at, datetime):
+            raise ValueError("expires_at must be a datetime")
+
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            return self._phase_a_store.upsert_app_user_session(
+                session_id=normalized_session_id,
+                user_id=resolved_user_id,
+                expires_at=expires_at,
+                revoked_at=None,
+            )
+
+        return self._sqlite_create_or_update_app_user_session(
+            session_id=normalized_session_id,
+            user_id=resolved_user_id,
+            expires_at=expires_at,
+            revoked_at=None,
+        )
+
+    def get_app_user_session(self, session_id: str) -> Optional[AppUserSession]:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return None
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            row = self._phase_a_store.get_app_user_session(normalized_session_id)
+            if row is not None:
+                return row
+            legacy_row = self._sqlite_get_app_user_session(normalized_session_id)
+            if legacy_row is None:
+                return None
+            return self._sync_phase_a_session_from_legacy(legacy_row)
+        return self._sqlite_get_app_user_session(normalized_session_id)
+
+    def touch_app_user_session(self, session_id: str) -> bool:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return False
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            if self._phase_a_store.touch_app_user_session(normalized_session_id):
+                return True
+            legacy_row = self._sqlite_get_app_user_session(normalized_session_id)
+            if legacy_row is None:
+                return False
+            synced = self._sync_phase_a_session_from_legacy(legacy_row)
+            if synced is None:
+                return False
+            return self._phase_a_store.touch_app_user_session(normalized_session_id)
+        return self._sqlite_touch_app_user_session(normalized_session_id)
+
+    def revoke_app_user_session(self, session_id: str) -> bool:
+        normalized_session_id = str(session_id or "").strip()
+        if not normalized_session_id:
+            return False
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            phase_a_revoked = self._phase_a_store.revoke_app_user_session(normalized_session_id)
+            legacy_revoked = self._sqlite_revoke_app_user_session(normalized_session_id)
+            if phase_a_revoked:
+                return True
+            legacy_row = self._sqlite_get_app_user_session(normalized_session_id)
+            if legacy_row is not None:
+                self._sync_phase_a_session_from_legacy(self._sqlite_get_app_user_session(normalized_session_id))
+                return self._phase_a_store.revoke_app_user_session(normalized_session_id) or legacy_revoked
+            return legacy_revoked
+        return self._sqlite_revoke_app_user_session(normalized_session_id)
+
+    def revoke_all_app_user_sessions(self, user_id: str) -> int:
+        resolved_user_id = self.require_user_id(user_id)
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            phase_a_count = self._phase_a_store.revoke_all_app_user_sessions(resolved_user_id)
+            legacy_count = self._sqlite_revoke_all_app_user_sessions(resolved_user_id)
+            return max(phase_a_count, legacy_count)
+        return self._sqlite_revoke_all_app_user_sessions(resolved_user_id)
+
+    def factory_reset_non_bootstrap_state(self) -> Dict[str, Any]:
+        """Clear bounded non-bootstrap user-owned state while preserving system bootstrap rows."""
+        user_ids = self._collect_known_user_ids()
+        if not user_ids:
+            return {
+                "cleared": [],
+                "counts": {},
+            }
+
+        with self.session_scope() as session:
             counts: Dict[str, int] = {}
 
             session_ids = session.execute(
@@ -1887,19 +2163,74 @@ class DatabaseManager:
                 delete(AppUser).where(AppUser.id.in_(user_ids))
             ).rowcount or 0
 
-            cleared = [key for key, value in counts.items() if int(value or 0) > 0]
-            return {
-                "cleared": cleared,
-                "counts": counts,
-            }
+        if self._phase_b_enabled and self._phase_b_store is not None:
+            phase_b_counts = self._phase_b_store.clear_non_bootstrap_state(user_ids)
+            counts["conversation_messages"] = counts.get("conversation_messages", 0) + int(
+                phase_b_counts.get("chat_messages", 0)
+            )
+            counts["conversation_sessions"] = counts.get("conversation_sessions", 0) + int(
+                phase_b_counts.get("chat_sessions", 0)
+            )
+            counts["analysis_history"] = counts.get("analysis_history", 0) + int(
+                phase_b_counts.get("analysis_records", 0)
+            )
+            counts["analysis_sessions"] = int(phase_b_counts.get("analysis_sessions", 0))
+        if self._phase_d_enabled and self._phase_d_store is not None:
+            phase_d_counts = self._phase_d_store.clear_non_bootstrap_state(user_ids)
+            counts["scanner_candidates"] = counts.get("scanner_candidates", 0) + int(
+                phase_d_counts.get("scanner_candidates", 0)
+            )
+            counts["scanner_runs"] = counts.get("scanner_runs", 0) + int(
+                phase_d_counts.get("scanner_runs", 0)
+            )
+            counts["watchlist_items"] = int(phase_d_counts.get("watchlist_items", 0))
+            counts["watchlists"] = int(phase_d_counts.get("watchlists", 0))
+        if self._phase_e_enabled and self._phase_e_store is not None:
+            phase_e_counts = self._phase_e_store.clear_non_bootstrap_state(user_ids)
+            counts["backtest_runs"] = counts.get("backtest_runs", 0) + int(
+                phase_e_counts.get("backtest_runs", 0)
+            )
+            counts["backtest_artifacts"] = int(phase_e_counts.get("backtest_artifacts", 0))
+            counts["market_data_usage_refs"] = counts.get("market_data_usage_refs", 0) + int(
+                phase_e_counts.get("market_data_usage_refs", 0)
+            )
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            phase_a_counts = self._phase_a_store.clear_non_bootstrap_state(user_ids)
+            counts["user_preferences"] = counts.get("user_preferences", 0) + int(
+                phase_a_counts.get("user_preferences", 0)
+            )
+            counts["app_user_sessions"] = counts.get("app_user_sessions", 0) + int(
+                phase_a_counts.get("app_user_sessions", 0)
+            )
+            counts["app_users"] = counts.get("app_users", 0) + int(
+                phase_a_counts.get("app_users", 0)
+            )
+            counts["notification_targets"] = int(
+                phase_a_counts.get("notification_targets", 0)
+            )
+
+        cleared = [key for key, value in counts.items() if int(value or 0) > 0]
+        return {
+            "cleared": cleared,
+            "counts": counts,
+        }
 
     def get_user_notification_preferences(self, user_id: str) -> Dict[str, Any]:
         resolved_user_id = self.require_user_id(user_id)
-        with self.get_session() as session:
-            row = session.execute(
-                select(UserPreference).where(UserPreference.user_id == resolved_user_id).limit(1)
-            ).scalar_one_or_none()
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            preferences = self._phase_a_store.get_user_notification_preferences(resolved_user_id)
+            if (
+                preferences.get("updated_at") is not None
+                or preferences.get("email") is not None
+                or preferences.get("discord_webhook") is not None
+            ):
+                return preferences
+            legacy_preferences = self._sync_phase_a_notification_preferences_from_legacy(resolved_user_id)
+            if legacy_preferences is not None:
+                return legacy_preferences
+            return preferences
 
+        row = self._sqlite_get_user_preference_row(resolved_user_id)
         payload = self._safe_json_loads(
             getattr(row, "notification_preferences_json", None),
             {},
@@ -1929,6 +2260,331 @@ class DatabaseManager:
             "updated_at": updated_at.isoformat() if updated_at else None,
         }
 
+    def get_symbol_master_entry(self, canonical_symbol: str) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.get_symbol_master_entry(canonical_symbol)
+
+    def upsert_symbol_master_entry(
+        self,
+        *,
+        canonical_symbol: str,
+        display_symbol: Optional[str] = None,
+        market: str,
+        asset_type: str,
+        display_name: Optional[str] = None,
+        exchange_code: Optional[str] = None,
+        currency: Optional[str] = None,
+        lot_size: Optional[Any] = None,
+        is_active: bool = True,
+        search_aliases: Optional[List[Any]] = None,
+        source: Optional[str] = None,
+        source_payload: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.upsert_symbol_master_entry(
+            canonical_symbol=canonical_symbol,
+            display_symbol=display_symbol,
+            market=market,
+            asset_type=asset_type,
+            display_name=display_name,
+            exchange_code=exchange_code,
+            currency=currency,
+            lot_size=lot_size,
+            is_active=is_active,
+            search_aliases=search_aliases,
+            source=source,
+            source_payload=source_payload,
+        )
+
+    def seed_symbol_master_from_stock_mapping(self, *, symbols: Optional[List[str]] = None) -> int:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return 0
+        return self._phase_c_store.seed_symbol_master_from_stock_mapping(symbols=symbols)
+
+    def get_market_data_manifest(self, manifest_key: str) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.get_market_data_manifest(manifest_key)
+
+    def upsert_market_data_manifest(
+        self,
+        *,
+        manifest_key: str,
+        dataset_family: str,
+        market: str,
+        storage_backend: str,
+        root_uri: str,
+        asset_scope: Optional[str] = None,
+        file_format: str = "parquet",
+        partition_strategy: Optional[str] = None,
+        symbol_namespace: Optional[str] = None,
+        description: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        active_version_id: Optional[int] = None,
+    ) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.upsert_market_data_manifest(
+            manifest_key=manifest_key,
+            dataset_family=dataset_family,
+            market=market,
+            storage_backend=storage_backend,
+            root_uri=root_uri,
+            asset_scope=asset_scope,
+            file_format=file_format,
+            partition_strategy=partition_strategy,
+            symbol_namespace=symbol_namespace,
+            description=description,
+            config=config,
+            active_version_id=active_version_id,
+        )
+
+    def get_market_dataset_version(self, dataset_version_id: int) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.get_market_dataset_version(dataset_version_id)
+
+    def register_market_dataset_version(
+        self,
+        *,
+        manifest_key: str,
+        version_label: str,
+        version_hash: str,
+        source_kind: Optional[str] = None,
+        generated_at: Optional[datetime] = None,
+        as_of_date: Optional[date] = None,
+        coverage_start: Optional[date] = None,
+        coverage_end: Optional[date] = None,
+        symbol_count: Optional[int] = None,
+        row_count: Optional[int] = None,
+        partition_count: Optional[int] = None,
+        file_inventory: Optional[Dict[str, Any]] = None,
+        content_stats: Optional[Dict[str, Any]] = None,
+        set_active: bool = False,
+    ) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.register_market_dataset_version(
+            manifest_key=manifest_key,
+            version_label=version_label,
+            version_hash=version_hash,
+            source_kind=source_kind,
+            generated_at=generated_at,
+            as_of_date=as_of_date,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+            symbol_count=symbol_count,
+            row_count=row_count,
+            partition_count=partition_count,
+            file_inventory=file_inventory,
+            content_stats=content_stats,
+            set_active=set_active,
+        )
+
+    def get_market_data_usage_refs(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+    ) -> List[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return []
+        return self._phase_c_store.get_market_data_usage_refs(
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+
+    def record_market_data_usage_ref(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int,
+        usage_role: str,
+        manifest_key: str,
+        dataset_version_id: int,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.record_market_data_usage_ref(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            usage_role=usage_role,
+            manifest_key=manifest_key,
+            dataset_version_id=dataset_version_id,
+            detail=detail,
+        )
+
+    def register_local_us_parquet_dataset_version(
+        self,
+        *,
+        root_path: Optional[Any] = None,
+        activate: bool = True,
+    ) -> Optional[Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return None
+        return self._phase_c_store.register_local_us_parquet_dataset_version(
+            root_path=root_path,
+            activate=activate,
+        )
+
+    def build_local_us_parquet_usage_detail(
+        self,
+        *,
+        stock_code: str,
+        file_path: Any,
+        dataframe: Optional[Any],
+        source_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return {}
+        return self._phase_c_store.build_local_us_parquet_usage_detail(
+            stock_code=stock_code,
+            file_path=file_path,
+            dataframe=dataframe,
+            source_name=source_name,
+        )
+
+    def sync_phase_e_analysis_backtest_shadow(self, run_id: int) -> Optional[Any]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return None
+
+        with self.get_session() as session:
+            run_row = session.execute(
+                select(BacktestRun).where(BacktestRun.id == int(run_id)).limit(1)
+            ).scalar_one_or_none()
+            if run_row is None:
+                return None
+
+            evaluated_at = getattr(run_row, "completed_at", None) or getattr(run_row, "run_at", None)
+            result_rows = session.execute(
+                select(BacktestResult)
+                .where(
+                    and_(
+                        BacktestResult.owner_id == run_row.owner_id,
+                        BacktestResult.evaluated_at == evaluated_at,
+                    )
+                )
+                .order_by(BacktestResult.analysis_history_id.asc(), BacktestResult.id.asc())
+            ).scalars().all() if evaluated_at is not None else []
+
+            summary_rows: List[BacktestSummary] = []
+            engine_versions = sorted({str(getattr(row, "engine_version", "") or "").strip() for row in result_rows if str(getattr(row, "engine_version", "") or "").strip()})
+            if engine_versions:
+                engine_version = engine_versions[0]
+                summary_conditions = [
+                    BacktestSummary.owner_id == run_row.owner_id,
+                    BacktestSummary.eval_window_days == run_row.eval_window_days,
+                    BacktestSummary.engine_version == engine_version,
+                ]
+                code_values = [run_row.code] if str(getattr(run_row, "code", "") or "").strip() else []
+                code_values.append("__overall__")
+                summary_rows = session.execute(
+                    select(BacktestSummary)
+                    .where(and_(*summary_conditions))
+                    .where(BacktestSummary.code.in_(code_values))
+                    .order_by(BacktestSummary.scope.asc(), BacktestSummary.code.asc())
+                ).scalars().all()
+
+        shadow_row = self._phase_e_store.upsert_analysis_eval_run_shadow(
+            run_row=run_row,
+            result_rows=result_rows,
+            summary_rows=summary_rows,
+        )
+        self._record_phase_e_analysis_usage_ref(run_row=run_row, shadow_row=shadow_row)
+        return shadow_row
+
+    def _record_phase_e_analysis_usage_ref(self, *, run_row: BacktestRun, shadow_row: Optional[Any]) -> None:
+        if shadow_row is None:
+            return
+        if not self._phase_c_enabled or self._phase_c_store is None:
+            return
+
+        summary = self._safe_json_loads(getattr(run_row, "summary_json", None), {})
+        resolved_source = str(summary.get("resolved_source") or "").strip()
+        if resolved_source != "LocalParquet":
+            return
+
+        canonical_symbol = str(getattr(run_row, "code", "") or "").strip().upper()
+        if not canonical_symbol:
+            return
+
+        try:
+            version = self.register_local_us_parquet_dataset_version()
+            if version is None:
+                return
+            self.record_market_data_usage_ref(
+                entity_type="backtest_run",
+                entity_id=int(shadow_row.id),
+                usage_role="primary_bars",
+                manifest_key="us.local_parquet.daily",
+                dataset_version_id=int(version.id),
+                detail={
+                    "symbol": canonical_symbol,
+                    "resolved_source": LOCAL_US_PARQUET_SOURCE,
+                    "provenance_granularity": "manifest_version",
+                },
+            )
+        except Exception as exc:
+            logger.warning("Failed to record Phase E market-data usage ref for run %s: %s", run_row.id, exc)
+
+    def delete_phase_e_analysis_backtest_shadow_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return 0
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.delete_backtest_shadows_by_code(
+            run_type="analysis_eval",
+            code=code,
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+
+    def sync_phase_e_rule_backtest_shadow(self, run_id: int) -> Optional[Any]:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return None
+
+        with self.get_session() as session:
+            run_row = session.execute(
+                select(RuleBacktestRun).where(RuleBacktestRun.id == int(run_id)).limit(1)
+            ).scalar_one_or_none()
+            if run_row is None:
+                return None
+            trade_rows = session.execute(
+                select(RuleBacktestTrade)
+                .where(RuleBacktestTrade.run_id == int(run_id))
+                .order_by(RuleBacktestTrade.trade_index.asc(), RuleBacktestTrade.id.asc())
+            ).scalars().all()
+
+        return self._phase_e_store.upsert_rule_backtest_run_shadow(
+            run_row=run_row,
+            trade_rows=trade_rows,
+        )
+
+    def delete_phase_e_rule_backtest_shadow_by_code(
+        self,
+        *,
+        code: str,
+        owner_id: Optional[str] = None,
+        include_all_owners: bool = False,
+    ) -> int:
+        if not self._phase_e_enabled or self._phase_e_store is None:
+            return 0
+        resolved_owner_id = None if include_all_owners else self.require_user_id(owner_id)
+        return self._phase_e_store.delete_backtest_shadows_by_code(
+            run_type="rule_deterministic",
+            code=code,
+            owner_user_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+
     def upsert_user_notification_preferences(
         self,
         user_id: str,
@@ -1954,6 +2610,16 @@ class DatabaseManager:
             normalized_channel = "discord"
         else:
             normalized_channel = "email"
+        if self._phase_a_enabled and self._phase_a_store is not None:
+            return self._phase_a_store.upsert_user_notification_preferences(
+                resolved_user_id,
+                email=normalized_email,
+                enabled=normalized_enabled,
+                channel=normalized_channel,
+                discord_webhook=normalized_discord_webhook,
+                discord_enabled=normalized_discord_enabled,
+            )
+
         payload = {
             "version": 2,
             "channel": normalized_channel,
@@ -2313,9 +2979,10 @@ class DatabaseManager:
         context_text = None
         if save_snapshot and context_snapshot is not None:
             context_text = self._safe_json_dumps(context_snapshot)
+        resolved_owner_id = self.require_user_id(owner_id)
 
         record = AnalysisHistory(
-            owner_id=self.require_user_id(owner_id),
+            owner_id=resolved_owner_id,
             query_id=query_id,
             code=result.code,
             name=result.name,
@@ -2337,6 +3004,24 @@ class DatabaseManager:
         with self.get_session() as session:
             try:
                 session.add(record)
+                session.flush()
+                if self._phase_b_enabled and self._phase_b_store is not None:
+                    self._phase_b_store.upsert_analysis_history_shadow(
+                        legacy_analysis_history_id=int(record.id),
+                        owner_user_id=resolved_owner_id,
+                        query_id=query_id,
+                        canonical_symbol=str(result.code or ""),
+                        display_name=getattr(result, "name", None),
+                        report_type=report_type,
+                        sentiment_score=getattr(result, "sentiment_score", None),
+                        operation_advice=getattr(result, "operation_advice", None),
+                        trend_prediction=getattr(result, "trend_prediction", None),
+                        summary_text=getattr(result, "analysis_summary", None),
+                        raw_result=record.raw_result,
+                        news_content=news_content,
+                        context_snapshot=context_text,
+                        created_at=record.created_at,
+                    )
                 session.commit()
                 return 1
             except Exception as e:
@@ -2507,6 +3192,8 @@ class DatabaseManager:
             ).scalars().all()
             if not matching_analysis_ids:
                 return 0
+            if self._phase_b_enabled and self._phase_b_store is not None:
+                self._phase_b_store.delete_analysis_history_shadow(matching_analysis_ids)
             session.execute(
                 delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(matching_analysis_ids))
             )
@@ -3329,10 +4016,11 @@ class DatabaseManager:
         """
         保存 Agent 对话消息
         """
+        resolved_owner_id = self.require_user_id(owner_id)
         with self.session_scope() as session:
             session_row = self.ensure_conversation_session(
                 session_id,
-                owner_id=owner_id,
+                owner_id=resolved_owner_id,
                 title=content if role == "user" else None,
                 session=session,
             )
@@ -3345,6 +4033,16 @@ class DatabaseManager:
             session_row.updated_at = datetime.now()
             if role == "user" and not session_row.title:
                 session_row.title = str(content or "").strip()[:255] or None
+            session.flush()
+            if self._phase_b_enabled and self._phase_b_store is not None:
+                self._phase_b_store.append_chat_message_shadow(
+                    session_key=session_id,
+                    owner_user_id=resolved_owner_id,
+                    role=role,
+                    content=content,
+                    title_hint=content if role == "user" else None,
+                    created_at=msg.created_at,
+                )
 
     def get_conversation_history(
         self,
@@ -3505,6 +4203,11 @@ class DatabaseManager:
                     session=session,
                     session_id=session_id,
                     owner_id=owner_id,
+                )
+            if self._phase_b_enabled and self._phase_b_store is not None:
+                self._phase_b_store.delete_chat_session_shadow(
+                    session_id,
+                    owner_user_id=None if include_all_owners else self.require_user_id(owner_id),
                 )
             result = session.execute(
                 delete(ConversationMessage).where(

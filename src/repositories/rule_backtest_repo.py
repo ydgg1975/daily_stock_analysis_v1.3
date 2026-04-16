@@ -22,7 +22,9 @@ class RuleBacktestRepository:
             session.add(run)
             session.commit()
             session.refresh(run)
-            return run
+        if getattr(run, "id", None) is not None:
+            self.db.sync_phase_e_rule_backtest_shadow(int(run.id))
+        return run
 
     def update_run(
         self,
@@ -45,15 +47,19 @@ class RuleBacktestRepository:
                 setattr(row, key, value)
             session.commit()
             session.refresh(row)
-            return row
+        self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
+        return row
 
     def save_trades(self, trades: List[RuleBacktestTrade]) -> int:
         if not trades:
             return 0
+        run_ids = sorted({int(trade.run_id) for trade in trades if getattr(trade, "run_id", None) is not None})
         with self.db.get_session() as session:
             session.add_all(trades)
             session.commit()
-            return len(trades)
+        for run_id in run_ids:
+            self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
+        return len(trades)
 
     def get_run(
         self,
@@ -115,15 +121,21 @@ class RuleBacktestRepository:
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> int:
+        resolved_owner_id = None if include_all_owners else self.db.require_user_id(owner_id)
         with self.db.get_session() as session:
             conditions = [RuleBacktestRun.code == code]
             if not include_all_owners:
-                conditions.append(RuleBacktestRun.owner_id == self.db.require_user_id(owner_id))
+                conditions.append(RuleBacktestRun.owner_id == resolved_owner_id)
             deleted = session.execute(
                 delete(RuleBacktestRun).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
-            return int(deleted)
+        self.db.delete_phase_e_rule_backtest_shadow_by_code(
+            code=code,
+            owner_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+        return int(deleted)
 
     def delete_trades_by_run_ids(self, run_ids: List[int]) -> int:
         if not run_ids:
@@ -133,4 +145,6 @@ class RuleBacktestRepository:
                 delete(RuleBacktestTrade).where(RuleBacktestTrade.run_id.in_(run_ids))
             ).rowcount or 0
             session.commit()
-            return int(deleted)
+        for run_id in sorted({int(value) for value in run_ids}):
+            self.db.sync_phase_e_rule_backtest_shadow(int(run_id))
+        return int(deleted)

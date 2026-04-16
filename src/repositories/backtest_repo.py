@@ -67,7 +67,9 @@ class BacktestRepository:
             session.add(run)
             session.commit()
             session.refresh(run)
-            return run
+        if getattr(run, "id", None) is not None:
+            self.db.sync_phase_e_analysis_backtest_shadow(int(run.id))
+        return run
 
     def get_runs_paginated(
         self,
@@ -118,15 +120,21 @@ class BacktestRepository:
         owner_id: Optional[str] = None,
         include_all_owners: bool = False,
     ) -> int:
+        resolved_owner_id = None if include_all_owners else self.db.require_user_id(owner_id)
         with self.db.get_session() as session:
             conditions = [BacktestRun.code == code]
             if not include_all_owners:
-                conditions.append(BacktestRun.owner_id == self.db.require_user_id(owner_id))
+                conditions.append(BacktestRun.owner_id == resolved_owner_id)
             deleted = session.execute(
                 delete(BacktestRun).where(and_(*conditions))
             ).rowcount or 0
             session.commit()
-            return int(deleted)
+        self.db.delete_phase_e_analysis_backtest_shadow_by_code(
+            code=code,
+            owner_id=resolved_owner_id,
+            include_all_owners=include_all_owners,
+        )
+        return int(deleted)
 
     def delete_results_by_code(
         self,
