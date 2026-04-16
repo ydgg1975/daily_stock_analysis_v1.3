@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from src.services.task_queue import AnalysisTaskQueue, TaskStatus
 from src.config import Config
+from src.multi_user import BOOTSTRAP_ADMIN_USER_ID
 import src.auth as auth
 
 @pytest.fixture
@@ -30,6 +31,7 @@ def disable_auth():
     """Keep analysis integration tests independent from local auth env state."""
     auth._auth_enabled = None
     with patch("api.middlewares.auth.is_auth_enabled", return_value=False), \
+         patch("api.deps.is_auth_enabled", return_value=False), \
          patch("src.auth.is_auth_enabled", return_value=False):
         yield
     auth._auth_enabled = None
@@ -75,7 +77,8 @@ class TestAnalysisIntegration:
             original_query="贵州茅台",
             selection_source="manual",
             report_type="detailed",
-            force_refresh=False
+            force_refresh=False,
+            owner_id=BOOTSTRAP_ADMIN_USER_ID,
         )
 
     def test_trigger_analysis_batch_deduplication(self, client, mock_task_queue):

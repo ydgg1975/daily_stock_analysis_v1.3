@@ -673,6 +673,10 @@ class DataFetcherManager:
         """Best-effort release of manager-owned resources."""
         if not hasattr(self, "_tickflow_lock") or self._tickflow_lock is None:
             self._tickflow_lock = RLock()
+        if not hasattr(self, "_alpaca_lock") or self._alpaca_lock is None:
+            self._alpaca_lock = RLock()
+        if not hasattr(self, "_twelve_data_lock") or self._twelve_data_lock is None:
+            self._twelve_data_lock = RLock()
 
         with self._tickflow_lock:
             current_fetcher = getattr(self, "_tickflow_fetcher", None)
