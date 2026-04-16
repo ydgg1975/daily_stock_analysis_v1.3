@@ -575,3 +575,113 @@ class PortfolioIbkrSyncServiceTestCase(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.code, "ibkr_account_mapping_conflict")
+
+    def test_same_day_overlay_resync_refreshes_cached_snapshot(self) -> None:
+        account = self.service.create_account(name="Primary IBKR", broker="IBKR", market="us", base_currency="USD")
+        first_transport = FakeIbkrTransport(
+            {
+                "/v1/api/portfolio/accounts": [
+                    {"accountId": "U1234567", "displayName": "Primary IBKR", "currency": "USD"},
+                ],
+                "/v1/api/portfolio/U1234567/summary": {
+                    "totalcashvalue": {"amount": "5000"},
+                    "stockmarketvalue": {"amount": "1600"},
+                    "netliquidation": {"amount": "6600"},
+                    "unrealizedpnl": {"amount": "100"},
+                },
+                "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "5000"}},
+                "/v1/api/portfolio/U1234567/positions/0": [
+                    {
+                        "conid": "265598",
+                        "contractDesc": "AAPL",
+                        "position": "10",
+                        "avgCost": "150",
+                        "mktPrice": "160",
+                        "mktValue": "1600",
+                        "unrealizedPnl": "100",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                        "countryCode": "US",
+                    }
+                ],
+                "/v1/api/portfolio/U1234567/positions/1": [],
+            }
+        )
+        sync_service = PortfolioIbkrSyncService(portfolio_service=self.service, transport=first_transport)
+        first_result = sync_service.sync_read_only_account_state(
+            account_id=account["id"],
+            session_token="unit-test-session",
+            broker_account_ref="U1234567",
+        )
+        snapshot_date = date.fromisoformat(first_result["snapshot_date"])
+        first_snapshot = self.service.get_portfolio_snapshot(
+            account_id=account["id"],
+            as_of=snapshot_date,
+            cost_method="fifo",
+        )
+        self.assertEqual([item["symbol"] for item in first_snapshot["accounts"][0]["positions"]], ["AAPL"])
+
+        connection_id = self.service.list_broker_connections(
+            portfolio_account_id=account["id"],
+            broker_type="ibkr",
+        )[0]["id"]
+        second_transport = FakeIbkrTransport(
+            {
+                "/v1/api/portfolio/accounts": [
+                    {"accountId": "U1234567", "displayName": "Primary IBKR", "currency": "USD"},
+                ],
+                "/v1/api/portfolio/U1234567/summary": {
+                    "totalcashvalue": {"amount": "4500"},
+                    "stockmarketvalue": {"amount": "5450"},
+                    "netliquidation": {"amount": "9950"},
+                    "unrealizedpnl": {"amount": "250"},
+                },
+                "/v1/api/portfolio/U1234567/ledger": {"USD": {"cashbalance": "4500"}},
+                "/v1/api/portfolio/U1234567/positions/0": [
+                    {
+                        "conid": "265598",
+                        "contractDesc": "AAPL",
+                        "position": "12",
+                        "avgCost": "150",
+                        "mktPrice": "165",
+                        "mktValue": "1980",
+                        "unrealizedPnl": "180",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                        "countryCode": "US",
+                    },
+                    {
+                        "conid": "208813719",
+                        "contractDesc": "GOOG",
+                        "position": "1",
+                        "avgCost": "3200",
+                        "mktPrice": "3470",
+                        "mktValue": "3470",
+                        "unrealizedPnl": "270",
+                        "currency": "USD",
+                        "assetClass": "STK",
+                        "listingExchange": "NASDAQ",
+                        "countryCode": "US",
+                    },
+                ],
+                "/v1/api/portfolio/U1234567/positions/1": [],
+            }
+        )
+        repeat_sync_service = PortfolioIbkrSyncService(portfolio_service=self.service, transport=second_transport)
+        second_result = repeat_sync_service.sync_read_only_account_state(
+            account_id=account["id"],
+            session_token="unit-test-session",
+            broker_connection_id=connection_id,
+        )
+
+        refreshed_snapshot = self.service.get_portfolio_snapshot(
+            account_id=account["id"],
+            as_of=date.fromisoformat(second_result["snapshot_date"]),
+            cost_method="fifo",
+        )
+        self.assertEqual(
+            {item["symbol"] for item in refreshed_snapshot["accounts"][0]["positions"]},
+            {"AAPL", "GOOG"},
+        )
