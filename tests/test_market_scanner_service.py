@@ -651,6 +651,58 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
         self.assertEqual(detail["shortlist"][0]["appeared_in_recent_runs"], 0)
 
+    def test_finalize_completed_scan_reuses_common_persistence_and_response_flow(self) -> None:
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeScannerDataManager(),
+            ai_interpretation_service=FakeScannerAiService(),
+        )
+        profile = get_scanner_profile(market="cn", profile="cn_preopen_v1")
+        run_started_at = datetime.fromisoformat("2026-04-16T08:40:00")
+        run_completed_at = datetime.fromisoformat("2026-04-16T08:41:15")
+        evaluated_candidates = [
+            self._candidate_payload("600001", "算力龙头", 0, 86.2, "2026-04-15"),
+            self._candidate_payload("600002", "机器人核心", 0, 79.5, "2026-04-15"),
+        ]
+        diagnostics = {
+            "market": "cn",
+            "profile": profile.key,
+            "profile_label": profile.label,
+            "stock_list_source": "FakeListSource",
+            "snapshot_source": "FakeSnapshotSource",
+            "history_mode": "local_first",
+        }
+
+        result = service._finalize_completed_scan(
+            profile_config=profile,
+            run_started_at=run_started_at,
+            run_completed_at=run_completed_at,
+            scope="user",
+            owner_id=service._resolve_persisted_owner_id(scope="user"),
+            resolved_shortlist_size=1,
+            universe_size=6,
+            preselected_size=2,
+            evaluated_candidates=evaluated_candidates,
+            source_summary="scanner=test",
+            universe_notes=["note"],
+            scoring_notes=["score-note"],
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["shortlist_size"], 1)
+        self.assertEqual(result["shortlist"][0]["symbol"], "600001")
+        self.assertEqual(result["shortlist"][0]["rank"], 1)
+        self.assertEqual(result["shortlist"][0]["appeared_in_recent_runs"], 0)
+        self.assertEqual(result["diagnostics"]["ai_interpretation"]["status"], "completed")
+        self.assertEqual(result["diagnostics"]["run_duration_seconds"], 75.0)
+
+        detail = service.get_run_detail(result["id"])
+        assert detail is not None
+        self.assertEqual(detail["headline"], result["headline"])
+        self.assertEqual(detail["shortlist"][0]["symbol"], "600001")
+        self.assertTrue(detail["shortlist"][0]["ai_interpretation"]["available"])
+
     def test_run_scan_ai_interpretation_remains_additive_to_ranking(self) -> None:
         baseline_service = MarketScannerService(
             self.db,

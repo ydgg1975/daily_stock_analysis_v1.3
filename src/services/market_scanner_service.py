@@ -559,21 +559,11 @@ class MarketScannerService:
         )
         self._finalize_candidates(evaluated_candidates)
 
-        ranked_candidates = sorted(
-            evaluated_candidates,
-            key=lambda item: (-float(item.get("score", 0.0)), str(item.get("symbol", ""))),
+        ranked_candidates, shortlist, ai_interpretation_diag = self._prepare_shortlist(
+            profile_config=profile_config,
+            evaluated_candidates=evaluated_candidates,
+            resolved_shortlist_size=resolved_shortlist_size,
         )
-        shortlist = ranked_candidates[:resolved_shortlist_size]
-        for rank, candidate in enumerate(shortlist, start=1):
-            candidate["rank"] = rank
-        shortlist, ai_interpretation_diag = self.ai_service.interpret_shortlist(
-            profile=profile_config,
-            candidates=shortlist,
-        )
-        shortlisted_codes = [str(item["symbol"]) for item in shortlist]
-
-        run_completed_at = datetime.now()
-        headline = self._build_headline(shortlist)
         scoring_notes = self._build_scoring_notes()
         coverage_summary = self._build_coverage_summary(
             input_universe_size=int(len(stock_list)),
@@ -619,8 +609,6 @@ class MarketScannerService:
                 "snapshot_resolution": self._public_resolution_diagnostics(snapshot_resolution),
                 "degraded_mode_used": bool(snapshot_resolution.get("degraded_mode_used")),
             },
-            "ai_interpretation": ai_interpretation_diag,
-            "run_duration_seconds": round((run_completed_at - run_started_at).total_seconds(), 2),
         }
         source_summary = self._build_source_summary(
             universe_source=stock_list_source,
@@ -629,17 +617,254 @@ class MarketScannerService:
             universe_resolution=universe_resolution,
             snapshot_resolution=snapshot_resolution,
         )
+        run_completed_at = datetime.now()
+        return self._finalize_completed_scan(
+            profile_config=profile_config,
+            run_started_at=run_started_at,
+            run_completed_at=run_completed_at,
+            scope=normalized_scope,
+            owner_id=resolved_owner_id,
+            resolved_shortlist_size=resolved_shortlist_size,
+            universe_size=int(len(universe_df)),
+            preselected_size=int(len(preselected_df)),
+            evaluated_candidates=evaluated_candidates,
+            ranked_candidates=ranked_candidates,
+            shortlist=shortlist,
+            ai_interpretation_diag=ai_interpretation_diag,
+            source_summary=source_summary,
+            universe_notes=universe_notes,
+            scoring_notes=scoring_notes,
+            diagnostics=diagnostics,
+        )
+
+    def _quote_market_options(self, *, market: str) -> Dict[str, Any]:
+        if market == "us":
+            return {
+                "resolve_universe": self._resolve_us_stock_universe,
+                "load_benchmark_context": self._load_us_benchmark_context,
+                "build_universe": self._build_us_universe,
+                "compute_pre_rank": self._compute_us_pre_rank,
+                "load_quote_context": self._load_us_realtime_quote_context,
+                "build_candidate": self._build_us_candidate_from_history,
+                "apply_scores": self._apply_us_scores,
+                "finalize_candidates": self._finalize_us_candidates,
+                "optional_quote_source": "optional_us_realtime_quote",
+                "history_only_source": "history_only_us_scan",
+                "quote_fetcher": "us_live_quote",
+                "universe_unavailable_code": "us_universe_unavailable",
+                "universe_unavailable_message": "美股 scanner universe 不可用。",
+                "empty_universe_message": "扫描宇宙为空，无法生成候选名单",
+                "no_candidates_message": "详细评估阶段未留下有效候选，请检查历史数据、流动性过滤条件或本地 US universe。",
+                "history_mode": "local_us_first",
+                "seed_only_note": "当前未发现足够的本地 US universe，已回退到受控的 liquid seed universe（{supplemented_seed_count} 只）补足首版覆盖。",
+                "supplemented_note": "本次在 {local_symbol_count} 只本地可用 US symbol 之外，额外补入 {supplemented_seed_count} 只受控 liquid seed 标的，避免候选池过窄。",
+            }
+        if market == "hk":
+            return {
+                "resolve_universe": self._resolve_hk_stock_universe,
+                "load_benchmark_context": self._load_hk_benchmark_context,
+                "build_universe": self._build_hk_universe,
+                "compute_pre_rank": self._compute_hk_pre_rank,
+                "load_quote_context": self._load_hk_realtime_quote_context,
+                "build_candidate": self._build_hk_candidate_from_history,
+                "apply_scores": self._apply_hk_scores,
+                "finalize_candidates": self._finalize_hk_candidates,
+                "optional_quote_source": "optional_hk_realtime_quote",
+                "history_only_source": "history_only_hk_scan",
+                "quote_fetcher": "hk_live_quote",
+                "universe_unavailable_code": "hk_universe_unavailable",
+                "universe_unavailable_message": "港股 scanner universe 不可用。",
+                "empty_universe_message": "港股扫描宇宙为空，无法生成候选名单",
+                "no_candidates_message": "港股详细评估阶段未留下有效候选，请检查历史数据、流动性过滤条件或 HK seed universe。",
+                "history_mode": "local_hk_first",
+                "seed_only_note": "当前未发现足够的本地港股 universe，已回退到受控的 HK liquid seed universe（{supplemented_seed_count} 只）补足首版覆盖。",
+                "supplemented_note": "本次在 {local_symbol_count} 只本地可用 HK symbol 之外，额外补入 {supplemented_seed_count} 只受控 liquid seed 标的，避免候选池过窄。",
+            }
+        raise ValueError(f"当前阶段暂不支持市场: {market}")
+
+    def _prepare_shortlist(
+        self,
+        *,
+        profile_config: ScannerMarketProfile,
+        evaluated_candidates: Sequence[Dict[str, Any]],
+        resolved_shortlist_size: int,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+        ranked_candidates = sorted(
+            evaluated_candidates,
+            key=lambda item: (-float(item.get("score", 0.0)), str(item.get("symbol", ""))),
+        )
+        shortlist = ranked_candidates[:resolved_shortlist_size]
+        for rank, candidate in enumerate(shortlist, start=1):
+            candidate["rank"] = rank
+        shortlist, ai_interpretation_diag = self.ai_service.interpret_shortlist(
+            profile=profile_config,
+            candidates=shortlist,
+        )
+        return ranked_candidates, shortlist, ai_interpretation_diag
+
+    def _collect_history_source_counts(self, diagnostics_by_symbol: Dict[str, Any]) -> Dict[str, int]:
+        history_source_counts: Dict[str, int] = {}
+        for item in diagnostics_by_symbol.values():
+            if not isinstance(item, dict):
+                continue
+            source_name = str(item.get("source") or "").strip()
+            if source_name:
+                history_source_counts[source_name] = history_source_counts.get(source_name, 0) + 1
+        return history_source_counts
+
+    def _evaluate_quote_market_candidates(
+        self,
+        *,
+        preselected_rows: Sequence[Dict[str, Any]],
+        history_cache: Dict[str, Any],
+        quote_loader,
+        candidate_builder,
+        benchmark_context: Dict[str, Any],
+        profile_config: ScannerMarketProfile,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        quote_diag_rollup = {
+            "attempted_candidates": 0,
+            "available_candidates": 0,
+            "unavailable_candidates": 0,
+            "sources": [],
+            "provider_attempts": {},
+        }
+        evaluated_candidates: List[Dict[str, Any]] = []
+        history_frames = history_cache.get("frames") if isinstance(history_cache.get("frames"), dict) else {}
+        history_diagnostics = history_cache.get("diagnostics") if isinstance(history_cache.get("diagnostics"), dict) else {}
+
+        for row in preselected_rows:
+            symbol = str(row["code"])
+            history_df = history_frames.get(symbol, pd.DataFrame())
+            history_diag = history_diagnostics.get(symbol, {})
+            quote_context = quote_loader(symbol=symbol, reference_close=row.get("close"))
+            quote_diag_rollup["attempted_candidates"] += 1
+            if quote_context.get("available"):
+                quote_diag_rollup["available_candidates"] += 1
+            else:
+                quote_diag_rollup["unavailable_candidates"] += 1
+            source_name = str(quote_context.get("source") or "").strip()
+            if source_name and source_name not in quote_diag_rollup["sources"]:
+                quote_diag_rollup["sources"].append(source_name)
+            for trace_item in quote_context.get("trace") or []:
+                if not isinstance(trace_item, dict):
+                    continue
+                provider_name = str(trace_item.get("provider") or "").strip()
+                if not provider_name or provider_name in {"market_route", "market_realtime"}:
+                    continue
+                provider_stats = quote_diag_rollup["provider_attempts"].setdefault(
+                    provider_name,
+                    {
+                        "attempts": 0,
+                        "successes": 0,
+                        "failures": 0,
+                        "skipped": 0,
+                    },
+                )
+                provider_stats["attempts"] += 1
+                action_name = str(trace_item.get("action") or "").strip().lower()
+                if action_name == "succeeded":
+                    provider_stats["successes"] += 1
+                elif action_name == "skipped":
+                    provider_stats["skipped"] += 1
+                elif action_name == "failed":
+                    provider_stats["failures"] += 1
+
+            candidate = candidate_builder(
+                universe_row=row,
+                history_df=history_df,
+                history_diag=history_diag,
+                quote_context=quote_context,
+                benchmark_context=benchmark_context,
+                profile=profile_config,
+            )
+            if candidate is None:
+                continue
+            evaluated_candidates.append(candidate)
+
+        return evaluated_candidates, quote_diag_rollup
+
+    def _build_quote_snapshot_resolution(
+        self,
+        *,
+        quote_diag_rollup: Dict[str, Any],
+        history_only_source: str,
+        quote_fetcher: str,
+    ) -> Dict[str, Any]:
+        provider_attempts = quote_diag_rollup.get("provider_attempts") or {}
+        quote_attempts = [
+            {
+                "fetcher": provider_name,
+                "status": (
+                    "success"
+                    if stats.get("successes")
+                    else "failed"
+                    if stats.get("failures")
+                    else "skipped"
+                ),
+                "rows": int(stats.get("successes") or 0),
+                "reason_code": None if stats.get("successes") else "no_live_quote_context",
+            }
+            for provider_name, stats in provider_attempts.items()
+        ] or [
+            {
+                "fetcher": quote_fetcher,
+                "status": "failed",
+                "rows": 0,
+                "reason_code": "no_live_quote_context",
+            }
+        ]
+        return {
+            "source": ",".join(quote_diag_rollup["sources"]) if quote_diag_rollup["sources"] else history_only_source,
+            "attempts": quote_attempts,
+            "degraded_mode_used": False,
+        }
+
+    def _finalize_completed_scan(
+        self,
+        *,
+        profile_config: ScannerMarketProfile,
+        run_started_at: datetime,
+        run_completed_at: datetime,
+        scope: str,
+        owner_id: Optional[str],
+        resolved_shortlist_size: int,
+        universe_size: int,
+        preselected_size: int,
+        evaluated_candidates: Sequence[Dict[str, Any]],
+        source_summary: str,
+        universe_notes: Sequence[str],
+        scoring_notes: Sequence[str],
+        diagnostics: Dict[str, Any],
+        ranked_candidates: Optional[Sequence[Dict[str, Any]]] = None,
+        shortlist: Optional[Sequence[Dict[str, Any]]] = None,
+        ai_interpretation_diag: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        ranked_candidates_list = list(ranked_candidates or [])
+        shortlist_list = list(shortlist or [])
+        if not ranked_candidates_list or not shortlist_list or ai_interpretation_diag is None:
+            ranked_candidates_list, shortlist_list, ai_interpretation_diag = self._prepare_shortlist(
+                profile_config=profile_config,
+                evaluated_candidates=evaluated_candidates,
+                resolved_shortlist_size=resolved_shortlist_size,
+            )
+
+        shortlisted_codes = [str(item["symbol"]) for item in shortlist_list]
+        headline = self._build_headline(shortlist_list, market=profile_config.market)
+        finalized_diagnostics = dict(diagnostics or {})
+        finalized_diagnostics["ai_interpretation"] = dict(ai_interpretation_diag or {})
+        finalized_diagnostics["run_duration_seconds"] = round((run_completed_at - run_started_at).total_seconds(), 2)
 
         run_model = MarketScannerRun(
-            owner_id=resolved_owner_id,
-            scope=normalized_scope,
+            owner_id=owner_id,
+            scope=scope,
             market=profile_config.market,
             profile=profile_config.key,
             universe_name=profile_config.universe_name,
             status="completed",
-            shortlist_size=len(shortlist),
-            universe_size=int(len(universe_df)),
-            preselected_size=int(len(preselected_df)),
+            shortlist_size=len(shortlist_list),
+            universe_size=int(universe_size),
+            preselected_size=int(preselected_size),
             evaluated_size=int(len(evaluated_candidates)),
             run_at=run_started_at,
             completed_at=run_completed_at,
@@ -652,18 +877,18 @@ class MarketScannerService:
                 },
                 ensure_ascii=False,
             ),
-            diagnostics_json=json.dumps(diagnostics, ensure_ascii=False),
-            universe_notes_json=json.dumps(universe_notes, ensure_ascii=False),
-            scoring_notes_json=json.dumps(scoring_notes, ensure_ascii=False),
+            diagnostics_json=json.dumps(finalized_diagnostics, ensure_ascii=False),
+            universe_notes_json=json.dumps(list(universe_notes or []), ensure_ascii=False),
+            scoring_notes_json=json.dumps(list(scoring_notes or []), ensure_ascii=False),
         )
         candidate_models = [
             self._candidate_dict_to_model(candidate, run_started_at=run_started_at)
-            for candidate in shortlist
+            for candidate in shortlist_list
         ]
         saved_run = self.repo.save_run_with_candidates(run=run_model, candidates=candidate_models)
 
         response_shortlist = []
-        for candidate in shortlist:
+        for candidate in shortlist_list:
             candidate["scan_timestamp"] = run_started_at.isoformat()
             candidate["appeared_in_recent_runs"] = self.repo.count_recent_symbol_mentions(
                 symbol=str(candidate["symbol"]),
@@ -671,8 +896,8 @@ class MarketScannerService:
                 profile=profile_config.key,
                 exclude_run_id=saved_run.id,
                 recent_run_limit=profile_config.recent_run_limit,
-                scope=normalized_scope,
-                owner_id=resolved_owner_id,
+                scope=scope,
+                owner_id=owner_id,
             )
             response_shortlist.append(self._public_candidate_dict(candidate))
 
@@ -686,16 +911,191 @@ class MarketScannerService:
             "completed_at": run_completed_at.isoformat(),
             "universe_name": profile_config.universe_name,
             "shortlist_size": len(response_shortlist),
-            "universe_size": int(len(universe_df)),
-            "preselected_size": int(len(preselected_df)),
+            "universe_size": int(universe_size),
+            "preselected_size": int(preselected_size),
             "evaluated_size": int(len(evaluated_candidates)),
             "source_summary": source_summary,
             "headline": headline,
-            "universe_notes": universe_notes,
-            "scoring_notes": scoring_notes,
-            "diagnostics": diagnostics,
+            "universe_notes": list(universe_notes or []),
+            "scoring_notes": list(scoring_notes or []),
+            "diagnostics": finalized_diagnostics,
             "shortlist": response_shortlist,
         }
+
+    def _run_quote_market_scan(
+        self,
+        *,
+        profile_config: ScannerMarketProfile,
+        run_started_at: datetime,
+        resolved_shortlist_size: int,
+        resolved_universe_limit: int,
+        resolved_detail_limit: int,
+        scope: str,
+        owner_id: Optional[str],
+    ) -> Dict[str, Any]:
+        market_options = self._quote_market_options(market=profile_config.market)
+        universe_resolution = market_options["resolve_universe"](profile=profile_config)
+        universe_symbols = universe_resolution.get("data") or []
+        universe_source = str(universe_resolution.get("source") or "unknown")
+
+        if not universe_symbols:
+            snapshot_resolution = {
+                "source": str(market_options["optional_quote_source"]),
+                "attempts": [],
+            }
+            failure_diagnostics = {
+                "reason_code": str(universe_resolution.get("error_code") or market_options["universe_unavailable_code"]),
+                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
+                "snapshot_resolution": snapshot_resolution,
+            }
+            raise ScannerRuntimeError(
+                str(universe_resolution.get("error_code") or market_options["universe_unavailable_code"]),
+                str(universe_resolution.get("error_message") or market_options["universe_unavailable_message"]),
+                diagnostics=failure_diagnostics,
+                source_summary=self._build_source_summary(
+                    universe_source=universe_source,
+                    snapshot_source=str(market_options["optional_quote_source"]),
+                    degraded_mode_used=False,
+                    universe_resolution=universe_resolution,
+                    snapshot_resolution=snapshot_resolution,
+                ),
+            )
+
+        benchmark_context = market_options["load_benchmark_context"](profile=profile_config)
+        universe_df, universe_notes, universe_diag, history_cache = market_options["build_universe"](
+            symbols=universe_symbols,
+            profile=profile_config,
+            universe_limit=resolved_universe_limit,
+            benchmark_context=benchmark_context,
+        )
+        coverage_strategy = str(universe_resolution.get("coverage_strategy") or "local_only")
+        supplemented_seed_count = int(universe_resolution.get("supplemented_seed_count") or 0)
+        local_symbol_count = int(universe_resolution.get("local_symbol_count") or 0)
+        if supplemented_seed_count > 0:
+            if coverage_strategy == "seed_only":
+                universe_notes.append(
+                    str(market_options["seed_only_note"]).format(
+                        supplemented_seed_count=supplemented_seed_count,
+                    )
+                )
+            else:
+                universe_notes.append(
+                    str(market_options["supplemented_note"]).format(
+                        local_symbol_count=local_symbol_count,
+                        supplemented_seed_count=supplemented_seed_count,
+                    )
+                )
+        if universe_df.empty:
+            raise ValueError(str(market_options["empty_universe_message"]))
+
+        preselected_df = market_options["compute_pre_rank"](universe_df).head(resolved_detail_limit).reset_index(drop=True)
+        evaluated_candidates, quote_diag_rollup = self._evaluate_quote_market_candidates(
+            preselected_rows=preselected_df.to_dict("records"),
+            history_cache=history_cache,
+            quote_loader=market_options["load_quote_context"],
+            candidate_builder=market_options["build_candidate"],
+            benchmark_context=benchmark_context,
+            profile_config=profile_config,
+        )
+        if not evaluated_candidates:
+            raise ValueError(str(market_options["no_candidates_message"]))
+
+        self._apply_relative_strength(evaluated_candidates)
+        market_options["apply_scores"](evaluated_candidates, profile=profile_config)
+        market_options["finalize_candidates"](evaluated_candidates)
+
+        ranked_candidates, shortlist, ai_interpretation_diag = self._prepare_shortlist(
+            profile_config=profile_config,
+            evaluated_candidates=evaluated_candidates,
+            resolved_shortlist_size=resolved_shortlist_size,
+        )
+        snapshot_resolution = self._build_quote_snapshot_resolution(
+            quote_diag_rollup=quote_diag_rollup,
+            history_only_source=str(market_options["history_only_source"]),
+            quote_fetcher=str(market_options["quote_fetcher"]),
+        )
+        history_source_counts = self._collect_history_source_counts(history_cache.get("diagnostics") or {})
+        coverage_summary = self._build_coverage_summary(
+            input_universe_size=int(len(universe_symbols)),
+            eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
+            eligible_after_liquidity_filter=int(len(universe_df)),
+            eligible_after_data_availability_filter=int(len(evaluated_candidates)),
+            ranked_candidate_count=int(len(ranked_candidates)),
+            shortlisted_count=int(len(shortlist)),
+            excluded_reason_counts={
+                "filtered_by_profile_constraints": int(
+                    sum(int(value or 0) for value in (universe_diag.get("exclusion_stats") or {}).values())
+                ),
+                "missing_quote_or_snapshot": int(quote_diag_rollup.get("unavailable_candidates") or 0),
+                "missing_history": int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
+            },
+        )
+        provider_diagnostics = self._build_provider_diagnostics(
+            configured_primary_provider=universe_source,
+            quote_source_used=str(snapshot_resolution["source"]),
+            snapshot_source_used=str(snapshot_resolution["source"]),
+            history_source_used=self._history_source_summary(history_source_counts),
+            attempt_groups=[
+                universe_resolution.get("attempts") or [],
+                snapshot_resolution.get("attempts") or [],
+            ],
+            history_source_counts=history_source_counts,
+            missing_data_symbol_count=int(quote_diag_rollup.get("unavailable_candidates") or 0)
+            + int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
+            additional_providers=quote_diag_rollup.get("sources") or [],
+        )
+        diagnostics = {
+            "market": profile_config.market,
+            "profile": profile_config.key,
+            "profile_label": profile_config.label,
+            "stock_list_source": universe_source,
+            "snapshot_source": snapshot_resolution["source"],
+            "history_mode": str(market_options["history_mode"]),
+            "history_stats": history_cache["history_rollup"],
+            "live_quote_stats": quote_diag_rollup,
+            "benchmark_context": benchmark_context,
+            "universe_filter_stats": {
+                **universe_diag,
+                "coverage_strategy": coverage_strategy,
+                "local_symbol_count": local_symbol_count,
+                "supplemented_seed_count": supplemented_seed_count,
+                "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
+            },
+            "coverage_summary": coverage_summary,
+            "provider_diagnostics": provider_diagnostics,
+            "scanner_data": {
+                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
+                "snapshot_resolution": snapshot_resolution,
+                "degraded_mode_used": False,
+            },
+        }
+        source_summary = self._build_source_summary(
+            universe_source=universe_source,
+            snapshot_source=str(snapshot_resolution["source"]),
+            degraded_mode_used=False,
+            universe_resolution=universe_resolution,
+            snapshot_resolution=snapshot_resolution,
+        )
+        scoring_notes = self._build_scoring_notes(profile=profile_config)
+        run_completed_at = datetime.now()
+        return self._finalize_completed_scan(
+            profile_config=profile_config,
+            run_started_at=run_started_at,
+            run_completed_at=run_completed_at,
+            scope=scope,
+            owner_id=owner_id,
+            resolved_shortlist_size=resolved_shortlist_size,
+            universe_size=int(len(universe_df)),
+            preselected_size=int(len(preselected_df)),
+            evaluated_candidates=evaluated_candidates,
+            ranked_candidates=ranked_candidates,
+            shortlist=shortlist,
+            ai_interpretation_diag=ai_interpretation_diag,
+            source_summary=source_summary,
+            universe_notes=universe_notes,
+            scoring_notes=scoring_notes,
+            diagnostics=diagnostics,
+        )
 
     def _run_us_scan(
         self,
@@ -708,305 +1108,15 @@ class MarketScannerService:
         scope: str,
         owner_id: Optional[str],
     ) -> Dict[str, Any]:
-        universe_resolution = self._resolve_us_stock_universe(profile=profile_config)
-        universe_symbols = universe_resolution.get("data") or []
-        universe_source = str(universe_resolution.get("source") or "unknown")
-
-        if not universe_symbols:
-            failure_diagnostics = {
-                "reason_code": str(universe_resolution.get("error_code") or "us_universe_unavailable"),
-                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
-                "snapshot_resolution": {
-                    "source": "optional_us_realtime_quote",
-                    "attempts": [],
-                },
-            }
-            raise ScannerRuntimeError(
-                str(universe_resolution.get("error_code") or "us_universe_unavailable"),
-                str(universe_resolution.get("error_message") or "美股 scanner universe 不可用。"),
-                diagnostics=failure_diagnostics,
-                source_summary=self._build_source_summary(
-                    universe_source=universe_source,
-                    snapshot_source="optional_us_realtime_quote",
-                    degraded_mode_used=False,
-                    universe_resolution=universe_resolution,
-                    snapshot_resolution={"source": "optional_us_realtime_quote", "attempts": []},
-                ),
-            )
-
-        benchmark_context = self._load_us_benchmark_context(profile=profile_config)
-        universe_df, universe_notes, universe_diag, history_cache = self._build_us_universe(
-            symbols=universe_symbols,
-            profile=profile_config,
-            universe_limit=resolved_universe_limit,
-            benchmark_context=benchmark_context,
-        )
-        coverage_strategy = str(universe_resolution.get("coverage_strategy") or "local_only")
-        supplemented_seed_count = int(universe_resolution.get("supplemented_seed_count") or 0)
-        local_symbol_count = int(universe_resolution.get("local_symbol_count") or 0)
-        if supplemented_seed_count > 0:
-            if coverage_strategy == "seed_only":
-                universe_notes.append(
-                    f"当前未发现足够的本地 US universe，已回退到受控的 liquid seed universe（{supplemented_seed_count} 只）补足首版覆盖。"
-                )
-            else:
-                universe_notes.append(
-                    f"本次在 {local_symbol_count} 只本地可用 US symbol 之外，额外补入 {supplemented_seed_count} 只受控 liquid seed 标的，避免候选池过窄。"
-                )
-        if universe_df.empty:
-            raise ValueError("扫描宇宙为空，无法生成候选名单")
-
-        preselected_df = self._compute_us_pre_rank(universe_df).head(resolved_detail_limit).reset_index(drop=True)
-        quote_diag_rollup = {
-            "attempted_candidates": 0,
-            "available_candidates": 0,
-            "unavailable_candidates": 0,
-            "sources": [],
-            "provider_attempts": {},
-        }
-        evaluated_candidates: List[Dict[str, Any]] = []
-        for row in preselected_df.to_dict("records"):
-            symbol = str(row["code"])
-            history_df = history_cache["frames"].get(symbol, pd.DataFrame())
-            history_diag = history_cache["diagnostics"].get(symbol, {})
-            quote_context = self._load_us_realtime_quote_context(symbol=symbol, reference_close=row.get("close"))
-            quote_diag_rollup["attempted_candidates"] += 1
-            if quote_context.get("available"):
-                quote_diag_rollup["available_candidates"] += 1
-            else:
-                quote_diag_rollup["unavailable_candidates"] += 1
-            source_name = str(quote_context.get("source") or "").strip()
-            if source_name and source_name not in quote_diag_rollup["sources"]:
-                quote_diag_rollup["sources"].append(source_name)
-            for trace_item in quote_context.get("trace") or []:
-                if not isinstance(trace_item, dict):
-                    continue
-                provider_name = str(trace_item.get("provider") or "").strip()
-                if not provider_name or provider_name in {"market_route", "market_realtime"}:
-                    continue
-                provider_stats = quote_diag_rollup["provider_attempts"].setdefault(
-                    provider_name,
-                    {
-                        "attempts": 0,
-                        "successes": 0,
-                        "failures": 0,
-                        "skipped": 0,
-                    },
-                )
-                provider_stats["attempts"] += 1
-                action_name = str(trace_item.get("action") or "").strip().lower()
-                if action_name == "succeeded":
-                    provider_stats["successes"] += 1
-                elif action_name == "skipped":
-                    provider_stats["skipped"] += 1
-                elif action_name == "failed":
-                    provider_stats["failures"] += 1
-
-            candidate = self._build_us_candidate_from_history(
-                universe_row=row,
-                history_df=history_df,
-                history_diag=history_diag,
-                quote_context=quote_context,
-                benchmark_context=benchmark_context,
-                profile=profile_config,
-            )
-            if candidate is None:
-                continue
-            evaluated_candidates.append(candidate)
-
-        if not evaluated_candidates:
-            raise ValueError("详细评估阶段未留下有效候选，请检查历史数据、流动性过滤条件或本地 US universe。")
-
-        self._apply_relative_strength(evaluated_candidates)
-        self._apply_us_scores(evaluated_candidates, profile=profile_config)
-        self._finalize_us_candidates(evaluated_candidates)
-
-        ranked_candidates = sorted(
-            evaluated_candidates,
-            key=lambda item: (-float(item.get("score", 0.0)), str(item.get("symbol", ""))),
-        )
-        shortlist = ranked_candidates[:resolved_shortlist_size]
-        for rank, candidate in enumerate(shortlist, start=1):
-            candidate["rank"] = rank
-        shortlist, ai_interpretation_diag = self.ai_service.interpret_shortlist(
-            profile=profile_config,
-            candidates=shortlist,
-        )
-        shortlisted_codes = [str(item["symbol"]) for item in shortlist]
-
-        provider_attempts = quote_diag_rollup.get("provider_attempts") or {}
-        quote_attempts = [
-            {
-                "fetcher": provider_name,
-                "status": (
-                    "success"
-                    if stats.get("successes")
-                    else "failed"
-                    if stats.get("failures")
-                    else "skipped"
-                ),
-                "rows": int(stats.get("successes") or 0),
-                "reason_code": None if stats.get("successes") else "no_live_quote_context",
-            }
-            for provider_name, stats in provider_attempts.items()
-        ] or [
-            {
-                "fetcher": "us_live_quote",
-                "status": "failed",
-                "rows": 0,
-                "reason_code": "no_live_quote_context",
-            }
-        ]
-        snapshot_resolution = {
-            "source": (
-                ",".join(quote_diag_rollup["sources"])
-                if quote_diag_rollup["sources"]
-                else "history_only_us_scan"
-            ),
-            "attempts": quote_attempts,
-            "degraded_mode_used": False,
-        }
-
-        run_completed_at = datetime.now()
-        headline = self._build_headline(shortlist, market=profile_config.market)
-        scoring_notes = self._build_scoring_notes(profile=profile_config)
-        history_source_counts = {}
-        for item in (history_cache.get("diagnostics") or {}).values():
-            if not isinstance(item, dict):
-                continue
-            source_name = str(item.get("source") or "").strip()
-            if source_name:
-                history_source_counts[source_name] = history_source_counts.get(source_name, 0) + 1
-        coverage_summary = self._build_coverage_summary(
-            input_universe_size=int(len(universe_symbols)),
-            eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
-            eligible_after_liquidity_filter=int(len(universe_df)),
-            eligible_after_data_availability_filter=int(len(evaluated_candidates)),
-            ranked_candidate_count=int(len(ranked_candidates)),
-            shortlisted_count=int(len(shortlist)),
-            excluded_reason_counts={
-                "filtered_by_profile_constraints": int(
-                    sum(int(value or 0) for value in (universe_diag.get("exclusion_stats") or {}).values())
-                ),
-                "missing_quote_or_snapshot": int(quote_diag_rollup.get("unavailable_candidates") or 0),
-                "missing_history": int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
-            },
-        )
-        provider_diagnostics = self._build_provider_diagnostics(
-            configured_primary_provider=universe_source,
-            quote_source_used=str(snapshot_resolution["source"]),
-            snapshot_source_used=str(snapshot_resolution["source"]),
-            history_source_used=self._history_source_summary(history_source_counts),
-            attempt_groups=[
-                universe_resolution.get("attempts") or [],
-                snapshot_resolution.get("attempts") or [],
-            ],
-            history_source_counts=history_source_counts,
-            missing_data_symbol_count=int(quote_diag_rollup.get("unavailable_candidates") or 0)
-            + int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
-            additional_providers=quote_diag_rollup.get("sources") or [],
-        )
-        diagnostics = {
-            "market": profile_config.market,
-            "profile": profile_config.key,
-            "profile_label": profile_config.label,
-            "stock_list_source": universe_source,
-            "snapshot_source": snapshot_resolution["source"],
-            "history_mode": "local_us_first",
-            "history_stats": history_cache["history_rollup"],
-            "live_quote_stats": quote_diag_rollup,
-            "benchmark_context": benchmark_context,
-            "universe_filter_stats": {
-                **universe_diag,
-                "coverage_strategy": coverage_strategy,
-                "local_symbol_count": local_symbol_count,
-                "supplemented_seed_count": supplemented_seed_count,
-                "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
-            },
-            "coverage_summary": coverage_summary,
-            "provider_diagnostics": provider_diagnostics,
-            "scanner_data": {
-                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
-                "snapshot_resolution": snapshot_resolution,
-                "degraded_mode_used": False,
-            },
-            "ai_interpretation": ai_interpretation_diag,
-            "run_duration_seconds": round((run_completed_at - run_started_at).total_seconds(), 2),
-        }
-        source_summary = self._build_source_summary(
-            universe_source=universe_source,
-            snapshot_source=str(snapshot_resolution["source"]),
-            degraded_mode_used=False,
-            universe_resolution=universe_resolution,
-            snapshot_resolution=snapshot_resolution,
-        )
-
-        run_model = MarketScannerRun(
-            owner_id=owner_id,
+        return self._run_quote_market_scan(
+            profile_config=profile_config,
+            run_started_at=run_started_at,
+            resolved_shortlist_size=resolved_shortlist_size,
+            resolved_universe_limit=resolved_universe_limit,
+            resolved_detail_limit=resolved_detail_limit,
             scope=scope,
-            market=profile_config.market,
-            profile=profile_config.key,
-            universe_name=profile_config.universe_name,
-            status="completed",
-            shortlist_size=len(shortlist),
-            universe_size=int(len(universe_df)),
-            preselected_size=int(len(preselected_df)),
-            evaluated_size=int(len(evaluated_candidates)),
-            run_at=run_started_at,
-            completed_at=run_completed_at,
-            source_summary=source_summary,
-            summary_json=json.dumps(
-                {
-                    "headline": headline,
-                    "profile_label": profile_config.label,
-                    "shortlisted_codes": shortlisted_codes,
-                },
-                ensure_ascii=False,
-            ),
-            diagnostics_json=json.dumps(diagnostics, ensure_ascii=False),
-            universe_notes_json=json.dumps(universe_notes, ensure_ascii=False),
-            scoring_notes_json=json.dumps(scoring_notes, ensure_ascii=False),
+            owner_id=owner_id,
         )
-        candidate_models = [
-            self._candidate_dict_to_model(candidate, run_started_at=run_started_at)
-            for candidate in shortlist
-        ]
-        saved_run = self.repo.save_run_with_candidates(run=run_model, candidates=candidate_models)
-
-        response_shortlist = []
-        for candidate in shortlist:
-            candidate["scan_timestamp"] = run_started_at.isoformat()
-            candidate["appeared_in_recent_runs"] = self.repo.count_recent_symbol_mentions(
-                symbol=str(candidate["symbol"]),
-                market=profile_config.market,
-                profile=profile_config.key,
-                exclude_run_id=saved_run.id,
-                recent_run_limit=profile_config.recent_run_limit,
-                scope=scope,
-                owner_id=owner_id,
-            )
-            response_shortlist.append(self._public_candidate_dict(candidate))
-
-        return {
-            "id": saved_run.id,
-            "market": profile_config.market,
-            "profile": profile_config.key,
-            "profile_label": profile_config.label,
-            "status": "completed",
-            "run_at": run_started_at.isoformat(),
-            "completed_at": run_completed_at.isoformat(),
-            "universe_name": profile_config.universe_name,
-            "shortlist_size": len(response_shortlist),
-            "universe_size": int(len(universe_df)),
-            "preselected_size": int(len(preselected_df)),
-            "evaluated_size": int(len(evaluated_candidates)),
-            "source_summary": source_summary,
-            "headline": headline,
-            "universe_notes": universe_notes,
-            "scoring_notes": scoring_notes,
-            "diagnostics": diagnostics,
-            "shortlist": response_shortlist,
-        }
 
     def _run_hk_scan(
         self,
@@ -1019,305 +1129,15 @@ class MarketScannerService:
         scope: str,
         owner_id: Optional[str],
     ) -> Dict[str, Any]:
-        universe_resolution = self._resolve_hk_stock_universe(profile=profile_config)
-        universe_symbols = universe_resolution.get("data") or []
-        universe_source = str(universe_resolution.get("source") or "unknown")
-
-        if not universe_symbols:
-            failure_diagnostics = {
-                "reason_code": str(universe_resolution.get("error_code") or "hk_universe_unavailable"),
-                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
-                "snapshot_resolution": {
-                    "source": "optional_hk_realtime_quote",
-                    "attempts": [],
-                },
-            }
-            raise ScannerRuntimeError(
-                str(universe_resolution.get("error_code") or "hk_universe_unavailable"),
-                str(universe_resolution.get("error_message") or "港股 scanner universe 不可用。"),
-                diagnostics=failure_diagnostics,
-                source_summary=self._build_source_summary(
-                    universe_source=universe_source,
-                    snapshot_source="optional_hk_realtime_quote",
-                    degraded_mode_used=False,
-                    universe_resolution=universe_resolution,
-                    snapshot_resolution={"source": "optional_hk_realtime_quote", "attempts": []},
-                ),
-            )
-
-        benchmark_context = self._load_hk_benchmark_context(profile=profile_config)
-        universe_df, universe_notes, universe_diag, history_cache = self._build_hk_universe(
-            symbols=universe_symbols,
-            profile=profile_config,
-            universe_limit=resolved_universe_limit,
-            benchmark_context=benchmark_context,
-        )
-        coverage_strategy = str(universe_resolution.get("coverage_strategy") or "local_only")
-        supplemented_seed_count = int(universe_resolution.get("supplemented_seed_count") or 0)
-        local_symbol_count = int(universe_resolution.get("local_symbol_count") or 0)
-        if supplemented_seed_count > 0:
-            if coverage_strategy == "seed_only":
-                universe_notes.append(
-                    f"当前未发现足够的本地港股 universe，已回退到受控的 HK liquid seed universe（{supplemented_seed_count} 只）补足首版覆盖。"
-                )
-            else:
-                universe_notes.append(
-                    f"本次在 {local_symbol_count} 只本地可用 HK symbol 之外，额外补入 {supplemented_seed_count} 只受控 liquid seed 标的，避免候选池过窄。"
-                )
-        if universe_df.empty:
-            raise ValueError("港股扫描宇宙为空，无法生成候选名单")
-
-        preselected_df = self._compute_hk_pre_rank(universe_df).head(resolved_detail_limit).reset_index(drop=True)
-        quote_diag_rollup = {
-            "attempted_candidates": 0,
-            "available_candidates": 0,
-            "unavailable_candidates": 0,
-            "sources": [],
-            "provider_attempts": {},
-        }
-        evaluated_candidates: List[Dict[str, Any]] = []
-        for row in preselected_df.to_dict("records"):
-            symbol = str(row["code"])
-            history_df = history_cache["frames"].get(symbol, pd.DataFrame())
-            history_diag = history_cache["diagnostics"].get(symbol, {})
-            quote_context = self._load_hk_realtime_quote_context(symbol=symbol, reference_close=row.get("close"))
-            quote_diag_rollup["attempted_candidates"] += 1
-            if quote_context.get("available"):
-                quote_diag_rollup["available_candidates"] += 1
-            else:
-                quote_diag_rollup["unavailable_candidates"] += 1
-            source_name = str(quote_context.get("source") or "").strip()
-            if source_name and source_name not in quote_diag_rollup["sources"]:
-                quote_diag_rollup["sources"].append(source_name)
-            for trace_item in quote_context.get("trace") or []:
-                if not isinstance(trace_item, dict):
-                    continue
-                provider_name = str(trace_item.get("provider") or "").strip()
-                if not provider_name or provider_name in {"market_route", "market_realtime"}:
-                    continue
-                provider_stats = quote_diag_rollup["provider_attempts"].setdefault(
-                    provider_name,
-                    {
-                        "attempts": 0,
-                        "successes": 0,
-                        "failures": 0,
-                        "skipped": 0,
-                    },
-                )
-                provider_stats["attempts"] += 1
-                action_name = str(trace_item.get("action") or "").strip().lower()
-                if action_name == "succeeded":
-                    provider_stats["successes"] += 1
-                elif action_name == "skipped":
-                    provider_stats["skipped"] += 1
-                elif action_name == "failed":
-                    provider_stats["failures"] += 1
-
-            candidate = self._build_hk_candidate_from_history(
-                universe_row=row,
-                history_df=history_df,
-                history_diag=history_diag,
-                quote_context=quote_context,
-                benchmark_context=benchmark_context,
-                profile=profile_config,
-            )
-            if candidate is None:
-                continue
-            evaluated_candidates.append(candidate)
-
-        if not evaluated_candidates:
-            raise ValueError("港股详细评估阶段未留下有效候选，请检查历史数据、流动性过滤条件或 HK seed universe。")
-
-        self._apply_relative_strength(evaluated_candidates)
-        self._apply_hk_scores(evaluated_candidates, profile=profile_config)
-        self._finalize_hk_candidates(evaluated_candidates)
-
-        ranked_candidates = sorted(
-            evaluated_candidates,
-            key=lambda item: (-float(item.get("score", 0.0)), str(item.get("symbol", ""))),
-        )
-        shortlist = ranked_candidates[:resolved_shortlist_size]
-        for rank, candidate in enumerate(shortlist, start=1):
-            candidate["rank"] = rank
-        shortlist, ai_interpretation_diag = self.ai_service.interpret_shortlist(
-            profile=profile_config,
-            candidates=shortlist,
-        )
-        shortlisted_codes = [str(item["symbol"]) for item in shortlist]
-
-        provider_attempts = quote_diag_rollup.get("provider_attempts") or {}
-        quote_attempts = [
-            {
-                "fetcher": provider_name,
-                "status": (
-                    "success"
-                    if stats.get("successes")
-                    else "failed"
-                    if stats.get("failures")
-                    else "skipped"
-                ),
-                "rows": int(stats.get("successes") or 0),
-                "reason_code": None if stats.get("successes") else "no_live_quote_context",
-            }
-            for provider_name, stats in provider_attempts.items()
-        ] or [
-            {
-                "fetcher": "hk_live_quote",
-                "status": "failed",
-                "rows": 0,
-                "reason_code": "no_live_quote_context",
-            }
-        ]
-        snapshot_resolution = {
-            "source": (
-                ",".join(quote_diag_rollup["sources"])
-                if quote_diag_rollup["sources"]
-                else "history_only_hk_scan"
-            ),
-            "attempts": quote_attempts,
-            "degraded_mode_used": False,
-        }
-
-        run_completed_at = datetime.now()
-        headline = self._build_headline(shortlist, market=profile_config.market)
-        scoring_notes = self._build_scoring_notes(profile=profile_config)
-        history_source_counts = {}
-        for item in (history_cache.get("diagnostics") or {}).values():
-            if not isinstance(item, dict):
-                continue
-            source_name = str(item.get("source") or "").strip()
-            if source_name:
-                history_source_counts[source_name] = history_source_counts.get(source_name, 0) + 1
-        coverage_summary = self._build_coverage_summary(
-            input_universe_size=int(len(universe_symbols)),
-            eligible_after_universe_fetch=int(universe_diag.get("raw_symbol_count") or len(universe_symbols)),
-            eligible_after_liquidity_filter=int(len(universe_df)),
-            eligible_after_data_availability_filter=int(len(evaluated_candidates)),
-            ranked_candidate_count=int(len(ranked_candidates)),
-            shortlisted_count=int(len(shortlist)),
-            excluded_reason_counts={
-                "filtered_by_profile_constraints": int(
-                    sum(int(value or 0) for value in (universe_diag.get("exclusion_stats") or {}).values())
-                ),
-                "missing_quote_or_snapshot": int(quote_diag_rollup.get("unavailable_candidates") or 0),
-                "missing_history": int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
-            },
-        )
-        provider_diagnostics = self._build_provider_diagnostics(
-            configured_primary_provider=universe_source,
-            quote_source_used=str(snapshot_resolution["source"]),
-            snapshot_source_used=str(snapshot_resolution["source"]),
-            history_source_used=self._history_source_summary(history_source_counts),
-            attempt_groups=[
-                universe_resolution.get("attempts") or [],
-                snapshot_resolution.get("attempts") or [],
-            ],
-            history_source_counts=history_source_counts,
-            missing_data_symbol_count=int(quote_diag_rollup.get("unavailable_candidates") or 0)
-            + int((history_cache.get("history_rollup") or {}).get("skipped_for_history") or 0),
-            additional_providers=quote_diag_rollup.get("sources") or [],
-        )
-        diagnostics = {
-            "market": profile_config.market,
-            "profile": profile_config.key,
-            "profile_label": profile_config.label,
-            "stock_list_source": universe_source,
-            "snapshot_source": snapshot_resolution["source"],
-            "history_mode": "local_hk_first",
-            "history_stats": history_cache["history_rollup"],
-            "live_quote_stats": quote_diag_rollup,
-            "benchmark_context": benchmark_context,
-            "universe_filter_stats": {
-                **universe_diag,
-                "coverage_strategy": coverage_strategy,
-                "local_symbol_count": local_symbol_count,
-                "supplemented_seed_count": supplemented_seed_count,
-                "resolved_symbol_count": int(universe_resolution.get("final_symbol_count") or len(universe_symbols)),
-            },
-            "coverage_summary": coverage_summary,
-            "provider_diagnostics": provider_diagnostics,
-            "scanner_data": {
-                "universe_resolution": self._public_resolution_diagnostics(universe_resolution),
-                "snapshot_resolution": snapshot_resolution,
-                "degraded_mode_used": False,
-            },
-            "ai_interpretation": ai_interpretation_diag,
-            "run_duration_seconds": round((run_completed_at - run_started_at).total_seconds(), 2),
-        }
-        source_summary = self._build_source_summary(
-            universe_source=universe_source,
-            snapshot_source=str(snapshot_resolution["source"]),
-            degraded_mode_used=False,
-            universe_resolution=universe_resolution,
-            snapshot_resolution=snapshot_resolution,
-        )
-
-        run_model = MarketScannerRun(
-            owner_id=owner_id,
+        return self._run_quote_market_scan(
+            profile_config=profile_config,
+            run_started_at=run_started_at,
+            resolved_shortlist_size=resolved_shortlist_size,
+            resolved_universe_limit=resolved_universe_limit,
+            resolved_detail_limit=resolved_detail_limit,
             scope=scope,
-            market=profile_config.market,
-            profile=profile_config.key,
-            universe_name=profile_config.universe_name,
-            status="completed",
-            shortlist_size=len(shortlist),
-            universe_size=int(len(universe_df)),
-            preselected_size=int(len(preselected_df)),
-            evaluated_size=int(len(evaluated_candidates)),
-            run_at=run_started_at,
-            completed_at=run_completed_at,
-            source_summary=source_summary,
-            summary_json=json.dumps(
-                {
-                    "headline": headline,
-                    "profile_label": profile_config.label,
-                    "shortlisted_codes": shortlisted_codes,
-                },
-                ensure_ascii=False,
-            ),
-            diagnostics_json=json.dumps(diagnostics, ensure_ascii=False),
-            universe_notes_json=json.dumps(universe_notes, ensure_ascii=False),
-            scoring_notes_json=json.dumps(scoring_notes, ensure_ascii=False),
+            owner_id=owner_id,
         )
-        candidate_models = [
-            self._candidate_dict_to_model(candidate, run_started_at=run_started_at)
-            for candidate in shortlist
-        ]
-        saved_run = self.repo.save_run_with_candidates(run=run_model, candidates=candidate_models)
-
-        response_shortlist = []
-        for candidate in shortlist:
-            candidate["scan_timestamp"] = run_started_at.isoformat()
-            candidate["appeared_in_recent_runs"] = self.repo.count_recent_symbol_mentions(
-                symbol=str(candidate["symbol"]),
-                market=profile_config.market,
-                profile=profile_config.key,
-                exclude_run_id=saved_run.id,
-                recent_run_limit=profile_config.recent_run_limit,
-                scope=scope,
-                owner_id=owner_id,
-            )
-            response_shortlist.append(self._public_candidate_dict(candidate))
-
-        return {
-            "id": saved_run.id,
-            "market": profile_config.market,
-            "profile": profile_config.key,
-            "profile_label": profile_config.label,
-            "status": "completed",
-            "run_at": run_started_at.isoformat(),
-            "completed_at": run_completed_at.isoformat(),
-            "universe_name": profile_config.universe_name,
-            "shortlist_size": len(response_shortlist),
-            "universe_size": int(len(universe_df)),
-            "preselected_size": int(len(preselected_df)),
-            "evaluated_size": int(len(evaluated_candidates)),
-            "source_summary": source_summary,
-            "headline": headline,
-            "universe_notes": universe_notes,
-            "scoring_notes": scoring_notes,
-            "diagnostics": diagnostics,
-            "shortlist": response_shortlist,
-        }
 
     def _resolve_hk_stock_universe(self, *, profile: ScannerMarketProfile) -> Dict[str, Any]:
         attempts: List[Dict[str, Any]] = []
