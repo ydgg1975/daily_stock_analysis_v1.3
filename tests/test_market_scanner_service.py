@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -858,6 +858,67 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("curated_us_liquid_seed", result["source"])
         self.assertIn("NVDA", result["data"])
         self.assertIn("PLTR", result["data"])
+
+    def test_load_local_us_universe_from_db_uses_stock_repository_boundary(self) -> None:
+        repo = MagicMock()
+        repo.list_distinct_codes.return_value = ["NVDA", "aapl", "HK00700", "600001"]
+        self.service.stock_repo = repo
+
+        result = self.service._load_local_us_universe_from_db()
+
+        repo.list_distinct_codes.assert_called_once_with()
+        self.assertEqual(result, ["AAPL", "NVDA"])
+
+    def test_load_local_stock_list_fallback_uses_repository_boundaries(self) -> None:
+        scanner_repo = MagicMock()
+        scanner_repo.list_recent_analysis_symbols.return_value = [
+            ("600001", "算力龙头"),
+            ("600002", "机器人核心"),
+        ]
+        stock_repo = MagicMock()
+        stock_repo.list_distinct_codes.return_value = ["600001", "600002", "300123"]
+        self.service.repo = scanner_repo
+        self.service.stock_repo = stock_repo
+
+        result = self.service._load_local_stock_list_fallback()
+
+        scanner_repo.list_recent_analysis_symbols.assert_called_once_with()
+        stock_repo.list_distinct_codes.assert_called_once_with()
+        self.assertTrue(result["success"])
+        frame = result["data"]
+        self.assertEqual(frame["code"].tolist(), ["600001", "600002", "300123"])
+        self.assertEqual(frame["name"].tolist()[:2], ["算力龙头", "机器人核心"])
+
+    def test_load_local_history_uses_stock_repository_boundary(self) -> None:
+        stock_repo = MagicMock()
+        stock_repo.get_recent_daily_rows.return_value = [
+            SimpleNamespace(
+                date=pd.Timestamp("2026-04-10").date(),
+                open=10.0,
+                high=10.5,
+                low=9.8,
+                close=10.2,
+                volume=1_000_000,
+                amount=10_200_000,
+                pct_chg=2.0,
+            ),
+            SimpleNamespace(
+                date=pd.Timestamp("2026-04-11").date(),
+                open=10.2,
+                high=10.8,
+                low=10.1,
+                close=10.6,
+                volume=1_100_000,
+                amount=11_660_000,
+                pct_chg=3.92,
+            ),
+        ]
+        self.service.stock_repo = stock_repo
+
+        frame = self.service._load_local_history("600001", history_days=2)
+
+        stock_repo.get_recent_daily_rows.assert_called_once_with(code="600001", limit=2)
+        self.assertEqual(frame["close"].tolist(), [10.2, 10.6])
 
     def test_run_scan_rejects_unknown_market_profile(self) -> None:
         with self.assertRaises(ValueError):

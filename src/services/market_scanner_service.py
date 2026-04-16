@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
 
 from data_provider.base import (
     DataFetcherManager,
@@ -32,11 +31,9 @@ from src.repositories.stock_repo import StockRepository
 from src.services.scanner_ai_service import ScannerAiInterpretationService
 from src.services.us_history_helper import fetch_daily_history_with_local_us_fallback, get_us_stock_parquet_dir
 from src.storage import (
-    AnalysisHistory,
     DatabaseManager,
     MarketScannerCandidate,
     MarketScannerRun,
-    StockDaily,
 )
 
 logger = logging.getLogger(__name__)
@@ -1230,13 +1227,11 @@ class MarketScannerService:
         }
 
     def _load_local_hk_universe_from_db(self) -> List[str]:
-        with self.db.get_session() as session:
-            rows = session.execute(select(StockDaily.code).distinct()).all()
         symbols = sorted(
             {
-                normalize_stock_code(str(row[0] or "")).upper()
-                for row in rows
-                if row and row[0] and _is_hk_scanner_symbol(str(row[0]))
+                normalize_stock_code(str(code or "")).upper()
+                for code in self.stock_repo.list_distinct_codes()
+                if code and _is_hk_scanner_symbol(str(code))
             }
         )
         return symbols
@@ -1575,13 +1570,11 @@ class MarketScannerService:
         return symbols
 
     def _load_local_us_universe_from_db(self) -> List[str]:
-        with self.db.get_session() as session:
-            rows = session.execute(select(StockDaily.code).distinct()).all()
         symbols = sorted(
             {
-                str(row[0]).upper()
-                for row in rows
-                if row and row[0] and is_us_stock_code(str(row[0]).upper())
+                str(code).upper()
+                for code in self.stock_repo.list_distinct_codes()
+                if code and is_us_stock_code(str(code).upper())
             }
         )
         return symbols
@@ -3244,21 +3237,16 @@ class MarketScannerService:
     def _load_local_stock_list_fallback(self) -> Dict[str, Any]:
         names: Dict[str, str] = {}
         codes: List[str] = []
-        with self.db.get_session() as session:
-            history_rows = session.execute(
-                select(AnalysisHistory.code, AnalysisHistory.name).order_by(AnalysisHistory.created_at.desc())
-            ).all()
-            for code, name in history_rows:
-                normalized = normalize_stock_code(str(code or ""))
-                if not normalized or normalized in names:
-                    continue
-                names[normalized] = str(name or normalized)
+        for code, name in self.repo.list_recent_analysis_symbols():
+            normalized = normalize_stock_code(str(code or ""))
+            if not normalized or normalized in names:
+                continue
+            names[normalized] = str(name or normalized)
 
-            daily_codes = session.execute(select(StockDaily.code).distinct()).scalars().all()
-            for raw_code in daily_codes:
-                normalized = normalize_stock_code(str(raw_code or ""))
-                if normalized and normalized not in codes:
-                    codes.append(normalized)
+        for raw_code in self.stock_repo.list_distinct_codes():
+            normalized = normalize_stock_code(str(raw_code or ""))
+            if normalized and normalized not in codes:
+                codes.append(normalized)
 
         if not codes:
             return {
@@ -3417,20 +3405,15 @@ class MarketScannerService:
                 if name:
                     names[code] = name
 
-        with self.db.get_session() as session:
-            if not candidate_codes:
-                daily_codes = session.execute(select(StockDaily.code).distinct()).scalars().all()
-                for raw_code in daily_codes:
-                    code = normalize_stock_code(str(raw_code or ""))
-                    if code and code not in candidate_codes:
-                        candidate_codes.append(code)
-            history_rows = session.execute(
-                select(AnalysisHistory.code, AnalysisHistory.name).order_by(AnalysisHistory.created_at.desc())
-            ).all()
-            for code, name in history_rows:
-                normalized = normalize_stock_code(str(code or ""))
-                if normalized and normalized not in names and name:
-                    names[normalized] = str(name).strip()
+        if not candidate_codes:
+            for raw_code in self.stock_repo.list_distinct_codes():
+                code = normalize_stock_code(str(raw_code or ""))
+                if code and code not in candidate_codes:
+                    candidate_codes.append(code)
+        for code, name in self.repo.list_recent_analysis_symbols():
+            normalized = normalize_stock_code(str(code or ""))
+            if normalized and normalized not in names and name:
+                names[normalized] = str(name).strip()
 
         records: List[Dict[str, Any]] = []
         max_codes = max(profile.universe_limit * 2, 400)
@@ -3966,14 +3949,7 @@ class MarketScannerService:
         }
 
     def _load_local_history(self, code: str, history_days: int) -> pd.DataFrame:
-        with self.db.get_session() as session:
-            rows = session.execute(
-                select(StockDaily)
-                .where(StockDaily.code == code)
-                .order_by(StockDaily.date.desc())
-                .limit(history_days)
-            ).scalars().all()
-
+        rows = self.stock_repo.get_recent_daily_rows(code=code, limit=history_days)
         records = []
         for row in reversed(list(rows)):
             records.append(

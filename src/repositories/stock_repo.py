@@ -159,3 +159,20 @@ class StockRepository:
                 .limit(eval_window_days)
             ).scalars().all()
             return list(rows)
+
+    def list_distinct_codes(self) -> List[str]:
+        """Return distinct stock codes currently present in local daily storage."""
+        with self.db.get_session() as session:
+            rows = session.execute(select(StockDaily.code).distinct()).scalars().all()
+            return [str(code) for code in rows if code]
+
+    def get_recent_daily_rows(self, *, code: str, limit: int) -> List[StockDaily]:
+        """Return latest daily rows for a code in descending date order."""
+        with self.db.get_session() as session:
+            rows = session.execute(
+                select(StockDaily)
+                .where(StockDaily.code == code)
+                .order_by(StockDaily.date.desc())
+                .limit(limit)
+            ).scalars().all()
+            return list(rows)
