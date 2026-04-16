@@ -818,7 +818,7 @@ const SettingsPage: React.FC = () => {
     ? t('settings.rawFieldsSectionTitle')
     : t('settings.currentCategory');
   const rawFieldsSectionDescription = shouldCollapseRawFields
-    ? t('settings.rawFieldsSectionDesc')
+    ? ''
     : activeCategoryDescription;
   const rawFieldsToggleLabel = activeCategory === 'ai_model'
     ? t('settings.aiRawFieldsToggle')
@@ -2956,14 +2956,7 @@ const SettingsPage: React.FC = () => {
                         title: t('settings.aiTaskName.backtest'),
                         routeMode: t(`settings.aiTaskRouteMode.${backtestRouteMode}`),
                         route: formatRouteLine(backtestEffectiveGateway, backtestEffectiveModel),
-                        backup: backtestOverrideModel
-                          ? t('settings.aiBacktestRouteDedicatedSummary', {
-                            model: backtestOverrideModel,
-                            route: formatRouteLine(backtestEffectiveGateway, backtestOverrideModel),
-                          })
-                          : t('settings.aiBacktestRouteSharedSummary', {
-                            route: formatRouteLine(aiSummary.primaryChannel, aiSummary.primaryModel),
-                          }),
+                        backup: '',
                         summary: backtestOverrideModel
                           ? t('settings.aiBacktestRouteDedicatedSummary', {
                             model: backtestOverrideModel,
@@ -3412,7 +3405,6 @@ const SettingsPage: React.FC = () => {
               description={t('settings.runtimeSummaryVisibilityDesc')}
             >
               <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-3.5 py-3">
-                <p className="text-xs text-muted-text">{t('settings.runtimeSummaryVisibilityTitle')}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -3470,7 +3462,6 @@ const SettingsPage: React.FC = () => {
                 className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border"
                 bodyClassName="space-y-3"
               >
-                <p className="text-xs leading-5 text-muted-text">{t('settings.categoriesDesc')}</p>
                 <SettingsCategoryNav
                   categories={domainCategories}
                   itemsByCategory={itemsByCategory}

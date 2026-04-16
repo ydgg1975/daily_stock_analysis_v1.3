@@ -1362,6 +1362,32 @@ describe('SettingsPage', () => {
     expect(screen.queryByText('按任务配置模型')).toBeNull();
   });
 
+  it('shows the inherited backtest route summary only once in the compact AI summary', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          buildAiConfigItem('GEMINI_API_KEY', 'masked-token'),
+          buildAiConfigItem('AI_PRIMARY_GATEWAY', 'gemini'),
+          buildAiConfigItem('AI_PRIMARY_MODEL', 'gemini/gemini-2.5-flash'),
+          buildAiConfigItem('AI_BACKUP_GATEWAY', ''),
+          buildAiConfigItem('AI_BACKUP_MODEL', ''),
+          buildAiConfigItem('BACKTEST_LITELLM_MODEL', ''),
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const aiSection = screen.getByRole('heading', { name: '任务路由' }).closest('section');
+    expect(aiSection).not.toBeNull();
+
+    expect(
+      within(aiSection as HTMLElement).getAllByText(/回测路由：当前继承 Analysis 路由/).length,
+    ).toBe(1);
+  });
+
   it('splits data settings into Data Routing and Data Source Library', async () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({
       activeCategory: 'data_source',
@@ -1430,6 +1456,17 @@ describe('SettingsPage', () => {
     expect(within(yahooCard).getAllByText('状态检查：内置源无需验证').length).toBeGreaterThan(0);
     expect(within(dataSection as HTMLElement).getAllByRole('combobox').length).toBeGreaterThan(0);
     expect(within(dataSection as HTMLElement).getAllByRole('button', { name: '保存优先顺序' }).length).toBeGreaterThan(0);
+  });
+
+  it('shows the runtime summary visibility title only once in the advanced domain section', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+    }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByRole('heading', { name: '首页运行时执行摘要可见性' })).toBeInTheDocument();
+    expect(screen.getAllByText('首页运行时执行摘要可见性').length).toBe(1);
   });
 
   it('creates a custom data source and exposes it only in the matching routing selector', async () => {
