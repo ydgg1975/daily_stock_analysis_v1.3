@@ -41,7 +41,7 @@ from src.auth import (
 from src.config import Config, setup_env
 from src.core.config_manager import ConfigManager
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN, ROLE_USER
-from src.storage import DatabaseManager
+from src.repositories.auth_repo import AuthRepository
 from src.services.system_config_service import SystemConfigService
 
 logger = logging.getLogger(__name__)
@@ -278,8 +278,8 @@ def _notification_delivery_available() -> bool:
 
 
 def _serialize_user_notification_preferences(user_id: str) -> dict:
-    db = DatabaseManager.get_instance()
-    preferences = db.get_user_notification_preferences(user_id)
+    repo = AuthRepository()
+    preferences = repo.get_user_notification_preferences(user_id)
     email_delivery_available = _notification_delivery_available()
     return UserNotificationPreferencesResponse(
         channel=str(preferences.get("channel") or "email"),
@@ -313,8 +313,8 @@ def _require_admin_current_user(request: Request):
 def _persist_session_for_user(*, request: Request, user_id: str, username: str, role: str) -> str:
     session_id = secrets.token_hex(16)
     expires_at = get_session_expiry_datetime()
-    db = DatabaseManager.get_instance()
-    db.create_app_user_session(
+    repo = AuthRepository()
+    repo.create_app_user_session(
         session_id=session_id,
         user_id=user_id,
         expires_at=expires_at,
@@ -440,7 +440,7 @@ async def auth_update_notification_preferences(request: Request, body: UserNotif
             content={"error": "validation_error", "message": "启用 Discord 通知前请先填写 Webhook URL"},
         )
 
-    DatabaseManager.get_instance().upsert_user_notification_preferences(
+    AuthRepository().upsert_user_notification_preferences(
         current_user.user_id,
         email=normalized_email,
         enabled=email_enabled,
@@ -514,7 +514,7 @@ async def auth_verify_password(request: Request, body: VerifyPasswordRequest):
             ensure_bootstrap_admin_user_password_hash()
             verified = verify_stored_password(password)
         else:
-            user_row = DatabaseManager.get_instance().get_app_user(current_user.user_id)
+            user_row = AuthRepository().get_app_user(current_user.user_id)
             verified = bool(user_row and verify_password_hash_string(password, getattr(user_row, "password_hash", None)))
         if not verified:
             record_login_failure(ip)
@@ -765,14 +765,14 @@ async def auth_login(request: Request, body: LoginRequest):
             },
         )
 
-    db = DatabaseManager.get_instance()
-    user_row = db.get_app_user_by_username(username)
+    repo = AuthRepository()
+    user_row = repo.get_app_user_by_username(username)
     created_user = False
 
     if username == BOOTSTRAP_ADMIN_USERNAME:
         ensure_bootstrap_admin_user_password_hash()
         if user_row is None:
-            user_row = db.ensure_bootstrap_admin_user()
+            user_row = repo.ensure_bootstrap_admin_user()
         if not has_stored_password():
             if not confirm:
                 return JSONResponse(
@@ -793,7 +793,7 @@ async def auth_login(request: Request, body: LoginRequest):
                     content={"error": "invalid_password", "message": err},
                 )
             ensure_bootstrap_admin_user_password_hash()
-            user_row = db.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
+            user_row = repo.get_app_user(BOOTSTRAP_ADMIN_USER_ID)
             created_user = True
         elif not verify_stored_password(password):
             record_login_failure(ip)
@@ -823,7 +823,7 @@ async def auth_login(request: Request, body: LoginRequest):
                     status_code=400,
                     content={"error": "invalid_password", "message": str(exc)},
                 )
-            user_row = db.create_or_update_app_user(
+            user_row = repo.create_or_update_app_user(
                 user_id=f"user-{secrets.token_hex(8)}",
                 username=username,
                 display_name=(body.display_name or "").strip() or username,
@@ -860,7 +860,7 @@ async def auth_login(request: Request, body: LoginRequest):
                         status_code=400,
                         content={"error": "invalid_password", "message": str(exc)},
                     )
-                user_row = db.create_or_update_app_user(
+                user_row = repo.create_or_update_app_user(
                     user_id=str(user_row.id),
                     username=str(user_row.username),
                     display_name=getattr(user_row, "display_name", None) or str(user_row.username),
@@ -952,8 +952,8 @@ async def auth_change_password(request: Request, body: ChangePasswordRequest):
                 content={"error": "invalid_password", "message": err},
             )
     else:
-        db = DatabaseManager.get_instance()
-        user_row = db.get_app_user(current_user.user_id)
+        repo = AuthRepository()
+        user_row = repo.get_app_user(current_user.user_id)
         if user_row is None:
             return JSONResponse(
                 status_code=404,
@@ -971,7 +971,7 @@ async def auth_change_password(request: Request, body: ChangePasswordRequest):
                 status_code=400,
                 content={"error": "invalid_password", "message": str(exc)},
             )
-        db.create_or_update_app_user(
+        repo.create_or_update_app_user(
             user_id=str(user_row.id),
             username=str(user_row.username),
             display_name=getattr(user_row, "display_name", None) or str(user_row.username),
@@ -980,7 +980,7 @@ async def auth_change_password(request: Request, body: ChangePasswordRequest):
             is_active=bool(getattr(user_row, "is_active", True)),
         )
         if current_user.session_id:
-            db.revoke_all_app_user_sessions(current_user.user_id)
+            repo.revoke_all_app_user_sessions(current_user.user_id)
 
     return Response(status_code=204)
 
@@ -994,7 +994,7 @@ async def auth_logout(request: Request):
     """Clear session cookie."""
     current_user = resolve_current_user(request)
     if current_user and current_user.session_id:
-        DatabaseManager.get_instance().revoke_app_user_session(current_user.session_id)
+        AuthRepository().revoke_app_user_session(current_user.session_id)
     resp = Response(status_code=204)
     _delete_session_cookie(resp)
     return resp

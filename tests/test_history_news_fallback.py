@@ -10,6 +10,41 @@ from src.services.history_service import HistoryService
 
 
 class HistoryNewsFallbackTestCase(unittest.TestCase):
+    def test_get_history_list_uses_analysis_repository_boundary(self) -> None:
+        db_manager = MagicMock()
+        repo = MagicMock()
+        repo.get_paginated.return_value = (
+            [
+                SimpleNamespace(
+                    id=1,
+                    query_id="q-1",
+                    code="600519",
+                    name="贵州茅台",
+                    report_type="standard",
+                    sentiment_score=80,
+                    operation_advice="hold",
+                    created_at=datetime(2026, 4, 17, 8, 0, 0),
+                )
+            ],
+            1,
+        )
+
+        with patch("src.services.history_service.AnalysisRepository", create=True) as repo_cls:
+            repo_cls.return_value = repo
+            service = HistoryService(db_manager=db_manager, owner_id="user-1")
+            result = service.get_history_list(page=1, limit=20)
+
+        repo_cls.assert_called_once_with(db_manager, owner_id="user-1", include_all_owners=False)
+        repo.get_paginated.assert_called_once_with(
+            code=None,
+            start_date=None,
+            end_date=None,
+            offset=0,
+            limit=20,
+        )
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["query_id"], "q-1")
+
     def test_fallback_filters_by_published_date_window(self) -> None:
         now = datetime.now()
         analysis = SimpleNamespace(code="600519", created_at=now)

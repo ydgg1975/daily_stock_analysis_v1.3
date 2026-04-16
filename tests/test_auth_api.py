@@ -6,9 +6,10 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from dotenv import dotenv_values
 from fastapi.responses import Response
@@ -247,6 +248,48 @@ class AuthApiTestCase(unittest.TestCase):
         response = asyncio.run(auth_endpoint.auth_logout(self._build_request()))
         self.assertEqual(response.status_code, 204)
         self.assertIn("dsa_session=", response.headers["set-cookie"])
+
+    def test_serialize_user_notification_preferences_uses_auth_repository_boundary(self) -> None:
+        repo = MagicMock()
+        repo.get_user_notification_preferences.return_value = {
+            "channel": "email",
+            "enabled": True,
+            "email": "user@example.com",
+            "email_enabled": True,
+            "discord_enabled": False,
+            "discord_webhook": None,
+            "updated_at": "2026-04-17T08:00:00+08:00",
+        }
+
+        with patch("api.v1.endpoints.auth.AuthRepository", create=True) as repo_cls:
+            repo_cls.return_value = repo
+            payload = auth_endpoint._serialize_user_notification_preferences("user-1")
+
+        repo.get_user_notification_preferences.assert_called_once_with("user-1")
+        self.assertEqual(payload["email"], "user@example.com")
+        self.assertTrue(payload["enabled"])
+
+    def test_persist_session_for_user_uses_auth_repository_boundary(self) -> None:
+        repo = MagicMock()
+        expires_at = datetime(2026, 4, 17, 8, 0, 0)
+
+        with patch("api.v1.endpoints.auth.AuthRepository", create=True) as repo_cls, \
+             patch("api.v1.endpoints.auth.get_session_expiry_datetime", return_value=expires_at), \
+             patch("api.v1.endpoints.auth.create_session", return_value="signed-session"):
+            repo_cls.return_value = repo
+            session_value = auth_endpoint._persist_session_for_user(
+                request=self._build_request(),
+                user_id="user-1",
+                username="alice",
+                role="user",
+            )
+
+        repo.create_app_user_session.assert_called_once_with(
+            session_id=ANY,
+            user_id="user-1",
+            expires_at=expires_at,
+        )
+        self.assertEqual(session_value, "signed-session")
 
     def test_change_password_requires_session(self) -> None:
         first_response = self._login_admin(password="oldpass6")

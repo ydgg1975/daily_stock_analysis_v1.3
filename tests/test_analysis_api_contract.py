@@ -333,6 +333,31 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             code="600519",
         )
 
+    def test_load_sync_fundamental_sources_uses_analysis_repository_boundary(self) -> None:
+        if _load_sync_fundamental_sources is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        repo = MagicMock()
+        repo.get_latest_record.return_value = SimpleNamespace(context_snapshot=None)
+        repo.get_latest_fundamental_snapshot.return_value = {"ok": True}
+
+        with patch("api.v1.endpoints.analysis.AnalysisRepository", create=True) as repo_cls:
+            repo_cls.return_value = repo
+            context_snapshot, fundamental_snapshot = _load_sync_fundamental_sources(
+                query_id="q_sync_001",
+                stock_code="600519",
+                owner_id="user-1",
+            )
+
+        repo_cls.assert_called_once_with(owner_id="user-1")
+        repo.get_latest_record.assert_called_once_with(query_id="q_sync_001", code="600519")
+        repo.get_latest_fundamental_snapshot.assert_called_once_with(
+            query_id="q_sync_001",
+            code="600519",
+        )
+        self.assertIsNone(context_snapshot)
+        self.assertEqual(fundamental_snapshot, {"ok": True})
+
     def test_handle_sync_analysis_prefers_top_level_query_id_from_service_result(self) -> None:
         if _handle_sync_analysis is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

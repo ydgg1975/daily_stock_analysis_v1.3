@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
 from src.config import get_config, resolve_news_window_days
+from src.repositories.analysis_repo import AnalysisRepository
 from src.services import report_renderer
 from src.report_language import (
     get_bias_status_emoji,
@@ -68,6 +69,11 @@ class HistoryService:
             db_manager: Database manager (optional, defaults to singleton instance)
         """
         self.db = db_manager or DatabaseManager.get_instance()
+        self.repo = AnalysisRepository(
+            self.db,
+            owner_id=owner_id,
+            include_all_owners=include_all_owners,
+        )
         self.owner_id = owner_id
         self.include_all_owners = bool(include_all_owners)
     
@@ -113,14 +119,12 @@ class HistoryService:
             offset = (page - 1) * limit
             
             # Use new paginated query method
-            records, total = self.db.get_analysis_history_paginated(
+            records, total = self.repo.get_paginated(
                 code=stock_code,
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
                 limit=limit,
-                owner_id=self.owner_id,
-                include_all_owners=self.include_all_owners,
             )
             
             # Convert to response format
@@ -161,21 +165,13 @@ class HistoryService:
         """
         try:
             int_id = int(record_id)
-            record = self.db.get_analysis_history_by_id(
-                int_id,
-                owner_id=self.owner_id,
-                include_all_owners=self.include_all_owners,
-            )
+            record = self.repo.get_by_id(int_id)
             if record:
                 return record
         except (ValueError, TypeError):
             pass
         # Fall back to query_id lookup
-        return self.db.get_latest_analysis_by_query_id(
-            record_id,
-            owner_id=self.owner_id,
-            include_all_owners=self.include_all_owners,
-        )
+        return self.repo.get_latest_record(query_id=record_id)
 
     def resolve_and_get_detail(self, record_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -231,11 +227,7 @@ class HistoryService:
             Complete analysis report dictionary, or None if not exists
         """
         try:
-            record = self.db.get_analysis_history_by_id(
-                record_id,
-                owner_id=self.owner_id,
-                include_all_owners=self.include_all_owners,
-            )
+            record = self.repo.get_by_id(record_id)
             if not record:
                 return None
             return self._record_to_detail_dict(record)
@@ -808,11 +800,7 @@ class HistoryService:
             Exception: Re-raises any storage-layer exception so the API caller
                        receives a proper 500 error instead of a silent success.
         """
-        return self.db.delete_analysis_history_records(
-            record_ids,
-            owner_id=self.owner_id,
-            include_all_owners=self.include_all_owners,
-        )
+        return self.repo.delete_records(record_ids)
 
     def get_news_intel(self, query_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """
@@ -826,7 +814,7 @@ class HistoryService:
             List of news intelligence (containing title, snippet, and url)
         """
         try:
-            records = self.db.get_news_intel_by_query_id(query_id=query_id, limit=limit)
+            records = self.repo.get_news_intel_by_query_id(query_id=query_id, limit=limit)
 
             if not records:
                 records = self._fallback_news_by_analysis_context(query_id=query_id, limit=limit)
@@ -863,11 +851,7 @@ class HistoryService:
         """
         try:
             # Look up the corresponding AnalysisHistory record by record_id
-            record = self.db.get_analysis_history_by_id(
-                record_id,
-                owner_id=self.owner_id,
-                include_all_owners=self.include_all_owners,
-            )
+            record = self.repo.get_by_id(record_id)
             if not record:
                 logger.warning(f"No analysis record found for record_id={record_id}")
                 return []
@@ -887,22 +871,19 @@ class HistoryService:
         - URL-level dedup keeps one canonical news row across repeated analyses.
         - Legacy records may have different historical query_id strategies.
         """
-        records = self.db.get_analysis_history(
-            query_id=query_id,
-            limit=1,
-            owner_id=self.owner_id,
-            include_all_owners=self.include_all_owners,
-        )
-        if not records:
+        analysis = self.repo.get_latest_record(query_id=query_id)
+        if not analysis:
             return []
-
-        analysis = records[0]
         if not analysis.code or not analysis.created_at:
             return []
 
         # Narrow down to same-stock recent news, then filter by analysis time window.
         days = max(1, (datetime.now() - analysis.created_at).days + 1)
-        candidates = self.db.get_recent_news(code=analysis.code, days=days, limit=max(limit * 5, 50))
+        candidates = self.repo.get_recent_news(
+            code=analysis.code,
+            days=days,
+            limit=max(limit * 5, 50),
+        )
 
         start_time = analysis.created_at - timedelta(hours=6)
         end_time = analysis.created_at + timedelta(hours=6)
@@ -936,6 +917,15 @@ class HistoryService:
                 filtered.append(item)
 
         return filtered[:limit]
+
+    def get_latest_fundamental_snapshot(
+        self,
+        *,
+        query_id: str,
+        code: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the fallback fundamental payload for a history detail request."""
+        return self.repo.get_latest_fundamental_snapshot(query_id=query_id, code=code)
     
     def _get_sentiment_label(self, score: int) -> str:
         """

@@ -358,7 +358,7 @@ def get_history_detail(
             take_profit=result.get("take_profit")
         )
         
-        fallback_fundamental = db_manager.get_latest_fundamental_snapshot(
+        fallback_fundamental = service.get_latest_fundamental_snapshot(
             query_id=result.get("query_id", ""),
             code=result.get("stock_code", ""),
         )

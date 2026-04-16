@@ -53,6 +53,7 @@ from api.v1.schemas.history import (
 )
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.config import Config
+from src.repositories.analysis_repo import AnalysisRepository
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.name_to_code_resolver import resolve_name_to_code
 from src.services.stock_code_utils import is_code_like
@@ -740,12 +741,10 @@ def get_analysis_status(
     
     # 2. 从数据库查询已完成的记录
     try:
-        from src.storage import DatabaseManager
-        db = DatabaseManager.get_instance()
-        records = db.get_analysis_history(query_id=task_id, limit=1, owner_id=owner_id)
+        repo = AnalysisRepository(owner_id=owner_id)
+        record = repo.get_latest_record(query_id=task_id)
 
-        if records:
-            record = records[0]
+        if record:
             raw_result = parse_json_field(record.raw_result)
             model_used = normalize_model_used(
                 (raw_result or {}).get("model_used") if isinstance(raw_result, dict) else None
@@ -826,22 +825,13 @@ def _load_sync_fundamental_sources(
     Load context_snapshot and fallback fundamental snapshot for sync analyze response.
     """
     try:
-        from src.storage import DatabaseManager
-
-        db = DatabaseManager.get_instance()
-        history_kwargs = {
-            "query_id": query_id,
-            "code": stock_code,
-            "limit": 1,
-        }
-        if owner_id:
-            history_kwargs["owner_id"] = owner_id
-        records = db.get_analysis_history(**history_kwargs)
+        repo = AnalysisRepository(owner_id=owner_id)
         context_snapshot = None
-        if records:
-            context_snapshot = parse_json_field(getattr(records[0], "context_snapshot", None))
+        record = repo.get_latest_record(query_id=query_id, code=stock_code)
+        if record:
+            context_snapshot = parse_json_field(getattr(record, "context_snapshot", None))
 
-        fallback_fundamental = db.get_latest_fundamental_snapshot(
+        fallback_fundamental = repo.get_latest_fundamental_snapshot(
             query_id=query_id,
             code=stock_code,
         )
