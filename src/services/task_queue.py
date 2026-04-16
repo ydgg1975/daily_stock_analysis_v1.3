@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -32,6 +33,7 @@ from src.services.execution_log_service import ExecutionLogService
 from src.utils.analysis_metadata import SELECTION_SOURCES
 
 logger = logging.getLogger(__name__)
+_WORKER_HINT_ENV_VARS = ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS")
 
 
 def _split_csv(value: Any) -> List[str]:
@@ -46,6 +48,24 @@ def _parse_provider_from_model(model: Optional[str]) -> Optional[str]:
         provider = model_name.split("/", 1)[0].strip()
         return provider or None
     return None
+
+
+def _read_worker_count_hints() -> Tuple[Dict[str, int], int]:
+    """Read worker-count hints from common deployment environment variables."""
+    hints: Dict[str, int] = {}
+    for env_key in _WORKER_HINT_ENV_VARS:
+        raw_value = str(os.getenv(env_key, "") or "").strip()
+        if not raw_value:
+            continue
+        try:
+            parsed = int(raw_value)
+        except ValueError:
+            logger.warning("[TaskQueue] 忽略非法 worker 提示环境变量 %s=%r", env_key, raw_value)
+            continue
+        if parsed > 0:
+            hints[env_key] = parsed
+    configured_worker_count = max(hints.values(), default=1)
+    return hints, configured_worker_count
 
 
 def _build_configured_execution_summary(owner_id: Optional[str] = None) -> Dict[str, Any]:
@@ -333,6 +353,7 @@ class AnalysisTaskQueue:
         
         # 线程安全锁
         self._data_lock = threading.RLock()
+        self._shutdown = False
         
         # 任务历史保留数量（内存中）
         self._max_history = 100
@@ -412,6 +433,41 @@ class AnalysisTaskQueue:
         if log:
             logger.info("[TaskQueue] 最大并发已更新: %s -> %s", previous, target)
         return "applied"
+
+    def activate(self) -> None:
+        """Reactivate a previously shut down singleton for a fresh app lifespan."""
+        with self._data_lock:
+            if not self._shutdown:
+                return
+            self._shutdown = False
+            self._main_loop = None
+            with self._subscribers_lock:
+                self._subscribers = []
+            logger.info("[TaskQueue] 任务队列已重新激活")
+
+    def get_runtime_status(self) -> Dict[str, Any]:
+        """Describe deployment assumptions for readiness checks and operator docs."""
+        worker_hints, configured_worker_count = _read_worker_count_hints()
+        topology_ok = configured_worker_count <= 1
+        warning = None
+        if not topology_ok:
+            warning = (
+                "Analysis task queue and SSE state are process-local. "
+                "Deploy the API as a single process or provide sticky routing with isolated task ownership."
+            )
+
+        with self._data_lock:
+            return {
+                "mode": "process_local",
+                "single_process_required": True,
+                "configured_worker_count": configured_worker_count,
+                "worker_hints": worker_hints,
+                "topology_ok": topology_ok,
+                "shutdown": self._shutdown,
+                "accepting_new_tasks": not self._shutdown,
+                "max_workers": self._max_workers,
+                "warning": warning,
+            }
     
     # ========== 任务提交与查询 ==========
     
@@ -520,6 +576,9 @@ class AnalysisTaskQueue:
         - If executor submission fails, the current batch is rolled back.
         """
         self.validate_selection_source(selection_source)
+        with self._data_lock:
+            if self._shutdown:
+                raise RuntimeError("任务队列正在关闭，暂不接受新的分析任务")
 
         accepted: List[TaskInfo] = []
         duplicates: List[DuplicateTaskError] = []
@@ -1056,12 +1115,39 @@ class AnalysisTaskQueue:
     
     # ========== 清理方法 ==========
     
-    def shutdown(self) -> None:
-        """关闭任务队列"""
-        if self._executor:
-            self._executor.shutdown(wait=True)
+    def shutdown_with_options(self, *, wait: bool = False, cancel_futures: bool = True) -> None:
+        """Close the task queue explicitly for app shutdown."""
+        executor = None
+        cancelled_task_ids: List[str] = []
+        with self._data_lock:
+            self._shutdown = True
+            executor = self._executor
             self._executor = None
-            logger.info("[TaskQueue] 线程池已关闭")
+        with self._subscribers_lock:
+            self._subscribers = []
+            self._main_loop = None
+
+        if executor is not None:
+            if cancel_futures:
+                with self._data_lock:
+                    for task_id, future in list(self._futures.items()):
+                        if not future.running():
+                            future.cancel()
+                            cancelled_task_ids.append(task_id)
+                    for task_id in cancelled_task_ids:
+                        future = self._futures.pop(task_id, None)
+                        task = self._tasks.pop(task_id, None)
+                        if task is not None:
+                            self._release_analyzing_stock_locked(task)
+            try:
+                executor.shutdown(wait=wait, cancel_futures=cancel_futures)
+            except TypeError:
+                executor.shutdown(wait=wait)
+            logger.info("[TaskQueue] 线程池已关闭 (wait=%s, cancel_futures=%s)", wait, cancel_futures)
+
+    def shutdown(self, *, wait: bool = False, cancel_futures: bool = True) -> None:
+        """Compatibility wrapper used by app lifespan and tests."""
+        self.shutdown_with_options(wait=wait, cancel_futures=cancel_futures)
 
 
 # ========== 便捷函数 ==========
@@ -1074,6 +1160,7 @@ def get_task_queue() -> AnalysisTaskQueue:
         AnalysisTaskQueue 实例
     """
     queue = AnalysisTaskQueue()
+    queue.activate()
     try:
         from src.config import get_config
 

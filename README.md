@@ -414,8 +414,8 @@ LITELLM_MODEL=openai/deepseek-chat
 
 1. **启动服务**（默认会自动编译前端）
    ```bash
-   python main.py --webui       # 启动 Web 界面 + 执行定时分析
-   python main.py --webui-only  # 仅启动 Web 界面
+   python main.py --serve       # 启动 API / Web 界面 + 执行一次分析
+   python main.py --serve-only  # 仅启动 API / Web 界面
    ```
    启动时会在 `apps/dsa-web` 自动执行 `npm install && npm run build`。
    如需关闭自动构建，设置 `WEBUI_AUTO_BUILD=false`，并改为手动执行：

@@ -9,7 +9,7 @@
 2. 提供统一的响应格式
 """
 
-from typing import Optional, Any
+from typing import Optional, Any, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,12 +46,24 @@ class HealthResponse(BaseModel):
             "example": {
                 "status": "ok",
                 "timestamp": "2024-01-01T12:00:00",
+                "service": "daily-stock-analysis-api",
+                "mode": "ready",
+                "ready": True,
+                "checks": {
+                    "storage": {"status": "ok", "detail": "storage session responded to SELECT 1"}
+                },
+                "warnings": [],
             }
         }
     )
 
     status: str = Field(..., description="服务状态", json_schema_extra={"example": "ok"})
     timestamp: Optional[str] = Field(None, description="时间戳")
+    service: Optional[str] = Field(None, description="服务标识")
+    mode: Optional[str] = Field(None, description="健康检查模式，如 live / ready")
+    ready: Optional[bool] = Field(None, description="是否已准备好承接流量")
+    checks: Optional[Dict[str, Any]] = Field(None, description="各依赖项检查结果")
+    warnings: Optional[List[str]] = Field(None, description="非阻断告警")
 
 
 class ErrorResponse(BaseModel):

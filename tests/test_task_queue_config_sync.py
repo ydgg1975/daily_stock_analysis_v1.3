@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 import unittest
@@ -98,6 +99,24 @@ class TaskQueueConfigSyncTestCase(unittest.TestCase):
 
         self.assertIs(synced, queue)
         self.assertEqual(synced.max_workers, 3)
+
+    def test_runtime_status_reports_single_process_requirement(self) -> None:
+        queue = AnalysisTaskQueue(max_workers=3)
+
+        with patch.dict(os.environ, {"WEB_CONCURRENCY": "2"}, clear=False):
+            runtime = queue.get_runtime_status()
+
+        self.assertEqual(runtime["mode"], "process_local")
+        self.assertTrue(runtime["single_process_required"])
+        self.assertEqual(runtime["configured_worker_count"], 2)
+        self.assertFalse(runtime["topology_ok"])
+
+    def test_submit_task_rejected_after_shutdown(self) -> None:
+        queue = AnalysisTaskQueue(max_workers=3)
+        queue.shutdown(wait=False, cancel_futures=True)
+
+        with self.assertRaises(RuntimeError):
+            queue.submit_tasks_batch(["600519"])
 
 
 if __name__ == "__main__":

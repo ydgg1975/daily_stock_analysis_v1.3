@@ -13,15 +13,15 @@ function resolveBackendCommand() {
 
   const unixVenvPython = path.join(repoRoot, '.venv', 'bin', 'python');
   if (fs.existsSync(unixVenvPython)) {
-    return `${unixVenvPython} main.py --webui-only --host 127.0.0.1 --port 8000`;
+    return `${unixVenvPython} main.py --serve-only --host 127.0.0.1 --port 8000`;
   }
 
   const windowsVenvPython = path.join(repoRoot, '.venv', 'Scripts', 'python.exe');
   if (fs.existsSync(windowsVenvPython)) {
-    return `"${windowsVenvPython}" main.py --webui-only --host 127.0.0.1 --port 8000`;
+    return `"${windowsVenvPython}" main.py --serve-only --host 127.0.0.1 --port 8000`;
   }
 
-  return 'python main.py --webui-only --host 127.0.0.1 --port 8000';
+  return 'python main.py --serve-only --host 127.0.0.1 --port 8000';
 }
 
 export default defineConfig({

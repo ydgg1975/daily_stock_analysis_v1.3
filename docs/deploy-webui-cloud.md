@@ -19,9 +19,17 @@
 
 ## 方式一：直接部署（pip + python）
 
-### 第一步：修改 .env 中的监听地址
+### 第一步：确认使用当前服务入口
 
-用编辑器打开 `.env`（在项目根目录，即包含 `main.py` 的目录），找到这一行：
+当前推荐的云服务器入口是 `--serve-only` / `--serve`，不再建议继续用旧的 `--webui-only` / `--webui` 作为新的部署命令。
+
+如果你希望显式指定监听地址与端口，直接在命令里传入：
+
+```bash
+python main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+如需兼容旧环境变量，也可以继续在 `.env` 中保留：
 
 ```env
 WEBUI_HOST=127.0.0.1
@@ -42,11 +50,11 @@ WEBUI_HOST=0.0.0.0
 在项目根目录执行：
 
 ```bash
-# 只启动 Web 界面（不自动执行分析）
-python main.py --webui-only
+# 只启动 API / Web 管理界面（不自动执行分析）
+python main.py --serve-only --host 0.0.0.0 --port 8000
 
-# 或者：启动 Web 界面（启动时执行一次分析；需每日定时分析请加 --schedule 或设 SCHEDULE_ENABLED=true）
-python main.py --webui
+# 或者：启动 API / Web 管理界面（启动时执行一次分析；需每日定时分析请另外运行 --schedule）
+python main.py --serve --host 0.0.0.0 --port 8000
 ```
 
 启动成功后，终端会输出类似：
@@ -58,10 +66,19 @@ FastAPI 服务已启动: http://0.0.0.0:8000
 如果你想让服务在退出终端后继续运行，可以用 `nohup`：
 
 ```bash
-nohup python main.py --webui-only > /dev/null 2>&1 &
+nohup python main.py --serve-only --host 0.0.0.0 --port 8000 > /dev/null 2>&1 &
 ```
 
 > 日志文件会由程序自动写入 `logs/` 目录，用 `tail -f logs/stock_analysis_*.log` 查看。
+
+### 第三步：确认服务已存活并就绪
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+```
+
+> 当前 `/api/v1/analysis/*` 任务队列和 SSE 状态是进程内存级别，云服务器部署默认应保持 API 单进程运行。
 
 ### 修改端口（可选）
 

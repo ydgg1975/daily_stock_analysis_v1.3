@@ -881,7 +881,9 @@ FastAPI provides RESTful API service for configuration management and triggering
 | `/api/v1/backtest/rule/runs/{run_id}` | GET | Query a rule backtest detail record |
 | `/api/v1/backtest/rule/runs/{run_id}/status` | GET | Query lightweight rule run status |
 | `/api/v1/backtest/rule/runs/{run_id}/cancel` | POST | Best-effort cancel a rule run |
-| `/api/health` | GET | Health check |
+| `/api/health` | GET | Default readiness alias |
+| `/api/health/live` | GET | Liveness check |
+| `/api/health/ready` | GET | Readiness check |
 | `/docs` | GET | API Swagger documentation |
 
 > Note: `POST /api/v1/analysis/analyze` supports only one stock when `async_mode=false`; batch `stock_codes` requires `async_mode=true`. The async `202` response returns a single `task_id` for one stock, or an `accepted` / `duplicates` summary for batch requests.
@@ -890,8 +892,11 @@ FastAPI provides RESTful API service for configuration management and triggering
 
 **Usage examples**:
 ```bash
-# Health check
-curl http://127.0.0.1:8000/api/health
+# Liveness check
+curl http://127.0.0.1:8000/api/health/live
+
+# Readiness check
+curl http://127.0.0.1:8000/api/health/ready
 
 # Trigger analysis (A-shares)
 curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
@@ -943,9 +948,9 @@ curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/cancel
 Backtest smoke suites:
 
 ```bash
-python3 test_backtest_basic.py
-python3 test_backtest_rule.py
-python3 test_backtest_run.py --mode both
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rule.py
 ```
 
 ### Custom Configuration

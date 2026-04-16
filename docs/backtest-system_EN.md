@@ -60,7 +60,7 @@ export US_STOCK_PARQUET_DIR=/path/to/local/us/parquet
 
 ## Smoke Scripts
 
-- The root-level smoke suites automatically:
+- The committed smoke scripts currently checked into the repo automatically:
   - boot a temporary uvicorn server
   - disable admin auth
   - create a temporary database
@@ -70,19 +70,19 @@ export US_STOCK_PARQUET_DIR=/path/to/local/us/parquet
 - Standard backtest API smoke:
 
 ```bash
-python3 test_backtest_basic.py
+python3 scripts/smoke_backtest_standard.py
 ```
 
 - Rule backtest API smoke:
 
 ```bash
-python3 test_backtest_rule.py
+python3 scripts/smoke_backtest_rule.py
 ```
 
 - Run both:
 
 ```bash
-python3 test_backtest_run.py --mode both
+python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rule.py
 ```
 
 ## Known Assumptions And Limits

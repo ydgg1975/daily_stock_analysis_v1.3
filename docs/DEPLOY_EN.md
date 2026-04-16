@@ -76,6 +76,23 @@ docker-compose -f ./docker/docker-compose.yml exec stock-analyzer bash
 docker-compose -f ./docker/docker-compose.yml exec stock-analyzer python main.py --no-notify
 ```
 
+### 4.1 API Deployment Assumption
+
+- The current `/api/v1/analysis/*` task queue and SSE fan-out are process-local.
+- The safe default for this phase is therefore: **run the API as a single process**.
+- Do not scale the API surface that serves `/api/v1/analysis/*` and `/api/v1/analysis/tasks/stream` to multiple workers or multiple instances unless you have your own sticky-routing strategy and accept process-local task visibility.
+- The current Docker Compose `server` service matches this assumption.
+
+### 4.2 Post-Start Checks
+
+```bash
+# Liveness: confirms the process is responding
+curl -fsS http://127.0.0.1:8000/api/health/live
+
+# Readiness: confirms storage and task-queue deployment assumptions
+curl -fsS http://127.0.0.1:8000/api/health/ready
+```
+
 ### 5. Data Persistence
 
 Data is automatically saved to host directories:
@@ -124,6 +141,16 @@ python main.py --schedule
 
 # Background run (using nohup)
 nohup python main.py --schedule > /dev/null 2>&1 &
+
+# API / Web admin surface (recommended single-process deployment path)
+python main.py --serve-only --host 0.0.0.0 --port 8000
+
+# API / Web admin surface + one analysis run at startup
+python main.py --serve --host 0.0.0.0 --port 8000
+
+# Liveness / readiness checks
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
 ---
@@ -149,7 +176,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/stock-analyzer
 Environment="PATH=/opt/stock-analyzer/venv/bin"
-ExecStart=/opt/stock-analyzer/venv/bin/python main.py --schedule
+ExecStart=/opt/stock-analyzer/venv/bin/python main.py --serve-only --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=30
 
@@ -175,6 +202,8 @@ sudo systemctl status stock-analyzer
 # View logs
 journalctl -u stock-analyzer -f
 ```
+
+If you also need scheduled analysis, run `--schedule` as a separate service instead of mixing it into the long-running API process.
 
 ---
 

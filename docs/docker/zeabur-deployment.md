@@ -194,16 +194,15 @@ Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
 
 系统内置了健康检查机制，默认检查：
 
-- WebUI 模式：检查 `http://localhost:8000/health` 端点
-- FastAPI 模式：检查 `http://localhost:8000/api/health` 端点
-- 非服务模式：始终返回健康状态
+- 存活检查：`http://localhost:8000/api/health/live`
+- 就绪检查：`http://localhost:8000/api/health/ready`
+- Docker / Zeabur 应优先绑定就绪检查，而不是使用“始终成功”的兜底逻辑
 
 健康检查配置如下：
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || curl -f http://localhost:8000/health \
-    || python -c "import sys; sys.exit(0)"
+    CMD curl -fsS http://localhost:8000/api/health/ready
 ```
 
 ## 8. 常见问题
@@ -236,13 +235,15 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 ### 9.1 多实例部署
 
-你可以在 Zeabur 上部署多个实例，用于不同的功能：
+你可以在 Zeabur 上部署多个实例，用于不同的功能，但当前 API 服务要注意部署边界：
 
-1. 一个实例用于 API 服务（`python main.py --serve-only`）
+1. 一个实例用于 API 服务（`python main.py --serve-only`，保持单实例/单进程）
 2. 一个实例用于定时任务（`python main.py --schedule`）
 3. 一个实例用于机器人（`python main.py --discord-bot`）
 
 确保它们共享同一个 `/app/data` 存储卷，以共享数据库。
+
+> 说明：`/api/v1/analysis/*` 的任务队列与 SSE 状态当前保存在 API 进程内存中，因此不建议把 API 服务直接横向扩成多实例来共同承接分析任务。
 
 ### 9.2 自定义域名
 

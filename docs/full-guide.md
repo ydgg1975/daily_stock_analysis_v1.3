@@ -1039,7 +1039,9 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 | `/api/v1/backtest/rule/runs/{run_id}/cancel` | POST | best-effort 取消规则回测 |
 | `/api/v1/stocks/extract-from-image` | POST | 从图片提取股票代码（multipart，超时 60s） |
 | `/api/v1/stocks/parse-import` | POST | 解析 CSV/Excel/剪贴板（multipart file 或 JSON `{"text":"..."}`，文件≤2MB，文本≤100KB） |
-| `/api/health` | GET | 健康检查 |
+| `/api/health` | GET | 默认就绪检查（readiness alias） |
+| `/api/health/live` | GET | 存活检查（liveness） |
+| `/api/health/ready` | GET | 就绪检查（readiness） |
 | `/docs` | GET | API Swagger 文档 |
 
 > 说明：`POST /api/v1/analysis/analyze` 在 `async_mode=false` 时仅支持单只股票；批量 `stock_codes` 需使用 `async_mode=true`。异步 `202` 响应对单股返回 `task_id`，对批量返回 `accepted` / `duplicates` 汇总结构。
@@ -1048,8 +1050,11 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 
 **调用示例**：
 ```bash
-# 健康检查
-curl http://127.0.0.1:8000/api/health
+# 存活检查
+curl http://127.0.0.1:8000/api/health/live
+
+# 就绪检查
+curl http://127.0.0.1:8000/api/health/ready
 
 # 触发分析（A股）
 curl -X POST http://127.0.0.1:8000/api/v1/analysis/analyze \
@@ -1101,9 +1106,9 @@ curl -X POST http://127.0.0.1:8000/api/v1/backtest/rule/runs/123/cancel
 Backtest 专项 smoke：
 
 ```bash
-python3 test_backtest_basic.py
-python3 test_backtest_rule.py
-python3 test_backtest_run.py --mode both
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rule.py
 ```
 
 ### 自定义配置

@@ -17,30 +17,132 @@ FastAPI 应用工厂模块
 
 import mimetypes
 import os
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, Dict, Tuple
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from sqlalchemy import text
 
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import HealthResponse
+from src.storage import get_db
 from src.services.system_config_service import SystemConfigService
+from src.services.task_queue import get_task_queue
+
+logger = logging.getLogger(__name__)
+
+
+def _iso_now() -> str:
+    return datetime.now().isoformat()
+
+
+def _build_health_payload(
+    *,
+    mode: str,
+    ready: bool,
+    checks: Optional[Dict[str, Dict[str, Any]]] = None,
+    warnings: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    return {
+        "status": "ok" if ready else "not_ready",
+        "timestamp": _iso_now(),
+        "service": "daily-stock-analysis-api",
+        "mode": mode,
+        "ready": ready,
+        "checks": checks or {},
+        "warnings": warnings or [],
+    }
+
+
+def _storage_readiness_check() -> Tuple[bool, Dict[str, Any]]:
+    try:
+        db = get_db()
+        session = db.get_session()
+        try:
+            session.execute(text("SELECT 1"))
+        finally:
+            session.close()
+        return True, {"status": "ok", "detail": "storage session responded to SELECT 1"}
+    except Exception as exc:
+        return False, {"status": "not_ready", "detail": f"storage check failed: {exc}"}
+
+
+def _task_queue_readiness_check(app: FastAPI) -> Tuple[bool, Dict[str, Any], list[str]]:
+    try:
+        queue = getattr(app.state, "task_queue", None) or get_task_queue()
+        runtime = queue.get_runtime_status()
+    except Exception as exc:
+        return False, {"status": "not_ready", "detail": f"task queue check failed: {exc}"}, []
+
+    ready = bool(runtime.get("topology_ok", True)) and not bool(runtime.get("shutdown"))
+    detail = "task queue ready"
+    warning = runtime.get("warning")
+    warnings = [warning] if warning else []
+    if bool(runtime.get("shutdown")):
+        detail = "task queue is shutting down"
+    elif not bool(runtime.get("topology_ok", True)):
+        detail = (
+            "process-local task queue requires single-process API deployment "
+            f"(configured_worker_count={runtime.get('configured_worker_count')})"
+        )
+
+    return ready, {
+        "status": "ok" if ready else "not_ready",
+        "detail": detail,
+        "mode": runtime.get("mode"),
+        "single_process_required": runtime.get("single_process_required"),
+        "configured_worker_count": runtime.get("configured_worker_count"),
+        "worker_hints": runtime.get("worker_hints"),
+    }, warnings
+
+
+def _readiness_payload(app: FastAPI) -> Tuple[int, Dict[str, Any]]:
+    checks: Dict[str, Dict[str, Any]] = {}
+    warnings: list[str] = []
+    ready = True
+
+    system_config_ready = hasattr(app.state, "system_config_service")
+    checks["system_config"] = {
+        "status": "ok" if system_config_ready else "not_ready",
+        "detail": "SystemConfigService initialized" if system_config_ready else "SystemConfigService missing from app state",
+    }
+    ready = ready and system_config_ready
+
+    storage_ready, storage_check = _storage_readiness_check()
+    checks["storage"] = storage_check
+    ready = ready and storage_ready
+
+    task_queue_ready, task_queue_check, task_queue_warnings = _task_queue_readiness_check(app)
+    checks["task_queue"] = task_queue_check
+    ready = ready and task_queue_ready
+    warnings.extend(task_queue_warnings)
+
+    payload = _build_health_payload(mode="ready", ready=ready, checks=checks, warnings=warnings)
+    return (200 if ready else 503), payload
 
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
     app.state.system_config_service = SystemConfigService()
+    app.state.task_queue = get_task_queue()
+    runtime = app.state.task_queue.get_runtime_status()
+    if not runtime.get("topology_ok", True):
+        logger.warning("[App] Task queue topology warning: %s", runtime.get("warning"))
     try:
         yield
     finally:
+        if hasattr(app.state, "task_queue"):
+            app.state.task_queue.shutdown(wait=False, cancel_futures=True)
+            delattr(app.state, "task_queue")
         if hasattr(app.state, "system_config_service"):
             delattr(app.state, "system_config_service")
 
@@ -159,18 +261,43 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             return HTMLResponse(content=_FRONTEND_NOT_BUILT_HTML)
     
     @app.get(
+        "/api/health/live",
+        response_model=HealthResponse,
+        tags=["Health"],
+        summary="存活检查",
+        description="用于判断 API 进程是否存活"
+    )
+    async def live_health_check() -> HealthResponse:
+        """Liveness endpoint: cheap and process-local."""
+        return HealthResponse(**_build_health_payload(
+            mode="live",
+            ready=True,
+            checks={"process": {"status": "ok", "detail": "process is serving requests"}},
+        ))
+
+    @app.get(
+        "/api/health/ready",
+        response_model=HealthResponse,
+        tags=["Health"],
+        summary="就绪检查",
+        description="用于判断 API 是否已准备好承接流量"
+    )
+    async def ready_health_check():
+        """Readiness endpoint: validates core runtime dependencies."""
+        status_code, payload = _readiness_payload(app)
+        return JSONResponse(status_code=status_code, content=payload)
+
+    @app.get(
         "/api/health",
         response_model=HealthResponse,
         tags=["Health"],
         summary="健康检查",
-        description="用于负载均衡器或监控系统检查服务状态"
+        description="默认健康检查，返回就绪状态"
     )
-    async def health_check() -> HealthResponse:
-        """健康检查接口"""
-        return HealthResponse(
-            status="ok",
-            timestamp=datetime.now().isoformat()
-        )
+    async def health_check():
+        """Compatibility alias for readiness checks."""
+        status_code, payload = _readiness_payload(app)
+        return JSONResponse(status_code=status_code, content=payload)
     
     # ============================================================
     # 静态文件托管（前端 SPA）

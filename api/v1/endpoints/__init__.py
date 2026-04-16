@@ -9,7 +9,6 @@ API v1 Endpoints 模块初始化
 """
 
 from api.v1.endpoints import (
-    health,
     analysis,
     admin_logs,
     history,
@@ -23,7 +22,6 @@ from api.v1.endpoints import (
     portfolio,
 )
 __all__ = [
-    "health",
     "analysis",
     "admin_logs",
     "history",

@@ -60,7 +60,7 @@ export US_STOCK_PARQUET_DIR=/path/to/local/us/parquet
 
 ## 冒烟脚本
 
-- 新的根目录脚本会自动：
+- 当前仓库内可直接复用的已提交冒烟脚本会自动：
   - 启动临时 uvicorn
   - 关闭管理认证
   - 创建临时数据库
@@ -70,19 +70,19 @@ export US_STOCK_PARQUET_DIR=/path/to/local/us/parquet
 - 标准 backtest API 冒烟：
 
 ```bash
-python3 test_backtest_basic.py
+python3 scripts/smoke_backtest_standard.py
 ```
 
 - 规则 backtest API 冒烟：
 
 ```bash
-python3 test_backtest_rule.py
+python3 scripts/smoke_backtest_rule.py
 ```
 
 - 合并运行：
 
 ```bash
-python3 test_backtest_run.py --mode both
+python3 scripts/smoke_backtest_standard.py && python3 scripts/smoke_backtest_rule.py
 ```
 
 ## 已知假设与限制
