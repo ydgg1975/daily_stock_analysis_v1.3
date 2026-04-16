@@ -244,11 +244,11 @@ class TestAgentRunStats(unittest.TestCase):
 
 
 # ============================================================
-# Legacy StrategyRouter Compatibility
+# Deprecated Legacy StrategyRouter Compatibility
 # ============================================================
 
 class TestStrategyRouter(unittest.TestCase):
-    """Test the legacy StrategyRouter alias for SkillRouter."""
+    """Test the deprecated StrategyRouter compatibility alias for SkillRouter."""
 
     def test_user_requested_strategies_take_priority(self):
         from src.agent.strategies.router import StrategyRouter
@@ -333,11 +333,11 @@ class TestStrategyRouter(unittest.TestCase):
 
 
 # ============================================================
-# StrategyAggregator
+# Deprecated StrategyAggregator Compatibility
 # ============================================================
 
 class TestStrategyAggregator(unittest.TestCase):
-    """Test StrategyAggregator consensus logic."""
+    """Test deprecated StrategyAggregator compatibility consensus logic."""
 
     def test_no_strategy_opinions_returns_none(self):
         from src.agent.strategies.aggregator import StrategyAggregator

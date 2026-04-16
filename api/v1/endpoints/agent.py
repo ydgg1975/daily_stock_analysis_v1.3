@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE = "Legacy strategy compatibility endpoint; use /api/v1/agent/skills."
+
 
 def _conversation_access_http_error(exc: ValueError) -> HTTPException:
     """Normalize conversation ownership errors into stable HTTP responses."""
@@ -69,12 +71,13 @@ class ChatRequest(BaseModel):
     skills: Optional[List[str]] = Field(
         default=None,
         validation_alias=AliasChoices("skills", "strategies"),
+        description="Canonical skill ids. Legacy `strategies` request alias is deprecated but still supported.",
     )
     context: Optional[Dict[str, Any]] = None  # Previous analysis context for data reuse
 
     @property
     def effective_skills(self) -> Optional[List[str]]:
-        """Return skill ids from the unified request shape."""
+        """Return canonical skill ids from the unified request shape."""
         return self.skills
 
 class ChatResponse(BaseModel):
@@ -162,14 +165,18 @@ def _build_skills_response(config) -> SkillsResponse:
 @router.get("/skills", response_model=SkillsResponse)
 async def get_skills():
     """
-    Get available agent strategy skills.
+    Get available agent skills.
     """
     return _build_skills_response(get_config())
 
 
 @router.get("/strategies", response_model=StrategiesResponse, include_in_schema=False)
-async def get_strategies():
-    """Compatibility alias for legacy clients."""
+async def get_strategies(response: Response = None):
+    """Deprecated compatibility alias for legacy clients. Prefer `/skills`."""
+    if response is not None:
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = '</api/v1/agent/skills>; rel="successor-version"'
+        response.headers["X-DSA-Deprecated-Reason"] = DEPRECATED_STRATEGIES_ENDPOINT_MESSAGE
     payload = _build_skills_response(get_config())
     return StrategiesResponse(
         strategies=payload.skills,

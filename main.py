@@ -146,13 +146,13 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         '--webui',
         action='store_true',
-        help='启动 Web 管理界面'
+        help='已弃用的兼容别名；请改用 --serve'
     )
 
     parser.add_argument(
         '--webui-only',
         action='store_true',
-        help='仅启动 Web 服务，不执行自动分析'
+        help='已弃用的兼容别名；请改用 --serve-only'
     )
 
     parser.add_argument(
@@ -545,8 +545,10 @@ def main() -> int:
 
     # === 处理 --webui / --webui-only 参数，映射到 --serve / --serve-only ===
     if args.webui:
+        logger.warning("命令行参数 --webui 已弃用；本次将按 --serve 处理。")
         args.serve = True
     if args.webui_only:
+        logger.warning("命令行参数 --webui-only 已弃用；本次将按 --serve-only 处理。")
         args.serve_only = True
 
     # 兼容旧版 WEBUI_ENABLED 环境变量

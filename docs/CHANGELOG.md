@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 修复
 
+- 🧭 **WS7 legacy strategy compatibility deprecation-only pass** — `src/agent/strategies/*` 现已在模块文案中明确标记为 deprecated compatibility wrapper，并给出 canonical `src.agent.skills.*` 替代导入路径；隐藏兼容接口 `/api/v1/agent/strategies` 继续保留原有返回体与字段，但现在会显式返回 deprecation headers，引导客户端切换到 `/api/v1/agent/skills`；`ChatRequest.skills` 也补充了 `strategies` 请求别名已弃用但仍受支持的说明，同时把少量 in-repo 注释/测试措辞从 strategy-first 收口到 skill-first 语义。
+- 🧹 **WS7 有界 cleanup/deprecation 首轮收口** — `scripts/smoke_backtest_standard.py` 与 `scripts/smoke_backtest_rule.py` 不再回跳到 clean-checkout 缺失的根目录 smoke helper，而是直接使用仓库内已提交的 canonical backtest smoke 实现；`main.py` 中的 `--webui` / `--webui-only` 继续保留兼容，但 CLI help 与启动日志现在都会明确提示它们已弃用，并给出 `--serve` / `--serve-only` 替代路径；`webui.py` 也改为显式兼容入口提示，运行时直接输出当前推荐命令而不改变现有启动语义。
 - 🧩 **WS6.2 设置页 advanced/domain 重复文案继续收口** — `SettingsPage` 进一步去掉了 advanced/domain 区里的重复说明：AI 域中 backtest 继承路由摘要不再重复展示两次，advanced 域“首页运行时执行摘要可见性”不再出现内外层重复标题，移动端分类抽屉也移除了与 domain 选择层重复的引导文案；所有保存、路由、Provider、destructive action 与 admin/user 语义保持不变。
 - 🧭 **WS6 控制面设置页一轮减负收口** — `/settings/system` 现已把执行日志入口、运行时缓存重置和工厂重置统一收进默认折叠的“维护与日志”面板，避免低频/破坏性动作继续和日常配置并排常显；运行时缓存重置、工厂重置以及 typed confirmation 语义保持不变，同时移除了“控制台偏好”区里重复的 admin/logs 入口提示，减轻设置页结构密度但不改变现有后端语义。
 - 📱 **Web 移动端导航与核心页面响应式稳定性收口** — 修复移动端共享导航抽屉在点击汉堡菜单后短暂打开又立即关闭的问题：`Shell` 现在只会在真实路由切换或断点变化时重置移动抽屉状态，并跳过首次挂载时的误关闭；移动导航抽屉同时改为显式关闭优先，不再响应 backdrop 点击，从而规避触摸设备上的 ghost click / delayed outside-click 误触。Scanner 短列表卡片也同步收口了小屏布局：分数区、CTA 按钮组和历史统计在窄屏下会自动纵向/双列重排，减少挤压与错位；Backtest 页面则补上了小屏 toggle 分组、结果页 tabs 横向滚动和 hero action 换行规则，降低移动端横向裁切和触达成本。

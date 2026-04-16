@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-# Built-in skill YAML directory (project_root/strategies/ kept for compatibility)
+# Built-in skill YAML directory (project_root/strategies/ kept as a deprecated compatibility location)
 _BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "strategies"
 
 

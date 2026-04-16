@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Compatibility re-exports for the legacy strategy namespace.
+Deprecated compatibility re-exports for the legacy strategy namespace.
+
+Use the canonical skills namespace instead:
+- `src.agent.skills.skill_agent.SkillAgent`
+- `src.agent.skills.router.SkillRouter`
+- `src.agent.skills.aggregator.SkillAggregator`
 
 Provides:
 - :class:`StrategyAgent` — legacy alias of :class:`SkillAgent`

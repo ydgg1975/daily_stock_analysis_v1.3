@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-WebUI 启动脚本
+WebUI 兼容启动脚本
 ===================================
 
-用于启动 Web 服务界面。
-直接运行 `python webui.py` 将启动 Web 后端服务。
+兼容旧版 Web 服务入口。
+直接运行 `python webui.py` 仍会启动 Web 后端服务，但该入口已弃用。
 
-等效命令：
-    python main.py --webui-only
+当前推荐命令：
+    python3 main.py --serve-only
 
 Usage:
   python webui.py
@@ -31,6 +31,8 @@ def main() -> int:
     host = os.getenv("WEBUI_HOST", os.getenv("API_HOST", "127.0.0.1"))
     port = int(os.getenv("WEBUI_PORT", os.getenv("API_PORT", "8000")))
 
+    print("注意：`python webui.py` 已弃用，当前仅保留兼容入口。")
+    print(f"请改用：python3 main.py --serve-only --host {host} --port {port}")
     print(f"正在启动 Web 服务: http://{host}:{port}")
     print(f"API 文档: http://{host}:{port}/docs")
     print()

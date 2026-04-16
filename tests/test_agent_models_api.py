@@ -7,6 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from fastapi import Response
+
 from api.v1.endpoints import agent
 from src.config import Config
 from src.services.agent_model_service import list_agent_model_deployments
@@ -298,10 +300,16 @@ class AgentSkillsEndpointTestCase(unittest.TestCase):
             "src.agent.factory.get_skill_manager",
             return_value=skill_manager,
         ):
-            payload = asyncio.run(agent.get_strategies()).model_dump()
+            response = Response()
+            payload = asyncio.run(agent.get_strategies(response)).model_dump()
 
         self.assertNotIn("skills", payload)
         self.assertEqual(payload["default_strategy_id"], "bull_trend")
+        self.assertEqual(response.headers["Deprecation"], "true")
+        self.assertEqual(
+            response.headers["X-DSA-Deprecated-Reason"],
+            "Legacy strategy compatibility endpoint; use /api/v1/agent/skills.",
+        )
         self.assertEqual(
             payload["strategies"],
             [
