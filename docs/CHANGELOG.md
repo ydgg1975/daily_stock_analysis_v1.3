@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### 新功能
 
+- 📏 **WS1 基线与验证命令面落地（无优化改动）** — 新增 `scripts/ws1_baseline_capture.py`，用于在单进程 API 前提下统一采集 scanner、portfolio snapshot、analysis/search 与 backtest smoke 的可复现基线时延与结果摘要，并将结果落盘到 `reports/ws1_baseline/`。同时更新 `docs/DEPLOY.md`、`docs/DEPLOY_EN.md`、`docs/full-guide.md`、`docs/full-guide_EN.md`，收口了 clean-checkout smoke 路径（仅仓库已提交脚本）、target-host queue/SSE 单进程验证 checklist 和 WS1 专用回滚 checklist。
 - 🚦 **部署前运行时加固（健康检查 / 队列关停 / 部署文档）** — API 新增 `/api/health/live` 与 `/api/health/ready`，并把 `/api/health` 收口为 readiness alias；readiness 现在会检查 `SystemConfigService`、存储 `SELECT 1`、任务队列 shutdown 状态以及当前 process-local queue/SSE 拓扑是否仍满足单进程部署假设。应用生命周期同时显式接管分析任务队列的激活与关闭，在 shutdown 时停止接受新任务并清理进程内订阅状态；Docker healthcheck 改为直接命中 `/api/health/ready`，不再用兜底成功掩盖真实故障。部署与 smoke 文档也统一切到当前 `--serve` / `--serve-only` 入口，补入 live/ready 检查与单进程 API 部署说明，并将回测 smoke 示例收口为仓库内已提交的 `scripts/smoke_backtest_standard.py` / `scripts/smoke_backtest_rule.py`。
 
 - 🧬 **PostgreSQL Phase C market metadata baseline（opt-in）** — 在保持 OHLCV 继续留在 Parquet / 本地 / NAS 的前提下，新增 PostgreSQL Phase C 元数据适配层：`symbol_master`、`market_data_manifests`、`market_dataset_versions` 与 `market_data_usage_refs` 现在可通过现有 baseline DSN 显式登记 symbol 热元数据、dataset manifest/version 以及运行时 usage provenance。当前实现保持 metadata-only，不接管 scanner/backtest 运行时持久化，也不会改写现有本地 parquet 读取路径；同时补入了本地 US parquet manifest/version 登记 helper 与对应 real-PG / focused tests，为后续 Phase D/E 的 reproducibility anchor 做准备。

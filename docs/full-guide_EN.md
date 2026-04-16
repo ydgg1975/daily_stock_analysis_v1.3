@@ -26,6 +26,7 @@ daily_stock_analysis/
 ## Table of Contents
 
 - [Project Structure](#project-structure)
+- [WS1 Baseline and Validation (Pre-deployment)](#ws1-baseline-and-validation-pre-deployment)
 - [GitHub Actions Configuration](#github-actions-configuration)
 - [Complete Environment Variables List](#complete-environment-variables-list)
 - [Docker Deployment](#docker-deployment)
@@ -36,6 +37,39 @@ daily_stock_analysis/
 - [Advanced Features](#advanced-features)
 - [Backtesting](#backtesting)
 - [Local WebUI Management Interface](#local-webui-management-interface)
+
+---
+
+## WS1 Baseline and Validation (Pre-deployment)
+
+WS1 is baseline capture and validation only. Do not optimize scanner, portfolio, search/provider, backtest internals, or storage architecture in this phase.
+
+Use this canonical command surface:
+
+```bash
+# Single-process API (current queue/SSE constraint)
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+In another terminal:
+
+```bash
+# Baseline capture (scanner + portfolio snapshot + analysis/search + backtest smoke)
+python3 scripts/ws1_baseline_capture.py \
+  --base-url http://127.0.0.1:8000 \
+  --stock-code AAPL \
+  --scanner-market cn \
+  --scanner-profile cn_preopen_v1
+```
+
+For clean-checkout smoke, use repo-committed scripts only:
+
+```bash
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
+For deployment validation and rollback checklists, follow sections `4.5` and `4.6` in [`docs/DEPLOY_EN.md`](DEPLOY_EN.md).
 
 ---
 

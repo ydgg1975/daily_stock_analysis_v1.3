@@ -97,6 +97,100 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
+### 4.3 WS1 基线捕获（部署前）
+
+> 目标：只做基线采集与验证，不做任何性能优化或架构改造。
+
+```bash
+# 1) 单进程启动 API（保持 queue/SSE 的当前部署前提）
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+另开一个终端执行：
+
+```bash
+# 2) 执行 WS1 基线采集（scanner / portfolio snapshot / analysis-search / backtest）
+python3 scripts/ws1_baseline_capture.py \
+  --base-url http://127.0.0.1:8000 \
+  --stock-code AAPL \
+  --scanner-market cn \
+  --scanner-profile cn_preopen_v1
+
+# 3) 基线结果默认输出到 reports/ws1_baseline/baseline_<UTC时间>.json
+```
+
+### 4.4 Canonical clean-checkout smoke（仅使用仓库已提交脚本）
+
+```bash
+# 干净 checkout 示例
+git clone <your-repo-url> /tmp/dsa-ws1-smoke
+cd /tmp/dsa-ws1-smoke
+cp .env.example .env
+pip install -r requirements.txt
+
+# Canonical smoke 路径（不依赖本地未跟踪 helper）
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
+### 4.5 目标主机 queue/SSE 单进程验证清单
+
+```bash
+# 1) 目标主机单进程启动
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+
+# 2) 健康检查
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+
+# 3) 提交一个异步分析任务并拿到 task_id
+TASK_ID=$(python3 - <<'PY'
+import json, urllib.request
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/api/v1/analysis/analyze",
+    data=json.dumps({"stock_code":"AAPL","async_mode":True,"report_type":"brief"}).encode("utf-8"),
+    headers={"Content-Type":"application/json","Accept":"application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    body = json.loads(resp.read().decode("utf-8"))
+print(body.get("task_id",""))
+PY
+)
+echo "TASK_ID=${TASK_ID}"
+
+# 4) 观察 SSE 流（至少应看到 task_id 对应事件）
+curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" | sed -n '1,20p'
+
+# 5) 查询任务状态（确认非 404 且状态流转）
+curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
+```
+
+### 4.6 回滚检查清单（WS1 部署验证专用）
+
+```bash
+# A. 停止新版本
+docker-compose -f ./docker/docker-compose.yml down
+# 或 systemd
+# sudo systemctl stop stock-analyzer
+
+# B. 切回已验证提交（示例：<last-good-commit>）
+git fetch --all --tags
+git checkout <last-good-commit>
+
+# C. 重建并启动
+docker-compose -f ./docker/docker-compose.yml build --no-cache
+docker-compose -f ./docker/docker-compose.yml up -d
+# 或 systemd
+# sudo systemctl start stock-analyzer
+
+# D. 回滚后验证
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
 ### 5. 数据持久化
 
 数据自动保存在宿主机目录：

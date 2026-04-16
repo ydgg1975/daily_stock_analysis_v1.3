@@ -26,6 +26,7 @@ daily_stock_analysis/
 ## 📑 目录
 
 - [项目结构](#项目结构)
+- [WS1 基线与验证（部署前）](#ws1-基线与验证部署前)
 - [GitHub Actions 详细配置](#github-actions-详细配置)
 - [环境变量完整列表](#环境变量完整列表)
 - [Docker 部署](#docker-部署)
@@ -36,6 +37,39 @@ daily_stock_analysis/
 - [高级功能](#高级功能)
 - [回测功能](#回测功能)
 - [本地 WebUI 管理界面](#本地-webui-管理界面)
+
+---
+
+## WS1 基线与验证（部署前）
+
+WS1 只做基线采集与验证，不做 scanner/portfolio/search/provider/backtest/storage 优化。
+
+建议固定使用以下命令面：
+
+```bash
+# 单进程 API（queue/SSE 当前约束）
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+另开终端：
+
+```bash
+# 基线采集（scanner + portfolio snapshot + analysis/search + backtest smoke）
+python3 scripts/ws1_baseline_capture.py \
+  --base-url http://127.0.0.1:8000 \
+  --stock-code AAPL \
+  --scanner-market cn \
+  --scanner-profile cn_preopen_v1
+```
+
+clean-checkout smoke 统一使用仓库已提交脚本：
+
+```bash
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
+部署验证与回滚 checklist 以 [`docs/DEPLOY.md`](DEPLOY.md) 第 `4.5`、`4.6` 节为准。
 
 ---
 

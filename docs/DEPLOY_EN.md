@@ -93,6 +93,100 @@ curl -fsS http://127.0.0.1:8000/api/health/live
 curl -fsS http://127.0.0.1:8000/api/health/ready
 ```
 
+### 4.3 WS1 Baseline Capture (Pre-deployment)
+
+> Goal: baseline capture and validation only. No optimization or architecture refactor.
+
+```bash
+# 1) Start API in single-process mode (matches current queue/SSE assumption)
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+```
+
+In another terminal:
+
+```bash
+# 2) Run WS1 baseline capture (scanner / portfolio snapshot / analysis-search / backtest)
+python3 scripts/ws1_baseline_capture.py \
+  --base-url http://127.0.0.1:8000 \
+  --stock-code AAPL \
+  --scanner-market cn \
+  --scanner-profile cn_preopen_v1
+
+# 3) Baseline output is written to reports/ws1_baseline/baseline_<UTC timestamp>.json
+```
+
+### 4.4 Canonical clean-checkout smoke (repo-committed scripts only)
+
+```bash
+# Clean-checkout example
+git clone <your-repo-url> /tmp/dsa-ws1-smoke
+cd /tmp/dsa-ws1-smoke
+cp .env.example .env
+pip install -r requirements.txt
+
+# Canonical smoke path (no untracked local helpers)
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
+### 4.5 Target-host queue/SSE single-process validation checklist
+
+```bash
+# 1) Start single-process API on target host
+python3 main.py --serve-only --host 0.0.0.0 --port 8000
+
+# 2) Health checks
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+
+# 3) Submit an async analysis task and capture task_id
+TASK_ID=$(python3 - <<'PY'
+import json, urllib.request
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/api/v1/analysis/analyze",
+    data=json.dumps({"stock_code":"AAPL","async_mode":True,"report_type":"brief"}).encode("utf-8"),
+    headers={"Content-Type":"application/json","Accept":"application/json"},
+    method="POST",
+)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    body = json.loads(resp.read().decode("utf-8"))
+print(body.get("task_id",""))
+PY
+)
+echo "TASK_ID=${TASK_ID}"
+
+# 4) Observe SSE stream (should include events for this task_id)
+curl -N "http://127.0.0.1:8000/api/v1/analysis/tasks/stream?task_id=${TASK_ID}" | sed -n '1,20p'
+
+# 5) Poll task status (must not be 404 and should progress)
+curl -fsS "http://127.0.0.1:8000/api/v1/analysis/status/${TASK_ID}"
+```
+
+### 4.6 Rollback checklist (WS1 deployment validation path)
+
+```bash
+# A. Stop the new version
+docker-compose -f ./docker/docker-compose.yml down
+# or systemd
+# sudo systemctl stop stock-analyzer
+
+# B. Switch to last known-good commit (example: <last-good-commit>)
+git fetch --all --tags
+git checkout <last-good-commit>
+
+# C. Rebuild and restart
+docker-compose -f ./docker/docker-compose.yml build --no-cache
+docker-compose -f ./docker/docker-compose.yml up -d
+# or systemd
+# sudo systemctl start stock-analyzer
+
+# D. Post-rollback validation
+curl -fsS http://127.0.0.1:8000/api/health/live
+curl -fsS http://127.0.0.1:8000/api/health/ready
+python3 scripts/smoke_backtest_standard.py
+python3 scripts/smoke_backtest_rule.py
+```
+
 ### 5. Data Persistence
 
 Data is automatically saved to host directories:
