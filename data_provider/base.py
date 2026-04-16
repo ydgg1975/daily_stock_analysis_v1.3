@@ -561,6 +561,9 @@ class DataFetcherManager:
         self._cn_stock_list_cache: Dict[Tuple[str, ...], Dict[str, Any]] = {}
         self._cn_stock_list_cache_lock = RLock()
         self._cn_stock_list_cache_ttl_seconds = 60.0
+        self._cn_realtime_snapshot_cache: Dict[Tuple[str, ...], Dict[str, Any]] = {}
+        self._cn_realtime_snapshot_cache_lock = RLock()
+        self._cn_realtime_snapshot_cache_ttl_seconds = 15.0
 
     def _get_tickflow_fetcher(self):
         """Lazily create a TickFlow fetcher for market-review-only calls."""
@@ -876,6 +879,67 @@ class DataFetcherManager:
             self._cn_stock_list_cache[cache_key] = {
                 "ts": time.time(),
                 "payload": self._clone_cn_stock_list_result(payload),
+            }
+
+    @staticmethod
+    def _clone_cn_realtime_snapshot_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+        cloned = dict(payload or {})
+        data = cloned.get("data")
+        if isinstance(data, pd.DataFrame):
+            cloned["data"] = data.copy()
+        attempts = cloned.get("attempts")
+        if isinstance(attempts, list):
+            cloned["attempts"] = [dict(item) for item in attempts if isinstance(item, dict)]
+        return cloned
+
+    def _get_cached_cn_realtime_snapshot(
+        self,
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if not hasattr(self, "_cn_realtime_snapshot_cache_lock") or self._cn_realtime_snapshot_cache_lock is None:
+            self._cn_realtime_snapshot_cache_lock = RLock()
+        if not hasattr(self, "_cn_realtime_snapshot_cache") or self._cn_realtime_snapshot_cache is None:
+            self._cn_realtime_snapshot_cache = {}
+        ttl_seconds = float(getattr(self, "_cn_realtime_snapshot_cache_ttl_seconds", 15.0) or 0.0)
+        if ttl_seconds <= 0:
+            return None
+
+        cache_key = self._normalize_cn_stock_list_cache_key(preferred_fetchers)
+        now_ts = time.time()
+        with self._cn_realtime_snapshot_cache_lock:
+            cache_item = self._cn_realtime_snapshot_cache.get(cache_key)
+            if not cache_item:
+                return None
+            if now_ts - float(cache_item.get("ts", 0.0)) > ttl_seconds:
+                self._cn_realtime_snapshot_cache.pop(cache_key, None)
+                return None
+            payload = cache_item.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        return self._clone_cn_realtime_snapshot_result(payload)
+
+    def _put_cached_cn_realtime_snapshot(
+        self,
+        payload: Dict[str, Any],
+        *,
+        preferred_fetchers: Optional[List[str]] = None,
+    ) -> None:
+        if not isinstance(payload, dict) or not payload.get("success"):
+            return
+        data = payload.get("data")
+        if not isinstance(data, pd.DataFrame) or data.empty:
+            return
+        if not hasattr(self, "_cn_realtime_snapshot_cache_lock") or self._cn_realtime_snapshot_cache_lock is None:
+            self._cn_realtime_snapshot_cache_lock = RLock()
+        if not hasattr(self, "_cn_realtime_snapshot_cache") or self._cn_realtime_snapshot_cache is None:
+            self._cn_realtime_snapshot_cache = {}
+
+        cache_key = self._normalize_cn_stock_list_cache_key(preferred_fetchers)
+        with self._cn_realtime_snapshot_cache_lock:
+            self._cn_realtime_snapshot_cache[cache_key] = {
+                "ts": time.time(),
+                "payload": self._clone_cn_realtime_snapshot_result(payload),
             }
 
     @staticmethod
@@ -2299,6 +2363,10 @@ class DataFetcherManager:
         preferred_fetchers: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Try to resolve an A-share snapshot and return structured diagnostics."""
+        cached = self._get_cached_cn_realtime_snapshot(preferred_fetchers=preferred_fetchers)
+        if cached is not None:
+            return cached
+
         attempts: List[Dict[str, Any]] = []
         candidates = self._select_fetchers_with_capability(
             capability="get_a_share_spot_snapshot",
@@ -2350,7 +2418,7 @@ class DataFetcherManager:
                     }
                 )
                 logger.info(f"[{fetcher.name}] 获取 A 股全市场快照成功: {len(normalized)} 条")
-                return {
+                result = {
                     "success": True,
                     "source": fetcher.name,
                     "data": normalized.reset_index(drop=True),
@@ -2358,6 +2426,8 @@ class DataFetcherManager:
                     "error_code": None,
                     "error_message": None,
                 }
+                self._put_cached_cn_realtime_snapshot(result, preferred_fetchers=preferred_fetchers)
+                return result
             except Exception as e:
                 error_type, error_reason = summarize_exception(e)
                 reason_code = classify_cn_snapshot_failure(fetcher.name, error_type, error_reason)

@@ -454,6 +454,8 @@ class FetcherStub(BaseFetcher):
         self._snapshot = snapshot.copy() if isinstance(snapshot, pd.DataFrame) else snapshot
         self._stock_list_error = stock_list_error
         self._snapshot_error = snapshot_error
+        self.stock_list_calls = 0
+        self.snapshot_calls = 0
 
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         _ = (stock_code, start_date, end_date)
@@ -464,11 +466,13 @@ class FetcherStub(BaseFetcher):
         return df
 
     def get_stock_list(self):
+        self.stock_list_calls += 1
         if self._stock_list_error is not None:
             raise self._stock_list_error
         return self._stock_list.copy() if isinstance(self._stock_list, pd.DataFrame) else self._stock_list
 
     def get_a_share_spot_snapshot(self):
+        self.snapshot_calls += 1
         if self._snapshot_error is not None:
             raise self._snapshot_error
         return self._snapshot.copy() if isinstance(self._snapshot, pd.DataFrame) else self._snapshot
@@ -967,6 +971,32 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             [item["reason_code"] for item in result["attempts"]],
             ["akshare_snapshot_fetch_failed", "efinance_snapshot_fetch_failed"],
         )
+
+    def test_snapshot_fetcher_manager_reuses_cached_snapshot_for_same_preferences(self) -> None:
+        snapshot = self.data_manager.snapshot.copy()
+        fetcher = FetcherStub(
+            name="AkshareFetcher",
+            priority=1,
+            snapshot=snapshot,
+        )
+        manager = DataFetcherManager(fetchers=[fetcher])
+
+        first = manager.try_get_cn_realtime_snapshot(
+            preferred_fetchers=["AkshareFetcher"],
+        )
+        second = manager.try_get_cn_realtime_snapshot(
+            preferred_fetchers=["AkshareFetcher"],
+        )
+
+        self.assertTrue(first["success"])
+        self.assertTrue(second["success"])
+        self.assertEqual(fetcher.snapshot_calls, 1)
+
+        first_data = first["data"]
+        second_data = second["data"]
+        self.assertIsNot(first_data, second_data)
+        first_data.loc[first_data.index[0], "name"] = "mutated"
+        self.assertNotEqual(first_data.iloc[0]["name"], second_data.iloc[0]["name"])
 
     def test_run_scan_uses_degraded_mode_when_realtime_snapshot_unavailable(self) -> None:
         for code, history in self.data_manager.histories.items():

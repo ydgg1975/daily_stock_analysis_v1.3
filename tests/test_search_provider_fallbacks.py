@@ -13,7 +13,13 @@ if "newspaper" not in sys.modules:
     mock_np.Config = MagicMock()
     sys.modules["newspaper"] = mock_np
 
-from src.search_service import SearchResponse, SearchResult, SearchService
+from src.search_service import (
+    SearchResponse,
+    SearchResult,
+    SearchService,
+    fetch_url_content,
+    reset_url_content_cache,
+)
 
 
 class _FakeResponse:
@@ -29,6 +35,40 @@ class _FakeResponse:
 
 
 class SearchProviderFallbacksTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_url_content_cache()
+
+    @patch("src.search_service.Article")
+    def test_fetch_url_content_reuses_cached_body_for_same_url(self, mock_article) -> None:
+        article = MagicMock()
+        article.text = "第一行\n第二行"
+        mock_article.return_value = article
+
+        url = "https://example.com/news/1"
+        first = fetch_url_content(url)
+        second = fetch_url_content(url)
+
+        self.assertEqual(first, second)
+        self.assertTrue(first)
+        self.assertEqual(mock_article.call_count, 1)
+        article.download.assert_called_once()
+        article.parse.assert_called_once()
+
+    @patch("src.search_service.Article")
+    def test_fetch_url_content_caches_failure_for_repeat_url(self, mock_article) -> None:
+        article = MagicMock()
+        article.download.side_effect = RuntimeError("network down")
+        mock_article.return_value = article
+
+        url = "https://example.com/news/fail"
+        first = fetch_url_content(url)
+        second = fetch_url_content(url)
+
+        self.assertEqual(first, "")
+        self.assertEqual(second, "")
+        self.assertEqual(mock_article.call_count, 1)
+        article.download.assert_called_once()
+
     @patch("src.search_service.requests.get")
     def test_search_stock_news_uses_finnhub_company_news(self, mock_get) -> None:
         published_at = datetime.now(timezone.utc) - timedelta(hours=6)
