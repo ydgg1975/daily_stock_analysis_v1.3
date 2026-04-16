@@ -2678,7 +2678,25 @@ const SettingsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <Disclosure
+            summary={(
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-warning-hsl))]">
+                    {t('settings.controlPlaneMaintenanceTitle')}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.controlPlaneMaintenanceSummary')}</p>
+                  <p className="mt-2 text-xs leading-5 text-secondary-text">{t('settings.controlPlaneMaintenanceDesc')}</p>
+                </div>
+                <span className="rounded-full border border-[hsl(var(--accent-warning-hsl)/0.3)] bg-[hsl(var(--accent-warning-hsl)/0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--accent-warning-hsl))]">
+                  {t('settings.controlPlaneMaintenanceBadge')}
+                </span>
+              </div>
+            )}
+            className="rounded-[var(--theme-panel-radius-md)] border settings-border bg-base/25"
+            summaryClassName="px-4 py-4"
+            bodyClassName="space-y-4 px-4 pb-4"
+          >
             <div className="settings-surface rounded-[var(--theme-panel-radius-md)] border settings-border px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-foreground">{t('settings.controlPlaneLogsTitle')}</p>
               <p className="mt-2 text-sm leading-6 text-secondary-text">{t('settings.controlPlaneLogsDesc')}</p>
@@ -2756,7 +2774,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               ) : null}
             </div>
-          </div>
+          </Disclosure>
         </div>
       </SettingsSectionCard>
 
@@ -2818,26 +2836,6 @@ const SettingsPage: React.FC = () => {
         </div>
 
         <FontSizeSettingsCard />
-
-        <div className="mt-4 rounded-[var(--theme-panel-radius-md)] border border-[hsl(var(--accent-positive-hsl)/0.2)] bg-[hsl(var(--accent-positive-hsl)/0.08)] px-4 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-[hsl(var(--accent-positive-hsl))]">
-                {t('settings.adminSurfaceActiveLabel')}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-foreground">{t('settings.adminSurfaceActiveTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-secondary-text">{t('settings.adminSurfaceActiveDesc')}</p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="settings-secondary"
-              onClick={() => window.location.assign('/admin/logs')}
-            >
-              {t('settings.viewAdminLogs')}
-            </Button>
-          </div>
-        </div>
       </SettingsSectionCard>
 
       {loadError ? (

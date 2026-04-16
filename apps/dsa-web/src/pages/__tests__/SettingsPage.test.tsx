@@ -355,6 +355,20 @@ async function openAdvancedConfigDrawer() {
   expect(screen.getByTestId('llm-provider-scope')).toHaveTextContent('');
 }
 
+function openMaintenancePanel(summaryLabel = '展开维护操作与日志入口') {
+  const summary = screen.getByText(summaryLabel);
+  const details = summary.closest('details');
+  expect(details).not.toBeNull();
+  expect(details).not.toHaveAttribute('open');
+  fireEvent.click(summary.closest('summary') ?? summary);
+  expect(details).toHaveAttribute('open');
+}
+
+function getMaintenancePanel(summaryLabel = '展开维护操作与日志入口') {
+  const summary = screen.getByText(summaryLabel);
+  return summary.closest('details');
+}
+
 async function openQuickProviderDrawer(providerName: string) {
   const providerKey = providerName === 'AIHubMix'
     ? 'aihubmix'
@@ -476,7 +490,8 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
     expect(screen.getAllByText('当前已进入全局系统控制面').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
+    expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+    expect(getMaintenancePanel()).not.toHaveAttribute('open');
     expect(screen.getByText('认证与登录保护')).toBeInTheDocument();
     expect(screen.getByText('修改密码')).toBeInTheDocument();
     expect(screen.queryByText('锁定状态下仅可浏览，无法修改系统级配置。')).not.toBeInTheDocument();
@@ -493,6 +508,7 @@ describe('SettingsPage', () => {
   it('confirms and runs bounded admin maintenance actions at action level', async () => {
     render(<SettingsPage />);
 
+    openMaintenancePanel();
     fireEvent.click(screen.getByRole('button', { name: '重置运行时缓存' }));
 
     expect(await screen.findByText('确认重置运行时缓存')).toBeInTheDocument();
@@ -509,6 +525,7 @@ describe('SettingsPage', () => {
   it('separates safe maintenance from factory reset and requires a typed phrase before destructive execution', async () => {
     render(<SettingsPage />);
 
+    openMaintenancePanel();
     expect(screen.getByText('维护操作')).toBeInTheDocument();
     expect(screen.getByText('工厂重置 / 系统初始化')).toBeInTheDocument();
 
@@ -529,6 +546,21 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(factoryResetSystem).toHaveBeenCalledWith({ confirmationPhrase: 'FACTORY RESET' });
     });
+  });
+
+  it('keeps maintenance and destructive actions out of the primary control-plane surface until expanded', async () => {
+    render(<SettingsPage />);
+
+    expect(await screen.findByText('全局控制面概览')).toBeInTheDocument();
+    expect(screen.getByText('展开维护操作与日志入口')).toBeInTheDocument();
+    expect(getMaintenancePanel()).not.toHaveAttribute('open');
+
+    openMaintenancePanel();
+
+    expect(getMaintenancePanel()).toHaveAttribute('open');
+    expect(screen.getByRole('button', { name: '查看系统执行日志' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重置运行时缓存' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '执行工厂重置' })).toBeInTheDocument();
   });
 
   it('resets local drafts from the page header button', () => {
