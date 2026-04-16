@@ -42,6 +42,7 @@ from src.config import Config, setup_env
 from src.core.config_manager import ConfigManager
 from src.multi_user import BOOTSTRAP_ADMIN_USER_ID, BOOTSTRAP_ADMIN_USERNAME, ROLE_ADMIN, ROLE_USER
 from src.storage import DatabaseManager
+from src.services.system_config_service import SystemConfigService
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,9 @@ def _apply_auth_enabled(enabled: bool, request: Request | None = None) -> bool:
                 updates=[("ADMIN_AUTH_ENABLED", "true" if enabled else "false")],
                 sensitive_keys=set(),
                 mask_token="******",
+            )
+            SystemConfigService._sync_phase_g_config_shadow(
+                raw_config_map=manager.read_config_map(),
             )
             manager_applied = True
         except Exception as exc:

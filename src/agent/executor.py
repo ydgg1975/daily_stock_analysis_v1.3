@@ -390,16 +390,25 @@ class AgentExecutor:
         messages.append({"role": "user", "content": message})
 
         # Persist the user turn immediately so the session appears in history during processing
-        conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
+        if owner_id is None:
+            conversation_manager.add_message(session_id, "user", message)
+        else:
+            conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
 
         result = self._run_loop(messages, tool_decls, parse_dashboard=False, progress_callback=progress_callback)
 
         # Persist assistant reply (or error note) for context continuity
         if result.success:
-            conversation_manager.add_message(session_id, "assistant", result.content, owner_id=owner_id)
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", result.content)
+            else:
+                conversation_manager.add_message(session_id, "assistant", result.content, owner_id=owner_id)
         else:
             error_note = f"[分析失败] {result.error or '未知错误'}"
-            conversation_manager.add_message(session_id, "assistant", error_note, owner_id=owner_id)
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", error_note)
+            else:
+                conversation_manager.add_message(session_id, "assistant", error_note, owner_id=owner_id)
 
         return result
 

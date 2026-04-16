@@ -139,6 +139,14 @@ class SystemConfigService:
                 "counts": counts,
                 "preserved": preserved,
             },
+            request={
+                "confirmation_phrase": FACTORY_RESET_CONFIRMATION_PHRASE,
+            },
+            result={
+                "cleared": cleared,
+                "counts": counts,
+                "preserved": preserved,
+            },
         )
 
         return {
@@ -207,9 +215,28 @@ class SystemConfigService:
 
         return display_map
 
+    @staticmethod
+    def _sync_phase_g_config_shadow(
+        *,
+        raw_config_map: Dict[str, str],
+        updated_by_user_id: Optional[str] = None,
+    ) -> None:
+        db = get_db()
+        schema_by_key: Dict[str, Dict[str, Any]] = {
+            key: get_field_definition(key, raw_config_map.get(key, ""))
+            for key in set(raw_config_map.keys()) | set(get_registered_field_keys())
+        }
+        db.sync_phase_g_runtime_config_shadow(
+            raw_config_map=raw_config_map,
+            field_schema_by_key=schema_by_key,
+            updated_by_user_id=updated_by_user_id,
+        )
+
     def get_config(self, include_schema: bool = True, mask_token: str = "******") -> Dict[str, Any]:
         """Return current config values without server-side secret masking."""
-        config_map = self._build_display_config_map(self._manager.read_config_map())
+        raw_config_map = self._manager.read_config_map()
+        self._sync_phase_g_config_shadow(raw_config_map=raw_config_map)
+        config_map = self._build_display_config_map(raw_config_map)
         registered_keys = set(get_registered_field_keys())
         all_keys = set(config_map.keys()) | registered_keys
 
@@ -469,6 +496,7 @@ class SystemConfigService:
         items: Sequence[Dict[str, str]],
         mask_token: str = "******",
         reload_now: bool = True,
+        actor_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Validate and persist updates into `.env`, then reload runtime config."""
         current_version = self._manager.get_config_version()
@@ -496,6 +524,10 @@ class SystemConfigService:
             updates=updates,
             sensitive_keys=sensitive_keys,
             mask_token=mask_token,
+        )
+        self._sync_phase_g_config_shadow(
+            raw_config_map=self._manager.read_config_map(),
+            updated_by_user_id=actor_user_id,
         )
 
         warnings: List[str] = []
@@ -595,6 +627,9 @@ class SystemConfigService:
             updates=updates,
             sensitive_keys=set(),
             mask_token=mask_token,
+        )
+        self._sync_phase_g_config_shadow(
+            raw_config_map=self._manager.read_config_map(),
         )
 
     def _collect_issues(self, items: Sequence[Dict[str, str]], mask_token: str) -> List[Dict[str, Any]]:

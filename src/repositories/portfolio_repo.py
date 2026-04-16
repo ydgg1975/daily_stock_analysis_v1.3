@@ -56,6 +56,12 @@ class PortfolioRepository:
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
 
+    @staticmethod
+    def _mark_phase_f_account_sync_in_session(*, session: Any, account_id: Optional[int]) -> None:
+        if account_id is None:
+            return
+        session.info.setdefault("phase_f_sync_account_ids", set()).add(int(account_id))
+
     def _account_conditions(
         self,
         *,
@@ -119,6 +125,11 @@ class PortfolioRepository:
                 is_active=True,
             )
             session.add(row)
+            session.flush()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             session.refresh(row)
             return row
@@ -201,6 +212,10 @@ class PortfolioRepository:
             for key, value in fields.items():
                 setattr(row, key, value)
             row.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             session.refresh(row)
             return row
@@ -224,6 +239,10 @@ class PortfolioRepository:
                 return False
             row.is_active = False
             row.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(row.id),
+            )
             session.commit()
             return True
 
@@ -258,6 +277,11 @@ class PortfolioRepository:
             )
             session.add(row)
             try:
+                session.flush()
+                self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=int(portfolio_account_id),
+                )
                 session.commit()
             except IntegrityError as exc:
                 session.rollback()
@@ -445,6 +469,10 @@ class PortfolioRepository:
                     )
                 )
 
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(portfolio_account_id),
+            )
             session.commit()
             session.refresh(row)
             return row
@@ -549,12 +577,19 @@ class PortfolioRepository:
             )
             if row is None:
                 return None
+            original_account_id = int(row.portfolio_account_id)
             if "owner_id" in fields:
                 fields["owner_id"] = self.db.require_user_id(fields.get("owner_id"))
             for key, value in fields.items():
                 setattr(row, key, value)
             row.updated_at = datetime.now()
             try:
+                session.flush()
+                for account_id in sorted({original_account_id, int(row.portfolio_account_id)}):
+                    self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                        session=session,
+                        account_id=account_id,
+                    )
                 session.commit()
             except IntegrityError as exc:
                 session.rollback()
@@ -580,6 +615,11 @@ class PortfolioRepository:
 
         try:
             yield session
+            for account_id in sorted(session.info.get("phase_f_sync_account_ids", set())):
+                self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account_id,
+                )
             session.commit()
         except OperationalError as exc:
             session.rollback()
@@ -802,6 +842,7 @@ class PortfolioRepository:
             dedup_hash=dedup_hash,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -839,6 +880,7 @@ class PortfolioRepository:
             note=note,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -874,6 +916,7 @@ class PortfolioRepository:
             note=note,
         )
         session.add(row)
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=account_id)
         self._invalidate_account_cache_in_session(
             session=session,
             account_id=account_id,
@@ -906,6 +949,7 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.trade_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
@@ -933,6 +977,7 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.event_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
@@ -960,6 +1005,7 @@ class PortfolioRepository:
             account_id=int(row.account_id),
             from_date=row.effective_date,
         )
+        self._mark_phase_f_account_sync_in_session(session=session, account_id=int(row.account_id))
         session.delete(row)
         session.flush()
         return True
@@ -1386,6 +1432,10 @@ class PortfolioRepository:
                     )
                 )
 
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()
 
     def _invalidate_account_cache_in_session(self, *, session: Any, account_id: int, from_date: date) -> None:
@@ -1497,6 +1547,10 @@ class PortfolioRepository:
                 existing.fx_stale = fx_stale
                 existing.payload = payload
                 existing.updated_at = datetime.now()
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()
 
     def replace_positions_lots_and_snapshot(
@@ -1612,4 +1666,8 @@ class PortfolioRepository:
                 existing.payload = payload
                 existing.updated_at = datetime.now()
 
+            self.db.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=int(account_id),
+            )
             session.commit()

@@ -36,6 +36,7 @@ class ConversationSession:
 
     def get_history(self) -> List[Dict[str, Any]]:
         """Get message history."""
+        get_db().ensure_conversation_session(self.session_id, owner_id=self.owner_id)
         messages = get_db().get_conversation_history(self.session_id, owner_id=self.owner_id)
         return messages
 

@@ -258,7 +258,10 @@ class AgentOrchestrator:
             ctx.meta["conversation_history"] = history
 
         # Persist user turn
-        conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
+        if owner_id is None:
+            conversation_manager.add_message(session_id, "user", message)
+        else:
+            conversation_manager.add_message(session_id, "user", message, owner_id=owner_id)
 
         orch_result = self._execute_pipeline(
             ctx,
@@ -268,13 +271,21 @@ class AgentOrchestrator:
 
         # Persist assistant response
         if orch_result.success:
-            conversation_manager.add_message(session_id, "assistant", orch_result.content, owner_id=owner_id)
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", orch_result.content)
+            else:
+                conversation_manager.add_message(session_id, "assistant", orch_result.content, owner_id=owner_id)
         else:
-            conversation_manager.add_message(
-                session_id, "assistant",
-                f"[分析失败] {orch_result.error or '未知错误'}",
-                owner_id=owner_id,
-            )
+            failure_message = f"[分析失败] {orch_result.error or '未知错误'}"
+            if owner_id is None:
+                conversation_manager.add_message(session_id, "assistant", failure_message)
+            else:
+                conversation_manager.add_message(
+                    session_id,
+                    "assistant",
+                    failure_message,
+                    owner_id=owner_id,
+                )
 
         return AgentResult(
             success=orch_result.success,

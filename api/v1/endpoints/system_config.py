@@ -81,7 +81,7 @@ def get_system_config(
 def update_system_config(
     request: UpdateSystemConfigRequest,
     service: SystemConfigService = Depends(get_system_config_service),
-    _: CurrentUser = Depends(require_admin_user),
+    current_user: CurrentUser = Depends(require_admin_user),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
     try:
@@ -90,6 +90,7 @@ def update_system_config(
             items=[item.model_dump() for item in request.items],
             mask_token=request.mask_token,
             reload_now=request.reload_now,
+            actor_user_id=getattr(current_user, "user_id", None),
         )
         return UpdateSystemConfigResponse.model_validate(payload)
     except ConfigValidationError as exc:

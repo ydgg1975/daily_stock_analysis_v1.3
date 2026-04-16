@@ -18,7 +18,7 @@ import json
 import logging
 import re
 from datetime import datetime, date, timedelta
-from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple
+from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Iterable
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -70,6 +70,8 @@ from src.postgres_phase_b import PostgresPhaseBStore
 from src.postgres_phase_c import PostgresPhaseCStore
 from src.postgres_phase_d import PostgresPhaseDStore
 from src.postgres_phase_e import PostgresPhaseEStore
+from src.postgres_phase_f import PostgresPhaseFStore
+from src.postgres_phase_g import PostgresPhaseGStore
 
 logger = logging.getLogger(__name__)
 
@@ -1151,6 +1153,10 @@ class DatabaseManager:
         self._phase_d_enabled = False
         self._phase_e_store: Optional[PostgresPhaseEStore] = None
         self._phase_e_enabled = False
+        self._phase_f_store: Optional[PostgresPhaseFStore] = None
+        self._phase_f_enabled = False
+        self._phase_g_store: Optional[PostgresPhaseGStore] = None
+        self._phase_g_enabled = False
         phase_a_url = str(getattr(config, "postgres_phase_a_url", "") or "").strip()
         if phase_a_url:
             try:
@@ -1179,9 +1185,19 @@ class DatabaseManager:
                     auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
                 )
                 self._phase_e_enabled = True
+                self._phase_f_store = PostgresPhaseFStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_f_enabled = True
+                self._phase_g_store = PostgresPhaseGStore(
+                    phase_a_url,
+                    auto_apply_schema=bool(getattr(config, "postgres_phase_a_apply_schema", True)),
+                )
+                self._phase_g_enabled = True
             except Exception as exc:
                 raise RuntimeError(
-                    "Failed to initialize PostgreSQL Phase A/B/C/D/E storage. "
+                    "Failed to initialize PostgreSQL Phase A/B/C/D/E/F/G storage. "
                     "Check POSTGRES_PHASE_A_URL / POSTGRES_PHASE_A_APPLY_SCHEMA configuration."
                 ) from exc
 
@@ -1212,6 +1228,10 @@ class DatabaseManager:
                 cls._instance._phase_d_store.dispose()
             if getattr(cls._instance, "_phase_e_store", None) is not None:
                 cls._instance._phase_e_store.dispose()
+            if getattr(cls._instance, "_phase_f_store", None) is not None:
+                cls._instance._phase_f_store.dispose()
+            if getattr(cls._instance, "_phase_g_store", None) is not None:
+                cls._instance._phase_g_store.dispose()
             if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
                 cls._instance._engine.dispose()
             cls._instance._initialized = False
@@ -2194,6 +2214,29 @@ class DatabaseManager:
             counts["market_data_usage_refs"] = counts.get("market_data_usage_refs", 0) + int(
                 phase_e_counts.get("market_data_usage_refs", 0)
             )
+        if self._phase_f_enabled and self._phase_f_store is not None:
+            phase_f_counts = self._phase_f_store.clear_non_bootstrap_state(user_ids)
+            counts["portfolio_accounts"] = counts.get("portfolio_accounts", 0) + int(
+                phase_f_counts.get("portfolio_accounts", 0)
+            )
+            counts["portfolio_broker_connections"] = counts.get("portfolio_broker_connections", 0) + int(
+                phase_f_counts.get("broker_connections", 0)
+            )
+            counts["portfolio_positions"] = counts.get("portfolio_positions", 0) + int(
+                phase_f_counts.get("portfolio_positions", 0)
+            )
+            counts["portfolio_sync_states"] = counts.get("portfolio_sync_states", 0) + int(
+                phase_f_counts.get("portfolio_sync_states", 0)
+            )
+            counts["portfolio_sync_positions"] = counts.get("portfolio_sync_positions", 0) + int(
+                phase_f_counts.get("portfolio_sync_positions", 0)
+            )
+            counts["portfolio_sync_cash_balances"] = counts.get("portfolio_sync_cash_balances", 0) + int(
+                phase_f_counts.get("portfolio_sync_cash_balances", 0)
+            )
+            counts["portfolio_ledger"] = int(phase_f_counts.get("portfolio_ledger", 0))
+        if self._phase_g_enabled and self._phase_g_store is not None:
+            self._phase_g_store.nullify_user_references(user_ids)
         if self._phase_a_enabled and self._phase_a_store is not None:
             phase_a_counts = self._phase_a_store.clear_non_bootstrap_state(user_ids)
             counts["user_preferences"] = counts.get("user_preferences", 0) + int(
@@ -2584,6 +2627,212 @@ class DatabaseManager:
             owner_user_id=resolved_owner_id,
             include_all_owners=include_all_owners,
         )
+
+    def _load_phase_f_portfolio_projection_in_session(
+        self,
+        *,
+        session: Session,
+        account_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        resolved_account_id = int(account_id)
+        account_row = session.execute(
+            select(PortfolioAccount).where(PortfolioAccount.id == resolved_account_id).limit(1)
+        ).scalar_one_or_none()
+        if account_row is None:
+            return None
+
+        return {
+            "account_row": account_row,
+            "broker_connection_rows": session.execute(
+                select(PortfolioBrokerConnection)
+                .where(PortfolioBrokerConnection.portfolio_account_id == resolved_account_id)
+                .order_by(PortfolioBrokerConnection.id.asc())
+            ).scalars().all(),
+            "trade_rows": session.execute(
+                select(PortfolioTrade)
+                .where(PortfolioTrade.account_id == resolved_account_id)
+                .order_by(PortfolioTrade.trade_date.asc(), PortfolioTrade.id.asc())
+            ).scalars().all(),
+            "cash_rows": session.execute(
+                select(PortfolioCashLedger)
+                .where(PortfolioCashLedger.account_id == resolved_account_id)
+                .order_by(PortfolioCashLedger.event_date.asc(), PortfolioCashLedger.id.asc())
+            ).scalars().all(),
+            "corporate_action_rows": session.execute(
+                select(PortfolioCorporateAction)
+                .where(PortfolioCorporateAction.account_id == resolved_account_id)
+                .order_by(PortfolioCorporateAction.effective_date.asc(), PortfolioCorporateAction.id.asc())
+            ).scalars().all(),
+            "position_rows": session.execute(
+                select(PortfolioPosition)
+                .where(PortfolioPosition.account_id == resolved_account_id)
+                .order_by(
+                    PortfolioPosition.cost_method.asc(),
+                    PortfolioPosition.symbol.asc(),
+                    PortfolioPosition.market.asc(),
+                    PortfolioPosition.currency.asc(),
+                    PortfolioPosition.id.asc(),
+                )
+            ).scalars().all(),
+            "snapshot_rows": session.execute(
+                select(PortfolioDailySnapshot)
+                .where(PortfolioDailySnapshot.account_id == resolved_account_id)
+                .order_by(
+                    PortfolioDailySnapshot.cost_method.asc(),
+                    PortfolioDailySnapshot.snapshot_date.desc(),
+                    PortfolioDailySnapshot.id.desc(),
+                )
+            ).scalars().all(),
+            "sync_state_rows": session.execute(
+                select(PortfolioBrokerSyncState)
+                .where(PortfolioBrokerSyncState.portfolio_account_id == resolved_account_id)
+                .order_by(PortfolioBrokerSyncState.broker_connection_id.asc(), PortfolioBrokerSyncState.id.asc())
+            ).scalars().all(),
+            "sync_position_rows": session.execute(
+                select(PortfolioBrokerSyncPosition)
+                .where(PortfolioBrokerSyncPosition.portfolio_account_id == resolved_account_id)
+                .order_by(
+                    PortfolioBrokerSyncPosition.broker_connection_id.asc(),
+                    PortfolioBrokerSyncPosition.symbol.asc(),
+                    PortfolioBrokerSyncPosition.market.asc(),
+                    PortfolioBrokerSyncPosition.currency.asc(),
+                    PortfolioBrokerSyncPosition.id.asc(),
+                )
+            ).scalars().all(),
+            "sync_cash_balance_rows": session.execute(
+                select(PortfolioBrokerSyncCashBalance)
+                .where(PortfolioBrokerSyncCashBalance.portfolio_account_id == resolved_account_id)
+                .order_by(
+                    PortfolioBrokerSyncCashBalance.broker_connection_id.asc(),
+                    PortfolioBrokerSyncCashBalance.currency.asc(),
+                    PortfolioBrokerSyncCashBalance.id.asc(),
+                )
+            ).scalars().all(),
+        }
+
+    def sync_phase_f_portfolio_account_shadow_from_session(
+        self,
+        *,
+        session: Session,
+        account_id: int,
+    ) -> bool:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return False
+
+        resolved_account_id = int(account_id)
+        session.flush()
+        projection = self._load_phase_f_portfolio_projection_in_session(
+            session=session,
+            account_id=resolved_account_id,
+        )
+        if projection is None:
+            self._phase_f_store.delete_account_shadow(account_id=resolved_account_id)
+            return False
+
+        self._phase_f_store.replace_account_shadow(**projection)
+        return True
+
+    def sync_phase_f_portfolio_account_shadow(self, account_id: int) -> bool:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return False
+        with self.get_session() as session:
+            return self.sync_phase_f_portfolio_account_shadow_from_session(
+                session=session,
+                account_id=account_id,
+            )
+
+    def sync_phase_f_portfolio_account_shadows(self, account_ids: Iterable[int]) -> int:
+        if not self._phase_f_enabled or self._phase_f_store is None:
+            return 0
+        synced = 0
+        with self.get_session() as session:
+            for account_id in sorted({int(item) for item in account_ids if item is not None}):
+                if self.sync_phase_f_portfolio_account_shadow_from_session(
+                    session=session,
+                    account_id=account_id,
+                ):
+                    synced += 1
+        return synced
+
+    def sync_phase_g_runtime_config_shadow(
+        self,
+        *,
+        raw_config_map: Dict[str, str],
+        field_schema_by_key: Dict[str, Dict[str, Any]],
+        updated_by_user_id: Optional[str] = None,
+    ) -> bool:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return False
+        self._phase_g_store.replace_config_snapshot(
+            raw_config_map=dict(raw_config_map or {}),
+            field_schema_by_key=dict(field_schema_by_key or {}),
+            updated_by_user_id=updated_by_user_id,
+        )
+        return True
+
+    def record_phase_g_admin_action(
+        self,
+        *,
+        action_key: str,
+        actor_user_id: Optional[str],
+        actor_role: Optional[str],
+        subsystem: str,
+        category: Optional[str],
+        message: Optional[str],
+        detail_json: Optional[Dict[str, Any]],
+        related_session_key: Optional[str],
+        destructive: bool,
+        status: str,
+        severity: str,
+        outcome: Optional[str],
+        request_json: Optional[Dict[str, Any]] = None,
+        result_json: Optional[Dict[str, Any]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> Dict[str, int]:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return {}
+
+        occurred_at = created_at or datetime.now()
+        admin_log_id = self._phase_g_store.append_admin_log(
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            subsystem=subsystem,
+            category=category,
+            event_type=action_key,
+            target_type="subsystem",
+            target_id=subsystem,
+            severity=severity,
+            outcome=outcome,
+            message=message,
+            detail_json=detail_json,
+            related_session_key=related_session_key,
+            occurred_at=occurred_at,
+        )
+        system_action_id = self._phase_g_store.append_system_action(
+            action_key=action_key,
+            actor_user_id=actor_user_id,
+            destructive=destructive,
+            status=status,
+            request_json=request_json,
+            result_json=result_json,
+            admin_log_id=admin_log_id,
+            created_at=occurred_at,
+            completed_at=occurred_at,
+        )
+        return {
+            "admin_log_id": int(admin_log_id),
+            "system_action_id": int(system_action_id),
+        }
+
+    def list_phase_g_admin_logs(self, *, limit: int = 50) -> List[Dict[str, Any]]:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return []
+        return self._phase_g_store.list_admin_logs(limit=limit)
+
+    def list_phase_g_system_actions(self, *, limit: int = 50) -> List[Dict[str, Any]]:
+        if not self._phase_g_enabled or self._phase_g_store is None:
+            return []
+        return self._phase_g_store.list_system_actions(limit=limit)
 
     def upsert_user_notification_preferences(
         self,

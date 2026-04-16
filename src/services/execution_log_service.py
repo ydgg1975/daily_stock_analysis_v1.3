@@ -99,6 +99,15 @@ def _outcome_from_status(status: Any) -> str:
     return "unknown"
 
 
+def _severity_from_status(status: Any) -> str:
+    outcome = _outcome_from_status(status)
+    if outcome == "failed":
+        return "error"
+    if outcome in {"partial", "timeout"}:
+        return "warning"
+    return "info"
+
+
 def _data_phase(key: str) -> str:
     mapping = {
         "market": "data_market",
@@ -258,13 +267,16 @@ class ExecutionLogService:
         destructive: bool = False,
         detail: Optional[Dict[str, Any]] = None,
         overall_status: str = "completed",
+        request: Optional[Dict[str, Any]] = None,
+        result: Optional[Dict[str, Any]] = None,
     ) -> str:
         session_id = uuid.uuid4().hex
         started_at = datetime.now()
+        actor_payload = self._resolve_actor(None, actor)
         summary = self._merge_summary(
             {"admin_action": detail or {}},
             self._summary_meta(
-                actor=actor,
+                actor=actor_payload,
                 session_kind="admin_action",
                 subsystem=subsystem,
                 action_name=action,
@@ -304,6 +316,29 @@ class ExecutionLogService:
             truth_level="actual",
             summary=summary,
             ended_at=started_at,
+        )
+        self.db.record_phase_g_admin_action(
+            action_key=action,
+            actor_user_id=actor_payload.get("user_id"),
+            actor_role=actor_payload.get("role"),
+            subsystem=subsystem,
+            category="system",
+            message=message,
+            detail_json={
+                "category": "system",
+                "action": action,
+                "outcome": _outcome_from_status(overall_status),
+                "destructive": destructive,
+                **(detail or {}),
+            },
+            related_session_key=session_id,
+            destructive=destructive,
+            status=overall_status,
+            severity=_severity_from_status(overall_status),
+            outcome=_outcome_from_status(overall_status),
+            request_json=request or {},
+            result_json=result if result is not None else (detail or {}),
+            created_at=started_at,
         )
         return session_id
 
