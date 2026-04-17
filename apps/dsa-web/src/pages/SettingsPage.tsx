@@ -2420,10 +2420,8 @@ const SettingsPage: React.FC = () => {
     }
     if (source.kind === 'custom' && source.customRecord) {
       const validation = validateCustomDataSource(source.customRecord);
-      const nextStatus: DataSourceValidationState = validation.valid ? 'validated' : 'failed';
-      const message = validation.valid
-        ? t('settings.dataSourceValidationLocalSuccess')
-        : validation.issue === 'name'
+      if (!validation.valid) {
+        const message = validation.issue === 'name'
           ? t('settings.dataSourceValidationMissingName')
           : validation.issue === 'credential'
             ? t('settings.dataSourceValidationMissingCredential')
@@ -2432,11 +2430,36 @@ const SettingsPage: React.FC = () => {
             : validation.issue === 'capabilities'
               ? t('settings.dataSourceValidationMissingCapabilities')
               : t('settings.dataSourceValidationInvalidBaseUrl');
+        const nextLibrary = customDataSourceLibraryDraft.map((record) => (
+          record.id === sourceId
+            ? { ...record, validation: { status: 'failed' as const, message } }
+            : record
+        ));
+        setCustomDataSourceLibraryDraft(nextLibrary);
+        setDataSourceValidationStatus((prev) => ({ ...prev, [sourceId]: 'failed' }));
+        await saveExternalItems([
+          { key: CUSTOM_DATA_SOURCE_LIBRARY_KEY, value: serializeCustomDataSourceLibrary(nextLibrary) },
+        ], message);
+        return;
+      }
+
+      const probe = await systemConfigApi.testCustomDataSource({
+        name: source.customRecord.name,
+        baseUrl: source.customRecord.baseUrl,
+        credentialSchema: source.customRecord.credentialSchema,
+        credential: source.customRecord.credential,
+        secret: source.customRecord.secret,
+        timeoutSeconds: 5,
+      });
+      const nextStatus: DataSourceValidationState = probe.success ? 'validated' : 'failed';
+      const message = probe.success
+        ? probe.message || t('settings.dataSourceValidationConnectivitySuccess')
+        : probe.error || probe.message || t('settings.dataSourceValidationConnectivityFailed');
       const nextLibrary = customDataSourceLibraryDraft.map((record) => (
         record.id === sourceId
           ? {
             ...record,
-            validation: validation.valid
+            validation: probe.success
               ? { status: 'validated' as const, message }
               : { status: 'failed' as const, message },
           }

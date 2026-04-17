@@ -847,17 +847,35 @@ class MarketScannerServiceTestCase(unittest.TestCase):
             return_value=["NVDA", "AAPL"],
         ):
             with patch.object(service, "_load_local_us_universe_from_db", return_value=["PLTR"]):
-                result = service._resolve_us_stock_universe(profile=profile)
+                result = service._resolve_us_stock_universe(profile=profile, target_symbol_count=50)
 
         self.assertTrue(result["success"])
         self.assertEqual(result["coverage_strategy"], "seed_supplemented")
         self.assertEqual(result["local_symbol_count"], 3)
         self.assertGreater(result["supplemented_seed_count"], 0)
-        self.assertGreaterEqual(result["final_symbol_count"], 24)
+        self.assertGreaterEqual(result["final_symbol_count"], 40)
+        self.assertGreaterEqual(result["target_symbol_count"], 50)
         self.assertTrue(result["source"].startswith("local_us_parquet_dir"))
         self.assertIn("curated_us_liquid_seed", result["source"])
         self.assertIn("NVDA", result["data"])
         self.assertIn("PLTR", result["data"])
+
+    def test_resolve_hk_stock_universe_respects_requested_target_for_seed_supplement(self) -> None:
+        profile = get_scanner_profile(market="hk", profile="hk_preopen_v1")
+        service = MarketScannerService(
+            self.db,
+            data_manager=FakeHkScannerDataManager(),
+        )
+
+        with patch.object(service, "_load_local_hk_universe_from_db", return_value=["HK00700", "HK01810"]):
+            result = service._resolve_hk_stock_universe(profile=profile, target_symbol_count=30)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["coverage_strategy"], "seed_supplemented")
+        self.assertEqual(result["local_symbol_count"], 2)
+        self.assertGreaterEqual(result["target_symbol_count"], 30)
+        self.assertGreaterEqual(result["final_symbol_count"], 25)
+        self.assertIn("curated_hk_liquid_seed", result["source"])
 
     def test_load_local_us_universe_from_db_uses_stock_repository_boundary(self) -> None:
         repo = MagicMock()

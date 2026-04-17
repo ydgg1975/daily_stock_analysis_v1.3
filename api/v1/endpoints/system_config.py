@@ -16,6 +16,8 @@ from api.v1.schemas.system_config import (
     SystemConfigResponse,
     SystemConfigSchemaResponse,
     SystemConfigValidationErrorResponse,
+    TestCustomDataSourceRequest,
+    TestCustomDataSourceResponse,
     TestLLMChannelRequest,
     TestLLMChannelResponse,
     UpdateSystemConfigRequest,
@@ -196,6 +198,44 @@ def test_llm_channel(
             detail={
                 "error": "internal_error",
                 "message": "Failed to test LLM channel",
+            },
+        )
+
+
+@router.post(
+    "/config/data-source/test",
+    response_model=TestCustomDataSourceResponse,
+    responses={
+        200: {"description": "Custom data source test completed"},
+        403: {"description": "Admin access required", "model": ErrorResponse},
+        500: {"description": "Internal server error", "model": ErrorResponse},
+    },
+    summary="Test one custom data source endpoint",
+    description="Run a bounded connectivity probe against one unsaved or saved custom data source base URL.",
+)
+def test_custom_data_source(
+    request: TestCustomDataSourceRequest,
+    service: SystemConfigService = Depends(get_system_config_service),
+    _: CurrentUser = Depends(require_admin_user),
+) -> TestCustomDataSourceResponse:
+    """Validate and test one custom data source without writing `.env`."""
+    try:
+        payload = service.test_custom_data_source(
+            name=request.name,
+            base_url=request.base_url,
+            credential_schema=request.credential_schema,
+            credential=request.credential,
+            secret=request.secret,
+            timeout_seconds=request.timeout_seconds,
+        )
+        return TestCustomDataSourceResponse.model_validate(payload)
+    except Exception as exc:
+        logger.error("Failed to test custom data source: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Failed to test custom data source",
             },
         )
 

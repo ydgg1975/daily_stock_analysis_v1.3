@@ -8,6 +8,7 @@ import {
   translate,
   type UiLanguage,
 } from '../i18n/core';
+import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath } from '../utils/localeRouting';
 
 type TranslateVars = Record<string, string | number | undefined>;
 
@@ -18,7 +19,30 @@ type UiLanguageContextValue = {
   t: (key: string, vars?: TranslateVars) => string;
 };
 
-const defaultLanguage = getStoredUiLanguage();
+function resolveInitialLanguage(): UiLanguage {
+  if (typeof window !== 'undefined') {
+    const routeLanguage = parseLocaleFromPathname(window.location.pathname);
+    if (routeLanguage) {
+      return routeLanguage;
+    }
+  }
+  return getStoredUiLanguage();
+}
+
+function syncCurrentPathToLanguage(nextLanguage: UiLanguage): void {
+  if (typeof window === 'undefined' || !shouldLocalizePath(window.location.pathname)) {
+    return;
+  }
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const nextPath = buildLocalizedPath(currentPath, nextLanguage);
+  if (nextPath === currentPath) {
+    return;
+  }
+  window.history.replaceState(window.history.state, '', nextPath);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+const defaultLanguage = resolveInitialLanguage();
 
 const defaultContextValue: UiLanguageContextValue = {
   language: defaultLanguage,
@@ -30,7 +54,7 @@ const defaultContextValue: UiLanguageContextValue = {
 const UiLanguageContext = createContext<UiLanguageContextValue>(defaultContextValue);
 
 export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<UiLanguage>(() => getStoredUiLanguage());
+  const [language, setLanguageState] = useState<UiLanguage>(() => resolveInitialLanguage());
 
   useEffect(() => {
     setStoredUiLanguage(language);
@@ -39,8 +63,16 @@ export const UiLanguageProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const value = useMemo<UiLanguageContextValue>(() => ({
     language,
-    setLanguage: (nextLanguage) => setLanguageState(normalizeUiLanguage(nextLanguage)),
-    toggleLanguage: () => setLanguageState((current) => (current === 'zh' ? 'en' : 'zh')),
+    setLanguage: (nextLanguage) => {
+      const normalized = normalizeUiLanguage(nextLanguage);
+      syncCurrentPathToLanguage(normalized);
+      setLanguageState(normalized);
+    },
+    toggleLanguage: () => setLanguageState((current) => {
+      const nextLanguage = current === 'zh' ? 'en' : 'zh';
+      syncCurrentPathToLanguage(nextLanguage);
+      return nextLanguage;
+    }),
     t: (key, vars) => translate(language, key, vars),
   }), [language]);
 

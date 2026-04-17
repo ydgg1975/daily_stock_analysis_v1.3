@@ -3,10 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppContent } from '../App';
 
-const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock } = vi.hoisted(() => ({
+const { useAuthMock, useProductSurfaceMock, setCurrentRouteMock, setLanguageMock } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   useProductSurfaceMock: vi.fn(),
   setCurrentRouteMock: vi.fn(),
+  setLanguageMock: vi.fn(),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -23,6 +24,7 @@ vi.mock('../hooks/useProductSurface', () => ({
 vi.mock('../contexts/UiLanguageContext', () => ({
   useI18n: () => ({
     language: 'en',
+    setLanguage: setLanguageMock,
     t: (key: string) => key,
   }),
 }));
@@ -203,5 +205,12 @@ describe('AppContent route flows', () => {
     renderAt('/settings/system');
 
     await waitFor(() => expect(screen.getByText('system-settings-page')).toBeInTheDocument());
+  });
+
+  it('supports locale-prefixed product routes and syncs language from the path', async () => {
+    renderAt('/en/chat');
+
+    expect(await screen.findByRole('heading', { name: 'Sign in to continue Ask Stock follow-up' })).toBeInTheDocument();
+    expect(screen.getByText('Guest Preview Only')).toBeInTheDocument();
   });
 });

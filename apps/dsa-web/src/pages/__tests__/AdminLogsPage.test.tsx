@@ -151,4 +151,28 @@ describe('AdminLogsPage', () => {
     expect(screen.getByText(/twelve_data/)).toBeInTheDocument();
     expect(screen.getByText(/fallback/i)).toBeInTheDocument();
   });
+
+  it('renders a visible empty timeline state instead of crashing when detail events are missing', async () => {
+    getSessionDetail.mockResolvedValueOnce({
+      sessionId: 'admin-action-1',
+      name: 'Factory reset',
+      overallStatus: 'completed',
+      readableSummary: {
+        actorDisplay: 'Bootstrap Admin',
+        actorRole: 'admin',
+        sessionKind: 'admin_action',
+        subsystem: 'system_control',
+        actionName: 'factory_reset_system',
+      },
+    });
+
+    render(<AdminLogsPage />);
+
+    expect(await screen.findByText('Factory reset')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Factory reset/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('adminLogs.emptyTimeline')).toBeInTheDocument();
+    });
+  });
 });

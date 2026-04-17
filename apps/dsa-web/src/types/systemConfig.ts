@@ -134,6 +134,24 @@ export interface TestLLMChannelResponse {
   latencyMs?: number | null;
 }
 
+export interface TestCustomDataSourceRequest {
+  name: string;
+  baseUrl: string;
+  credentialSchema: 'single_key' | 'key_secret';
+  credential?: string;
+  secret?: string;
+  timeoutSeconds?: number;
+}
+
+export interface TestCustomDataSourceResponse {
+  success: boolean;
+  message: string;
+  error?: string | null;
+  statusCode?: number | null;
+  checkedUrl?: string | null;
+  latencyMs?: number | null;
+}
+
 export interface SystemAdminActionResponse {
   success: boolean;
   action: string;

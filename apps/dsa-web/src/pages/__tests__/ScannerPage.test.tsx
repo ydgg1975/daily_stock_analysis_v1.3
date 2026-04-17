@@ -11,12 +11,14 @@ import type {
 
 const {
   getRecentWatchlists,
+  getRuns,
   getRun,
   getStatus,
   runScan,
   analyzeAsync,
 } = vi.hoisted(() => ({
   getRecentWatchlists: vi.fn(),
+  getRuns: vi.fn(),
   getRun: vi.fn(),
   getStatus: vi.fn(),
   runScan: vi.fn(),
@@ -26,6 +28,7 @@ const {
 vi.mock('../../api/scanner', () => ({
   scannerApi: {
     getRecentWatchlists,
+    getRuns,
     getRun,
     getStatus,
     run: runScan,
@@ -540,6 +543,68 @@ function makeUsHistoryResponse(): ScannerRunHistoryResponse {
   };
 }
 
+function makePersonalRunsResponse(): ScannerRunHistoryResponse {
+  return {
+    total: 1,
+    page: 1,
+    limit: 5,
+    items: [
+      {
+        id: 901,
+        market: 'cn',
+        profile: 'cn_preopen_v1',
+        profileLabel: 'A股盘前扫描 v1',
+        status: 'completed',
+        runAt: '2026-04-13T08:32:00',
+        completedAt: '2026-04-13T08:33:00',
+        watchlistDate: '2026-04-13',
+        triggerMode: 'manual',
+        headline: '我的手动扫描：600001 算力龙头',
+        topSymbols: ['600001', '600002'],
+        shortlistSize: 2,
+        universeName: 'cn_a_liquid_watchlist_v1',
+        universeSize: 300,
+        preselectedSize: 60,
+        evaluatedSize: 48,
+        notificationStatus: 'not_attempted',
+        failureReason: null,
+        changeSummary: {
+          available: false,
+          previousRunId: null,
+          previousWatchlistDate: null,
+          newCount: 0,
+          retainedCount: 0,
+          droppedCount: 0,
+          newSymbols: [],
+          retainedSymbols: [],
+          droppedSymbols: [],
+        },
+        reviewSummary: {
+          available: false,
+          reviewWindowDays: 3,
+          reviewStatus: 'pending',
+          candidateCount: 0,
+          reviewedCount: 0,
+          pendingCount: 0,
+          hitRatePct: null,
+          outperformRatePct: null,
+          avgSameDayCloseReturnPct: null,
+          avgReviewWindowReturnPct: null,
+          avgMaxFavorableMovePct: null,
+          avgMaxAdverseMovePct: null,
+          strongCount: 0,
+          mixedCount: 0,
+          weakCount: 0,
+          bestSymbol: null,
+          bestReturnPct: null,
+          weakestSymbol: null,
+          weakestReturnPct: null,
+        },
+      },
+    ],
+  };
+}
+
 function makeHkHistoryResponse(): ScannerRunHistoryResponse {
   return {
     total: 1,
@@ -715,12 +780,14 @@ function renderScannerPage() {
 describe('ScannerPage', () => {
   beforeEach(() => {
     getRecentWatchlists.mockReset();
+    getRuns.mockReset();
     getRun.mockReset();
     getStatus.mockReset();
     runScan.mockReset();
     analyzeAsync.mockReset();
 
     getRecentWatchlists.mockResolvedValue(makeHistoryResponse());
+    getRuns.mockResolvedValue(makePersonalRunsResponse());
     getRun.mockResolvedValue(makeRunDetail());
     getStatus.mockResolvedValue(makeStatusResponse());
     runScan.mockResolvedValue(makeRunDetail());
@@ -811,6 +878,19 @@ describe('ScannerPage', () => {
     expect(screen.getAllByText(/AkshareFetcher/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/EfinanceFetcher/).length).toBeGreaterThan(0);
     expect(screen.getByText('发生 1 次 fallback')).toBeInTheDocument();
+  });
+
+  it('keeps personal scanner history visible in admin mode as an additive section', async () => {
+    renderScannerPage();
+
+    expect(await screen.findByText('我的近期 runs')).toBeInTheDocument();
+    expect(screen.getByText('我的手动扫描：600001 算力龙头')).toBeInTheDocument();
+    expect(getRuns).toHaveBeenCalledWith({
+      market: 'cn',
+      profile: 'cn_preopen_v1',
+      page: 1,
+      limit: 5,
+    });
   });
 
   it('runs the scanner and renders the returned shortlist', async () => {

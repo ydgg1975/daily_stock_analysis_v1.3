@@ -24,6 +24,7 @@ import {
   useProductSurface,
 } from './hooks/useProductSurface';
 import type { UiLanguage } from './i18n/core';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from './utils/localeRouting';
 import HomeSurfacePage from './pages/HomeSurfacePage';
 import PersonalSettingsPage from './pages/PersonalSettingsPage';
 import { useAgentChatStore } from './stores/agentChatStore';
@@ -322,7 +323,9 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
   const location = useLocation();
   const { language } = useI18n();
   const { isGuest } = useProductSurface();
-  const gateCopy = getRegisteredSurfaceCopy(location.pathname, location.pathname + location.search, language);
+  const routePathname = stripLocalePrefix(location.pathname);
+  const routeTarget = `${routePathname}${location.search}`;
+  const gateCopy = getRegisteredSurfaceCopy(routePathname, routeTarget, language);
 
   if (!isGuest) {
     return <>{children}</>;
@@ -338,7 +341,7 @@ export const RegisteredSurfaceRoute: React.FC<{ children: React.ReactNode }> = (
       note={gateCopy.note}
       primaryAction={{
         label: language === 'en' ? 'Sign in now' : '立即登录',
-        to: buildLoginPath(location.pathname + location.search),
+        to: buildLoginPath(routeTarget),
       }}
       secondaryAction={gateCopy.secondaryAction}
       tertiaryAction={gateCopy.tertiaryAction}
@@ -350,7 +353,9 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
   const location = useLocation();
   const { language } = useI18n();
   const { isAdmin, isAdminMode, isGuest } = useProductSurface();
-  const gateCopy = getAdminSurfaceCopy(location.pathname, language, isGuest);
+  const routePathname = stripLocalePrefix(location.pathname);
+  const routeTarget = `${routePathname}${location.search}`;
+  const gateCopy = getAdminSurfaceCopy(routePathname, language, isGuest);
 
   if (isAdmin && isAdminMode) {
     return <>{children}</>;
@@ -401,7 +406,7 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
       note={gateCopy.note}
       primaryAction={{
         label: isGuest ? (language === 'en' ? 'Sign in' : '登录') : (language === 'en' ? 'Open personal settings' : '打开个人设置'),
-        to: isGuest ? buildLoginPath(location.pathname + location.search) : '/settings',
+        to: isGuest ? buildLoginPath(routeTarget) : '/settings',
       }}
       secondaryAction={gateCopy.secondaryAction}
     />
@@ -411,15 +416,24 @@ export const AdminSurfaceRoute: React.FC<{ children: React.ReactNode }> = ({ chi
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const { authEnabled, loggedIn, isLoading, loadError, refreshStatus } = useAuth();
-  const { t } = useI18n();
+  const { language, setLanguage, t } = useI18n();
   const bootStartedAt = useRef<number>(0);
   const [showBootSplash, setShowBootSplash] = useState(true);
   const [bootSplashFading, setBootSplashFading] = useState(false);
   const splashDismissed = useRef(false);
+  const routeLocale = parseLocaleFromPathname(location.pathname);
+  const routePathname = stripLocalePrefix(location.pathname);
+  const localizedHomePath = routeLocale ? buildLocalizedPath('/', routeLocale) : '/';
 
   useEffect(() => {
     useAgentChatStore.getState().setCurrentRoute(location.pathname);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (routeLocale && routeLocale !== language) {
+      setLanguage(routeLocale);
+    }
+  }, [language, routeLocale, setLanguage]);
 
   useEffect(() => {
     if (bootStartedAt.current === 0) {
@@ -474,8 +488,8 @@ export const AppContent: React.FC = () => {
       </div>
     );
   } else if (!isLoading) {
-    if (location.pathname === '/login') {
-      const redirectTarget = resolveAuthRedirect(location.search, '/');
+    if (routePathname === '/login') {
+      const redirectTarget = resolveAuthRedirect(location.search, localizedHomePath);
       if (!authEnabled || loggedIn) {
         content = <Navigate to={redirectTarget} replace />;
       } else {
@@ -496,7 +510,20 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
+          <Route path="/:locale" element={<Shell />}>
+            <Route index element={<HomeSurfacePage />} />
+            <Route path="scanner" element={<ScannerSurfacePage />} />
+            <Route path="chat" element={<RegisteredSurfaceRoute><ChatPage /></RegisteredSurfaceRoute>} />
+            <Route path="portfolio" element={<RegisteredSurfaceRoute><PortfolioPage /></RegisteredSurfaceRoute>} />
+            <Route path="backtest" element={<RegisteredSurfaceRoute><BacktestPage /></RegisteredSurfaceRoute>} />
+            <Route path="backtest/results/:runId" element={<RegisteredSurfaceRoute><DeterministicBacktestResultPage /></RegisteredSurfaceRoute>} />
+            <Route path="settings" element={<PersonalSettingsPage />} />
+            <Route path="settings/system" element={<AdminSurfaceRoute><SettingsPage /></AdminSurfaceRoute>} />
+            <Route path="admin/logs" element={<AdminSurfaceRoute><AdminLogsPage /></AdminSurfaceRoute>} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/:locale/login" element={<LoginPage />} />
         </Routes>
       );
     }

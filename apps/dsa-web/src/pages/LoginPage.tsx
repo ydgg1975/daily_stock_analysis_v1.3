@@ -7,6 +7,7 @@ import { isParsedApiError } from '../api/error';
 import { useAuth } from '../hooks';
 import { SettingsAlert } from '../components/settings';
 import { normalizeRedirectPath } from '../hooks/useProductSurface';
+import { buildLocalizedPath, parseLocaleFromPathname, stripLocalePrefix } from '../utils/localeRouting';
 
 const AUTH_FACTS = [
   '统一研究工作台',
@@ -45,6 +46,29 @@ function describeRedirectTarget(pathname: string): {
   return { label: '首页研究工作台', requiresAdmin: false };
 }
 
+function describeExitTarget(
+  pathname: string,
+  routeLanguage: ReturnType<typeof parseLocaleFromPathname>,
+): {
+  label: string;
+  destination: string;
+  description: string;
+} {
+  const localize = (path: string) => (routeLanguage ? buildLocalizedPath(path, routeLanguage) : path);
+  if (pathname.startsWith('/scanner')) {
+    return {
+      label: '返回扫描器预览',
+      destination: localize('/scanner'),
+      description: '先回到公开可见的扫描器预览，再决定是否登录进入个人或管理员工作区。',
+    };
+  }
+  return {
+    label: '返回首页',
+    destination: localize('/'),
+    description: '回到公开产品首页，不会影响后续再次登录或注册。',
+  };
+}
+
 const LoginPage: React.FC = () => {
   const { login, passwordSet, setupState } = useAuth();
   const navigate = useNavigate();
@@ -56,7 +80,10 @@ const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const redirect = normalizeRedirectPath(searchParams.get('redirect'), '/');
   const createModeRequested = searchParams.get('mode') === 'create';
-  const redirectTarget = describeRedirectTarget(redirect);
+  const routeLanguage = parseLocaleFromPathname(redirect) || parseLocaleFromPathname(window.location.pathname);
+  const normalizedRedirect = stripLocalePrefix(redirect);
+  const redirectTarget = describeRedirectTarget(normalizedRedirect);
+  const exitTarget = describeExitTarget(normalizedRedirect, routeLanguage);
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -168,6 +195,20 @@ const LoginPage: React.FC = () => {
                 </p>
               </div>
             ) : null}
+
+            <div className="rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/35 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-secondary-text">Leave Auth Page</p>
+              <p className="mt-2 text-sm font-semibold text-foreground">{exitTarget.label}</p>
+              <p className="mt-1 text-xs leading-5 text-secondary-text">{exitTarget.description}</p>
+              <button
+                type="button"
+                className="btn-ghost mt-3 w-full justify-center"
+                onClick={() => navigate(exitTarget.destination, { replace: true })}
+                disabled={isSubmitting}
+              >
+                {exitTarget.label}
+              </button>
+            </div>
 
             {!isAdminBootstrap ? (
               <Input

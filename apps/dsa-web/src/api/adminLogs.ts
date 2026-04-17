@@ -72,6 +72,27 @@ export interface ExecutionLogSessionListResponse {
   items: ExecutionLogSessionSummary[];
 }
 
+function normalizeSessionSummary(payload: Record<string, unknown>): ExecutionLogSessionSummary {
+  const normalized = toCamelCase<ExecutionLogSessionSummary>(payload);
+  return {
+    ...normalized,
+    readableSummary: normalized.readableSummary && typeof normalized.readableSummary === 'object'
+      ? normalized.readableSummary
+      : {},
+  };
+}
+
+function normalizeSessionDetail(payload: Record<string, unknown>): ExecutionLogSessionDetail {
+  const normalized = toCamelCase<ExecutionLogSessionDetail>(payload);
+  return {
+    ...normalized,
+    readableSummary: normalized.readableSummary && typeof normalized.readableSummary === 'object'
+      ? normalized.readableSummary
+      : {},
+    events: Array.isArray(normalized.events) ? normalized.events : [],
+  };
+}
+
 export const adminLogsApi = {
   listSessions: async (
     params: {
@@ -91,13 +112,19 @@ export const adminLogsApi = {
         params,
       },
     );
-    return toCamelCase<ExecutionLogSessionListResponse>(response.data);
+    const normalized = toCamelCase<ExecutionLogSessionListResponse>(response.data);
+    return {
+      total: Number(normalized.total || 0),
+      items: Array.isArray(normalized.items)
+        ? normalized.items.map((item) => normalizeSessionSummary(item as unknown as Record<string, unknown>))
+        : [],
+    };
   },
 
   getSessionDetail: async (sessionId: string): Promise<ExecutionLogSessionDetail> => {
     const response = await apiClient.get<Record<string, unknown>>(
       `/api/v1/admin/logs/sessions/${encodeURIComponent(sessionId)}`,
     );
-    return toCamelCase<ExecutionLogSessionDetail>(response.data);
+    return normalizeSessionDetail(response.data);
   },
 };

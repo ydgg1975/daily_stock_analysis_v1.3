@@ -148,6 +148,28 @@ class TestLLMChannelResponse(BaseModel):
     latency_ms: Optional[int] = None
 
 
+class TestCustomDataSourceRequest(BaseModel):
+    """Request payload for testing one custom data source endpoint."""
+
+    name: str = "custom_data_source"
+    base_url: str
+    credential_schema: Literal["single_key", "key_secret"] = "single_key"
+    credential: str = ""
+    secret: str = ""
+    timeout_seconds: float = 5.0
+
+
+class TestCustomDataSourceResponse(BaseModel):
+    """Response payload for one custom data source connectivity test."""
+
+    success: bool
+    message: str
+    error: Optional[str] = None
+    status_code: Optional[int] = None
+    checked_url: Optional[str] = None
+    latency_ms: Optional[int] = None
+
+
 class SystemAdminActionResponse(BaseModel):
     """Response payload for bounded admin maintenance actions."""
 

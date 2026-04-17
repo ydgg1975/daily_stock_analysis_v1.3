@@ -639,6 +639,42 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertIn("unsupported model", payload["error"].lower())
         self.assertIn("protocol", payload["error"].lower())
 
+    @patch("src.services.system_config_service.requests.request")
+    def test_test_custom_data_source_reports_reachable_endpoint(self, mock_request) -> None:
+        mock_request.return_value = SimpleNamespace(status_code=200, headers={}, close=lambda: None)
+
+        payload = self.service.test_custom_data_source(
+            name="Demo API",
+            base_url="https://demo.example.com/v1",
+            credential_schema="single_key",
+            credential="demo-key",
+            secret="",
+            timeout_seconds=5.0,
+        )
+
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["status_code"], 200)
+        self.assertIn("reachable", payload["message"].lower())
+
+    @patch("src.services.system_config_service.requests.request")
+    def test_test_custom_data_source_reports_dns_failure(self, mock_request) -> None:
+        import requests
+
+        mock_request.side_effect = requests.exceptions.ConnectionError("Name or service not known")
+
+        payload = self.service.test_custom_data_source(
+            name="Demo API",
+            base_url="https://missing.example.invalid/v1",
+            credential_schema="single_key",
+            credential="demo-key",
+            secret="",
+            timeout_seconds=5.0,
+        )
+
+        self.assertFalse(payload["success"])
+        self.assertIsNone(payload["status_code"])
+        self.assertIn("dns", payload["message"].lower())
+
     @patch.object(SystemConfigService, "_reload_runtime_singletons")
     def test_update_with_reload_resets_runtime_singletons(
         self,

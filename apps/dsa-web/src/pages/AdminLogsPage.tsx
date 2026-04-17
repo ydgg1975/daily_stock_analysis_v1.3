@@ -298,11 +298,13 @@ const AdminLogsPage: React.FC = () => {
             <div className="space-y-4">
               {(() => {
                 const readable = detail.readableSummary || {};
+                const events = Array.isArray(detail.events) ? detail.events : [];
                 const notificationState = String(readable.notificationClassification || '').trim();
                 return (
-                  <section className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                    <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.executiveSummary')}</h3>
-                    <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
+                  <>
+                    <section className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                      <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.executiveSummary')}</h3>
+                      <div className="mt-2 grid gap-2 text-xs md:grid-cols-2">
                       <p className="text-secondary-text">{t('adminLogs.actor')}: <span className="text-foreground">{sourceText(readable.actorDisplay)}</span></p>
                       <p className="text-secondary-text">{t('adminLogs.actorRole')}: <span className="text-foreground">{sourceText(readable.actorRole)}</span></p>
                       <p className="text-secondary-text">{t('adminLogs.sessionKind')}: <span className="text-foreground">{sourceText(readable.sessionKind)}</span></p>
@@ -352,59 +354,64 @@ const AdminLogsPage: React.FC = () => {
                         </p>
                       </div>
                     ) : null}
-                  </section>
+                    </section>
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">
+                        {detail.name || detail.code || '--'}
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-text">{detail.sessionId}</p>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <p className="text-xs text-secondary-text">{t('adminLogs.queryId')}: <span className="text-foreground">{detail.queryId || '--'}</span></p>
+                      <p className="text-xs text-secondary-text">{t('adminLogs.taskId')}: <span className="text-foreground">{detail.taskId || '--'}</span></p>
+                    </div>
+                    <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.systemActionTimeline')}</h3>
+                    <div className="space-y-2">
+                      {events.length === 0 ? (
+                        <p className="rounded-md border border-border/50 bg-muted/10 px-3 py-2 text-sm text-muted-text">
+                          {t('adminLogs.emptyTimeline')}
+                        </p>
+                      ) : events.map((event) => {
+                        const statusKey = STATUS_CLASS[event.status] ? event.status : (event.status === 'failed' ? 'failed_runtime' : 'running');
+                        const category = normalizeCategory(event.category || event.phase);
+                        const action = String(event.action || event.step || '--').trim();
+                        const outcome = String(event.outcome || '').trim().toLowerCase();
+                        const reason = String(event.reason || '').trim();
+                        return (
+                          <div key={event.id} className="rounded-md border border-border/50 bg-muted/10 px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                                {resolveCategoryLabel(category, t)}
+                              </span>
+                              <span className="rounded-full border border-border/50 px-2 py-0.5 text-[11px] text-secondary-text">
+                                {resolveActionLabel(action, t)}
+                              </span>
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] ${STATUS_CLASS[statusKey]}`}>{event.status}</span>
+                              {outcome ? (
+                                <span className="rounded-full border border-border/50 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
+                                  {t('adminLogs.outcome')}: {t(`adminLogs.outcomeState.${outcome}`)}
+                                </span>
+                              ) : null}
+                              <span className="text-xs text-muted-text">{event.target || '--'}</span>
+                            </div>
+                            {event.message ? (
+                              <p className="mt-1 break-words text-xs text-secondary-text">{event.message}</p>
+                            ) : null}
+                            {reason ? (
+                              <p className="mt-1 break-words text-[11px] text-muted-text">
+                                {t('adminLogs.reason')}: {reason}
+                              </p>
+                            ) : null}
+                            <p className="mt-1 text-[11px] text-muted-text">
+                              {(event.eventAt && new Date(event.eventAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')) || '--'}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 );
               })()}
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  {detail.name || detail.code || '--'}
-                </h2>
-                <p className="mt-1 text-xs text-muted-text">{detail.sessionId}</p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-2">
-                <p className="text-xs text-secondary-text">{t('adminLogs.queryId')}: <span className="text-foreground">{detail.queryId || '--'}</span></p>
-                <p className="text-xs text-secondary-text">{t('adminLogs.taskId')}: <span className="text-foreground">{detail.taskId || '--'}</span></p>
-              </div>
-              <h3 className="text-sm font-semibold text-foreground">{t('adminLogs.systemActionTimeline')}</h3>
-              <div className="space-y-2">
-                {detail.events.map((event) => {
-                  const statusKey = STATUS_CLASS[event.status] ? event.status : (event.status === 'failed' ? 'failed_runtime' : 'running');
-                  const category = normalizeCategory(event.category || event.phase);
-                  const action = String(event.action || event.step || '--').trim();
-                  const outcome = String(event.outcome || '').trim().toLowerCase();
-                  const reason = String(event.reason || '').trim();
-                  return (
-                    <div key={event.id} className="rounded-md border border-border/50 bg-muted/10 px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-border/60 bg-base/60 px-2 py-0.5 text-[11px] font-medium text-foreground">
-                          {resolveCategoryLabel(category, t)}
-                        </span>
-                        <span className="rounded-full border border-border/50 px-2 py-0.5 text-[11px] text-secondary-text">
-                          {resolveActionLabel(action, t)}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] ${STATUS_CLASS[statusKey]}`}>{event.status}</span>
-                        {outcome ? (
-                          <span className="rounded-full border border-border/50 bg-base/60 px-2 py-0.5 text-[11px] text-secondary-text">
-                            {t('adminLogs.outcome')}: {t(`adminLogs.outcomeState.${outcome}`)}
-                          </span>
-                        ) : null}
-                        <span className="text-xs text-muted-text">{event.target || '--'}</span>
-                      </div>
-                      {event.message ? (
-                        <p className="mt-1 break-words text-xs text-secondary-text">{event.message}</p>
-                      ) : null}
-                      {reason ? (
-                        <p className="mt-1 break-words text-[11px] text-muted-text">
-                          {t('adminLogs.reason')}: {reason}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-[11px] text-muted-text">
-                        {(event.eventAt && new Date(event.eventAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')) || '--'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-text">{t('adminLogs.selectSession')}</p>

@@ -43,7 +43,8 @@ DEFAULT_SCANNER_BENCHMARK_CODE = "000300"
 DEFAULT_US_SCANNER_BENCHMARK_CODE = "SPY"
 DEFAULT_HK_SCANNER_BENCHMARK_CODE = "HK02800"
 MIN_US_SCANNER_SEED_TARGET = 24
-MAX_US_SCANNER_SEED_TARGET = 36
+MAX_US_SCANNER_SUPPLEMENT_TARGET = 80
+MAX_HK_SCANNER_SUPPLEMENT_TARGET = 60
 CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "NVDA",
     "AAPL",
@@ -72,11 +73,40 @@ CURATED_US_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "INTC",
     "JPM",
     "BAC",
+    "WFC",
+    "GS",
+    "MS",
+    "C",
     "XOM",
+    "CVX",
     "UNH",
     "ADBE",
+    "NOW",
+    "CRWD",
+    "ABNB",
+    "PYPL",
+    "SQ",
+    "HOOD",
+    "RBLX",
+    "PFE",
+    "DIS",
+    "NKE",
+    "KO",
+    "WMT",
+    "COST",
+    "GE",
+    "CAT",
+    "BA",
+    "PLUG",
+    "MSTR",
+    "APP",
+    "TEM",
+    "RDDT",
     "QQQ",
     "IWM",
+    "DIA",
+    "SMH",
+    "XLF",
 )
 CURATED_HK_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "HK00700",
@@ -100,6 +130,25 @@ CURATED_HK_LIQUID_SEED_SYMBOLS: Tuple[str, ...] = (
     "HK01109",
     "HK06618",
     "HK02800",
+    "HK09626",
+    "HK09868",
+    "HK09888",
+    "HK09896",
+    "HK09696",
+    "HK09866",
+    "HK01093",
+    "HK00857",
+    "HK00386",
+    "HK02313",
+    "HK02015",
+    "HK02628",
+    "HK03988",
+    "HK00939",
+    "HK01928",
+    "HK00941",
+    "HK00175",
+    "HK01088",
+    "HK02269",
 )
 
 
@@ -931,7 +980,10 @@ class MarketScannerService:
         owner_id: Optional[str],
     ) -> Dict[str, Any]:
         market_options = self._quote_market_options(market=profile_config.market)
-        universe_resolution = market_options["resolve_universe"](profile=profile_config)
+        universe_resolution = market_options["resolve_universe"](
+            profile=profile_config,
+            target_symbol_count=resolved_universe_limit,
+        )
         universe_symbols = universe_resolution.get("data") or []
         universe_source = str(universe_resolution.get("source") or "unknown")
 
@@ -1136,7 +1188,12 @@ class MarketScannerService:
             owner_id=owner_id,
         )
 
-    def _resolve_hk_stock_universe(self, *, profile: ScannerMarketProfile) -> Dict[str, Any]:
+    def _resolve_hk_stock_universe(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        target_symbol_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         attempts: List[Dict[str, Any]] = []
         combined_symbols: List[str] = []
         seen_symbols = set()
@@ -1176,12 +1233,12 @@ class MarketScannerService:
             )
 
         local_symbol_count = int(len(combined_symbols))
-        target_symbol_count = min(
-            max(int(profile.detail_limit or 0), MIN_US_SCANNER_SEED_TARGET),
-            MAX_US_SCANNER_SEED_TARGET,
+        resolved_target_symbol_count = min(
+            max(int(target_symbol_count or 0), int(profile.detail_limit or 0), MIN_US_SCANNER_SEED_TARGET),
+            MAX_HK_SCANNER_SUPPLEMENT_TARGET,
         )
         supplement_pool = [symbol for symbol in CURATED_HK_LIQUID_SEED_SYMBOLS if symbol not in seen_symbols]
-        required = max(0, target_symbol_count - len(combined_symbols))
+        required = max(0, resolved_target_symbol_count - len(combined_symbols))
         supplement_symbols = supplement_pool[:required]
         supplemented_seed_count = _merge_symbols(
             supplement_symbols,
@@ -1213,7 +1270,7 @@ class MarketScannerService:
                 "local_symbol_count": local_symbol_count,
                 "supplemented_seed_count": int(supplemented_seed_count),
                 "final_symbol_count": int(len(combined_symbols)),
-                "target_symbol_count": int(target_symbol_count),
+                "target_symbol_count": int(resolved_target_symbol_count),
                 "coverage_strategy": coverage_strategy,
             }
 
@@ -1442,7 +1499,12 @@ class MarketScannerService:
             profile=profile,
         )
 
-    def _resolve_us_stock_universe(self, *, profile: ScannerMarketProfile) -> Dict[str, Any]:
+    def _resolve_us_stock_universe(
+        self,
+        *,
+        profile: ScannerMarketProfile,
+        target_symbol_count: Optional[int] = None,
+    ) -> Dict[str, Any]:
         attempts: List[Dict[str, Any]] = []
         combined_symbols: List[str] = []
         seen_symbols = set()
@@ -1503,14 +1565,14 @@ class MarketScannerService:
             )
 
         local_symbol_count = int(len(combined_symbols))
-        target_symbol_count = min(
-            max(int(profile.detail_limit or 0), MIN_US_SCANNER_SEED_TARGET),
-            MAX_US_SCANNER_SEED_TARGET,
+        resolved_target_symbol_count = min(
+            max(int(target_symbol_count or 0), int(profile.detail_limit or 0), MIN_US_SCANNER_SEED_TARGET),
+            MAX_US_SCANNER_SUPPLEMENT_TARGET,
         )
         supplemented_seed_count = 0
-        if len(combined_symbols) < target_symbol_count:
+        if len(combined_symbols) < resolved_target_symbol_count:
             supplement_pool = [symbol for symbol in CURATED_US_LIQUID_SEED_SYMBOLS if symbol not in seen_symbols]
-            required = max(0, target_symbol_count - len(combined_symbols))
+            required = max(0, resolved_target_symbol_count - len(combined_symbols))
             supplement_symbols = supplement_pool[:required]
             supplemented_seed_count = _merge_symbols(
                 supplement_symbols,
@@ -1543,7 +1605,7 @@ class MarketScannerService:
                 "local_symbol_count": local_symbol_count,
                 "supplemented_seed_count": int(supplemented_seed_count),
                 "final_symbol_count": int(len(combined_symbols)),
-                "target_symbol_count": int(target_symbol_count),
+                "target_symbol_count": int(resolved_target_symbol_count),
                 "coverage_strategy": coverage_strategy,
             }
 

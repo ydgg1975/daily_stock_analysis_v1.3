@@ -1,5 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { getStoredUiLanguage } from '../i18n/core';
+import { buildLocalizedPath, parseLocaleFromPathname, shouldLocalizePath } from '../utils/localeRouting';
 
 export type ProductSurfaceRole = 'guest' | 'user' | 'admin';
 export type AdminSurfaceMode = 'user' | 'admin';
@@ -83,12 +85,34 @@ export function resolveAuthRedirect(search: string, fallback = '/'): string {
   return normalizeRedirectPath(new URLSearchParams(search).get('redirect'), fallback);
 }
 
+function resolveActiveLocale() {
+  if (typeof window === 'undefined') {
+    return getStoredUiLanguage();
+  }
+  const routeLocale = parseLocaleFromPathname(window.location.pathname);
+  return routeLocale || getStoredUiLanguage();
+}
+
 export function buildLoginPath(redirectTo: string): string {
-  return `/login?redirect=${encodeURIComponent(normalizeRedirectPath(redirectTo))}`;
+  const normalizedRedirect = normalizeRedirectPath(redirectTo);
+  const activeLocale = resolveActiveLocale();
+  const localizedRedirect = buildLocalizedPath(normalizedRedirect, activeLocale);
+  const path = `/login?redirect=${encodeURIComponent(localizedRedirect)}`;
+  if (typeof window !== 'undefined' && shouldLocalizePath(window.location.pathname)) {
+    return buildLocalizedPath(path, activeLocale);
+  }
+  return path;
 }
 
 export function buildRegistrationPath(redirectTo: string): string {
-  return `/login?mode=create&redirect=${encodeURIComponent(normalizeRedirectPath(redirectTo))}`;
+  const normalizedRedirect = normalizeRedirectPath(redirectTo);
+  const activeLocale = resolveActiveLocale();
+  const localizedRedirect = buildLocalizedPath(normalizedRedirect, activeLocale);
+  const path = `/login?mode=create&redirect=${encodeURIComponent(localizedRedirect)}`;
+  if (typeof window !== 'undefined' && shouldLocalizePath(window.location.pathname)) {
+    return buildLocalizedPath(path, activeLocale);
+  }
+  return path;
 }
 
 export function useProductSurface() {

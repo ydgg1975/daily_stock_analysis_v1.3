@@ -160,7 +160,7 @@ function MetricPair({
 
 const ScannerPage: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   const [market, setMarket] = useState<'cn' | 'us' | 'hk'>('cn');
   const [profile, setProfile] = useState('cn_preopen_v1');
@@ -173,14 +173,17 @@ const ScannerPage: React.FC = () => {
   const [historyItems, setHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
+  const [personalHistoryItems, setPersonalHistoryItems] = useState<ScannerRunHistoryItem[]>([]);
   const [statusSummary, setStatusSummary] = useState<ScannerOperationalStatus | null>(null);
 
   const [selectedCandidate, setSelectedCandidate] = useState<ScannerCandidate | null>(null);
   const [pageError, setPageError] = useState<ParsedApiError | null>(null);
   const [historyError, setHistoryError] = useState<ParsedApiError | null>(null);
+  const [personalHistoryError, setPersonalHistoryError] = useState<ParsedApiError | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoadingRun, setIsLoadingRun] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoadingPersonalHistory, setIsLoadingPersonalHistory] = useState(false);
 
   useEffect(() => {
     document.title = t('scanner.documentTitle');
@@ -328,6 +331,24 @@ const ScannerPage: React.FC = () => {
     }
   }, [loadRun, market, profile, selectedRunId]);
 
+  const fetchPersonalHistory = useCallback(async () => {
+    setIsLoadingPersonalHistory(true);
+    try {
+      const response = await scannerApi.getRuns({
+        market,
+        profile,
+        page: 1,
+        limit: 5,
+      });
+      setPersonalHistoryItems(response.items);
+      setPersonalHistoryError(null);
+    } catch (error) {
+      setPersonalHistoryError(getParsedApiError(error));
+    } finally {
+      setIsLoadingPersonalHistory(false);
+    }
+  }, [market, profile]);
+
   useEffect(() => {
     setRunDetail(null);
     setSelectedRunId(null);
@@ -337,7 +358,8 @@ const ScannerPage: React.FC = () => {
   useEffect(() => {
     void fetchHistory(1);
     void fetchStatus();
-  }, [fetchHistory, fetchStatus]);
+    void fetchPersonalHistory();
+  }, [fetchHistory, fetchPersonalHistory, fetchStatus]);
 
   const handleRun = useCallback(async () => {
     setIsRunning(true);
@@ -1165,6 +1187,66 @@ const ScannerPage: React.FC = () => {
                 totalPages={totalHistoryPages}
                 onPageChange={(page) => void fetchHistory(page)}
               />
+            </Card>
+
+            <Card
+              title={language === 'en' ? 'My recent runs' : '我的近期 runs'}
+              subtitle={language === 'en' ? 'Personal history remains visible in Admin Mode' : 'Admin Mode 下也保留个人历史可见'}
+              className="space-y-4"
+            >
+              {personalHistoryError ? <ApiErrorAlert error={personalHistoryError} /> : null}
+
+              {isLoadingPersonalHistory ? (
+                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm text-secondary-text">
+                  {t('scanner.loadingHistory')}
+                </div>
+              ) : null}
+
+              {!isLoadingPersonalHistory && personalHistoryItems.length ? (
+                <div className="space-y-3">
+                  {personalHistoryItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => void loadRun(item.id)}
+                      className="w-full rounded-[var(--theme-panel-radius-md)] border border-[var(--theme-panel-subtle-border)] bg-[var(--surface-2)]/45 px-4 py-3 text-left transition-colors hover:bg-[var(--overlay-hover)]"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="history">{`#${item.id}`}</Badge>
+                            <Badge variant={marketBadgeVariant(item.market)}>
+                              {item.market === 'us' ? t('scanner.marketUs') : item.market === 'hk' ? t('scanner.marketHk') : t('scanner.marketCn')}
+                            </Badge>
+                            {item.triggerMode ? (
+                              <Badge variant={item.triggerMode === 'scheduled' ? 'info' : 'history'}>
+                                {item.triggerMode === 'scheduled' ? t('scanner.triggerScheduled') : t('scanner.triggerManual')}
+                              </Badge>
+                            ) : null}
+                            <Badge variant={runStatusVariant(item.status)}>{t(`scanner.status.${item.status}`)}</Badge>
+                            <Badge variant="history">{formatTimestamp(item.runAt)}</Badge>
+                          </div>
+                          <p className="text-sm leading-6 text-foreground">{item.headline || '--'}</p>
+                          <p className="text-xs leading-5 text-secondary-text">
+                            {item.topSymbols.join(' / ') || t('scanner.noTopSymbols')}
+                          </p>
+                        </div>
+                        <div className="w-full sm:w-auto text-left sm:text-right text-xs text-secondary-text">
+                          <p>{`${t('scanner.metricUniverse')} ${item.universeSize}`}</p>
+                          <p>{`${t('scanner.metricDetail')} ${item.evaluatedSize}`}</p>
+                          <p>{`${t('scanner.metricShortlist')} ${item.shortlistSize}`}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {!isLoadingPersonalHistory && !personalHistoryItems.length ? (
+                <div className="rounded-[var(--theme-panel-radius-md)] border border-dashed border-[var(--theme-panel-subtle-border)] px-4 py-5 text-sm leading-6 text-secondary-text">
+                  {language === 'en' ? 'No personal scanner history yet.' : '当前管理员账户下还没有个人 scanner 历史。'}
+                </div>
+              ) : null}
             </Card>
 
             <Card

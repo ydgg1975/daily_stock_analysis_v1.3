@@ -9,6 +9,8 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urlparse
 
+import requests
+
 from src.config import (
     SUPPORTED_LLM_CHANNEL_PROTOCOLS,
     Config,
@@ -390,6 +392,119 @@ class SystemConfigService:
                 "latency_ms": None,
             }
 
+    def test_custom_data_source(
+        self,
+        *,
+        name: str,
+        base_url: str,
+        credential_schema: str,
+        credential: str,
+        secret: str = "",
+        timeout_seconds: float = 5.0,
+    ) -> Dict[str, Any]:
+        """Run a bounded connectivity probe for a custom data source base URL."""
+        normalized_name = str(name or "").strip() or "custom_data_source"
+        normalized_url = str(base_url or "").strip()
+        parsed = urlparse(normalized_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return {
+                "success": False,
+                "message": "Base URL format is invalid",
+                "error": "Use a full http(s) URL before testing connectivity.",
+                "status_code": None,
+                "checked_url": normalized_url,
+                "latency_ms": None,
+            }
+
+        headers = {
+            "User-Agent": "WolfyStock-Config-Validation/1.0",
+            "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+        }
+        trimmed_credential = str(credential or "").strip()
+        trimmed_secret = str(secret or "").strip()
+        if credential_schema == "key_secret":
+            if trimmed_credential:
+                headers["X-API-Key"] = trimmed_credential
+            if trimmed_secret:
+                headers["X-API-Secret"] = trimmed_secret
+        elif trimmed_credential:
+            headers["Authorization"] = f"Bearer {trimmed_credential}"
+
+        methods = ["HEAD", "GET"]
+        for index, method in enumerate(methods):
+            try:
+                started_at = time.perf_counter()
+                response = requests.request(
+                    method,
+                    normalized_url,
+                    headers=headers,
+                    timeout=max(2.0, float(timeout_seconds)),
+                    allow_redirects=True,
+                    stream=(method == "GET"),
+                )
+                latency_ms = int((time.perf_counter() - started_at) * 1000)
+                status_code = int(getattr(response, "status_code", 0) or 0)
+                try:
+                    return self._classify_custom_data_source_probe(
+                        status_code=status_code,
+                        checked_url=normalized_url,
+                        latency_ms=latency_ms,
+                    )
+                finally:
+                    close_fn = getattr(response, "close", None)
+                    if callable(close_fn):
+                        close_fn()
+            except requests.exceptions.SSLError as exc:
+                return {
+                    "success": False,
+                    "message": "TLS handshake failed while testing the endpoint",
+                    "error": "The server certificate could not be verified. Check HTTPS/TLS configuration.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.Timeout:
+                return {
+                    "success": False,
+                    "message": "Endpoint timed out during connectivity validation",
+                    "error": "The server did not respond before the timeout window elapsed.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.ConnectionError as exc:
+                classified = self._classify_custom_data_source_connection_error(exc)
+                return {
+                    "success": False,
+                    "message": classified[0],
+                    "error": classified[1],
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Custom data source probe failed for %s: %s", normalized_name, exc)
+                return {
+                    "success": False,
+                    "message": "Endpoint probe failed before a valid HTTP response was returned",
+                    "error": "The request could not be completed. Check proxy, URL, and server reachability.",
+                    "status_code": None,
+                    "checked_url": normalized_url,
+                    "latency_ms": None,
+                }
+
+            if index == 0:
+                continue
+
+        return {
+            "success": False,
+            "message": "Endpoint probe did not complete",
+            "error": "No usable probe result was produced.",
+            "status_code": None,
+            "checked_url": normalized_url,
+            "latency_ms": None,
+        }
+
     @staticmethod
     def _extract_llm_response_text(response: Any) -> str:
         """Extract plain text content from heterogeneous LiteLLM response shapes."""
@@ -417,6 +532,89 @@ class SystemConfigService:
             if delta is not None:
                 return str(getattr(delta, "content", "") or "").strip()
         return str(content or "").strip()
+
+    @staticmethod
+    def _classify_custom_data_source_connection_error(
+        exc: requests.exceptions.ConnectionError,
+    ) -> Tuple[str, str]:
+        raw_error = str(exc).strip().lower()
+        dns_tokens = (
+            "name or service not known",
+            "temporary failure in name resolution",
+            "nodename nor servname provided",
+            "getaddrinfo failed",
+            "no address associated with hostname",
+        )
+        if any(token in raw_error for token in dns_tokens):
+            return (
+                "DNS resolution failed while testing the endpoint",
+                "The hostname could not be resolved. Check the Base URL host spelling and DNS availability.",
+            )
+        return (
+            "Connection to the endpoint failed",
+            "The host was reached incorrectly or refused the connection. Check host, port, firewall, and service status.",
+        )
+
+    @staticmethod
+    def _classify_custom_data_source_probe(
+        *,
+        status_code: int,
+        checked_url: str,
+        latency_ms: int,
+    ) -> Dict[str, Any]:
+        if 200 <= status_code < 300:
+            return {
+                "success": True,
+                "message": "Endpoint reachable and responded successfully",
+                "error": None,
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if 300 <= status_code < 400:
+            return {
+                "success": True,
+                "message": "Endpoint reachable and responded with a redirect",
+                "error": "The URL redirected during validation. Verify that the final target is the intended API endpoint.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code in {401, 403}:
+            return {
+                "success": False,
+                "message": "Endpoint reachable, but the server rejected the supplied credentials",
+                "error": "Connectivity is working, but authentication/authorization failed.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code == 404:
+            return {
+                "success": False,
+                "message": "Endpoint reachable, but the Base URL path was not found",
+                "error": "The server responded with 404. Check the Base URL path and version suffix.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        if status_code in {405, 501}:
+            return {
+                "success": True,
+                "message": "Endpoint reachable, but the probe method is not supported",
+                "error": "The server rejected the validation method, but network reachability is confirmed.",
+                "status_code": status_code,
+                "checked_url": checked_url,
+                "latency_ms": latency_ms,
+            }
+        return {
+            "success": False,
+            "message": f"Endpoint responded with unexpected HTTP status {status_code}",
+            "error": "The server was reachable, but the response was not usable for validation.",
+            "status_code": status_code,
+            "checked_url": checked_url,
+            "latency_ms": latency_ms,
+        }
 
     @staticmethod
     def _build_llm_empty_response_hint(
