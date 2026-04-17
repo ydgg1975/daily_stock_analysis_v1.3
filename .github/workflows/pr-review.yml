@@ -164,12 +164,30 @@ jobs:
         if: steps.check_files.outputs.has_py_changes == 'true'
         run: |
           echo "## 🔎 代码质量检查" >> $GITHUB_STEP_SUMMARY
-          RESULT=$(flake8 $CHANGED_FILES --select=E9,F63,F7,F82 --format='%(path)s:%(row)d: %(code)s %(text)s' 2>/dev/null || true)
+
+          mapfile -t changed_files <<< "$CHANGED_FILES"
+          existing_files=()
+          for file in "${changed_files[@]}"; do
+            if [ -f "$file" ]; then
+              existing_files+=("$file")
+            fi
+          done
+
+          if [ "${#existing_files[@]}" -eq 0 ]; then
+            echo "✅ 没有可检查的现存 Python 文件" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          RESULT="$(flake8 "${existing_files[@]}" \
+            --select=E9,F63,F7,F82 \
+            --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' \
+            2>&1 || true)"
           if [ -n "$RESULT" ]; then
             echo "⚠️ 发现以下问题：" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "$RESULT" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$RESULT"
             exit 1
           else
             echo "✅ 未发现严重代码问题" >> $GITHUB_STEP_SUMMARY
