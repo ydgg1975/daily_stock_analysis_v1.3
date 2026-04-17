@@ -17,7 +17,7 @@ import unittest
 import sys
 import os
 from dataclasses import dataclass
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -519,7 +519,8 @@ class TestAgentExecutor(unittest.TestCase):
         adapter.call_with_tools.side_effect = _capture_timeout
 
         executor = AgentExecutor(registry, adapter, max_steps=2, timeout_seconds=0.2)
-        result = executor.run("Analyze 600519")
+        with patch("src.agent.runner._persist_usage", side_effect=lambda *_args, **_kwargs: time.sleep(0.25)):
+            result = executor.run("Analyze 600519")
 
         self.assertTrue(result.success)
         self.assertIsNotNone(captured.get("timeout"))

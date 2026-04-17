@@ -408,10 +408,6 @@ def run_agent_loop(
         m = getattr(response, "model", "") or response.provider
         if m and m != "error":
             models_used.append(m)
-        model_for_usage = m or response.provider
-        if model_for_usage and model_for_usage != "error" and response.usage:
-            _persist_usage(response.usage, model_for_usage, call_type="agent")
-
         remaining_timeout = _remaining_timeout_seconds(start_time, max_wall_clock_seconds)
         if remaining_timeout is not None and remaining_timeout <= 0:
             logger.warning("Agent timed out after LLM call at step %d", step + 1)
@@ -425,6 +421,10 @@ def run_agent_loop(
                 models_used=models_used,
                 messages=messages,
             )
+
+        model_for_usage = m or response.provider
+        if model_for_usage and model_for_usage != "error" and response.usage:
+            _persist_usage(response.usage, model_for_usage, call_type="agent")
 
         if response.tool_calls:
             # ---- tool execution branch ----
