@@ -164,12 +164,16 @@ jobs:
         if: steps.check_files.outputs.has_py_changes == 'true'
         run: |
           echo "## 🔎 代码质量检查" >> $GITHUB_STEP_SUMMARY
-          RESULT=$(flake8 $CHANGED_FILES --select=E9,F63,F7,F82 --format='%(path)s:%(row)d: %(code)s %(text)s' 2>/dev/null || true)
+          RESULT="$(flake8 $CHANGED_FILES \
+            --select=E9,F63,F7,F82 \
+            --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' \
+            2>&1 || true)"
           if [ -n "$RESULT" ]; then
             echo "⚠️ 发现以下问题：" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "$RESULT" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$RESULT"
             exit 1
           else
             echo "✅ 未发现严重代码问题" >> $GITHUB_STEP_SUMMARY
