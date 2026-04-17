@@ -164,7 +164,10 @@ jobs:
         if: steps.check_files.outputs.has_py_changes == 'true'
         run: |
           echo "## 🔎 代码质量检查" >> $GITHUB_STEP_SUMMARY
-          RESULT="$(flake8 $CHANGED_FILES \
+
+          mapfile -t changed_files <<< "$CHANGED_FILES"
+
+          RESULT="$(flake8 "${changed_files[@]}" \
             --select=E9,F63,F7,F82 \
             --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s' \
             2>&1 || true)"
