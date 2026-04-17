@@ -1222,13 +1222,14 @@ class NotificationService(
         config = get_config()
         report_language = self._get_report_language(results)
         labels = get_report_labels(report_language)
-        self._prime_channel_report_cache(results, report_date=report_date or datetime.now().strftime('%Y-%m-%d'), report_language=report_language)
+        report_date = datetime.now().strftime('%Y-%m-%d')
+        self._prime_channel_report_cache(results, report_date=report_date, report_language=report_language)
         if getattr(config, 'report_renderer_enabled', False) and results:
             from src.services.report_renderer import render
             out = render(
                 platform='wechat',
                 results=results,
-                report_date=datetime.now().strftime('%Y-%m-%d'),
+                report_date=report_date,
                 summary_only=self._report_summary_only,
                 extra_context={
                     "report_language": report_language,
@@ -1237,8 +1238,6 @@ class NotificationService(
             )
             if out:
                 return out
-
-        report_date = datetime.now().strftime('%Y-%m-%d')
         
         # 按评分排序
         sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
