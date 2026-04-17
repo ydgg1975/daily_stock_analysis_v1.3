@@ -75,7 +75,17 @@ def load_local_us_daily_history(
             status="not_applicable",
         )
 
-    if not path.exists():
+    try:
+        exists = path.exists()
+    except OSError as exc:
+        return LocalUsHistoryLoadResult(
+            stock_code=normalized_code,
+            path=path,
+            status="failed",
+            error=str(exc),
+        )
+
+    if not exists:
         return LocalUsHistoryLoadResult(
             stock_code=normalized_code,
             path=path,

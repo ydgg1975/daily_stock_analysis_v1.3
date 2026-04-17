@@ -860,6 +860,12 @@ class MarketScannerServiceTestCase(unittest.TestCase):
         self.assertIn("NVDA", result["data"])
         self.assertIn("PLTR", result["data"])
 
+    def test_resolve_us_stock_universe_falls_back_when_parquet_root_is_inaccessible(self) -> None:
+        with patch("src.services.market_scanner_service.Path.exists", side_effect=PermissionError("permission denied")):
+            symbols = MarketScannerService._load_local_us_universe_from_parquet(Path("/root/us_test/data/normalized/us"))
+
+        self.assertEqual(symbols, [])
+
     def test_resolve_hk_stock_universe_respects_requested_target_for_seed_supplement(self) -> None:
         profile = get_scanner_profile(market="hk", profile="hk_preopen_v1")
         service = MarketScannerService(

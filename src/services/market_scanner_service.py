@@ -1620,15 +1620,19 @@ class MarketScannerService:
 
     @staticmethod
     def _load_local_us_universe_from_parquet(parquet_dir: Path) -> List[str]:
-        if not parquet_dir.exists() or not parquet_dir.is_dir():
+        try:
+            if not parquet_dir.exists() or not parquet_dir.is_dir():
+                return []
+            symbols = sorted(
+                {
+                    path.stem.upper()
+                    for path in parquet_dir.glob("*.parquet")
+                    if is_us_stock_code(path.stem.upper())
+                }
+            )
+        except OSError as exc:
+            logger.warning("Unable to inspect local US parquet universe at %s: %s", parquet_dir, exc)
             return []
-        symbols = sorted(
-            {
-                path.stem.upper()
-                for path in parquet_dir.glob("*.parquet")
-                if is_us_stock_code(path.stem.upper())
-            }
-        )
         return symbols
 
     def _load_local_us_universe_from_db(self) -> List[str]:
