@@ -103,6 +103,120 @@ describe('LLMChannelEditor', () => {
     expect(within(visionModelSelect).getByRole('option', { name: 'minimax/MiniMax-M1' })).toBeInTheDocument();
   });
 
+  it('round-trips a minimax channel: protocol stays minimax and bare model resolves to openai/<id>', async () => {
+    update.mockResolvedValue({
+      success: true,
+      configVersion: 'v2',
+      appliedCount: 1,
+      skippedMaskedCount: 0,
+      reloadTriggered: true,
+      updatedKeys: [],
+      warnings: [],
+    });
+
+    render(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'minimax' },
+          { key: 'LLM_MINIMAX_PROTOCOL', value: 'minimax' },
+          { key: 'LLM_MINIMAX_BASE_URL', value: 'https://api.minimax.io/v1' },
+          { key: 'LLM_MINIMAX_ENABLED', value: 'true' },
+          { key: 'LLM_MINIMAX_API_KEY', value: 'minimax-key' },
+          { key: 'LLM_MINIMAX_MODELS', value: 'MiniMax-M1' },
+        ]}
+        configVersion="v1"
+        maskToken="******"
+        onSaved={() => {}}
+      />,
+    );
+
+    // Bare MiniMax model should be normalized to openai/<id> in runtime selectors,
+    // matching backend src/config.py which routes minimax via openai/ prefix.
+    const primaryModelSelect = screen.getByRole('combobox', { name: '主模型' });
+    expect(within(primaryModelSelect).getByRole('option', { name: 'openai/MiniMax-M1' })).toBeInTheDocument();
+    // The minimax/<id> form should NOT appear (it would imply a different runtime route).
+    expect(within(primaryModelSelect).queryByRole('option', { name: 'minimax/MiniMax-M1' })).not.toBeInTheDocument();
+
+    // Open the channel row so the model input becomes editable.
+    fireEvent.click(screen.getByRole('button', { name: /MiniMax/i }));
+
+    // Trigger save: dirty the model field to enable Save. The save payload assertion below
+    // proves the protocol round-trips as 'minimax' (not coerced to 'openai').
+    const modelsInput = screen.getByLabelText('模型（逗号分隔）');
+    fireEvent.change(modelsInput, { target: { value: 'MiniMax-M1,MiniMax-Text-01' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存 AI 配置' }));
+
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+
+    const updatePayload = update.mock.calls[0][0];
+    expect(updatePayload.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'LLM_MINIMAX_PROTOCOL', value: 'minimax' }),
+        expect.objectContaining({ key: 'LLM_MINIMAX_BASE_URL', value: 'https://api.minimax.io/v1' }),
+        expect.objectContaining({ key: 'LLM_MINIMAX_MODELS', value: 'MiniMax-M1,MiniMax-Text-01' }),
+      ]),
+    );
+  });
+
+  it('clears stale fallback models when the underlying channel models change', async () => {
+    update.mockResolvedValue({
+      success: true,
+      configVersion: 'v2',
+      appliedCount: 1,
+      skippedMaskedCount: 0,
+      reloadTriggered: true,
+      updatedKeys: [],
+      warnings: [],
+    });
+
+    render(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'openai' },
+          { key: 'LLM_OPENAI_PROTOCOL', value: 'openai' },
+          { key: 'LLM_OPENAI_BASE_URL', value: 'https://api.openai.com/v1' },
+          { key: 'LLM_OPENAI_ENABLED', value: 'true' },
+          { key: 'LLM_OPENAI_API_KEY', value: 'sk-test' },
+          { key: 'LLM_OPENAI_MODELS', value: 'gpt-4o-mini,gpt-4o' },
+          { key: 'LITELLM_MODEL', value: 'openai/gpt-4o-mini' },
+          { key: 'LITELLM_FALLBACK_MODELS', value: 'openai/gpt-4o' },
+        ]}
+        configVersion="v1"
+        maskToken="******"
+        onSaved={() => {}}
+      />,
+    );
+
+    // Initially the fallback (openai/gpt-4o) should be checked.
+    const fallbackBefore = screen.getByRole('checkbox', { name: 'openai/gpt-4o' }) as HTMLInputElement;
+    expect(fallbackBefore.checked).toBe(true);
+
+    // User removes gpt-4o from the channel's model list — leaves only gpt-4o-mini.
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI 官方/i }));
+    const modelsInput = screen.getByLabelText('模型（逗号分隔）');
+    fireEvent.change(modelsInput, { target: { value: 'gpt-4o-mini' } });
+
+    // The stale fallback option should disappear from the available list and not block save.
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'openai/gpt-4o' })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存 AI 配置' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+
+    const updatePayload = update.mock.calls[0][0];
+    // Stale fallback should have been cleared from runtime config.
+    expect(updatePayload.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'LITELLM_FALLBACK_MODELS', value: '' }),
+      ]),
+    );
+  });
+
   it('checks protocol-prefixed selected model when discovery returns bare id', async () => {
     discoverLLMChannelModels.mockResolvedValue({
       success: true,

@@ -5,7 +5,7 @@ import { getParsedApiError } from '../../api/error';
 import { systemConfigApi } from '../../api/systemConfig';
 import { ApiErrorAlert, Badge, Button, InlineAlert, Input, Select, StatusDot, Tooltip } from '../common';
 
-type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
+type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama' | 'minimax';
 
 interface ChannelPreset {
   label: string;
@@ -81,6 +81,12 @@ const CHANNEL_PRESETS: Record<string, ChannelPreset> = {
     baseUrl: 'http://127.0.0.1:11434',
     placeholder: 'llama3.2,qwen2.5',
   },
+  minimax: {
+    label: 'MiniMax（海外站）',
+    protocol: 'minimax',
+    baseUrl: 'https://api.minimax.io/v1',
+    placeholder: 'MiniMax-M1,MiniMax-Text-01',
+  },
   custom: {
     label: '自定义渠道',
     protocol: 'openai',
@@ -96,6 +102,7 @@ const PROTOCOL_OPTIONS: Array<{ value: ChannelProtocol; label: string }> = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'vertex_ai', label: 'Vertex AI' },
   { value: 'ollama', label: 'Ollama' },
+  { value: 'minimax', label: 'MiniMax' },
 ];
 
 const MODEL_PLACEHOLDERS: Record<ChannelProtocol, string> = {
@@ -105,6 +112,7 @@ const MODEL_PLACEHOLDERS: Record<ChannelProtocol, string> = {
   anthropic: 'claude-3-5-sonnet-20241022',
   vertex_ai: 'gemini-2.5-flash',
   ollama: 'llama3.2,qwen2.5',
+  minimax: 'MiniMax-M1,MiniMax-Text-01',
 };
 
 const KNOWN_MODEL_PREFIXES = new Set([
@@ -473,6 +481,9 @@ function normalizeProtocol(value: string): ChannelProtocol {
   if (normalized === 'ollama') {
     return 'ollama';
   }
+  if (normalized === 'minimax' || normalized === 'minimaxi') {
+    return 'minimax';
+  }
   return 'openai';
 }
 
@@ -570,6 +581,7 @@ const PROTOCOL_ALIASES: Record<string, string> = {
   google: 'gemini',
   openai_compatible: 'openai',
   openai_compat: 'openai',
+  minimaxi: 'minimax',
 };
 
 function normalizeModelForRuntime(model: string, protocol: ChannelProtocol): string {
@@ -588,9 +600,18 @@ function normalizeModelForRuntime(model: string, protocol: ChannelProtocol): str
       }
       return trimmedModel;
     }
+    if (protocol === 'minimax') {
+      // MiniMax uses the OpenAI-compatible API; route via openai/ prefix.
+      return `openai/${trimmedModel}`;
+    }
     return `${protocol}/${trimmedModel}`;
   }
 
+  if (protocol === 'minimax') {
+    // MiniMax uses the OpenAI-compatible API; route via openai/ prefix
+    // with explicit api_base on the backend (matches src/config.py).
+    return `openai/${trimmedModel}`;
+  }
   return `${protocol}/${trimmedModel}`;
 }
 
