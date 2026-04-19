@@ -386,6 +386,11 @@ class LLMToolAdapter:
         }
         if max_tokens is not None:
             call_kwargs["max_tokens"] = max_tokens
+        elif "minimax" in model.lower():
+            # MiniMax models default to thinking mode (CoT), which consumes significant
+            # output tokens before the actual response. Set a safe default to avoid
+            # finish_reason=length being mistaken for insufficient balance (issue 1008).
+            call_kwargs["max_tokens"] = 16000
         if timeout is not None:
             call_kwargs["timeout"] = timeout
 
@@ -495,7 +500,11 @@ class LLMToolAdapter:
         # DeepSeek/Qwen thinking mode; not in standard OpenAI type, accessed via getattr
         reasoning_content = getattr(choice.message, "reasoning_content", None)
 
+        # MiniMax does not support structured tool_calls via LiteLLM (supports_function_calling=False).
+        # The model outputs tool calls as plain text: [TOOL_CALL]{tool => "name", args => {...}}[/TOOL_CALL]
+        # Parse these text blocks when no structured tool_calls are present.
         if choice.message.tool_calls:
+            # Structured tool_calls (OpenAI-compatible providers)
             for tc in choice.message.tool_calls:
                 args: Dict[str, Any] = {}
                 if tc.function.arguments:
@@ -521,6 +530,27 @@ class LLMToolAdapter:
                     arguments=args,
                     thought_signature=sig,
                 ))
+        elif text_content:
+            # MiniMax text-mode tool_call fallback: parse [TOOL_CALL]{...}[/TOOL_CALL] blocks
+            import re
+            tc_blocks = re.findall(r'\[TOOL_CALL\]\s*\{[^}]+\}(?:\s*\[/TOOL_CALL\])?', text_content, re.DOTALL)
+            for i, block in enumerate(tc_blocks):
+                # Extract {name, args {...}}
+                m = re.search(r'tool\s*=>\s*"([^"]+)"', block)
+                args_m = re.search(r'args\s*=>\s*\{([^}]+)\}', block)
+                if m:
+                    name = m.group(1)
+                    args_str = args_m.group(1) if args_m else ""
+                    # Parse key => value pairs
+                    args = {}
+                    for kv in re.findall(r'--(\w+)\s+"([^"]*)"', args_str):
+                        args[kv[0]] = kv[1]
+                    tool_calls.append(ToolCall(
+                        id=f"minimax_tc_{i}",
+                        name=name,
+                        arguments=args,
+                        thought_signature=None,
+                    ))
 
         usage: Dict[str, Any] = {}
         if response.usage:
