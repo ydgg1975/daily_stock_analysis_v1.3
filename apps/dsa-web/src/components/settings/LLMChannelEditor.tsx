@@ -829,6 +829,21 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
     return models;
   }, [channels, managesRuntimeConfig]);
 
+  // When available models change (e.g. a channel is disabled or its model list changes),
+  // automatically remove any fallback models that are no longer selectable.
+  // Without this, stale fallback entries become invisible in the UI (only availableModels
+  // are rendered as checkboxes) yet still block saving with a validation error.
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    setRuntimeConfig((previous) => {
+      const validFallbacks = previous.fallbackModels.filter(
+        (model) => availableModels.includes(model) || usesDirectEnvProvider(model),
+      );
+      if (validFallbacks.length === previous.fallbackModels.length) return previous;
+      return { ...previous, fallbackModels: validFallbacks };
+    });
+  }, [availableModels]);
+
   const hasChanges = useMemo(() => {
     const runtimeChanged = (
       runtimeConfig.primaryModel !== initialRuntimeConfig.primaryModel
