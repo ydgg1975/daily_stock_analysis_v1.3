@@ -176,32 +176,40 @@ export const KLineChart: React.FC<KLineChartProps> = ({ stockCode, annotations, 
       if (annotations.support) {
         const { supportLow, supportHigh, resistanceLow, resistanceHigh } = annotations.support;
 
-        const supportSeries = chart.addAreaSeries({
-          topColor: 'rgba(34,197,94,0.15)',
-          bottomColor: 'rgba(34,197,94,0.03)',
-          lineColor: 'rgba(34,197,94,0.4)',
+        // Use Baseline series so the area fills only between baseValue and the line
+        // (Area series fills all the way to the price-scale floor and does not accept baseValue).
+        const supportSeries = chart.addBaselineSeries({
+          baseValue: { type: 'price', price: supportLow },
+          topFillColor1: 'rgba(34,197,94,0.15)',
+          topFillColor2: 'rgba(34,197,94,0.03)',
+          topLineColor: 'rgba(34,197,94,0.4)',
+          bottomFillColor1: 'rgba(34,197,94,0)',
+          bottomFillColor2: 'rgba(34,197,94,0)',
+          bottomLineColor: 'rgba(34,197,94,0)',
           lineWidth: 1,
           priceScaleId: 'right',
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
-          baseValue: { type: 'price', price: supportLow },
         });
         supportSeries.setData(
           bars.map((b) => ({ time: b.date as Time, value: supportHigh })),
         );
 
         // Resistance band (red semi-transparent area between resistanceLow and resistanceHigh)
-        const resistanceSeries = chart.addAreaSeries({
-          topColor: 'rgba(239,68,68,0.15)',
-          bottomColor: 'rgba(239,68,68,0.03)',
-          lineColor: 'rgba(239,68,68,0.4)',
+        const resistanceSeries = chart.addBaselineSeries({
+          baseValue: { type: 'price', price: resistanceLow },
+          topFillColor1: 'rgba(239,68,68,0.15)',
+          topFillColor2: 'rgba(239,68,68,0.03)',
+          topLineColor: 'rgba(239,68,68,0.4)',
+          bottomFillColor1: 'rgba(239,68,68,0)',
+          bottomFillColor2: 'rgba(239,68,68,0)',
+          bottomLineColor: 'rgba(239,68,68,0)',
           lineWidth: 1,
           priceScaleId: 'right',
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
-          baseValue: { type: 'price', price: resistanceLow },
         });
         resistanceSeries.setData(
           bars.map((b) => ({ time: b.date as Time, value: resistanceHigh })),
