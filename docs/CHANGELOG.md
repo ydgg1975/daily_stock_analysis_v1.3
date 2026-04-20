@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 自选股增强 — 实时行情（Tushare 自动优先）、30 日 sparkline 走势图、AI 分析摘要、持仓联动、自定义分组与排序、分析历史时间线
 - [新功能] 新用户引导流程 — 注册后 3 步向导：配置 AI 模型（仅需一个 API Key）→ 添加自选股 → 触发首次分析
 - [新功能] 自选股定时分析 — 每个用户可配置每日自动分析时间，设置页新增定时分析面板，自选股页显示定时状态
+- [新功能] 报告内联追问 AI 抽屉 — 首页「追问 AI」按钮改为打开右侧 Chat 抽屉（替代原本的 `/chat` 页面跳转），抽屉按报告 ID 派生**独立 scoped store**（不再共享 /chat 页面的全局 session，避免互相污染），发送按钮在 hydrate 完成前禁用以防竞态丢消息；自动注入 `ChatFollowUpContext`（买点/止损/目标价/当前价），空态展示 3 个预置追问 chips；加入 focus trap 与关闭后焦点回落；后端 `context: Dict[str, Any]` 已有能力，无需改动。
 - [修复] 大盘复盘链路接入 `REPORT_LANGUAGE`：`REPORT_LANGUAGE=en` 时，A 股/合并复盘的 Prompt、章节标题、模板兜底文案与通知包装标题统一改为英文，避免出现英文正文外包中文标题的问题。
 - [修复] `AGENT_MAX_STEPS` 在 orchestrator 多 Agent 模式下统一明确为“默认作为各子 Agent 的步数上限而非硬覆盖；TechnicalAgent 等高默认值 Agent 会被封顶、低默认值 Agent 保持原值；当用户主动调高（>10）时，再统一覆盖所有子 Agent 采用全局值”，同时修复用户设置 12 但 TechnicalAgent 仍以默认 6 步运行并报 "Agent exceeded max steps" 的问题（fixes #1026）
 - [修复] Specialist（Skill）Agent 失败不再中断整个分析管线，改为与 intel/risk 相同的优雅降级策略

@@ -122,6 +122,43 @@ test.describe('web smoke', () => {
     await expect(page.getByRole('link', { name: '回测' })).toBeVisible({ timeout: 5000 });
   });
 
+  test('home report 追问 AI button opens inline chat drawer with preset prompts', async ({ page }) => {
+    await login(page);
+
+    const stockInput = page.getByPlaceholder('输入股票代码或名称，如 600519、贵州茅台、AAPL');
+    await expect(stockInput).toBeVisible({ timeout: 10_000 });
+
+    // 这条用例必须实际验证 drawer 行为；没有历史报告时不再静默 skip，
+    // 改为显式失败，提示运行者先种入一条报告（否则 CI 会拿到虚假通过）
+    const followUpButton = page.getByRole('button', { name: '追问 AI' });
+    const hasReport = await followUpButton.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!hasReport) {
+      throw new Error(
+        '首页没有可点击的"追问 AI"按钮（需要至少一条历史报告）。\n'
+        + '请在运行 smoke 前种入一条分析报告（例如通过 API 或 fixture），'
+        + '或设置 DSA_WEB_SMOKE_ALLOW_SKIP=1 显式允许跳过。',
+      );
+    }
+
+    await followUpButton.click();
+
+    // 抽屉展示报告标题与 3 个预置追问 chip（hydrate 完成后可见）
+    await expect(
+      page.getByText(/为什么把止损和买点定在这里/),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.getByText(/结合我的持仓和自选股/),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/如果我已经在更高价位买了/),
+    ).toBeVisible();
+
+    // 输入框就位且 hydrate 后可用（不再是"加载中..."占位）
+    const composer = page.getByPlaceholder(/继续追问/);
+    await expect(composer).toBeVisible();
+    await expect(composer).toBeEnabled();
+  });
+
   test('settings page renders title and save actions after login', async ({ page }) => {
     await login(page);
 

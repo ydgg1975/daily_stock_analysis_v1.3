@@ -1,11 +1,12 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { ApiErrorAlert, ConfirmDialog, Button, EmptyState, InlineAlert } from '../components/common';
 import { DashboardStateBlock } from '../components/dashboard';
 import { StockAutocomplete } from '../components/StockAutocomplete';
 import { HistoryList } from '../components/history';
 import { ReportMarkdown, ReportSummary } from '../components/report';
+import { ChatDrawer } from '../components/chat';
 import { ShareButton } from '../components/share/ShareButton';
 import { watchlistApi } from '../api/watchlist';
 import { useDashboardLifecycle, useHomeDashboardState } from '../hooks';
@@ -216,11 +217,11 @@ function MarketSentimentPanel({ report }: { report: AnalysisReport | null }) {
 }
 
 const HomePage: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [watchlistCodes, setWatchlistCodes] = useState<Set<string>>(new Set());
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
 
   const {
     query,
@@ -328,12 +329,12 @@ const HomePage: React.FC = () => {
     if (selectedReport?.meta.id === undefined) {
       return;
     }
+    setChatDrawerOpen(true);
+  }, [selectedReport]);
 
-    const code = selectedReport.meta.stockCode;
-    const name = selectedReport.meta.stockName;
-    const rid = selectedReport.meta.id;
-    navigate(`/chat?stock=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&recordId=${rid}`);
-  }, [navigate, selectedReport]);
+  const handleCloseChatDrawer = useCallback(() => {
+    setChatDrawerOpen(false);
+  }, []);
 
   const handleDeleteSelectedHistory = useCallback(() => {
     void deleteSelectedHistory();
@@ -581,6 +582,12 @@ const HomePage: React.FC = () => {
           onClose={closeMarkdownDrawer}
         />
       ) : null}
+
+      <ChatDrawer
+        isOpen={chatDrawerOpen}
+        onClose={handleCloseChatDrawer}
+        report={chatDrawerOpen ? selectedReport : null}
+      />
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}

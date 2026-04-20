@@ -41,6 +41,14 @@ vi.mock('../../hooks/useTaskStream', () => ({
   useTaskStream: vi.fn(),
 }));
 
+vi.mock('../../api/agent', () => ({
+  agentApi: {
+    getChatSessions: vi.fn(async () => []),
+    getChatSessionMessages: vi.fn(async () => []),
+    chatStream: vi.fn(),
+  },
+}));
+
 const historyItem = {
   id: 1,
   queryId: 'q-1',
@@ -157,7 +165,7 @@ describe('HomePage', () => {
     expect(screen.getByText(/股票 600519 正在分析中/).closest('[role="alert"]')).toBeInTheDocument();
   });
 
-  it('navigates to chat with report context when asking a follow-up question', async () => {
+  it('opens the inline chat drawer with report context when asking a follow-up question', async () => {
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 1,
       page: 1,
@@ -175,9 +183,13 @@ describe('HomePage', () => {
     const followUpButton = await screen.findByRole('button', { name: '追问 AI' });
     fireEvent.click(followUpButton);
 
-    expect(navigateMock).toHaveBeenCalledWith(
-      '/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0&recordId=1',
-    );
+    // ChatDrawer 打开后会以 stockName(stockCode) 作为标题，并展示预置追问
+    expect(await screen.findByText('贵州茅台(600519)')).toBeInTheDocument();
+    expect(
+      screen.getByText('为什么把止损和买点定在这里？给我解释一下这个点位逻辑'),
+    ).toBeInTheDocument();
+    // 不再跳转到 /chat
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   it('confirms and deletes selected history from the dashboard state flow', async () => {
