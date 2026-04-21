@@ -82,6 +82,18 @@
 
 進入你 Fork 的倉庫 → `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
 
+> **🎯 最小化可執行配置（約 5 分鐘）**
+>
+> 只要配好下面 3 個 Secret，系統就能跑起來。其餘所有欄位都是可選的增強：
+>
+> | Secret | 範例值 | 作用 |
+> |---|---|---|
+> | `STOCK_LIST` | `600519,hk00700,AAPL` | 你的自選股（逗號分隔） |
+> | `GEMINI_API_KEY` | `AIza...`（[免費申請](https://aistudio.google.com/)） | 任一個 AI Key 即可；也可換成 `AIHUBMIX_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 等 |
+> | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | — | 任選一個推送渠道；也可換成 `WECHAT_WEBHOOK_URL` / `FEISHU_WEBHOOK_URL` / `EMAIL_SENDER` 等 |
+>
+> 配好這 3 項後直接跳到第 3 步啟用 Actions。下方完整表格只在你需要多資料源、多模型負載均衡或多渠道推送等進階能力時才需要查閱。
+
 **AI 模型配置（二選一）**
 
 > 詳細配置請參考 [LLM 配置指南](LLM_CONFIG_GUIDE.md)。預設路徑是先選服務商、填 API Key，再視需要補主模型；只有需要多模型切換時才啟用渠道模式，高級 YAML 路由則留給進階用戶。

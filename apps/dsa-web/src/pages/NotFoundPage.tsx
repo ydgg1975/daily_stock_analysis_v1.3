@@ -1,20 +1,20 @@
 import type React from 'react';
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const NotFoundPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const attemptedPath = location.pathname + location.search;
 
-  // Set page title
   useEffect(() => {
     document.title = '页面未找到 - DSA';
   }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
-      {/* 404 */}
       <div className="relative mb-8">
-        <span 
+        <span
           className="text-8xl font-bold text-transparent bg-clip-text"
           style={{
             backgroundImage: 'linear-gradient(135deg, #00d4ff 0%, #a855f7 100%)',
@@ -25,9 +25,15 @@ const NotFoundPage: React.FC = () => {
       </div>
 
       <h1 className="text-2xl font-bold text-foreground mb-2">页面未找到</h1>
-      <p className="text-muted-text mb-8">抱歉，您访问的页面不存在或已被移动</p>
+      <p className="text-muted-text mb-3">抱歉，您访问的页面不存在或已被移动</p>
+      <code
+        className="mb-8 inline-block max-w-full truncate rounded border border-border bg-surface px-3 py-1 text-xs text-muted-text"
+        title={attemptedPath}
+      >
+        {attemptedPath}
+      </code>
 
-      <button 
+      <button
         type="button"
         className="btn-primary flex items-center gap-2"
         onClick={() => navigate('/')}

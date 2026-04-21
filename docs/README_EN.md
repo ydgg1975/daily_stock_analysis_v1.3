@@ -85,6 +85,18 @@ Click the `Fork` button in the upper right corner
 
 Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
 
+> **🎯 Minimum viable config (~5 minutes)**
+>
+> Just these 3 Secrets are enough to get the system running. Everything else in the tables below is an optional enhancement:
+>
+> | Secret | Example | Purpose |
+> |---|---|---|
+> | `STOCK_LIST` | `600519,hk00700,AAPL` | Your watchlist (comma-separated) |
+> | `GEMINI_API_KEY` | `AIza...` ([free key](https://aistudio.google.com/)) | Any single AI key works; swap for `AIHUBMIX_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` if you prefer |
+> | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | — | Any single push channel; swap for `WECHAT_WEBHOOK_URL` / `FEISHU_WEBHOOK_URL` / `EMAIL_SENDER` etc. |
+>
+> With those 3 set, skip to [Step 3: Enable Actions](#3-enable-actions). The detailed tables below are only relevant when you want multi-source data, multi-model fallback, or multi-channel delivery.
+
 **AI Model Configuration (Choose one)**
 
 > For detailed configuration, see [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md). The default path is: pick a provider, add the API key, then optionally pin a primary model. Use channels only when you need multi-provider routing or fallbacks; advanced YAML routing is optional for expert setups.

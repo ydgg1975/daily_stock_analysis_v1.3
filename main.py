@@ -22,11 +22,27 @@ A股自选股智能分析系统 - 主调度程序
 - 买点偏好：缩量回踩 MA5/MA10 支撑
 """
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from dotenv import dotenv_values
-from src.config import setup_env
+
+def _abort_missing_dependency(exc: ModuleNotFoundError) -> None:
+    """缺少依赖时输出友好提示并退出，避免暴露原始 traceback。"""
+    missing = exc.name or "unknown"
+    sys.stderr.write(
+        f"\n错误：缺少依赖 '{missing}' / Missing dependency '{missing}'\n\n"
+        "请先安装项目依赖 / Install dependencies first:\n"
+        "    pip install -r requirements.txt\n\n"
+    )
+    sys.exit(1)
+
+
+try:
+    from dotenv import dotenv_values
+    from src.config import setup_env
+except ModuleNotFoundError as exc:
+    _abort_missing_dependency(exc)
 
 _INITIAL_PROCESS_ENV = dict(os.environ)
 setup_env()
@@ -43,16 +59,18 @@ if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").low
 
 import argparse
 import logging
-import sys
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Tuple
 
-from data_provider.base import canonical_stock_code
-from src.webui_frontend import prepare_webui_frontend_assets
-from src.config import get_config, Config
-from src.logging_config import setup_logging
+try:
+    from data_provider.base import canonical_stock_code
+    from src.webui_frontend import prepare_webui_frontend_assets
+    from src.config import get_config, Config
+    from src.logging_config import setup_logging
+except ModuleNotFoundError as exc:
+    _abort_missing_dependency(exc)
 
 
 logger = logging.getLogger(__name__)

@@ -102,6 +102,18 @@
 
 `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
 
+> **🎯 最小化可运行配置（~5 分钟）**
+>
+> 只要配好下面 3 个 Secret，系统就能跑起来。其它所有字段都是可选增强：
+>
+> | Secret | 示例值 | 作用 |
+> |---|---|---|
+> | `STOCK_LIST` | `600519,hk00700,AAPL` | 你的自选股（逗号分隔） |
+> | `GEMINI_API_KEY` | `AIza...`（[免费申请](https://aistudio.google.com/)） | 任意一个 AI Key 即可；替换为 `AIHUBMIX_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 等也可 |
+> | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | — | 任选一个推送渠道；也可替换为 `WECHAT_WEBHOOK_URL` / `FEISHU_WEBHOOK_URL` / `EMAIL_SENDER` 等 |
+>
+> 配好这 3 项后直接跳到 [第 3 步：启用 Actions](#3-启用-actions)。下方的完整表格只在你需要多数据源、多模型负载均衡、多通知渠道等进阶能力时再查。
+
 **AI 模型配置（至少配置一个）**
 
 > 详细配置说明见 [LLM 配置指南](docs/LLM_CONFIG_GUIDE.md)（极简接入、渠道模式、高级 YAML 路由、Vision、Agent、排错）。默认推荐先选服务商并填写 API Key；需要多模型时再启用渠道模式；只有高级用户才需要 YAML 路由配置。
