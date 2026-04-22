@@ -58,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 集成 Anspire Search 作为可选语义搜索后端; 配置 `ANSPIRE_*` 可使用Anspire Search获取实时行情及新闻资讯，未配置时行为与此前一致。Anspire Search请使用 `tests/test_anspire_search.py`（手动脚本）。
 - [修复] GitHub Actions `daily_analysis.yml` 未注入 `REPORT_LANGUAGE` 环境变量，导致用户在 Secrets/Variables 中配置后不生效（fixes #1013）
 - [修复] `GET /api/v1/analysis/status/{task_id}` 从数据库回填已完成任务时缺少 `current_price` / `change_pct`，导致首页报告股票名旁不显示实时价格（fixes #983）
+- [新功能] 自选股新增"重新分析"按钮，与原"分析"按钮（现重命名为"分析历史"）分别进入不同路径：看历史 vs. 触发新分析（生成新的分析历史记录）
+- [改进] 新增 `stock_identity_service` 作为股票 (代码, 名称) 规范化单一真源，所有写入（自选股、分析历史、LLM 上下文）统一以代码为权威源
+- [改进] 注册全局 `StockIdentityNotFound` FastAPI 异常处理器，未识别股票代码统一返回 400 `stock.identity_not_found`
+- [修复] 问股 / 首页 / 组合等 Tab 页面根元素统一改用 `<AppPage>`，消除 `100vh` / `min-h-screen` 硬编码导致的主内容框与左侧 Sidebar 高度错位
 
 ## [3.12.0] - 2026-04-01
 
