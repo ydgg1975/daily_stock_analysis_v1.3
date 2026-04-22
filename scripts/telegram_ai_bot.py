@@ -9,11 +9,13 @@ process that keeps receiving updates.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import logging
 import os
 import re
 import signal
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -289,6 +291,25 @@ def chunk_text(text: str, limit: int = SAFE_CHUNK_LEN) -> list[str]:
     return chunks
 
 
+def format_telegram_text(text: str) -> str:
+    """Convert common Markdown-ish agent output into readable Telegram plain text."""
+
+    result = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not result:
+        return ""
+
+    result = re.sub(r"```(?:\w+)?\n?", "", result)
+    result = re.sub(r"^#{1,6}\s*", "", result, flags=re.MULTILINE)
+    result = re.sub(r"^\s*[-*]\s+", "• ", result, flags=re.MULTILINE)
+    result = re.sub(r"\*\*([^*\n]+?)\*\*", r"\1", result)
+    result = re.sub(r"__([^_\n]+?)__", r"\1", result)
+    result = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"\1", result)
+    result = result.replace("`", "")
+    result = re.sub(r"[ \t]+\n", "\n", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
+
+
 class TelegramPollingBot:
     def __init__(
         self,
@@ -359,6 +380,25 @@ class TelegramPollingBot:
         except Exception as exc:
             logger.debug("sendChatAction failed: %s", exc)
 
+    @contextmanager
+    def typing_indicator(self, chat_id: str, message_thread_id: Optional[int] = None):
+        """Keep Telegram's typing indicator alive while a long command runs."""
+
+        stop_event = threading.Event()
+
+        def _worker() -> None:
+            while not stop_event.is_set():
+                self._send_chat_action(chat_id, message_thread_id=message_thread_id)
+                stop_event.wait(4.0)
+
+        worker = threading.Thread(target=_worker, daemon=True)
+        worker.start()
+        try:
+            yield
+        finally:
+            stop_event.set()
+            worker.join(timeout=0.2)
+
     def send_message(
         self,
         chat_id: str,
@@ -366,6 +406,7 @@ class TelegramPollingBot:
         reply_to_message_id: Optional[int] = None,
         message_thread_id: Optional[int] = None,
     ) -> None:
+        text = format_telegram_text(text)
         if not text.strip():
             return
 
@@ -422,12 +463,12 @@ class TelegramPollingBot:
                 )
             return
 
-        self._send_chat_action(chat_id, message_thread_id=thread_id)
         bot_message = to_bot_message(message, prepared)
 
         from bot.dispatcher import get_dispatcher
 
-        response = get_dispatcher().dispatch(bot_message)
+        with self.typing_indicator(chat_id, message_thread_id=thread_id):
+            response = get_dispatcher().dispatch(bot_message)
         if response.text.strip():
             self.send_message(
                 chat_id,

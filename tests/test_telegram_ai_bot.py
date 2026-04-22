@@ -14,6 +14,7 @@ from scripts.telegram_ai_bot import (
     build_direct_stock_question_command,
     configure_runtime_defaults,
     extract_stock_code,
+    format_telegram_text,
     get_allowed_chat_ids_from_env,
     prepare_message,
 )
@@ -87,6 +88,17 @@ class TelegramAIBotHelperTests(unittest.TestCase):
     def test_build_direct_stock_question_command_returns_none_without_stock(self):
         with patch("scripts.telegram_ai_bot.find_stock_reference", return_value=None):
             self.assertIsNone(build_direct_stock_question_command("你好"))
+
+    def test_format_telegram_text_strips_markdown_noise(self):
+        raw = "**一、结论：**\n* **实时价格：** 27.99 元\n### 技术面\n`MA5` 上方"
+
+        text = format_telegram_text(raw)
+
+        self.assertIn("一、结论：", text)
+        self.assertIn("• 实时价格： 27.99 元", text)
+        self.assertIn("技术面", text)
+        self.assertIn("MA5 上方", text)
+        self.assertNotIn("**", text)
 
     def test_extract_stock_code_prefers_parenthesized_code(self):
         self.assertEqual(extract_stock_code("报告生成时间：2026-04-22\n硅烷科技（920402）"), "920402")

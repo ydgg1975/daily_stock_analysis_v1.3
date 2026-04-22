@@ -66,6 +66,8 @@ jobs:
           LITELLM_CONFIG_YAML: ${{ vars.LITELLM_CONFIG_YAML || secrets.LITELLM_CONFIG_YAML }}
           LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
           LITELLM_MODEL: ${{ vars.LITELLM_MODEL || secrets.LITELLM_MODEL }}
+          LITELLM_FALLBACK_MODELS: ${{ vars.LITELLM_FALLBACK_MODELS || secrets.LITELLM_FALLBACK_MODELS }}
+          AGENT_LITELLM_MODEL: ${{ vars.AGENT_LITELLM_MODEL || secrets.AGENT_LITELLM_MODEL }}
 
           # Gemini AI（主选）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -87,6 +89,10 @@ jobs:
           # Anthropic / Claude
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || secrets.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022' }}
+
+          # MiniMax（M2.x 问答模型；Coding Plan Key 需同时写入 MINIMAX_API_KEY）
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY || secrets.MINIMAX_API_KEYS }}
+          MINIMAX_API_BASE: ${{ vars.MINIMAX_API_BASE || secrets.MINIMAX_API_BASE || 'https://api.minimaxi.com/v1' }}
 
           # ==========================================
           # 数据源

@@ -228,6 +228,10 @@ class AskCommand(BotCommand):
             user_msg = f"请使用 {skill_id} 技能分析股票 {stock_code}"
         if skill_text:
             user_msg = f"请分析股票 {stock_code}，{skill_text}"
+        user_msg += (
+            "\n\n输出要求：用适合 Telegram 阅读的简体中文纯文本；"
+            "先给直接结论，再列关键理由和风险；不要使用 Markdown 粗体、表格或长分隔线。"
+        )
         return user_msg
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
