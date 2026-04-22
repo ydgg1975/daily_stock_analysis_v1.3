@@ -10,9 +10,12 @@ from unittest.mock import patch
 import scripts.telegram_ai_bot as telegram_ai_bot
 from scripts.telegram_ai_bot import (
     TelegramIdentity,
+    build_image_no_stock_response,
+    build_image_stock_question_command,
     build_reply_chat_prompt,
     build_direct_stock_question_command,
     configure_runtime_defaults,
+    extract_image_payload,
     extract_stock_code,
     format_telegram_text,
     get_allowed_chat_ids_from_env,
@@ -88,6 +91,63 @@ class TelegramAIBotHelperTests(unittest.TestCase):
     def test_build_direct_stock_question_command_returns_none_without_stock(self):
         with patch("scripts.telegram_ai_bot.find_stock_reference", return_value=None):
             self.assertIsNone(build_direct_stock_question_command("你好"))
+
+    def test_extract_image_payload_uses_largest_photo(self):
+        message = {
+            "photo": [
+                {"file_id": "small", "width": 90, "height": 90, "file_size": 100},
+                {"file_id": "large", "width": 900, "height": 900, "file_size": 200},
+            ]
+        }
+
+        payload = extract_image_payload(message)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload.file_id, "large")
+        self.assertEqual(payload.mime_type, "image/jpeg")
+
+    def test_extract_image_payload_accepts_image_document(self):
+        message = {
+            "document": {
+                "file_id": "doc-image",
+                "mime_type": "image/png",
+                "file_name": "watchlist.png",
+                "file_size": 1234,
+            }
+        }
+
+        payload = extract_image_payload(message)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload.file_id, "doc-image")
+        self.assertEqual(payload.mime_type, "image/png")
+        self.assertEqual(payload.file_name, "watchlist.png")
+
+    def test_build_image_stock_question_command_reuses_ask(self):
+        command = build_image_stock_question_command(
+            "现在还能买吗？",
+            [("002497", "雅化集团", "high"), ("002497", "雅化集团", "medium")],
+        )
+
+        self.assertEqual(command, "/ask 002497 现在还能买吗")
+
+    def test_build_image_stock_question_command_strips_command_caption(self):
+        command = build_image_stock_question_command(
+            "/ask@DailyStockBot 帮我看看",
+            [("920402", "硅烷科技", "high")],
+            "DailyStockBot",
+        )
+
+        self.assertEqual(command, "/ask 920402 帮我看看")
+
+    def test_build_image_stock_question_command_returns_none_without_codes(self):
+        self.assertIsNone(build_image_stock_question_command("看看", []))
+
+    def test_build_image_no_stock_response_includes_provider(self):
+        response = build_image_no_stock_response("图片里只有走势，没有代码", "MiniMax MCP")
+
+        self.assertIn("没有识别到股票代码", response)
+        self.assertIn("MiniMax MCP", response)
 
     def test_format_telegram_text_strips_markdown_noise(self):
         raw = "**一、结论：**\n* **实时价格：** 27.99 元\n### 技术面\n`MA5` 上方"

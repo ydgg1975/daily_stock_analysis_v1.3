@@ -38,6 +38,13 @@ logger = logging.getLogger("telegram_ai_bot")
 MAX_TELEGRAM_TEXT_LEN = 4096
 SAFE_CHUNK_LEN = 3800
 REPORT_CONTEXT_LEN = 2800
+TELEGRAM_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+SUPPORTED_TELEGRAM_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
 
 SUPPORTED_COMMANDS = {
     "ask",
@@ -76,6 +83,14 @@ class PreparedMessage:
     reason: str
 
 
+@dataclass(frozen=True)
+class TelegramImagePayload:
+    file_id: str
+    mime_type: str
+    file_size: Optional[int] = None
+    file_name: str = ""
+
+
 def _split_csv(value: Optional[str]) -> set[str]:
     if not value:
         return set()
@@ -98,6 +113,35 @@ def get_allowed_chat_ids_from_env() -> set[str]:
 
 def extract_text(message: dict[str, Any]) -> str:
     return str(message.get("text") or message.get("caption") or "").strip()
+
+
+def extract_image_payload(message: dict[str, Any]) -> Optional[TelegramImagePayload]:
+    photos = message.get("photo")
+    if isinstance(photos, list) and photos:
+        candidates = [item for item in photos if isinstance(item, dict) and item.get("file_id")]
+        if candidates:
+            best = max(candidates, key=lambda item: int(item.get("width") or 0) * int(item.get("height") or 0))
+            file_size = best.get("file_size")
+            return TelegramImagePayload(
+                file_id=str(best["file_id"]),
+                mime_type="image/jpeg",
+                file_size=int(file_size) if isinstance(file_size, int) else None,
+                file_name="telegram-photo.jpg",
+            )
+
+    document = message.get("document")
+    if isinstance(document, dict) and document.get("file_id"):
+        mime_type = str(document.get("mime_type") or "").split(";")[0].strip().lower()
+        if mime_type in SUPPORTED_TELEGRAM_IMAGE_MIME_TYPES:
+            file_size = document.get("file_size")
+            return TelegramImagePayload(
+                file_id=str(document["file_id"]),
+                mime_type=mime_type,
+                file_size=int(file_size) if isinstance(file_size, int) else None,
+                file_name=str(document.get("file_name") or "telegram-image"),
+            )
+
+    return None
 
 
 def _command_name(text: str) -> Optional[str]:
@@ -191,6 +235,48 @@ def build_direct_stock_question_command(text: str) -> Optional[str]:
     question = re.sub(r"^(请|帮我|帮忙|麻烦|分析|看看|看一下|查一下|问一下)\s*", "", question)
     question = question.strip(" ，,。.!！?？")
     return f"/ask {code} {question}".strip()
+
+
+def build_image_stock_question_command(
+    caption: str,
+    items: list[tuple[str, Optional[str], str]],
+    bot_username: str = "",
+) -> Optional[str]:
+    """Build a deterministic /ask command from image-extracted stock items."""
+
+    seen: set[str] = set()
+    codes: list[str] = []
+    for code, _name, _confidence in items:
+        normalized = str(code or "").strip().upper()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            codes.append(normalized)
+
+    if not codes:
+        return None
+
+    clean_caption = strip_plain_mention(caption.strip(), bot_username)
+    clean_caption = normalize_command_mention(clean_caption, bot_username)
+    clean_caption = re.sub(r"^/(ask|analyze|chat)(?:@[A-Za-z0-9_]+)?\b", "", clean_caption, flags=re.IGNORECASE)
+    clean_caption = clean_caption.strip(" ，,。.!！?？")
+    if not clean_caption:
+        clean_caption = "根据图片截图分析"
+
+    return f"/ask {','.join(codes[:5])} {clean_caption}".strip()
+
+
+def build_image_no_stock_response(raw_text: str, provider: str) -> str:
+    snippet = (raw_text or "").strip()
+    if len(snippet) > 1000:
+        snippet = snippet[:1000].rstrip() + "\n...（图片理解结果已截断）"
+    if snippet:
+        return (
+            f"我看到了图片，但没有识别到股票代码。\n\n"
+            f"图片理解来源：{provider}\n"
+            f"{snippet}\n\n"
+            "请补充股票代码，或重新发送包含股票代码/名称的截图。"
+        )
+    return "我看到了图片，但没有识别到股票代码。请补充股票代码，或重新发送包含股票代码/名称的截图。"
 
 
 def prepare_message(message: dict[str, Any], identity: TelegramIdentity) -> PreparedMessage:
@@ -437,6 +523,110 @@ class TelegramPollingBot:
         result = data.get("result") or []
         return result if isinstance(result, list) else []
 
+    def _download_telegram_file(self, payload: TelegramImagePayload) -> bytes:
+        if payload.file_size and payload.file_size > TELEGRAM_IMAGE_MAX_BYTES:
+            raise ValueError(f"图片过大，最大支持 {TELEGRAM_IMAGE_MAX_BYTES // (1024 * 1024)}MB")
+
+        file_data = self._api("getFile", {"file_id": payload.file_id}).get("result") or {}
+        file_path = str(file_data.get("file_path") or "")
+        if not file_path:
+            raise RuntimeError("Telegram 未返回 file_path")
+
+        response = self.session.get(
+            f"https://api.telegram.org/file/bot{self.token}/{file_path}",
+            stream=True,
+            timeout=self.request_timeout,
+        )
+        response.raise_for_status()
+
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > TELEGRAM_IMAGE_MAX_BYTES:
+                raise ValueError(f"图片过大，最大支持 {TELEGRAM_IMAGE_MAX_BYTES // (1024 * 1024)}MB")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    def _should_handle_image_message(self, message: dict[str, Any], chat_type: str) -> bool:
+        if chat_type == "private":
+            return True
+        if is_reply_to_bot(message, self.identity.bot_id):
+            return True
+        caption = extract_text(message)
+        if not caption:
+            return False
+        normalized = normalize_command_mention(caption, self.identity.username)
+        if _command_name(normalized):
+            return True
+        return bool(
+            self.identity.username
+            and re.search(rf"@{re.escape(self.identity.username)}\b", caption, re.IGNORECASE)
+        )
+
+    def _handle_image_message(
+        self,
+        message: dict[str, Any],
+        payload: TelegramImagePayload,
+        chat_id: str,
+        message_id: Optional[int],
+        thread_id: Optional[int],
+    ) -> bool:
+        chat = message.get("chat") or {}
+        chat_type = str(chat.get("type") or "")
+        if not self._should_handle_image_message(message, chat_type):
+            logger.debug("Ignored Telegram image without private chat, mention, reply, or command")
+            return True
+
+        try:
+            with self.typing_indicator(chat_id, message_thread_id=thread_id):
+                image_bytes = self._download_telegram_file(payload)
+                from src.services.telegram_image_stock_analyzer import analyze_stock_image_bytes
+
+                analysis = analyze_stock_image_bytes(image_bytes, payload.mime_type)
+                command = build_image_stock_question_command(
+                    extract_text(message),
+                    analysis.items,
+                    self.identity.username,
+                )
+                if not command:
+                    response_text = build_image_no_stock_response(analysis.raw_text, analysis.provider)
+                    self.send_message(
+                        chat_id,
+                        response_text,
+                        reply_to_message_id=message_id,
+                        message_thread_id=thread_id,
+                    )
+                    return True
+
+                prepared = PreparedMessage(command, True, True, "image-stock-question")
+                bot_message = to_bot_message(message, prepared)
+
+                from bot.dispatcher import get_dispatcher
+
+                response = get_dispatcher().dispatch(bot_message)
+
+            if response.text.strip():
+                self.send_message(
+                    chat_id,
+                    response.text,
+                    reply_to_message_id=message_id,
+                    message_thread_id=thread_id,
+                )
+            return True
+        except Exception as exc:
+            logger.error("Telegram image handling failed: %s", exc)
+            logger.debug("Image handling error details", exc_info=True)
+            self.send_message(
+                chat_id,
+                f"图片处理失败：{exc}",
+                reply_to_message_id=message_id,
+                message_thread_id=thread_id,
+            )
+            return True
+
     def handle_update(self, update: dict[str, Any]) -> None:
         message = update.get("message")
         if not isinstance(message, dict):
@@ -449,6 +639,10 @@ class TelegramPollingBot:
 
         if not self._is_allowed(chat_id):
             logger.warning("Ignored unauthorized Telegram chat_id=%s", chat_id)
+            return
+
+        image_payload = extract_image_payload(message)
+        if image_payload and self._handle_image_message(message, image_payload, chat_id, message_id, thread_id):
             return
 
         prepared = prepare_message(message, self.identity)

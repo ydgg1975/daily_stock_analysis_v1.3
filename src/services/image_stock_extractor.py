@@ -207,6 +207,12 @@ def _parse_items_from_text(text: str) -> List[Tuple[str, Optional[str], str]]:
     return [(c, None, "medium") for c in codes]
 
 
+def parse_stock_items_from_vision_text(text: str) -> List[Tuple[str, Optional[str], str]]:
+    """Public wrapper for parsing stock items from any vision-model response."""
+
+    return _parse_items_from_text(text)
+
+
 def _resolve_vision_model() -> str:
     """Determine the litellm model to use for vision, with gemini-3 downgrade."""
     cfg = get_config()
