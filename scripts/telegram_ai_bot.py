@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.services.name_to_code_resolver import find_stock_reference
+
 
 logger = logging.getLogger("telegram_ai_bot")
 
@@ -166,6 +168,29 @@ def build_reply_chat_prompt(question: str, replied_text: str) -> str:
     )
 
 
+def build_direct_stock_question_command(text: str) -> Optional[str]:
+    """Turn a private natural-language stock question into a deterministic /ask."""
+
+    normalized = str(text or "").strip()
+    if not normalized:
+        return None
+
+    try:
+        reference = find_stock_reference(normalized)
+    except Exception as exc:
+        logger.debug("stock reference extraction failed: %s", exc)
+        return None
+
+    if not reference:
+        return None
+
+    code, matched_text = reference
+    question = normalized.replace(matched_text, "", 1).strip()
+    question = re.sub(r"^(请|帮我|帮忙|麻烦|分析|看看|看一下|查一下|问一下)\s*", "", question)
+    question = question.strip(" ，,。.!！?？")
+    return f"/ask {code} {question}".strip()
+
+
 def prepare_message(message: dict[str, Any], identity: TelegramIdentity) -> PreparedMessage:
     raw_text = extract_text(message)
     if not raw_text:
@@ -198,6 +223,11 @@ def prepare_message(message: dict[str, Any], identity: TelegramIdentity) -> Prep
         if replied_text:
             prompt = build_reply_chat_prompt(normalized, replied_text)
             return PreparedMessage(prompt, True, True, "reply-report")
+
+    if is_private or mentioned:
+        direct_stock_command = build_direct_stock_question_command(normalized)
+        if direct_stock_command:
+            return PreparedMessage(direct_stock_command, True, True, "stock-question")
 
     if is_private:
         return PreparedMessage(normalized, True, True, "private-nl")

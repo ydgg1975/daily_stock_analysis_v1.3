@@ -11,6 +11,7 @@ import scripts.telegram_ai_bot as telegram_ai_bot
 from scripts.telegram_ai_bot import (
     TelegramIdentity,
     build_reply_chat_prompt,
+    build_direct_stock_question_command,
     configure_runtime_defaults,
     extract_stock_code,
     get_allowed_chat_ids_from_env,
@@ -67,6 +68,25 @@ class TelegramAIBotHelperTests(unittest.TestCase):
         self.assertTrue(prepared.text.startswith("/chat "))
         self.assertIn("股票代码：920402", prepared.text)
         self.assertIn("这个还能拿吗？", prepared.text)
+
+    def test_private_stock_question_becomes_ask_command(self):
+        message = {
+            "message_id": 12,
+            "text": "雅化集团现在可以买吗？",
+            "chat": {"id": "1", "type": "private"},
+            "from": {"id": 9},
+        }
+
+        with patch("scripts.telegram_ai_bot.find_stock_reference", return_value=("002497", "雅化集团")):
+            prepared = prepare_message(message, TelegramIdentity(bot_id=42, username="DailyStockBot"))
+
+        self.assertTrue(prepared.should_dispatch)
+        self.assertEqual(prepared.reason, "stock-question")
+        self.assertEqual(prepared.text, "/ask 002497 现在可以买吗")
+
+    def test_build_direct_stock_question_command_returns_none_without_stock(self):
+        with patch("scripts.telegram_ai_bot.find_stock_reference", return_value=None):
+            self.assertIsNone(build_direct_stock_question_command("你好"))
 
     def test_extract_stock_code_prefers_parenthesized_code(self):
         self.assertEqual(extract_stock_code("报告生成时间：2026-04-22\n硅烷科技（920402）"), "920402")
