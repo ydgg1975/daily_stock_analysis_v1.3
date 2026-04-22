@@ -1,11 +1,12 @@
 """Watchlist (favorites) API endpoints."""
 from __future__ import annotations
 from typing import List
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from src.services.watchlist_service import WatchlistService
 from src.services.watchlist_enrichment_service import WatchlistEnrichmentService
+from src.services.stock_identity_service import normalize_stock_identity, StockIdentityNotFound
 from src.storage import DatabaseManager
 
 router = APIRouter()
@@ -68,7 +69,14 @@ def list_watchlist(request: Request):
 @router.post("")
 def add_to_watchlist(request: Request, body: AddWatchlistRequest):
     user_id = request.state.user_id
-    item = _get_service().add(user_id, body.stock_code, body.stock_name)
+    try:
+        canonical_code, canonical_name = normalize_stock_identity(body.stock_code)
+    except StockIdentityNotFound as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "stock.identity_not_found", "message": str(exc)},
+        )
+    item = _get_service().add(user_id, canonical_code, canonical_name)
     return item
 
 
