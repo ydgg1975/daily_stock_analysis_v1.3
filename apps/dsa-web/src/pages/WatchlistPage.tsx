@@ -57,6 +57,13 @@ const WatchlistPage: React.FC = () => {
     [navigate],
   );
 
+  const handleReanalyze = useCallback(
+    (stockCode: string) => {
+      navigate(`/?q=${encodeURIComponent(stockCode)}&force=1`);
+    },
+    [navigate],
+  );
+
   const handleRemove = useCallback(
     async (stockCode: string) => {
       try {
@@ -259,6 +266,7 @@ const WatchlistPage: React.FC = () => {
               group={group}
               groups={groupMetas}
               onAnalyze={handleAnalyze}
+              onReanalyze={handleReanalyze}
               onRemove={(code) => void handleRemove(code)}
               onMoveGroup={(code, gid) => void handleMoveGroup(code, gid)}
               onMoveItem={(code, dir) => void handleMoveItem(code, dir)}

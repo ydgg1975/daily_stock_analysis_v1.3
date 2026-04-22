@@ -8,6 +8,7 @@ import { HistoryTimeline } from './HistoryTimeline';
 interface WatchlistCardProps {
   item: EnrichedWatchlistItem;
   onAnalyze: (stockCode: string) => void;
+  onReanalyze: (stockCode: string) => void;
   onRemove: (stockCode: string) => void;
   onMoveGroup: (stockCode: string, groupId: string) => void;
   onMoveItem: (stockCode: string, direction: 'up' | 'down') => void;
@@ -54,6 +55,7 @@ function pctColorClass(value: number): string {
 export const WatchlistCard: React.FC<WatchlistCardProps> = ({
   item,
   onAnalyze,
+  onReanalyze,
   onRemove,
   onMoveGroup,
   onMoveItem,
@@ -234,14 +236,25 @@ export const WatchlistCard: React.FC<WatchlistCardProps> = ({
         </div>
       )}
 
-      {/* Analyze button */}
-      <button
-        type="button"
-        onClick={() => onAnalyze(item.stockCode)}
-        className="mt-1 w-full rounded-lg border border-subtle bg-surface/60 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-subtle-hover hover:text-foreground"
-      >
-        {'\u5206\u6790'}
-      </button>
+      {/* Analyze actions: split into history + reanalyze */}
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          onClick={() => onAnalyze(item.stockCode)}
+          className="flex-1 rounded-lg border border-subtle bg-surface/60 px-3 py-1.5 text-xs text-secondary-text transition-colors hover:border-subtle-hover hover:text-foreground"
+          title="\u67e5\u770b\u8be5\u80a1\u7968\u7684\u5386\u53f2\u5206\u6790\u62a5\u544a"
+        >
+          {'\u5206\u6790\u5386\u53f2'}
+        </button>
+        <button
+          type="button"
+          onClick={() => onReanalyze(item.stockCode)}
+          className="flex-1 rounded-lg border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-xs text-cyan transition-colors hover:border-cyan hover:bg-cyan/20"
+          title="\u53d1\u8d77\u4e00\u6b21\u5168\u65b0\u7684 LLM \u5206\u6790"
+        >
+          {'\u91cd\u65b0\u5206\u6790'}
+        </button>
+      </div>
     </div>
   );
 };

@@ -8,6 +8,7 @@ interface GroupSectionProps {
   group: WatchlistGroup;
   groups: { groupId: string; groupName: string }[];
   onAnalyze: (stockCode: string) => void;
+  onReanalyze: (stockCode: string) => void;
   onRemove: (stockCode: string) => void;
   onMoveGroup: (stockCode: string, groupId: string) => void;
   onRenameGroup: (groupId: string, name: string) => void;
@@ -22,6 +23,7 @@ export const GroupSection: React.FC<GroupSectionProps> = ({
   group,
   groups,
   onAnalyze,
+  onReanalyze,
   onRemove,
   onMoveGroup,
   onRenameGroup,
@@ -134,6 +136,7 @@ export const GroupSection: React.FC<GroupSectionProps> = ({
                 key={item.stockCode}
                 item={item}
                 onAnalyze={onAnalyze}
+                onReanalyze={onReanalyze}
                 onRemove={onRemove}
                 onMoveGroup={onMoveGroup}
                 onMoveItem={onMoveItem}
