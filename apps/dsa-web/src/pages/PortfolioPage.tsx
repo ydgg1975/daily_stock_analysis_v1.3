@@ -2,6 +2,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pie, PieChart, ResponsiveContainer, Tooltip, Legend, Cell } from 'recharts';
 import { portfolioApi } from '../api/portfolio';
+import { AppPage } from '../components/common/AppPage';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, EmptyState, InlineAlert } from '../components/common';
@@ -753,7 +754,8 @@ const PortfolioPage: React.FC = () => {
   };
 
   return (
-    <div className="portfolio-page min-h-screen space-y-4 p-4 md:p-6">
+    <AppPage>
+    <div className="portfolio-page min-h-full space-y-4">
       <section className="space-y-3">
         <div className="space-y-2">
           <h1 className="text-xl md:text-2xl font-semibold text-foreground">持仓管理</h1>
@@ -1345,6 +1347,7 @@ const PortfolioPage: React.FC = () => {
         }}
       />
     </div>
+    </AppPage>
   );
 };
 

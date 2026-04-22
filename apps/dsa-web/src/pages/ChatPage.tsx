@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '../utils/cn';
+import { AppPage } from '../components/common/AppPage';
 import { agentApi } from '../api/agent';
 import { ApiErrorAlert, Badge, Button, ConfirmDialog, EmptyState, InlineAlert, ScrollArea, Tooltip } from '../components/common';
 import { getParsedApiError } from '../api/error';
@@ -532,9 +533,10 @@ const ChatPage: React.FC = () => {
   );
 
   return (
+    <AppPage className="flex h-full min-h-0 flex-col px-0 pb-0 pt-0 md:px-0 lg:px-0">
     <div
       data-testid="chat-workspace"
-      className="flex h-[calc(100vh-5rem)] w-full min-w-0 gap-4 overflow-hidden sm:h-[calc(100vh-5.5rem)] lg:h-[calc(100vh-2rem)]"
+      className="flex h-full w-full min-w-0 gap-4 overflow-hidden"
     >
       {/* Desktop sidebar */}
       <div className="hidden h-full w-64 flex-shrink-0 flex-col overflow-hidden rounded-[1.25rem] border border-white/8 bg-card/82 shadow-soft-card md:flex">
@@ -994,6 +996,7 @@ const ChatPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </AppPage>
   );
 };
 
