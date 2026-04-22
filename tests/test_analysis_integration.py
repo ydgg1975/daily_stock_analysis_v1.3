@@ -77,7 +77,7 @@ class TestAnalysisIntegration:
         mock_task_queue.submit_tasks_batch.assert_called_once()
         _, kwargs = mock_task_queue.submit_tasks_batch.call_args
         assert kwargs["stock_codes"] == ["600519"]
-        assert kwargs["stock_name"] is None
+        assert kwargs["stock_name"] == "贵州茅台"
         assert kwargs["original_query"] == "贵州茅台"
         assert kwargs["selection_source"] == "manual"
         assert kwargs["report_type"] == "detailed"
@@ -105,13 +105,14 @@ class TestAnalysisIntegration:
     def test_trigger_analysis_dos_protection(self, client):
         """Test that excessive stock codes are rejected."""
         too_many_codes = [f"{i:06d}" for i in range(101)]
-        response = client.post(
-            "/api/v1/analysis/analyze",
-            json={
-                "stock_codes": too_many_codes,
-                "async_mode": True
-            }
-        )
+        with patch("api.v1.endpoints.analysis.normalize_stock_identity", return_value=("000000", "stub")):
+            response = client.post(
+                "/api/v1/analysis/analyze",
+                json={
+                    "stock_codes": too_many_codes,
+                    "async_mode": True
+                }
+            )
 
         assert response.status_code == 400
         assert "最多支持" in response.json()["message"]

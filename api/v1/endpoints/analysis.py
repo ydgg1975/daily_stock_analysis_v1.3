@@ -52,6 +52,10 @@ from src.config import Config
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.name_to_code_resolver import resolve_name_to_code
 from src.services.stock_code_utils import is_code_like
+from src.services.stock_identity_service import (
+    normalize_stock_identity,
+    StockIdentityNotFound,
+)
 from src.services.task_queue import (
     get_task_queue,
     DuplicateTaskError,
@@ -200,6 +204,15 @@ def trigger_analysis(
     
     stock_codes = unique_codes
 
+    if not stock_codes:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "validation_error",
+                "message": "股票代码不能为空或仅包含空白字符"
+            }
+        )
+
     # Limit the number of stocks in a single request to prevent DoS
     MAX_BATCH_SIZE = 50
     if len(stock_codes) > MAX_BATCH_SIZE:
@@ -211,14 +224,17 @@ def trigger_analysis(
             }
         )
 
-    if not stock_codes:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "validation_error",
-                "message": "股票代码不能为空或仅包含空白字符"
-            }
-        )
+    # Enforce canonical (code, name) resolution. Fail fast on unknown codes.
+    canonical_names: dict[str, str] = {}
+    for code in stock_codes:
+        try:
+            _, name = normalize_stock_identity(code)
+            canonical_names[code] = name
+        except StockIdentityNotFound as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "stock.identity_not_found", "message": str(exc)},
+            )
 
     user_id = getattr(getattr(http_request, "state", None), "user_id", None) if http_request else None
 
@@ -235,12 +251,13 @@ def trigger_analysis(
         return _handle_sync_analysis(stock_codes[0], request, user_id=user_id)
 
     # Async mode submits one task per stock.
-    return _handle_async_analysis_batch(stock_codes, request, user_id=user_id)
+    return _handle_async_analysis_batch(stock_codes, request, canonical_names=canonical_names, user_id=user_id)
 
 
 def _handle_async_analysis_batch(
     stock_codes: list,
     request: AnalyzeRequest,
+    canonical_names: Optional[Dict[str, str]] = None,
     user_id: Optional[str] = None,
 ) -> JSONResponse:
     """
@@ -254,7 +271,7 @@ def _handle_async_analysis_batch(
     is_single = len(stock_codes) == 1
     preserve_batch_metadata = request.selection_source in {"import", "image"}
 
-    stock_name = request.stock_name if is_single else None
+    stock_name = (canonical_names or {}).get(stock_codes[0]) if is_single else None
     original_query = request.original_query if (is_single or preserve_batch_metadata) else None
     selection_source = request.selection_source if (is_single or preserve_batch_metadata) else None
     notify = getattr(request, "notify", True)

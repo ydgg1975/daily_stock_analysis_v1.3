@@ -626,7 +626,8 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         queue.submit_tasks_batch.return_value = ([], [])
 
         with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue), \
-             patch("api.v1.endpoints.analysis.resolve_name_to_code") as resolve_mock:
+             patch("api.v1.endpoints.analysis.resolve_name_to_code") as resolve_mock, \
+             patch("api.v1.endpoints.analysis.normalize_stock_identity", return_value=("AAPL.US", "苹果")):
             response = trigger_analysis(
                 request=SimpleNamespace(
                     stock_code="AAPL.US",
@@ -646,7 +647,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         resolve_mock.assert_not_called()
         queue.submit_tasks_batch.assert_called_once_with(
             stock_codes=["AAPL.US"],
-            stock_name=None,
+            stock_name="苹果",
             original_query="AAPL.US",
             selection_source="manual",
             report_type="detailed",
@@ -718,7 +719,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         resolve_mock.assert_not_called()
         queue.submit_tasks_batch.assert_called_once_with(
             stock_codes=["HK00700"],
-            stock_name=None,
+            stock_name="腾讯控股",
             original_query="HK00700",
             selection_source="manual",
             report_type="detailed",
@@ -735,7 +736,8 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         queue.submit_tasks_batch.return_value = ([], [])
 
         with patch("api.v1.endpoints.analysis.resolve_name_to_code", return_value="688783"), \
-             patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue):
+             patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue), \
+             patch("api.v1.endpoints.analysis.normalize_stock_identity", return_value=("688783", "西安奕材")):
             response = trigger_analysis(
                 request=SimpleNamespace(
                     stock_code="西安奕材-U",
@@ -754,7 +756,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         queue.submit_tasks_batch.assert_called_once_with(
             stock_codes=["688783"],
-            stock_name=None,
+            stock_name="西安奕材",
             original_query="西安奕材-U",
             selection_source="manual",
             report_type="detailed",
@@ -790,7 +792,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         queue.submit_tasks_batch.assert_called_once_with(
             stock_codes=["600519"],
-            stock_name=None,
+            stock_name="贵州茅台",
             original_query="贵州茅台",
             selection_source="manual",
             report_type="detailed",
@@ -946,6 +948,27 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             json.loads(response.body),
             {"error": "not_found", "message": "API endpoint /api not found"},
         )
+
+    def test_analyze_rejects_unknown_code(self) -> None:
+        if trigger_analysis is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        import src.services.stock_identity_service as mod
+        with patch.object(mod, "_lookup_name_from_akshare", return_value=None):
+            with self.assertRaises(Exception) as ctx:
+                trigger_analysis(
+                    request=SimpleNamespace(
+                        stock_code="ZZZZ",
+                        stock_codes=None,
+                        report_type="detailed",
+                        force_refresh=False,
+                        async_mode=False,
+                    ),
+                    config=SimpleNamespace(),
+                )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail["error"], "stock.identity_not_found")
 
     def test_sse_generator_reraises_cancelled_error(self) -> None:
         """CancelledError must propagate (not be swallowed) from the SSE event generator."""
