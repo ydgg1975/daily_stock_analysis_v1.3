@@ -17,6 +17,7 @@ from typing import Callable
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from src.services.stock_identity_service import StockIdentityNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,18 @@ def add_error_handlers(app) -> None:
             }
         )
     
+    @app.exception_handler(StockIdentityNotFound)
+    async def stock_identity_not_found_handler(request: Request, exc: StockIdentityNotFound):
+        """处理股票代码未找到异常（安全网）"""
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "stock.identity_not_found",
+                "message": str(exc),
+                "detail": None
+            }
+        )
+
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         """处理通用异常"""
