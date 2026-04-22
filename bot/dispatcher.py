@@ -528,7 +528,8 @@ User: "analyze TSLA and NVDA using trend strategy"
             code_str = ",".join(codes[:5])  # cap at 5
             args = [code_str]
             if strategy:
-                args.append(strategy)
+                args.append(str(strategy))
+            args.append(text)
 
             logger.info(
                 "[Dispatcher] NL routing → /ask %s (strategy=%s, text=%s)",
@@ -591,7 +592,8 @@ User: "analyze TSLA and NVDA using trend strategy"
             code_str = ",".join(codes[:5])
             args = [code_str]
             if strategy:
-                args.append(strategy)
+                args.append(str(strategy))
+            args.append(text)
 
             logger.info(
                 "[Dispatcher] NL routing → /ask %s (strategy=%s, text=%s)",
@@ -676,7 +678,11 @@ User: "analyze TSLA and NVDA using trend strategy"
         """Best-effort stock name/code resolution for NL-routed analysis requests."""
         from data_provider.base import canonical_stock_code
         from src.data.stock_mapping import STOCK_NAME_MAP
-        from src.services.name_to_code_resolver import resolve_name_to_code
+        from src.services.name_to_code_resolver import resolve_name_to_code, resolve_text_to_code
+
+        resolved_from_text = resolve_text_to_code(text)
+        if resolved_from_text:
+            return canonical_stock_code(resolved_from_text)
 
         def _iter_candidates(raw_text: str) -> List[str]:
             candidates: List[str] = []

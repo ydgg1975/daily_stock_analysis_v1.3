@@ -146,6 +146,25 @@ class TestAskCommandMultiStock(unittest.TestCase):
         self.assertEqual(raw_code_str, "600519,000858")
         self.assertEqual(remaining_args, ["波浪理论"])
 
+    def test_resolve_stock_query_accepts_stock_name_and_question(self):
+        command = AskCommand()
+
+        with patch("bot.commands.ask.find_stock_reference", return_value=("002497", "雅化集团")):
+            codes, remaining = command._resolve_stock_query(["雅化集团现在可以买吗"])
+
+        self.assertEqual(codes, ["002497"])
+        self.assertEqual(remaining, ["现在可以买吗"])
+        self.assertIsNone(command.validate_args(["雅化集团现在可以买吗"]))
+
+    def test_validate_args_rejects_unknown_name_with_actionable_hint(self):
+        command = AskCommand()
+
+        with patch("bot.commands.ask.find_stock_reference", return_value=None), \
+             patch("bot.commands.ask.resolve_text_to_code", return_value=None):
+            error = command.validate_args(["不存在的股票"])
+
+        self.assertIn("股票代码或股票名称", error)
+
     def test_build_portfolio_section_reads_assessment(self):
         command = AskCommand()
         results = {

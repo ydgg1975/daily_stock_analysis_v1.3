@@ -164,7 +164,7 @@ class TestCommandDispatcherAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.text, "ask-ok")
         ask_command.execute_async.assert_awaited_once()
         _, args = ask_command.execute_async.await_args.args
-        self.assertEqual(args, ["600519"])
+        self.assertEqual(args, ["600519", "帮我分析茅台"])
 
 
 class TestCommandDispatcherSyncCompatibility(unittest.TestCase):

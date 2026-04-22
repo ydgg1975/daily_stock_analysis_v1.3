@@ -14,6 +14,7 @@ from typing import List, Optional
 from bot.commands.base import BotCommand
 from bot.models import BotMessage, BotResponse
 from data_provider.base import canonical_stock_code
+from src.services.name_to_code_resolver import find_stock_reference
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +44,23 @@ class AnalyzeCommand(BotCommand):
     
     @property
     def usage(self) -> str:
-        return "/analyze <股票代码> [full]"
+        return "/analyze <股票代码或股票名称> [full]"
+
+    def _resolve_code(self, args: List[str]) -> Optional[str]:
+        full_text = " ".join(args).strip()
+        reference = find_stock_reference(full_text)
+        if reference:
+            return canonical_stock_code(reference[0])
+        return None
     
     def validate_args(self, args: List[str]) -> Optional[str]:
         """验证参数"""
         if not args:
             return "请输入股票代码"
         
-        code = args[0].upper()
+        code = self._resolve_code(args)
+        if not code:
+            code = args[0].upper()
 
         # 验证股票代码格式
         # A股：6位数字
@@ -61,17 +71,17 @@ class AnalyzeCommand(BotCommand):
         is_us_stock = re.match(r'^[A-Z]{1,5}(\.[A-Z]{1,2})?$', code)
 
         if not (is_a_stock or is_hk_stock or is_us_stock):
-            return f"无效的股票代码: {code}（A股6位数字 / 港股HK+5位数字 / 美股1-5个字母）"
+            return f"无效的股票: {args[0]}（可输入代码，也可输入股票名称，例如 `/analyze 雅化集团`）"
         
         return None
     
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         """执行分析命令"""
-        code = canonical_stock_code(args[0])
+        code = canonical_stock_code(self._resolve_code(args) or args[0])
         
         # 检查是否需要完整报告（默认精简，传 full/完整/详细 切换）
         report_type = "simple"
-        if len(args) > 1 and args[1].lower() in ["full", "完整", "详细"]:
+        if any(str(arg).lower() in ["full", "完整", "详细"] for arg in args[1:]):
             report_type = "full"
         logger.info(f"[AnalyzeCommand] 分析股票: {code}, 报告类型: {report_type}")
         

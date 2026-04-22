@@ -38,6 +38,27 @@ class TestStockIndexLoader(unittest.TestCase):
                 self.assertEqual(stock_index_loader.get_index_stock_name("700.HK"), "腾讯控股")
                 self.assertEqual(stock_index_loader.get_index_stock_name("aapl"), "苹果")
 
+    def test_get_stock_code_index_map_supports_names_and_aliases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            index_path = Path(temp_dir) / "stocks.index.json"
+            index_path.write_text(
+                json.dumps(
+                    [
+                        ["002497.SZ", "002497", "雅化集团", "yahuajituan", "yhjt", ["雅化"], "CN", "stock", True, 100],
+                        ["920402.BJ", "920402", "硅烷科技", "guiwankeji", "gwkj", [], "BSE", "stock", True, 100],
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(stock_index_loader, "get_stock_index_candidate_paths", return_value=(index_path,)):
+                name_to_code = stock_index_loader.get_stock_code_index_map()
+
+            self.assertEqual(name_to_code["雅化集团"], "002497")
+            self.assertEqual(name_to_code["雅化"], "002497")
+            self.assertEqual(name_to_code["硅烷科技"], "920402")
+
     def test_get_stock_name_index_map_is_cached_after_first_load(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             index_path = Path(temp_dir) / "stocks.index.json"

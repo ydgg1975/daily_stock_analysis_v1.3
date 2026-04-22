@@ -14,7 +14,9 @@ import pytest
 from unittest.mock import patch
 
 from src.services.name_to_code_resolver import (
+    find_stock_reference,
     resolve_name_to_code,
+    resolve_text_to_code,
     _is_code_like,
     _normalize_code,
     _build_reverse_map_no_duplicates,
@@ -116,14 +118,24 @@ class TestResolveNameToCode:
 
     @patch("src.services.name_to_code_resolver._get_akshare_name_to_code")
     def test_akshare_fallback_when_not_in_local(self, mock_akshare):
-        mock_akshare.return_value = {"平安银行": "000001"}
-        # 000001 is in local map as 平安银行, so we use a name that's only in akshare
-        # Actually local has 000001 -> 平安银行. So "平安银行" would hit local first.
-        # Use a name not in STOCK_NAME_MAP - e.g. some A-share only in AkShare
-        mock_akshare.return_value = {"浦发银行": "600000"}
-        result = resolve_name_to_code("浦发银行")
+        mock_akshare.return_value = {"测试银行": "600000"}
+        with patch("src.services.name_to_code_resolver.get_stock_code_index_map", return_value={}):
+            result = resolve_name_to_code("测试银行")
         assert result == "600000"
         mock_akshare.assert_called()
+
+    @patch("src.services.name_to_code_resolver.get_stock_code_index_map")
+    def test_generated_stock_index_exact_name_match(self, mock_index):
+        mock_index.return_value = {"雅化集团": "002497"}
+
+        assert resolve_name_to_code("雅化集团") == "002497"
+
+    @patch("src.services.name_to_code_resolver.get_stock_code_index_map")
+    def test_resolve_text_to_code_extracts_name_from_question(self, mock_index):
+        mock_index.return_value = {"雅化集团": "002497"}
+
+        assert resolve_text_to_code("雅化集团现在可以买吗") == "002497"
+        assert find_stock_reference("雅化集团现在可以买吗") == ("002497", "雅化集团")
 
     @patch("src.services.name_to_code_resolver._get_akshare_name_to_code")
     def test_fuzzy_match_fallback(self, mock_akshare):

@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import difflib
 import logging
+import re
 import time
 from typing import Dict, Optional, Set, Tuple
 
+from data_provider.base import canonical_stock_code
+from src.data.stock_index_loader import get_stock_code_index_map
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.services.stock_code_utils import is_code_like, normalize_code
 
@@ -86,6 +89,16 @@ def _build_local_name_indexes(code_to_name: Dict[str, str]) -> Tuple[Dict[str, s
 
 
 _LOCAL_REVERSE_MAP, _LOCAL_AMBIGUOUS_NAMES = _build_local_name_indexes(STOCK_NAME_MAP)
+
+
+def _get_combined_local_name_to_code() -> Dict[str, str]:
+    """Return local exact name lookup, including the generated stock index."""
+    combined = dict(_LOCAL_REVERSE_MAP)
+    try:
+        combined.update(get_stock_code_index_map())
+    except Exception as exc:
+        logger.debug("[NameResolver] stock index reverse lookup unavailable: %s", exc)
+    return combined
 
 
 def _get_akshare_name_to_code() -> Optional[Dict[str, str]]:
@@ -164,9 +177,9 @@ def resolve_name_to_code(name: str) -> Optional[str]:
         return _normalize_code(s)
 
     # 2. Local reverse map (no duplicates)
-    local_reverse = _LOCAL_REVERSE_MAP
+    local_reverse = _get_combined_local_name_to_code()
     if s in local_reverse:
-        return local_reverse[s]
+        return canonical_stock_code(local_reverse[s])
     if s in _LOCAL_AMBIGUOUS_NAMES:
         logger.debug(f"[NameResolver] 命中本地歧义名称，快速返回 None: {s}")
         return None
@@ -179,7 +192,7 @@ def resolve_name_to_code(name: str) -> Optional[str]:
         for local_name, code in local_reverse.items():
             local_pinyin = "".join(lazy_pinyin(local_name)).lower()
             if input_pinyin == local_pinyin:
-                return code
+                return canonical_stock_code(code)
     except ImportError:
         pass
     except Exception as e:
@@ -195,7 +208,7 @@ def resolve_name_to_code(name: str) -> Optional[str]:
     akshare_map = _get_akshare_name_to_code()
     if akshare_map and s in akshare_map:
         logger.debug(f"[NameResolver] 命中 AkShare 映射: {s} -> {akshare_map[s]}")
-        return akshare_map[s]
+        return canonical_stock_code(akshare_map[s])
 
     # 5. Fuzzy match (local + akshare, local takes precedence)
     all_name_to_code = dict(local_reverse)
@@ -209,7 +222,7 @@ def resolve_name_to_code(name: str) -> Optional[str]:
         matches = difflib.get_close_matches(s, names, n=1, cutoff=0.8)
         if matches:
             logger.debug(f"[NameResolver] 命中模糊匹配: input={s}, matched={matches[0]}")
-            return all_name_to_code[matches[0]]
+            return canonical_stock_code(all_name_to_code[matches[0]])
 
         # Conservative fallback for one-character typo in medium/long names.
         # This keeps the strict default threshold while fixing obvious misspellings
@@ -217,7 +230,61 @@ def resolve_name_to_code(name: str) -> Optional[str]:
         typo_matches = difflib.get_close_matches(s, names, n=1, cutoff=0.7)
         if typo_matches and _is_single_char_typo(s, typo_matches[0]):
             logger.debug(f"[NameResolver] 命中单字误写兜底: input={s}, matched={typo_matches[0]}")
-            return all_name_to_code[typo_matches[0]]
+            return canonical_stock_code(all_name_to_code[typo_matches[0]])
 
     logger.debug(f"[NameResolver] 解析失败: {s}")
     return None
+
+
+_A_SHARE_TEXT_RE = re.compile(r"(?<!\d)(?:[036]\d{5}|(?:43|83|87|88|92)\d{4})(?!\d)")
+_HK_TEXT_RE = re.compile(r"(?i)(?<![A-Z0-9])HK?\d{5}(?![A-Z0-9])")
+
+
+def find_stock_reference(text: str) -> Optional[Tuple[str, str]]:
+    """Find a stock reference in free-form text.
+
+    Returns:
+        (code, matched_text), or None when no reliable reference is found.
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+
+    if _is_code_like(raw):
+        normalized = normalize_code(raw)
+        if normalized:
+            return canonical_stock_code(normalized), raw
+
+    name_to_code = _get_combined_local_name_to_code()
+    exact_code = name_to_code.get(raw)
+    if exact_code:
+        return canonical_stock_code(exact_code), raw
+
+    for pattern in (_A_SHARE_TEXT_RE, _HK_TEXT_RE):
+        match = pattern.search(raw)
+        if match:
+            normalized = normalize_code(match.group(0))
+            if normalized:
+                return canonical_stock_code(normalized), match.group(0)
+
+    for name, code in sorted(name_to_code.items(), key=lambda item: len(item[0]), reverse=True):
+        if len(name) < 2:
+            continue
+        if name in raw:
+            return canonical_stock_code(code), name
+
+    # Online/fuzzy fallback is useful for short name-like input, but must not
+    # run before local substring extraction for free-form questions; AkShare can
+    # take tens of seconds when upstream exchanges are slow.
+    if len(raw) <= 8:
+        direct = resolve_name_to_code(raw)
+        if direct:
+            return canonical_stock_code(direct), raw
+
+    return None
+
+
+def resolve_text_to_code(text: str) -> Optional[str]:
+    """Resolve a stock code from either a pure name/code or free-form text."""
+    reference = find_stock_reference(text)
+    return reference[0] if reference else None

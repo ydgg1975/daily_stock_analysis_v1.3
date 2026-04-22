@@ -19,6 +19,7 @@ from bot.commands.base import BotCommand
 from bot.models import BotMessage, BotResponse
 from data_provider.base import canonical_stock_code
 from src.config import get_config
+from src.services.name_to_code_resolver import find_stock_reference, resolve_text_to_code
 from src.storage import get_db
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,33 @@ class AskCommand(BotCommand):
         parts = [p.strip().upper() for p in raw.replace("，", ",").split(",") if p.strip()]
         return [canonical_stock_code(part) for part in parts]
 
+    @staticmethod
+    def _extract_question_text(full_text: str, matched_text: Optional[str]) -> str:
+        text = (full_text or "").strip()
+        if matched_text:
+            text = text.replace(matched_text, "", 1).strip()
+        text = re.sub(r"^(请|帮我|帮忙|麻烦|分析|看看|看一下|查一下|问一下)\s*", "", text)
+        return text.strip(" ，,。.!！?？")
+
+    def _resolve_stock_query(self, args: List[str]) -> tuple[List[str], List[str]]:
+        raw_code_str, remaining_args = self._merge_code_args(args)
+        codes = self._parse_stock_codes(raw_code_str)
+        if codes and all(self._validate_single_code(code) is None for code in codes):
+            return codes, remaining_args
+
+        full_text = " ".join(args).strip()
+        reference = find_stock_reference(full_text)
+        if reference:
+            code, matched_text = reference
+            question_text = self._extract_question_text(full_text, matched_text)
+            return [code], ([question_text] if question_text else [])
+
+        resolved = resolve_text_to_code(full_text)
+        if resolved:
+            return [resolved], []
+
+        return [], args
+
     def _validate_single_code(self, code: str) -> Optional[str]:
         """Validate a single stock code format."""
         normalized = code.upper()
@@ -106,10 +134,9 @@ class AskCommand(BotCommand):
         if not args:
             return "请输入股票代码。用法: /ask <股票代码[,代码2,...]> [技能名称]"
 
-        raw_code_str, _ = self._merge_code_args(args)
-        codes = self._parse_stock_codes(raw_code_str)
+        codes, _ = self._resolve_stock_query(args)
         if not codes:
-            return "请输入至少一个有效的股票代码"
+            return "请输入股票代码或股票名称，例如 `/ask 920402 现在还能拿吗` 或 `/ask 雅化集团现在可以买吗`"
 
         for code in codes:
             error = self._validate_single_code(code)
@@ -212,8 +239,7 @@ class AskCommand(BotCommand):
                 "⚠️ Agent 模式未开启，无法使用问股功能。\n请在配置中设置 `AGENT_MODE=true`。"
             )
 
-        raw_code_str, remaining_args = self._merge_code_args(args)
-        codes = self._parse_stock_codes(raw_code_str)
+        codes, remaining_args = self._resolve_stock_query(args)
         skill_id = self._parse_skill(["placeholder"] + remaining_args) if remaining_args else self._get_default_skill_id()
         skill_text = " ".join(remaining_args).strip()
 
