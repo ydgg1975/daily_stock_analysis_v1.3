@@ -1007,6 +1007,47 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         mock_task_queue.unsubscribe.assert_called_once_with(never_queue)
 
 
+class SyncAnalysisCanonicalNameTestCase(unittest.TestCase):
+    """Spec: 以 code 为准 — sync path must use canonical name in response."""
+
+    def test_sync_path_overrides_provider_name_with_canonical_name(self) -> None:
+        if _handle_sync_analysis is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        fake_result = {
+            "stock_code": "600519",
+            "stock_name": "WRONG_NAME_FROM_PROVIDER",
+            "report": {"meta": {}, "summary": {}, "strategy": {}, "details": {}},
+        }
+
+        service_instance = MagicMock()
+        service_instance.analyze_stock.return_value = fake_result
+
+        with patch("src.services.analysis_service.AnalysisService", return_value=service_instance), \
+             patch(
+                 "api.v1.endpoints.analysis._load_sync_fundamental_sources",
+                 return_value=(None, None),
+             ), \
+             patch(
+                 "api.v1.endpoints.analysis._build_analysis_report",
+                 return_value=MagicMock(model_dump=lambda: {}),
+             ):
+            response = _handle_sync_analysis(
+                "600519",
+                SimpleNamespace(
+                    report_type="detailed",
+                    force_refresh=False,
+                    notify=True,
+                ),
+                canonical_name="贵州茅台",
+            )
+
+        # The canonical name must win over the data-provider name.
+        self.assertEqual(response.stock_name, "贵州茅台")
+        # The dict was mutated in-place before response building.
+        self.assertEqual(fake_result["stock_name"], "贵州茅台")
+
+
 class BatchTaskQueueContractTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._original_instance = AnalysisTaskQueue._instance

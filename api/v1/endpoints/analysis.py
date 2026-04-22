@@ -248,7 +248,12 @@ def trigger_analysis(
                     "message": "同步模式仅支持单只股票分析，请使用 async_mode=true 进行批量分析"
                 }
             )
-        return _handle_sync_analysis(stock_codes[0], request, user_id=user_id)
+        return _handle_sync_analysis(
+            stock_codes[0],
+            request,
+            canonical_name=canonical_names[stock_codes[0]],
+            user_id=user_id,
+        )
 
     # Async mode submits one task per stock.
     return _handle_async_analysis_batch(stock_codes, request, canonical_names=canonical_names, user_id=user_id)
@@ -348,6 +353,7 @@ def _handle_async_analysis_batch(
 def _handle_sync_analysis(
     stock_code: str,
     request: AnalyzeRequest,
+    canonical_name: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> AnalysisResultResponse:
     """
@@ -380,6 +386,10 @@ def _handle_sync_analysis(
                     "message": error_message,
                 }
             )
+
+        # 以 canonical_name 为准（spec: 以 code 为准），覆盖 data provider 返回的名称
+        if canonical_name:
+            result["stock_name"] = canonical_name
 
         # 构建报告结构
         report_data = result.get("report", {})
