@@ -265,19 +265,31 @@ const HomePage: React.FC = () => {
   }, []);
 
   // When navigated here with ?q= (e.g., from watchlist card):
-  // pre-fill the input and show the most recent history for that stock if available.
-  // Do NOT auto-submit a new LLM analysis — that would re-run every click.
+  // - default: pre-fill input and show the most recent history record for that stock.
+  // - ?force=1: immediately trigger a fresh analysis (force_refresh=true).
   const pendingQRef = useRef<string | null>(null);
   const didSelectQRef = useRef(false);
 
   useEffect(() => {
-    if (pendingQRef.current !== null) return; // already consumed
+    if (pendingQRef.current !== null) return;
     const q = searchParams.get('q');
     if (!q) return;
+    const force = searchParams.get('force') === '1';
     setSearchParams({}, { replace: true });
     setQuery(q);
     pendingQRef.current = q;
-  }, [searchParams, setSearchParams, setQuery]);
+    if (force) {
+      // Skip the history-select path and trigger a fresh analysis.
+      didSelectQRef.current = true;
+      pendingQRef.current = null;
+      void submitAnalysis({
+        stockCode: q,
+        originalQuery: q,
+        selectionSource: 'manual',
+        forceRefresh: true,
+      });
+    }
+  }, [searchParams, setSearchParams, setQuery, submitAnalysis]);
 
   // Once history has loaded, find and select the most recent record for the target stock
   useEffect(() => {
