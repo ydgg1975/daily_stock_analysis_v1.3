@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import requests
+from dotenv import load_dotenv
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -449,6 +450,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def configure_runtime_defaults() -> None:
+    load_dotenv(ROOT / ".env", override=False)
+
     # The interactive Telegram bot should expose the project's AI commands by
     # default; users can still override either value explicitly.
     os.environ.setdefault("AGENT_MODE", "true")

@@ -2,12 +2,16 @@
 """Tests for the Telegram AI polling entrypoint helpers."""
 
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+import scripts.telegram_ai_bot as telegram_ai_bot
 from scripts.telegram_ai_bot import (
     TelegramIdentity,
     build_reply_chat_prompt,
+    configure_runtime_defaults,
     extract_stock_code,
     get_allowed_chat_ids_from_env,
     prepare_message,
@@ -73,6 +77,24 @@ class TelegramAIBotHelperTests(unittest.TestCase):
         self.assertIn("股票代码：920402", prompt)
         self.assertIn("...（报告已截断）", prompt)
         self.assertIn("风险在哪里？", prompt)
+
+    def test_configure_runtime_defaults_loads_project_env(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text(
+                "TELEGRAM_BOT_TOKEN=test-token\n"
+                "TELEGRAM_CHAT_ID=123\n"
+                "AGENT_MODE=false\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(telegram_ai_bot, "ROOT", Path(tmpdir)):
+                with patch.dict(os.environ, {}, clear=True):
+                    configure_runtime_defaults()
+                    self.assertEqual(os.environ["TELEGRAM_BOT_TOKEN"], "test-token")
+                    self.assertEqual(os.environ["TELEGRAM_CHAT_ID"], "123")
+                    self.assertEqual(os.environ["AGENT_MODE"], "false")
+                    self.assertEqual(os.environ["AGENT_NL_ROUTING"], "true")
 
 
 if __name__ == "__main__":
