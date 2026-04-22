@@ -213,15 +213,17 @@ git commit -m "feat(identity): add stock_identity_service with StockIdentityNotF
 
 ```python
 def test_normalize_hk_stock_common_prefixes():
+    # Codebase canonical form: HK codes stored without the .HK suffix
     code, name = normalize_stock_identity("hk00700")
-    assert code == "00700.HK"
-    assert name and "腾讯" in name
+    assert code == "00700"
+    assert name == "腾讯控股"
 
 
 def test_normalize_us_stock_uppercase():
+    # Codebase canonical form: US tickers uppercase, names stored in Chinese
     code, name = normalize_stock_identity("aapl")
     assert code == "AAPL"
-    assert name and "Apple" in name
+    assert name == "苹果"
 
 
 def test_normalize_rejects_pure_symbols():
@@ -241,19 +243,13 @@ Expected: 3 new tests FAIL（假设 STOCK_NAME_MAP 里已有 `00700.HK` 与 `AAP
 
 - [ ] **Step 2.3：调整实现以处理港股/美股前缀**
 
-先确认 `STOCK_NAME_MAP` 中是否已有条目：
+注意：本项目的规范化形式为：
+- HK 代码存储时 **不含 `.HK` 后缀**（如 `"00700"` 而非 `"00700.HK"`）
+- US 代码和名称均大写/中文（如 `"AAPL"` → `"苹果"`，而非 `"Apple Inc."` ）
 
-```bash
-python -c "from src.data.stock_mapping import STOCK_NAME_MAP; print([k for k in STOCK_NAME_MAP if 'HK' in k or k in ('AAPL',)][:5])"
-```
+所以 `STOCK_NAME_MAP` 中已有 `"00700"` 和 `"AAPL"` 两个条目，分别映射到 `"腾讯控股"` 和 `"苹果"`，无需新增。
 
-- 如果没有，在 `src/data/stock_mapping.py` 中补充（最少一条，供测试使用）：
-  ```python
-  "00700.HK": "腾讯控股",
-  "AAPL": "Apple Inc.",
-  ```
-
-- 如 `normalize_code` 已处理 `hk00700` → `00700.HK`、`aapl` → `AAPL`，则 Task 1 的实现已经可以直接复用。如果 `normalize_code` 不覆盖，打开 `src/services/stock_code_utils.py` 查看并补全（只加，不动原逻辑）。
+若 `normalize_code` 已处理 `hk00700` → `00700`、`aapl` → `AAPL`，则 Task 1 的实现已经可以直接复用。如果 `normalize_code` 不覆盖，打开 `src/services/stock_code_utils.py` 查看并补全（只加，不动原逻辑）。
 
 - [ ] **Step 2.4：运行测试确认通过**
 
@@ -261,7 +257,7 @@ python -c "from src.data.stock_mapping import STOCK_NAME_MAP; print([k for k in 
 python -m pytest tests/test_stock_identity_service.py -v
 ```
 
-Expected: 7 passed。
+Expected: 8 passed。
 
 - [ ] **Step 2.5：提交**
 

@@ -137,9 +137,9 @@ User clicks [重新分析] on WatchlistPage row
 ```
 Frontend submits { code: 'hk700', name: '中国腾讯' }
   → watchlist endpoint calls normalize_stock_identity('hk700')
-    → cleans → '00700.HK' (或项目当前规范化后的形式)
+    → cleans → '00700' (项目当前规范化后的形式：HK 代码不含后缀)
     → looks up canonical_name = '腾讯控股'
-  → DB stores (user_id, '00700.HK', '腾讯控股')
+  → DB stores (user_id, '00700', '腾讯控股')
   → AnalysisHistory on analyze 同样使用上述 (code, name)
 ```
 

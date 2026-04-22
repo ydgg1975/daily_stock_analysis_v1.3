@@ -36,15 +36,17 @@ def test_normalize_raises_when_code_unknown_and_no_fallback(monkeypatch):
 
 
 def test_normalize_hk_stock_common_prefixes():
+    # Codebase canonical form: HK codes stored without the .HK suffix
     code, name = normalize_stock_identity("hk00700")
     assert code == "00700"
-    assert name and "腾讯" in name
+    assert name == "腾讯控股"
 
 
 def test_normalize_us_stock_uppercase():
+    # Codebase canonical form: US tickers uppercase, names stored in Chinese
     code, name = normalize_stock_identity("aapl")
     assert code == "AAPL"
-    assert name and "Apple" in name or "苹果" in name
+    assert name == "苹果"
 
 
 def test_normalize_rejects_pure_symbols():
