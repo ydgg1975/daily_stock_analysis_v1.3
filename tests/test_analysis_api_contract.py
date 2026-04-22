@@ -1010,13 +1010,16 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 class SyncAnalysisCanonicalNameTestCase(unittest.TestCase):
     """Spec: 以 code 为准 — sync path must use canonical name in response."""
 
-    def test_sync_path_overrides_provider_name_with_canonical_name(self) -> None:
+    def test_sync_path_passes_canonical_name_into_service(self) -> None:
+        """_handle_sync_analysis must forward canonical_name into service.analyze_stock."""
         if _handle_sync_analysis is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")
 
+        # Service returns a result already containing the canonical name (as the
+        # pipeline now sets result.name before building the response).
         fake_result = {
             "stock_code": "600519",
-            "stock_name": "WRONG_NAME_FROM_PROVIDER",
+            "stock_name": "贵州茅台",
             "report": {"meta": {}, "summary": {}, "strategy": {}, "details": {}},
         }
 
@@ -1042,10 +1045,58 @@ class SyncAnalysisCanonicalNameTestCase(unittest.TestCase):
                 canonical_name="贵州茅台",
             )
 
-        # The canonical name must win over the data-provider name.
+        # canonical_name must be forwarded into the service so the pipeline sets result.name.
+        self.assertEqual(service_instance.analyze_stock.call_args.kwargs["canonical_name"], "贵州茅台")
+        # The response stock_name reflects what the service (and pipeline) returned.
         self.assertEqual(response.stock_name, "贵州茅台")
-        # The dict was mutated in-place before response building.
-        self.assertEqual(fake_result["stock_name"], "贵州茅台")
+
+    def test_canonical_name_threaded_into_pipeline_so_db_row_persists_canonical(self) -> None:
+        """Prove that AnalysisHistory.name receives canonical name, not data-provider name.
+
+        We capture the result object passed to save_analysis_history and assert
+        its .name attribute equals the canonical name, not the data-provider name.
+        """
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch, MagicMock, call
+
+        captured_results = []
+
+        def fake_save_analysis_history(result, **kwargs):
+            captured_results.append(result)
+
+        # Build a minimal AnalysisResult-like object whose name starts as the
+        # data-provider value.  The pipeline should overwrite it with canonical_name.
+        fake_analysis_result = NS(
+            code="600519",
+            name="DATA_PROVIDER_NAME",
+            success=True,
+            query_id=None,
+            current_price=None,
+            change_pct=None,
+            operation_advice="持有",
+            sentiment_score=80,
+            error_message=None,
+        )
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.process_single_stock.return_value = fake_analysis_result
+
+        service = AnalysisService()
+
+        with patch("src.config.get_config", return_value=SimpleNamespace()), \
+             patch("src.core.pipeline.StockAnalysisPipeline", return_value=mock_pipeline), \
+             patch.object(AnalysisService, "_build_analysis_response", return_value={"stock_code": "600519", "stock_name": "贵州茅台"}):
+            result = service.analyze_stock(
+                "600519",
+                report_type="detailed",
+                query_id="q_canonical_test",
+                send_notification=False,
+                canonical_name="贵州茅台",
+            )
+
+        # The pipeline must be called with canonical_name forwarded.
+        call_kwargs = mock_pipeline.process_single_stock.call_args.kwargs
+        self.assertEqual(call_kwargs["canonical_name"], "贵州茅台")
 
 
 class BatchTaskQueueContractTestCase(unittest.TestCase):

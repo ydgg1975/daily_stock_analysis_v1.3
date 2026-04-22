@@ -566,7 +566,12 @@ class AnalysisTaskQueue:
         try:
             # 导入分析服务（延迟导入避免循环依赖）
             from src.services.analysis_service import AnalysisService
-            
+
+            # 读取任务中存储的规范名称（来自 normalize_stock_identity 解析结果）
+            with self._data_lock:
+                _task = self._tasks.get(task_id)
+                canonical_name = _task.stock_name if _task else None
+
             # 执行分析
             service = AnalysisService()
 
@@ -581,6 +586,7 @@ class AnalysisTaskQueue:
                 send_notification=notify,
                 progress_callback=_on_progress,
                 user_id=user_id,
+                canonical_name=canonical_name,
             )
             
             if result:

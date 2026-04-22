@@ -47,6 +47,7 @@ class AnalysisService:
         send_notification: bool = True,
         progress_callback: Optional[Callable[[int, str], None]] = None,
         user_id: Optional[str] = None,
+        canonical_name: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -96,6 +97,7 @@ class AnalysisService:
                 skip_analysis=False,
                 single_stock_notify=send_notification,
                 report_type=rt,
+                canonical_name=canonical_name,
             )
             
             if result is None:

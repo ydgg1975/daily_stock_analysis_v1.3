@@ -375,6 +375,7 @@ def _handle_sync_analysis(
             query_id=query_id,
             send_notification=getattr(request, "notify", True),
             user_id=user_id,
+            canonical_name=canonical_name,
         )
 
         if result is None:
@@ -386,10 +387,6 @@ def _handle_sync_analysis(
                     "message": error_message,
                 }
             )
-
-        # 以 canonical_name 为准（spec: 以 code 为准），覆盖 data provider 返回的名称
-        if canonical_name:
-            result["stock_name"] = canonical_name
 
         # 构建报告结构
         report_data = result.get("report", {})

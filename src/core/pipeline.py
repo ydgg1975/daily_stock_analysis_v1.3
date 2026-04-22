@@ -234,10 +234,10 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
     
-    def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
+    def analyze_stock(self, code: str, report_type: ReportType, query_id: str, canonical_name: Optional[str] = None) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
-        
+
         流程：
         1. 获取实时行情（量比、换手率）- 通过 DataFetcherManager 自动故障切换
         2. 获取筹码分布 - 通过 DataFetcherManager 带熔断保护
@@ -245,12 +245,13 @@ class StockAnalysisPipeline:
         4. 多维度情报搜索（最新消息+风险排查+业绩预期）
         5. 从数据库获取分析上下文
         6. 调用 AI 进行综合分析
-        
+
         Args:
             query_id: 查询链路关联 id
             code: 股票代码
             report_type: 报告类型
-            
+            canonical_name: 规范股票名称（由上层解析，优先于数据源返回的名称）
+
         Returns:
             AnalysisResult 或 None（如果分析失败）
         """
@@ -285,6 +286,10 @@ class StockAnalysisPipeline:
             # 如果还是没有名称，使用代码作为名称
             if not stock_name:
                 stock_name = f'股票{code}'
+
+            # 若调用方提供了规范名称，以其为准（覆盖数据源返回的名称）
+            if canonical_name:
+                stock_name = canonical_name
 
             # Step 2: 获取筹码分布 - 使用统一入口，带熔断保护
             chip_data = None
@@ -374,6 +379,7 @@ class StockAnalysisPipeline:
                     chip_data,
                     fundamental_context,
                     trend_result,
+                    canonical_name=canonical_name,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
@@ -485,6 +491,9 @@ class StockAnalysisPipeline:
                 realtime_data = enhanced_context.get('realtime', {})
                 result.current_price = realtime_data.get('price')
                 result.change_pct = realtime_data.get('change_pct')
+                # 规范名称覆盖：确保 save_analysis_history 持久化规范名称
+                if canonical_name:
+                    result.name = canonical_name
 
             # Step 7.6: chip_structure fallback (Issue #589)
             if result and chip_data:
@@ -741,15 +750,16 @@ class StockAnalysisPipeline:
         return enriched_context
 
     def _analyze_with_agent(
-        self, 
-        code: str, 
-        report_type: ReportType, 
+        self,
+        code: str,
+        report_type: ReportType,
         query_id: str,
         stock_name: str,
         realtime_quote: Any,
         chip_data: Optional[ChipDistribution],
         fundamental_context: Optional[Dict[str, Any]] = None,
         trend_result: Optional[TrendAnalysisResult] = None,
+        canonical_name: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         使用 Agent 模式分析单只股票。
@@ -822,6 +832,10 @@ class StockAnalysisPipeline:
             # price_position fallback (same as non-agent path Step 7.7)
             if result:
                 fill_price_position_if_needed(result, trend_result, realtime_quote)
+
+            # 规范名称覆盖（Agent 路径）：确保 save_analysis_history 持久化规范名称
+            if result and canonical_name:
+                result.name = canonical_name
 
             resolved_stock_name = result.name if result and result.name else stock_name
 
@@ -1187,6 +1201,7 @@ class StockAnalysisPipeline:
         report_type: ReportType = ReportType.SIMPLE,
         analysis_query_id: Optional[str] = None,
         current_time: Optional[datetime] = None,
+        canonical_name: Optional[str] = None,
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -1231,7 +1246,7 @@ class StockAnalysisPipeline:
                 return None
             
             effective_query_id = analysis_query_id or self.query_id or uuid.uuid4().hex
-            result = self.analyze_stock(code, report_type, query_id=effective_query_id)
+            result = self.analyze_stock(code, report_type, query_id=effective_query_id, canonical_name=canonical_name)
             
             if result and result.success:
                 logger.info(
