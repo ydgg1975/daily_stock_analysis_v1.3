@@ -854,8 +854,11 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
   // automatically remove any fallback models that are no longer selectable.
   // Without this, stale fallback entries become invisible in the UI (only availableModels
   // are rendered as checkboxes) yet still block saving with a validation error.
+  // Skip when this editor isn't managing runtime config (availableModels is intentionally
+  // empty in that mode) but keep cleaning when the user truly clears the last model or
+  // disables the last enabled channel — otherwise #1069 still reproduces in those cases.
   useEffect(() => {
-    if (availableModels.length === 0) return;
+    if (!managesRuntimeConfig) return;
     setRuntimeConfig((previous) => {
       const validFallbacks = previous.fallbackModels.filter(
         (model) => availableModels.includes(model) || usesDirectEnvProvider(model),
@@ -863,7 +866,7 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
       if (validFallbacks.length === previous.fallbackModels.length) return previous;
       return { ...previous, fallbackModels: validFallbacks };
     });
-  }, [availableModels]);
+  }, [availableModels, managesRuntimeConfig]);
 
   const hasChanges = useMemo(() => {
     const runtimeChanged = (

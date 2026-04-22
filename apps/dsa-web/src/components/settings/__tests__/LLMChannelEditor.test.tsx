@@ -217,6 +217,63 @@ describe('LLMChannelEditor', () => {
     );
   });
 
+  it('clears stale fallback models when the only enabled channel is disabled (availableModels -> 0)', async () => {
+    update.mockResolvedValue({
+      success: true,
+      configVersion: 'v2',
+      appliedCount: 1,
+      skippedMaskedCount: 0,
+      reloadTriggered: true,
+      updatedKeys: [],
+      warnings: [],
+    });
+
+    render(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'openai' },
+          { key: 'LLM_OPENAI_PROTOCOL', value: 'openai' },
+          { key: 'LLM_OPENAI_BASE_URL', value: 'https://api.openai.com/v1' },
+          { key: 'LLM_OPENAI_ENABLED', value: 'true' },
+          { key: 'LLM_OPENAI_API_KEY', value: 'sk-test' },
+          { key: 'LLM_OPENAI_MODELS', value: 'gpt-4o-mini,gpt-4o' },
+          { key: 'LITELLM_MODEL', value: 'openai/gpt-4o-mini' },
+          { key: 'LITELLM_FALLBACK_MODELS', value: 'openai/gpt-4o' },
+        ]}
+        configVersion="v1"
+        maskToken="******"
+        onSaved={() => {}}
+      />,
+    );
+
+    // Initially the fallback (openai/gpt-4o) should be checked.
+    expect((screen.getByRole('checkbox', { name: 'openai/gpt-4o' }) as HTMLInputElement).checked).toBe(true);
+
+    // User clears every model from the only enabled channel — availableModels collapses
+    // from non-empty to 0, the same shape as "user disabled the last enabled channel".
+    fireEvent.click(screen.getByRole('button', { name: /OpenAI 官方/i }));
+    const modelsInput = screen.getByLabelText('模型（逗号分隔）');
+    fireEvent.change(modelsInput, { target: { value: '' } });
+
+    // Fallback section disappears (no available models left to render).
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'openai/gpt-4o' })).not.toBeInTheDocument();
+    });
+
+    // Save should succeed (no '存在无效的备选模型' block) and stale fallback should be cleared.
+    fireEvent.click(screen.getByRole('button', { name: '保存 AI 配置' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalled();
+    });
+
+    const updatePayload = update.mock.calls[0][0];
+    expect(updatePayload.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'LITELLM_FALLBACK_MODELS', value: '' }),
+      ]),
+    );
+  });
+
   it('checks protocol-prefixed selected model when discovery returns bare id', async () => {
     discoverLLMChannelModels.mockResolvedValue({
       success: true,
