@@ -988,8 +988,24 @@ class PortfolioService:
                 )
 
             last_price = self.repo.get_latest_close(symbol=symbol, as_of=as_of_date)
+            price_stale = False
             if last_price is None or last_price <= 0:
-                last_price = avg_cost
+                # For current-day snapshots, try realtime quote before falling back to avg_cost
+                if as_of_date >= date.today():
+                    try:
+                        from data_provider.base import DataFetcherManager
+
+                        manager = DataFetcherManager()
+                        quote = manager.get_realtime_quote(symbol)
+                        if quote is not None:
+                            realtime_price = float(getattr(quote, "price", 0.0) or 0.0)
+                            if realtime_price > 0:
+                                last_price = realtime_price
+                    except Exception:
+                        pass
+                if last_price is None or last_price <= 0:
+                    last_price = avg_cost
+                    price_stale = True
 
             local_market_value = qty * float(last_price)
             market_base, stale_market, _ = self._convert_amount(
@@ -1016,6 +1032,7 @@ class PortfolioService:
                     "avg_cost": round(avg_cost, 8),
                     "total_cost": round(total_cost, 8),
                     "last_price": round(float(last_price), 8),
+                    "price_stale": price_stale,
                     "market_value_base": round(market_base, 8),
                     "unrealized_pnl_base": round(unrealized_base, 8),
                     "valuation_currency": account.base_currency,

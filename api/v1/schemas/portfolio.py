@@ -157,6 +157,7 @@ class PortfolioPositionItem(BaseModel):
     avg_cost: float
     total_cost: float
     last_price: float
+    price_stale: bool = False
     market_value_base: float
     unrealized_pnl_base: float
     valuation_currency: str
