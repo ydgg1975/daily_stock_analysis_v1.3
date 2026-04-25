@@ -31,6 +31,8 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
     # 添加超时限制，防止任务卡死
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
     
