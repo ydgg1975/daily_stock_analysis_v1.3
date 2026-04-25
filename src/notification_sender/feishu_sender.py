@@ -59,7 +59,11 @@ class FeishuSender:
         if not self._feishu_secret:
             return {}
 
-        timestamp = str(int(time.time()))
+        # 根据飞书官方文档和示例，待签名的字符串（string_to_sign）被用作 HMAC 的密钥(key)。
+        # 这是一个非标准的 HMAC 用法，但我们必须遵循。
+        # 为防止客户端与服务器之间的时钟不同步（Clock Skew），我们从当前时间戳中减去 60 秒，
+        # 以提供一个容错窗口，确保签名在飞书服务器的一小时验证期内有效。
+        timestamp = str(int(time.time()) - 60)
         string_to_sign = f"{timestamp}\n{self._feishu_secret}"
         sign = base64.b64encode(
             hmac.new(
