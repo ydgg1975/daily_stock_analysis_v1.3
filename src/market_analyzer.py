@@ -10,11 +10,13 @@
 3. 使用大模型生成每日大盘复盘报告
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
 
@@ -108,6 +110,7 @@ class MarketAnalyzer:
         search_service: Optional[SearchService] = None,
         analyzer=None,
         region: str = "cn",
+        enable_diagnostic: bool = False,
     ):
         """
         初始化大盘分析器
@@ -116,6 +119,7 @@ class MarketAnalyzer:
             search_service: 搜索服务实例
             analyzer: AI分析器实例（用于调用LLM）
             region: 市场区域 cn=A股 us=美股
+            enable_diagnostic: 是否启用全维度诊断模式（Req 21.7）
         """
         self.config = get_config()
         self.search_service = search_service
@@ -124,6 +128,177 @@ class MarketAnalyzer:
         self.region = region if region in ("cn", "us") else "cn"
         self.profile: MarketProfile = get_profile(self.region)
         self.strategy = get_market_strategy_blueprint(self.region)
+
+        # Req 21.7: Instantiate MarketDiagnosticEngine when diagnostic mode is enabled
+        self.diagnostic_engine = None
+        if enable_diagnostic:
+            from src.market_diagnostic.engine import MarketDiagnosticEngine
+            self.diagnostic_engine = MarketDiagnosticEngine(
+                data_manager=self.data_manager,
+                analyzer=self.analyzer,
+            )
+
+    def run_full_analysis(self, merge_with_original: bool = True) -> Tuple[Optional[Any], str]:
+        """
+        执行完整的市场分析流程。
+
+        当 enable_diagnostic=True 时，运行全维度诊断工作流；
+        如果 merge_with_original=True，则将诊断结果与原有复盘报告合并。
+
+        Args:
+            merge_with_original: 是否将诊断结果与原有复盘报告合并（默认True）
+
+        Returns:
+            Tuple[Optional[DiagnosticReport], str]:
+                - 第一个元素：DiagnosticReport（诊断模式）或 None（普通模式）
+                - 第二个元素：Markdown 格式的报告字符串
+
+        Requirements: 21.7, 21.8
+        """
+        # Req 21.8: When diagnostic engine is available, run full diagnostic workflow
+        if self.diagnostic_engine:
+            diagnostic_report, diagnostic_markdown = self.diagnostic_engine.run()
+            
+            # 如果需要合并，则将诊断结果与原有复盘合并
+            if merge_with_original:
+                try:
+                    overview = self.get_market_overview()
+                    news = self.search_market_news()
+                    original_review = self.generate_market_review(overview, news)
+                    
+                    # 合并两份报告
+                    merged_markdown = self._merge_reports(
+                        original_review=original_review,
+                        diagnostic_markdown=diagnostic_markdown,
+                        diagnostic_report=diagnostic_report
+                    )
+                    return diagnostic_report, merged_markdown
+                except Exception as e:
+                    logger.warning(f"Failed to merge reports, returning diagnostic only: {e}")
+                    return diagnostic_report, diagnostic_markdown
+            else:
+                # 仅返回诊断报告
+                return diagnostic_report, diagnostic_markdown
+
+        # Fallback: use existing review generation pipeline
+        overview = self.get_market_overview()
+        news = self.search_market_news()
+        return None, self.generate_market_review(overview, news)
+    
+    def _merge_reports(
+        self,
+        original_review: str,
+        diagnostic_markdown: str,
+        diagnostic_report: Any
+    ) -> str:
+        """
+        合并原有复盘报告和诊断系统报告。
+        
+        策略：
+        1. 保留原有报告的新闻和热点部分
+        2. 用诊断系统的量化分析替换原有的指数点评
+        3. 在末尾添加完整的诊断报告
+        
+        Args:
+            original_review: 原有复盘报告
+            diagnostic_markdown: 诊断系统Markdown报告
+            diagnostic_report: 诊断系统结构化报告
+            
+        Returns:
+            合并后的Markdown报告
+        """
+        import re
+        
+        # 提取原有报告的标题和日期
+        lines = original_review.split('\n')
+        title_section = []
+        content_start = 0
+        
+        for i, line in enumerate(lines):
+            if line.startswith('#'):
+                title_section.append(line)
+                content_start = i + 1
+            elif title_section and not line.strip():
+                continue
+            else:
+                break
+        
+        # 构建合并报告
+        merged = []
+        
+        # 1. 标题部分
+        if title_section:
+            merged.extend(title_section)
+            merged.append('')
+        else:
+            merged.append(f"# {diagnostic_report.date} 市场全维度诊断复盘")
+            merged.append('')
+        
+        # 2. 添加诊断系统的一句话总结
+        merged.append("## 🎯 市场诊断总结")
+        merged.append('')
+        merged.append(f"**{diagnostic_report.one_sentence_summary}**")
+        merged.append('')
+        merged.append(f"- **综合状态**: {diagnostic_report.composite_regime}")
+        merged.append(f"- **趋势状态**: {diagnostic_report.trend_state}")
+        merged.append(f"- **市场广度**: {diagnostic_report.breadth_state}")
+        merged.append(f"- **情绪状态**: {diagnostic_report.sentiment_state}")
+        merged.append(f"- **风险等级**: {diagnostic_report.risk_state}")
+        merged.append(f"- **置信度**: {diagnostic_report.confidence:.0%}")
+        merged.append('')
+        
+        # 3. 提取原有报告的新闻部分（如果有）
+        news_section = self._extract_section(original_review, r"###\s*(?:三、)?(?:市场新闻|Market News)")
+        if news_section:
+            merged.append("---")
+            merged.append('')
+            merged.append("## 📰 市场新闻与热点")
+            merged.append('')
+            merged.append(news_section)
+            merged.append('')
+        
+        # 4. 添加完整的诊断报告
+        merged.append("---")
+        merged.append('')
+        merged.append("## 📊 全维度量化诊断")
+        merged.append('')
+        merged.append(diagnostic_markdown)
+        
+        return '\n'.join(merged)
+    
+    def _extract_section(self, markdown: str, pattern: str) -> str:
+        """
+        从Markdown中提取特定章节。
+        
+        Args:
+            markdown: 完整的Markdown文本
+            pattern: 章节标题的正则表达式
+            
+        Returns:
+            提取的章节内容（不含标题）
+        """
+        import re
+        
+        lines = markdown.split('\n')
+        section_lines = []
+        in_section = False
+        section_level = 0
+        
+        for line in lines:
+            if re.match(pattern, line, re.IGNORECASE):
+                in_section = True
+                # 记录章节级别（#的数量）
+                section_level = len(line) - len(line.lstrip('#'))
+                continue
+            elif in_section:
+                # 遇到同级或更高级标题，停止
+                if line.startswith('#'):
+                    current_level = len(line) - len(line.lstrip('#'))
+                    if current_level <= section_level:
+                        break
+                section_lines.append(line)
+        
+        return '\n'.join(section_lines).strip()
 
     def _get_review_language(self) -> str:
         configured = normalize_report_language(
