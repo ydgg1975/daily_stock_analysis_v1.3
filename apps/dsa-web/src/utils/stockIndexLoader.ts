@@ -26,7 +26,7 @@ export interface IndexLoadResult {
 export async function loadStockIndex(): Promise<IndexLoadResult> {
   try {
     // Add time parameter to bypass cache (in case the backend doesn't handle ETag/Cache-Control)
-    const response = await fetch(`/stocks.index.json?_t=${Math.floor(Date.now() / 3600000)}`);
+    const response = await fetch(`${import.meta.env.BASE_URL}stocks.index.json?_t=${Math.floor(Date.now() / 3600000)}`);
 
     if (!response.ok) {
       throw new Error(`Failed to load index: ${response.status} ${response.statusText}`);
