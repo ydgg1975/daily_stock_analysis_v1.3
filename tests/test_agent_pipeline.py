@@ -479,6 +479,44 @@ class TestAgentResultConversion(unittest.TestCase):
         self.assertEqual(result.operation_advice, "观望")
         self.assertIn("Max steps exceeded", result.error_message)
 
+    def test_convert_invalid_dashboard_preserves_local_trend_result(self):
+        """Invalid Agent dashboard should not erase already-computed trend data."""
+        pipeline = self._make_pipeline()
+
+        from src.agent.executor import AgentResult
+        from src.enums import ReportType
+        from src.stock_analyzer import BuySignal, TrendAnalysisResult, TrendStatus
+
+        agent_result = AgentResult(
+            success=True,
+            content="LLM returned text but no dashboard JSON",
+            dashboard=None,
+            provider="ollama",
+        )
+        trend_result = TrendAnalysisResult(
+            code="600519",
+            trend_status=TrendStatus.BULL,
+            buy_signal=BuySignal.BUY,
+            signal_score=64,
+        )
+
+        result = pipeline._agent_result_to_analysis_result(
+            agent_result,
+            "600519",
+            "贵州茅台",
+            ReportType.SIMPLE,
+            "q-trend-fallback",
+            trend_result=trend_result,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertTrue(result.success)
+        self.assertEqual(result.sentiment_score, 64)
+        self.assertEqual(result.trend_prediction, "多头排列")
+        self.assertEqual(result.operation_advice, "买入")
+        self.assertEqual(result.decision_type, "buy")
+        self.assertIn("trend:fallback", result.data_sources)
+
     def test_convert_uses_dashboard_stock_name_when_input_is_placeholder(self):
         """When input name is placeholder-like, prefer dashboard stock_name."""
         pipeline = self._make_pipeline()
