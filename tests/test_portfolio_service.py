@@ -100,6 +100,36 @@ class PortfolioServiceTestCase(unittest.TestCase):
         self.assertEqual(pos["price_provider"], "unit-test")
         self.assertTrue(pos["price_available"])
 
+    def test_current_snapshot_uses_close_before_realtime_fallback(self) -> None:
+        today = date.today()
+        account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
+        aid = account["id"]
+        self.service.record_trade(
+            account_id=aid,
+            symbol="600519",
+            trade_date=today,
+            side="buy",
+            quantity=10,
+            price=100,
+            market="cn",
+            currency="CNY",
+        )
+        self._save_close("600519", today, 118.0)
+
+        with patch.object(
+            PortfolioService,
+            "_fetch_realtime_position_price",
+            side_effect=AssertionError("close price should be used before realtime fallback"),
+        ):
+            snapshot = self.service.get_portfolio_snapshot(account_id=aid, as_of=today, cost_method="fifo")
+
+        pos = snapshot["accounts"][0]["positions"][0]
+        self.assertAlmostEqual(pos["last_price"], 118.0, places=6)
+        self.assertAlmostEqual(pos["market_value_base"], 1180.0, places=6)
+        self.assertAlmostEqual(pos["unrealized_pnl_base"], 180.0, places=6)
+        self.assertEqual(pos["price_source"], "history_close")
+        self.assertTrue(pos["price_available"])
+
     def test_historical_snapshot_marks_missing_price_without_cost_fallback(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")
         aid = account["id"]
@@ -127,9 +157,13 @@ class PortfolioServiceTestCase(unittest.TestCase):
 
         pos = snapshot["accounts"][0]["positions"][0]
         self.assertEqual(pos["last_price"], 0.0)
+        self.assertEqual(pos["market_value_base"], 0.0)
+        self.assertEqual(pos["unrealized_pnl_base"], 0.0)
         self.assertEqual(pos["price_source"], "missing")
         self.assertFalse(pos["price_available"])
         self.assertTrue(pos["price_stale"])
+        self.assertEqual(snapshot["accounts"][0]["total_market_value"], 0.0)
+        self.assertEqual(snapshot["accounts"][0]["unrealized_pnl"], 0.0)
 
     def test_snapshot_fifo_vs_avg_on_partial_sell(self) -> None:
         account = self.service.create_account(name="Main", broker="Demo", market="cn", base_currency="CNY")

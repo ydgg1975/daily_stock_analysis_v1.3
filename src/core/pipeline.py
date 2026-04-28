@@ -1001,16 +1001,19 @@ class StockAnalysisPipeline:
         else:
             result.operation_advice = "Watch" if report_language == "en" else "观望"
 
+        from src.agent.protocols import normalize_decision_signal
+
         signal_name = getattr(buy_signal, "name", "").lower()
         signal_to_decision = {
-            "strong_buy": "strong_buy",
+            "strong_buy": "buy",
             "buy": "buy",
             "hold": "hold",
             "wait": "hold",
             "sell": "sell",
-            "strong_sell": "strong_sell",
+            "strong_sell": "sell",
         }
         result.decision_type = signal_to_decision.get(signal_name, result.decision_type or "hold")
+        result.decision_type = normalize_decision_signal(result.decision_type)
         result.data_sources = f"{result.data_sources},trend:fallback" if result.data_sources else "trend:fallback"
 
     @staticmethod

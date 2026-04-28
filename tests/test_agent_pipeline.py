@@ -517,6 +517,46 @@ class TestAgentResultConversion(unittest.TestCase):
         self.assertEqual(result.decision_type, "buy")
         self.assertIn("trend:fallback", result.data_sources)
 
+    def test_convert_invalid_dashboard_normalizes_strong_trend_decision_type(self):
+        """Fallback preserves strong advice text while keeping stable decision_type values."""
+        pipeline = self._make_pipeline()
+
+        from src.agent.executor import AgentResult
+        from src.enums import ReportType
+        from src.stock_analyzer import BuySignal, TrendAnalysisResult, TrendStatus
+
+        cases = [
+            (BuySignal.STRONG_BUY, "buy", "强烈买入"),
+            (BuySignal.STRONG_SELL, "sell", "强烈卖出"),
+        ]
+
+        for buy_signal, expected_decision, expected_advice in cases:
+            with self.subTest(buy_signal=buy_signal):
+                agent_result = AgentResult(
+                    success=True,
+                    content="LLM returned text but no dashboard JSON",
+                    dashboard=None,
+                    provider="ollama",
+                )
+                trend_result = TrendAnalysisResult(
+                    code="600519",
+                    trend_status=TrendStatus.BULL,
+                    buy_signal=buy_signal,
+                    signal_score=80,
+                )
+
+                result = pipeline._agent_result_to_analysis_result(
+                    agent_result,
+                    "600519",
+                    "贵州茅台",
+                    ReportType.SIMPLE,
+                    "q-trend-fallback",
+                    trend_result=trend_result,
+                )
+
+                self.assertEqual(result.operation_advice, expected_advice)
+                self.assertEqual(result.decision_type, expected_decision)
+
     def test_convert_uses_dashboard_stock_name_when_input_is_placeholder(self):
         """When input name is placeholder-like, prefer dashboard stock_name."""
         pipeline = self._make_pipeline()

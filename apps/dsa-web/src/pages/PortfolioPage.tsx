@@ -1011,7 +1011,15 @@ const PortfolioPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-2 pr-2 text-right">{formatPositionMoney(row.marketValueBase, row)}</td>
-                      <td className={`py-2 text-right ${row.unrealizedPnlBase >= 0 ? 'text-success' : 'text-danger'}`}>
+                      <td
+                        className={`py-2 text-right ${
+                          hasPositionPrice(row)
+                            ? row.unrealizedPnlBase >= 0
+                              ? 'text-success'
+                              : 'text-danger'
+                            : 'text-secondary'
+                        }`}
+                      >
                         {formatPositionMoney(row.unrealizedPnlBase, row)}
                       </td>
                     </tr>
