@@ -845,10 +845,11 @@ class DataFetcherManager:
         """
         初始化默认数据源列表
 
-        优先级动态调整逻辑：
-        - 如果配置了 TUSHARE_TOKEN：Tushare 优先级提升为 0（最高）
+        - 优先级数字越小越优先，负优先级表示禁用该数据源
+        - 如果配置了 TUSHARE_TOKEN：Tushare 优先级提升为 0（与 efinance 同级，
+          靠 stable sort 顺序保证 Tushare 优先于 efinance）
         - 否则按默认优先级：
-          0. EfinanceFetcher (Priority 0) - 最高优先级
+          0. EfinanceFetcher (Priority 0)
           1. AkshareFetcher (Priority 1)
           2. PytdxFetcher (Priority 2) - 通达信
           2. TushareFetcher (Priority 2)
@@ -872,21 +873,24 @@ class DataFetcherManager:
         yfinance = YfinanceFetcher()
         longbridge = LongbridgeFetcher()  # 长桥（美股/港股兜底，懒加载）
 
-        # 初始化数据源列表
+        # 初始化数据源列表（负优先级 = 禁用）
         self._ensure_concurrency_guards()
         with self._fetchers_lock:
-            self._fetchers = [
+            all_fetchers = [
+                # Tushare 放在列表首位，当其优先级与 efinance 相同时（均为 0），
+                # stable sort 会保持此顺序，使 Tushare 优先于 efinance
+                tushare,
                 efinance,
                 akshare,
-                tushare,
                 pytdx,
                 baostock,
                 yfinance,
                 longbridge,
             ]
-
-            # 按优先级排序（Tushare 如果配置了 Token 且初始化成功，优先级为 0）
-            self._fetchers.sort(key=lambda f: f.priority)
+            # 按优先级排序（优先级数字越小越优先；负优先级 = 禁用）
+            self._fetchers = sorted(all_fetchers, key=lambda f: f.priority)
+            # 过滤掉优先级为负的数据源（表示用户显式禁用）
+            self._fetchers = [f for f in self._fetchers if f.priority >= 0]
 
         # 构建优先级说明
         priority_info = ", ".join([f"{f.name}(P{f.priority})" for f in self._get_fetchers_snapshot()])
