@@ -1246,6 +1246,149 @@ class AnspireSearchProvider(BaseSearchProvider):
             return '未知来源'
 
 
+class ExaSearchProvider(BaseSearchProvider):
+    """
+    Exa AI Search 搜索引擎
+
+    特点：
+    - 神经搜索，专为 AI/LLM 优化
+    - 支持类别过滤（news / financial report / company 等），契合金融场景
+    - 内容字段可同时返回 highlights / text / summary
+
+    文档: https://exa.ai/docs/reference/search
+    """
+
+    # 搜索类型：auto 让 Exa 自动选择神经/关键词混合策略
+    _DEFAULT_SEARCH_TYPE = "auto"
+    # 默认偏向新闻类目，便于聚合金融资讯
+    _DEFAULT_CATEGORY = "news"
+    # 单条结果片段最大长度，与其他 Provider 保持一致
+    _SNIPPET_MAX_CHARS = 500
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "Exa")
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """执行 Exa 搜索"""
+        try:
+            from exa_py import Exa
+        except ImportError:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message="exa-py 未安装，请运行：pip install exa-py"
+            )
+
+        try:
+            client = Exa(api_key=api_key)
+            # 标记调用来源，便于 Exa 侧识别集成
+            client.headers["x-exa-integration"] = "daily-stock-analysis"
+
+            start_published_date = (
+                datetime.now(timezone.utc) - timedelta(days=max(days, 1))
+            ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+            response = client.search_and_contents(
+                query,
+                type=self._DEFAULT_SEARCH_TYPE,
+                num_results=max(1, min(max_results, 25)),
+                category=self._DEFAULT_CATEGORY,
+                start_published_date=start_published_date,
+                text={"max_characters": 1000},
+                highlights={"num_sentences": 3, "highlights_per_url": 2},
+                summary=True,
+            )
+
+            results: List[SearchResult] = []
+            raw_results = getattr(response, "results", []) or []
+
+            for item in raw_results[:max_results]:
+                snippet = self._build_snippet(item)
+                published = (
+                    getattr(item, "published_date", None)
+                    or getattr(item, "publishedDate", None)
+                )
+                url = getattr(item, "url", "") or ""
+
+                results.append(SearchResult(
+                    title=getattr(item, "title", "") or "",
+                    snippet=snippet,
+                    url=url,
+                    source=self._extract_domain(url),
+                    published_date=published,
+                ))
+
+            logger.info(
+                f"[Exa] 搜索完成，query='{query}'，返回 {len(results)} 条结果"
+            )
+            logger.debug(f"[Exa] 原始响应：{raw_results}")
+
+            return SearchResponse(
+                query=query,
+                results=results,
+                provider=self.name,
+                success=True,
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            error_lower = error_msg.lower()
+            if "401" in error_msg or "unauthorized" in error_lower or "invalid api key" in error_lower:
+                error_msg = f"API KEY 无效：{error_msg}"
+            elif "rate limit" in error_lower or "quota" in error_lower or "429" in error_msg:
+                error_msg = f"API 配额已用尽：{error_msg}"
+            logger.warning(f"[Exa] 搜索失败：{error_msg}")
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=error_msg
+            )
+
+    @classmethod
+    def _build_snippet(cls, item: Any) -> str:
+        """按 highlights → summary → text 顺序构造可读摘要。
+
+        Exa 同一次请求可同时返回多个内容字段，任一字段都可能为空，
+        故按可用性级联回退，避免单一字段缺失导致空摘要。
+        """
+        highlights = getattr(item, "highlights", None) or []
+        if isinstance(highlights, list):
+            cleaned = [h.strip() for h in highlights if isinstance(h, str) and h.strip()]
+            if cleaned:
+                snippet = " … ".join(cleaned)
+                return cls._truncate(snippet)
+
+        summary = getattr(item, "summary", None)
+        if isinstance(summary, str) and summary.strip():
+            return cls._truncate(summary.strip())
+
+        text = getattr(item, "text", None)
+        if isinstance(text, str) and text.strip():
+            return cls._truncate(text.strip())
+
+        return ""
+
+    @classmethod
+    def _truncate(cls, text: str) -> str:
+        if len(text) <= cls._SNIPPET_MAX_CHARS:
+            return text
+        return text[: cls._SNIPPET_MAX_CHARS] + "..."
+
+    @staticmethod
+    def _extract_domain(url: str) -> str:
+        """从 URL 提取域名作为来源"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.replace('www.', '')
+            return domain or '未知来源'
+        except Exception:
+            return '未知来源'
+
+
 class MiniMaxSearchProvider(BaseSearchProvider):
     """
     MiniMax Web Search (Coding Plan API)
@@ -2125,6 +2268,7 @@ class SearchService:
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
+        exa_keys: Optional[List[str]] = None,
         searxng_base_urls: Optional[List[str]] = None,
         searxng_public_instances_enabled: bool = True,
         news_max_age_days: int = 3,
@@ -2140,6 +2284,7 @@ class SearchService:
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
+            exa_keys: Exa AI Search API Key 列表
             searxng_base_urls: SearXNG 实例地址列表（自建无配额兜底）
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
             news_max_age_days: 新闻最大时效（天）
@@ -2188,6 +2333,11 @@ class SearchService:
         if minimax_keys:
             self._providers.append(MiniMaxSearchProvider(minimax_keys))
             logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
+
+        # Exa AI Search（神经搜索，新闻类目过滤）
+        if exa_keys:
+            self._providers.append(ExaSearchProvider(exa_keys))
+            logger.info(f"已配置 Exa 搜索，共 {len(exa_keys)} 个 API Key")
 
         # 6. SearXNG（自建实例优先；未配置时可自动发现公共实例）
         searxng_provider = SearXNGSearchProvider(
@@ -3442,6 +3592,7 @@ def get_search_service() -> SearchService:
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,
+                    exa_keys=config.exa_api_keys,
                     searxng_base_urls=config.searxng_base_urls,
                     searxng_public_instances_enabled=config.searxng_public_instances_enabled,
                     news_max_age_days=config.news_max_age_days,
