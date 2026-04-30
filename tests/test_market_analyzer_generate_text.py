@@ -416,6 +416,70 @@ class TestAnalyzerGenerateText:
         assert result.success is True
         assert result.error_message is None
 
+    def test_json_parse_failure_triggers_fallback_model(self):
+        """When the primary model returns non-JSON, _call_litellm must try the fallback model."""
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="provider/primary-model",
+            litellm_fallback_models=["provider/fallback-model"],
+            llm_model_list=[],
+        )
+
+        import json as _json
+        valid_json = _json.dumps({"sentiment_score": 70, "trend_prediction": "看多"})
+        dispatch_calls = []
+
+        def fake_dispatch(model, call_kwargs, **kwargs):
+            dispatch_calls.append(model)
+            if "primary" in model:
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content="这不是 JSON 格式的响应"))],
+                    usage=None,
+                )
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=valid_json))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+            )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", side_effect=fake_dispatch):
+            text, model_used, usage = analyzer._call_litellm(
+                "test prompt",
+                {"max_tokens": 128, "temperature": 0.7},
+                response_validator=analyzer._validate_json_response,
+            )
+
+        assert "primary" in dispatch_calls[0], "primary model should be tried first"
+        assert len(dispatch_calls) == 2, "fallback model should be tried after primary JSON failure"
+        assert "fallback" in model_used
+        assert valid_json == text
+
+    def test_all_models_invalid_json_raises_all_models_failed_error(self):
+        """When all models return non-JSON, _AllModelsFailedError is raised with last_response_text."""
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="provider/primary-model",
+            litellm_fallback_models=["provider/fallback-model"],
+            llm_model_list=[],
+        )
+
+        from src.analyzer import _AllModelsFailedError
+
+        def fake_dispatch(model, call_kwargs, **kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="这不是 JSON 格式的响应"))],
+                usage=None,
+            )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", side_effect=fake_dispatch):
+            with pytest.raises(_AllModelsFailedError) as exc_info:
+                analyzer._call_litellm(
+                    "test prompt",
+                    {"max_tokens": 128, "temperature": 0.7},
+                    response_validator=analyzer._validate_json_response,
+                )
+
+        assert exc_info.value.last_response_text == "这不是 JSON 格式的响应"
+
 
 # ---------------------------------------------------------------------------
 # market_analyzer uses generate_text(), not private attributes
