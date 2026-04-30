@@ -566,6 +566,158 @@ class TestAnalyzerGenerateText:
         assert result.search_performed is True
 
 
+    def test_analyze_integrity_retry_zero_skips_to_placeholder_fill(self):
+        """With report_integrity_retry=0 and all models returning invalid JSON,
+        analyze() must skip the retry loop and go straight to placeholder fill.
+
+        _call_litellm should be invoked exactly once (no retry), and
+        _apply_placeholder_fill must still fire for the missing fields.
+        """
+        from src.analyzer import AnalysisResult, _AllModelsFailedError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            gemini_request_delay=0,
+            report_language="zh",
+            litellm_model="provider/primary-model",
+            litellm_fallback_models=[],
+            llm_temperature=0.7,
+            llm_model_list=[],
+            report_integrity_enabled=True,
+            report_integrity_retry=0,
+        )
+
+        text_fallback_result = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            sentiment_score=50,
+            trend_prediction="震荡",
+            operation_advice="持有",
+            analysis_summary="部分文本摘要",
+            success=False,
+        )
+
+        all_models_error = _AllModelsFailedError(
+            "all failed",
+            last_response_text="raw text fallback",
+            last_model="provider/primary-model",
+            last_usage={"prompt_tokens": 5, "completion_tokens": 10, "total_tokens": 15},
+        )
+
+        with patch.object(analyzer, "is_available", return_value=True), \
+             patch.object(analyzer, "_get_analysis_system_prompt", return_value="system"), \
+             patch.object(analyzer, "_format_prompt", return_value="prompt"), \
+             patch.object(analyzer, "_call_litellm", side_effect=all_models_error) as mock_call, \
+             patch.object(analyzer, "_parse_response", return_value=text_fallback_result), \
+             patch.object(analyzer, "_build_market_snapshot", return_value={}), \
+             patch.object(
+                 analyzer,
+                 "_check_content_integrity",
+                 return_value=(False, ["analysis_summary"]),
+             ) as mock_integrity, \
+             patch.object(analyzer, "_apply_placeholder_fill") as mock_fill, \
+             patch("src.analyzer.persist_llm_usage"):
+
+            analyzer.analyze({"code": "600519", "stock_name": "贵州茅台"})
+
+        # _call_litellm invoked exactly once -- no retry when retry=0
+        assert mock_call.call_count == 1
+        # integrity check still runs (for the text fallback result)
+        mock_integrity.assert_called_once()
+        # placeholder fill fires because integrity failed and retries exhausted
+        mock_fill.assert_called_once()
+        assert "analysis_summary" in mock_fill.call_args[0][1]
+
+    def test_all_models_failed_error_with_none_response_text_falls_back_to_outer_handler(self):
+        """When _AllModelsFailedError.last_response_text is None, the inner
+        handler re-raises, which the outer except Exception catches and returns
+        AnalysisResult(success=False).  _parse_response must NOT be called
+        because there is no response text to parse.
+        """
+        from src.analyzer import _AllModelsFailedError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            gemini_request_delay=0,
+            report_language="zh",
+            litellm_model="provider/primary-model",
+            litellm_fallback_models=[],
+            llm_temperature=0.7,
+            llm_model_list=[],
+            report_integrity_enabled=True,
+            report_integrity_retry=1,
+        )
+
+        all_models_error = _AllModelsFailedError(
+            "all failed",
+            last_response_text=None,
+            last_model="provider/primary-model",
+            last_usage={},
+        )
+
+        with patch.object(analyzer, "is_available", return_value=True), \
+             patch.object(analyzer, "_get_analysis_system_prompt", return_value="system"), \
+             patch.object(analyzer, "_format_prompt", return_value="prompt"), \
+             patch.object(analyzer, "_call_litellm", side_effect=all_models_error), \
+             patch.object(analyzer, "_parse_response") as mock_parse, \
+             patch("src.analyzer.persist_llm_usage"):
+
+            result = analyzer.analyze({"code": "600519", "stock_name": "贵州茅台"})
+
+        # Outer except Exception returns a failed AnalysisResult
+        assert result.success is False
+        assert result.code == "600519"
+        assert result.sentiment_score == 50
+        # _parse_response was never called because there was no text to parse
+        mock_parse.assert_not_called()
+
+    def test_persist_llm_usage_safely_handles_empty_or_none_usage(self):
+        """persist_llm_usage must never raise, even when usage is empty,
+        None, or has missing keys.  It is fire-and-forget by contract.
+        """
+        from src.storage import persist_llm_usage
+
+        with patch("src.storage.DatabaseManager") as mock_db_cls:
+            mock_db = MagicMock()
+            mock_db_cls.get_instance.return_value = mock_db
+
+            # empty dict -- should write zeros
+            persist_llm_usage({}, "model-a", call_type="analysis", stock_code="600519")
+            mock_db.record_llm_usage.assert_called_once_with(
+                call_type="analysis",
+                model="model-a",
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                stock_code="600519",
+            )
+            mock_db.record_llm_usage.reset_mock()
+
+            # partial keys -- missing total_tokens should default to 0
+            persist_llm_usage(
+                {"prompt_tokens": 100, "completion_tokens": 50},
+                "model-b",
+                call_type="market_review",
+            )
+            mock_db.record_llm_usage.assert_called_once_with(
+                call_type="market_review",
+                model="model-b",
+                prompt_tokens=100,
+                completion_tokens=50,
+                total_tokens=0,
+                stock_code=None,
+            )
+            mock_db.record_llm_usage.reset_mock()
+
+            # DB raises -- must still not propagate
+            mock_db.record_llm_usage.side_effect = RuntimeError("db locked")
+            persist_llm_usage(
+                {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+                "model-c",
+                call_type="analysis",
+            )
+
+
 # ---------------------------------------------------------------------------
 # market_analyzer uses generate_text(), not private attributes
 # ---------------------------------------------------------------------------

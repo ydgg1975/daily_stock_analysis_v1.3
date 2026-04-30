@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
+- [测试] 补齐 LLM 完整性链路 3 个边界回归用例：`REPORT_INTEGRITY_RETRY=0` 时 all-models-invalid 直接占位补全不重试；`_AllModelsFailedError.last_response_text=None` 时正确走外层异常兜底；`persist_llm_usage` 在 usage 为空/缺字段/DB 异常时均不抛出。
 
 ## [3.14.2] - 2026-04-30
 
