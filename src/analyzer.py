@@ -67,11 +67,23 @@ class _AllModelsFailedError(Exception):
     The ``last_response_text`` attribute holds the raw text from the last model
     that *did* return a response (but whose JSON could not be validated), so
     callers can still attempt a best-effort text fallback.
+
+    ``last_model`` and ``last_usage`` record the model name and token usage
+    from the last attempt so callers can persist usage even on fallback.
     """
 
-    def __init__(self, message: str, *, last_response_text: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        last_response_text: Optional[str] = None,
+        last_model: Optional[str] = None,
+        last_usage: Optional[Dict[str, Any]] = None,
+    ):
         super().__init__(message)
         self.last_response_text = last_response_text
+        self.last_model = last_model
+        self.last_usage = last_usage or {}
 
 
 def check_content_integrity(result: "AnalysisResult") -> Tuple[bool, List[str]]:
@@ -1406,6 +1418,8 @@ class GeminiAnalyzer:
 
         last_error = None
         last_response_text: Optional[str] = None
+        last_model: Optional[str] = None
+        last_usage: Dict[str, Any] = {}
         effective_system_prompt = system_prompt or self.TEXT_SYSTEM_PROMPT
         router_model_names = set(get_configured_llm_models(config.llm_model_list))
         for model in models_to_try:
@@ -1469,6 +1483,8 @@ class GeminiAnalyzer:
 
                 if _stream_text is not None:
                     last_response_text = _stream_text
+                    last_model = model
+                    last_usage = _stream_usage
                     if response_validator is not None:
                         response_validator(_stream_text)
                     return _stream_text, model, _stream_usage
@@ -1485,6 +1501,8 @@ class GeminiAnalyzer:
                     content = response.choices[0].message.content
                     usage = self._normalize_usage(getattr(response, "usage", None))
                     last_response_text = content
+                    last_model = model
+                    last_usage = usage
                     if response_validator is not None:
                         response_validator(content)
                     return (content, model, usage)
@@ -1498,6 +1516,8 @@ class GeminiAnalyzer:
         raise _AllModelsFailedError(
             f"All LLM models failed (tried {len(models_to_try)} model(s)). Last error: {last_error}",
             last_response_text=last_response_text,
+            last_model=last_model,
+            last_usage=last_usage,
         )
 
     def generate_text(
@@ -1634,6 +1654,7 @@ class GeminiAnalyzer:
             retry_count = 0
             max_retries = config.report_integrity_retry if config.report_integrity_enabled else 0
 
+            all_models_failed = False
             while True:
                 start_time = time.time()
                 try:
@@ -1652,14 +1673,12 @@ class GeminiAnalyzer:
                             name,
                             code,
                         )
-                        result = self._parse_response(exc.last_response_text, code, name)
-                        result.raw_response = exc.last_response_text
-                        result.search_performed = bool(news_context)
-                        result.market_snapshot = self._build_market_snapshot(context)
-                        result.model_used = None
-                        result.report_language = report_language
-                        return result
-                    raise
+                        response_text = exc.last_response_text
+                        model_used = exc.last_model
+                        llm_usage = exc.last_usage
+                        all_models_failed = True
+                    else:
+                        raise
                 elapsed = time.time() - start_time
 
                 # 记录响应信息
@@ -1688,6 +1707,13 @@ class GeminiAnalyzer:
                     break
                 pass_integrity, missing_fields = self._check_content_integrity(result)
                 if pass_integrity:
+                    break
+                if all_models_failed:
+                    self._apply_placeholder_fill(result, missing_fields)
+                    logger.warning(
+                        "[LLM完整性] all-models-invalid，必填字段缺失 %s，已占位补全",
+                        missing_fields,
+                    )
                     break
                 if retry_count < max_retries:
                     current_prompt = self._build_integrity_retry_prompt(
