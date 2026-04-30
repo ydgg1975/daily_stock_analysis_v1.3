@@ -1654,7 +1654,6 @@ class GeminiAnalyzer:
             retry_count = 0
             max_retries = config.report_integrity_retry if config.report_integrity_enabled else 0
 
-            all_models_failed = False
             while True:
                 start_time = time.time()
                 try:
@@ -1676,7 +1675,6 @@ class GeminiAnalyzer:
                         response_text = exc.last_response_text
                         model_used = exc.last_model
                         llm_usage = exc.last_usage
-                        all_models_failed = True
                     else:
                         raise
                 elapsed = time.time() - start_time
@@ -1707,13 +1705,6 @@ class GeminiAnalyzer:
                     break
                 pass_integrity, missing_fields = self._check_content_integrity(result)
                 if pass_integrity:
-                    break
-                if all_models_failed:
-                    self._apply_placeholder_fill(result, missing_fields)
-                    logger.warning(
-                        "[LLM完整性] all-models-invalid，必填字段缺失 %s，已占位补全",
-                        missing_fields,
-                    )
                     break
                 if retry_count < max_retries:
                     current_prompt = self._build_integrity_retry_prompt(

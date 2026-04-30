@@ -482,7 +482,12 @@ class TestAnalyzerGenerateText:
 
     def test_analyze_all_models_invalid_json_goes_through_post_processing(self):
         """When all models return non-JSON, analyze() must still run integrity
-        checks, placeholder fill, and persist_llm_usage — no early return."""
+        checks, placeholder fill, and persist_llm_usage — no early return.
+
+        With report_integrity_retry=1, the retry loop runs once (re-prompting
+        with complement instructions); when that also yields invalid JSON the
+        exhausted-retries path fires placeholder fill.
+        """
         from src.analyzer import AnalysisResult, _AllModelsFailedError
 
         analyzer = self._make_analyzer()
@@ -509,22 +514,25 @@ class TestAnalyzerGenerateText:
             error_message="LLM response is not valid JSON; analysis result will not be persisted",
         )
 
+        all_models_error = _AllModelsFailedError(
+            "all failed",
+            last_response_text="这不是 JSON，而是纯文本分析结果",
+            last_model="provider/fallback-model",
+            last_usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        )
+
         with patch.object(analyzer, "is_available", return_value=True), \
              patch.object(analyzer, "_get_analysis_system_prompt", return_value="system"), \
              patch.object(analyzer, "_format_prompt", return_value="prompt"), \
              patch.object(
                  analyzer,
                  "_call_litellm",
-                 side_effect=_AllModelsFailedError(
-                     "all failed",
-                     last_response_text="这不是 JSON，而是纯文本分析结果",
-                     last_model="provider/fallback-model",
-                     last_usage={"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
-                 ),
+                 side_effect=all_models_error,
              ) as mock_call, \
              patch.object(analyzer, "_parse_response", return_value=text_fallback_result) as mock_parse, \
              patch.object(analyzer, "_build_market_snapshot", return_value={}), \
              patch.object(analyzer, "_check_content_integrity", return_value=(False, ["dashboard.core_conclusion.one_sentence"])), \
+             patch.object(analyzer, "_build_integrity_retry_prompt", return_value="retry prompt"), \
              patch.object(analyzer, "_apply_placeholder_fill") as mock_fill, \
              patch("src.analyzer.persist_llm_usage") as mock_usage:
 
@@ -533,10 +541,14 @@ class TestAnalyzerGenerateText:
                 news_context="some news",
             )
 
-        # _parse_response was called with the last_response_text
-        mock_parse.assert_called_once_with("这不是 JSON，而是纯文本分析结果", "600519", "贵州茅台")
+        # _call_litellm called twice: initial + 1 retry
+        assert mock_call.call_count == 2
 
-        # Placeholder fill was applied for missing fields
+        # _parse_response called twice (initial + retry)
+        assert mock_parse.call_count == 2
+        mock_parse.assert_called_with("这不是 JSON，而是纯文本分析结果", "600519", "贵州茅台")
+
+        # Placeholder fill was applied after retry exhaustion
         mock_fill.assert_called_once()
         assert "dashboard.core_conclusion.one_sentence" in mock_fill.call_args[0][1]
 
