@@ -71,6 +71,36 @@ LITELLM_MODEL=ollama/qwen3:8b
 
 > **New editor behavior**: For DeepSeek, DashScope, and other OpenAI-compatible providers that expose `/v1/models`, the settings page can now fetch models directly from `{base_url}/models` and let you select multiple entries visually. The underlying storage format is still the existing comma-separated `LLM_{CHANNEL}_MODELS=model1,model2` value. If a provider does not support `/models`, authentication fails, or the endpoint is temporarily unavailable, you can still type the model list manually and save normally.
 
+### First-run Setup Status
+
+The backend exposes a read-only status endpoint at `GET /api/v1/system/config/setup/status`. It reports whether the minimum first-run pieces are present: primary LLM, Agent model inheritance/configuration, stock list, optional notification channel, and local storage. The endpoint only reads the saved `.env` plus the current process environment; it does not reload runtime config, write `.env`, test a real model, or create a database file. Frontend onboarding and later smoke-run flows can build on this endpoint incrementally.
+
+### Web channel editor: compatibility, migration, and rollback rules
+
+- The preset provider / Base URL / sample models are **form defaults only**. What gets persisted is still exactly what you submit in `LLM_{CHANNEL}_PROTOCOL`, `LLM_{CHANNEL}_BASE_URL`, `LLM_{CHANNEL}_MODELS`, and `LLM_{CHANNEL}_API_KEY(S)`; the editor does not silently rewrite them to a different provider name or URL.
+- "Discover models" only calls `{base_url}/models` for `OpenAI Compatible` / `DeepSeek` channels, and "Test connection" only sends one minimal chat completion request. The returned `stage / error_code / details / latency_ms` fields are for structured diagnostics only and are **never persisted** back into `.env`.
+- Saving channels only updates the keys submitted in that save operation; there is no whole-config silent migration when you switch channel settings. The one deliberate cleanup is runtime model references: if `LITELLM_MODEL`, `AGENT_LITELLM_MODEL`, `VISION_MODEL`, or `LITELLM_FALLBACK_MODELS` point to models that no longer exist in the currently enabled channels, the editor clears/removes those stale references before saving so runtime calls do not keep targeting invalid models. Direct-env providers such as `cohere/...` remain untouched.
+- Rollback stays minimal: restore the previous channel model list and re-select the runtime models, or restore the previous `LLM_*`, `LITELLM_MODEL`, `AGENT_LITELLM_MODEL`, `VISION_MODEL`, and `LLM_TEMPERATURE` values from your desktop export / manual `.env` backup. No extra migration script is required.
+- The current dependency window for this flow in the repository is `litellm>=1.80.10,<1.82.7` (see `requirements.txt`). Regression coverage for it lives in `tests/test_system_config_service.py`, `tests/test_system_config_api.py`, and `apps/dsa-web/src/components/settings/__tests__/LLMChannelEditor.test.tsx`.
+
+### Rollback & compatibility evidence
+
+- Scope and cleanup behavior under `litellm>=1.80.10,<1.82.7`: only runtime references (`LITELLM_MODEL`, `AGENT_LITELLM_MODEL`, `VISION_MODEL`, `LITELLM_FALLBACK_MODELS`) are sanitized during save; non-channel direct providers such as `cohere/*` are preserved.
+- Rollback path: export desktop config, then restore the backup through `POST /api/v1/system/config/import`; or manually restore historical `.env` entries (`LITELLM_*`, `AGENT_LITELLM_MODEL`, `VISION_MODEL`, `LLM_TEMPERATURE`) and restart.
+- Rollback evidence: `tests/test_system_config_service.py::test_import_desktop_env_restores_runtime_models_after_cleanup` covers restore from exported desktop backup after runtime cleanup.
+- Recommended rollback sequence (including UI reload): export desktop backup, restore via `POST /api/v1/system/config/import`, then call `GET /api/v1/system/config` to refresh the settings page and verify `LITELLM_MODEL` / `AGENT_LITELLM_MODEL` / `VISION_MODEL` / `LLM_TEMPERATURE` before continuing.
+
+### Official references for provider presets / Base URLs / model naming
+
+- OpenAI-compatible routing in LiteLLM: <https://docs.litellm.ai/docs/providers/openai_compatible>
+- OpenAI official API docs: <https://platform.openai.com/docs/api-reference/chat>
+- DeepSeek official API docs: <https://api-docs.deepseek.com/>
+- DashScope OpenAI-compatible mode: <https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope>
+- Moonshot / Kimi official compatibility docs: <https://platform.moonshot.ai/docs/guide/compatibility>
+- Anthropic official Messages API: <https://docs.anthropic.com/en/api/messages>
+- Gemini official OpenAI compatibility docs: <https://ai.google.dev/gemini-api/docs/openai>
+- Ollama API docs: <https://github.com/ollama/ollama/blob/main/docs/api.md>
+
 If you prefer modifying files, configuring this in the `.env` file is also very smooth. It allows you to manage multiple platforms simultaneously. The rules are:
 
 1. **Declare your channels first**: `LLM_CHANNELS=channel_name_1,channel_name_2`
@@ -117,6 +147,15 @@ LITELLM_MODEL=ollama/qwen3:8b
 
 - If you access MiniMax through an OpenAI-compatible channel, enter the model as `minimax/<model-name>` in the channel model list, for example `minimax/MiniMax-M1`.
 - The Web settings page now keeps that value unchanged in Primary, Agent Primary, Fallback, and Vision selectors instead of rewriting it to `openai/minimax/<model-name>`.
+
+### Ask-Stock Agent / LiteLLM compatibility notes
+
+- The ask-stock Agent follows the same three-tier runtime priority as the regular analyzer: `LITELLM_CONFIG` (LiteLLM YAML) > `LLM_CHANNELS` > legacy provider keys. Once an upper tier is valid and active, lower tiers are ignored for that request.
+- In YAML mode, the Agent reuses LiteLLM `model_list` / `model_name` routing semantics directly. In channel mode, it first reads `AGENT_LITELLM_MODEL`; when that is empty it inherits `LITELLM_MODEL`, then continues through `LITELLM_FALLBACK_MODELS`.
+- If you do not use YAML or Channels, leave `AGENT_LITELLM_MODEL` empty, and still rely on legacy provider env vars, the ask-stock Agent continues to inherit them: `GEMINI_API_KEY + GEMINI_MODEL` -> `gemini/<model>`, `OPENAI_API_KEY + OPENAI_MODEL` -> `openai/<model>`, and `ANTHROPIC_API_KEY + ANTHROPIC_MODEL` -> `anthropic/<model>`.
+- This fix only improves two things: preserving the backend's real failure reason and returning a more specific diagnostic when no usable Agent LLM is configured. It does **not** silently delete, clear, migrate, or rewrite your existing `GEMINI_*`, `OPENAI_*`, `ANTHROPIC_*`, or `LITELLM_*` settings.
+- If the current environment has no valid Agent model path at all, the ask-stock page still returns a failure and now surfaces the backend's real configuration diagnosis. As soon as you restore any valid model source, the flow recovers without running any migration step.
+- The recommended forward path is still to configure `LITELLM_MODEL` / `AGENT_LITELLM_MODEL` explicitly or move to `LLM_CHANNELS`; legacy provider keys remain a compatibility fallback for older `.env` files, local macOS development, and existing deployments.
 
 ### Kimi K2.6 Fixed-Temperature Compatibility Notes
 
