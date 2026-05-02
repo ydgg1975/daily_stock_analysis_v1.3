@@ -23,6 +23,11 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 创建非 root 用户 
+RUN groupadd -g 1000 dsa && \ 
+    useradd -u 1000 -g dsa -m dsa && \ 
+    chown -R dsa:dsa /app 
+
 # 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \

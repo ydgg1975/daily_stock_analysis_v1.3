@@ -936,12 +936,12 @@ class AkshareFetcher(BaseFetcher):
         circuit_breaker = get_realtime_circuit_breaker()
         source_key = "akshare_sina"
         symbol = _to_sina_tx_symbol(stock_code)
-        url = f"http://{SINA_REALTIME_ENDPOINT}={symbol}"
+        url = f"https://{SINA_REALTIME_ENDPOINT}={symbol}"
         api_start = time.time()
         
         try:
             headers = {
-                'Referer': 'http://finance.sina.com.cn',
+                'Referer': 'https://finance.sina.com.cn',
                 'User-Agent': random.choice(USER_AGENTS)
             }
             
@@ -1087,12 +1087,12 @@ class AkshareFetcher(BaseFetcher):
         circuit_breaker = get_realtime_circuit_breaker()
         source_key = "akshare_tencent"
         symbol = _to_sina_tx_symbol(stock_code)
-        url = f"http://{TENCENT_REALTIME_ENDPOINT}={symbol}"
+        url = f"https://{TENCENT_REALTIME_ENDPOINT}={symbol}"
         api_start = time.time()
         
         try:
             headers = {
-                'Referer': 'http://finance.qq.com',
+                'Referer': 'https://finance.qq.com',
                 'User-Agent': random.choice(USER_AGENTS)
             }
             
