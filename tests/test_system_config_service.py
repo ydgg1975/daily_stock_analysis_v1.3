@@ -89,6 +89,20 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(checks["stock_list"]["status"], "configured")
         self.assertEqual(checks["notification"]["status"], "optional")
 
+    def test_get_setup_status_accepts_anspire_one_key_llm(self) -> None:
+        self._rewrite_env(
+            "ANSPIRE_API_KEYS=sk-anspire-test-value",
+            "STOCK_LIST=600519",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            status = self.service.get_setup_status()
+
+        checks = {check["key"]: check for check in status["checks"]}
+        self.assertTrue(status["is_complete"])
+        self.assertEqual(checks["llm_primary"]["status"], "configured")
+        self.assertIn("openai/Doubao-Seed-2.0-lite", checks["llm_primary"]["message"])
+
     def test_get_setup_status_accepts_direct_env_primary_without_provider_key(self) -> None:
         self._rewrite_env(
             "LITELLM_MODEL=minimax/MiniMax-M1",
@@ -733,6 +747,17 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LLM_PRIMARY_ENABLED", "value": "false"},
                 {"key": "OPENAI_API_KEY", "value": "sk-legacy-value"},
                 {"key": "LITELLM_MODEL", "value": "openai/gpt-4o-mini"},
+            ]
+        )
+
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["issues"], [])
+
+    def test_validate_allows_anspire_channel_with_shared_key_defaults(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "anspire"},
+                {"key": "ANSPIRE_API_KEYS", "value": "sk-anspire-test-value"},
             ]
         )
 

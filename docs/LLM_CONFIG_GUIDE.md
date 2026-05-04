@@ -22,6 +22,21 @@
 
 如果你只打算用一种模型，这是最快捷的办法。打开项目根目录下的 `.env` 文件（如果没有，复制一份 `.env.example` 并重命名为 `.env`）。
 
+### Anspire Open 示例：
+
+> 💡 **推荐 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：一个key同时使用大模型和专属中文优化的联网搜索服务，汇聚全球热门大模型（Gemini、MiniMax、Claude、GPT等），无需科学上网，稳定供应，绝不注水，99.9%高可用保障，7*24小时企业级服务标准。本项目含 **免费使用额度**。
+
+```env
+# Anspire Open API Keys（支持多个，逗号分隔）
+# 获取: https://open.anspire.cn/?share_code=QFBC0FYC
+# 只填这一项时，系统会同时启用 Anspire 大模型网关和中文优化联网搜索。
+# 默认模型：Doubao-Seed-2.0-lite；国内网关：https://open-gateway.anspire.cn/v6
+ANSPIRE_API_KEYS=sk-xxxxxxxxxxxxxxxx
+# 可选：切换默认模型或海外网关
+# ANSPIRE_LLM_MODEL=Doubao-Seed-2.0-pro
+# ANSPIRE_LLM_BASE_URL=https://open-gateway.anspire.ai/v6
+```
+
 ### 示例 1：使用通用第三方平台（兼容 OpenAI 格式，推荐）
 
 现在市面上绝大多数第三方聚合平台（例如硅基流动、AIHubmix、阿里百炼、智谱等）都兼容 OpenAI 的接口格式。只要平台提供了 API Key 和 Base URL，你都可以按照以下格式无脑配置：

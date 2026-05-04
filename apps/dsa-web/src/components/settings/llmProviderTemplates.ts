@@ -59,6 +59,15 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
     officialSources: [{ label: 'AIHubmix', url: 'https://aihubmix.com/' }],
   },
   {
+    channelId: 'anspire',
+    label: 'Anspire Open（赞助商）',
+    protocol: 'openai',
+    baseUrl: 'https://open-gateway.anspire.cn/v6',
+    placeholderModels: 'Doubao-Seed-2.0-lite,Doubao-Seed-2.0-pro,qwen3.5-flash,MiniMax-M2.7',
+    capabilities: ['openai-compatible', 'aggregator'],
+    officialSources: [{ label: 'Anspire Open', url: 'https://open.anspire.cn/?share_code=QFBC0FYC' }],
+  },
+  {
     channelId: 'deepseek',
     label: 'DeepSeek 官方',
     protocol: 'deepseek',
