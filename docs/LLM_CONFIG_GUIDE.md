@@ -24,15 +24,17 @@
 
 ### Anspire Open 示例：
 
-> 💡 **推荐 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：一个 Key 同时使用大模型和中文优化的联网搜索服务，支持多种热门模型（Gemini、MiniMax、Claude、GPT 等），无需科学上网，并为本项目提供 **免费使用额度**。
+> 💡 **推荐 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：支持中文优化的联网搜索与 OpenAI-compatible 路径一体化体验，适合只准备一个 Key 的用户。
+> - 以下为配置示例，模型与网关可用性以账号权限和 Anspire 控制台为准；本项目未在本次 PR 中新增可复现的线上连通性 smoke 验证。
+> - 建议在 Web 设置页点击“测试连接”进行实际鉴权与模型可用性检查，避免以文档默认值直接当作可用性承诺。
 
 ```env
 # Anspire Open API Keys（支持多个，逗号分隔）
 # 获取: https://open.anspire.cn/?share_code=QFBC0FYC
-# 只填这一项时，系统会同时启用 Anspire 大模型网关和中文优化联网搜索。
-# 默认模型：Doubao-Seed-2.0-lite；国内网关：https://open-gateway.anspire.cn/v6
+# 满足默认优先级条件时，系统会复用该 Key 处理搜索与 LLM（仅限示例兜底路径）。
+# 示例模型：Doubao-Seed-2.0-lite；示例网关：https://open-gateway.anspire.cn/v6
 ANSPIRE_API_KEYS=sk-xxxxxxxxxxxxxxxx
-# 可选：切换默认模型或海外网关
+# 可选：按控制台可用性切换模型或网关
 # ANSPIRE_LLM_MODEL=Doubao-Seed-2.0-pro
 # ANSPIRE_LLM_BASE_URL=https://open-gateway.anspire.ai/v6
 ```
@@ -115,6 +117,7 @@ LITELLM_MODEL=ollama/qwen3:8b
 - OpenAI Compatible 规范（LiteLLM）：<https://docs.litellm.ai/docs/providers/openai_compatible>
 - OpenAI 官方：<https://platform.openai.com/docs/api-reference/chat>
 - DeepSeek 官方：<https://api-docs.deepseek.com/>
+- Anspire Open：<https://open.anspire.cn/?share_code=QFBC0FYC>
 - 阿里百炼 DashScope 兼容模式：<https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope>
 - Moonshot / Kimi 官方：<https://platform.moonshot.ai/docs/guide/compatibility>
 - Anthropic 官方：<https://docs.anthropic.com/en/api/messages>
