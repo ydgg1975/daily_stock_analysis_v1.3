@@ -1109,6 +1109,19 @@ class SystemConfigService:
         return any((effective_map.get(key) or "").strip() for key in keys)
 
     @classmethod
+    def _anspire_legacy_llm_enabled(cls, effective_map: Dict[str, str]) -> bool:
+        if not parse_env_bool(effective_map.get("ANSPIRE_LLM_ENABLED"), default=True):
+            return False
+        for name in cls._split_csv(effective_map.get("LLM_CHANNELS") or ""):
+            if name.strip().lower() != "anspire":
+                continue
+            enabled_raw = effective_map.get("LLM_ANSPIRE_ENABLED")
+            if not (enabled_raw or "").strip():
+                enabled_raw = effective_map.get("ANSPIRE_LLM_ENABLED")
+            return parse_env_bool(enabled_raw, default=True)
+        return True
+
+    @classmethod
     def _provider_has_setup_credentials(cls, provider: str, effective_map: Dict[str, str]) -> bool:
         normalized = canonicalize_llm_channel_protocol(provider)
         if normalized == "ollama":
@@ -1123,7 +1136,7 @@ class SystemConfigService:
             if cls._has_any_config_value(effective_map, ("OPENAI_API_KEYS", "OPENAI_API_KEY", "AIHUBMIX_KEY")):
                 return True
             if (
-                parse_env_bool(effective_map.get("ANSPIRE_LLM_ENABLED"), default=True)
+                cls._anspire_legacy_llm_enabled(effective_map)
                 and cls._has_any_config_value(effective_map, ("ANSPIRE_API_KEYS",))
             ):
                 return True
@@ -1215,7 +1228,7 @@ class SystemConfigService:
             model = (effective_map.get("OPENAI_MODEL") or "gpt-5.5").strip()
             return model if "/" in model else f"openai/{model}"
         if (
-            parse_env_bool(effective_map.get("ANSPIRE_LLM_ENABLED"), default=True)
+            cls._anspire_legacy_llm_enabled(effective_map)
             and cls._has_any_config_value(effective_map, ("ANSPIRE_API_KEYS",))
         ):
             model = (
@@ -2020,7 +2033,7 @@ class SystemConfigService:
                 or (effective_map.get("AIHUBMIX_KEY") or "").strip()
                 or (effective_map.get("OPENAI_API_KEY") or "").strip()
                 or (
-                    parse_env_bool(effective_map.get("ANSPIRE_LLM_ENABLED"), default=True)
+                    SystemConfigService._anspire_legacy_llm_enabled(effective_map)
                     and (effective_map.get("ANSPIRE_API_KEYS") or "").strip()
                 )
             )

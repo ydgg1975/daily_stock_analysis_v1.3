@@ -93,6 +93,26 @@ class LLMChannelConfigTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_disabled_anspire_channel_does_not_fall_back_to_legacy(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        env = {
+            "LLM_CHANNELS": "anspire",
+            "LLM_ANSPIRE_ENABLED": "false",
+            "ANSPIRE_API_KEYS": "sk-anspire-test-value",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.openai_api_keys, [])
+        self.assertEqual(config.llm_channels, [])
+        self.assertEqual(config.llm_model_list, [])
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_protocol_prefixes_bare_model_names(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "primary",

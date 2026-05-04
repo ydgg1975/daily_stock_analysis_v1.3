@@ -120,6 +120,22 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(checks["llm_primary"]["status"], "needs_action")
         self.assertIn("llm_primary", status["required_missing_keys"])
 
+    def test_get_setup_status_respects_disabled_anspire_channel_without_legacy_fallback(self) -> None:
+        self._rewrite_env(
+            "LLM_CHANNELS=anspire",
+            "LLM_ANSPIRE_ENABLED=false",
+            "ANSPIRE_API_KEYS=sk-anspire-test-value",
+            "STOCK_LIST=600519",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            status = self.service.get_setup_status()
+
+        checks = {check["key"]: check for check in status["checks"]}
+        self.assertFalse(status["is_complete"])
+        self.assertEqual(checks["llm_primary"]["status"], "needs_action")
+        self.assertIn("llm_primary", status["required_missing_keys"])
+
     def test_get_setup_status_accepts_direct_env_primary_without_provider_key(self) -> None:
         self._rewrite_env(
             "LITELLM_MODEL=minimax/MiniMax-M1",
@@ -799,6 +815,19 @@ class SystemConfigServiceTestCase(unittest.TestCase):
                 {"key": "LLM_CHANNELS", "value": "anspire"},
                 {"key": "LLM_ANSPIRE_ENABLED", "value": "   "},
                 {"key": "ANSPIRE_LLM_ENABLED", "value": "false"},
+                {"key": "ANSPIRE_API_KEYS", "value": "sk-anspire-test-value"},
+                {"key": "LITELLM_MODEL", "value": f"openai/{ANSPIRE_LLM_MODEL_DEFAULT}"},
+            ]
+        )
+
+        self.assertFalse(validation["valid"])
+        self.assertTrue(any(issue["key"] == "LITELLM_MODEL" and issue["code"] == "missing_runtime_source" for issue in validation["issues"]))
+
+    def test_validate_excludes_disabled_anspire_channel_from_legacy_runtime_source(self) -> None:
+        validation = self.service.validate(
+            items=[
+                {"key": "LLM_CHANNELS", "value": "anspire"},
+                {"key": "LLM_ANSPIRE_ENABLED", "value": "false"},
                 {"key": "ANSPIRE_API_KEYS", "value": "sk-anspire-test-value"},
                 {"key": "LITELLM_MODEL", "value": f"openai/{ANSPIRE_LLM_MODEL_DEFAULT}"},
             ]
