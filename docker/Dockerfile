@@ -4,75 +4,50 @@
 # 多阶段构建：前端打包 + 后端运行
 
 FROM node:20-slim AS web-builder
+WORKDIR /app
+COPY apps/dsa-web/package*.json ./apps/dsa-web/
+RUN cd apps/dsa-web && npm install --registry=https://registry.npmmirror.com
+COPY apps/dsa-web ./apps/dsa-web
+RUN cd apps/dsa-web && npm run build
 
-WORKDIR /app/apps/dsa-web
-
-COPY apps/dsa-web/package.json apps/dsa-web/package-lock.json ./
-RUN npm ci
-
-COPY apps/dsa-web/ ./
-RUN npm run build
-
-# Pin to bookworm: wkhtmltopdf was removed from Debian testing (2025)
-FROM python:3.11-slim-bookworm
-
-# 设置工作目录
+FROM python:3.10-slim
 WORKDIR /app
 
-# 设置时区为上海
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 创建非 root 用户 
-RUN groupadd -g 1000 dsa && \ 
-    useradd -u 1000 -g dsa -m dsa && \ 
-    chown -R dsa:dsa /app 
-
-# 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
+# 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
     curl \
-    wkhtmltopdf \
-    fontconfig \
-    libjpeg62-turbo \
-    libxrender1 \
-    libxext6 \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY requirements.txt .
+# 创建非 root 用户
+RUN groupadd -g 1000 dsa && \
+    useradd -u 1000 -g dsa -m dsa && \
+    chown -R dsa:dsa /app
 
 # 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 复制应用代码
-COPY *.py ./
-COPY api/ ./api/
-COPY data_provider/ ./data_provider/
-COPY bot/ ./bot/
-COPY patch/ ./patch/
-COPY src/ ./src/
-COPY strategies/ ./strategies/
-COPY --from=web-builder /app/static ./static/
+# 复制项目代码
+COPY . .
 
-# 创建数据目录
-RUN mkdir -p /app/data /app/logs /app/reports
+# 复制前端静态资源
+COPY --from=web-builder /app/static ./static
 
-# 设置环境变量默认值
+# 确保数据和日志目录存在并具有正确权限
+RUN mkdir -p data logs reports && chown -R dsa:dsa data logs reports
+
+# 切换到非 root 用户
+USER dsa
+
+# 环境变量
 ENV PYTHONUNBUFFERED=1
-ENV LOG_DIR=/app/logs
-ENV DATABASE_PATH=/app/data/stock_analysis.db
-# Web/API service
-ENV WEBUI_HOST=0.0.0.0
-ENV API_PORT=8000
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# 暴露 API 端口
+# 暴露端口
 EXPOSE 8000
 
-# 数据卷（持久化数据）
-VOLUME ["/app/data", "/app/logs", "/app/reports"]
-
-# 健康检查（FastAPI 模式）
+# 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || curl -f http://localhost:8000/health \
     || python -c "import sys; sys.exit(0)"
