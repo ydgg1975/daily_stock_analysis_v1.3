@@ -24,7 +24,7 @@ If you only plan to use one single model, this is the fastest way. Open the `.en
 
 ### Anspire Open Example:
 
-> 💡 **Recommended [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：Use a single API key to access both large language models and a web search service specially optimized for Chinese content. It integrates globally popular large models (such as Gemini, MiniMax, Claude, GPT, etc.), requires no VPN, offers stable and reliable service with no token inflation, guarantees 99.9% high availability, and provides enterprise-grade 24/7 support.**Free usage quota included.**.
+> 💡 **Recommended [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**: Use a single API key to access both large language models and a web search service optimized for Chinese content. It supports popular models such as Gemini, MiniMax, Claude, and GPT, requires no VPN, and includes a **free usage quota for this project**.
 
 ```env
 # Anspire Open API keys (multiple keys supported, separated by commas)

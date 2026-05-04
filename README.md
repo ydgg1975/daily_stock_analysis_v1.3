@@ -25,7 +25,7 @@
 ## 💖 赞助商 (Sponsors)
 <div align="center">
   <a href="https://open.anspire.cn/?share_code=QFBC0FYC" target="_blank">
-    <img src="./sources/anspire.png" alt="智能体时代的领先基础设施供应商" width="300" height="141" style="width: 300px; height: 141px; object-fit: contain;">
+    <img src="./sources/anspire.png" alt="Anspire Open 一站式模型和搜索服务" width="300" height="141" style="width: 300px; height: 141px; object-fit: contain;">
   </a>
   &nbsp;&nbsp;
   <a href="https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis" target="_blank">

@@ -60,11 +60,12 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
   },
   {
     channelId: 'anspire',
-    label: 'Anspire Open（赞助商）',
+    label: 'Anspire Open（一站式模型+搜索）',
     protocol: 'openai',
     baseUrl: 'https://open-gateway.anspire.cn/v6',
     placeholderModels: 'Doubao-Seed-2.0-lite,Doubao-Seed-2.0-pro,qwen3.5-flash,MiniMax-M2.7',
-    capabilities: ['openai-compatible', 'aggregator'],
+    capabilities: ['openai-compatible'],
+    configHint: '同一 ANSPIRE_API_KEYS 可同时用于 Anspire 大模型网关和新闻搜索。',
     officialSources: [{ label: 'Anspire Open', url: 'https://open.anspire.cn/?share_code=QFBC0FYC' }],
   },
   {

@@ -14,7 +14,7 @@ const categoryTitleMap: Record<SystemConfigCategory, string> = {
 const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
   base: '管理自选股与基础运行参数。',
   data_source: '管理行情数据源与优先级策略。',
-  ai_model: '管理模型供应商、模型名称与推理参数。',
+  ai_model: '管理模型服务、模型名称与推理参数。',
   notification: '管理机器人、Webhook 和消息推送配置。',
   system: '管理调度、日志、端口等系统级参数。',
   agent: '管理 Agent 模式、策略与多 Agent 编排配置。',

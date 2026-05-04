@@ -24,7 +24,7 @@
 
 ### Anspire Open 示例：
 
-> 💡 **推荐 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：一个key同时使用大模型和专属中文优化的联网搜索服务，汇聚全球热门大模型（Gemini、MiniMax、Claude、GPT等），无需科学上网，稳定供应，绝不注水，99.9%高可用保障，7*24小时企业级服务标准。本项目含 **免费使用额度**。
+> 💡 **推荐 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)**：一个 Key 同时使用大模型和中文优化的联网搜索服务，支持多种热门模型（Gemini、MiniMax、Claude、GPT 等），无需科学上网，并为本项目提供 **免费使用额度**。
 
 ```env
 # Anspire Open API Keys（支持多个，逗号分隔）
