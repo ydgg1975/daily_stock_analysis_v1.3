@@ -1699,7 +1699,7 @@ class Config:
             if ch_lower == "anspire" and not protocol_raw:
                 protocol_raw = "openai"
             enabled_raw = os.getenv(f'LLM_{ch_upper}_ENABLED')
-            if enabled_raw is None and ch_lower == "anspire":
+            if (enabled_raw is None or not enabled_raw.strip()) and ch_lower == "anspire":
                 enabled_raw = os.getenv('ANSPIRE_LLM_ENABLED')
             enabled = parse_env_bool(enabled_raw, default=True)
 

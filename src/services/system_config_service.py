@@ -1154,7 +1154,7 @@ class SystemConfigService:
                 continue
             prefix = f"LLM_{name.upper()}"
             enabled_raw = effective_map.get(f"{prefix}_ENABLED")
-            if enabled_raw is None and name.lower() == "anspire":
+            if (enabled_raw is None or not enabled_raw.strip()) and name.lower() == "anspire":
                 enabled_raw = effective_map.get("ANSPIRE_LLM_ENABLED")
             enabled = parse_env_bool(enabled_raw, default=True)
             if not enabled:
@@ -1908,7 +1908,7 @@ class SystemConfigService:
                     ).strip()
                 ]
             enabled_raw = effective_map.get(f"{prefix}_ENABLED")
-            if enabled_raw is None and name.lower() == "anspire":
+            if (enabled_raw is None or not enabled_raw.strip()) and name.lower() == "anspire":
                 enabled_raw = effective_map.get("ANSPIRE_LLM_ENABLED")
             enabled = parse_env_bool(enabled_raw, default=True)
             issues.extend(
@@ -1942,7 +1942,7 @@ class SystemConfigService:
 
             prefix = f"LLM_{name.upper()}"
             enabled_raw = effective_map.get(f"{prefix}_ENABLED")
-            if enabled_raw is None and name.lower() == "anspire":
+            if (enabled_raw is None or not enabled_raw.strip()) and name.lower() == "anspire":
                 enabled_raw = effective_map.get("ANSPIRE_LLM_ENABLED")
             enabled = parse_env_bool(enabled_raw, default=True)
             if not enabled:
