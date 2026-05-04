@@ -369,7 +369,11 @@ jobs:
           echo "📋 配置检查"
           echo "=========================================="
           echo "【AI 配置】"
-          echo "  LiteLLM: $([ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ] || [ -n "$ANSPIRE_API_KEYS" ] && echo '✅ 已配置' || echo '❌ 未配置')"
+          if [ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ] || [ -n "$ANSPIRE_API_KEYS" ]; then
+            echo "  LiteLLM: ✅ 已配置"
+          else
+            echo "  LiteLLM: ❌ 未配置"
+          fi
           echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
           echo "  DeepSeek Key:   $([ -n "$DEEPSEEK_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Anspire Key:    $([ -n "$ANSPIRE_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"

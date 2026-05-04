@@ -38,6 +38,22 @@ class LLMChannelConfigTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_anspire_legacy_overrides_stale_openai_base_url(self, _mock_parse_yaml, _mock_setup_env) -> None:
+        env = {
+            "ANSPIRE_API_KEYS": "sk-anspire-test-value",
+            "OPENAI_BASE_URL": "https://stale-openai-compatible.example/v1",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.openai_api_keys, ["sk-anspire-test-value"])
+        self.assertEqual(config.openai_base_url, ANSPIRE_LLM_BASE_URL_DEFAULT)
+        params = config.llm_model_list[0]["litellm_params"]
+        self.assertEqual(params["api_base"], ANSPIRE_LLM_BASE_URL_DEFAULT)
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_anspire_channel_reuses_shared_key_and_defaults(self, _mock_parse_yaml, _mock_setup_env) -> None:
         env = {
             "LLM_CHANNELS": "anspire",
@@ -56,7 +72,11 @@ class LLMChannelConfigTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
-    def test_blank_anspire_channel_enabled_falls_back_to_shared_toggle(self, _mock_parse_yaml, _mock_setup_env) -> None:
+    def test_blank_anspire_channel_enabled_uses_shared_disable_flag(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
         env = {
             "LLM_CHANNELS": "anspire",
             "LLM_ANSPIRE_ENABLED": "   ",
@@ -67,6 +87,7 @@ class LLMChannelConfigTestCase(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             config = Config._load_from_env()
 
+        self.assertEqual(config.openai_api_keys, [])
         self.assertEqual(config.llm_channels, [])
         self.assertEqual(config.llm_model_list, [])
 

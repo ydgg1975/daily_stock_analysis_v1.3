@@ -1106,8 +1106,7 @@ class Config:
         using_anspire_llm_legacy = bool(anspire_llm_enabled and anspire_api_keys and not openai_api_keys)
         if using_anspire_llm_legacy:
             openai_api_keys = list(anspire_api_keys)
-            if not openai_base_url:
-                openai_base_url = anspire_llm_base_url
+            openai_base_url = anspire_llm_base_url
 
         # LITELLM_MODEL: explicit config takes precedence; else infer from available keys
         litellm_model = os.getenv('LITELLM_MODEL', '').strip()
@@ -1699,7 +1698,7 @@ class Config:
             if ch_lower == "anspire" and not protocol_raw:
                 protocol_raw = "openai"
             enabled_raw = os.getenv(f'LLM_{ch_upper}_ENABLED')
-            if (enabled_raw is None or not enabled_raw.strip()) and ch_lower == "anspire":
+            if ch_lower == "anspire" and (enabled_raw is None or not enabled_raw.strip()):
                 enabled_raw = os.getenv('ANSPIRE_LLM_ENABLED')
             enabled = parse_env_bool(enabled_raw, default=True)
 

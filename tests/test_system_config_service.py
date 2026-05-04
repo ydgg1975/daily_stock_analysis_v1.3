@@ -103,7 +103,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(checks["llm_primary"]["status"], "configured")
         self.assertIn("openai/Doubao-Seed-2.0-lite", checks["llm_primary"]["message"])
 
-    def test_get_setup_status_respects_blank_anspire_channel_enabled_fallback(self) -> None:
+    def test_get_setup_status_treats_blank_anspire_channel_enabled_as_shared_disable(self) -> None:
         self._rewrite_env(
             "LLM_CHANNELS=anspire",
             "LLM_ANSPIRE_ENABLED=",
@@ -118,6 +118,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         checks = {check["key"]: check for check in status["checks"]}
         self.assertFalse(status["is_complete"])
         self.assertEqual(checks["llm_primary"]["status"], "needs_action")
+        self.assertIn("llm_primary", status["required_missing_keys"])
 
     def test_get_setup_status_accepts_direct_env_primary_without_provider_key(self) -> None:
         self._rewrite_env(
@@ -780,7 +781,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["issues"], [])
 
-    def test_validate_treats_blank_anspire_channel_enabled_as_fallback_disable(self) -> None:
+    def test_validate_treats_blank_anspire_channel_enabled_as_shared_disable(self) -> None:
         validation = self.service.validate(
             items=[
                 {"key": "LLM_CHANNELS", "value": "anspire"},
