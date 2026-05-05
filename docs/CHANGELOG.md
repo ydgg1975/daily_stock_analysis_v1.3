@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] Web 设置页新增通知渠道一键测试，支持临时配置、耗时与脱敏 attempts 展示。
 - [新功能] 系统设置页新增配置项帮助入口与多语言帮助文案基础设施，首批覆盖自选股、LLM 主模型、LLM 渠道、飞书 Webhook 与 WebUI 监听地址。
 - [改进] 设置项帮助窗口支持键盘焦点限制、Esc 关闭和关闭后焦点恢复，并移除短描述重复 hover tooltip。
+- [文档] 新增设置页配置帮助维护说明，明确帮助元数据字段、首批覆盖范围、事实源和多语言文案同步规则。
 - [测试] 补充设置项帮助元数据、API schema、前端弹窗交互测试，并修复 Bot 名称路由与调度时间 provider 测试的离线 CI 稳定性问题。
 
 ## [3.15.0] - 2026-05-05
