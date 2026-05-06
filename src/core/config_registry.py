@@ -1525,7 +1525,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-与-api-服务",
             },
         ],
-        "warning_codes": ["public_bind_requires_auth"],
+        "warning_codes": ["public_bind_requires_auth", "restart_required"],
     },
     "WEBUI_PORT": {
         "title": "Web UI Port",

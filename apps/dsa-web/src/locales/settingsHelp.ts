@@ -86,13 +86,15 @@ const settingsHelpZhCN: SettingsHelpMap = {
     summary: '控制 WebUI 服务绑定在哪个网络地址上。',
     usage: '本机访问通常使用 127.0.0.1；云服务器、Docker 或需要外部访问时通常使用 0.0.0.0。',
     valueNotes: [
-      '.env 里的 WEBUI_HOST 优先级高于命令行 --host 参数。',
+      '.env 里的 WEBUI_HOST 在进程启动读取时优先级高于命令行 --host 参数。',
+      '在设置页保存后，只会写入 .env 并重载运行时配置对象，不会让当前 WebUI/API 进程重新绑定监听地址。',
       'Docker Compose 中通常会在容器内使用 0.0.0.0，宿主机访问还取决于端口映射。',
     ],
     impact: [
-      '影响浏览器能否从本机、局域网或公网访问 WebUI。',
+      '影响重启后浏览器能否从本机、局域网或公网访问 WebUI。',
     ],
     notes: [
+      '修改 WEBUI_HOST 后需要重启当前进程、Docker 容器或服务管理器才会生效。',
       '直连公网时建议同时启用 ADMIN_AUTH_ENABLED。',
       '如果部署在反向代理后面，登录限流与真实 IP 识别还需要评估 TRUST_X_FORWARDED_FOR。',
     ],
@@ -162,11 +164,13 @@ const settingsHelpEnUS: SettingsHelpMap = {
     summary: 'Controls the network address the WebUI service binds to.',
     usage: 'Use 127.0.0.1 for local-only access. Use 0.0.0.0 for cloud, Docker, or external access.',
     valueNotes: [
-      'WEBUI_HOST in .env has higher priority than the --host command-line argument.',
+      'WEBUI_HOST in .env has higher priority than the --host command-line argument when the process starts.',
+      'Saving it from the settings page writes .env and reloads runtime config objects, but the running WebUI/API process will not rebind its host.',
       'Docker Compose commonly binds 0.0.0.0 inside the container; host access also depends on port mapping.',
     ],
-    impact: ['Affects whether the WebUI can be reached locally, on the LAN, or from the public internet.'],
+    impact: ['Affects whether the WebUI can be reached locally, on the LAN, or from the public internet after restart.'],
     notes: [
+      'Restart the process, Docker container, or service manager after changing WEBUI_HOST.',
       'Enable ADMIN_AUTH_ENABLED when exposing the service publicly.',
       'Behind a reverse proxy, also evaluate TRUST_X_FORWARDED_FOR for login rate limiting and real IP detection.',
     ],
