@@ -931,17 +931,17 @@ class AkshareFetcher(BaseFetcher):
         优点：单股票查询，负载小，速度快
         缺点：数据字段较少，无量比/PE/PB等
         
-        接口格式：http://hq.sinajs.cn/list=sh600519,sz000001
+        接口格式：https://hq.sinajs.cn/list=sh600519,sz000001
         """
         circuit_breaker = get_realtime_circuit_breaker()
         source_key = "akshare_sina"
         symbol = _to_sina_tx_symbol(stock_code)
-        url = f"http://{SINA_REALTIME_ENDPOINT}={symbol}"
+        url = f"https://{SINA_REALTIME_ENDPOINT}={symbol}"
         api_start = time.time()
         
         try:
             headers = {
-                'Referer': 'http://finance.sina.com.cn',
+                'Referer': 'https://finance.sina.com.cn',
                 'User-Agent': random.choice(USER_AGENTS)
             }
             
@@ -1082,17 +1082,17 @@ class AkshareFetcher(BaseFetcher):
         优点：单股票查询，负载小，包含换手率
         缺点：无量比/PE/PB等估值数据
         
-        接口格式：http://qt.gtimg.cn/q=sh600519,sz000001
+        接口格式：https://qt.gtimg.cn/q=sh600519,sz000001
         """
         circuit_breaker = get_realtime_circuit_breaker()
         source_key = "akshare_tencent"
         symbol = _to_sina_tx_symbol(stock_code)
-        url = f"http://{TENCENT_REALTIME_ENDPOINT}={symbol}"
+        url = f"https://{TENCENT_REALTIME_ENDPOINT}={symbol}"
         api_start = time.time()
         
         try:
             headers = {
-                'Referer': 'http://finance.qq.com',
+                'Referer': 'https://finance.qq.com',
                 'User-Agent': random.choice(USER_AGENTS)
             }
             

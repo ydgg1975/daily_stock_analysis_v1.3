@@ -73,16 +73,21 @@ def akshare_fetcher(monkeypatch):
 
 def test_sina_realtime_success_logs_endpoint(caplog, monkeypatch, akshare_fetcher):
     breaker = _DummyCircuitBreaker()
+    captured_url = None
+
+    def _mock_get(url, *args, **kwargs):
+        nonlocal captured_url
+        captured_url = url
+        return _DummyResponse(200, _make_sina_payload())
+
     monkeypatch.setattr("data_provider.akshare_fetcher.get_realtime_circuit_breaker", lambda: breaker)
-    monkeypatch.setattr(
-        "data_provider.akshare_fetcher.requests.get",
-        lambda *args, **kwargs: _DummyResponse(200, _make_sina_payload()),
-    )
+    monkeypatch.setattr("data_provider.akshare_fetcher.requests.get", _mock_get)
 
     with caplog.at_level(logging.INFO):
         quote = akshare_fetcher._get_stock_realtime_quote_sina("601006")
 
     assert quote is not None
+    assert captured_url.startswith("https://")
     assert quote.name == "大秦铁路"
     assert quote.price == 5.19
     assert breaker.successes == ["akshare_sina"]
@@ -133,16 +138,21 @@ def test_tencent_realtime_http_status_logs_endpoint(caplog, monkeypatch, akshare
 
 def test_tencent_realtime_success_logs_endpoint(caplog, monkeypatch, akshare_fetcher):
     breaker = _DummyCircuitBreaker()
+    captured_url = None
+
+    def _mock_get(url, *args, **kwargs):
+        nonlocal captured_url
+        captured_url = url
+        return _DummyResponse(200, _make_tencent_payload())
+
     monkeypatch.setattr("data_provider.akshare_fetcher.get_realtime_circuit_breaker", lambda: breaker)
-    monkeypatch.setattr(
-        "data_provider.akshare_fetcher.requests.get",
-        lambda *args, **kwargs: _DummyResponse(200, _make_tencent_payload()),
-    )
+    monkeypatch.setattr("data_provider.akshare_fetcher.requests.get", _mock_get)
 
     with caplog.at_level(logging.INFO):
         quote = akshare_fetcher._get_stock_realtime_quote_tencent("601006")
 
     assert quote is not None
+    assert captured_url.startswith("https://")
     assert quote.name == "大秦铁路"
     assert quote.price == 5.19
     assert breaker.successes == ["akshare_tencent"]
