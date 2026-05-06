@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { analysisApi } from '../api/analysis';
 import type { TaskInfo } from '../types/analysis';
 import { useTaskStream } from './useTaskStream';
 
@@ -23,13 +24,50 @@ export function useDashboardLifecycle({
 }: UseDashboardLifecycleOptions): void {
   const removalTimeoutsRef = useRef<number[]>([]);
 
+  // Sync active tasks from the API to reconcile stale store state.
+  // This handles the case where tasks completed while the component was unmounted.
+  const syncActiveTasksFromApi = useCallback(async () => {
+    try {
+      const response = await analysisApi.getTasks({ limit: 50 });
+      const serverTasks = response.tasks ?? [];
+      const serverActiveIds = new Set<string>();
+
+      for (const task of serverTasks) {
+        if (task.status === 'pending' || task.status === 'processing') {
+          serverActiveIds.add(task.taskId);
+          // Ensure task exists in store with latest state
+          syncTaskCreated(task);
+          syncTaskUpdated(task);
+        } else if (task.status === 'completed') {
+          // Task completed while we were away - remove it from store
+          removeTask(task.taskId);
+        } else if (task.status === 'failed') {
+          removeTask(task.taskId);
+        }
+      }
+
+      // Remove tasks from store that are no longer in the server response
+      // (they completed/failed while the component was unmounted)
+      const { useStockPoolStore } = await import('../stores/stockPoolStore');
+      const { activeTasks } = useStockPoolStore.getState();
+      for (const storeTask of activeTasks) {
+        if (!serverActiveIds.has(storeTask.taskId)) {
+          removeTask(storeTask.taskId);
+        }
+      }
+    } catch {
+      // Silently ignore - SSE will eventually sync state
+    }
+  }, [syncTaskCreated, syncTaskUpdated, removeTask]);
+
   useEffect(() => {
     if (!enabled) {
       return;
     }
 
     void loadInitialHistory();
-  }, [enabled, loadInitialHistory]);
+    void syncActiveTasksFromApi();
+  }, [enabled, loadInitialHistory, syncActiveTasksFromApi]);
 
   useEffect(() => {
     if (!enabled) {
