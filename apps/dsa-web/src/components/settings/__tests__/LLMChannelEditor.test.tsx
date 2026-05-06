@@ -54,6 +54,31 @@ describe('LLMChannelEditor', () => {
     expect(input).toHaveAttribute('type', 'text');
   });
 
+  it('shows help dialogs for channel editor fields', async () => {
+    render(
+      <LLMChannelEditor
+        items={[
+          { key: 'LLM_CHANNELS', value: 'deepseek' },
+          { key: 'LLM_DEEPSEEK_PROTOCOL', value: 'deepseek' },
+          { key: 'LLM_DEEPSEEK_BASE_URL', value: 'https://api.deepseek.com' },
+          { key: 'LLM_DEEPSEEK_ENABLED', value: 'true' },
+          { key: 'LLM_DEEPSEEK_API_KEY', value: 'sk-test' },
+          { key: 'LLM_DEEPSEEK_MODELS', value: 'deepseek-v4-flash' },
+        ]}
+        configVersion="v1"
+        maskToken="******"
+        onSaved={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /DeepSeek 官方/i }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看 Base URL 配置说明' }));
+
+    expect(screen.getByRole('dialog', { name: 'Base URL' })).toBeInTheDocument();
+    expect(screen.getByText('该渠道的接口根地址。')).toBeInTheDocument();
+    expect(screen.getByText('LLM_DEEPSEEK_BASE_URL=https://api.deepseek.com')).toBeInTheDocument();
+  });
+
   it('hides LiteLLM wording when advanced YAML routing is enabled', () => {
     render(
       <LLMChannelEditor

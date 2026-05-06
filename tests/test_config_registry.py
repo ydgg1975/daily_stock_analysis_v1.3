@@ -146,7 +146,7 @@ class TestAstrBotFieldsRegistered(unittest.TestCase):
 
 
 class TestSettingsHelpMetadata(unittest.TestCase):
-    """Field help metadata should be available for the first settings help slice."""
+    """Field help metadata should be available for covered settings help slices."""
 
     _HELP_KEYS = (
         "STOCK_LIST",
@@ -154,6 +154,14 @@ class TestSettingsHelpMetadata(unittest.TestCase):
         "LLM_CHANNELS",
         "FEISHU_WEBHOOK_URL",
         "WEBUI_HOST",
+        "AGENT_LITELLM_MODEL",
+        "LITELLM_FALLBACK_MODELS",
+        "TUSHARE_TOKEN",
+        "TAVILY_API_KEYS",
+        "WECHAT_WEBHOOK_URL",
+        "EMAIL_RECEIVERS",
+        "SCHEDULE_TIME",
+        "ADMIN_AUTH_ENABLED",
     )
 
     def test_representative_fields_have_help_metadata(self):
@@ -167,6 +175,21 @@ class TestSettingsHelpMetadata(unittest.TestCase):
         field = get_field_definition("WEBUI_HOST")
         self.assertEqual(field["category"], "system")
         self.assertNotEqual(field["display_order"], 9000)
+
+    def test_restart_warning_codes_match_runtime_behavior(self):
+        restart_required_keys = (
+            "RUN_IMMEDIATELY",
+            "SCHEDULE_ENABLED",
+            "SCHEDULE_RUN_IMMEDIATELY",
+            "WEBUI_HOST",
+            "WEBUI_PORT",
+        )
+        for key in restart_required_keys:
+            field = get_field_definition(key)
+            self.assertIn("restart_required", field.get("warning_codes", []))
+
+        schedule_time = get_field_definition("SCHEDULE_TIME")
+        self.assertNotIn("restart_required", schedule_time.get("warning_codes", []))
 
     def test_schema_response_includes_help_metadata(self):
         schema = build_schema_response()
