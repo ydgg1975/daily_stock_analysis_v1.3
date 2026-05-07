@@ -1,4 +1,11 @@
-export type ChannelProtocol = 'openai' | 'deepseek' | 'gemini' | 'anthropic' | 'vertex_ai' | 'ollama';
+export type ChannelProtocol =
+  | 'openai'
+  | 'deepseek'
+  | 'gemini'
+  | 'anthropic'
+  | 'vertex_ai'
+  | 'ollama'
+  | 'github_copilot';
 export type LLMProviderCapability =
   | 'openai-compatible'
   | 'aggregator'
@@ -200,6 +207,20 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
     officialSources: [{ label: 'Ollama API', url: 'https://github.com/ollama/ollama/blob/main/docs/api.md' }],
   },
   {
+    channelId: 'copilot',
+    label: 'GitHub Copilot（OAuth 设备流，无需 API Key）',
+    protocol: 'github_copilot',
+    baseUrl: '',
+    placeholderModels: 'gpt-4o,claude-sonnet-4,gemini-2.5-pro',
+    capabilities: ['official-api'],
+    configHint:
+      '需要付费 GitHub Copilot 订阅。首次调用时 LiteLLM 会在终端打印 device code 与 GitHub 验证链接，授权后凭据自动保存到 ~/.config/litellm/github_copilot/，之后无需再次登录。',
+    officialSources: [
+      { label: 'GitHub Copilot Docs', url: 'https://docs.github.com/en/copilot' },
+      { label: 'LiteLLM GitHub Copilot Provider', url: 'https://docs.litellm.ai/docs/providers/github_copilot' },
+    ],
+  },
+  {
     channelId: 'custom',
     label: '自定义渠道',
     protocol: 'openai',
@@ -232,4 +253,5 @@ export const MODEL_PLACEHOLDERS_BY_PROTOCOL: Record<ChannelProtocol, string> = {
   anthropic: 'claude-sonnet-4-6,claude-opus-4-7',
   vertex_ai: 'gemini-3.1-pro-preview',
   ollama: 'llama3.2,qwen2.5',
+  github_copilot: 'gpt-4o,claude-sonnet-4',
 };

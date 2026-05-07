@@ -48,12 +48,39 @@ class ConfigIssue:
 
 
 _MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek"}
-SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama")
+SUPPORTED_LLM_CHANNEL_PROTOCOLS = (
+    "openai",
+    "anthropic",
+    "gemini",
+    "vertex_ai",
+    "deepseek",
+    "ollama",
+    "github_copilot",
+)
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
 # Fallback defaults used when ANSPIRE_API_KEYS is reused as legacy OpenAI-compatible source.
 # These are compatibility examples; actual availability should be validated by Anspire console/model entitlement.
 ANSPIRE_LLM_BASE_URL_DEFAULT = "https://open-gateway.anspire.cn/v6"
 ANSPIRE_LLM_MODEL_DEFAULT = "Doubao-Seed-2.0-lite"
+# GitHub Copilot endpoints.
+# - The OpenAI-compatible API endpoint at https://api.githubcopilot.com is
+#   only used as the legacy fallback when a user manually pre-provisions a
+#   GITHUB_COPILOT_TOKEN; in that mode the runtime model name remains
+#   ``openai/<model>``.
+# - The default copilot channel uses LiteLLM's native ``github_copilot``
+#   provider, which triggers an OAuth device-flow on first use and stores
+#   refreshed tokens under ``~/.config/litellm/github_copilot/`` (see
+#   https://docs.litellm.ai/docs/providers/github_copilot). No API key is
+#   required up-front for that path.
+# Reference: https://docs.github.com/en/copilot/using-github-copilot/asking-github-copilot-questions-in-your-ide
+GITHUB_COPILOT_BASE_URL_DEFAULT = "https://api.githubcopilot.com"
+GITHUB_COPILOT_INTEGRATION_ID = "vscode-chat"
+# Default model surfaced by the copilot channel when LLM_COPILOT_MODELS is
+# unset. ``gpt-4o`` is the most universally accessible Copilot-managed
+# model name; users can override via LLM_COPILOT_MODELS to e.g.
+# ``gpt-4.1`` / ``claude-sonnet-4`` / ``gemini-2.5-pro`` once their
+# Copilot account has access.
+GITHUB_COPILOT_DEFAULT_MODEL = "gpt-4o"
 # Kimi K2.6 is consumed through Moonshot's OpenAI-compatible API in this
 # repository. Official references:
 # - https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart
@@ -200,6 +227,9 @@ def canonicalize_llm_channel_protocol(value: Optional[str]) -> str:
         "google": "gemini",
         "vertex": "vertex_ai",
         "vertexai": "vertex_ai",
+        "copilot": "github_copilot",
+        "github": "github_copilot",
+        "githubcopilot": "github_copilot",
     }
     return aliases.get(candidate, candidate)
 
@@ -244,6 +274,9 @@ def channel_allows_empty_api_key(protocol: Optional[str], base_url: Optional[str
     """Return True when a channel can run without an API key."""
     resolved_protocol = resolve_llm_channel_protocol(protocol, base_url=base_url)
     if resolved_protocol == "ollama":
+        return True
+    # github_copilot uses LiteLLM's built-in OAuth device flow; no static API key.
+    if resolved_protocol == "github_copilot":
         return True
     parsed = urlparse(base_url or "")
     return parsed.hostname in {"127.0.0.1", "localhost", "0.0.0.0"}
@@ -1194,6 +1227,26 @@ class Config:
             if llm_model_list:
                 llm_models_source = "legacy_env"
 
+        # Priority 4: zero-config default → GitHub Copilot OAuth device flow.
+        # Only kicks in when nothing else is configured. The first LLM call
+        # will print a device code in the terminal that runs main.py / serve;
+        # credentials are persisted to ~/.config/litellm/github_copilot/ by
+        # LiteLLM and reused on subsequent runs. Requires a paid GitHub
+        # Copilot subscription. Disable by setting LLM_DEFAULT_COPILOT=false
+        # or by configuring any other LLM source above.
+        if not llm_model_list and parse_env_bool(
+            os.getenv('LLM_DEFAULT_COPILOT'), default=True
+        ):
+            llm_channels = cls._parse_llm_channels('copilot')
+            llm_model_list = cls._channels_to_model_list(llm_channels)
+            if llm_model_list:
+                llm_models_source = "default_copilot"
+                logger.info(
+                    "No LLM source configured; defaulting to GitHub Copilot "
+                    "channel (OAuth device flow). Set LLM_DEFAULT_COPILOT=false "
+                    "to opt out."
+                )
+
         if (
             inferred_legacy_deepseek_model
             and llm_models_source == "legacy_env"
@@ -1714,6 +1767,21 @@ class Config:
             protocol_raw = os.getenv(f'LLM_{ch_upper}_PROTOCOL', '').strip()
             if ch_lower == "anspire" and not protocol_raw:
                 protocol_raw = "openai"
+            if ch_lower == "copilot" and not protocol_raw:
+                # Default to LiteLLM native github_copilot provider so the
+                # OAuth device flow handles credentials automatically; users
+                # can still set LLM_COPILOT_PROTOCOL=openai + GITHUB_COPILOT_TOKEN
+                # for the legacy pre-provisioned token path.
+                protocol_raw = "github_copilot"
+            # Only fall back to the OpenAI-compatible Copilot endpoint when
+            # the user explicitly opts into the openai protocol; the native
+            # github_copilot provider injects its own api_base.
+            if (
+                ch_lower == "copilot"
+                and not base_url
+                and canonicalize_llm_channel_protocol(protocol_raw) == "openai"
+            ):
+                base_url = GITHUB_COPILOT_BASE_URL_DEFAULT
             enabled_raw = os.getenv(f'LLM_{ch_upper}_ENABLED')
             if ch_lower == "anspire" and (enabled_raw is None or not enabled_raw.strip()):
                 enabled_raw = os.getenv('ANSPIRE_LLM_ENABLED')
@@ -1729,6 +1797,10 @@ class Config:
             if not api_keys and ch_lower == "anspire":
                 anspire_keys_raw = os.getenv('ANSPIRE_API_KEYS', '')
                 api_keys = [k.strip() for k in anspire_keys_raw.split(',') if k.strip()]
+            if not api_keys and ch_lower == "copilot":
+                _copilot_token = os.getenv('GITHUB_COPILOT_TOKEN', '').strip()
+                if _copilot_token:
+                    api_keys = [_copilot_token]
 
             # Models
             models_raw = os.getenv(f'LLM_{ch_upper}_MODELS', '')
@@ -1739,6 +1811,8 @@ class Config:
                 ).strip()
                 if anspire_model:
                     raw_models = [anspire_model]
+            if not raw_models and ch_lower == "copilot":
+                raw_models = [GITHUB_COPILOT_DEFAULT_MODEL]
             protocol = resolve_llm_channel_protocol(protocol_raw, base_url=base_url, models=raw_models, channel_name=ch_name)
             models = [normalize_llm_channel_model(m, protocol, base_url) for m in raw_models]
 
@@ -1804,6 +1878,9 @@ class Config:
                     headers = dict(ch.get('extra_headers') or {})
                     if ch['base_url'] and 'aihubmix.com' in ch['base_url']:
                         headers.setdefault('APP-Code', 'GPIJ3886')
+                    # Auto-inject GitHub Copilot required integration header
+                    if ch['base_url'] and 'githubcopilot.com' in ch['base_url']:
+                        headers.setdefault('Copilot-Integration-Id', GITHUB_COPILOT_INTEGRATION_ID)
                     if headers:
                         litellm_params['extra_headers'] = headers
 

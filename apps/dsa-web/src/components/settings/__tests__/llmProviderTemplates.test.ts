@@ -25,6 +25,7 @@ describe('llmProviderTemplates', () => {
       'anthropic',
       'openai',
       'ollama',
+      'copilot',
       'custom',
     ]);
   });
@@ -99,6 +100,7 @@ describe('llmProviderTemplates', () => {
       anthropic: 'claude-sonnet-4-6,claude-opus-4-7',
       vertex_ai: 'gemini-3.1-pro-preview',
       ollama: 'llama3.2,qwen2.5',
+      github_copilot: 'gpt-4o,claude-sonnet-4',
     });
   });
 });

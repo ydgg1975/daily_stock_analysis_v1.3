@@ -228,6 +228,17 @@ jobs:
           LLM_OLLAMA_ENABLED: ${{ vars.LLM_OLLAMA_ENABLED || secrets.LLM_OLLAMA_ENABLED }}
           LLM_OLLAMA_EXTRA_HEADERS: ${{ vars.LLM_OLLAMA_EXTRA_HEADERS || secrets.LLM_OLLAMA_EXTRA_HEADERS }}
 
+          # GitHub Copilot 渠道（OAuth 设备流为交互式流程，不适用于无人值守 CI；
+          # 此处仅保留 env 占位，方便已有 GITHUB_COPILOT_TOKEN 的用户走 OpenAI 兼容路径。）
+          LLM_COPILOT_PROTOCOL: ${{ vars.LLM_COPILOT_PROTOCOL || secrets.LLM_COPILOT_PROTOCOL }}
+          LLM_COPILOT_BASE_URL: ${{ vars.LLM_COPILOT_BASE_URL || secrets.LLM_COPILOT_BASE_URL }}
+          LLM_COPILOT_API_KEY: ${{ secrets.LLM_COPILOT_API_KEY }}
+          LLM_COPILOT_API_KEYS: ${{ secrets.LLM_COPILOT_API_KEYS }}
+          LLM_COPILOT_MODELS: ${{ vars.LLM_COPILOT_MODELS || secrets.LLM_COPILOT_MODELS }}
+          LLM_COPILOT_ENABLED: ${{ vars.LLM_COPILOT_ENABLED || secrets.LLM_COPILOT_ENABLED }}
+          LLM_COPILOT_EXTRA_HEADERS: ${{ vars.LLM_COPILOT_EXTRA_HEADERS || secrets.LLM_COPILOT_EXTRA_HEADERS }}
+          GITHUB_COPILOT_TOKEN: ${{ secrets.GITHUB_COPILOT_TOKEN }}
+
           # ==========================================
           # 数据源
           # ==========================================

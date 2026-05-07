@@ -67,6 +67,7 @@ OpenAI-compatible Base URL 只填到服务商兼容入口，不额外拼接 `/ch
 | 火山方舟 / 豆包 | `volcengine` | `openai` | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-1-6-251015,doubao-seed-1-6-thinking-251015` |
 | 硅基流动 / SiliconFlow | `siliconflow` | `openai` | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3.2,Qwen/Qwen3-235B-A22B-Thinking-2507` |
 | OpenRouter | `openrouter` | `openai` | `https://openrouter.ai/api/v1` | `~anthropic/claude-sonnet-latest,~openai/gpt-latest` |
+| GitHub Copilot | `copilot` | `github_copilot` | 留空（LiteLLM 自动注入） | `gpt-4o,claude-sonnet-4,gemini-2.5-pro` |
 | Ollama | `ollama` | `ollama` | `http://127.0.0.1:11434` | `llama3.2,qwen2.5` |
 
 ## 官方来源与兼容性
@@ -85,6 +86,7 @@ OpenAI-compatible Base URL 只填到服务商兼容入口，不额外拼接 `/ch
 | 火山方舟 / 豆包 | [在线推理（常规）](https://www.volcengine.com/docs/82379/2121998)、[模型列表](https://www.volcengine.com/docs/82379/1949118) | 官方示例使用 `https://ark.cn-beijing.volces.com/api/v3` 与 `doubao-seed-1-6-251015`；如使用 Coding Plan，请改用其专用 Base URL 和模型名，不要套用本表的在线推理模板。 |
 | SiliconFlow | [模型列表](https://docs.siliconflow.cn/quickstart/models)、[获取模型列表 API](https://docs.siliconflow.cn/cn/api-reference/models/get-model-list) | 平台模型实时更新且 `/models` 需要 API Key；模板只给常见新模型示例，保存前建议在 Web 设置页点击「获取模型」确认账号可见性。 |
 | OpenRouter | [Models API](https://openrouter.ai/docs/api/api-reference/models/get-models) | OpenRouter 支持 `~anthropic/claude-sonnet-latest`、`~openai/gpt-latest` 等 latest router alias；2026-05-03 的一次手动 live smoke 以 Claude Sonnet latest 作为默认示例通过，GPT latest 保留为可按账号权限切换的备选。 |
+| GitHub Copilot | [Copilot 文档](https://docs.github.com/en/copilot)、[LiteLLM GitHub Copilot Provider](https://docs.litellm.ai/docs/providers/github_copilot) | 需要付费 GitHub Copilot 订阅。`copilot` 渠道默认走 LiteLLM 原生 `github_copilot/` provider：首次调用时会在终端打印 device code 与 GitHub 验证链接，授权后凭据自动保存到 `~/.config/litellm/github_copilot/`，后续无需重复登录，也不需要手动维护 `LLM_COPILOT_API_KEY`。运行时模型形如 `github_copilot/gpt-4o`。可选：通过 `GITHUB_COPILOT_TOKEN_DIR` 自定义凭据目录；如已有现成 Copilot Token，可改为 `LLM_COPILOT_PROTOCOL=openai` + `GITHUB_COPILOT_TOKEN` 的兼容模式（此时模型形如 `openai/gpt-4o`）。注意：CI / 无人值守环境无法完成交互式 OAuth，建议仅在本地或桌面端使用 OAuth 设备流，CI 中改用其他渠道。 |
 | LiteLLM | [OpenAI-Compatible Endpoints](https://docs.litellm.ai/docs/providers/openai_compatible) | OpenAI-compatible 端点需要把运行时模型写成 `openai/<model>`，Base URL 只填到服务商兼容入口，不额外拼接 `/chat/completions`。 |
 
 本页预设只保证配置形状与当前依赖的 OpenAI-compatible 路由规则一致；实际连通性仍取决于服务商账号权限、地域、额度和模型开通状态。当前 LiteLLM 版本约束为 `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`（见 `requirements.txt`），保留历史最低版本、显式排除 PyPI 事故版本，并避免未来大版本自动进入。

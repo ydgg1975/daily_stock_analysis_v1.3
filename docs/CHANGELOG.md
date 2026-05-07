@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] 补齐通知渠道 P0 基线、Actions 映射与 `--check-notify` 只读诊断，完善 AstrBot 配置入口和通知回归快照。
 - [chore] 清理仓库根目录：移除误入库的 `.codex`、`review.md` 跟踪记录，将 smoke 测试入口迁移到 `scripts/`、环境检查脚本迁移为 `scripts/check_env.py`，并将 LiteLLM YAML 示例迁移到 `docs/examples/`。
 - [新功能] Web 设置页新增通知渠道一键测试，支持临时配置、耗时与脱敏 attempts 展示。
+- [新功能] LLM 渠道新增 GitHub Copilot 预设：基于 LiteLLM 原生 `github_copilot/` provider，首次调用通过 OAuth 设备流自动完成授权，凭据本地持久化，无需手动配置 API Key（需付费 GitHub Copilot 订阅）。
+- [改进] 未配置任何 LLM 源时，`main.py` / `server.py` 默认启用 GitHub Copilot 渠道，首次调用触发 OAuth 设备流；可通过 `LLM_DEFAULT_COPILOT=false` 关闭。
 
 ## [3.15.0] - 2026-05-05
 

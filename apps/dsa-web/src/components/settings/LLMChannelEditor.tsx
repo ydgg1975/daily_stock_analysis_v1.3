@@ -21,6 +21,7 @@ const PROTOCOL_OPTIONS: Array<{ value: ChannelProtocol; label: string }> = [
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'vertex_ai', label: 'Vertex AI' },
   { value: 'ollama', label: 'Ollama' },
+  { value: 'github_copilot', label: 'GitHub Copilot (OAuth)' },
 ];
 
 const KNOWN_MODEL_PREFIXES = new Set([
@@ -229,7 +230,7 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
               </span>
             </Tooltip>
           ) : null}
-          {!hasKey && channel.protocol !== 'ollama' ? <Badge variant="warning">未填 Key</Badge> : null}
+          {!hasKey && channel.protocol !== 'ollama' && channel.protocol !== 'github_copilot' ? <Badge variant="warning">未填 Key</Badge> : null}
           {testState?.status !== 'idle' ? (
             <Badge variant={statusVariant}>
               {testState?.status === 'success' ? '连接正常' : testState?.status === 'error' ? '连接失败' : '测试中'}
@@ -342,7 +343,13 @@ const ChannelRow: React.FC<ChannelRowProps> = ({
             value={channel.apiKey}
             disabled={busy}
             onChange={(e) => onUpdate(index, 'apiKey', e.target.value)}
-            placeholder={channel.protocol === 'ollama' ? '本地 Ollama 可留空' : '支持多个 Key 逗号分隔'}
+            placeholder={
+              channel.protocol === 'ollama'
+                ? '本地 Ollama 可留空'
+                : channel.protocol === 'github_copilot'
+                  ? '首次调用会触发 OAuth 设备流，留空即可'
+                  : '支持多个 Key 逗号分隔'
+            }
           />
 
           <div className="space-y-3 rounded-xl border border-[var(--settings-border)] bg-[var(--settings-surface-hover)] p-3">

@@ -28,7 +28,15 @@ EXPECTED_TEMPLATE_CHANNELS = {
     "anthropic",
     "openai",
     "ollama",
+    "copilot",
 }
+
+# Channels whose runtime authentication does not rely on a static API key
+# (Ollama runs locally without auth, GitHub Copilot uses LiteLLM's OAuth
+# device flow). They are still wired through the channel env conventions
+# but ``LLM_<CHANNEL>_API_KEY=`` is intentionally absent from the example
+# `.env`.
+CHANNELS_WITHOUT_API_KEY_IN_EXAMPLE = {"ollama", "copilot"}
 
 
 def _extract_provider_templates() -> dict[str, str]:
@@ -103,7 +111,7 @@ def test_env_example_includes_provider_template_channel_examples() -> None:
         assert f"LLM_CHANNELS={channel}" in env_example
         assert f"LLM_{upper}_MODELS=" in env_example
 
-        if channel != "ollama":
+        if channel not in CHANNELS_WITHOUT_API_KEY_IN_EXAMPLE:
             assert f"LLM_{upper}_API_KEY=" in env_example
         if base_url:
             assert f"LLM_{upper}_BASE_URL=" in env_example
