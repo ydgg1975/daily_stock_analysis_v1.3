@@ -660,6 +660,7 @@ class Config:
     anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys
     bocha_api_keys: List[str] = field(default_factory=list)  # Bocha API Keys
     minimax_api_keys: List[str] = field(default_factory=list)  # MiniMax API Keys
+    miaoxiang_api_keys: List[str] = field(default_factory=list)  # 东方财富妙想 API Keys
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
@@ -1244,6 +1245,9 @@ class Config:
         brave_keys_str = os.getenv('BRAVE_API_KEYS', '')
         brave_api_keys = [k.strip() for k in brave_keys_str.split(',') if k.strip()]
 
+        miaoxiang_keys_str = os.getenv('MX_APIKEY', '')
+        miaoxiang_api_keys = [k.strip() for k in miaoxiang_keys_str.split(',') if k.strip()]
+
         _raw_urls = [u.strip() for u in os.getenv('SEARXNG_BASE_URLS', '').split(',') if u.strip()]
         searxng_base_urls = []
         invalid_searxng_urls = []
@@ -1362,6 +1366,7 @@ class Config:
             anspire_api_keys=anspire_api_keys,
             bocha_api_keys=bocha_api_keys,
             minimax_api_keys=minimax_api_keys,
+            miaoxiang_api_keys=miaoxiang_api_keys,
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
@@ -2136,6 +2141,7 @@ class Config:
             self.anspire_api_keys
             or self.bocha_api_keys
             or self.minimax_api_keys
+            or self.miaoxiang_api_keys
             or self.tavily_api_keys
             or self.brave_api_keys
             or self.serpapi_keys
@@ -2382,7 +2388,7 @@ class Config:
         if not self.has_search_capability_enabled():
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用",
+                message="未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG/妙想)，新闻搜索功能将不可用",
                 field="BOCHA_API_KEYS",
             ))
 

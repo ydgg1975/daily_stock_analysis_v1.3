@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 - [改进] 放宽 LiteLLM 依赖约束，保留 `>=1.80.10` 最低版本并显式排除 PyPI 事故版本 `1.82.7` / `1.82.8`，允许安装后续 1.x 修复版本。
+- [新功能] 集成东方财富妙想 API（MX_APIKEY）：新增妙想金融新闻搜索 Provider 和智能选股 Agent Tool（smart_stock_screen）。
+- [新功能] WebUI 新增「AI选股」页面（位于首页和问股之间）：支持自然语言选股，结果可一键提交深度分析。
 
 ## [3.15.0] - 2026-05-05
 

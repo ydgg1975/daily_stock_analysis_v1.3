@@ -397,6 +397,20 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 53,
     },
+    "MX_APIKEY": {
+        "title": "MiaoXiang API Keys",
+        "description": "Comma-separated MiaoXiang (妙想) API keys for financial news search and smart stock screening.",
+        "category": "data_source",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {"multi_value": True, "delimiter": ","},
+        "display_order": 52,
+    },
     "SEARXNG_BASE_URLS": {
         "title": "SearXNG Base URLs",
         "description": "Comma-separated SearXNG instance URLs (self-hosted, no quota). Enable format: json in settings.yml.",
@@ -1970,6 +1984,7 @@ def _infer_category(key: str) -> str:
             "BOCHA",
             "ANSPIRE",
             "SEARXNG",
+            "MX_",
             "NEWS_",
             "BIAS_",
         )

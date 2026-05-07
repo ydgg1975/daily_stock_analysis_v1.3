@@ -2082,6 +2082,102 @@ class SearXNGSearchProvider(BaseSearchProvider):
         )
 
 
+class MiaoXiangSearchProvider(BaseSearchProvider):
+    """
+    东方财富妙想资讯搜索
+
+    特点：
+    - 基于东方财富妙想搜索能力，金融场景信源智能筛选
+    - 覆盖研报、新闻、公告、政策、交易规则等金融信息
+    - 结果权威、时效性强，适合 A 股场景
+
+    获取 API Key: 前往东方财富妙想 Skills 页面申请
+    """
+
+    API_ENDPOINT = "https://mkapi2.dfcfs.com/finskillshub/api/claw/news-search"
+
+    _INFO_TYPE_MAP = {
+        "REPORT": "研报",
+        "NEWS": "新闻",
+        "ANNOUNCEMENT": "公告",
+    }
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "MiaoXiang")
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": api_key,
+        }
+        payload = {"query": query}
+
+        resp = _post_with_retry(
+            self.API_ENDPOINT,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+
+        status = body.get("status")
+        if status != 0:
+            msg = body.get("message", "unknown error")
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self._name,
+                success=False,
+                error_message=f"MiaoXiang API error: status={status}, message={msg}",
+            )
+
+        # Navigate: data -> data -> llmSearchResponse -> data (list)
+        data = body.get("data", {})
+        inner_data = data.get("data", {})
+        search_response = inner_data.get("llmSearchResponse", {})
+        items = search_response.get("data", [])
+
+        if not isinstance(items, list):
+            items = []
+
+        results: List[SearchResult] = []
+        for item in items[:max_results]:
+            if not isinstance(item, dict):
+                continue
+            title = item.get("title", "")
+            content = item.get("content", "")
+            raw_date = item.get("date", "")
+            ins_name = item.get("insName", "")
+            info_type = item.get("informationType", "")
+            entity_name = item.get("entityFullName", "")
+
+            source_parts = []
+            if ins_name:
+                source_parts.append(ins_name)
+            type_cn = self._INFO_TYPE_MAP.get(info_type, info_type)
+            if type_cn:
+                source_parts.append(type_cn)
+            source = " | ".join(source_parts) or "东方财富妙想"
+
+            published_date = raw_date.split()[0] if raw_date else None
+
+            results.append(SearchResult(
+                title=title,
+                snippet=content[:500] if content else "",
+                url="",
+                source=source,
+                published_date=published_date,
+            ))
+
+        return SearchResponse(
+            query=query,
+            results=results,
+            provider=self._name,
+            success=True,
+        )
+
+
 class SearchService:
     """
     搜索服务
@@ -2125,6 +2221,7 @@ class SearchService:
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
+        miaoxiang_keys: Optional[List[str]] = None,
         searxng_base_urls: Optional[List[str]] = None,
         searxng_public_instances_enabled: bool = True,
         news_max_age_days: int = 3,
@@ -2132,7 +2229,7 @@ class SearchService:
     ):
         """
         初始化搜索服务
-
+    
         Args:
             bocha_keys: 博查搜索 API Key 列表
             tavily_keys: Tavily API Key 列表
@@ -2140,7 +2237,8 @@ class SearchService:
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
-            searxng_base_urls: SearXNG 实例地址列表（自建无配额兜底）
+            miaoxiang_keys: 东方财富妙想 API Key 列表
+            searxng_base_urls: SearXNG 实例地址列表（自建无配额兗底）
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
             news_max_age_days: 新闻最大时效（天）
             news_strategy_profile: 新闻窗口策略档位（ultra_short/short/medium/long）
@@ -2169,27 +2267,32 @@ class SearchService:
             self._providers.append(BochaSearchProvider(bocha_keys))
             logger.info(f"已配置 Bocha 搜索，共 {len(bocha_keys)} 个 API Key")
 
-        # 2. Tavily（免费额度更多，每月 1000 次）
+        # 2. MiaoXiang（东方财富妙想，金融场景优化，研报/新闻/公告）
+        if miaoxiang_keys:
+            self._providers.append(MiaoXiangSearchProvider(miaoxiang_keys))
+            logger.info(f"已配置 MiaoXiang 妙想搜索，共 {len(miaoxiang_keys)} 个 API Key")
+
+        # 3. Tavily（免费额度更多，每月 1000 次）
         if tavily_keys:
             self._providers.append(TavilySearchProvider(tavily_keys))
             logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
 
-        # 3. Brave Search（隐私优先，全球覆盖）
+        # 4. Brave Search（隐私优先，全球覆盖）
         if brave_keys:
             self._providers.append(BraveSearchProvider(brave_keys))
             logger.info(f"已配置 Brave 搜索，共 {len(brave_keys)} 个 API Key")
 
-        # 4. SerpAPI 作为备选（每月 100 次）
+        # 5. SerpAPI 作为备选（每月 100 次）
         if serpapi_keys:
             self._providers.append(SerpAPISearchProvider(serpapi_keys))
             logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
 
-        # 5. MiniMax（Coding Plan Web Search，结构化结果）
+        # 6. MiniMax（Coding Plan Web Search，结构化结果）
         if minimax_keys:
             self._providers.append(MiniMaxSearchProvider(minimax_keys))
             logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
 
-        # 6. SearXNG（自建实例优先；未配置时可自动发现公共实例）
+        # 7. SearXNG（自建实例优先；未配置时可自动发现公共实例）
         searxng_provider = SearXNGSearchProvider(
             searxng_base_urls,
             use_public_instances=bool(searxng_public_instances_enabled and not searxng_base_urls),
@@ -2201,7 +2304,7 @@ class SearchService:
             else:
                 logger.info("已启用 SearXNG 公共实例自动发现模式")
 
-        # 7. Anspire Search（实时智能搜索优化）
+        # 8. Anspire Search（实时智能搜索优化）
         if anspire_keys:
             self._providers.insert(0, AnspireSearchProvider(anspire_keys))
             logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
@@ -3442,6 +3545,7 @@ def get_search_service() -> SearchService:
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,
+                    miaoxiang_keys=config.miaoxiang_api_keys,
                     searxng_base_urls=config.searxng_base_urls,
                     searxng_public_instances_enabled=config.searxng_public_instances_enabled,
                     news_max_age_days=config.news_max_age_days,
