@@ -1,17 +1,18 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Sparkles } from 'lucide-react';
 import {
   ApiErrorAlert,
   Button,
   EmptyState,
   InlineAlert,
   PageHeader,
+  Pagination,
 } from '../components/common';
 import { screenApi, type ScreenResultRow } from '../api/screen';
 import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
+import { useScreenStore } from '../stores/screenStore';
 
 const QUICK_QUERIES: string[] = [
   '今天涨幅超过5%的A股',
@@ -37,6 +38,16 @@ const NAME_KEY_CANDIDATES = [
   'StockName',
 ];
 
+// Columns hidden from the result table (internal IDs / redundant metadata).
+const HIDDEN_COLUMNS = new Set<string>([
+  '市场代码简称',
+  'choiceInnerCode',
+  'inOptional',
+]);
+
+// Front-end pagination page size for the result table.
+const PAGE_SIZE = 20;
+
 function pickField(row: ScreenResultRow, candidates: string[]): string | undefined {
   for (const key of candidates) {
     if (key in row && row[key]) return row[key];
@@ -52,16 +63,89 @@ function pickField(row: ScreenResultRow, candidates: string[]): string | undefin
   return undefined;
 }
 
+// 尝试把 "2058.42亿" / "3692.10万" / "-3.71" / "19.96" / "87.10%" 解析为纯数值，
+// 便于数字列按大小排序；无法解析返回 null，回退到字符串比较。
+function parseNumeric(raw: unknown): number | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s || s === '-' || s === '--') return null;
+  const match = s.match(/^(-?[\d,]+(?:\.\d+)?)\s*([亿万%]?)$/);
+  if (match) {
+    const base = parseFloat(match[1].replace(/,/g, ''));
+    if (Number.isNaN(base)) return null;
+    if (match[2] === '亿') return base * 1e8;
+    if (match[2] === '万') return base * 1e4;
+    return base;
+  }
+  const n = parseFloat(s);
+  return Number.isNaN(n) ? null : n;
+}
+
+// 在可见列中找到包含"涨跌幅"的列名，作为默认排序列。
+function findChangePercentColumn(cols: string[]): string | null {
+  return cols.find((c) => c.includes('涨跌幅')) ?? null;
+}
+
+// 从列名末尾剥离时间戳后缀（HH:MM[:SS] / YYYYMMDD），
+// 返回 { displayName, date, time }，用于把时间集中展示在 meta 区域。
+function stripColumnTimestamp(col: string): {
+  displayName: string;
+  date: string | null;
+  time: string | null;
+} {
+  let name = col;
+  let time: string | null = null;
+  let date: string | null = null;
+
+  const timeMatch = name.match(/^(.*?)(\d{1,2}:\d{2}(?::\d{2})?)\s*$/);
+  if (timeMatch) {
+    name = timeMatch[1];
+    time = timeMatch[2];
+  }
+  const dateMatch = name.match(/^(.*?)(\d{8})\s*$/);
+  if (dateMatch) {
+    name = dateMatch[1];
+    const raw = dateMatch[2];
+    date = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  }
+  return { displayName: name.trim() || col, date, time };
+}
+
+// 汇总列名中的时间戳为统一的 meta 字符串：优先 "YYYY-MM-DD HH:MM[:SS]"。
+function aggregateTimestamp(cols: string[]): string | null {
+  let maxDate: string | null = null;
+  let maxTime: string | null = null;
+  for (const c of cols) {
+    const { date, time } = stripColumnTimestamp(c);
+    if (date && (!maxDate || date > maxDate)) maxDate = date;
+    if (time && (!maxTime || time > maxTime)) maxTime = time;
+  }
+  if (maxDate && maxTime) return `${maxDate} ${maxTime}`;
+  if (maxDate) return maxDate;
+  if (maxTime) return maxTime;
+  return null;
+}
+
 const ScreenPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [input, setInput] = useState('');
+  // 跨路由保留的选股状态（来自全局 store）
+  const input = useScreenStore((s) => s.input);
+  const setInput = useScreenStore((s) => s.setInput);
+  const rows = useScreenStore((s) => s.rows);
+  const lastQuery = useScreenStore((s) => s.lastQuery);
+  const resultsCount = useScreenStore((s) => s.resultsCount);
+  const returnedCount = useScreenStore((s) => s.returnedCount);
+  const emptyMessage = useScreenStore((s) => s.emptyMessage);
+  const currentPage = useScreenStore((s) => s.currentPage);
+  const setCurrentPage = useScreenStore((s) => s.setCurrentPage);
+  const sortKey = useScreenStore((s) => s.sortKey);
+  const sortDir = useScreenStore((s) => s.sortDir);
+  const setSort = useScreenStore((s) => s.setSort);
+  const setResults = useScreenStore((s) => s.setResults);
+  const clearResults = useScreenStore((s) => s.clearResults);
+
+  // 仅当前页会话的瞬态状态
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ParsedApiError | null>(null);
-  const [rows, setRows] = useState<ScreenResultRow[]>([]);
-  const [lastQuery, setLastQuery] = useState<string>('');
-  const [resultsCount, setResultsCount] = useState(0);
-  const [returnedCount, setReturnedCount] = useState(0);
-  const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
   const [submittingCodes, setSubmittingCodes] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -69,17 +153,83 @@ const ScreenPage: React.FC = () => {
     document.title = 'AI选股 - DSA';
   }, []);
 
+  // 若已有结果但尚未设置排序列（例如历史状态未带默认），自动按涨跌幅降序兜底
+  useEffect(() => {
+    if (!sortKey && rows.length > 0) {
+      const cols = Object.keys(rows[0]).filter((k) => !HIDDEN_COLUMNS.has(k));
+      const fallback = findChangePercentColumn(cols);
+      if (fallback) setSort(fallback, 'desc');
+    }
+  }, [sortKey, rows, setSort]);
+
   useEffect(() => {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  // Column order: keep order of first row's keys
+  // Column order: keep order of first row's keys, excluding hidden internal columns.
+  // 额外规则：将"流通市值"列与"证券类型"列位置互换（若两者都存在）。
   const columns = useMemo<string[]>(() => {
     if (rows.length === 0) return [];
-    return Object.keys(rows[0]);
+    const base = Object.keys(rows[0]).filter((key) => !HIDDEN_COLUMNS.has(key));
+    const liuTongIdx = base.findIndex((c) => c.includes('流通市值'));
+    const typeIdx = base.findIndex((c) => c.includes('证券类型'));
+    if (liuTongIdx !== -1 && typeIdx !== -1) {
+      [base[liuTongIdx], base[typeIdx]] = [base[typeIdx], base[liuTongIdx]];
+    }
+    return base;
   }, [rows]);
+
+  // 去除列名末尾时间戳后的"显示名"映射：原始列名 -> 去时间戳后的标题。
+  const columnDisplayNames = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const c of columns) map[c] = stripColumnTimestamp(c).displayName;
+    return map;
+  }, [columns]);
+
+  // 汇总到 meta 区域显示的统一时间戳。
+  const dataTimestamp = useMemo<string | null>(() => aggregateTimestamp(columns), [columns]);
+
+  // 对 rows 按 sortKey + sortDir 排序：数字列按数值，其它按 localeCompare。
+  const sortedRows = useMemo<ScreenResultRow[]>(() => {
+    if (!sortKey || rows.length === 0) return rows;
+    const dirFactor = sortDir === 'asc' ? 1 : -1;
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const va = a[sortKey];
+      const vb = b[sortKey];
+      const na = parseNumeric(va);
+      const nb = parseNumeric(vb);
+      if (na !== null && nb !== null) return (na - nb) * dirFactor;
+      // 只有一侧能解析为数字 → 数字永远排前面（desc 时放前，asc 时放后）
+      if (na !== null) return -1 * dirFactor;
+      if (nb !== null) return 1 * dirFactor;
+      const sa = va == null ? '' : String(va);
+      const sb = vb == null ? '' : String(vb);
+      return sa.localeCompare(sb, 'zh-Hans-CN') * dirFactor;
+    });
+    return arr;
+  }, [rows, sortKey, sortDir]);
+
+  // Front-end pagination derived state.
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo<ScreenResultRow[]>(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return sortedRows.slice(start, start + PAGE_SIZE);
+  }, [sortedRows, safePage]);
+
+  const handleSortColumn = useCallback(
+    (col: string) => {
+      if (sortKey === col) {
+        setSort(col, sortDir === 'desc' ? 'asc' : 'desc');
+      } else {
+        setSort(col, 'desc');
+      }
+    },
+    [sortKey, sortDir, setSort],
+  );
 
   const handleSearch = useCallback(
     async (overrideQuery?: string) => {
@@ -88,28 +238,37 @@ const ScreenPage: React.FC = () => {
 
       setLoading(true);
       setError(null);
-      setEmptyMessage(null);
       try {
         const resp = await screenApi.query(q);
-        setLastQuery(resp.query || q);
-        setRows(resp.results || []);
-        setResultsCount(resp.resultsCount || 0);
-        setReturnedCount(resp.returnedCount || (resp.results?.length ?? 0));
+        const resultRows = resp.results || [];
+        let nextEmpty: string | null = null;
         if (!resp.success) {
-          setEmptyMessage(resp.error || resp.message || '选股未返回结果');
-        } else if ((resp.results?.length ?? 0) === 0) {
-          setEmptyMessage(resp.message || '未找到符合条件的股票');
+          nextEmpty = resp.error || resp.message || '选股未返回结果';
+        } else if (resultRows.length === 0) {
+          nextEmpty = resp.message || '未找到符合条件的股票';
         }
+        // 默认按"涨跌幅"列降序（若列存在）
+        const visibleCols =
+          resultRows.length > 0
+            ? Object.keys(resultRows[0]).filter((k) => !HIDDEN_COLUMNS.has(k))
+            : [];
+        const defaultSortKey = findChangePercentColumn(visibleCols);
+        setResults({
+          query: resp.query || q,
+          rows: resultRows,
+          resultsCount: resp.resultsCount || 0,
+          returnedCount: resp.returnedCount || resultRows.length,
+          emptyMessage: nextEmpty,
+          defaultSortKey,
+        });
       } catch (err) {
         setError(getParsedApiError(err));
-        setRows([]);
-        setResultsCount(0);
-        setReturnedCount(0);
+        clearResults();
       } finally {
         setLoading(false);
       }
     },
-    [input, loading],
+    [input, loading, setResults, clearResults],
   );
 
   const handleQuickQuery = useCallback(
@@ -117,7 +276,7 @@ const ScreenPage: React.FC = () => {
       setInput(q);
       void handleSearch(q);
     },
-    [handleSearch],
+    [handleSearch, setInput],
   );
 
   const handleAnalyze = useCallback(
@@ -157,8 +316,6 @@ const ScreenPage: React.FC = () => {
     },
     [input, lastQuery],
   );
-
-  const handleGoHome = useCallback(() => navigate('/'), [navigate]);
 
   return (
     <div
@@ -256,6 +413,11 @@ const ScreenPage: React.FC = () => {
                 共 {resultsCount} 条{returnedCount < resultsCount ? `，显示前 ${returnedCount} 条` : ''}
               </span>
             ) : null}
+            {dataTimestamp ? (
+              <span className="ml-3">
+                数据时间：<span className="text-foreground">{dataTimestamp}</span>
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -276,26 +438,54 @@ const ScreenPage: React.FC = () => {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
                 <tr className="border-b border-subtle">
-                  {columns.map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-2 text-left text-xs font-medium text-muted-text whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
-                  ))}
+                  {columns.map((col) => {
+                    const active = sortKey === col;
+                    const SortIcon = active
+                      ? sortDir === 'asc'
+                        ? ArrowUp
+                        : ArrowDown
+                      : ArrowUpDown;
+                    return (
+                      <th
+                        key={col}
+                        scope="col"
+                        className={`px-3 py-2 text-left text-xs font-medium whitespace-nowrap ${
+                          active ? 'text-foreground' : 'text-muted-text'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSortColumn(col)}
+                          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                          aria-label={`按 ${col} 排序`}
+                          aria-sort={
+                            active
+                              ? sortDir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                        >
+                          <span>{columnDisplayNames[col] ?? col}</span>
+                          <SortIcon
+                            className={`h-3 w-3 ${active ? 'opacity-100' : 'opacity-40'}`}
+                          />
+                        </button>
+                      </th>
+                    );
+                  })}
                   <th className="sticky right-0 bg-card/95 px-3 py-2 text-right text-xs font-medium text-muted-text whitespace-nowrap">
                     操作
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => {
+                {pagedRows.map((row, idx) => {
                   const code = pickField(row, CODE_KEY_CANDIDATES);
                   const submitting = code ? submittingCodes.has(code) : false;
                   return (
                     <tr
-                      key={idx}
+                      key={`${safePage}-${idx}`}
                       className="border-b border-subtle/60 hover:bg-hover/50 transition-colors"
                     >
                       {columns.map((col) => (
@@ -321,17 +511,17 @@ const ScreenPage: React.FC = () => {
           )}
         </div>
 
-        {/* Footer hint */}
-        {rows.length > 0 ? (
-          <div className="mt-2 flex items-center justify-between text-xs text-muted-text">
-            <span>提示：点击"分析"按钮即可为该股票提交深度分析任务</span>
-            <button
-              type="button"
-              onClick={handleGoHome}
-              className="text-primary hover:underline"
-            >
-              前往首页查看分析进度 →
-            </button>
+        {/* Pagination */}
+        {rows.length > PAGE_SIZE ? (
+          <div className="mt-3">
+            <Pagination
+              currentPage={safePage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+            <p className="mt-1 text-center text-xs text-muted-text">
+              共 {rows.length} 条 · 第 {safePage} / {totalPages} 页
+            </p>
           </div>
         ) : null}
       </div>
