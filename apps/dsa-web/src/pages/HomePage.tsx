@@ -17,6 +17,7 @@ const HomePage: React.FC = () => {
 
   const {
     query,
+    assetType,
     inputError,
     duplicateError,
     error,
@@ -32,6 +33,7 @@ const HomePage: React.FC = () => {
     activeTasks,
     markdownDrawerOpen,
     setQuery,
+    setAssetType,
     clearError,
     loadInitialHistory,
     refreshHistory,
@@ -81,11 +83,12 @@ const HomePage: React.FC = () => {
       void submitAnalysis({
         stockCode,
         stockName,
+        assetType,
         originalQuery: query,
         selectionSource: selectionSource ?? 'manual',
       });
     },
-    [query, submitAnalysis],
+    [assetType, query, submitAnalysis],
   );
 
   const handleAskFollowUp = useCallback(() => {
@@ -107,6 +110,7 @@ const HomePage: React.FC = () => {
     void submitAnalysis({
       stockCode: selectedReport.meta.stockCode,
       stockName: selectedReport.meta.stockName,
+      assetType: selectedReport.meta.assetType ?? 'stock',
       originalQuery: selectedReport.meta.stockCode,
       selectionSource: 'manual',
       forceRefresh: true,
@@ -173,13 +177,38 @@ const HomePage: React.FC = () => {
               </svg>
             </button>
             <div className="relative min-w-0 flex-1">
+              <div className="mb-2 inline-flex h-8 rounded-lg border border-subtle bg-surface/70 p-0.5 text-xs">
+                {[
+                  { value: 'stock', label: '股票' },
+                  { value: 'futures', label: '期货' },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setAssetType(item.value as typeof assetType)}
+                    className={[
+                      'rounded-md px-3 transition-colors',
+                      assetType === item.value
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-secondary-text hover:text-foreground',
+                    ].join(' ')}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
               <StockAutocomplete
                 value={query}
                 onChange={setQuery}
                 onSubmit={(stockCode, stockName, selectionSource) => {
                   handleSubmitAnalysis(stockCode, stockName, selectionSource);
                 }}
-                placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
+                placeholder={
+                  assetType === 'futures'
+                    ? '输入期货品种或合约，如 JM2609、焦煤2609、RB'
+                    : '输入股票代码或名称，如 600519、贵州茅台、AAPL'
+                }
+                assetType={assetType}
                 disabled={isAnalyzing}
                 className={inputError ? 'border-danger/50' : undefined}
               />

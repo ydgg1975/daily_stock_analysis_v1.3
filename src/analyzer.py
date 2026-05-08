@@ -1216,11 +1216,38 @@ class GeminiAnalyzer:
             ),
         )
 
-    def _get_analysis_system_prompt(self, report_language: str, stock_code: str = "") -> str:
+    def _get_analysis_system_prompt(
+        self,
+        report_language: str,
+        stock_code: str = "",
+        asset_type: str = "stock",
+    ) -> str:
         """Build the analyzer system prompt with output-language guidance."""
         lang = normalize_report_language(report_language)
-        market_role = get_market_role(stock_code, lang)
-        market_guidelines = get_market_guidelines(stock_code, lang)
+        is_futures = str(asset_type or "stock").lower() == "futures"
+        if is_futures:
+            if lang == "en":
+                market_role = "domestic futures"
+                market_guidelines = (
+                    "- This analysis covers a domestic futures contract, not an equity.\n"
+                    "- Futures support both long and short positions. Interpret `buy` as opening/adding a long bias, "
+                    "`sell` as opening/adding a short bias, and `hold` as waiting or holding the current directional plan.\n"
+                    "- Human-readable advice must use futures wording such as long, short, wait, reduce exposure, stop loss, "
+                    "margin risk, leverage risk, rollover risk, and forced liquidation risk."
+                )
+            else:
+                market_role = "国内期货"
+                market_guidelines = (
+                    "- 本次分析对象为 **国内期货合约**，不是股票。\n"
+                    "- 期货支持做多和做空。`decision_type` 中 buy 表示做多/偏多，sell 表示做空/偏空，"
+                    "`decision_type=hold` 表示观望或维持现有多空计划；不要把 sell 写成卖出现货或股票减仓。\n"
+                    "- 面向用户的操作建议必须使用期货语义，例如做多、做空、偏多、偏空、观望、减仓、止损、保证金风险、"
+                    "杠杆风险、换月风险、强平风险。\n"
+                    "- 仪表盘信号使用做多信号、持仓观望、做空信号或风险警告，不要使用股票买入/卖出信号。"
+                )
+        else:
+            market_role = get_market_role(stock_code, lang)
+            market_guidelines = get_market_guidelines(stock_code, lang)
         skill_instructions, default_skill_policy, use_legacy_default_prompt = self._get_skill_prompt_sections()
         if use_legacy_default_prompt:
             base_prompt = self.LEGACY_DEFAULT_SYSTEM_PROMPT.replace(
@@ -1669,7 +1696,11 @@ class GeminiAnalyzer:
         code = context.get('code', 'Unknown')
         config = self._get_runtime_config()
         report_language = normalize_report_language(getattr(config, "report_language", "zh"))
-        system_prompt = self._get_analysis_system_prompt(report_language, stock_code=code)
+        system_prompt = self._get_analysis_system_prompt(
+            report_language,
+            stock_code=code,
+            asset_type=str(context.get("asset_type") or "stock"),
+        )
         
         # 请求前增加延时（防止连续请求触发限流）
         request_delay = config.gemini_request_delay
@@ -1861,19 +1892,40 @@ class GeminiAnalyzer:
         stock_name = context.get('stock_name', name)
         if not stock_name or stock_name == f'股票{code}':
             stock_name = STOCK_NAME_MAP.get(code, f'股票{code}')
+        asset_type = str(context.get("asset_type") or "stock").lower()
+        is_futures = asset_type == "futures"
+        instrument_label = "期货品种" if is_futures else "股票"
+        code_label = "期货品种" if is_futures else "股票代码"
+        name_label = "合约名称" if is_futures else "股票名称"
             
         today = context.get('today', {})
         unknown_text = get_unknown_text(report_language)
         no_data_text = get_no_data_text(report_language)
+        futures_guidance = ""
+        if is_futures:
+            futures_guidance = """
+## 期货分析约束（最高优先级）
+
+- 分析对象是国内商品期货主力连续合约，不是股票。
+- 必须围绕多空趋势、支撑压力、波动率、跳空风险、保证金/杠杆风险、主力连续换月风险展开。
+- 可结合商品供需、库存、政策、美元、利率、工业需求和通胀预期等宏观驱动。
+- 不要使用股票专属概念，包括股东、PE/PB、业绩、分红、市值、筹码分布、龙虎榜、股票公告。
+- 交易建议必须覆盖多空双向：偏多时写做多/多单/回调接多，偏空时写做空/空单/反弹试空，震荡时写观望或区间短线。
+- `decision_type` 中 buy 表示做多或偏多；sell 表示做空或偏空，不是卖出现货或股票减仓；hold 表示观望或维持现有多空计划。
+- 点位表达使用“多/空入场位、止损位、目标位”，不要使用股票的“买入价/卖出价”口径。
+- 仪表盘 `signal_type` 使用“做多信号/持仓观望/做空信号/风险警告”，不要使用股票“买入信号/卖出信号”口径。
+
+---
+"""
         
         # ========== 构建决策仪表盘格式的输入 ==========
         prompt = f"""# 决策仪表盘分析请求
 
-## 📊 股票基础信息
+{futures_guidance}## 📊 {instrument_label}基础信息
 | 项目 | 数据 |
 |------|------|
-| 股票代码 | **{code}** |
-| 股票名称 | **{stock_name}** |
+| {code_label} | **{code}** |
+| {name_label} | **{stock_name}** |
 | 分析日期 | {context.get('date', unknown_text)} |
 
 ---
@@ -2152,7 +2204,21 @@ class GeminiAnalyzer:
 4. ❓ 消息面有无重大利空或与技能结论冲突的信息？
 5. ❓ 若结论成立，具体触发条件、止损位、观察点分别是什么？
 """
-        prompt += f"""
+        if is_futures:
+            prompt += f"""
+
+### 决策仪表盘要求：
+- **合约名称**：必须输出正确的中文合约名称（如"焦煤2609"而非"股票JM2609"）
+- **核心结论**：一句话说清该做多/做空/该等
+- **持仓分类建议**：无仓位者怎么做 vs 已有多单或空单者怎么做
+- **具体狙击点位**：多/空入场价、止损价、目标价（精确到分）
+- **检查清单**：每项用 ✅/⚠️/❌ 标记
+- **消息面时间合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得包含超出近{news_window_days}日或时间未知的信息
+- **技术面一致性**：严禁把“空头排列”和“多头排列”等互斥结论同时当作有效依据；若供需/事件面与技术面冲突，必须明确写“事件先行、技术待确认”或“基本面偏多，但技术面尚未确认”
+ 
+请输出完整的 JSON 格式决策仪表盘。"""
+        else:
+            prompt += f"""
 
 ### 决策仪表盘要求：
 - **股票名称**：必须输出正确的中文全称（如"贵州茅台"而非"股票600519"）

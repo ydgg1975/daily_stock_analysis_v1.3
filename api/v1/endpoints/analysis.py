@@ -48,6 +48,7 @@ from api.v1.schemas.history import (
     ReportDetails,
 )
 from data_provider.base import canonical_stock_code, normalize_stock_code
+from src.data.futures_mapping import normalize_futures_symbol
 from src.config import Config
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.services.name_to_code_resolver import resolve_name_to_code
@@ -94,7 +95,7 @@ def _is_obviously_invalid_analysis_input(text: str) -> bool:
     return has_letters and has_digits
 
 
-def _resolve_and_normalize_input(raw_value: str) -> str:
+def _resolve_and_normalize_input(raw_value: str, asset_type: str = "stock") -> str:
     """
     Resolve and normalize a stock input for analysis requests.
 
@@ -105,6 +106,12 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     text = (raw_value or "").strip()
     if not text:
         return ""
+
+    if (asset_type or "stock").lower() == "futures":
+        normalized = normalize_futures_symbol(text)
+        if normalized:
+            return normalized
+        raise _invalid_analysis_input_error()
 
     if is_code_like(text):
         return canonical_stock_code(text)
@@ -183,7 +190,8 @@ def trigger_analysis(
         )
 
     # Normalize and de-duplicate inputs while preserving compatibility.
-    resolved = [_resolve_and_normalize_input(c) for c in stock_codes]
+    asset_type = getattr(request, "asset_type", "stock") or "stock"
+    resolved = [_resolve_and_normalize_input(c, asset_type=asset_type) for c in stock_codes]
     
     seen = set()
     unique_codes = []
@@ -191,7 +199,7 @@ def trigger_analysis(
         if not code:
             continue
         # Use normalize_stock_code to ensure '600519' and '600519.SH' are merged
-        norm = normalize_stock_code(code)
+        norm = normalize_futures_symbol(code) if asset_type == "futures" else normalize_stock_code(code)
         if norm not in seen:
             seen.add(norm)
             unique_codes.append(code)
@@ -263,6 +271,9 @@ def _handle_async_analysis_batch(
         force_refresh=request.force_refresh,
         notify=notify,
     )
+    asset_type = getattr(request, "asset_type", "stock") or "stock"
+    if asset_type != "stock":
+        submit_kwargs["asset_type"] = asset_type
 
     accepted_tasks, duplicate_errors = task_queue.submit_tasks_batch(**submit_kwargs)
 
@@ -338,13 +349,17 @@ def _handle_sync_analysis(
     
     try:
         service = AnalysisService()
-        result = service.analyze_stock(
+        analyze_kwargs = dict(
             stock_code=stock_code,
             report_type=request.report_type,
             force_refresh=request.force_refresh,
             query_id=query_id,
             send_notification=getattr(request, "notify", True),
         )
+        asset_type = getattr(request, "asset_type", "stock") or "stock"
+        if asset_type != "stock":
+            analyze_kwargs["asset_type"] = asset_type
+        result = service.analyze_stock(**analyze_kwargs)
 
         if result is None:
             error_message = service.last_error or f"分析股票 {stock_code} 失败"
@@ -441,6 +456,7 @@ def get_task_list(
             task_id=t.task_id,
             stock_code=t.stock_code,
             stock_name=t.stock_name,
+            asset_type=t.asset_type,
             status=t.status.value,
             progress=t.progress,
             message=t.message,
@@ -588,6 +604,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             progress=task.progress,
             result=None,  # In-progress tasks do not carry a result payload.
             error=task.error,
+            asset_type=task.asset_type,
             stock_name=task.stock_name,
             original_query=task.original_query,
             selection_source=task.selection_source,

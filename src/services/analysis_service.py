@@ -46,6 +46,7 @@ class AnalysisService:
         query_id: Optional[str] = None,
         send_notification: bool = True,
         progress_callback: Optional[Callable[[int, str], None]] = None,
+        asset_type: str = "stock",
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
@@ -83,6 +84,7 @@ class AnalysisService:
                 query_id=query_id,
                 query_source="api",
                 progress_callback=progress_callback,
+                asset_type=asset_type,
             )
             
             # 确定报告类型 (API: simple/detailed/full/brief -> ReportType)
@@ -107,7 +109,7 @@ class AnalysisService:
                 return None
             
             # 构建响应
-            return self._build_analysis_response(result, query_id, report_type=rt.value)
+            return self._build_analysis_response(result, query_id, report_type=rt.value, asset_type=asset_type)
             
         except Exception as e:
             self.last_error = str(e)
@@ -119,6 +121,7 @@ class AnalysisService:
         result: Any, 
         query_id: str,
         report_type: str = "detailed",
+        asset_type: str = "stock",
     ) -> Dict[str, Any]:
         """
         构建分析响应
@@ -148,6 +151,7 @@ class AnalysisService:
                 "stock_code": result.code,
                 "stock_name": stock_name,
                 "report_type": report_type,
+                "asset_type": asset_type,
                 "report_language": report_language,
                 "current_price": result.current_price,
                 "change_pct": result.change_pct,

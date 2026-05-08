@@ -588,6 +588,8 @@ class Config:
     
     # === 自选股配置 ===
     stock_list: List[str] = field(default_factory=list)
+    futures_enabled: bool = False
+    futures_list: List[str] = field(default_factory=list)
 
     # === 飞书云文档配置 ===
     feishu_app_id: Optional[str] = None
@@ -1057,6 +1059,16 @@ class Config:
         # 如果没有配置，使用默认的示例股票
         if not stock_list:
             stock_list = ['600519', '000001', '300750']
+
+        futures_enabled = parse_env_bool(os.getenv('FUTURES_ENABLED'), default=False)
+        futures_list_str = cls._resolve_env_value(
+            'FUTURES_LIST',
+            default='',
+            prefer_env_file=True,
+        )
+        from src.data.futures_mapping import parse_futures_list
+
+        futures_list = parse_futures_list(futures_list_str)
         
         # === LiteLLM multi-key parsing ===
         # GEMINI_API_KEYS (comma-separated) > GEMINI_API_KEY (single)
@@ -1311,6 +1323,8 @@ class Config:
         
         return cls(
             stock_list=stock_list,
+            futures_enabled=futures_enabled,
+            futures_list=futures_list,
             feishu_app_id=os.getenv('FEISHU_APP_ID'),
             feishu_app_secret=os.getenv('FEISHU_APP_SECRET'),
             feishu_folder_token=os.getenv('FEISHU_FOLDER_TOKEN'),
@@ -2199,6 +2213,22 @@ class Config:
             stock_list = ['000001']
 
         self.stock_list = stock_list
+
+    def refresh_futures_list(self) -> None:
+        """热读取 FUTURES_LIST 环境变量并更新配置中的期货品种列表。"""
+        env_file = os.getenv("ENV_FILE")
+        env_path = Path(env_file) if env_file else (Path(__file__).parent.parent / '.env')
+        futures_list_str = ''
+        if env_path.exists():
+            env_values = dotenv_values(env_path)
+            futures_list_str = (env_values.get('FUTURES_LIST') or '').strip()
+
+        if not futures_list_str:
+            futures_list_str = os.getenv('FUTURES_LIST', '')
+
+        from src.data.futures_mapping import parse_futures_list
+
+        self.futures_list = parse_futures_list(futures_list_str)
     
     def validate_structured(self) -> List[ConfigIssue]:
         """Return structured validation issues with severity levels.

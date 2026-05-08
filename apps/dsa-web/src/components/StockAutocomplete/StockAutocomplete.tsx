@@ -5,14 +5,16 @@
  * Supports keyboard navigation, IME input method, graceful degradation
  */
 
-import { Component, useRef, useEffect, useState } from 'react';
+import { Component, useRef, useEffect, useMemo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useStockIndex } from '../../hooks/useStockIndex';
+import { useFuturesIndex } from '../../hooks/useFuturesIndex';
 import { useAutocomplete } from '../../hooks/useAutocomplete';
 import { SuggestionsList } from './SuggestionsList';
 import { cn } from '../../utils/cn';
+import type { AssetType } from '../../types/analysis';
 
 const AUTOCOMPLETE_INPUT_CLASS =
   'input-surface input-focus-glow h-11 w-full rounded-xl border bg-transparent px-4 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60';
@@ -30,6 +32,8 @@ export interface StockAutocompleteProps {
   placeholder?: string;
   /** Additional CSS class name */
   className?: string;
+  /** Instrument universe to search */
+  assetType?: AssetType;
 }
 
 function FallbackInput({
@@ -98,8 +102,15 @@ function StockAutocompleteInner({
   disabled = false,
   placeholder = '输入股票代码或名称',
   className,
+  assetType = 'stock',
 }: StockAutocompleteProps) {
-  const { index, loading, fallback } = useStockIndex();
+  const stockIndexState = useStockIndex();
+  const futuresIndexState = useFuturesIndex(assetType === 'futures');
+  const activeIndexState = assetType === 'futures' ? futuresIndexState : stockIndexState;
+  const searchIndex = useMemo(
+    () => activeIndexState.index,
+    [activeIndexState.index],
+  );
   const {
     // query,
     setQuery,
@@ -115,7 +126,7 @@ function StockAutocompleteInner({
     setIsComposing,
     runtimeFallback,
     error: autocompleteError,
-  } = useAutocomplete(index);
+  } = useAutocomplete(searchIndex);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const prevValueRef = useRef(value);
@@ -222,7 +233,7 @@ function StockAutocompleteInner({
   };
 
   // Fallback mode: use normal input
-  if (fallback || loading || runtimeFallback) {
+  if ((assetType === 'stock' && (activeIndexState.fallback || activeIndexState.loading)) || runtimeFallback) {
     return (
       <FallbackInput
         value={value}
@@ -266,7 +277,7 @@ function StockAutocompleteInner({
       />
 
       {/* Loading indicator */}
-      {loading && (
+      {activeIndexState.loading && (
         <div className="absolute right-3 top-1/2 -translate-y-1/2">
           <div className="w-4 h-4 border-2 border-cyan/20 border-t-cyan rounded-full animate-spin" />
         </div>

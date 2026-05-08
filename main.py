@@ -238,6 +238,12 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        '--futures',
+        type=str,
+        help='指定要分析的国内期货品种，逗号分隔（如 RB,I,AU）'
+    )
+
+    parser.add_argument(
         '--no-notify',
         action='store_true',
         help='不发送推送通知'
@@ -405,7 +411,8 @@ def _compute_trading_day_filter(
 def run_full_analysis(
     config: Config,
     args: argparse.Namespace,
-    stock_codes: Optional[List[str]] = None
+    stock_codes: Optional[List[str]] = None,
+    asset_type: str = "stock",
 ):
     """
     执行完整的分析流程（个股 + 大盘复盘）
@@ -418,15 +425,23 @@ def run_full_analysis(
     from src.core.pipeline import StockAnalysisPipeline
 
     try:
+        asset_type = (asset_type or "stock").lower()
         # Issue #529: Hot-reload STOCK_LIST from .env on each scheduled run
-        if stock_codes is None:
+        if stock_codes is None and asset_type == "stock":
             config.refresh_stock_list()
+        elif stock_codes is None and asset_type == "futures":
+            config.refresh_futures_list()
 
         # Issue #373: Trading day filter (per-stock, per-market)
-        effective_codes = stock_codes if stock_codes is not None else config.stock_list
-        filtered_codes, effective_region, should_skip = _compute_trading_day_filter(
-            config, args, effective_codes
+        effective_codes = stock_codes if stock_codes is not None else (
+            config.futures_list if asset_type == "futures" else config.stock_list
         )
+        if asset_type == "futures":
+            filtered_codes, effective_region, should_skip = effective_codes, "", False
+        else:
+            filtered_codes, effective_region, should_skip = _compute_trading_day_filter(
+                config, args, effective_codes
+            )
         if should_skip:
             logger.info(
                 "今日所有相关市场均为非交易日，跳过执行。可使用 --force-run 强制执行。"
@@ -444,6 +459,7 @@ def run_full_analysis(
         # Issue #190: 个股与大盘复盘合并推送
         merge_notification = (
             getattr(config, 'merge_email_notification', False)
+            and asset_type == "stock"
             and config.market_review_enabled
             and not getattr(args, 'no_market_review', False)
             and not config.single_stock_notify
@@ -459,7 +475,8 @@ def run_full_analysis(
             max_workers=args.workers,
             query_id=query_id,
             query_source="cli",
-            save_context_snapshot=save_context_snapshot
+            save_context_snapshot=save_context_snapshot,
+            asset_type=asset_type,
         )
 
         # 1. 运行个股分析
@@ -474,6 +491,7 @@ def run_full_analysis(
         analysis_delay = getattr(config, 'analysis_delay', 0)
         if (
             analysis_delay > 0
+            and asset_type == "stock"
             and config.market_review_enabled
             and not args.no_market_review
             and effective_region != ''
@@ -484,7 +502,8 @@ def run_full_analysis(
         # 2. 运行大盘复盘（如果启用且不是仅个股模式）
         market_report = ""
         if (
-            config.market_review_enabled
+            asset_type == "stock"
+            and config.market_review_enabled
             and not args.no_market_review
             and effective_region != ''
         ):
@@ -754,6 +773,13 @@ def main() -> int:
         stock_codes = [canonical_stock_code(c) for c in args.stocks.split(',') if (c or "").strip()]
         logger.info(f"使用命令行指定的股票列表: {stock_codes}")
 
+    futures_codes = None
+    if getattr(args, "futures", None):
+        from src.data.futures_mapping import parse_futures_list
+
+        futures_codes = parse_futures_list(args.futures)
+        logger.info(f"使用命令行指定的期货品种列表: {futures_codes}")
+
     # === 处理 --webui / --webui-only 参数，映射到 --serve / --serve-only ===
     if args.webui:
         args.serve = True
@@ -934,7 +960,10 @@ def main() -> int:
 
         # 模式3: 正常单次运行
         if config.run_immediately:
-            run_full_analysis(config, args, stock_codes)
+            if futures_codes is not None:
+                run_full_analysis(config, args, futures_codes, asset_type="futures")
+            else:
+                run_full_analysis(config, args, stock_codes)
         else:
             logger.info("配置为不立即运行分析 (RUN_IMMEDIATELY=false)")
 

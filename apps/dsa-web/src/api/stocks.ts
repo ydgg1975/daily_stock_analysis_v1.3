@@ -1,4 +1,6 @@
 import apiClient from './index';
+import { toCamelCase } from './utils';
+import type { StockIndexItem } from '../types/stockIndex';
 
 export type ExtractItem = {
   code?: string | null;
@@ -13,6 +15,14 @@ export type ExtractFromImageResponse = {
 };
 
 export const stocksApi = {
+  async getFuturesIndex(): Promise<StockIndexItem[]> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/stocks/futures-index', {
+      timeout: 60000,
+    });
+    const data = toCamelCase<{ items?: StockIndexItem[] }>(response.data);
+    return data.items ?? [];
+  },
+
   async extractFromImage(file: File): Promise<ExtractFromImageResponse> {
     const formData = new FormData();
     formData.append('file', file);

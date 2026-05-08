@@ -92,6 +92,26 @@ class ExtractFromImageResponse(BaseModel):
     raw_text: Optional[str] = Field(None, description="原始 LLM 响应（调试用）")
 
 
+class FuturesIndexItem(BaseModel):
+    """期货搜索候选项"""
+
+    canonical_code: str = Field(..., description="标准合约代码")
+    display_code: str = Field(..., description="展示代码")
+    name_zh: str = Field(..., description="中文名称")
+    aliases: List[str] = Field(default_factory=list, description="搜索别名")
+    market: str = Field("FUTURES", description="市场类型")
+    asset_type: str = Field("futures", description="资产类型")
+    exchange: Optional[str] = Field(None, description="交易所")
+    active: bool = Field(True, description="是否可用")
+    popularity: Optional[int] = Field(None, description="排序权重")
+
+
+class FuturesIndexResponse(BaseModel):
+    """期货搜索候选响应"""
+
+    items: List[FuturesIndexItem] = Field(default_factory=list, description="期货候选项")
+
+
 class StockHistoryResponse(BaseModel):
     """股票历史行情响应"""
     

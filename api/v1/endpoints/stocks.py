@@ -19,6 +19,7 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
+    FuturesIndexResponse,
     KLineData,
     StockHistoryResponse,
     StockQuote,
@@ -35,6 +36,7 @@ from src.services.import_parser import (
     parse_import_from_text,
 )
 from src.services.stock_service import StockService
+from src.services.futures_index_service import get_futures_index_items
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,24 @@ router = APIRouter()
 
 # 须在 /{stock_code} 路由之前定义
 ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
+
+
+@router.get(
+    "/futures-index",
+    response_model=FuturesIndexResponse,
+    summary="获取国内期货搜索候选",
+    description="返回当前可交易的国内期货品种、主力连续和具体合约候选，用于 Web 期货搜索框。",
+)
+def get_futures_index() -> FuturesIndexResponse:
+    """Return domestic futures autocomplete candidates."""
+    try:
+        return FuturesIndexResponse(items=get_futures_index_items())
+    except Exception as exc:
+        logger.error("[futures-index] 获取期货候选失败: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "futures_index_unavailable", "message": "获取期货候选失败"},
+        )
 
 
 @router.post(

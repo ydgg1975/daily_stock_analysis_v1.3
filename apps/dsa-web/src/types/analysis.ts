@@ -5,9 +5,12 @@
 
 // ============ Request Types ============
 
+export type AssetType = 'stock' | 'futures';
+
 export interface AnalysisRequest {
   stockCode?: string;
   stockCodes?: string[];
+  assetType?: AssetType;
   reportType?: 'simple' | 'detailed' | 'full' | 'brief';
   forceRefresh?: boolean;
   asyncMode?: boolean;
@@ -28,6 +31,7 @@ export interface ReportMeta {
   stockCode: string;
   stockName: string;
   reportType: 'simple' | 'detailed' | 'full' | 'brief';
+  assetType?: AssetType;
   reportLanguage?: ReportLanguage;
   createdAt: string;
   currentPrice?: number;
@@ -148,6 +152,7 @@ export interface TaskStatus {
   progress?: number;
   result?: AnalysisResult;
   error?: string;
+  assetType?: AssetType;
   stockName?: string;
   originalQuery?: string;
   selectionSource?: string;
@@ -158,6 +163,7 @@ export interface TaskInfo {
   taskId: string;
   stockCode: string;
   stockName?: string;
+  assetType?: AssetType;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   message?: string;

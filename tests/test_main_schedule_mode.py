@@ -266,7 +266,14 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertEqual(call_order, ["reload_env", "reset_instance", "get_config"])
 
     def test_schedule_time_provider_propagates_config_read_failures(self) -> None:
-        with patch(
+        clean_env = dict(os.environ)
+        clean_env.pop("SCHEDULE_TIME", None)
+
+        with patch.dict(os.environ, clean_env, clear=True), patch.object(
+            main,
+            "_INITIAL_PROCESS_ENV",
+            {},
+        ), patch(
             "src.core.config_manager.ConfigManager.read_config_map",
             side_effect=RuntimeError("boom"),
         ):

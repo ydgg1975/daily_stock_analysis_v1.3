@@ -157,6 +157,38 @@ describe('HomePage', () => {
     expect(screen.getByText(/股票 600519 正在分析中/).closest('[role="alert"]')).toBeInTheDocument();
   });
 
+  it('submits futures analysis when the futures asset type is selected', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 0,
+      page: 1,
+      limit: 20,
+      items: [],
+    });
+    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
+      taskId: 'task-futures-1',
+      status: 'pending',
+    });
+
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '期货' }));
+    const input = screen.getByPlaceholderText('输入期货品种或合约，如 JM2609、焦煤2609、RB');
+    fireEvent.change(input, { target: { value: '焦煤2609' } });
+    fireEvent.click(screen.getByRole('button', { name: '分析' }));
+
+    await waitFor(() => {
+      expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
+        stockCode: '焦煤2609',
+        assetType: 'futures',
+        originalQuery: '焦煤2609',
+      }));
+    });
+  });
+
   it('navigates to chat with report context when asking a follow-up question', async () => {
     vi.mocked(historyApi.getList).mockResolvedValue({
       total: 1,

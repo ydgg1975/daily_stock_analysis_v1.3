@@ -49,6 +49,7 @@ from sqlalchemy.orm import (
     sessionmaker,
     Session,
 )
+from sqlalchemy.pool import NullPool
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from src.config import get_config
@@ -672,6 +673,11 @@ class DatabaseManager:
             engine_kwargs["connect_args"] = {
                 "timeout": self._sqlite_busy_timeout_ms / 1000,
             }
+        if str(db_url).startswith("sqlite:") and not str(db_url).endswith(":memory:"):
+            # Avoid keeping idle file handles open on Windows; tests and
+            # maintenance tasks often need to remove SQLite files immediately
+            # after closing sessions.
+            engine_kwargs["poolclass"] = NullPool
 
         # 创建数据库引擎
         self._engine = create_engine(

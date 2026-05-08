@@ -3,7 +3,7 @@ import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import type { ParsedApiError } from '../api/error';
 import { getParsedApiError } from '../api/error';
 import { historyApi } from '../api/history';
-import type { AnalysisReport, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
+import type { AnalysisReport, AssetType, HistoryItem, HistoryListResponse, TaskInfo } from '../types/analysis';
 import { getRecentStartDate, getTodayInShanghai } from '../utils/format';
 import { isObviouslyInvalidStockQuery, looksLikeStockCode, validateStockCode } from '../utils/validation';
 
@@ -20,6 +20,7 @@ type FetchHistoryOptions = {
 type SubmitAnalysisOptions = {
   stockCode?: string;
   stockName?: string;
+  assetType?: AssetType;
   originalQuery?: string;
   selectionSource?: SelectionSource;
   notify?: boolean;
@@ -34,6 +35,7 @@ const dismissedTaskIds = new Set<string>();
 export interface StockPoolState {
   query: string;
   selectionSource: SelectionSource;
+  assetType: AssetType;
   notify: boolean;
   inputError?: string;
   duplicateError: string | null;
@@ -51,6 +53,7 @@ export interface StockPoolState {
   activeTasks: TaskInfo[];
   markdownDrawerOpen: boolean;
   setQuery: (query: string) => void;
+  setAssetType: (assetType: AssetType) => void;
   clearError: () => void;
   clearInlineMessages: () => void;
   openMarkdownDrawer: () => void;
@@ -74,6 +77,7 @@ export interface StockPoolState {
 const initialState = {
   query: '',
   selectionSource: 'manual' as SelectionSource,
+  assetType: 'stock' as AssetType,
   notify: true,
   inputError: undefined,
   duplicateError: null,
@@ -181,6 +185,14 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     set({
       query,
       selectionSource: 'manual',
+      inputError: undefined,
+      duplicateError: null,
+    });
+  },
+
+  setAssetType: (assetType) => {
+    set({
+      assetType,
       inputError: undefined,
       duplicateError: null,
     });
@@ -306,23 +318,24 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const rawStockCode = options?.stockCode ?? state.query;
     const stockCodeInput = rawStockCode.trim();
     const stockName = options?.stockName;
+    const assetType = options?.assetType ?? state.assetType;
     const selectionSource = options?.selectionSource ?? state.selectionSource;
     const originalQuery = (options?.originalQuery ?? state.query).trim();
     const notify = options?.notify ?? state.notify;
     const forceRefresh = options?.forceRefresh ?? false;
 
     if (!stockCodeInput) {
-      set({ inputError: '请输入股票代码', duplicateError: null });
+      set({ inputError: assetType === 'futures' ? '请输入期货品种' : '请输入股票代码', duplicateError: null });
       return;
     }
 
-    if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
+    if (assetType === 'stock' && selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
       set({ inputError: '请输入有效的股票代码或股票名称', duplicateError: null });
       return;
     }
 
     let normalizedStockCode = stockCodeInput;
-    if (selectionSource === 'autocomplete' || looksLikeStockCode(stockCodeInput)) {
+    if (assetType === 'stock' && (selectionSource === 'autocomplete' || looksLikeStockCode(stockCodeInput))) {
       const { valid, message, normalized } = validateStockCode(stockCodeInput);
       if (!valid) {
         set({ inputError: message, duplicateError: null });
@@ -342,6 +355,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     try {
       await analysisApi.analyzeAsync({
         stockCode: normalizedStockCode,
+        assetType,
         reportType: 'detailed',
         stockName,
         originalQuery: originalQuery || stockCodeInput,
@@ -364,8 +378,9 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
       }
 
       if (error instanceof DuplicateTaskError) {
+        const label = assetType === 'futures' ? '期货品种' : '股票';
         set({
-          duplicateError: `股票 ${error.stockCode} 正在分析中，请等待完成`,
+          duplicateError: `${label} ${error.stockCode} 正在分析中，请等待完成`,
         });
         return;
       }

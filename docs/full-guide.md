@@ -336,6 +336,8 @@ daily_stock_analysis/
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `STOCK_LIST` | 自选股代码（逗号分隔） | - |
+| `FUTURES_ENABLED` | 是否启用国内商品期货配置；CLI/API 仍可显式指定期货分析 | `false` |
+| `FUTURES_LIST` | 国内商品期货品种或具体合约（逗号分隔），支持 `RB,I,AU`、`JM2609` 和 `焦煤2609` 等输入 | - |
 | `ADMIN_AUTH_ENABLED` | Web 登录：设为 `true` 启用密码保护；首次访问在网页设置初始密码，可在「系统设置 > 修改密码」修改；忘记密码执行 `python -m src.auth reset_password` | `false` |
 | `TRUST_X_FORWARDED_FOR` | 单层可信反向代理部署时设为 `true`，取 `X-Forwarded-For` 最右值作为真实客户端 IP（用于登录限流等）；直连公网时保持 `false` 防伪造。多级代理/CDN 场景下限流 key 可能退化为边缘代理 IP，需额外评估 | `false` |
 | `MAX_WORKERS` | 并发线程数 | `3` |
@@ -536,6 +538,8 @@ python main.py                        # 完整分析（个股 + 大盘复盘）
 python main.py --market-review        # 仅大盘复盘
 python main.py --no-market-review     # 仅个股分析
 python main.py --stocks 600519,300750 # 指定股票
+python main.py --futures RB,I,AU      # 指定国内期货主力连续合约
+python main.py --futures 焦煤2609     # 指定国内期货具体合约（JM2609）
 python main.py --dry-run              # 仅获取数据，不 AI 分析
 python main.py --no-notify            # 不发送推送
 python main.py --schedule             # 定时任务模式
@@ -1136,6 +1140,23 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 | 港股 | hk + 5位数字 | `hk00700`、`hk09988` |
 | 美股 | 1-5 字母（可选 .X 后缀） | `AAPL`、`TSLA`、`BRK.B` |
 | 美股指数 | SPX/DJI/IXIC 等 | `SPX`、`DJI`、`NASDAQ`、`VIX` |
+
+### 国内期货分析
+
+国内期货分析走独立的 `futures` 资产类型。输入 `RB`、`I`、`AU` 这类品种代码时会自动转换为 `RB0`、`I0`、`AU0` 等新浪主力连续合约；输入 `JM2609`、`焦煤2609` 这类具体合约时会保留合约月份并拉取具体合约日线。也支持部分中文别名，例如 `螺纹钢`、`铁矿石`、`沪金`、`焦煤`。
+
+```bash
+# 临时分析指定品种
+python main.py --futures RB,I,AU --no-notify
+python main.py --futures 焦煤2609 --no-notify
+
+# 使用 .env 中的默认期货列表
+FUTURES_ENABLED=true
+FUTURES_LIST=RB,I,AU,JM2609
+python main.py --futures RB,I,AU,焦煤2609
+```
+
+Web/API 调用时可在分析请求里传入 `asset_type=futures`，例如 `stock_codes=["RB", "I", "JM2609"]`。Web 首页切到“期货”后，搜索框会通过 `GET /api/v1/stocks/futures-index` 加载 AkShare 当前可交易期货候选，覆盖上期所、大商所、郑商所、广期所和中金所接口返回的品种、主力连续和具体合约；接口失败时前端会回退到内置基础候选集。搜索支持中文品种、主力代码和具体合约代码的模糊匹配。期货模式会跳过股票基本面、筹码分布、股东、估值等股票专属逻辑，分析提示词会改用多空趋势、支撑压力、保证金/杠杆、换月和商品供需等期货语义。交易建议保留兼容字段 `decision_type=buy/hold/sell`，但在期货语境下分别解释为做多/观望/做空；Web 策略点位也显示为“理想入场/二次入场”，避免把做空建议误写成股票卖出或减仓。
 
 ### 注意事项
 

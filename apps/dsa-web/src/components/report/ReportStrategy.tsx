@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { ReportLanguage, ReportStrategy as ReportStrategyType } from '../../types/analysis';
+import type { AssetType, ReportLanguage, ReportStrategy as ReportStrategyType } from '../../types/analysis';
 import { Card } from '../common';
 import { DashboardPanelHeader } from '../dashboard';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
@@ -7,6 +7,7 @@ import { getReportText, normalizeReportLanguage } from '../../utils/reportLangua
 interface ReportStrategyProps {
   strategy?: ReportStrategyType;
   language?: ReportLanguage;
+  assetType?: AssetType;
 }
 
 interface StrategyItemProps {
@@ -37,22 +38,23 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
 /**
  * 策略点位区组件 - 终端风格
  */
-export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, language = 'zh' }) => {
+export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, language = 'zh', assetType = 'stock' }) => {
   if (!strategy) {
     return null;
   }
 
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
+  const isFutures = assetType === 'futures';
 
   const strategyItems = [
     {
-      label: text.idealBuy,
+      label: isFutures ? text.idealEntry : text.idealBuy,
       value: strategy.idealBuy,
       tone: '--home-strategy-buy',
     },
     {
-      label: text.secondaryBuy,
+      label: isFutures ? text.secondaryEntry : text.secondaryBuy,
       value: strategy.secondaryBuy,
       tone: '--home-strategy-secondary',
     },

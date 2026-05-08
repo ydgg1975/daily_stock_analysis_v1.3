@@ -27,6 +27,13 @@ class TaskStatusEnum(str, Enum):
 
 class AnalyzeRequest(BaseModel):
     """Analysis request parameters"""
+
+    asset_type: str = Field(
+        "stock",
+        description="资产类型：stock(股票) / futures(国内期货主力合约)",
+        pattern="^(stock|futures)$",
+        example="stock",
+    )
     
     stock_code: Optional[str] = Field(
         None, 
@@ -227,6 +234,7 @@ class TaskStatus(BaseModel):
         None, 
         description="错误信息（仅在 failed 时存在）"
     )
+    asset_type: str = Field("stock", description="资产类型：stock/futures")
     stock_name: Optional[str] = Field(None, description="股票名称")
     original_query: Optional[str] = Field(None, description="用户原始输入")
     selection_source: Optional[str] = Field(
@@ -243,6 +251,7 @@ class TaskStatus(BaseModel):
                 "progress": 100,
                 "result": None,
                 "error": None,
+                "asset_type": "stock",
                 "stock_name": "贵州茅台",
                 "original_query": "茅台",
                 "selection_source": "autocomplete"
@@ -260,6 +269,7 @@ class TaskInfo(BaseModel):
     task_id: str = Field(..., description="任务 ID")
     stock_code: str = Field(..., description="股票代码")
     stock_name: Optional[str] = Field(None, description="股票名称")
+    asset_type: str = Field("stock", description="资产类型：stock/futures")
     status: TaskStatusEnum = Field(..., description="任务状态")
     progress: int = Field(0, description="进度百分比 (0-100)", ge=0, le=100)
     message: Optional[str] = Field(None, description="状态消息")
@@ -281,6 +291,7 @@ class TaskInfo(BaseModel):
                 "task_id": "abc123def456",
                 "stock_code": "600519",
                 "stock_name": "贵州茅台",
+                "asset_type": "stock",
                 "status": "processing",
                 "progress": 50,
                 "message": "正在分析中...",

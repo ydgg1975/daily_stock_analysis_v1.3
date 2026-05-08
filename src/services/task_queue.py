@@ -32,14 +32,18 @@ from src.utils.analysis_metadata import SELECTION_SOURCES
 logger = logging.getLogger(__name__)
 
 
-def _dedupe_stock_code_key(stock_code: str) -> str:
+def _dedupe_stock_code_key(stock_code: str, asset_type: Optional[str] = None) -> str:
     """
     Build the internal duplicate-detection key for a stock code.
 
     The task queue should treat equivalent market code shapes as the same
     underlying stock, e.g. ``600519`` and ``600519.SH``.
     """
-    return canonical_stock_code(normalize_stock_code(stock_code))
+    canonical = canonical_stock_code(normalize_stock_code(stock_code))
+    if asset_type is None or (asset_type or "stock").strip().lower() == "stock":
+        return canonical
+    normalized_asset = (asset_type or "stock").strip().lower()
+    return f"{normalized_asset}:{canonical}"
 
 
 class TaskStatus(str, Enum):
@@ -71,6 +75,7 @@ class TaskInfo:
     completed_at: Optional[datetime] = None
     original_query: Optional[str] = None
     selection_source: Optional[str] = None
+    asset_type: str = "stock"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task info into an API-friendly dictionary."""
@@ -88,6 +93,7 @@ class TaskInfo:
             "error": self.error,
             "original_query": self.original_query,
             "selection_source": self.selection_source,
+            "asset_type": self.asset_type,
         }
     
     def copy(self) -> 'TaskInfo':
@@ -107,6 +113,7 @@ class TaskInfo:
             completed_at=self.completed_at,
             original_query=self.original_query,
             selection_source=self.selection_source,
+            asset_type=self.asset_type,
         )
 
 
@@ -300,6 +307,7 @@ class AnalysisTaskQueue:
         selection_source: Optional[str] = None,
         report_type: str = "detailed",
         force_refresh: bool = False,
+        asset_type: str = "stock",
     ) -> TaskInfo:
         """
         Submit a single analysis task.
@@ -329,6 +337,7 @@ class AnalysisTaskQueue:
             selection_source=selection_source,
             report_type=report_type,
             force_refresh=force_refresh,
+            asset_type=asset_type,
         )
         if duplicates:
             raise duplicates[0]
@@ -343,6 +352,7 @@ class AnalysisTaskQueue:
         report_type: str = "detailed",
         force_refresh: bool = False,
         notify: bool = True,
+        asset_type: str = "stock",
     ) -> Tuple[List[TaskInfo], List[DuplicateTaskError]]:
         """
         Submit analysis tasks in batch.
@@ -363,7 +373,7 @@ class AnalysisTaskQueue:
 
         with self._data_lock:
             for stock_code in canonical_codes:
-                dedupe_key = _dedupe_stock_code_key(stock_code)
+                dedupe_key = _dedupe_stock_code_key(stock_code, asset_type=asset_type)
                 if dedupe_key in self._analyzing_stocks:
                     existing_task_id = self._analyzing_stocks[dedupe_key]
                     duplicates.append(DuplicateTaskError(stock_code, existing_task_id))
@@ -379,6 +389,7 @@ class AnalysisTaskQueue:
                     report_type=report_type,
                     original_query=original_query,
                     selection_source=selection_source,
+                    asset_type=asset_type,
                 )
                 self._tasks[task_id] = task_info
                 self._analyzing_stocks[dedupe_key] = task_id
@@ -391,6 +402,7 @@ class AnalysisTaskQueue:
                         report_type,
                         force_refresh,
                         notify,
+                        asset_type,
                     )
                 except Exception:
                     # Roll back the current batch to avoid partial submission.
@@ -419,7 +431,7 @@ class AnalysisTaskQueue:
 
             task = self._tasks.pop(task_id, None)
             if task:
-                dedupe_key = _dedupe_stock_code_key(task.stock_code)
+                dedupe_key = _dedupe_stock_code_key(task.stock_code, asset_type=task.asset_type)
                 if self._analyzing_stocks.get(dedupe_key) == task_id:
                     del self._analyzing_stocks[dedupe_key]
     
@@ -532,6 +544,7 @@ class AnalysisTaskQueue:
         report_type: str,
         force_refresh: bool,
         notify: bool = True,
+        asset_type: str = "stock",
     ) -> Optional[Dict[str, Any]]:
         """
         执行分析任务（在线程池中运行）
@@ -574,6 +587,7 @@ class AnalysisTaskQueue:
                 query_id=task_id,
                 send_notification=notify,
                 progress_callback=_on_progress,
+                asset_type=asset_type,
             )
             
             if result:
@@ -589,7 +603,7 @@ class AnalysisTaskQueue:
                         task.stock_name = result.get("stock_name", task.stock_name)
                         
                         # 从分析中集合移除
-                        dedupe_key = _dedupe_stock_code_key(task.stock_code)
+                        dedupe_key = _dedupe_stock_code_key(task.stock_code, asset_type=task.asset_type)
                         if dedupe_key in self._analyzing_stocks:
                             del self._analyzing_stocks[dedupe_key]
                 
@@ -617,7 +631,7 @@ class AnalysisTaskQueue:
                     task.message = f"分析失败: {error_msg[:50]}"
                     
                     # 从分析中集合移除
-                    dedupe_key = _dedupe_stock_code_key(task.stock_code)
+                    dedupe_key = _dedupe_stock_code_key(task.stock_code, asset_type=task.asset_type)
                     if dedupe_key in self._analyzing_stocks:
                         del self._analyzing_stocks[dedupe_key]
             

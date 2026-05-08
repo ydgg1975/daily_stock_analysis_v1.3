@@ -25,6 +25,7 @@ import pandas as pd
 from src.config import get_config, Config
 from src.storage import get_db
 from data_provider import DataFetcherManager
+from data_provider.futures_fetcher import FuturesFetcher
 from data_provider.base import normalize_stock_code
 from data_provider.realtime_types import ChipDistribution
 from src.analyzer import GeminiAnalyzer, AnalysisResult, fill_chip_structure_if_needed, fill_price_position_if_needed
@@ -78,6 +79,7 @@ class StockAnalysisPipeline:
         query_source: Optional[str] = None,
         save_context_snapshot: Optional[bool] = None,
         progress_callback: Optional[Callable[[int, str], None]] = None,
+        asset_type: str = "stock",
     ):
         """
         初始化调度器
@@ -91,6 +93,7 @@ class StockAnalysisPipeline:
         self.source_message = source_message
         self.query_id = query_id
         self.query_source = self._resolve_query_source(query_source)
+        self.asset_type = (asset_type or "stock").strip().lower()
         self.save_context_snapshot = (
             self.config.save_context_snapshot if save_context_snapshot is None else save_context_snapshot
         )
@@ -99,6 +102,7 @@ class StockAnalysisPipeline:
         # 初始化各模块
         self.db = get_db()
         self.fetcher_manager = DataFetcherManager()
+        self.futures_fetcher = FuturesFetcher()
         # 不再单独创建 akshare_fetcher，统一使用 fetcher_manager 获取增强数据
         self.trend_analyzer = StockTrendAnalyzer()  # 技术分析器
         self.analyzer = GeminiAnalyzer(config=self.config)
@@ -157,6 +161,20 @@ class StockAnalysisPipeline:
             )
             self.social_sentiment_service = None
 
+    @property
+    def _is_futures_mode(self) -> bool:
+        return getattr(self, "asset_type", "stock") == "futures"
+
+    def _get_display_name_for_asset(self, code: str, *, allow_realtime: bool = True) -> Optional[str]:
+        if self._is_futures_mode:
+            return self.futures_fetcher.get_stock_name(code)
+        return self.fetcher_manager.get_stock_name(code, allow_realtime=allow_realtime)
+
+    def _get_daily_data_for_asset(self, code: str, days: int = 30):
+        if self._is_futures_mode:
+            return self.futures_fetcher.get_daily_data(code, days=days), self.futures_fetcher.name
+        return self.fetcher_manager.get_daily_data(code, days=days)
+
     def _emit_progress(self, progress: int, message: str) -> None:
         """Best-effort bridge from pipeline stages to task SSE progress."""
         callback = getattr(self, "progress_callback", None)
@@ -204,7 +222,7 @@ class StockAnalysisPipeline:
         stock_name = code
         try:
             # 首先获取股票名称
-            stock_name = self.fetcher_manager.get_stock_name(code, allow_realtime=False)
+            stock_name = self._get_display_name_for_asset(code, allow_realtime=False)
 
             target_date = self._resolve_resume_target_date(
                 code, current_time=current_time
@@ -219,7 +237,7 @@ class StockAnalysisPipeline:
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            df, source_name = self._get_daily_data_for_asset(code, days=30)
 
             if df is None or df.empty:
                 return False, "获取数据为空"
@@ -259,12 +277,12 @@ class StockAnalysisPipeline:
         try:
             self._emit_progress(18, f"{code}：正在获取行情与筹码数据")
             # 获取股票名称（先走轻量名称路径，后续若 realtime_quote 有 name 再覆盖）
-            stock_name = self.fetcher_manager.get_stock_name(code, allow_realtime=False)
+            stock_name = self._get_display_name_for_asset(code, allow_realtime=False)
 
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
             try:
-                if self.config.enable_realtime_quote:
+                if self.config.enable_realtime_quote and not self._is_futures_mode:
                     realtime_quote = self.fetcher_manager.get_realtime_quote(code, log_final_failure=False)
                     if realtime_quote:
                         # 使用实时行情返回的真实股票名称
@@ -290,7 +308,10 @@ class StockAnalysisPipeline:
             # Step 2: 获取筹码分布 - 使用统一入口，带熔断保护
             chip_data = None
             try:
-                chip_data = self.fetcher_manager.get_chip_distribution(code)
+                if self._is_futures_mode:
+                    logger.debug(f"{stock_name}({code}) 期货模式跳过筹码分布")
+                else:
+                    chip_data = self.fetcher_manager.get_chip_distribution(code)
                 if chip_data:
                     logger.info(f"{stock_name}({code}) 筹码分布: 获利比例={chip_data.profit_ratio:.1%}, "
                               f"90%集中度={chip_data.concentration_90:.2%}")
@@ -319,18 +340,26 @@ class StockAnalysisPipeline:
             # - 关闭开关时仍返回 not_supported 结构
             fundamental_context = None
             try:
-                fundamental_context = self.fetcher_manager.get_fundamental_context(
-                    code,
-                    budget_seconds=getattr(self.config, 'fundamental_stage_timeout_seconds', 1.5),
-                )
+                if self._is_futures_mode:
+                    fundamental_context = self.fetcher_manager.build_failed_fundamental_context(
+                        code,
+                        "futures asset type does not support stock fundamentals",
+                    )
+                    fundamental_context["asset_type"] = "futures"
+                else:
+                    fundamental_context = self.fetcher_manager.get_fundamental_context(
+                        code,
+                        budget_seconds=getattr(self.config, 'fundamental_stage_timeout_seconds', 1.5),
+                    )
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 基本面聚合失败: {e}")
                 fundamental_context = self.fetcher_manager.build_failed_fundamental_context(code, str(e))
 
-            fundamental_context = self._attach_belong_boards_to_fundamental_context(
-                code,
-                fundamental_context,
-            )
+            if not self._is_futures_mode:
+                fundamental_context = self._attach_belong_boards_to_fundamental_context(
+                    code,
+                    fundamental_context,
+                )
 
             # P0: write-only snapshot, fail-open, no read dependency on this table.
             try:
@@ -356,7 +385,7 @@ class StockAnalysisPipeline:
                 if historical_bars:
                     df = pd.DataFrame([bar.to_dict() for bar in historical_bars])
                     # Issue #234: Augment with realtime for intraday MA calculation
-                    if self.config.enable_realtime_quote and realtime_quote:
+                    if self.config.enable_realtime_quote and realtime_quote and not self._is_futures_mode:
                         df = self._augment_historical_with_realtime(df, realtime_quote, code)
                     trend_result = self.trend_analyzer.analyze(df, code)
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
@@ -419,7 +448,12 @@ class StockAnalysisPipeline:
                 logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
 
             # Step 4.5: Social sentiment intelligence (US stocks only)
-            if self.social_sentiment_service is not None and self.social_sentiment_service.is_available and is_us_stock_code(code):
+            if (
+                not self._is_futures_mode
+                and self.social_sentiment_service is not None
+                and self.social_sentiment_service.is_available
+                and is_us_stock_code(code)
+            ):
                 try:
                     social_context = self.social_sentiment_service.get_social_context(code)
                     if social_context:
@@ -550,6 +584,8 @@ class StockAnalysisPipeline:
         """
         enhanced = context.copy()
         enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        enhanced["asset_type"] = self.asset_type
+        enhanced["instrument_type"] = self.asset_type
         
         # 添加股票名称
         if stock_name:
@@ -1698,15 +1734,23 @@ class StockAnalysisPipeline:
         
         # 使用配置中的股票列表
         if stock_codes is None:
-            self.config.refresh_stock_list()
-            stock_codes = self.config.stock_list
+            if self._is_futures_mode:
+                self.config.refresh_futures_list()
+                stock_codes = self.config.futures_list
+            else:
+                self.config.refresh_stock_list()
+                stock_codes = self.config.stock_list
         
         if not stock_codes:
-            logger.error("未配置自选股列表，请在 .env 文件中设置 STOCK_LIST")
+            if self._is_futures_mode:
+                logger.error("未配置期货品种列表，请在 .env 文件中设置 FUTURES_LIST")
+            else:
+                logger.error("未配置自选股列表，请在 .env 文件中设置 STOCK_LIST")
             return []
         
-        logger.info(f"===== 开始分析 {len(stock_codes)} 只股票 =====")
-        logger.info(f"股票列表: {', '.join(stock_codes)}")
+        instrument_label = "期货品种" if self._is_futures_mode else "股票"
+        logger.info(f"===== 开始分析 {len(stock_codes)} 只{instrument_label} =====")
+        logger.info(f"{instrument_label}列表: {', '.join(stock_codes)}")
         logger.info(f"并发数: {self.max_workers}, 模式: {'仅获取数据' if dry_run else '完整分析'}")
 
         # 冻结本轮运行的统一参考时间，避免跨市场收盘边界时同批股票使用不同目标交易日。
@@ -1714,14 +1758,14 @@ class StockAnalysisPipeline:
         
         # === 批量预取实时行情（优化：避免每只股票都触发全量拉取）===
         # 只有股票数量 >= 5 时才进行预取，少量股票直接逐个查询更高效
-        if len(stock_codes) >= 5:
+        if len(stock_codes) >= 5 and not self._is_futures_mode:
             prefetch_count = self.fetcher_manager.prefetch_realtime_quotes(stock_codes)
             if prefetch_count > 0:
                 logger.info(f"已启用批量预取架构：一次拉取全市场数据，{len(stock_codes)} 只股票共享缓存")
 
         # Issue #455: 预取股票名称，避免并发分析时显示「股票xxxxx」
         # dry_run 仅做数据拉取，不需要名称预取，避免额外网络开销
-        if not dry_run:
+        if not dry_run and not self._is_futures_mode:
             self.fetcher_manager.prefetch_stock_names(stock_codes, use_bulk=False)
 
         # 单股推送模式（#55）：从配置读取

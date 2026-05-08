@@ -104,9 +104,19 @@ def _resolve_asset_path(assets_dir: Path, asset_path: str) -> Optional[Path]:
 def _missing_asset_media_type(asset_path: str) -> str:
     """Return a safe media type for a missing asset response."""
     content_type, _ = mimetypes.guess_type(asset_path)
+    if content_type == "application/javascript":
+        return "text/javascript"
     if content_type in _SAFE_MISSING_ASSET_MEDIA_TYPES:
         return content_type
     return "text/plain"
+
+
+def _asset_media_type(asset_path: str) -> Optional[str]:
+    """Return browser-compatible media types for built frontend assets."""
+    content_type, _ = mimetypes.guess_type(asset_path)
+    if content_type == "application/javascript":
+        return "text/javascript"
+    return content_type
 
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
@@ -288,7 +298,11 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 )
             if file_path.is_file():
                 relative_path = file_path.relative_to(assets_root).as_posix()
-                return await assets_static_files.get_response(relative_path, request.scope)
+                response = await assets_static_files.get_response(relative_path, request.scope)
+                media_type = _asset_media_type(relative_path)
+                if media_type:
+                    response.headers["content-type"] = media_type
+                return response
             return Response(
                 content="asset not found",
                 status_code=404,
@@ -314,8 +328,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             if file_path is not None and file_path.is_file():
                 # Issue #520: Explicitly resolve MIME type to avoid
                 # browsers rejecting JS modules served as text/plain.
-                content_type, _ = mimetypes.guess_type(str(file_path))
-                return FileResponse(file_path, media_type=content_type)
+                return FileResponse(file_path, media_type=_asset_media_type(str(file_path)))
 
             return FileResponse(static_dir / "index.html")
     

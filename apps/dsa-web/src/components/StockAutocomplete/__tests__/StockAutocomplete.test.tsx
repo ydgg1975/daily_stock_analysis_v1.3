@@ -32,14 +32,29 @@ let autocompleteHookImpl: () => {
   runtimeFallback: boolean;
   error: Error | null;
 };
+let futuresIndexHookImpl: () => {
+  index: StockIndexItem[];
+  loading: boolean;
+  fallback: boolean;
+  error: Error | null;
+  loaded: boolean;
+};
+let autocompleteIndexArg: StockIndexItem[] | undefined;
 
 // Mock the hooks
 vi.mock('../../../hooks/useStockIndex', () => ({
   useStockIndex: () => stockIndexHookImpl(),
 }));
 
+vi.mock('../../../hooks/useFuturesIndex', () => ({
+  useFuturesIndex: () => futuresIndexHookImpl(),
+}));
+
 vi.mock('../../../hooks/useAutocomplete', () => ({
-  useAutocomplete: () => autocompleteHookImpl(),
+  useAutocomplete: (index: StockIndexItem[]) => {
+    autocompleteIndexArg = index;
+    return autocompleteHookImpl();
+  },
 }));
 
 const mockIndex: StockIndexItem[] = [
@@ -52,6 +67,19 @@ const mockIndex: StockIndexItem[] = [
     aliases: ["茅台"],
     market: "CN",
     assetType: "stock",
+    active: true,
+    popularity: 100,
+  },
+];
+
+const mockFuturesIndex: StockIndexItem[] = [
+  {
+    canonicalCode: "JM2609",
+    displayCode: "JM2609",
+    nameZh: "焦煤2609",
+    aliases: ["焦煤", "焦煤2609"],
+    market: "FUTURES",
+    assetType: "futures",
     active: true,
     popularity: 100,
   },
@@ -92,6 +120,13 @@ describe('StockAutocomplete', () => {
       error: null,
       loaded: true,
     });
+    futuresIndexHookImpl = () => ({
+      index: mockFuturesIndex,
+      loading: false,
+      fallback: false,
+      error: null,
+      loaded: true,
+    });
     autocompleteHookImpl = () => ({
       query: '',
       setQuery: vi.fn(),
@@ -109,6 +144,7 @@ describe('StockAutocomplete', () => {
       runtimeFallback: false,
       error: null,
     });
+    autocompleteIndexArg = undefined;
   });
 
   it('renders the input element', () => {
@@ -178,6 +214,20 @@ describe('StockAutocomplete', () => {
     fireEvent.change(input, { target: { value: '600519' } });
 
     expect(mockOnChange).toHaveBeenCalledWith('600519');
+  });
+
+  it('uses a futures autocomplete index in futures mode', () => {
+    render(
+      <StockAutocomplete
+        value="焦煤"
+        onChange={mockOnChange}
+        onSubmit={mockOnSubmit}
+        assetType="futures"
+      />
+    );
+
+    expect(autocompleteIndexArg?.some((item) => /^JM\d{4}$/.test(item.canonicalCode) && item.nameZh.startsWith('焦煤'))).toBe(true);
+    expect(autocompleteIndexArg?.some((item) => item.canonicalCode === '600519.SH')).toBe(false);
   });
 
   it('applies a custom class name', () => {
