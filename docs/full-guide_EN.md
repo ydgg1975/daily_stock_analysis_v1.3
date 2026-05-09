@@ -71,6 +71,8 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 
 #### Notification Channels (Multiple can be configured, all will receive notifications)
 
+> The notification baseline, minimal/advanced key split, Actions mapping, `--check-notify` CLI behavior, and Web one-click notification test are tracked in [Notification Baseline](notifications.md). A complete English notification topic remains a later follow-up.
+
 | Secret Name | Description | Required |
 |------------|------|:----:|
 | `WECHAT_WEBHOOK_URL` | WeChat Work Webhook URL | Optional |
@@ -94,6 +96,8 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `STOCK_GROUP_N` / `EMAIL_GROUP_N` | Email routing groups (Issue #268): `STOCK_GROUP_N` should be a subset of `STOCK_LIST`; affects email recipients only, not analysis scope or other channels | Optional |
 | `PUSHPLUS_TOKEN` | PushPlus Token ([Get here](https://www.pushplus.plus), Chinese push service) | Optional |
 | `SERVERCHAN3_SENDKEY` | ServerChan v3 Sendkey ([Get here](https://sc3.ft07.com/), mobile app push service) | Optional |
+| `ASTRBOT_URL` | AstrBot Webhook URL | Optional |
+| `ASTRBOT_TOKEN` | Optional AstrBot Bearer Token | Optional |
 | `CUSTOM_WEBHOOK_URLS` | Custom Webhook (supports DingTalk, etc., comma-separated) | Optional |
 | `CUSTOM_WEBHOOK_BEARER_TOKEN` | Bearer Token for custom webhooks (for authenticated webhooks) | Optional |
 | `CUSTOM_WEBHOOK_BODY_TEMPLATE` | Custom Webhook JSON body template for AstrBot, NapCat, or self-hosted services with special payloads | Optional |
@@ -101,7 +105,7 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 
 > *Note: Configure at least one channel; multiple channels will all receive notifications
 >
-> The default `daily_analysis.yml` in this repository only exports fixed Secret / Variable names. Arbitrary numbered env vars such as `STOCK_GROUP_1` and `EMAIL_GROUP_1` are not auto-injected into the job, so grouped email routing is not available in the stock workflow unless you explicitly extend the workflow's `env:` mapping in your own fork.
+> The default `daily_analysis.yml` in this repository only exports fixed Secret / Variable names. Arbitrary numbered env vars such as `STOCK_GROUP_1` and `EMAIL_GROUP_1` are not auto-injected into the job, so grouped email routing is not available in the stock workflow unless you explicitly extend the workflow's `env:` mapping in your own fork. P0 maps `CUSTOM_WEBHOOK_BODY_TEMPLATE`, `WEBHOOK_VERIFY_SSL`, `FEISHU_WEBHOOK_SECRET`, `FEISHU_WEBHOOK_KEYWORD`, and `PUSHPLUS_TOPIC`; `MARKDOWN_TO_IMAGE_CHANNELS` and `MERGE_EMAIL_NOTIFICATION` remain behavior toggles for a later phase.
 
 #### Push Behavior Configuration
 
@@ -192,6 +196,8 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 
 ### Notification Channel Configuration
 
+For the P0 notification baseline and diagnostics, see [Notification Baseline](notifications.md).
+
 | Variable | Description | Required |
 |--------|------|:----:|
 | `WECHAT_WEBHOOK_URL` | WeChat Work Bot Webhook URL | Optional |
@@ -221,6 +227,8 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 | `PUSHOVER_API_TOKEN` | Pushover API Token | Optional |
 | `PUSHPLUS_TOKEN` | PushPlus Token (Chinese push service) | Optional |
 | `SERVERCHAN3_SENDKEY` | ServerChan v3 Sendkey | Optional |
+| `ASTRBOT_URL` | AstrBot Webhook URL | Optional |
+| `ASTRBOT_TOKEN` | Optional AstrBot Bearer Token | Optional |
 
 > Note: the default `daily_analysis` GitHub Actions workflow only maps fixed variable names. It does not automatically import arbitrary numbered variables such as `STOCK_GROUP_N` / `EMAIL_GROUP_N`. This feature therefore works in local `.env`, Docker, or any runtime where you explicitly inject those variables.
 
@@ -550,6 +558,8 @@ crontab -e
 
 ## Notification Channel Configuration
 
+The P0 notification channel matrix and `--check-notify` CLI details are documented in [Notification Baseline](notifications.md).
+
 ### WeChat Work
 
 1. Add "Group Bot" in WeChat Work group chat
@@ -633,14 +643,31 @@ Supports any POST JSON Webhook, including:
 Set `CUSTOM_WEBHOOK_URLS`, separate multiple with commas.
 
 If AstrBot, NapCat, or a self-hosted service requires a custom request body, set
-`CUSTOM_WEBHOOK_BODY_TEMPLATE`. The rendered value must be a JSON object. Prefer
-`$content_json` so newlines and quotes stay valid JSON:
+`CUSTOM_WEBHOOK_BODY_TEMPLATE`. This is a global template and is rendered before
+URL auto-detected payloads such as Bark, Slack, or Discord. If the rendered value
+is not a JSON object, DSA falls back to the default payload. Prefer
+`$content_json` / `$title_json` so newlines and quotes stay valid JSON:
 
 ```env
 CUSTOM_WEBHOOK_BODY_TEMPLATE={"msg_type":"text","content":$content_json}
 ```
 
 Available placeholders: `$content_json`, `$content`, `$title_json`, `$title`.
+Raw `$content` / `$title` are not JSON-escaped, so quotes or newlines can make
+the template invalid and trigger fallback.
+
+When using Bark with a global template, include the Bark body explicitly:
+
+```env
+CUSTOM_WEBHOOK_BODY_TEMPLATE={"title":$title_json,"body":$content_json,"group":"stock"}
+```
+
+NapCat / OneBot examples must be adjusted for your actual endpoint, `user_id`,
+or `group_id`:
+
+```env
+CUSTOM_WEBHOOK_BODY_TEMPLATE={"user_id":123456,"message":$content_json}
+```
 
 ### Discord
 
@@ -759,6 +786,8 @@ Use `hk` prefix for HK stock codes:
 ```bash
 STOCK_LIST=600519,hk00700,hk01810
 ```
+
+HK daily history skips efinance, pytdx, baostock, and other built-in providers that do not support HK daily data, avoiding mismatches between HK symbols and non-HK market data. AkShare/Tushare/YFinance/Longbridge continue to provide HK fallback paths.
 
 ### Multi-Model Switching
 
@@ -971,7 +1000,7 @@ python main.py --serve-only --host 0.0.0.0 --port 8888
 | Type | Format | Examples |
 |------|------|------|
 | A-shares | 6-digit number | `600519`, `000001`, `300750` |
-| BSE (Beijing) | 8/4/92 prefix, 6-digit | `920748`, `838163`, `430047` |
+| BSE (Beijing) | 8/4/92 prefix, 6-digit; supports `BJ` prefix or `.BJ` suffix | `920748`, `BJ920493`, `920493.BJ` |
 | HK stocks | hk + 5-digit number | `hk00700`, `hk09988` |
 
 ### Notes
