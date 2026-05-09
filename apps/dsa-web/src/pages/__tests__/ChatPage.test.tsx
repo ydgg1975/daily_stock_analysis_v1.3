@@ -3,6 +3,7 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-d
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
+import { systemConfigApi } from '../../api/systemConfig';
 import type { Message } from '../../stores/agentChatStore';
 import ChatPage from '../ChatPage';
 
@@ -79,6 +80,14 @@ vi.mock('../../api/history', () => ({
   },
 }));
 
+vi.mock('../../api/systemConfig', () => ({
+  systemConfigApi: {
+    getConfig: vi.fn(),
+    update: vi.fn(),
+  },
+  SystemConfigConflictError: class SystemConfigConflictError extends Error {},
+}));
+
 vi.mock('../../stores/agentChatStore', () => {
   const useAgentChatStore = (
     selector?: (state: typeof mockStoreState) => unknown
@@ -149,6 +158,20 @@ beforeEach(() => {
   mockSendChat.mockResolvedValue({ success: true });
   mockDownloadSession.mockImplementation(() => {});
   mockFormatSessionAsMarkdown.mockReturnValue('# exported session');
+  vi.mocked(systemConfigApi.getConfig).mockResolvedValue({
+    configVersion: 'cfg-1',
+    maskToken: '******',
+    items: [{ key: 'STOCK_LIST', value: 'AAPL', rawValueExists: true, isMasked: false }],
+  });
+  vi.mocked(systemConfigApi.update).mockResolvedValue({
+    success: true,
+    configVersion: 'cfg-2',
+    appliedCount: 1,
+    skippedMaskedCount: 0,
+    reloadTriggered: true,
+    updatedKeys: ['STOCK_LIST'],
+    warnings: [],
+  });
 });
 
 describe('ChatPage', () => {
@@ -660,6 +683,63 @@ describe('ChatPage', () => {
       );
     });
     expect(historyApi.getDetail).not.toHaveBeenCalled();
+  });
+
+  it('shows a watchlist quick action for follow-up stock context and adds it to the queue', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('当前标的：贵州茅台 (600519)')).toBeInTheDocument();
+
+    const addButton = await screen.findByRole('button', { name: '加入观察队列' });
+    fireEvent.click(addButton);
+
+    await waitFor(() => {
+      expect(systemConfigApi.update).toHaveBeenCalledWith(expect.objectContaining({
+        items: [{ key: 'STOCK_LIST', value: 'AAPL,600519' }],
+      }));
+    });
+    expect(await screen.findByText('贵州茅台 已加入观察队列')).toBeInTheDocument();
+  });
+
+  it('extracts stock code from a direct ask message and exposes the remove watchlist action', async () => {
+    vi.mocked(systemConfigApi.getConfig).mockResolvedValue({
+      configVersion: 'cfg-1',
+      maskToken: '******',
+      items: [{ key: 'STOCK_LIST', value: 'AAPL,600519', rawValueExists: true, isMasked: false }],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText(/分析 600519/), {
+      target: { value: '请分析 600519' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(mockStartStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: '请分析 600519',
+        }),
+        expect.anything(),
+      );
+    });
+
+    const removeButton = await screen.findByRole('button', { name: '取消观察队列' });
+    fireEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(systemConfigApi.update).toHaveBeenCalledWith(expect.objectContaining({
+        items: [{ key: 'STOCK_LIST', value: 'AAPL' }],
+      }));
+    });
   });
 
   it('ignores malformed follow-up query params', async () => {

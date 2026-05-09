@@ -8,6 +8,7 @@ import { ApiErrorAlert, Badge, Button, ConfirmDialog, EmptyState, InlineAlert, S
 import { getParsedApiError } from '../api/error';
 import type { SkillInfo } from '../api/agent';
 import { DashboardStateBlock } from '../components/dashboard';
+import { WatchlistQuickAction } from '../components/watchlist/WatchlistQuickAction';
 import {
   useAgentChatStore,
   type Message,
@@ -47,9 +48,53 @@ const getMessageSkillNames = (msg: Message): string[] => {
 
 const getMessageSkillLabel = (msg: Message): string => getMessageSkillNames(msg).join('、');
 
+type ActiveStockTarget = {
+  stockCode: string;
+  stockName: string | null;
+};
+
+function extractStockTargetFromText(text: string): ActiveStockTarget | null {
+  const normalized = text.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const namedCodeMatch = normalized.match(
+    /([\u3400-\u9FFFA-Za-z0-9.-]{1,80})\s*\(\s*((?:HK\d{1,5})|(?:\d{1,5}\.HK)|(?:\d{5,6})|(?:(?:SH|SZ|BJ)\d{6})|(?:\d{6}\.(?:SH|SZ|SS|BJ))|(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?))\s*\)/i,
+  );
+  if (namedCodeMatch) {
+    const stockCode = sanitizeFollowUpStockCode(namedCodeMatch[2]);
+    const stockName = sanitizeFollowUpStockName(namedCodeMatch[1]);
+    if (stockCode) {
+      return {
+        stockCode,
+        stockName,
+      };
+    }
+  }
+
+  const codeMatch = normalized.match(
+    /(?:HK\d{1,5})|(?:\d{1,5}\.HK)|(?:\d{6}\.(?:SH|SZ|SS|BJ))|(?:(?:SH|SZ|BJ)\d{6})|(?:\d{6})|(?:\d{5})|(?:[A-Z]{1,5}(?:\.(?:US|[A-Z]))?)/i,
+  );
+  if (!codeMatch) {
+    return null;
+  }
+
+  const stockCode = sanitizeFollowUpStockCode(codeMatch[0]);
+  if (!stockCode) {
+    return null;
+  }
+
+  return {
+    stockCode,
+    stockName: null,
+  };
+}
+
 const ChatPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState('');
+  const [activeStockTarget, setActiveStockTarget] = useState<ActiveStockTarget | null>(null);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [showSkillDesc, setShowSkillDesc] = useState<string | null>(null);
@@ -228,12 +273,14 @@ const ChatPage: React.FC = () => {
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
+    setActiveStockTarget(null);
     requestScrollToBottom('auto');
     useAgentChatStore.getState().startNewChat();
     setSidebarOpen(false);
   }, [requestScrollToBottom]);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
+    setActiveStockTarget(null);
     requestScrollToBottom('auto');
     switchSession(targetSessionId);
     setSidebarOpen(false);
@@ -271,6 +318,10 @@ const ChatPage: React.FC = () => {
       stock_code: stock,
       stock_name: name,
     };
+    setActiveStockTarget({
+      stockCode: stock,
+      stockName: name,
+    });
     if (recordId !== undefined) {
       setIsFollowUpContextLoading(true);
     }
@@ -291,6 +342,35 @@ const ChatPage: React.FC = () => {
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (messages.length === 0) {
+      return;
+    }
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.role !== 'user') {
+        continue;
+      }
+
+      const inferred = extractStockTargetFromText(message.content);
+      if (inferred) {
+        setActiveStockTarget((current) => {
+          if (
+            current?.stockCode === inferred.stockCode
+            && (current.stockName || null) === (inferred.stockName || null)
+          ) {
+            return current;
+          }
+          return inferred;
+        });
+        return;
+      }
+    }
+
+    setActiveStockTarget(null);
+  }, [messages, sessionId]);
+
   const handleSend = useCallback(
     async (overrideMessage?: string, overrideSkillIds?: string[]) => {
       const msgText = (overrideMessage ?? input).trim();
@@ -304,6 +384,24 @@ const ChatPage: React.FC = () => {
         ...(usedSkillIds.length > 0 ? { skills: usedSkillIds } : {}),
         context: followUpContextRef.current ?? undefined,
       };
+      const nextStockTarget = payload.context
+        && typeof payload.context === 'object'
+        && payload.context !== null
+        && 'stock_code' in payload.context
+        ? (() => {
+            const stockCode = String((payload.context as { stock_code: unknown }).stock_code);
+            const rawStockName = (payload.context as { stock_name?: unknown }).stock_name;
+            return {
+              stockCode,
+              stockName: typeof rawStockName === 'string'
+                ? sanitizeFollowUpStockName(rawStockName)
+                : null,
+            };
+          })()
+        : extractStockTargetFromText(msgText);
+      if (nextStockTarget?.stockCode) {
+        setActiveStockTarget(nextStockTarget);
+      }
       followUpHydrationTokenRef.current += 1;
       followUpContextRef.current = null;
       setIsFollowUpContextLoading(false);
@@ -757,6 +855,20 @@ const ChatPage: React.FC = () => {
               message={sendToast.message}
               className="max-w-md rounded-xl px-3 py-2 text-xs shadow-none"
             />
+          ) : null}
+          {activeStockTarget?.stockCode ? (
+            <div className="flex flex-wrap items-start gap-3">
+              <div className="rounded-xl border border-white/8 bg-surface/60 px-3 py-2 text-xs text-secondary-text">
+                当前标的：{activeStockTarget.stockName ? `${activeStockTarget.stockName} (${activeStockTarget.stockCode})` : activeStockTarget.stockCode}
+              </div>
+              <WatchlistQuickAction
+                stockCode={activeStockTarget.stockCode}
+                stockName={activeStockTarget.stockName}
+                buttonVariant="action-primary"
+                size="sm"
+                className="max-w-md"
+              />
+            </div>
           ) : null}
         </header>
 

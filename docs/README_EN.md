@@ -214,7 +214,7 @@ Full environment variables, model routing, notification channels, data-source pr
 
 ![FastAPI Web UI](../sources/fastapi_server.png)
 
-The Web workspace supports settings, task monitoring, manual analysis, history reports, backtest, portfolio management, smart import, and light/dark themes.
+The Web workspace supports settings, task monitoring, manual analysis, history reports, backtest, portfolio management, smart import, light/dark themes, and quick watchlist add/remove actions from the Home analysis result and Chat stock context.
 
 ```bash
 python main.py --webui

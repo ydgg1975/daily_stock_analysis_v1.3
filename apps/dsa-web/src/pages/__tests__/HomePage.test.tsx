@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analysisApi, DuplicateTaskError } from '../../api/analysis';
 import { historyApi } from '../../api/history';
+import { systemConfigApi } from '../../api/systemConfig';
 import { useStockPoolStore } from '../../stores';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import HomePage from '../HomePage';
@@ -36,6 +37,14 @@ vi.mock('../../api/analysis', async () => {
     },
   };
 });
+
+vi.mock('../../api/systemConfig', () => ({
+  systemConfigApi: {
+    getConfig: vi.fn(),
+    update: vi.fn(),
+  },
+  SystemConfigConflictError: class SystemConfigConflictError extends Error {},
+}));
 
 vi.mock('../../hooks/useTaskStream', () => ({
   useTaskStream: vi.fn(),
@@ -74,6 +83,20 @@ describe('HomePage', () => {
     vi.clearAllMocks();
     navigateMock.mockReset();
     useStockPoolStore.getState().resetDashboardState();
+    vi.mocked(systemConfigApi.getConfig).mockResolvedValue({
+      configVersion: 'cfg-1',
+      maskToken: '******',
+      items: [{ key: 'STOCK_LIST', value: 'AAPL', rawValueExists: true, isMasked: false }],
+    });
+    vi.mocked(systemConfigApi.update).mockResolvedValue({
+      success: true,
+      configVersion: 'cfg-2',
+      appliedCount: 1,
+      skippedMaskedCount: 0,
+      reloadTriggered: true,
+      updatedKeys: ['STOCK_LIST'],
+      warnings: [],
+    });
   });
 
   it('renders the dashboard workspace and auto-loads the first report', async () => {
@@ -311,5 +334,62 @@ describe('HomePage', () => {
       originalQuery: '600519',
       forceRefresh: true,
     }));
+  });
+
+  it('adds the current report stock to the watchlist from the home action bar', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const addButton = await screen.findByRole('button', { name: '加入观察队列' });
+    fireEvent.click(addButton);
+
+    await waitFor(() => {
+      expect(systemConfigApi.update).toHaveBeenCalledWith(expect.objectContaining({
+        items: [{ key: 'STOCK_LIST', value: 'AAPL,600519' }],
+      }));
+    });
+    expect(await screen.findByText('贵州茅台 已加入观察队列')).toBeInTheDocument();
+  });
+
+  it('removes the current report stock from the watchlist when already watched', async () => {
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(historyReport);
+    vi.mocked(systemConfigApi.getConfig).mockResolvedValue({
+      configVersion: 'cfg-1',
+      maskToken: '******',
+      items: [{ key: 'STOCK_LIST', value: '600519,AAPL', rawValueExists: true, isMasked: false }],
+    });
+
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const removeButton = await screen.findByRole('button', { name: '取消观察队列' });
+    fireEvent.click(removeButton);
+
+    await waitFor(() => {
+      expect(systemConfigApi.update).toHaveBeenCalledWith(expect.objectContaining({
+        items: [{ key: 'STOCK_LIST', value: 'AAPL' }],
+      }));
+    });
+    expect(await screen.findByText('贵州茅台 已移出观察队列')).toBeInTheDocument();
   });
 });

@@ -7,6 +7,7 @@ import { StockAutocomplete } from '../components/StockAutocomplete';
 import { HistoryList } from '../components/history';
 import { ReportMarkdown, ReportSummary } from '../components/report';
 import { TaskPanel } from '../components/tasks';
+import { WatchlistQuickAction } from '../components/watchlist/WatchlistQuickAction';
 import { useDashboardLifecycle, useHomeDashboardState } from '../hooks';
 import { getReportText, normalizeReportLanguage } from '../utils/reportLanguage';
 
@@ -300,6 +301,12 @@ const HomePage: React.FC = () => {
                     </svg>
                     {reportText.fullReport}
                   </Button>
+                  <WatchlistQuickAction
+                    stockCode={selectedReport.meta.stockCode}
+                    stockName={selectedReport.meta.stockName}
+                    buttonVariant="home-action-ai"
+                    size="sm"
+                  />
                 </div>
                 <ReportSummary data={selectedReport} isHistory />
               </div>
