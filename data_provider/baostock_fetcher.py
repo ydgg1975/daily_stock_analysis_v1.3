@@ -102,7 +102,7 @@ class BaostockFetcher(BaseFetcher):
         
         try:
             # 登录 Baostock
-            login_result = bs.login()
+            login_result = bs.login(user_id='youngyadoudou', password='uijka443$89@Yndn')
             
             if login_result.error_code != '0':
                 raise DataFetchError(f"Baostock 登录失败: {login_result.error_msg}")

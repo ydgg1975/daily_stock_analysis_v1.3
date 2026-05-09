@@ -145,6 +145,7 @@ class TushareFetcher(BaseFetcher):
         self._date_list_end: Optional[str] = None  # 缓存对应的截止日期，用于跨日刷新
 
         # 尝试初始化 API
+        self.token = ''
         self._init_api()
 
         # 根据 API 初始化结果动态调整优先级
@@ -163,6 +164,9 @@ class TushareFetcher(BaseFetcher):
         if not config.tushare_token:
             logger.warning("Tushare Token 未配置，此数据源不可用")
             return
+        else:
+            self.token = config.tushare_token
+            logger.info(f"Tushare Token 配置已生效: *****{config.tushare_token[-5:]}")
 
         try:
             self._api = self._build_api_client(config.tushare_token)
@@ -616,7 +620,7 @@ class TushareFetcher(BaseFetcher):
                 return name
             
         except Exception as e:
-            logger.warning(f"Tushare 获取股票名称失败 {stock_code}: {e}")
+            logger.warning(f"Tushare 获取股票名称失败 {stock_code}, token: {self._api.token[-5:]}: {e}")
         
         return None
     
