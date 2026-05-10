@@ -666,6 +666,9 @@ class LongbridgeFetcher(BaseFetcher):
         self, stock_code: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
         """Fetch historical candlesticks from Longbridge."""
+        if not self.is_available_for_request("daily_data"):
+            raise RuntimeError("Longbridge temporarily unavailable for daily_data")
+
         symbol = _to_longbridge_symbol(stock_code)
         if symbol is None:
             raise ValueError(f"Cannot convert {stock_code} to Longbridge symbol")

@@ -226,6 +226,16 @@ class TestLongbridgeFetcherMocked(unittest.TestCase):
         self.assertIsNone(fetcher._ctx)
         self.assertGreater(fetcher._cooldown_until, time.time())
 
+    def test_daily_data_skips_request_during_cooldown(self):
+        """Daily requests should also respect the connection cooldown."""
+        fetcher, ctx = self._make_fetcher_with_mock_ctx()
+        fetcher._cooldown_until = time.time() + 30
+
+        with self.assertRaisesRegex(RuntimeError, "temporarily unavailable"):
+            fetcher._fetch_raw_data("AAPL", "2026-05-01", "2026-05-08")
+
+        ctx.history_candlesticks_by_date.assert_not_called()
+
     def test_hk_stock_symbol(self):
         """HK stock should use .HK suffix."""
         fetcher, ctx = self._make_fetcher_with_mock_ctx()

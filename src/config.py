@@ -1296,15 +1296,27 @@ class Config:
             else True
         )
 
+        process_schedule_run_immediately_env = os.environ.get('SCHEDULE_RUN_IMMEDIATELY')
         schedule_run_immediately_env = cls._resolve_env_value(
             'SCHEDULE_RUN_IMMEDIATELY',
             prefer_env_file=True,
         )
-        schedule_run_immediately = (
-            schedule_run_immediately_env.lower() == 'true'
-            if schedule_run_immediately_env is not None
-            else legacy_run_immediately
-        )
+        # Keep backward compatibility for container/process overrides:
+        # when RUN_IMMEDIATELY is explicitly provided by the runtime but the
+        # schedule-specific alias is absent, schedule mode should inherit the
+        # legacy process value instead of being pulled back to the persisted
+        # `.env` copy of SCHEDULE_RUN_IMMEDIATELY.
+        if (
+            process_schedule_run_immediately_env is None
+            and cls._has_bootstrap_runtime_env_override('RUN_IMMEDIATELY')
+        ):
+            schedule_run_immediately = legacy_run_immediately
+        else:
+            schedule_run_immediately = (
+                schedule_run_immediately_env.lower() == 'true'
+                if schedule_run_immediately_env is not None
+                else legacy_run_immediately
+            )
         schedule_time_value = cls._resolve_env_value(
             'SCHEDULE_TIME',
             default='18:00',

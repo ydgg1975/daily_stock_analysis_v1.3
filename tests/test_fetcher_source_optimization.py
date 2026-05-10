@@ -6,6 +6,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+
 if "litellm" not in sys.modules:
     sys.modules["litellm"] = MagicMock()
 if "json_repair" not in sys.modules:
@@ -35,6 +37,23 @@ def _make_quote(code: str = "AAPL") -> UnifiedRealtimeQuote:
         total_mv=1000.0,
         circ_mv=900.0,
         amplitude=2.0,
+    )
+
+
+def _make_daily_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "date": "2026-05-01",
+                "open": 100.0,
+                "high": 102.0,
+                "low": 99.0,
+                "close": 101.0,
+                "volume": 1000,
+                "amount": 101000.0,
+                "pct_chg": 1.0,
+            }
+        ]
     )
 
 
@@ -107,6 +126,60 @@ class TestFetcherSourceOptimization(unittest.TestCase):
         self.assertEqual(quote.code, "AAPL")
         yfinance.get_realtime_quote.assert_called_once_with("AAPL")
         longbridge.get_realtime_quote.assert_not_called()
+
+    @patch("src.config.get_config")
+    def test_us_daily_route_skips_temporarily_unavailable_longbridge(self, mock_get_config):
+        mock_get_config.return_value = SimpleNamespace(
+            longbridge_app_key="app-key",
+            longbridge_app_secret="app-secret",
+            longbridge_access_token="access-token",
+        )
+
+        longbridge = MagicMock()
+        longbridge.name = "LongbridgeFetcher"
+        longbridge.priority = 5
+        longbridge.is_available_for_request.return_value = False
+
+        yfinance = MagicMock()
+        yfinance.name = "YfinanceFetcher"
+        yfinance.priority = 4
+        yfinance.get_daily_data.return_value = _make_daily_df()
+
+        manager = DataFetcherManager(fetchers=[longbridge, yfinance])
+
+        df, source = manager.get_daily_data("AAPL", start_date="2026-05-01", end_date="2026-05-08")
+
+        self.assertFalse(df.empty)
+        self.assertEqual(source, "YfinanceFetcher")
+        yfinance.get_daily_data.assert_called_once()
+        longbridge.get_daily_data.assert_not_called()
+
+    @patch("src.config.get_config")
+    def test_hk_daily_route_skips_temporarily_unavailable_longbridge(self, mock_get_config):
+        mock_get_config.return_value = SimpleNamespace(
+            longbridge_app_key="app-key",
+            longbridge_app_secret="app-secret",
+            longbridge_access_token="access-token",
+        )
+
+        longbridge = MagicMock()
+        longbridge.name = "LongbridgeFetcher"
+        longbridge.priority = 5
+        longbridge.is_available_for_request.return_value = False
+
+        akshare = MagicMock()
+        akshare.name = "AkshareFetcher"
+        akshare.priority = 1
+        akshare.get_daily_data.return_value = _make_daily_df()
+
+        manager = DataFetcherManager(fetchers=[longbridge, akshare])
+
+        df, source = manager.get_daily_data("HK00700", start_date="2026-05-01", end_date="2026-05-08")
+
+        self.assertFalse(df.empty)
+        self.assertEqual(source, "AkshareFetcher")
+        akshare.get_daily_data.assert_called_once()
+        longbridge.get_daily_data.assert_not_called()
 
 
 if __name__ == "__main__":

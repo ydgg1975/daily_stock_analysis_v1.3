@@ -39,6 +39,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - fix: Avoid unsupported built-in historical providers for Hong Kong daily data; align Beijing Stock Exchange `BJ` prefix and `.BJ` suffix validation.
 - fix: Improve Web market-review observability, Windows fallback lock probing, and market catalyst snippet rendering.
 - docs: Add the documentation index and settings-help maintenance guide; remove temporary PR/doc-sync notes from README and user-facing guides.
+- [改进] Docker 镜像支持非 root 用户 (`dsa`, UID 1000) 执行，并增强 `Dockerfile` 安全性与构建稳健性。
+- [改进] 放宽 LiteLLM 依赖约束，保留 `>=1.80.10` 最低版本并显式排除 PyPI 事故版本 `1.82.7` / `1.82.8`，允许安装后续 1.x 修复版本。
+- [改进] 补齐通知渠道 P0 基线、Actions 映射与 `--check-notify` 只读诊断，完善 AstrBot 配置入口和通知回归快照。
+- [修复] 未配置 Tushare / Longbridge 凭据时不再实例化对应可选 fetcher；Longbridge 遇到连接关闭类异常后会进入冷却期，并在美股/港股实时与日线请求中临时跳过该数据源，避免频繁重连。
+- [修复] 修正 LLM 渠道测试中 `Model disabled` 被误报为网络异常的问题，并在失败提示中展示本次实际测试模型。
+- [修复] 修正 LLM 渠道测试中 `Your request was blocked` 等服务商或网关拦截错误被误报为网络异常的问题。
+- [chore] 清理仓库根目录：移除误入库的 `.codex`、`review.md` 跟踪记录，将 smoke 测试入口迁移到 `scripts/`、环境检查脚本迁移为 `scripts/check_env.py`，并将 LiteLLM YAML 示例迁移到 `docs/examples/`。
+- [新功能] Web 设置页新增通知渠道一键测试，支持临时配置、耗时与脱敏 attempts 展示。
+- [改进] 产品化自定义 Webhook Body 模板说明，明确全局模板优先级、JSON 转义建议和 Bark / NapCat 适配示例。
+- [新功能] 系统设置页新增配置项帮助入口与多语言帮助文案基础设施，首批覆盖自选股、LLM 主模型、LLM 渠道、飞书 Webhook 与 WebUI 监听地址。
+- [改进] 设置项帮助窗口支持键盘焦点限制、Esc 关闭和关闭后焦点恢复，并移除短描述重复 hover tooltip。
+- [文档] 新增设置页配置帮助维护说明，明确帮助元数据字段、首批覆盖范围、事实源和多语言文案同步规则。
+- [测试] 补充设置项帮助元数据、API schema、前端弹窗交互测试，并修复 Bot 名称路由与调度时间 provider 测试的离线 CI 稳定性问题。
+- [修复] 港股日线跳过不支持港股的内置历史数据源，避免港股代码错配到非港股市场数据。
+- [修复] 修正分析 API 对北交所 `BJ` 前缀与 `.BJ` 后缀股票代码的校验，保持前端自动补全与 Tushare `ts_code` 调用格式一致。
+- [新功能] 新增通知路由策略，支持按 report、alert、system_error 将通知收窄到指定已配置渠道。
+- [修复] 大盘复盘“近三日催化线索”改为明确展示摘要片段、来源日期和 URL，避免把搜索摘要截断内容误呈现为完整事件。
+- [改进] 个股报告操作建议增加支撑/压力位与主力资金流校准，减少仅因单日涨跌导致买入/卖出剧烈切换，并补充“震荡观望、洗盘观察”等中性建议。
+- [文档] 本次决策稳定性与提示词约束改动仅保持运行时模型/provider/Base URL/发布语义不变，不改动配置持久化与环境语义；但涉及 `src/analyzer.py`、`src/core/pipeline.py`、`src/report_language.py` 与 `src/agent` 相关决策后处理/提示词路径的运行时行为，请回归验证决策落盘与报告口径映射。
+- [文档] 新增中文文档中心并同步英文索引，补齐快速开始、配置、使用专题、部署打包、参考开发等项目文档入口。
+- [文档] 调整 README 联系与合作区域。
 
 ## [3.15.0] - 2026-05-05
 
