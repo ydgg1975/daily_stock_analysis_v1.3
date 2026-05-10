@@ -59,7 +59,17 @@ class MarketCommand(BotCommand):
             args=(message, config, lock_token),
             daemon=True,
         )
-        thread.start()
+        try:
+            thread.start()
+        except Exception as exc:
+            logger.error(
+                "[MarketCommand] 大盘复盘后台线程启动失败: %s",
+                exc,
+            )
+            self._release_market_review_lock(lock_token)
+            return BotResponse.error_response(
+                "大盘复盘启动失败，已释放运行锁；请稍后重试"
+            )
 
         return BotResponse.markdown_response(
             "✅ **大盘复盘任务已启动**\n\n"

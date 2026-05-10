@@ -214,6 +214,28 @@ class MarketCommandRegionFilterTestCase(unittest.TestCase):
         market_review_module.run_market_review.assert_not_called()
         self.assertIsNotNone(notifier)
 
+    def test_execute_releases_lock_when_thread_start_fails(self) -> None:
+        """Thread start failure in execute() should release lock and return an error."""
+        message = _make_message()
+        config, _, _, _, _, _, _ = self._patch_dependencies(
+            market_review_region="cn",
+            open_markets={"cn"},
+        )
+
+        cmd = MarketCommand()
+        lock_token = object()
+        fake_thread = MagicMock()
+        fake_thread.start.side_effect = RuntimeError("thread start failed")
+
+        with patch.object(cmd, "_try_acquire_market_review_lock", return_value=lock_token), \
+             patch.object(cmd, "_release_market_review_lock") as release_market_review_lock, \
+             patch("bot.commands.market.threading.Thread", return_value=fake_thread):
+            response = cmd.execute(message, [])
+
+        release_market_review_lock.assert_called_once_with(lock_token)
+        self.assertEqual(response.text, "❌ 错误：大盘复盘启动失败，已释放运行锁；请稍后重试")
+
+
 
 if __name__ == "__main__":
     unittest.main()
