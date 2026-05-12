@@ -8,6 +8,9 @@ FROM node:20-slim AS web-builder
 WORKDIR /app/apps/dsa-web
 
 COPY apps/dsa-web/package.json apps/dsa-web/package-lock.json ./
+
+RUN npm config set registry https://registry.npmmirror.com
+#上面是自己加的
 RUN npm ci
 
 COPY apps/dsa-web/ ./
@@ -22,7 +25,19 @@ WORKDIR /app
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
+#自己加的
+# 更换为阿里云 Debian 源（加速 apt-get）
+# 更换为阿里云 Debian 源（加速 apt-get）
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+        echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+        echo "deb http://mirrors.aliyun.com/debian-security/ bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list; \
+    fi
+#上面是自己加的
 # 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -36,7 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 复制依赖文件
 COPY requirements.txt .
-
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+RUN pip config set install.trusted-host mirrors.aliyun.com
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
