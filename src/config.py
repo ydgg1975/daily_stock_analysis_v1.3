@@ -24,6 +24,13 @@ from src.report_language import (
     is_supported_report_language_value,
     normalize_report_language,
 )
+from src.notification_routing import parse_notification_route_channels
+from src.notification_noise import (
+    NOTIFICATION_SEVERITIES,
+    is_supported_notification_severity,
+    parse_notification_quiet_hours,
+    validate_notification_timezone,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +57,10 @@ class ConfigIssue:
 _MANAGED_LITELLM_KEY_PROVIDERS = {"gemini", "vertex_ai", "anthropic", "openai", "deepseek"}
 SUPPORTED_LLM_CHANNEL_PROTOCOLS = ("openai", "anthropic", "gemini", "vertex_ai", "deepseek", "ollama")
 _FALSEY_ENV_VALUES = {"0", "false", "no", "off"}
+# Fallback defaults used when ANSPIRE_API_KEYS is reused as legacy OpenAI-compatible source.
+# These are compatibility examples; actual availability should be validated by Anspire console/model entitlement.
+ANSPIRE_LLM_BASE_URL_DEFAULT = "https://open-gateway.anspire.cn/v6"
+ANSPIRE_LLM_MODEL_DEFAULT = "Doubao-Seed-2.0-lite"
 # Kimi K2.6 is consumed through Moonshot's OpenAI-compatible API in this
 # repository. Official references:
 # - https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart
@@ -743,6 +754,19 @@ class Config:
     astrbot_token: Optional[str] = None
     astrbot_url: Optional[str] = None
 
+    # 通知路由策略（Issue #1200 P3）：留空表示该类型使用全部已配置渠道
+    notification_report_channels: List[str] = field(default_factory=list)
+    notification_alert_channels: List[str] = field(default_factory=list)
+    notification_system_error_channels: List[str] = field(default_factory=list)
+
+    # 通知降噪机制（Issue #1200 P4）：默认全部关闭，仅对静态通知渠道生效
+    notification_dedup_ttl_seconds: int = 0
+    notification_cooldown_seconds: int = 0
+    notification_quiet_hours: str = ""
+    notification_timezone: str = ""
+    notification_min_severity: str = ""
+    notification_daily_digest_enabled: bool = False
+
     # 单股推送模式：每分析完一只股票立即推送，而不是汇总后推送
     single_stock_notify: bool = False
 
@@ -935,6 +959,7 @@ class Config:
     )
     _BOOTSTRAP_RUNTIME_ENV_OVERRIDES_CAPTURED = False
     _BOOTSTRAP_RUNTIME_ENV_OVERRIDES = frozenset()
+    _BOOTSTRAP_RUNTIME_ENV_PRESENT_KEYS = frozenset()
 
     def __post_init__(self) -> None:
         _log = logging.getLogger(__name__)
@@ -1070,14 +1095,17 @@ class Config:
             anthropic_api_keys = [_single_anthropic]
 
         # OPENAI_API_KEYS > AIHUBMIX_KEY > OPENAI_API_KEY
+        _aihubmix = os.getenv('AIHUBMIX_KEY', '').strip()
         _openai_keys_raw = os.getenv('OPENAI_API_KEYS', '')
         openai_api_keys = [k.strip() for k in _openai_keys_raw.split(',') if k.strip()]
         if not openai_api_keys:
-            _aihubmix = os.getenv('AIHUBMIX_KEY', '').strip()
             _single_openai = os.getenv('OPENAI_API_KEY', '').strip()
             _fallback_key = _aihubmix or _single_openai
             if _fallback_key:
                 openai_api_keys = [_fallback_key]
+        openai_base_url = os.getenv('OPENAI_BASE_URL') or (
+            'https://aihubmix.com/v1' if _aihubmix else None
+        )
 
         # DEEPSEEK_API_KEYS > DEEPSEEK_API_KEY (independent from OpenAI-compatible layer)
         _deepseek_keys_raw = os.getenv('DEEPSEEK_API_KEYS', '')
@@ -1087,13 +1115,48 @@ class Config:
             if _single_deepseek:
                 deepseek_api_keys = [_single_deepseek]
 
+        # Anspire Open shares the same key as Anspire Search and exposes an
+        # OpenAI-compatible LLM gateway.  When no other OpenAI-compatible key is
+        # configured, use ANSPIRE_API_KEYS as the legacy openai-compatible
+        # provider so "one key" setups work without LLM_CHANNELS.
+        anspire_keys_str = os.getenv('ANSPIRE_API_KEYS', '')
+        anspire_api_keys = [k.strip() for k in anspire_keys_str.split(',') if k.strip()]
+        anspire_llm_enabled = parse_env_bool(os.getenv('ANSPIRE_LLM_ENABLED'), default=True)
+        anspire_llm_base_url = (
+            os.getenv('ANSPIRE_LLM_BASE_URL') or ANSPIRE_LLM_BASE_URL_DEFAULT
+        ).strip()
+        _anspire_llm_model_env = os.getenv('ANSPIRE_LLM_MODEL', '').strip()
+        anspire_channel_disabled = False
+        for _raw_channel in os.getenv('LLM_CHANNELS', '').split(','):
+            if _raw_channel.strip().lower() != "anspire":
+                continue
+            _channel_enabled_raw = os.getenv('LLM_ANSPIRE_ENABLED')
+            if _channel_enabled_raw is not None and _channel_enabled_raw.strip():
+                anspire_channel_disabled = not parse_env_bool(_channel_enabled_raw, default=True)
+            else:
+                anspire_channel_disabled = not anspire_llm_enabled
+            break
+        using_anspire_llm_legacy = bool(
+            anspire_llm_enabled
+            and not anspire_channel_disabled
+            and anspire_api_keys
+            and not openai_api_keys
+        )
+        if using_anspire_llm_legacy:
+            openai_api_keys = list(anspire_api_keys)
+            openai_base_url = anspire_llm_base_url
+
         # LITELLM_MODEL: explicit config takes precedence; else infer from available keys
         litellm_model = os.getenv('LITELLM_MODEL', '').strip()
         inferred_legacy_deepseek_model = False
+        _openai_model_env = os.getenv('OPENAI_MODEL', '').strip()
+        if using_anspire_llm_legacy:
+            _openai_model_name = _anspire_llm_model_env or _openai_model_env or ANSPIRE_LLM_MODEL_DEFAULT
+        else:
+            _openai_model_name = _openai_model_env or 'gpt-5.5'
         if not litellm_model:
             _gemini_model_name = os.getenv('GEMINI_MODEL', 'gemini-3.1-pro-preview').strip()
             _anthropic_model_name = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6').strip()
-            _openai_model_name = os.getenv('OPENAI_MODEL', 'gpt-5.5').strip()
             if gemini_api_keys:
                 litellm_model = f'gemini/{_gemini_model_name}'
             elif anthropic_api_keys:
@@ -1146,9 +1209,7 @@ class Config:
         if not llm_model_list:
             llm_model_list = cls._legacy_keys_to_model_list(
                 gemini_api_keys, anthropic_api_keys, openai_api_keys,
-                os.getenv('OPENAI_BASE_URL') or (
-                    'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
-                ),
+                openai_base_url,
                 deepseek_api_keys,
             )
             if llm_model_list:
@@ -1189,10 +1250,6 @@ class Config:
         )
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
-        # Anspire Search
-        anspire_keys_str = os.getenv('ANSPIRE_API_KEYS', '')
-        anspire_api_keys = [k.strip() for k in anspire_keys_str.split(',') if k.strip()]
-
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
         bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
 
@@ -1258,11 +1315,22 @@ class Config:
             'SCHEDULE_RUN_IMMEDIATELY',
             prefer_env_file=True,
         )
-        schedule_run_immediately = (
-            schedule_run_immediately_env.lower() == 'true'
-            if schedule_run_immediately_env is not None
-            else legacy_run_immediately
-        )
+        # Keep backward compatibility for container/process overrides:
+        # when RUN_IMMEDIATELY is explicitly provided by the runtime but the
+        # schedule-specific alias is absent, schedule mode should inherit the
+        # legacy process value instead of being pulled back to the persisted
+        # `.env` copy of SCHEDULE_RUN_IMMEDIATELY.
+        if (
+            not cls._had_bootstrap_runtime_env_key('SCHEDULE_RUN_IMMEDIATELY')
+            and cls._has_bootstrap_runtime_env_override('RUN_IMMEDIATELY')
+        ):
+            schedule_run_immediately = legacy_run_immediately
+        else:
+            schedule_run_immediately = (
+                schedule_run_immediately_env.lower() == 'true'
+                if schedule_run_immediately_env is not None
+                else legacy_run_immediately
+            )
         schedule_time_value = cls._resolve_env_value(
             'SCHEDULE_TIME',
             default='18:00',
@@ -1311,11 +1379,9 @@ class Config:
             # base_url is auto-set to aihubmix.com/v1 when AIHUBMIX_KEY is used and no explicit
             # OPENAI_BASE_URL override is provided.
             # Model names match upstream (e.g. gemini-3.1-pro-preview, gpt-5.5, deepseek-v4-flash).
-            openai_api_key=os.getenv('AIHUBMIX_KEY') or os.getenv('OPENAI_API_KEY') or None,
-            openai_base_url=os.getenv('OPENAI_BASE_URL') or (
-                'https://aihubmix.com/v1' if os.getenv('AIHUBMIX_KEY') else None
-            ),  # noqa: E501
-            openai_model=os.getenv('OPENAI_MODEL', 'gpt-5.5'),
+            openai_api_key=openai_api_keys[0] if openai_api_keys else None,
+            openai_base_url=openai_base_url,
+            openai_model=_openai_model_name,
             openai_vision_model=os.getenv('OPENAI_VISION_MODEL') or None,
             openai_temperature=parse_env_float(os.getenv('OPENAI_TEMPERATURE'), 0.7, field_name='OPENAI_TEMPERATURE'),
             # Vision model: VISION_MODEL > OPENAI_VISION_MODEL (alias) > default
@@ -1423,6 +1489,34 @@ class Config:
             slack_channel_id=os.getenv('SLACK_CHANNEL_ID'),
             astrbot_url=os.getenv('ASTRBOT_URL'),
             astrbot_token=os.getenv('ASTRBOT_TOKEN'),
+            notification_report_channels=parse_notification_route_channels(
+                os.getenv('NOTIFICATION_REPORT_CHANNELS')
+            ),
+            notification_alert_channels=parse_notification_route_channels(
+                os.getenv('NOTIFICATION_ALERT_CHANNELS')
+            ),
+            notification_system_error_channels=parse_notification_route_channels(
+                os.getenv('NOTIFICATION_SYSTEM_ERROR_CHANNELS')
+            ),
+            notification_dedup_ttl_seconds=parse_env_int(
+                os.getenv('NOTIFICATION_DEDUP_TTL_SECONDS'),
+                0,
+                field_name='NOTIFICATION_DEDUP_TTL_SECONDS',
+                minimum=0,
+            ),
+            notification_cooldown_seconds=parse_env_int(
+                os.getenv('NOTIFICATION_COOLDOWN_SECONDS'),
+                0,
+                field_name='NOTIFICATION_COOLDOWN_SECONDS',
+                minimum=0,
+            ),
+            notification_quiet_hours=(os.getenv('NOTIFICATION_QUIET_HOURS') or '').strip(),
+            notification_timezone=(os.getenv('NOTIFICATION_TIMEZONE') or '').strip(),
+            notification_min_severity=(os.getenv('NOTIFICATION_MIN_SEVERITY') or '').strip().lower(),
+            notification_daily_digest_enabled=parse_env_bool(
+                os.getenv('NOTIFICATION_DAILY_DIGEST_ENABLED'),
+                default=False,
+            ),
             single_stock_notify=os.getenv('SINGLE_STOCK_NOTIFY', 'false').lower() == 'true',
             report_type=cls._parse_report_type(os.getenv('REPORT_TYPE', 'simple')),
             report_language=cls._parse_report_language(report_language_raw),
@@ -1669,11 +1763,21 @@ class Config:
             ch_name = raw_name.strip()
             if not ch_name:
                 continue
+            ch_lower = ch_name.lower()
             ch_upper = ch_name.upper()
 
             base_url = os.getenv(f'LLM_{ch_upper}_BASE_URL', '').strip() or None
+            if ch_lower == "anspire" and not base_url:
+                base_url = (
+                    os.getenv('ANSPIRE_LLM_BASE_URL') or ANSPIRE_LLM_BASE_URL_DEFAULT
+                ).strip() or None
             protocol_raw = os.getenv(f'LLM_{ch_upper}_PROTOCOL', '').strip()
-            enabled = parse_env_bool(os.getenv(f'LLM_{ch_upper}_ENABLED'), default=True)
+            if ch_lower == "anspire" and not protocol_raw:
+                protocol_raw = "openai"
+            enabled_raw = os.getenv(f'LLM_{ch_upper}_ENABLED')
+            if ch_lower == "anspire" and (enabled_raw is None or not enabled_raw.strip()):
+                enabled_raw = os.getenv('ANSPIRE_LLM_ENABLED')
+            enabled = parse_env_bool(enabled_raw, default=True)
 
             # API keys: LLM_{NAME}_API_KEYS (multi) > LLM_{NAME}_API_KEY (single)
             api_keys_raw = os.getenv(f'LLM_{ch_upper}_API_KEYS', '')
@@ -1682,10 +1786,19 @@ class Config:
                 single_key = os.getenv(f'LLM_{ch_upper}_API_KEY', '').strip()
                 if single_key:
                     api_keys = [single_key]
+            if not api_keys and ch_lower == "anspire":
+                anspire_keys_raw = os.getenv('ANSPIRE_API_KEYS', '')
+                api_keys = [k.strip() for k in anspire_keys_raw.split(',') if k.strip()]
 
             # Models
             models_raw = os.getenv(f'LLM_{ch_upper}_MODELS', '')
             raw_models = [m.strip() for m in models_raw.split(',') if m.strip()]
+            if not raw_models and ch_lower == "anspire":
+                anspire_model = (
+                    os.getenv('ANSPIRE_LLM_MODEL') or ANSPIRE_LLM_MODEL_DEFAULT
+                ).strip()
+                if anspire_model:
+                    raw_models = [anspire_model]
             protocol = resolve_llm_channel_protocol(protocol_raw, base_url=base_url, models=raw_models, channel_name=ch_name)
             models = [normalize_llm_channel_model(m, protocol, base_url) for m in raw_models]
 
@@ -1934,22 +2047,30 @@ class Config:
             return
 
         explicit_overrides = set()
+        present_keys = set()
         for key in cls._WEBUI_RUNTIME_ENV_FILE_PRIORITY_KEYS:
             env_value = os.environ.get(key)
             if env_value is None:
                 continue
 
+            present_keys.add(key)
             file_value = cls._get_env_file_value(key)
             if file_value is None or env_value != file_value:
                 explicit_overrides.add(key)
 
         cls._BOOTSTRAP_RUNTIME_ENV_OVERRIDES = frozenset(explicit_overrides)
+        cls._BOOTSTRAP_RUNTIME_ENV_PRESENT_KEYS = frozenset(present_keys)
         cls._BOOTSTRAP_RUNTIME_ENV_OVERRIDES_CAPTURED = True
 
     @classmethod
     def _has_bootstrap_runtime_env_override(cls, key: str) -> bool:
         cls._capture_bootstrap_runtime_env_overrides()
         return key in cls._BOOTSTRAP_RUNTIME_ENV_OVERRIDES
+
+    @classmethod
+    def _had_bootstrap_runtime_env_key(cls, key: str) -> bool:
+        cls._capture_bootstrap_runtime_env_overrides()
+        return key in cls._BOOTSTRAP_RUNTIME_ENV_PRESENT_KEYS
 
     @classmethod
     def _resolve_report_language_env_value(
@@ -2072,6 +2193,7 @@ class Config:
         cls._instance = None
         cls._BOOTSTRAP_RUNTIME_ENV_OVERRIDES_CAPTURED = False
         cls._BOOTSTRAP_RUNTIME_ENV_OVERRIDES = frozenset()
+        cls._BOOTSTRAP_RUNTIME_ENV_PRESENT_KEYS = frozenset()
 
     def has_searxng_enabled(self) -> bool:
         """Whether SearXNG fallback is enabled via self-hosted or public mode."""
@@ -2343,6 +2465,7 @@ class Config:
             or self.pushplus_token
             or self.serverchan3_sendkey
             or self.custom_webhook_urls
+            or self.astrbot_url
             or (self.discord_bot_token and self.discord_main_channel_id)
             or self.discord_webhook_url
             or self.slack_webhook_url
@@ -2354,6 +2477,46 @@ class Config:
                 severity="warning",
                 message="未配置通知渠道，将不发送推送通知",
                 field="WECHAT_WEBHOOK_URL",
+            ))
+
+        if self.notification_quiet_hours:
+            try:
+                parse_notification_quiet_hours(self.notification_quiet_hours)
+            except ValueError as exc:
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=f"通知静默时段配置无效：{exc}",
+                    field="NOTIFICATION_QUIET_HOURS",
+                ))
+
+        if self.notification_timezone:
+            try:
+                validate_notification_timezone(self.notification_timezone)
+            except ValueError as exc:
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=f"通知时区配置无效：{exc}",
+                    field="NOTIFICATION_TIMEZONE",
+                ))
+
+        if self.notification_min_severity and not is_supported_notification_severity(self.notification_min_severity):
+            issues.append(ConfigIssue(
+                severity="error",
+                message=(
+                    "通知最低级别配置无效，允许值："
+                    f"{', '.join(NOTIFICATION_SEVERITIES)}"
+                ),
+                field="NOTIFICATION_MIN_SEVERITY",
+            ))
+
+        if self.notification_daily_digest_enabled:
+            issues.append(ConfigIssue(
+                severity="warning",
+                message=(
+                    "NOTIFICATION_DAILY_DIGEST_ENABLED 当前为预留配置；"
+                    "P4 不会发送每日摘要或持久化摘要内容。"
+                ),
+                field="NOTIFICATION_DAILY_DIGEST_ENABLED",
             ))
 
         has_feishu_app_id = bool((self.feishu_app_id or "").strip())
