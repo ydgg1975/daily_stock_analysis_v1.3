@@ -697,6 +697,10 @@ def stabilize_decision_with_structure(
     if not result:
         return
 
+    # 注入财务数据到 dashboard（供邮件报告使用）
+    if fundamental_context:
+        _inject_financial_data_to_dashboard(result, fundamental_context)
+
     try:
         language = normalize_report_language(getattr(result, "report_language", "zh"))
         dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
@@ -1128,6 +1132,94 @@ def _set_structural_hold_wording(
         result.risk_warning = f"{result.risk_warning}{sep}{reason}" if result.risk_warning else reason
     result.buy_reason = reason or result.buy_reason
     logger.info("[decision_stability] Applied structural hold calibration: %s", reason_key)
+
+
+def _inject_financial_data_to_dashboard(
+    result: "AnalysisResult",
+    fundamental_context: Optional[Dict[str, Any]] = None
+) -> None:
+    """
+    将财务数据注入到 dashboard 的 intelligence 字段，供邮件报告使用
+    """
+    if not fundamental_context or not isinstance(fundamental_context, dict):
+        return
+
+    if not hasattr(result, 'dashboard') or not result.dashboard:
+        result.dashboard = {}
+
+    dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
+    intelligence = dashboard.get('intelligence', {})
+    if not isinstance(intelligence, dict):
+        intelligence = {}
+
+    # 提取财报数据 - 支持两种格式：
+    # 1. fundamental_context["earnings"]["data"]["financial_report"] (base.py格式)
+    # 2. fundamental_context["earnings"]["financial_report"] (adapter直接返回格式)
+    earnings_block = fundamental_context.get("earnings", {})
+
+    if isinstance(earnings_block, dict):
+        # Try data key first
+        earnings_data = earnings_block.get("data", {})
+
+        if isinstance(earnings_data, dict) and earnings_data:
+            # Has data in data key
+            financial_report = earnings_data.get("financial_report", {})
+            dividend_metrics = earnings_data.get("dividend", {})
+        else:
+            financial_report = earnings_block.get("financial_report", {})
+            dividend_metrics = earnings_block.get("dividend", {})
+    else:
+        financial_report = {}
+        dividend_metrics = {}
+
+    if not isinstance(financial_report, dict):
+        financial_report = {}
+    if not isinstance(dividend_metrics, dict):
+        dividend_metrics = {}
+
+    # 如果 dividend 是字典但包含 events，需要提取 TTM 值
+    if isinstance(dividend_metrics, dict) and 'events' in dividend_metrics:
+        events = dividend_metrics.get('events', [])
+        if events:
+            ttm_cash = sum(e.get('cash_dividend_per_share', 0) for e in events if e.get('ex_dividend_date'))
+            ttm_count = len([e for e in events if e.get('ex_dividend_date')])
+            dividend_metrics = {
+                'ttm_cash_dividend_per_share': ttm_cash,
+                'ttm_event_count': ttm_count,
+            }
+
+    # 提取板块数据 - capital_flow.data OR top-level belong_boards
+    capital_flow_block = fundamental_context.get("capital_flow", {})
+    capital_flow_data = capital_flow_block.get("data", {}) if isinstance(capital_flow_block, dict) else {}
+
+    # 优先从 capital_flow.data 获取，其次从顶层 belong_boards 获取
+    belong_boards = capital_flow_data.get("belong_boards", []) if isinstance(capital_flow_data, dict) else []
+    if not belong_boards:
+        belong_boards = fundamental_context.get("belong_boards", [])
+
+    sector_rankings = capital_flow_data.get("sector_rankings", {}) if isinstance(capital_flow_data, dict) else {}
+    if not sector_rankings:
+        sector_rankings = fundamental_context.get("sector_rankings", {})
+
+    # 注入到 intelligence
+    if financial_report:
+        intelligence['financial_report'] = financial_report
+
+    if dividend_metrics:
+        intelligence['dividend_metrics'] = {
+            'ttm_dividend_yield_pct': dividend_metrics.get('ttm_dividend_yield_pct'),
+            'ttm_cash_dividend_per_share': dividend_metrics.get('ttm_cash_dividend_per_share'),
+            'ttm_event_count': dividend_metrics.get('ttm_event_count'),
+        }
+
+    if belong_boards:
+        intelligence['belong_boards'] = belong_boards if isinstance(belong_boards, list) else []
+
+    if sector_rankings:
+        intelligence['sector_rankings'] = sector_rankings if isinstance(sector_rankings, dict) else {}
+
+    dashboard['intelligence'] = intelligence
+    result.dashboard = dashboard
 
 
 def get_stock_name_multi_source(
