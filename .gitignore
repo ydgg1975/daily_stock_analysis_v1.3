@@ -80,3 +80,4 @@ static/
 /apps/dsa-desktop/node_modules/
 .python-version
 .gstack/
+.server.pid
