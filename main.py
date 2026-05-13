@@ -704,9 +704,7 @@ def main() -> int:
                     logger.info("[大盘复盘] 开始执行...")
                     try:
                         # Initialize required services
-                        notifier = NotificationService(
-                            enabled=not getattr(args, 'no_notify', False)
-                        )
+                        notifier = NotificationService()
                         search_service = SearchService()
                         
                         # Initialize analyzer if API keys are available

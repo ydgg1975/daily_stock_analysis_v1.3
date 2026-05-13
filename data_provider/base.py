@@ -460,9 +460,7 @@ class DataFetcherManager:
         from .pytdx_fetcher import PytdxFetcher
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
-        from src.config import get_config
-
-        config = get_config()
+        from .iwencai_market_query_fetcher import IwencaiMarketQueryFetcher, iwencai_fetcher_should_register
 
         # 创建所有数据源实例（优先级在各 Fetcher 的 __init__ 中确定）
         efinance = EfinanceFetcher()
@@ -481,6 +479,8 @@ class DataFetcherManager:
             baostock,
             yfinance,
         ]
+        if iwencai_fetcher_should_register():
+            self._fetchers.append(IwencaiMarketQueryFetcher())
 
         # 按优先级排序（Tushare 如果配置了 Token 且初始化成功，优先级为 0）
         self._fetchers.sort(key=lambda f: f.priority)
@@ -811,7 +811,14 @@ class DataFetcherManager:
                             if hasattr(fetcher, 'get_realtime_quote'):
                                 quote = fetcher.get_realtime_quote(stock_code)
                             break
-                
+
+                elif source in ("iwencai_market", "wencai_skillhub"):
+                    for fetcher in self._fetchers:
+                        if fetcher.name == "IwencaiMarketQueryFetcher":
+                            if hasattr(fetcher, "get_realtime_quote"):
+                                quote = fetcher.get_realtime_quote(stock_code)
+                            break
+
                 if quote is not None and quote.has_basic_data():
                     if primary_quote is None:
                         # First successful source becomes primary

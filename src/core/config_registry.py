@@ -208,7 +208,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_sensitive": False,
         "is_required": False,
         "is_editable": True,
-        "default_value": "tencent,akshare_sina,efinance,akshare_em",
+        "default_value": "iwencai_market,tencent,akshare_sina,efinance,akshare_em",
         "options": [],
         "validation": {},
         "display_order": 20,

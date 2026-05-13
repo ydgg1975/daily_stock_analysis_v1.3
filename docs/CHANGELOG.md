@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **默认实时行情优先级** — 未设置 `REALTIME_SOURCE_PRIORITY` 时默认改为 `iwencai_market,tencent,akshare_sina,efinance,akshare_em`（问财 CLI 优先；未启用问财或无 Key 时自动跳过）；仅配置 `TUSHARE_TOKEN` 且未显式设置该变量时，自动解析为 `iwencai_market,tushare,tencent,akshare_sina,efinance,akshare_em`
+
 ### Added
+- **requirements-dev.txt** — optional `pytest` / `flake8` pins for local tests and `scripts/ci_gate.sh`; CI (`ci.yml`, `docker-publish.yml`, `network-smoke.yml`) installs with `pip install -r requirements.txt -r requirements-dev.txt`
+- **iWencai realtime (hithink-market-query)** — optional `IwencaiMarketQueryFetcher`: when `IWENCAI_MARKET_QUERY_ENABLED=true`, `IWENCAI_API_KEY` is set, and the skill CLI exists under `skills/hithink-market-query/`, add token `iwencai_market` or `wencai_skillhub` to `REALTIME_SOURCE_PRIORITY` to query Tonghuashun iWencai OpenAPI for `UnifiedRealtimeQuote`; daily OHLCV still uses existing fetcher chain. E2E helper: `scripts/verify_iwencai_pipeline.sh`.
 - 📊 **LLM cost tracking** — all LLM calls (analysis, agent, market review) are recorded in the `llm_usage` table; new `GET /api/v1/usage/summary?period=today|month|all` endpoint returns aggregated token usage broken down by call type and model
+
 ### Fixed
 - 🐛 **历史报告狙击点位显示原始文本** (#452) — 历史详情页现优先展示 `raw_result.dashboard.battle_plan.sniper_points` 中的原始字符串，避免 `analysis_history` 数值列把区间、说明文字或复杂点位压缩成单个数字；保留原有数值列作为回退
 

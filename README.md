@@ -148,6 +148,9 @@
 | `BOCHA_API_KEYS` | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔） | 可选 |
 | `BRAVE_API_KEYS` | [Brave Search](https://brave.com/search/api/) API（隐私优先，美股优化，多个key用逗号分隔） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
+| `IWENCAI_API_KEY` | 同花顺问财 OpenAPI Key（[SkillHub](https://www.iwencai.com/skillhub) 安装 `hithink-market-query` 后获取） | 选用问财实时源时必填 |
+| `IWENCAI_MARKET_QUERY_ENABLED` | 设为 `true` 时注册问财实时 Fetcher（需本仓库 `skills/hithink-market-query/scripts/cli.py`） | 可选 |
+| `REALTIME_SOURCE_PRIORITY` | 逗号分隔实时源顺序；未配置时默认 **`iwencai_market` 优先**，其后 `tencent` 等；可含 `iwencai_market` 或 `wencai_skillhub` | 可选 |
 | `PREFETCH_REALTIME_QUOTES` | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`） | 可选 |
 | `WECHAT_MSG_TYPE` | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本 | 可选 |
 | `NEWS_MAX_AGE_DAYS` | 新闻最大时效（天），默认 3，避免使用过时信息 | 可选 |
@@ -340,8 +343,7 @@ python main.py
 ### 本地门禁（建议先跑）
 
 ```bash
-pip install -r requirements.txt
-pip install flake8 pytest
+pip install -r requirements.txt -r requirements-dev.txt
 ./scripts/ci_gate.sh
 ```
 

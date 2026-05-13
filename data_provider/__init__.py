@@ -27,29 +27,52 @@
 6. YfinanceFetcher (Priority 4) - 来自 yfinance 库
 
 提示：优先级数字越小越优先，同优先级按初始化顺序排列
+
+Heavy fetcher modules are lazy-loaded via __getattr__ so ``import data_provider``
+only pulls BaseFetcher / DataFetcherManager dependencies by default.
 """
 
+import importlib
+from typing import Any
+
 from .base import BaseFetcher, DataFetcherManager
-from .efinance_fetcher import EfinanceFetcher
-from .akshare_fetcher import AkshareFetcher, is_hk_stock_code
-from .tushare_fetcher import TushareFetcher
-from .pytdx_fetcher import PytdxFetcher
-from .baostock_fetcher import BaostockFetcher
-from .yfinance_fetcher import YfinanceFetcher
 from .us_index_mapping import is_us_index_code, is_us_stock_code, get_us_index_yf_symbol, US_INDEX_MAPPING
 
+_LAZY_EXPORTS = {
+    "EfinanceFetcher": ("efinance_fetcher", "EfinanceFetcher"),
+    "AkshareFetcher": ("akshare_fetcher", "AkshareFetcher"),
+    "TushareFetcher": ("tushare_fetcher", "TushareFetcher"),
+    "PytdxFetcher": ("pytdx_fetcher", "PytdxFetcher"),
+    "BaostockFetcher": ("baostock_fetcher", "BaostockFetcher"),
+    "YfinanceFetcher": ("yfinance_fetcher", "YfinanceFetcher"),
+    "IwencaiMarketQueryFetcher": ("iwencai_market_query_fetcher", "IwencaiMarketQueryFetcher"),
+    "is_hk_stock_code": ("akshare_fetcher", "is_hk_stock_code"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_EXPORTS:
+        mod_name, attr_name = _LAZY_EXPORTS[name]
+        mod = importlib.import_module(f"{__name__}.{mod_name}")
+        val = getattr(mod, attr_name)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    'BaseFetcher',
-    'DataFetcherManager',
-    'EfinanceFetcher',
-    'AkshareFetcher',
-    'TushareFetcher',
-    'PytdxFetcher',
-    'BaostockFetcher',
-    'YfinanceFetcher',
-    'is_us_index_code',
-    'is_us_stock_code',
-    'is_hk_stock_code',
-    'get_us_index_yf_symbol',
-    'US_INDEX_MAPPING',
+    "BaseFetcher",
+    "DataFetcherManager",
+    "EfinanceFetcher",
+    "AkshareFetcher",
+    "TushareFetcher",
+    "PytdxFetcher",
+    "BaostockFetcher",
+    "YfinanceFetcher",
+    "IwencaiMarketQueryFetcher",
+    "is_us_index_code",
+    "is_us_stock_code",
+    "is_hk_stock_code",
+    "get_us_index_yf_symbol",
+    "US_INDEX_MAPPING",
 ]

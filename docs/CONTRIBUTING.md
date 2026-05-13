@@ -31,6 +31,9 @@ source venv/bin/activate  # Linux/Mac
 # 安装依赖
 pip install -r requirements.txt
 
+# 运行测试或 ./scripts/ci_gate.sh 时再安装开发依赖
+pip install -r requirements-dev.txt
+
 # 配置环境变量
 cp .env.example .env
 ```

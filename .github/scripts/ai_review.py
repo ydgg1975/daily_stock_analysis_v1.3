@@ -17,6 +17,7 @@ REVIEW_PATHS = [
     'docs/**',
     '.github/PULL_REQUEST_TEMPLATE.md',
     'requirements.txt',
+    'requirements-dev.txt',
     'pyproject.toml',
     'setup.cfg',
     '.github/workflows/*.yml',
@@ -67,7 +68,7 @@ def classify_files(files):
     doc_files = [f for f in files if f.endswith('.md') or f.startswith('docs/') or f in ('README.md', 'AGENTS.md')]
     ci_files = [f for f in files if f.startswith('.github/workflows/')]
     config_files = [
-        f for f in files if f in ('requirements.txt', 'pyproject.toml', 'setup.cfg', '.github/PULL_REQUEST_TEMPLATE.md')
+        f for f in files if f in ('requirements.txt', 'requirements-dev.txt', 'pyproject.toml', 'setup.cfg', '.github/PULL_REQUEST_TEMPLATE.md')
     ]
     return py_files, doc_files, ci_files, config_files
 

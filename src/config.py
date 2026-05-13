@@ -276,12 +276,18 @@ class Config:
     # 东财接口补丁开关
     enable_eastmoney_patch: bool = False
     # 实时行情数据源优先级（逗号分隔）
-    # 推荐顺序：tencent > akshare_sina > efinance > akshare_em > tushare
-    # - tencent: 腾讯财经，有量比/换手率/市盈率等，单股查询稳定（推荐）
+    # 默认将 iwencai_market 置首；未启用问财或未注册 Fetcher 时会自动跳过并走后续源
+    # - iwencai_market（别名 wencai_skillhub）: 同花顺问财 OpenAPI，需 IWENCAI_MARKET_QUERY_ENABLED、IWENCAI_API_KEY 与 CLI
+    # - tencent: 腾讯财经，有量比/换手率/市盈率等，单股查询稳定
     # - akshare_sina: 新浪财经，基本行情稳定，但无量比
     # - efinance/akshare_em: 东财全量接口，数据最全但容易被封
-    # - tushare: Tushare Pro，需要2000积分，数据全面（付费用户可优先使用）
-    realtime_source_priority: str = "tencent,akshare_sina,efinance,akshare_em"
+    # - tushare: Tushare Pro，需要2000积分，数据全面（未显式配置 REALTIME 且配置了 TUSHARE_TOKEN 时会自动插在问财之后）
+    realtime_source_priority: str = "iwencai_market,tencent,akshare_sina,efinance,akshare_em"
+    # 同花顺问财行情技能（hithink-market-query）：可选实时源，默认关闭
+    iwencai_market_query_enabled: bool = False
+    iwencai_cli_path: Optional[str] = None  # default: <repo>/skills/hithink-market-query/scripts/cli.py
+    iwencai_market_query_template: str = "{code}最新价涨跌幅成交量换手率"
+    iwencai_subprocess_timeout_sec: int = 45
     # 实时行情缓存时间（秒）
     realtime_cache_ttl: int = 600
     # 熔断器冷却时间（秒）
@@ -723,9 +729,16 @@ class Config:
             # - akshare_sina: 新浪财经，基本行情稳定，但无量比
             # - efinance/akshare_em: 东财全量接口，数据最全但容易被封
             # - tushare: Tushare Pro，需要2000积分，数据全面
+            # - iwencai_market / wencai_skillhub: 问财 OpenAPI（IWENCAI_API_KEY + hithink-market-query CLI）
             realtime_source_priority=cls._resolve_realtime_source_priority(),
             realtime_cache_ttl=int(os.getenv('REALTIME_CACHE_TTL', '600')),
-            circuit_breaker_cooldown=int(os.getenv('CIRCUIT_BREAKER_COOLDOWN', '300'))
+            circuit_breaker_cooldown=int(os.getenv('CIRCUIT_BREAKER_COOLDOWN', '300')),
+            iwencai_market_query_enabled=os.getenv('IWENCAI_MARKET_QUERY_ENABLED', 'false').lower() == 'true',
+            iwencai_cli_path=os.getenv('IWENCAI_CLI_PATH', '').strip() or None,
+            iwencai_market_query_template=os.getenv(
+                'IWENCAI_MARKET_QUERY_TEMPLATE', '{code}最新价涨跌幅成交量换手率'
+            ),
+            iwencai_subprocess_timeout_sec=int(os.getenv('IWENCAI_SUBPROCESS_TIMEOUT_SEC', '45')),
         )
     
     @classmethod
@@ -997,11 +1010,11 @@ class Config:
         Resolve realtime source priority with automatic tushare injection.
 
         When TUSHARE_TOKEN is configured but REALTIME_SOURCE_PRIORITY is not
-        explicitly set, automatically prepend 'tushare' to the default priority
-        so that the paid data source is utilized for realtime quotes as well.
+        explicitly set, insert ``tushare`` after ``iwencai_market`` so iWencai is
+        tried first when enabled, with Tushare as the next paid fallback.
         """
         explicit = os.getenv('REALTIME_SOURCE_PRIORITY')
-        default_priority = 'tencent,akshare_sina,efinance,akshare_em'
+        default_priority = 'iwencai_market,tencent,akshare_sina,efinance,akshare_em'
 
         if explicit:
             # User explicitly set priority, respect it
@@ -1009,11 +1022,10 @@ class Config:
 
         tushare_token = os.getenv('TUSHARE_TOKEN', '').strip()
         if tushare_token:
-            # Token configured but no explicit priority override
-            # Prepend tushare so the paid source is tried first
+            # Token configured but no explicit priority override: tushare after iWencai
             import logging
             logger = logging.getLogger(__name__)
-            resolved = f'tushare,{default_priority}'
+            resolved = 'iwencai_market,tushare,tencent,akshare_sina,efinance,akshare_em'
             logger.info(
                 f"TUSHARE_TOKEN detected, auto-injecting tushare into realtime priority: {resolved}"
             )
