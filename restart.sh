@@ -35,7 +35,7 @@ fi
 
 echo "[daily-stock] starting server..."
 mkdir -p "$SCRIPT_DIR/logs"
-nohup "$VENV_PYTHON" main.py --serve-only >> "$LOG_FILE" 2>&1 &
+nohup "$VENV_PYTHON" main.py --serve-only --port 3001 >> "$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 
 sleep 2
