@@ -27,6 +27,20 @@ from src.formatters import (
 logger = logging.getLogger(__name__)
 
 
+def _contains_markdown_table(content: str) -> bool:
+    """Return whether content contains consecutive Markdown table rows."""
+    table_row_count = 0
+    for raw_line in content.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("|") and "|" in stripped[1:]:
+            table_row_count += 1
+            if table_row_count >= 2:
+                return True
+            continue
+        table_row_count = 0
+    return False
+
+
 class FeishuSender:
     
     def __init__(self, config: Config):
@@ -148,7 +162,8 @@ class FeishuSender:
         """
         分批发送长消息到飞书
         
-        按股票分析块（以 --- 或 ### 分隔）智能分割，确保每批不超过限制
+        按股票分析块（以 --- 或 ### 分隔）智能分割，确保每批不超过限制。
+        包含表格时先转成飞书友好的安全文本，避免分片后丢失表头上下文。
         
         Args:
             content: 完整消息内容
@@ -157,8 +172,9 @@ class FeishuSender:
         Returns:
             是否全部发送成功
         """
+        chunk_source = format_feishu_markdown(content) if _contains_markdown_table(content) else content
         try:
-            chunks = chunk_content_by_max_bytes(content, max_bytes, add_page_marker=True)
+            chunks = chunk_content_by_max_bytes(chunk_source, max_bytes, add_page_marker=True)
         except ValueError as e:
             logger.error("飞书消息分片失败，单片预算不足以安全分页（关键词过长或 max_bytes 过小）: %s", e)
             return False

@@ -229,6 +229,37 @@ class TestFeishuSender(unittest.TestCase):
         self.assertNotIn("```", serialized)
         self.assertNotIn("| 指标 |", serialized)
 
+    @mock.patch("src.notification_sender.feishu_sender.time.sleep", return_value=None)
+    @mock.patch("src.notification_sender.feishu_sender.requests.post")
+    def test_chunked_markdown_table_does_not_promote_data_rows_to_headers(self, mock_post, _mock_sleep):
+        mock_post.return_value = _response(200, {"code": 0})
+        cfg = _config(feishu_webhook_url="https://feishu.example/hook", feishu_max_bytes=130)
+        sender = FeishuSender(cfg)
+        rows = "\n".join(
+            f"| {index:06d} | 股票{index:02d} | {index} |"
+            for index in range(1, 10)
+        )
+        content = f"""# 人气股票
+
+| 代码 | 名称 | 热度 |
+| --- | --- | --- |
+{rows}
+"""
+
+        result = sender.send_to_feishu(content)
+
+        self.assertTrue(result)
+        self.assertGreater(mock_post.call_count, 1)
+        continuation_elements = [
+            call.kwargs["json"]["card"]["elements"]
+            for call in mock_post.call_args_list[1:]
+        ]
+        serialized = json.dumps(continuation_elements, ensure_ascii=False)
+        self.assertIn("000004", serialized)
+        self.assertIn("000006", serialized)
+        self.assertNotIn("**000002**", serialized)
+        self.assertNotIn("**000006**", serialized)
+
     @mock.patch("src.notification_sender.feishu_sender.requests.post")
     def test_send_error_response_returns_false(self, mock_post):
         mock_post.return_value = _response(200, {"code": 19024, "msg": "keyword not found"})
