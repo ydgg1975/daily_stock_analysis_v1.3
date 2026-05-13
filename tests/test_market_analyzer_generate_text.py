@@ -141,6 +141,65 @@ class TestAnalyzerGenerateText:
         assert dispatch_calls[0]["stream"] is True
         assert "stream" not in dispatch_calls[1]
 
+    def test_call_litellm_extracts_message_content_blocks_when_content_is_null(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="openai/cpa-compatible",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+        )
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=None,
+                        content_blocks=[
+                            {"type": "text", "text": "block "},
+                            {"type": "text", "text": "response"},
+                        ],
+                    ),
+                )
+            ],
+            usage=SimpleNamespace(prompt_tokens=2, completion_tokens=3, total_tokens=5),
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            text, model_used, usage = analyzer._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+            )
+
+        assert text == "block response"
+        assert model_used == "openai/cpa-compatible"
+        assert usage == {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5}
+
+    def test_call_litellm_falls_back_to_message_content_when_blocks_empty(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="openai/deepseek-chat",
+            litellm_fallback_models=[],
+            llm_model_list=[],
+        )
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    content_blocks=[],
+                    message=SimpleNamespace(content="message response"),
+                )
+            ],
+            usage=None,
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            text, model_used, usage = analyzer._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+            )
+
+        assert text == "message response"
+        assert model_used == "openai/deepseek-chat"
+        assert usage == {}
+
     def test_call_litellm_normalizes_kimi_k26_temperature(self):
         analyzer = self._make_analyzer()
         analyzer._config_override = SimpleNamespace(

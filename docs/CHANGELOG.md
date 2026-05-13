@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] Web 设置页为通知测试与 Agent/通知配置区域增加局部运行时错误兜底，异常时提示提供 Windows 桌面端 `desktop.log`，避免整页黑屏。
 - [修复] 资金流数据不可用时将直接买入结论降级为观察，避免缺失数据被误读为高置信买入依据。
 - [修复] 调高基本面聚合默认超时预算，降低 Windows/Docker 环境下整段基本面 timeout 的概率。
+- [修复] 正式分析链路兼容 OpenAI-compatible `content_blocks` 响应，避免 `message.content=null` 时被误判为空回复。
 
 ## [3.16.0] - 2026-05-10
 
