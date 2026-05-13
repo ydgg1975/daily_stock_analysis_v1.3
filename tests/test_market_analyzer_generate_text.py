@@ -827,6 +827,10 @@ Sector text.
 
         result = ma._inject_data_into_review(review, overview, news)
 
+        assert "大盘红绿灯" in result
+        assert "green（可进攻）" in result
+        assert "核心原因" in result
+        assert "操作建议" in result
         assert "盘面温度" in result
         assert "| 上涨/下跌/平盘 | 3200 / 1800 / 100 |" in result
         assert "| 指数 | 最新 | 涨跌幅 | 开盘 | 最高 | 最低 | 振幅 | 成交额(亿) |" in result
@@ -835,6 +839,127 @@ Sector text.
         assert "| 1 | AI算力 | +3.25% |" in result
         assert "#### 近三日催化线索" in result
         assert "AI算力板块走强" in result
+
+    def test_news_block_labels_snippets_and_preserves_source_url(self):
+        from src.market_analyzer import MarketAnalyzer
+
+        ma = MarketAnalyzer.__new__(MarketAnalyzer)
+        ma.config = SimpleNamespace(report_language="zh")
+        ma.region = "cn"
+        long_snippet = (
+            "复盘必读 2026-05-06 复盘的意义在于更清晰地把握市场脉搏，"
+            "综合描述 A 股三大指数今日集体反弹，成交额放大，科技成长方向领涨。"
+        )
+
+        result = ma._build_news_block([
+            {
+                "title": "A股收评：科创50指数放量反弹涨5.47% 两市成交额重回3万亿元",
+                "snippet": long_snippet,
+                "source": "东方财富",
+                "published_date": "2026-05-06",
+                "url": "https://example.com/news/1",
+            }
+        ])
+
+        assert "摘要/线索片段" in result
+        assert "关注点" not in result
+        assert "成交额放大" in result
+        assert "[东方财富 / 2026-05-06](https://example.com/news/1)" in result
+
+    def test_news_block_uses_dash_when_source_metadata_missing(self):
+        from src.market_analyzer import MarketAnalyzer
+
+        ma = MarketAnalyzer.__new__(MarketAnalyzer)
+        ma.config = SimpleNamespace(report_language="zh")
+        ma.region = "cn"
+
+        result = ma._build_news_block([
+            {
+                "title": "政策利好带动板块活跃",
+                "snippet": "相关主题成交放大",
+            }
+        ])
+
+        assert "| 1 | 政策利好带动板块活跃 | 相关主题成交放大 | - |" in result
+        assert "| 1 | 政策利好带动板块活跃 | 相关主题成交放大 | source |" not in result
+
+    def test_review_prompt_caps_news_url_context(self):
+        from src.market_analyzer import MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        long_url = "https://example.com/redirect?" + "utm_campaign=" + ("x" * 420)
+
+        prompt = ma._build_review_prompt(
+            MarketOverview(date="2026-05-06"),
+            [
+                {
+                    "title": "A股收评：指数放量反弹",
+                    "snippet": "科技成长方向领涨",
+                    "source": "测试来源",
+                    "published_date": "2026-05-06",
+                    "url": long_url,
+                }
+            ],
+        )
+
+        assert long_url not in prompt
+        assert "URL: https://example.com/redirect?" in prompt
+        assert ("x" * 220) not in prompt
+
+    def test_market_light_snapshot_marks_defensive_market_red(self):
+        from src.market_analyzer import MarketIndex, MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        overview = MarketOverview(
+            date="2026-03-06",
+            indices=[
+                MarketIndex(code="000001", name="上证指数", current=3200, change_pct=-1.8),
+                MarketIndex(code="399001", name="深证成指", current=9800, change_pct=-2.4),
+            ],
+            up_count=900,
+            down_count=4100,
+            limit_up_count=10,
+            limit_down_count=80,
+            total_amount=9800.0,
+        )
+
+        snapshot = ma.build_market_light_snapshot(overview)
+
+        assert snapshot["status"] == "red"
+        assert snapshot["label"] == "偏防守"
+        assert snapshot["score"] < 40
+        assert any("亏钱效应" in reason for reason in snapshot["reasons"])
+
+    def test_market_light_snapshot_uses_english_labels_and_reasons(self):
+        from src.market_analyzer import MarketIndex, MarketOverview
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        ma.config.report_language = "en"
+        overview = MarketOverview(
+            date="2026-03-06",
+            indices=[
+                MarketIndex(code="000001", name="SSE Composite", current=3200, change_pct=-1.8),
+                MarketIndex(code="399001", name="SZSE Component", current=9800, change_pct=-2.4),
+            ],
+            up_count=900,
+            down_count=4100,
+            limit_up_count=10,
+            limit_down_count=80,
+            total_amount=9800.0,
+        )
+
+        snapshot = ma.build_market_light_snapshot(overview)
+
+        assert snapshot["status"] == "red"
+        assert snapshot["label"] == "defensive"
+        assert snapshot["guidance"] == (
+            "Risk is elevated; prioritize drawdown control and avoid chasing weak rebounds."
+        )
+        assert snapshot["reasons"][0].startswith("market temperature ")
+        assert any(
+            reason.startswith("advancers ratio ") and "downside pressure dominates" in reason
+            for reason in snapshot["reasons"]
+        )
 
     def test_us_english_indices_do_not_label_turnover_as_cny(self):
         from src.core.market_profile import US_PROFILE
