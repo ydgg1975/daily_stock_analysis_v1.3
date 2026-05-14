@@ -27,7 +27,8 @@ _DIVIDEND_KEYWORD_MAP: Dict[str, List[str]] = {
         "派息(元/股)",
         "税前派息(元/股)",
         "现金分红(税前)",
-        "现金分红-现金分红比例",  # Added for stock_fhps_detail_em format
+        # Note: 现金分红-现金分红比例 is a percentage (e.g., 30%), not yuan-per-share
+        # Adding it here would cause 10x inflation in dividend yield calculations
     ],
     "plan_text": [
         "分配方案",
