@@ -47,14 +47,30 @@ class PipelineRelatedBoardsTestCase(unittest.TestCase):
         pipeline.fetcher_manager.get_belong_boards.assert_not_called()
 
     def test_attach_belong_boards_skips_provider_for_non_cn(self) -> None:
+        """For HK market (non-CN), should attempt to fetch board data."""
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
         pipeline.fetcher_manager = MagicMock()
+        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "科技", "type": "行业"}]
 
-        context = {"market": "us", "status": "not_supported"}
+        context = {"market": "hk", "status": "not_supported"}
+        enriched = pipeline._attach_belong_boards_to_fundamental_context("00700", context)
+
+        # HK market now supports board data fetch
+        self.assertEqual(enriched["belong_boards"], [{"name": "科技", "type": "行业"}])
+        pipeline.fetcher_manager.get_belong_boards.assert_called_once_with("00700")
+
+    def test_attach_belong_boards_allows_us_market(self) -> None:
+        """US market should also be able to fetch board data."""
+        pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+        pipeline.fetcher_manager = MagicMock()
+        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "Tech", "type": "Sector"}]
+
+        context = {"market": "us", "status": "ok"}
         enriched = pipeline._attach_belong_boards_to_fundamental_context("AAPL", context)
 
-        self.assertEqual(enriched["belong_boards"], [])
-        pipeline.fetcher_manager.get_belong_boards.assert_not_called()
+        # US market now supports board data fetch
+        self.assertEqual(enriched["belong_boards"], [{"name": "Tech", "type": "Sector"}])
+        pipeline.fetcher_manager.get_belong_boards.assert_called_once_with("AAPL")
 
     def test_attach_belong_boards_skips_provider_when_board_block_not_supported(self) -> None:
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
