@@ -1061,7 +1061,12 @@ class NotificationService(
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
                             name = board.get('name', '')
-                            change_pct = board.get('change_pct')
+                            change_pct_raw = board.get('change_pct')
+                            # 安全转换 change_pct 为浮点数
+                            try:
+                                change_pct = float(change_pct_raw) if change_pct_raw is not None else None
+                            except (ValueError, TypeError):
+                                change_pct = None
                             if name:
                                 # 涨跌幅格式化
                                 if change_pct is not None:
@@ -1431,7 +1436,11 @@ class NotificationService(
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
                             name = board.get('name', '')
-                            change_pct = board.get('change_pct')
+                            change_pct_raw = board.get('change_pct')
+                            try:
+                                change_pct = float(change_pct_raw) if change_pct_raw is not None else None
+                            except (ValueError, TypeError):
+                                change_pct = None
                             if name:
                                 if change_pct is not None:
                                     change_str = f"{change_pct:+.2f}%"
@@ -1726,7 +1735,11 @@ class NotificationService(
             for board in belong_boards[:5]:
                 if isinstance(board, dict):
                     name = board.get('name', '')
-                    change_pct = board.get('change_pct')
+                    change_pct_raw = board.get('change_pct')
+                    try:
+                        change_pct = float(change_pct_raw) if change_pct_raw is not None else None
+                    except (ValueError, TypeError):
+                        change_pct = None
                     price = board.get('price')
                     if name:
                         if change_pct is not None:
