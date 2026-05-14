@@ -1134,6 +1134,112 @@ def _set_structural_hold_wording(
     logger.info("[decision_stability] Applied structural hold calibration: %s", reason_key)
 
 
+def _enrich_belong_boards_with_quote(belong_boards: List[Any]) -> List[Dict[str, Any]]:
+    """
+    为关联板块确保包含涨跌幅数据
+    数据来源于 efinance get_belong_board 接口（已包含板块涨幅）
+    如果已有 change_pct 则直接返回，否则尝试二次查询
+
+    Args:
+        belong_boards: 原始板块列表，每个元素可以是 str 或 dict
+
+    Returns:
+        增强后的板块列表，包含 name, price, change_pct 字段
+    """
+    if not belong_boards:
+        return []
+
+    # 检查是否需要二次查询
+    need_fetch = False
+    for board in belong_boards:
+        if isinstance(board, dict):
+            if 'change_pct' not in board or board.get('change_pct') is None:
+                need_fetch = True
+                break
+        else:
+            need_fetch = True
+            break
+
+    if not need_fetch:
+        # 数据已包含 change_pct，直接返回
+        return [
+            dict(board) if isinstance(board, dict) else {'name': str(board)}
+            for board in belong_boards
+        ]
+
+    # 提取板块名称列表，尝试二次查询
+    board_names = []
+    for board in belong_boards:
+        if isinstance(board, dict):
+            name = board.get('name', '')
+            if name:
+                board_names.append(name)
+        elif isinstance(board, str) and board:
+            board_names.append(board)
+
+    if not board_names:
+        return belong_boards
+
+    # 二次查询获取实时行情
+    quotes = []
+    try:
+        from data_provider.base import DataFetcherManager
+        manager = DataFetcherManager()
+        quotes = manager.get_sector_realtime_quote(board_names)
+    except Exception as e:
+        logger.warning(f"[板块行情] 获取实时行情失败: {e}")
+
+    # 构建名称到行情的映射
+    quote_map = {}
+    for quote in quotes:
+        quote_name = quote.get('name', '')
+        if quote_name:
+            quote_map[quote_name] = quote
+
+    # 为每个板块匹配行情数据
+    enriched = []
+    for board in belong_boards:
+        if isinstance(board, dict):
+            board_name = board.get('name', '')
+            enriched_board = dict(board)
+        else:
+            board_name = str(board) if board else ''
+            enriched_board = {'name': board_name}
+
+        # 如果已有 change_pct 且非空，跳过
+        if enriched_board.get('change_pct') is not None:
+            enriched.append(enriched_board)
+            continue
+
+        # 尝试匹配行情数据
+        matched_quote = None
+        for quote_name, quote in quote_map.items():
+            if board_name == quote_name or board_name in quote_name or quote_name in board_name:
+                matched_quote = quote
+                break
+            # 特殊后缀处理
+            suffix_map = {'Ⅲ': '概念', 'Ⅱ': '概念', 'Ⅰ': '概念'}
+            for suffix, replacement in suffix_map.items():
+                if board_name.endswith(suffix):
+                    core_name = board_name[:-len(suffix)] + replacement
+                    if core_name in quote_name or quote_name in core_name:
+                        matched_quote = quote
+                        break
+            if matched_quote:
+                break
+
+        if matched_quote:
+            enriched_board['price'] = matched_quote.get('price')
+            enriched_board['change_pct'] = matched_quote.get('change_pct')
+            enriched_board['volume'] = matched_quote.get('volume')
+
+        enriched.append(enriched_board)
+
+    return enriched
+
+    return enriched
+
+
 def _inject_financial_data_to_dashboard(
     result: "AnalysisResult",
     fundamental_context: Optional[Dict[str, Any]] = None
@@ -1213,7 +1319,9 @@ def _inject_financial_data_to_dashboard(
         }
 
     if belong_boards:
-        intelligence['belong_boards'] = belong_boards if isinstance(belong_boards, list) else []
+        # 为关联板块查询实时行情
+        enriched_boards = _enrich_belong_boards_with_quote(belong_boards)
+        intelligence['belong_boards'] = enriched_boards if isinstance(enriched_boards, list) else []
 
     if sector_rankings:
         intelligence['sector_rankings'] = sector_rankings if isinstance(sector_rankings, dict) else {}

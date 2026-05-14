@@ -325,6 +325,18 @@ class BaseFetcher(ABC):
         """
         return None
 
+    def get_sector_realtime_quote(self, board_names: List[str]) -> List[Dict[str, Any]]:
+        """
+        根据板块名称列表查询实时行情
+
+        Args:
+            board_names: 板块名称列表
+
+        Returns:
+            每个板块的实时行情，包含 name, price, change_pct, volume
+        """
+        return []
+
     def get_daily_data(
         self,
         stock_code: str, 
@@ -877,6 +889,24 @@ class DataFetcherManager:
                 ),
                 None,
             )
+            # 新增：提取板块涨跌幅（来自 efinance get_belong_board 返回的"板块涨幅"列）
+            change_col = next(
+                (
+                    col
+                    for col in raw_data.columns
+                    if str(col) in {"板块涨幅", "涨跌幅", "change_pct", "pct_chg"}
+                ),
+                None,
+            )
+            # 新增：提取板块最新价（如果数据源提供）
+            price_col = next(
+                (
+                    col
+                    for col in raw_data.columns
+                    if str(col) in {"最新价", "板块价格", "price"}
+                ),
+                None,
+            )
             if name_col is None:
                 return []
             for _, row in raw_data.iterrows():
@@ -896,6 +926,22 @@ class DataFetcherManager:
                     board_type_raw = row.get(type_col, "")
                     if not DataFetcherManager._is_missing_board_value(board_type_raw):
                         item["type"] = str(board_type_raw).strip()
+                # 添加涨跌幅数据
+                if change_col is not None:
+                    change_val = row.get(change_col)
+                    if change_val is not None and not DataFetcherManager._is_missing_board_value(change_val):
+                        try:
+                            item["change_pct"] = float(change_val)
+                        except (ValueError, TypeError):
+                            pass
+                # 添加最新价数据
+                if price_col is not None:
+                    price_val = row.get(price_col)
+                    if price_val is not None and not DataFetcherManager._is_missing_board_value(price_val):
+                        try:
+                            item["price"] = float(price_val)
+                        except (ValueError, TypeError):
+                            pass
                 normalized.append(item)
             return normalized
 
@@ -1635,9 +1681,12 @@ class DataFetcherManager:
         Get stock membership boards through capability probing.
 
         Keep this at manager layer to avoid changing BaseFetcher abstraction.
+        支持 A 股、美股、港股的板块查询
         """
         stock_code = normalize_stock_code(stock_code)
-        if _market_tag(stock_code) != "cn":
+        market = _market_tag(stock_code)
+        # 支持 cn(A股)、us(美股)、hk(港股)
+        if market not in ("cn", "us", "hk"):
             return []
         for fetcher in self._fetchers:
             if not hasattr(fetcher, "get_belong_board"):
@@ -1646,7 +1695,7 @@ class DataFetcherManager:
                 raw_data = fetcher.get_belong_board(stock_code)
                 boards = self._normalize_belong_boards(raw_data)
                 if boards:
-                    logger.info(f"[{fetcher.name}] 获取所属板块成功: {stock_code}, count={len(boards)}")
+                    logger.info(f"[{fetcher.name}] 获取所属板���成功: {stock_code}, count={len(boards)}")
                     return boards
             except Exception as e:
                 logger.debug(f"[{fetcher.name}] 获取所属板块失败: {e}")
@@ -2623,3 +2672,24 @@ class DataFetcherManager:
             return top, bottom
         logger.warning(f"[板块排行] 所有数据源均失败，最终错误: {last_error}")
         return [], []
+
+    def get_sector_realtime_quote(self, board_names: List[str]) -> List[Dict[str, Any]]:
+        """获取板块实时行情（自动切换数据源）"""
+        if not board_names:
+            return []
+
+        for fetcher in self._fetchers:
+            try:
+                logger.info(f"[板块行情] 尝试从 {fetcher.name} 获取...")
+                result = fetcher.get_sector_realtime_quote(board_names)
+                if result and len(result) > 0:
+                    logger.info(f"[板块行情] 从 {fetcher.name} 获取成功: {len(result)} 条")
+                    return result
+                else:
+                    logger.warning(f"[板块行情] {fetcher.name} 返回空结果，继续尝试下一个数据源")
+            except Exception as e:
+                logger.warning(f"[{fetcher.name}] 获取板块行情失败: {e}")
+                continue
+
+        logger.warning(f"[板块行情] 所有数据源均失败")
+        return []

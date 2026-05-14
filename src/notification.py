@@ -1051,19 +1051,27 @@ class NotificationService(
                 # ========== 关联板块 ==========
                 belong_boards = intel.get('belong_boards', [])
                 if belong_boards and isinstance(belong_boards, list):
-                    board_texts = []
+                    # 始终以表格形式展示：板块名称 | 涨跌幅
+                    report_lines.extend([
+                        f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
+                        "",
+                        f"| 板块 | 涨跌幅 |",
+                        f"| --- | --- |",
+                    ])
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
-                            board_texts.append(board.get('name', str(board)))
-                        elif isinstance(board, str):
-                            board_texts.append(board)
-                    if board_texts:
-                        report_lines.extend([
-                            f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
-                            "",
-                            " | ".join(board_texts),
-                            "",
-                        ])
+                            name = board.get('name', '')
+                            change_pct = board.get('change_pct')
+                            if name:
+                                # 涨跌幅格式化
+                                if change_pct is not None:
+                                    change_str = f"{change_pct:+.2f}%"
+                                    emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
+                                    change_str = f"{emoji} {change_str}"
+                                else:
+                                    change_str = "NaN"
+                                report_lines.append(f"| {name} | {change_str} |")
+                    report_lines.append("")
 
                 # ========== 板块涨跌榜 ==========
                 sector_rankings = intel.get('sector_rankings', {})
@@ -1413,19 +1421,26 @@ class NotificationService(
                 # ========== 关联板块 ==========
                 belong_boards = intel.get('belong_boards', []) if intel else []
                 if belong_boards and isinstance(belong_boards, list):
-                    board_texts = []
+                    # 始终以表格形式展示
+                    lines.extend([
+                        f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
+                        "",
+                        f"| 板块 | 涨跌幅 |",
+                        f"| --- | --- |",
+                    ])
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
-                            board_texts.append(board.get('name', str(board)))
-                        elif isinstance(board, str):
-                            board_texts.append(board)
-                    if board_texts:
-                        lines.extend([
-                            f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
-                            "",
-                            " | ".join(board_texts),
-                            "",
-                        ])
+                            name = board.get('name', '')
+                            change_pct = board.get('change_pct')
+                            if name:
+                                if change_pct is not None:
+                                    change_str = f"{change_pct:+.2f}%"
+                                    emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
+                                    change_str = f"{emoji} {change_str}"
+                                else:
+                                    change_str = "NaN"
+                                lines.append(f"| {name} | {change_str} |")
+                    lines.append("")
 
                 # ========== 财务与分红数据 ==========
                 financial_report = intel.get('financial_report', {}) if intel else {}
@@ -1700,19 +1715,31 @@ class NotificationService(
         # ========== 关联板块 ==========
         belong_boards = intel.get('belong_boards', [])
         if belong_boards and isinstance(belong_boards, list):
-            board_texts = []
+            # 始终以表格形式展示
+            lines.extend([
+                "",
+                f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
+                "",
+                f"| 板块 | 涨跌幅 | 最新价 |",
+                f"| --- | --- | --- |",
+            ])
             for board in belong_boards[:5]:
                 if isinstance(board, dict):
-                    board_texts.append(board.get('name', str(board)))
-                elif isinstance(board, str):
-                    board_texts.append(board)
-            if board_texts:
-                lines.extend([
-                    "",
-                    f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
-                    "",
-                    " | ".join(board_texts),
-                ])
+                    name = board.get('name', '')
+                    change_pct = board.get('change_pct')
+                    price = board.get('price')
+                    if name:
+                        if change_pct is not None:
+                            change_str = f"{change_pct:+.2f}%"
+                            emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
+                            change_str = f"{emoji} {change_str}"
+                        else:
+                            change_str = "NaN"
+                        if price is not None:
+                            price_str = f"¥{price:.2f}"
+                        else:
+                            price_str = "NaN"
+                        lines.append(f"| {name} | {change_str} | {price_str} |")
 
         # ========== 财务与分红数据 ==========
         financial_report = intel.get('financial_report', {})

@@ -1805,6 +1805,152 @@ class AkshareFetcher(BaseFetcher):
             logger.error(f"[Akshare] 新浪接口获取板块排行也失败: {e}")
             return None
 
+    def get_all_sector_quotes(self, sector_type: str = '概念') -> Optional[pd.DataFrame]:
+        """获取所有板块实时行情（用于按名称查询）
+
+        Args:
+            sector_type: 板块类型 '概念' 或 '行业'
+        """
+        import akshare as ak
+
+        # 优先尝试概念板块（匹配用户报告中的"白酒概念"等）
+        if sector_type == '概念':
+            try:
+                self._set_random_user_agent()
+                self._enforce_rate_limit()
+
+                logger.info("[API调用] ak.stock_sector_spot() 获取概念板块行情...")
+                df = ak.stock_sector_spot(indicator='概念')
+                if df is not None and not df.empty:
+                    return df
+            except Exception as e:
+                logger.warning(f"[Akshare] 获取概念板块行情失败: {e}")
+
+        # 降级到行业板块
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ak.stock_board_industry_name_em() 获取行业板块行情...")
+            df = ak.stock_board_industry_name_em()
+            if df is None or df.empty:
+                return None
+            return df
+        except Exception as e:
+            logger.warning(f"[Akshare] 东财接口获取行业板块行情失败，尝试新浪接口: {e}")
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ak.stock_sector_spot() 获取板块行情(新浪)...")
+            df = ak.stock_sector_spot(indicator='行业')
+            return df
+        except Exception as e:
+            logger.error(f"[Akshare] 新浪接口获取板块行情也失败: {e}")
+            return None
+
+    def get_sector_realtime_quote(self, board_names: List[str]) -> List[Dict[str, Any]]:
+        """
+        根据板块名称列表查询实时行情 (Akshare)
+        支持模糊匹配：双向包含 + 特殊后缀处理
+        同时查询概念板块和行业板块
+        """
+        # 获取概念板块和行业板块数据
+        df_concept = self.get_all_sector_quotes(sector_type='概念')
+        df_industry = self.get_all_sector_quotes(sector_type='行业')
+
+        # 合并数据
+        dfs = []
+        if df_concept is not None and not df_concept.empty:
+            dfs.append(df_concept)
+        if df_industry is not None and not df_industry.empty:
+            # 统一列名
+            if '板块名称' in df_industry.columns:
+                df_industry = df_industry.rename(columns={'板块名称': '板块'})
+            dfs.append(df_industry)
+
+        if not dfs:
+            return []
+
+        df = pd.concat(dfs, ignore_index=True)
+
+        # 去重（保留概念板块的数据，因为更精准）
+        if '板块' in df.columns:
+            df = df.drop_duplicates(subset=['板块'], keep='first')
+
+        # 确定列名（兼容多个数据源返回的列名）
+        name_col = '板块'
+        price_col = next((c for c in df.columns if c in ('最新价', '平均价格', 'price')), None)
+        change_col = next((c for c in df.columns if c in ('涨跌幅', 'pct_chg', 'change_pct')), None)
+        volume_col = next((c for c in df.columns if c in ('成交额', '总成交额', 'volume')), None)
+
+        if name_col is None:
+            return []
+
+        result = []
+        df[name_col] = df[name_col].astype(str)
+        all_board_names = df[name_col].tolist()
+
+        for board_name in board_names:
+            board_name_str = str(board_name).strip()
+            if not board_name_str:
+                continue
+
+            matched = False
+
+            # 1. 精确匹配
+            for data_name in all_board_names:
+                if data_name == board_name_str:
+                    row = df[df[name_col] == data_name].iloc[0]
+                    result.append({
+                        'name': str(row[name_col]),
+                        'price': float(row[price_col]) if price_col and price_col in df.columns and pd.notna(row.get(price_col)) else None,
+                        'change_pct': float(row[change_col]) if change_col and change_col in df.columns and pd.notna(row.get(change_col)) else None,
+                        'volume': float(row[volume_col]) if volume_col and volume_col in df.columns and pd.notna(row.get(volume_col)) else None,
+                    })
+                    matched = True
+                    break
+
+            if matched:
+                continue
+
+            # 2. 双向包含匹配（板块名在数据中 OR 数据名在板块名中）
+            for data_name in all_board_names:
+                if board_name_str in data_name or data_name in board_name_str:
+                    row = df[df[name_col] == data_name].iloc[0]
+                    result.append({
+                        'name': str(row[name_col]),
+                        'price': float(row[price_col]) if price_col and price_col in df.columns and pd.notna(row.get(price_col)) else None,
+                        'change_pct': float(row[change_col]) if change_col and change_col in df.columns and pd.notna(row.get(change_col)) else None,
+                        'volume': float(row[volume_col]) if volume_col and volume_col in df.columns and pd.notna(row.get(volume_col)) else None,
+                    })
+                    matched = True
+                    break
+
+            if matched:
+                continue
+
+            # 3. 特殊后缀处理：白酒Ⅲ/白酒Ⅱ → 白酒概念
+            suffix_map = {'Ⅲ': '概念', 'Ⅱ': '概念', 'Ⅰ': '概念', 'IV': '概念', 'III': '概念', 'II': '概念', 'I': '概念'}
+            for suffix, replacement in suffix_map.items():
+                if board_name_str.endswith(suffix):
+                    core_name = board_name_str[:-len(suffix)] + replacement
+                    for data_name in all_board_names:
+                        if core_name in data_name or data_name in core_name:
+                            row = df[df[name_col] == data_name].iloc[0]
+                            result.append({
+                                'name': str(row[name_col]),
+                                'price': float(row[price_col]) if price_col and price_col in df.columns and pd.notna(row.get(price_col)) else None,
+                                'change_pct': float(row[change_col]) if change_col and change_col in df.columns and pd.notna(row.get(change_col)) else None,
+                                'volume': float(row[volume_col]) if volume_col and volume_col in df.columns and pd.notna(row.get(volume_col)) else None,
+                            })
+                            matched = True
+                            break
+                    break
+
+        return result
+
 
 if __name__ == "__main__":
     # 测试代码

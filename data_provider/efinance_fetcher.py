@@ -1045,7 +1045,61 @@ class EfinanceFetcher(BaseFetcher):
         except Exception as e:
             logger.error(f"[efinance] 获取板块排行失败: {e}")
             return None
-    
+
+    def get_all_sector_quotes(self) -> Optional[pd.DataFrame]:
+        """获取所有板块实时行情（用于按名称查询）"""
+        import efinance as ef
+
+        try:
+            self._set_random_user_agent()
+            self._enforce_rate_limit()
+
+            logger.info("[API调用] ef.stock.get_realtime_quotes(['行业板块']) 获取板块行情...")
+            df = _ef_call_with_timeout(ef.stock.get_realtime_quotes, ['行业板块'])
+            if df is None or df.empty:
+                logger.warning("[efinance] 板块行情数据为空")
+                return None
+            return df
+        except Exception as e:
+            logger.error(f"[efinance] 获取板块行情失败: {e}")
+            return None
+
+    def get_sector_realtime_quote(self, board_names: List[str]) -> List[Dict[str, Any]]:
+        """
+        根据板块名称列表查询实时行情 (efinance)
+        """
+        df = self.get_all_sector_quotes()
+        if df is None or df.empty:
+            return []
+
+        name_col = '股票名称' if '股票名称' in df.columns else 'name'
+        price_col = '最新价' if '最新价' in df.columns else 'price'
+        change_col = '涨跌幅' if '涨跌幅' in df.columns else 'pct_chg'
+        volume_col = '成交额' if '成交额' in df.columns else 'amount'
+
+        if name_col not in df.columns:
+            return []
+
+        result = []
+        df[name_col] = df[name_col].astype(str)
+
+        for board_name in board_names:
+            board_name_str = str(board_name).strip()
+            if not board_name_str:
+                continue
+
+            matches = df[df[name_col].str.contains(board_name_str, case=False, na=False)]
+            if not matches.empty:
+                row = matches.iloc[0]
+                result.append({
+                    'name': str(row[name_col]),
+                    'price': float(row[price_col]) if price_col in df.columns and pd.notna(row.get(price_col)) else None,
+                    'change_pct': float(row[change_col]) if change_col in df.columns and pd.notna(row.get(change_col)) else None,
+                    'volume': float(row[volume_col]) if volume_col in df.columns and pd.notna(row.get(volume_col)) else None,
+                })
+
+        return result
+
     def get_base_info(self, stock_code: str) -> Optional[Dict[str, Any]]:
         """
         获取股票基本信息
