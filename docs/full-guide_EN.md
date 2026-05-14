@@ -530,7 +530,7 @@ GEMINI_MODEL=gemini-3-flash-preview
 OPENAI_API_KEY=xxx
 OPENAI_BASE_URL=https://api.deepseek.com/v1
 OPENAI_MODEL=deepseek-chat
-# Thinking mode: deepseek-reasoner, deepseek-r1, qwq auto-detected; deepseek-chat enabled by model name
+# Thinking mode: deepseek-reasoner, deepseek-r1, qwq auto-detected; deepseek-chat uses normal Chat mode by default
 ```
 
 ### LiteLLM Direct Integration (Multi-Model + Multi-Key Load Balancing)

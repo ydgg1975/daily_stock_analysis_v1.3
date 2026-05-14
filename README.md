@@ -48,8 +48,8 @@
 | 类型 | 支持 |
 |------|------|
 | AI 模型 | [AIHubMix](https://aihubmix.com/?aff=CfMq)、Gemini、OpenAI 兼容、DeepSeek、通义千问、Claude 等（统一通过 [LiteLLM](https://github.com/BerriAI/litellm) 调用，支持多 Key 负载均衡）|
-| 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance |
-| 新闻搜索 | Tavily、SerpAPI、Bocha、Brave、MiniMax |
+| 行情数据 | 同花顺问财 SkillHub CLI、AkShare、Tushare、Pytdx、Baostock、YFinance |
+| 新闻搜索 | 同花顺问财结构化情报、Tavily、SerpAPI、Bocha、Brave、MiniMax |
 
 > 注：美股历史数据与实时行情统一使用 YFinance，确保复权一致性
 
@@ -95,7 +95,7 @@
 | `OPENAI_MODEL` | 模型名称（如 `gemini-3.1-pro-preview`、`gemini-3-flash-preview`、`gpt-5.2`） | 可选 |
 | `OPENAI_VISION_MODEL` | 图片识别专用模型（部分第三方模型不支持图像；不填则用 `OPENAI_MODEL`） | 可选 |
 
-> 注：AI 优先级 Gemini > Anthropic > OpenAI（含 AIHubmix），至少配置一个。`AIHUBMIX_KEY` 无需配置 `OPENAI_BASE_URL`，系统自动适配。图片识别需 Vision 能力模型。DeepSeek 思考模式（deepseek-reasoner、deepseek-r1、qwq、deepseek-chat）按模型名自动识别，无需额外配置。
+> 注：AI 优先级 Gemini > Anthropic > OpenAI（含 AIHubmix），至少配置一个。`AIHUBMIX_KEY` 无需配置 `OPENAI_BASE_URL`，系统自动适配。图片识别需 Vision 能力模型。DeepSeek 思考模式（deepseek-reasoner、deepseek-r1、qwq）按模型名自动识别，无需额外配置；`deepseek-chat` 默认走普通 Chat 模式。
 
 <details>
 <summary><b>通知渠道配置</b>（点击展开，至少配置一个）</summary>
@@ -148,8 +148,10 @@
 | `BOCHA_API_KEYS` | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔） | 可选 |
 | `BRAVE_API_KEYS` | [Brave Search](https://brave.com/search/api/) API（隐私优先，美股优化，多个key用逗号分隔） | 可选 |
 | `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) Token | 可选 |
-| `IWENCAI_API_KEY` | 同花顺问财 OpenAPI Key（[SkillHub](https://www.iwencai.com/skillhub) 安装 `hithink-market-query` 后获取） | 选用问财实时源时必填 |
-| `IWENCAI_MARKET_QUERY_ENABLED` | 设为 `true` 时注册问财实时 Fetcher（需本仓库 `skills/hithink-market-query/scripts/cli.py`） | 可选 |
+| `IWENCAI_API_KEY` | 同花顺问财 OpenAPI Key（[SkillHub](https://www.iwencai.com/skillhub) 安装 `hithink-market-query` 后获取） | 选用问财行情/情报源时必填 |
+| `IWENCAI_MARKET_QUERY_ENABLED` | 设为 `true` 时注册问财 Fetcher 和结构化情报 provider（需本仓库 `skills/hithink-market-query/scripts/cli.py`） | 可选 |
+| `IWENCAI_CLI_PATH` | 自定义问财 CLI 路径；不填时默认使用 `skills/hithink-market-query/scripts/cli.py` | 可选 |
+| `IWENCAI_MARKET_QUERY_TEMPLATE` | 自定义实时行情字段查询模板，默认包含最新价、涨跌幅、量比、换手率、PE/PB、市值、开高低等字段 | 可选 |
 | `REALTIME_SOURCE_PRIORITY` | 逗号分隔实时源顺序；未配置时默认 **`iwencai_market` 优先**，其后 `tencent` 等；可含 `iwencai_market` 或 `wencai_skillhub` | 可选 |
 | `PREFETCH_REALTIME_QUOTES` | 实时行情预取开关：设为 `false` 可禁用全市场预取（默认 `true`） | 可选 |
 | `WECHAT_MSG_TYPE` | 企微消息类型，默认 markdown，支持配置 text 类型，发送纯 markdown 文本 | 可选 |

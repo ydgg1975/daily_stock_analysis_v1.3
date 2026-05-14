@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 import litellm
 from litellm import Router
 
-from src.config import get_config, get_api_keys_for_model, extra_litellm_params
+from src.config import get_config, get_api_keys_for_model, extra_litellm_params, _model_uses_managed_keys
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +48,9 @@ class LLMResponse:
 # Models that auto-return reasoning_content; do NOT send extra_body (may cause 400).
 _AUTO_THINKING_MODELS: List[str] = ["deepseek-reasoner", "deepseek-r1", "qwq"]
 
-# Models that need explicit opt-in via extra_body; payload decoupled from model name.
-_OPT_IN_THINKING_MODELS: Dict[str, dict] = {
-    "deepseek-chat": {"thinking": {"type": "enabled"}},
-}
+# Models that need explicit opt-in via extra_body; keep empty by default because
+# some providers route opt-in payloads to beta endpoints that are less stable.
+_OPT_IN_THINKING_MODELS: Dict[str, dict] = {}
 
 
 def _model_matches(model: str, entries: List[str]) -> bool:
@@ -83,8 +82,8 @@ def get_thinking_extra_body(model: str) -> Optional[dict]:
       These models automatically return reasoning_content in API responses; sending
       extra_body would cause 400 because the API already enables thinking by default.
       Return None to avoid duplicate activation.
-    - Opt-in models (_OPT_IN_THINKING_MODELS: deepseek-chat): Return the activation
-      payload to explicitly enable thinking mode.
+    - Opt-in models (_OPT_IN_THINKING_MODELS): Return provider-specific activation
+      payloads only when they are explicitly listed.
     - All other models: Return None (no thinking mode).
     """
     if _model_matches(model, _AUTO_THINKING_MODELS):
@@ -125,8 +124,6 @@ class LLMToolAdapter:
             logger.warning("Agent LLM: LITELLM_MODEL not configured")
             return
 
-        self._litellm_available = True
-
         # --- Channel / YAML path ---
         if self._has_channel_config():
             model_list = config.llm_model_list
@@ -142,10 +139,19 @@ class LLMToolAdapter:
                 f"Agent LLM: Router initialized from channels/YAML — "
                 f"{len(model_list)} deployment(s), models: {unique_models}"
             )
+            self._litellm_available = True
             return
 
         # --- Legacy path ---
         keys = get_api_keys_for_model(litellm_model, config)
+        if not keys and _model_uses_managed_keys(litellm_model):
+            logger.warning(
+                f"Agent LLM: no valid API key configured for {litellm_model}; "
+                "agent LLM calls will be unavailable"
+            )
+            return
+
+        self._litellm_available = True
         if not keys:
             logger.info(
                 f"Agent LLM: litellm initialized (model={litellm_model}, "
@@ -212,6 +218,11 @@ class LLMToolAdapter:
         Returns:
             LLMResponse with either content (final answer) or tool_calls.
         """
+        if not self.is_available:
+            error_msg = "LLM unavailable: no valid API key configured"
+            logger.warning(error_msg)
+            return LLMResponse(content=error_msg, provider="error")
+
         config = self._config
         models_to_try = [config.litellm_model] + (config.litellm_fallback_models or [])
         models_to_try = [m for m in models_to_try if m]

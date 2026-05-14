@@ -12,7 +12,9 @@ A股自选股智能分析系统 - 搜索服务模块
 """
 
 import logging
+import os
 import random
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -231,6 +233,108 @@ class BaseSearchProvider(ABC):
                 error_message=str(e),
                 search_time=elapsed
             )
+
+
+class IwencaiSearchProvider(BaseSearchProvider):
+    """
+    Tonghuashun iWencai SkillHub search provider.
+
+    It adapts structured iWencai rows (news, research reports, announcements,
+    risk/earnings facts) into the existing SearchResponse shape so the rest of
+    the analysis pipeline can keep using the provider-neutral search interface.
+    """
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "Iwencai")
+
+    @staticmethod
+    def _build_iwencai_query(query: str) -> str:
+        compact = "".join((query or "").split())
+        has_symbol = bool(re.search(r"\d{6}|HK\d{5}|[A-Z]{2,5}", query or ""))
+        market_terms = ("A股", "大盘", "股市", "市场", "板块")
+        stock_context_terms = (
+            "所在行业", "竞争对手", "市场份额", "目标价", "评级", "研报",
+            "减持", "业绩", "财报", "诉讼", "处罚", "风险", "净利润", "营收",
+        )
+        has_stock_context = any(term in compact for term in stock_context_terms)
+        if not has_symbol and not has_stock_context and any(term in compact for term in market_terms):
+            if "情绪" in compact or "涨停" in compact or "跌停" in compact:
+                return "今日A股市场情绪上涨家数下跌家数涨停家数跌停家数"
+            if "热点" in compact or "板块" in compact:
+                return "今日A股主要指数涨跌幅成交额上涨家数下跌家数市场热点板块"
+            return "今日A股大盘复盘主要指数涨跌幅成交额市场热点板块"
+
+        finance_terms = (
+            "新闻", "公告", "研报", "风险", "业绩", "减持",
+            "处罚", "诉讼", "财报", "行业", "目标价", "评级",
+        )
+        if not any(term in query for term in finance_terms):
+            return f"{query} 新闻公告研报风险业绩"
+        return query
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        from data_provider.iwencai_market_query_fetcher import iwencai_cli_query
+
+        actual_query = self._build_iwencai_query(query)
+
+        payload = iwencai_cli_query(actual_query, limit=max_results, timeout=30)
+        datas = (payload or {}).get("datas") or []
+        results: List[SearchResult] = []
+        for idx, row in enumerate(datas[:max_results], 1):
+            if not isinstance(row, dict):
+                continue
+
+            title = (
+                row.get("新闻标题")
+                or row.get("公告标题")
+                or row.get("研报")
+                or row.get("标题")
+                or row.get("事件")
+                or row.get("指数简称")
+                or row.get("行业名称")
+                or row.get("概念名称")
+                or row.get("板块名称")
+                or row.get("股票简称")
+                or f"同花顺结果 {idx}"
+            )
+            url = (
+                row.get("新闻链接")
+                or row.get("公告链接")
+                or row.get("研报链接")
+                or row.get("链接")
+                or ""
+            )
+            source = row.get("来源") or row.get("研究机构") or row.get("公告来源") or "同花顺问财"
+            published = (
+                row.get("发布时间")
+                or row.get("公告日期")
+                or row.get("发布日期")
+                or row.get("日期")
+            )
+            snippet_parts = []
+            for key, value in row.items():
+                if key in {"新闻链接", "公告链接", "研报链接", "链接"}:
+                    continue
+                if value in (None, "", [], {}):
+                    continue
+                snippet_parts.append(f"{key}: {value}")
+            results.append(
+                SearchResult(
+                    title=str(title),
+                    snippet="; ".join(snippet_parts)[:500],
+                    url=str(url),
+                    source=str(source),
+                    published_date=str(published) if published else None,
+                )
+            )
+
+        return SearchResponse(
+            query=actual_query,
+            results=results,
+            provider=self.name,
+            success=bool(results),
+            error_message=None if results else "同花顺问财未返回搜索结果",
+        )
 
 
 class TavilySearchProvider(BaseSearchProvider):
@@ -1179,6 +1283,13 @@ class SearchService:
         self.news_max_age_days = max(1, news_max_age_days)
 
         # 初始化搜索引擎（按优先级排序）
+        # 0. iWencai 优先（同花顺 SkillHub，结构化金融情报）
+        iwencai_key = os.getenv("IWENCAI_API_KEY", "").strip()
+        iwencai_enabled = os.getenv("IWENCAI_MARKET_QUERY_ENABLED", "false").lower() == "true"
+        if iwencai_enabled and iwencai_key:
+            self._providers.append(IwencaiSearchProvider([iwencai_key]))
+            logger.info("已配置 Iwencai 搜索/情报 provider")
+
         # 1. Bocha 优先（中文搜索优化，AI摘要）
         if bocha_keys:
             self._providers.append(BochaSearchProvider(bocha_keys))
@@ -1257,6 +1368,11 @@ class SearchService:
     def is_available(self) -> bool:
         """检查是否有可用的搜索引擎"""
         return any(p.is_available for p in self._providers)
+
+    @property
+    def provider_names(self) -> List[str]:
+        """Return enabled search provider names for diagnostics."""
+        return [p.name for p in self._providers if p.is_available]
 
     def _cache_key(self, query: str, max_results: int, days: int) -> str:
         """Build a cache key from query parameters."""
@@ -1467,18 +1583,23 @@ class SearchService:
         else:
             search_dimensions = [
                 {'name': 'latest_news', 'query': f"{stock_name} {stock_code} 最新 新闻 重大 事件", 'desc': '最新消息'},
-                {'name': 'market_analysis', 'query': f"{stock_name} 研报 目标价 评级 深度分析", 'desc': '机构分析'},
+                {
+                    'name': 'market_analysis',
+                    'query': f"{stock_name} {stock_code} 研报 目标价 评级 深度分析",
+                    'desc': '机构分析',
+                },
                 {'name': 'risk_check', 'query': (
                     f"{stock_name} 指数走势 跟踪误差 净值 表现"
-                    if is_index_etf else f"{stock_name} 减持 处罚 违规 诉讼 利空 风险"
+                    if is_index_etf else f"{stock_name} {stock_code} 减持 处罚 违规 诉讼 利空 风险"
                 ), 'desc': '风险排查'},
                 {'name': 'earnings', 'query': (
                     f"{stock_name} 指数成分 净值 跟踪表现"
-                    if is_index_etf else f"{stock_name} 业绩预告 财报 营收 净利润 同比增长"
+                    if is_index_etf else f"{stock_name} {stock_code} 业绩预告 财报 营收 净利润 同比增长"
                 ), 'desc': '业绩预期'},
                 {'name': 'industry', 'query': (
                     f"{stock_name} 指数成分股 行业配置 权重"
-                    if is_index_etf else f"{stock_name} 所在行业 竞争对手 市场份额 行业前景"
+                    if is_index_etf
+                    else f"{stock_name} {stock_code} 所在行业 竞争对手 市场份额 行业前景"
                 ), 'desc': '行业分析'},
             ]
         

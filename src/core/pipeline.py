@@ -103,7 +103,7 @@ class StockAnalysisPipeline:
         else:
             logger.info("筹码分布分析已禁用")
         if self.search_service.is_available:
-            logger.info("搜索服务已启用 (Tavily/SerpAPI)")
+            logger.info(f"搜索服务已启用 ({', '.join(self.search_service.provider_names)})")
         else:
             logger.warning("搜索服务未启用（未配置 API Key）")
     

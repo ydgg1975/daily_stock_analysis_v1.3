@@ -21,7 +21,7 @@ from json_repair import repair_json
 from litellm import Router
 
 from src.agent.llm_adapter import get_thinking_extra_body
-from src.config import Config, get_config, get_api_keys_for_model, extra_litellm_params
+from src.config import Config, get_config, get_api_keys_for_model, extra_litellm_params, _model_uses_managed_keys
 from src.storage import persist_llm_usage
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.schemas.report_schema import AnalysisReportSchema
@@ -561,8 +561,6 @@ class GeminiAnalyzer:
             logger.warning("Analyzer LLM: LITELLM_MODEL not configured")
             return
 
-        self._litellm_available = True
-
         # --- Channel / YAML path: build Router from pre-built model_list ---
         if self._has_channel_config(config):
             model_list = config.llm_model_list
@@ -578,10 +576,19 @@ class GeminiAnalyzer:
                 f"Analyzer LLM: Router initialized from channels/YAML — "
                 f"{len(model_list)} deployment(s), models: {unique_models}"
             )
+            self._litellm_available = True
             return
 
         # --- Legacy path: build Router for multi-key, or use single key ---
         keys = get_api_keys_for_model(litellm_model, config)
+        if not keys and _model_uses_managed_keys(litellm_model):
+            logger.warning(
+                f"Analyzer LLM: no valid API key configured for {litellm_model}; "
+                "AI analysis will be unavailable"
+            )
+            return
+
+        self._litellm_available = True
 
         if len(keys) > 1:
             # Build legacy Router for primary model multi-key load-balancing
@@ -616,7 +623,7 @@ class GeminiAnalyzer:
 
     def is_available(self) -> bool:
         """Check if LiteLLM is properly configured with at least one API key."""
-        return self._router is not None or self._litellm_available
+        return getattr(self, "_router", None) is not None or getattr(self, "_litellm_available", False)
 
     def _call_litellm(self, prompt: str, generation_config: dict) -> Tuple[str, str, Dict[str, Any]]:
         """Call LLM via litellm with fallback across configured models.
@@ -716,6 +723,10 @@ class GeminiAnalyzer:
         Returns:
             Response text, or None if the LLM call fails (error is logged).
         """
+        if hasattr(self, "_litellm_available") and not self.is_available():
+            logger.warning("[generate_text] LLM unavailable; skip LiteLLM call")
+            return None
+
         try:
             result = self._call_litellm(
                 prompt,

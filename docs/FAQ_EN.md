@@ -203,7 +203,7 @@ Use channel mode: set `LLM_CHANNELS=aihubmix,deepseek,gemini` and configure each
 OPENAI_API_KEY=sk-xxxxxxxx
 OPENAI_BASE_URL=https://api.deepseek.com/v1
 OPENAI_MODEL=deepseek-chat
-# Thinking mode: deepseek-reasoner, deepseek-r1, qwq auto-detected; deepseek-chat enabled by model name
+# Thinking mode: deepseek-reasoner, deepseek-r1, qwq auto-detected; deepseek-chat uses normal Chat mode by default
 ```
 
 Supported model services:

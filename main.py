@@ -633,7 +633,15 @@ def main() -> int:
             search_service = None
             analyzer = None
 
-            if config.bocha_api_keys or config.tavily_api_keys or config.brave_api_keys or config.serpapi_keys or config.minimax_api_keys:
+            has_search_provider = bool(
+                config.bocha_api_keys
+                or config.tavily_api_keys
+                or config.brave_api_keys
+                or config.serpapi_keys
+                or config.minimax_api_keys
+                or (config.iwencai_market_query_enabled and config.iwencai_api_key)
+            )
+            if has_search_provider:
                 search_service = SearchService(
                     bocha_keys=config.bocha_api_keys,
                     tavily_keys=config.tavily_api_keys,

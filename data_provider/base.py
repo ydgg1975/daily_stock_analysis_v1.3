@@ -925,6 +925,7 @@ class DataFetcherManager:
 
         # 定义筹码数据源优先级列表
         chip_sources = [
+            ("IwencaiMarketQueryFetcher", "iwencai_chip"),
             ("AkshareFetcher", "akshare_chip"),
             ("TushareFetcher", "tushare_chip"),
             ("EfinanceFetcher", "efinance_chip"),

@@ -192,6 +192,24 @@ class TestValidateStructuredLLM:
         issues = cfg.validate_structured()
         assert not any(i.severity == "error" and "LLM" in i.message for i in issues)
 
+    def test_load_from_env_ignores_non_ascii_deepseek_placeholder(self):
+        """Chinese placeholder keys must not be sent as HTTP Authorization headers."""
+        with patch.dict(
+            "os.environ",
+            {
+                "ENV_FILE": "/tmp/daily-stock-analysis-missing.env",
+                "STOCK_LIST": "600519",
+                "LITELLM_MODEL": "deepseek/deepseek-chat",
+                "DEEPSEEK_API_KEY": "请替换为你的实际_Key",
+            },
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
+
+        assert cfg.deepseek_api_keys == []
+        assert cfg.llm_model_list == []
+        assert any(i.severity == "error" and "LLM" in i.message for i in cfg.validate_structured())
+
     def test_missing_litellm_model_is_info_not_error(self):
         """llm_model_list present but litellm_model unset = info, not error."""
         cfg = _make_config(litellm_model="")

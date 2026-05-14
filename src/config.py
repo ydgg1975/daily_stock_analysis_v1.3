@@ -57,6 +57,39 @@ def setup_env(override: bool = False):
     load_dotenv(dotenv_path=env_path, override=override)
 
 
+_API_KEY_PLACEHOLDER_RE = re.compile(r"(请|替换|你的|实际|your[_-]?|replace|placeholder|example|xxx)", re.IGNORECASE)
+
+
+def _is_valid_api_key(value: Optional[str]) -> bool:
+    """Reject empty, placeholder, or non-ASCII API keys before they reach HTTP headers."""
+    key = (value or "").strip()
+    if len(key) < 8:
+        return False
+    try:
+        key.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+    return _API_KEY_PLACEHOLDER_RE.search(key) is None
+
+
+def _parse_api_keys(raw: str) -> List[str]:
+    """Parse comma-separated API keys and keep only header-safe values."""
+    return [k.strip() for k in (raw or "").split(",") if _is_valid_api_key(k)]
+
+
+def _first_valid_api_key(*values: Optional[str]) -> Optional[str]:
+    for value in values:
+        if _is_valid_api_key(value):
+            return value.strip()  # type: ignore[union-attr]
+    return None
+
+
+def _model_uses_managed_keys(model: str) -> bool:
+    """Whether this LiteLLM model is covered by Config-managed API key fields."""
+    model = (model or "").lower().strip()
+    return model.startswith(("gemini/", "vertex_ai/", "anthropic/", "openai/", "deepseek/"))
+
+
 @dataclass
 class Config:
     """
@@ -135,6 +168,7 @@ class Config:
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
+    iwencai_api_key: Optional[str] = None
 
     # === 新闻与分析筛选配置 ===
     news_max_age_days: int = 3   # 新闻最大时效（天）
@@ -286,7 +320,12 @@ class Config:
     # 同花顺问财行情技能（hithink-market-query）：可选实时源，默认关闭
     iwencai_market_query_enabled: bool = False
     iwencai_cli_path: Optional[str] = None  # default: <repo>/skills/hithink-market-query/scripts/cli.py
-    iwencai_market_query_template: str = "{code}最新价涨跌幅成交量换手率"
+    iwencai_market_query_template: str = "".join(
+        [
+            "{code}最新价涨跌幅成交量成交额换手率量比",
+            "市盈率市净率总市值流通市值振幅开盘价最高价最低价",
+        ]
+    )
     iwencai_subprocess_timeout_sec: int = 45
     # 实时行情缓存时间（秒）
     realtime_cache_ttl: int = 600
@@ -432,33 +471,34 @@ class Config:
         # === LiteLLM multi-key parsing ===
         # GEMINI_API_KEYS (comma-separated) > GEMINI_API_KEY (single)
         _gemini_keys_raw = os.getenv('GEMINI_API_KEYS', '')
-        gemini_api_keys = [k.strip() for k in _gemini_keys_raw.split(',') if k.strip()]
-        _single_gemini = os.getenv('GEMINI_API_KEY', '').strip()
+        gemini_api_keys = _parse_api_keys(_gemini_keys_raw)
+        _single_gemini = _first_valid_api_key(os.getenv('GEMINI_API_KEY', ''))
         if not gemini_api_keys and _single_gemini:
             gemini_api_keys = [_single_gemini]
 
         # ANTHROPIC_API_KEYS > ANTHROPIC_API_KEY
         _anthropic_keys_raw = os.getenv('ANTHROPIC_API_KEYS', '')
-        anthropic_api_keys = [k.strip() for k in _anthropic_keys_raw.split(',') if k.strip()]
-        _single_anthropic = os.getenv('ANTHROPIC_API_KEY', '').strip()
+        anthropic_api_keys = _parse_api_keys(_anthropic_keys_raw)
+        _single_anthropic = _first_valid_api_key(os.getenv('ANTHROPIC_API_KEY', ''))
         if not anthropic_api_keys and _single_anthropic:
             anthropic_api_keys = [_single_anthropic]
 
         # OPENAI_API_KEYS > AIHUBMIX_KEY > OPENAI_API_KEY
         _openai_keys_raw = os.getenv('OPENAI_API_KEYS', '')
-        openai_api_keys = [k.strip() for k in _openai_keys_raw.split(',') if k.strip()]
+        openai_api_keys = _parse_api_keys(_openai_keys_raw)
         if not openai_api_keys:
-            _aihubmix = os.getenv('AIHUBMIX_KEY', '').strip()
-            _single_openai = os.getenv('OPENAI_API_KEY', '').strip()
-            _fallback_key = _aihubmix or _single_openai
+            _fallback_key = _first_valid_api_key(
+                os.getenv('AIHUBMIX_KEY', ''),
+                os.getenv('OPENAI_API_KEY', ''),
+            )
             if _fallback_key:
                 openai_api_keys = [_fallback_key]
 
         # DEEPSEEK_API_KEYS > DEEPSEEK_API_KEY (independent from OpenAI-compatible layer)
         _deepseek_keys_raw = os.getenv('DEEPSEEK_API_KEYS', '')
-        deepseek_api_keys = [k.strip() for k in _deepseek_keys_raw.split(',') if k.strip()]
+        deepseek_api_keys = _parse_api_keys(_deepseek_keys_raw)
         if not deepseek_api_keys:
-            _single_deepseek = os.getenv('DEEPSEEK_API_KEY', '').strip()
+            _single_deepseek = _first_valid_api_key(os.getenv('DEEPSEEK_API_KEY', ''))
             if _single_deepseek:
                 deepseek_api_keys = [_single_deepseek]
 
@@ -540,19 +580,19 @@ class Config:
 
         # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
-        bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
+        bocha_api_keys = _parse_api_keys(bocha_keys_str)
 
         minimax_keys_str = os.getenv('MINIMAX_API_KEYS', '')
-        minimax_api_keys = [k.strip() for k in minimax_keys_str.split(',') if k.strip()]
+        minimax_api_keys = _parse_api_keys(minimax_keys_str)
         
         tavily_keys_str = os.getenv('TAVILY_API_KEYS', '')
-        tavily_api_keys = [k.strip() for k in tavily_keys_str.split(',') if k.strip()]
+        tavily_api_keys = _parse_api_keys(tavily_keys_str)
         
         serpapi_keys_str = os.getenv('SERPAPI_API_KEYS', '')
-        serpapi_keys = [k.strip() for k in serpapi_keys_str.split(',') if k.strip()]
+        serpapi_keys = _parse_api_keys(serpapi_keys_str)
 
         brave_keys_str = os.getenv('BRAVE_API_KEYS', '')
-        brave_api_keys = [k.strip() for k in brave_keys_str.split(',') if k.strip()]
+        brave_api_keys = _parse_api_keys(brave_keys_str)
 
         # 企微消息类型与最大字节数逻辑
         wechat_msg_type = os.getenv('WECHAT_MSG_TYPE', 'markdown')
@@ -615,6 +655,7 @@ class Config:
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
+            iwencai_api_key=_first_valid_api_key(os.getenv('IWENCAI_API_KEY')),
             news_max_age_days=max(1, int(os.getenv('NEWS_MAX_AGE_DAYS', '3'))),
             bias_threshold=max(1.0, float(os.getenv('BIAS_THRESHOLD', '5.0'))),
             agent_mode=os.getenv('AGENT_MODE', 'false').lower() == 'true',
@@ -736,7 +777,13 @@ class Config:
             iwencai_market_query_enabled=os.getenv('IWENCAI_MARKET_QUERY_ENABLED', 'false').lower() == 'true',
             iwencai_cli_path=os.getenv('IWENCAI_CLI_PATH', '').strip() or None,
             iwencai_market_query_template=os.getenv(
-                'IWENCAI_MARKET_QUERY_TEMPLATE', '{code}最新价涨跌幅成交量换手率'
+                'IWENCAI_MARKET_QUERY_TEMPLATE',
+                "".join(
+                    [
+                        "{code}最新价涨跌幅成交量成交额换手率量比",
+                        "市盈率市净率总市值流通市值振幅开盘价最高价最低价",
+                    ]
+                ),
             ),
             iwencai_subprocess_timeout_sec=int(os.getenv('IWENCAI_SUBPROCESS_TIMEOUT_SEC', '45')),
         )
@@ -899,7 +946,7 @@ class Config:
 
         # Gemini keys
         for k in gemini_keys:
-            if k and len(k) >= 8:
+            if _is_valid_api_key(k):
                 model_list.append({
                     'model_name': '__legacy_gemini__',
                     'litellm_params': {'model': '__legacy_gemini__', 'api_key': k},
@@ -907,7 +954,7 @@ class Config:
 
         # Anthropic keys
         for k in anthropic_keys:
-            if k and len(k) >= 8:
+            if _is_valid_api_key(k):
                 model_list.append({
                     'model_name': '__legacy_anthropic__',
                     'litellm_params': {'model': '__legacy_anthropic__', 'api_key': k},
@@ -915,7 +962,7 @@ class Config:
 
         # OpenAI-compatible keys
         for k in openai_keys:
-            if k and len(k) >= 8:
+            if _is_valid_api_key(k):
                 params: Dict[str, Any] = {'model': '__legacy_openai__', 'api_key': k}
                 if openai_base_url:
                     params['api_base'] = openai_base_url
@@ -928,7 +975,7 @@ class Config:
 
         # DeepSeek keys (native litellm provider — auto-resolves api_base)
         for k in (deepseek_keys or []):
-            if k and len(k) >= 8:
+            if _is_valid_api_key(k):
                 model_list.append({
                     'model_name': '__legacy_deepseek__',
                     'litellm_params': {
@@ -1132,10 +1179,14 @@ class Config:
             or self.tavily_api_keys
             or self.brave_api_keys
             or self.serpapi_keys
+            or (self.iwencai_market_query_enabled and self.iwencai_api_key)
         ):
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置搜索引擎 API Key (Bocha/MiniMax/Tavily/Brave/SerpAPI)，新闻搜索功能将不可用",
+                message=(
+                    "未配置搜索引擎/情报 API Key (Bocha/MiniMax/Tavily/Brave/SerpAPI/IWENCAI)，"
+                    "新闻搜索功能将不可用"
+                ),
                 field="BOCHA_API_KEY",
             ))
 
@@ -1260,13 +1311,13 @@ def get_api_keys_for_model(model: str, config: Config) -> List[str]:
     no Router is built and a direct litellm.completion() call is needed.
     """
     if model.startswith("gemini/") or model.startswith("vertex_ai/"):
-        return [k for k in config.gemini_api_keys if k and len(k) >= 8]
+        return [k for k in config.gemini_api_keys if _is_valid_api_key(k)]
     if model.startswith("anthropic/"):
-        return [k for k in config.anthropic_api_keys if k and len(k) >= 8]
+        return [k for k in config.anthropic_api_keys if _is_valid_api_key(k)]
     if model.startswith("deepseek/"):
-        return [k for k in config.deepseek_api_keys if k and len(k) >= 8]
+        return [k for k in config.deepseek_api_keys if _is_valid_api_key(k)]
     if model.startswith("openai/") or "/" not in model:
-        return [k for k in config.openai_api_keys if k and len(k) >= 8]
+        return [k for k in config.openai_api_keys if _is_valid_api_key(k)]
     # Other LiteLLM-native providers – API key resolved from env vars
     return []
 

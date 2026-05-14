@@ -222,45 +222,22 @@ get_analysis_context_tool = ToolDefinition(
 
 def _handle_get_stock_info(stock_code: str) -> dict:
     """Get stock fundamental information including industry, financials, and valuation."""
-    # Try EfinanceFetcher.get_base_info first (most complete)
+    # Try configured fetchers first so iWencai can replace legacy providers without
+    # changing the agent-facing tool contract.
     try:
-        from data_provider.efinance_fetcher import EfinanceFetcher
-        fetcher = EfinanceFetcher()
-        info = fetcher.get_base_info(stock_code)
-        if info:
-            # Sanitise: convert non-serialisable types and remove NaN
-            import math
-            clean: dict = {}
-            for k, v in info.items():
-                if isinstance(v, float) and math.isnan(v):
-                    clean[k] = None
-                else:
-                    try:
-                        import json as _json
-                        _json.dumps(v)       # test serialisability
-                        clean[k] = v
-                    except (TypeError, ValueError):
-                        clean[k] = str(v)
-
-            # Also try to get board/sector membership
+        manager = _get_fetcher_manager()
+        for fetcher in getattr(manager, "_fetchers", []):
+            if not hasattr(fetcher, "get_base_info"):
+                continue
             try:
-                board_df = fetcher.get_belong_board(stock_code)
-                if board_df is not None and not board_df.empty:
-                    # Typically columns: 板块名称, 板块代码, 涨跌幅, …
-                    boards = board_df.to_dict(orient="records")
-                    # Keep only name + change columns to limit token usage
-                    clean["belong_boards"] = [
-                        {k2: (str(v2) if not isinstance(v2, (int, float, str, type(None))) else v2)
-                         for k2, v2 in row.items()
-                         if any(kw in str(k2) for kw in ["名称", "代码", "涨跌", "板块"])}
-                        for row in boards[:10]
-                    ]
-            except Exception:
-                pass
-
-            return clean
+                info = fetcher.get_base_info(stock_code)
+                if info:
+                    return _clean_serializable_info(info, fetcher, stock_code)
+            except Exception as e:
+                logger.warning(f"get_stock_info via {fetcher.name} failed for {stock_code}: {e}")
+                continue
     except Exception as e:
-        logger.warning(f"get_stock_info via EfinanceFetcher failed for {stock_code}: {e}")
+        logger.warning(f"get_stock_info via configured fetchers failed for {stock_code}: {e}")
 
     # Fallback: derive from realtime quote (valuation metrics only)
     manager = _get_fetcher_manager()
@@ -276,6 +253,59 @@ def _handle_get_stock_info(stock_code: str) -> dict:
             "note": "Basic info only — EfinanceFetcher unavailable",
         }
     return {"error": f"Unable to fetch stock info for {stock_code}"}
+
+
+def _clean_serializable_info(info: dict, fetcher, stock_code: str) -> dict:
+    import math
+
+    clean: dict = {}
+    for k, v in info.items():
+        if isinstance(v, float) and math.isnan(v):
+            clean[k] = None
+        else:
+            try:
+                import json as _json
+
+                _json.dumps(v)
+                clean[k] = v
+            except (TypeError, ValueError):
+                clean[k] = str(v)
+
+    def first_matching_value(prefixes):
+        for key, value in clean.items():
+            if any(str(key).startswith(prefix) for prefix in prefixes):
+                return value
+        return None
+
+    clean.setdefault("source", getattr(fetcher, "name", "unknown"))
+    clean.setdefault("code", clean.get("股票代码") or stock_code)
+    clean.setdefault("name", clean.get("股票简称") or clean.get("名称"))
+    clean.setdefault("industry", clean.get("所属同花顺行业") or clean.get("行业"))
+    clean.setdefault("concepts", clean.get("所属概念") or clean.get("概念"))
+    clean.setdefault("pe_ratio", first_matching_value(("市盈率", "动态市盈率")))
+    clean.setdefault("pb_ratio", first_matching_value(("市净率",)))
+    clean.setdefault("total_mv", first_matching_value(("总市值",)))
+    clean.setdefault("circ_mv", first_matching_value(("流通市值", "a股流通市值")))
+    clean.setdefault("revenue", first_matching_value(("营业收入",)))
+    clean.setdefault("net_profit", first_matching_value(("归母净利润", "净利润")))
+    clean.setdefault("roe", first_matching_value(("净资产收益率", "ROE")))
+
+    try:
+        if hasattr(fetcher, "get_belong_board"):
+            board_df = fetcher.get_belong_board(stock_code)
+            if board_df is not None and not board_df.empty:
+                boards = board_df.to_dict(orient="records")
+                clean["belong_boards"] = [
+                    {
+                        k2: (str(v2) if not isinstance(v2, (int, float, str, type(None))) else v2)
+                        for k2, v2 in row.items()
+                        if any(kw in str(k2) for kw in ["名称", "代码", "涨跌", "板块"])
+                    }
+                    for row in boards[:10]
+                ]
+    except Exception:
+        pass
+    return clean
 
 
 get_stock_info_tool = ToolDefinition(
