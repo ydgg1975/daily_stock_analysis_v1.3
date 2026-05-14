@@ -1107,10 +1107,67 @@ class TushareFetcher(BaseFetcher):
         
         # 获取为空或者接口调用失败，返回 None
         return None
-    
-    
 
-    
+
+
+    def get_all_sector_quotes(self) -> Optional[pd.DataFrame]:
+        """获取所有板块实时行情（用于按名称查询）"""
+        start_date = self.get_trade_time(early_time='00:00', late_time='15:30')
+        if not start_date:
+            return None
+
+        logger.info("[Tushare] 获取行业板块行情...")
+        try:
+            df = self._call_api_with_rate_limit("moneyflow_ind_ths", trade_date=start_date)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"[Tushare] 同花顺接口获取板块行情失败: {e}")
+
+        try:
+            df = self._call_api_with_rate_limit("moneyflow_ind_dc", trade_date=start_date)
+            if df is not None and not df.empty:
+                df = df[df['content_type'] == '行业']
+                return df
+        except Exception as e:
+            logger.warning(f"[Tushare] 东财接口获取板块行情失败: {e}")
+
+        return None
+
+    def get_sector_realtime_quote(self, board_names: List[str]) -> List[Dict[str, Any]]:
+        """根据板块名称列表查询实时行情 (Tushare)"""
+        df = self.get_all_sector_quotes()
+        if df is None or df.empty:
+            return []
+
+        name_col = 'industry' if 'industry' in df.columns else 'name'
+        change_col = 'pct_change' if 'pct_change' in df.columns else 'pct_change'
+
+        if name_col not in df.columns:
+            return []
+
+        result = []
+        df[name_col] = df[name_col].astype(str)
+
+        for board_name in board_names:
+            board_name_str = str(board_name).strip()
+            if not board_name_str:
+                continue
+
+            matches = df[df[name_col].str.contains(board_name_str, case=False, na=False)]
+            if not matches.empty:
+                row = matches.iloc[0]
+                result.append({
+                    'name': str(row[name_col]),
+                    'price': None,
+                    'change_pct': float(row[change_col]) if change_col in df.columns and pd.notna(row.get(change_col)) else None,
+                    'volume': None,
+                })
+
+        return result
+
+
+
     def get_chip_distribution(self, stock_code: str) -> Optional[ChipDistribution]:
         """
         获取筹码分布数据

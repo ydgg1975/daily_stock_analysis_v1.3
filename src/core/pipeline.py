@@ -703,7 +703,8 @@ class StockAnalysisPipeline:
         fundamental_context: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
-        Attach A-share board membership as a top-level supplemental field.
+        Attach stock board membership as a top-level supplemental field.
+        Supports A-share (cn), US (us), and HK (hk) markets.
 
         Keep this as a shallow copy so cached fundamental contexts are not
         mutated in place after retrieval.
@@ -729,11 +730,17 @@ class StockAnalysisPipeline:
         if not isinstance(market, str) or not market.strip():
             market = get_market_for_stock(normalize_stock_code(code))
 
-        if (
-            market != "cn"
-            or boards_status == "not_supported"
-            or boards_coverage == "not_supported"
+        # 对于美股和港股，强制尝试获取板块数据（不依赖 boards_status）
+        # 对于 A 股，使用原有逻辑
+        if market in ("us", "hk"):
+            # 美股/港股：直接获取板块数据
+            pass  # 继续执行，不跳过
+        elif (
+            market not in ("cn", "us", "hk")
+            or boards_status in ("not_supported", "failed")
+            or boards_coverage in ("not_supported", "failed")
         ):
+            # A 股：原有逻辑
             enriched_context["belong_boards"] = []
             return enriched_context
 
