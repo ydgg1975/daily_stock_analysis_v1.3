@@ -1695,7 +1695,7 @@ class DataFetcherManager:
                 raw_data = fetcher.get_belong_board(stock_code)
                 boards = self._normalize_belong_boards(raw_data)
                 if boards:
-                    logger.info(f"[{fetcher.name}] 获取所属板���成功: {stock_code}, count={len(boards)}")
+                    logger.info(f"[{fetcher.name}] 获取所属板块成功: {stock_code}, count={len(boards)}")
                     return boards
             except Exception as e:
                 logger.debug(f"[{fetcher.name}] 获取所属板块失败: {e}")
