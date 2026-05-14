@@ -69,6 +69,61 @@ if TYPE_CHECKING:
     from src.analyzer import AnalysisResult
 
 
+def _format_large_number(value: Any) -> str:
+    """
+    格式化大数字为亿/千万/万/千单位
+
+    Args:
+        value: 数值或数字字符串
+
+    Returns:
+        格式化后的字符串，如 "547.29亿" 或 "106.39元"
+    """
+    if value is None or value == '':
+        return 'N/A'
+
+    try:
+        # 尝试转换为浮点数
+        num = float(value)
+    except (ValueError, TypeError):
+        return str(value) if value else 'N/A'
+
+    # 处理负数
+    prefix = "-" if num < 0 else ""
+    abs_num = abs(num)
+
+    if abs_num >= 1_0000_0000:  # >= 1亿
+        return f"{prefix}{abs_num / 1_0000_0000:.2f}亿"
+    elif abs_num >= 1_0000_000:  # >= 1000万
+        return f"{prefix}{abs_num / 1_0000_000:.2f}千万"
+    elif abs_num >= 1_0000:  # >= 1万
+        return f"{prefix}{abs_num / 1_0000:.2f}万"
+    elif abs_num >= 1000:  # >= 1000
+        return f"{prefix}{abs_num / 1000:.2f}千"
+    else:
+        return f"{prefix}{abs_num:.2f}"
+
+
+def _format_percentage(value: Any) -> str:
+    """
+    格式化百分比值
+
+    Args:
+        value: 百分比数值或字符串
+
+    Returns:
+        格式化后的百分比字符串，如 "10.57%"
+    """
+    if value is None or value == '':
+        return 'N/A'
+
+    try:
+        num = float(value)
+        return f"{num:.2f}%"
+    except (ValueError, TypeError):
+        return str(value) if value else 'N/A'
+
+
 class NotificationChannel(Enum):
     """通知渠道类型"""
     WECHAT = "wechat"      # 企业微信
@@ -1023,28 +1078,51 @@ class NotificationService(
                         f"### 💰 {labels.get('financial_report_heading', '财务与分红')}",
                         "",
                     ])
-                    # 财务报告
+                    # 财务报告 - 使用表格展示
                     if financial_report and isinstance(financial_report, dict):
                         report_lines.extend([
                             f"**📊 {labels.get('financial_report_label', '财务报告')}**",
                             "",
-                            f"| {labels.get('report_period_label', '报告期')} | {financial_report.get('report_date', 'N/A')} |",
-                            f"| {labels.get('revenue_label', '营业收入')} | {financial_report.get('revenue', 'N/A')} |",
-                            f"| {labels.get('net_profit_label', '归母净利润')} | {financial_report.get('net_profit_parent', 'N/A')} |",
-                            f"| {labels.get('roe_label', 'ROE')} | {financial_report.get('roe', 'N/A')} |",
+                            f"| 指标 | 数值 |",
+                            f"| --- | --- |",
+                            f"| 报告期 | {financial_report.get('report_date', 'N/A')} |",
+                            f"| 营业收入 | {_format_large_number(financial_report.get('revenue'))} |",
+                            f"| 归母净利润 | {_format_large_number(financial_report.get('net_profit_parent'))} |",
+                            f"| ROE | {_format_percentage(financial_report.get('roe'))} |",
                             "",
                         ])
-                    # 分红指标
+                    # 分红指标 - 使用表格展示
                     if dividend_metrics and isinstance(dividend_metrics, dict):
-                        ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct', 'N/A')
-                        ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share', 'N/A')
+                        ttm_yield_raw = dividend_metrics.get('ttm_dividend_yield_pct')
+                        ttm_cash_raw = dividend_metrics.get('ttm_cash_dividend_per_share')
                         ttm_count = dividend_metrics.get('ttm_event_count', 'N/A')
+
+                        # 格式化股息率
+                        if ttm_yield_raw is not None:
+                            try:
+                                ttm_yield = f"{float(ttm_yield_raw):.2f}%"
+                            except (ValueError, TypeError):
+                                ttm_yield = str(ttm_yield_raw)
+                        else:
+                            ttm_yield = 'N/A'
+
+                        # 格式化每股分红（添加"元"单位）
+                        if ttm_cash_raw is not None:
+                            try:
+                                ttm_cash = f"{float(ttm_cash_raw):.2f}元"
+                            except (ValueError, TypeError):
+                                ttm_cash = str(ttm_cash_raw)
+                        else:
+                            ttm_cash = 'N/A'
+
                         report_lines.extend([
                             f"**💵 {labels.get('dividend_label', '分红指标')}**",
                             "",
-                            f"| {labels.get('ttm_yield_label', 'TTM股息率')} | {ttm_yield} |",
-                            f"| {labels.get('ttm_cash_label', 'TTM每股现金分红')} | {ttm_cash} |",
-                            f"| {labels.get('ttm_count_label', 'TTM分红次数')} | {ttm_count} |",
+                            f"| 指标 | 数值 |",
+                            f"| --- | --- |",
+                            f"| TTM股息率 | {ttm_yield} |",
+                            f"| TTM每股现金分红 | {ttm_cash} |",
+                            f"| TTM分红次数 | {ttm_count} 次 |",
                             "",
                         ])
 
@@ -1456,28 +1534,54 @@ class NotificationService(
                 dividend_metrics = intel.get('dividend_metrics', {}) if intel else {}
                 if financial_report or dividend_metrics:
                     fin_lines = []
+                    # 财务报告 - 使用表格展示
                     if financial_report and isinstance(financial_report, dict):
-                        revenue = financial_report.get('revenue', '')
-                        net_profit = financial_report.get('net_profit_parent', '')
-                        roe = financial_report.get('roe', '')
+                        revenue = financial_report.get('revenue')
+                        net_profit = financial_report.get('net_profit_parent')
+                        roe = financial_report.get('roe')
                         if any([revenue, net_profit, roe]):
                             fin_lines.append("### 💰 财务数据")
-                            if revenue:
-                                fin_lines.append(f"营收: {revenue}")
-                            if net_profit:
-                                fin_lines.append(f"净利润: {net_profit}")
-                            if roe:
-                                fin_lines.append(f"ROE: {roe}")
+                            fin_lines.append("")
+                            fin_lines.append("| 指标 | 数值 |")
+                            fin_lines.append("| --- | --- |")
+                            fin_lines.append(f"| 报告期 | {financial_report.get('report_date', 'N/A')} |")
+                            fin_lines.append(f"| 营业收入 | {_format_large_number(revenue)} |")
+                            fin_lines.append(f"| 归母净利润 | {_format_large_number(net_profit)} |")
+                            fin_lines.append(f"| ROE | {_format_percentage(roe)} |")
 
+                    # 分红指标 - 使用表格展示
                     if dividend_metrics and isinstance(dividend_metrics, dict):
-                        ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct')
-                        ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share')
-                        if ttm_yield or ttm_cash:
+                        ttm_yield_raw = dividend_metrics.get('ttm_dividend_yield_pct')
+                        ttm_cash_raw = dividend_metrics.get('ttm_cash_dividend_per_share')
+                        ttm_count = dividend_metrics.get('ttm_event_count')
+                        if ttm_yield_raw or ttm_cash_raw or ttm_count:
+                            fin_lines.append("")
                             fin_lines.append("### 💵 分红指标")
-                            if ttm_yield:
-                                fin_lines.append(f"股息率: {ttm_yield}%")
-                            if ttm_cash:
-                                fin_lines.append(f"每股分红: {ttm_cash}元")
+                            fin_lines.append("")
+                            fin_lines.append("| 指标 | 数值 |")
+                            fin_lines.append("| --- | --- |")
+
+                            # 格式化股息率
+                            if ttm_yield_raw is not None:
+                                try:
+                                    ttm_yield = f"{float(ttm_yield_raw):.2f}%"
+                                except (ValueError, TypeError):
+                                    ttm_yield = str(ttm_yield_raw)
+                            else:
+                                ttm_yield = 'N/A'
+
+                            # 格式化每股分红
+                            if ttm_cash_raw is not None:
+                                try:
+                                    ttm_cash = f"{float(ttm_cash_raw):.2f}元"
+                                except (ValueError, TypeError):
+                                    ttm_cash = str(ttm_cash_raw)
+                            else:
+                                ttm_cash = 'N/A'
+
+                            fin_lines.append(f"| TTM股息率 | {ttm_yield} |")
+                            fin_lines.append(f"| TTM每股分红 | {ttm_cash} |")
+                            fin_lines.append(f"| TTM分红次数 | {ttm_count if ttm_count else 'N/A'} 次 |")
 
                     if fin_lines:
                         lines.extend(fin_lines)
