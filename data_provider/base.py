@@ -523,6 +523,8 @@ class DataFetcherManager:
         "BaostockFetcher": {"cn"},
         "YfinanceFetcher": {"cn", "hk", "us"},
         "LongbridgeFetcher": {"hk", "us"},
+        "FinnhubFetcher": {"us"},
+        "AlphaVantageFetcher": {"us"},
     }
     
     def __init__(self, fetchers: Optional[List[BaseFetcher]] = None):
@@ -1031,6 +1033,20 @@ class DataFetcherManager:
             optional_fetchers.append(LongbridgeFetcher())  # 长桥（美股/港股兜底，懒加载）
         else:
             logger.debug("[数据源初始化] 跳过未配置的 LongbridgeFetcher")
+
+        finnhub_api_key = (getattr(config, "finnhub_api_key", None) or "").strip()
+        if finnhub_api_key:
+            from .finnhub_fetcher import FinnhubFetcher
+            optional_fetchers.append(FinnhubFetcher())
+        else:
+            logger.debug("[数据源初始化] 跳过未配置的 FinnhubFetcher")
+
+        alphavantage_api_key = (getattr(config, "alphavantage_api_key", None) or "").strip()
+        if alphavantage_api_key:
+            from .alphavantage_fetcher import AlphaVantageFetcher
+            optional_fetchers.append(AlphaVantageFetcher())
+        else:
+            logger.debug("[数据源初始化] 跳过未配置的 AlphaVantageFetcher")
 
         # 初始化数据源列表
         self._ensure_concurrency_guards()
