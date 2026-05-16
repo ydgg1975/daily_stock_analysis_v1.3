@@ -730,17 +730,17 @@ class StockAnalysisPipeline:
         if not isinstance(market, str) or not market.strip():
             market = get_market_for_stock(normalize_stock_code(code))
 
-        # 对于美股和港股，强制尝试获取板块数据（不依赖 boards_coverage）
-        # 对于 A 股，只在明确 not_supported 时跳过（failed 应该尝试独立查询）
+# 对于美股和港股，强制尝试获取板块数据（不依赖 boards_status）
+        # 对于 A 股，使用原有逻辑
         if market in ("us", "hk"):
             # 美股/港股：直接获取板块数据
             pass  # 继续执行，不跳过
-        elif market == "cn" and boards_coverage in ("not_supported",):
-            # A 股且 boards 不支持：跳过
-            enriched_context["belong_boards"] = []
-            return enriched_context
-        elif market not in ("cn", "us", "hk"):
-            # 其他市场：不支持
+        elif (
+            market not in ("cn", "us", "hk")
+            or boards_status in ("not_supported", "failed")
+            or boards_coverage in ("not_supported", "failed")
+        ):
+            # A 股：原有逻辑
             enriched_context["belong_boards"] = []
             return enriched_context
 

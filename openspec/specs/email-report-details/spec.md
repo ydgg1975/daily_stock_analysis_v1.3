@@ -44,6 +44,10 @@
 - **THEN** fallback 计算仅使用最近 365 天内的 events
 - **AND** cash_dividend_per_share 为 None 时跳过该 event，不抛 TypeError
 
+#### Scenario: Missing data handled gracefully
+- **WHEN** 上述任一数据字段不存在
+- **THEN** 邮件报告中不显示对应模块，不报错误
+
 #### Scenario: Email content not exceeding reasonable length
 - **WHEN** 添加详细数据后
 - **THEN** 邮件内容应进行合理截断，确保可读性

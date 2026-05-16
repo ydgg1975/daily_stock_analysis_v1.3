@@ -1280,9 +1280,6 @@ def _inject_financial_data_to_dashboard(
 
     if not isinstance(financial_report, dict):
         financial_report = {}
-    if not isinstance(dividend_metrics, dict):
-        dividend_metrics = {}
-
     # 优先使用 adapter 预计算的 TTM 字段，只有在这些字段缺失时才使用 fallback 计算
     has_ttm_fields = (
         dividend_metrics.get('ttm_dividend_yield_pct') is not None
@@ -1344,6 +1341,7 @@ def _inject_financial_data_to_dashboard(
             'ttm_event_count': dividend_metrics.get('ttm_event_count'),
         }
 
+<<<<<<< HEAD
     # 板块数据已在 pipeline 阶段预 enriched，直接使用
     if belong_boards:
         intelligence['belong_boards'] = belong_boards if isinstance(belong_boards, list) else []
