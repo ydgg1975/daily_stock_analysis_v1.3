@@ -69,6 +69,39 @@ if TYPE_CHECKING:
     from src.analyzer import AnalysisResult
 
 
+def _format_large_number(value: Any) -> str:
+    """格式化大数字为亿/千万/万/千单位"""
+    if value is None or value == '':
+        return 'N/A'
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        return str(value) if value else 'N/A'
+    prefix = "-" if num < 0 else ""
+    abs_num = abs(num)
+    if abs_num >= 1_0000_0000:
+        return f"{prefix}{abs_num / 1_0000_0000:.2f}亿"
+    elif abs_num >= 1_0000_000:
+        return f"{prefix}{abs_num / 1_0000_000:.2f}千万"
+    elif abs_num >= 1_0000:
+        return f"{prefix}{abs_num / 1_0000:.2f}万"
+    elif abs_num >= 1000:
+        return f"{prefix}{abs_num / 1000:.2f}千"
+    else:
+        return f"{prefix}{abs_num:.2f}"
+
+
+def _format_percentage(value: Any) -> str:
+    """格式化百分比值"""
+    if value is None or value == '':
+        return 'N/A'
+    try:
+        num = float(value)
+        return f"{num:.2f}%"
+    except (ValueError, TypeError):
+        return str(value) if value else 'N/A'
+
+
 class NotificationChannel(Enum):
     """通知渠道类型"""
     WECHAT = "wechat"      # 企业微信
@@ -1029,21 +1062,36 @@ class NotificationService(
                             f"**📊 {labels.get('financial_report_label', '财务报告')}**",
                             "",
                             f"| {labels.get('report_period_label', '报告期')} | {financial_report.get('report_date', 'N/A')} |",
-                            f"| {labels.get('revenue_label', '营业收入')} | {financial_report.get('revenue', 'N/A')} |",
-                            f"| {labels.get('net_profit_label', '归母净利润')} | {financial_report.get('net_profit_parent', 'N/A')} |",
-                            f"| {labels.get('roe_label', 'ROE')} | {financial_report.get('roe', 'N/A')} |",
+                            f"| {labels.get('revenue_label', '营业收入')} | {_format_large_number(financial_report.get('revenue'))} |",
+                            f"| {labels.get('net_profit_label', '归母净利润')} | {_format_large_number(financial_report.get('net_profit_parent'))} |",
+                            f"| {labels.get('roe_label', 'ROE')} | {_format_percentage(financial_report.get('roe'))} |",
                             "",
                         ])
                     # 分红指标
                     if dividend_metrics and isinstance(dividend_metrics, dict):
-                        ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct', 'N/A')
-                        ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share', 'N/A')
+                        ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct')
+                        ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share')
                         ttm_count = dividend_metrics.get('ttm_event_count', 'N/A')
+                        # 格式化
+                        if ttm_yield is not None:
+                            try:
+                                ttm_yield_str = f"{float(ttm_yield):.2f}%"
+                            except (ValueError, TypeError):
+                                ttm_yield_str = 'N/A'
+                        else:
+                            ttm_yield_str = 'N/A'
+                        if ttm_cash is not None:
+                            try:
+                                ttm_cash_str = f"{float(ttm_cash):.2f}元"
+                            except (ValueError, TypeError):
+                                ttm_cash_str = 'N/A'
+                        else:
+                            ttm_cash_str = 'N/A'
                         report_lines.extend([
                             f"**💵 {labels.get('dividend_label', '分红指标')}**",
                             "",
-                            f"| {labels.get('ttm_yield_label', 'TTM股息率')} | {ttm_yield} |",
-                            f"| {labels.get('ttm_cash_label', 'TTM每股现金分红')} | {ttm_cash} |",
+                            f"| {labels.get('ttm_yield_label', 'TTM股息率')} | {ttm_yield_str} |",
+                            f"| {labels.get('ttm_cash_label', 'TTM每股现金分红')} | {ttm_cash_str} |",
                             f"| {labels.get('ttm_count_label', 'TTM分红次数')} | {ttm_count} |",
                             "",
                         ])
