@@ -1341,8 +1341,7 @@ def _inject_financial_data_to_dashboard(
             'ttm_event_count': dividend_metrics.get('ttm_event_count'),
         }
 
-<<<<<<< HEAD
-    # 板块数据已在 pipeline 阶段预 enriched，直接使用
+# 板块数据已在 pipeline 阶段预 enriched，直接使用
     if belong_boards:
         intelligence['belong_boards'] = belong_boards if isinstance(belong_boards, list) else []
 
