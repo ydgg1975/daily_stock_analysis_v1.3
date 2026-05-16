@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 补充 Issue #1316 参数自愈改动的外部兼容依据、运行时配置清理边界与回滚证据；并在 `tests/test_system_config_service.py` 增加清理路径下 `LLM_TEMPERATURE` 保持不变的回归用例。
 - [文档] 补充严格 temperature 兼容语义的官方来源、运行时依赖约束与 `LLM_TEMPERATURE` 回退/不回写路径说明。
 - [改进] 告警中心 P2 新增后台评估 worker，schedule 模式可同时评估持久化 active rules 与 legacy JSON 规则，并记录 `triggered` / `skipped` / `degraded` / `failed` 最小评估历史。
+
+- [新功能] Longbridge 数据源新增 OAuth 2.0 认证方式（`LONGBRIDGE_OAUTH_CLIENT_ID`），Token 自动加载本地缓存文件，无需浏览器交互；原有 Legacy API Key 仍兼容。
+- [改进] Docker entrypoint 自动修复 Longbridge Token 持久化目录权限，确保非 root 容器可写入 OAuth Token。
+- [改进] OAuth 认证路径优先于 Legacy API Key，避免配置了 OAuth 后仍命中已废弃凭据。
 - [修复] 统一 Windows 桌面安装包与自动更新元数据文件名，避免 Release 中出现重复安装包并阻断 `latest.yml` 指向不存在附件。
 - [修复] 桌面端启动 WebUI 时为入口页增加 no-cache 响应头和版本化 cache-busting URL，避免安装新版后 Electron 继续复用旧 WebUI 缓存。
 

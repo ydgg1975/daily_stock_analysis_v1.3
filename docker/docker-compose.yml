@@ -26,6 +26,9 @@ x-common: &common
     - ../reports:/app/reports
     - ../.env:/app/.env
     - ../strategies:/app/strategies:ro
+    # 长桥 OAuth Token 持久化：entrypoint.sh 启动时自动修复容器内权限（dsa 用户）
+    # 首次部署前建议在宿主机执行：mkdir -p ./longbridge_tokens
+    - ../longbridge_tokens:/home/dsa/.longbridge
     # 如需覆盖前端静态资源，可挂载本地 static 目录
     # - ../static:/app/static:ro
 
