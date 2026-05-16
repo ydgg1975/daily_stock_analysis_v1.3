@@ -1133,9 +1133,18 @@ class NotificationService(
                     report_lines.extend([
                         f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
                         "",
-                        f"| 板块 | 涨跌幅 |",
-                        f"| --- | --- |",
                     ])
+                    # 检查是否所有板块的 change_pct 都是 None
+                    has_any_change = any(
+                        isinstance(board, dict) and board.get('change_pct') is not None
+                        for board in belong_boards[:5]
+                    )
+                    if has_any_change:
+                        # 有涨跌幅数据，使用表格展示
+                        report_lines.extend([
+                            f"| 板块 | 涨跌幅 |",
+                            f"| --- | --- |",
+                        ])
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
                             name = board.get('name', '')
@@ -1151,9 +1160,14 @@ class NotificationService(
                                     change_str = f"{change_pct:+.2f}%"
                                     emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
                                     change_str = f"{emoji} {change_str}"
+                                elif has_any_change:
+                                    change_str = "-"
                                 else:
-                                    change_str = "NaN"
-                                report_lines.append(f"| {name} | {change_str} |")
+                                    change_str = None
+                                if change_str:
+                                    report_lines.append(f"| {name} | {change_str} |")
+                                else:
+                                    report_lines.append(f"| {name} |")
                     report_lines.append("")
 
                 # ========== 板块涨跌榜 ==========
@@ -1504,13 +1518,20 @@ class NotificationService(
                 # ========== 关联板块 ==========
                 belong_boards = intel.get('belong_boards', []) if intel else []
                 if belong_boards and isinstance(belong_boards, list):
-                    # 始终以表格形式展示
+                    # 检查是否所有板块的 change_pct 都是 None
+                    has_any_change = any(
+                        isinstance(board, dict) and board.get('change_pct') is not None
+                        for board in belong_boards[:5]
+                    )
                     lines.extend([
                         f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
                         "",
-                        f"| 板块 | 涨跌幅 |",
-                        f"| --- | --- |",
                     ])
+                    if has_any_change:
+                        lines.extend([
+                            f"| 板块 | 涨跌幅 |",
+                            f"| --- | --- |",
+                        ])
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
                             name = board.get('name', '')
@@ -1524,9 +1545,14 @@ class NotificationService(
                                     change_str = f"{change_pct:+.2f}%"
                                     emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
                                     change_str = f"{emoji} {change_str}"
+                                elif has_any_change:
+                                    change_str = "-"
                                 else:
-                                    change_str = "NaN"
-                                lines.append(f"| {name} | {change_str} |")
+                                    change_str = None
+                                if change_str:
+                                    lines.append(f"| {name} | {change_str} |")
+                                else:
+                                    lines.append(f"| {name} |")
                     lines.append("")
 
                 # ========== 财务与分红数据 ==========
@@ -1828,14 +1854,33 @@ class NotificationService(
         # ========== 关联板块 ==========
         belong_boards = intel.get('belong_boards', [])
         if belong_boards and isinstance(belong_boards, list):
-            # 始终以表格形式展示
+            # 检查是否所有板块的 change_pct 和 price 都是 None
+            has_any_change = any(
+                isinstance(board, dict) and board.get('change_pct') is not None
+                for board in belong_boards[:5]
+            )
+            has_any_price = any(
+                isinstance(board, dict) and board.get('price') is not None
+                for board in belong_boards[:5]
+            )
             lines.extend([
                 "",
                 f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
                 "",
-                f"| 板块 | 涨跌幅 | 最新价 |",
-                f"| --- | --- | --- |",
             ])
+            # 根据数据情况决定表格列
+            header_row = "| 板块"
+            sep_row = "| ---"
+            if has_any_change:
+                header_row += " | 涨跌幅"
+                sep_row += " | ---"
+            if has_any_price:
+                header_row += " | 最新价"
+                sep_row += " | ---"
+            header_row += " |"
+            sep_row += " |"
+            if header_row != "| 板块 |":
+                lines.extend([header_row, sep_row])
             for board in belong_boards[:5]:
                 if isinstance(board, dict):
                     name = board.get('name', '')
@@ -1844,19 +1889,29 @@ class NotificationService(
                         change_pct = float(change_pct_raw) if change_pct_raw is not None else None
                     except (ValueError, TypeError):
                         change_pct = None
-                    price = board.get('price')
+                    price_raw = board.get('price')
+                    try:
+                        price = float(price_raw) if price_raw is not None else None
+                    except (ValueError, TypeError):
+                        price = None
                     if name:
-                        if change_pct is not None:
-                            change_str = f"{change_pct:+.2f}%"
-                            emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
-                            change_str = f"{emoji} {change_str}"
-                        else:
-                            change_str = "NaN"
-                        if price is not None:
-                            price_str = f"¥{price:.2f}"
-                        else:
-                            price_str = "NaN"
-                        lines.append(f"| {name} | {change_str} | {price_str} |")
+                        row = f"| {name}"
+                        if has_any_change:
+                            if change_pct is not None:
+                                change_str = f"{change_pct:+.2f}%"
+                                emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
+                                change_str = f"{emoji} {change_str}"
+                            else:
+                                change_str = "-"
+                            row += f" | {change_str}"
+                        if has_any_price:
+                            if price is not None:
+                                price_str = f"¥{price:.2f}"
+                            else:
+                                price_str = "-"
+                            row += f" | {price_str}"
+                        row += " |"
+                        lines.append(row)
 
         # ========== 财务与分红数据 ==========
         financial_report = intel.get('financial_report', {})
@@ -1874,11 +1929,11 @@ class NotificationService(
                     if report_date:
                         lines.append(f"报告期: {report_date}")
                     if revenue:
-                        lines.append(f"营业收入: {revenue}")
+                        lines.append(f"营业收入: {_format_large_number(revenue)}")
                     if net_profit:
-                        lines.append(f"归母净利润: {net_profit}")
+                        lines.append(f"归母净利润: {_format_large_number(net_profit)}")
                     if roe:
-                        lines.append(f"ROE: {roe}")
+                        lines.append(f"ROE: {_format_percentage(roe)}")
                     lines.append("")
 
             if dividend_metrics and isinstance(dividend_metrics, dict):

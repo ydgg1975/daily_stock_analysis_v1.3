@@ -730,16 +730,17 @@ class StockAnalysisPipeline:
         if not isinstance(market, str) or not market.strip():
             market = get_market_for_stock(normalize_stock_code(code))
 
-        # 对于美股和港股，强制尝试获取板块数据（不依赖 boards_status）
+        # 对于美股和港股，强制尝试获取板块数据（不依赖 boards_coverage）
         # 对于 A 股，只在明确 not_supported 时跳过（failed 应该尝试独立查询）
         if market in ("us", "hk"):
             # 美股/港股：直接获取板块数据
             pass  # 继续执行，不跳过
-        elif (
-            market not in ("cn", "us", "hk")
-            or boards_coverage in ("not_supported",)
-        ):
-            # A 股：只有明确 not_supported 时才跳过
+        elif market == "cn" and boards_coverage in ("not_supported",):
+            # A 股且 boards 不支持：跳过
+            enriched_context["belong_boards"] = []
+            return enriched_context
+        elif market not in ("cn", "us", "hk"):
+            # 其他市场：不支持
             enriched_context["belong_boards"] = []
             return enriched_context
 
@@ -751,8 +752,103 @@ class StockAnalysisPipeline:
         except Exception as e:
             logger.debug("%s attach belong_boards failed (fail-open): %s", code, e)
 
+        # 如果板块数据包含 name 但缺少 change_pct，尝试获取实时行情
+        if boards:
+            boards = self._enrich_boards_with_realtime_quote(boards)
+
         enriched_context["belong_boards"] = boards
         return enriched_context
+
+    def _enrich_boards_with_realtime_quote(self, boards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Enrich board data with realtime quotes (price, change_pct).
+        This is called during pipeline data-fetch phase to avoid external calls
+        in post-analysis paths.
+        """
+        if not boards:
+            return boards
+
+        # 检查是否需要获取实时行情
+        need_fetch = False
+        for board in boards:
+            if isinstance(board, dict):
+                if 'change_pct' not in board or board.get('change_pct') is None:
+                    need_fetch = True
+                    break
+            else:
+                need_fetch = True
+                break
+
+        if not need_fetch:
+            return boards
+
+        # 提取板块名称
+        board_names = []
+        for board in boards:
+            if isinstance(board, dict):
+                name = board.get('name', '')
+                if name:
+                    board_names.append(name)
+            elif isinstance(board, str) and board:
+                board_names.append(board)
+
+        if not board_names:
+            return boards
+
+        # 获取实时行情
+        quotes = []
+        try:
+            quotes = self.fetcher_manager.get_sector_realtime_quote(board_names)
+        except Exception as e:
+            logger.debug("get_sector_realtime_quote failed (fail-open): %s", e)
+
+        # 构建名称到行情的映射
+        quote_map = {}
+        for quote in quotes:
+            quote_name = quote.get('name', '')
+            if quote_name:
+                quote_map[quote_name] = quote
+
+        # 为每个板块匹配行情数据
+        enriched = []
+        for board in boards:
+            if isinstance(board, dict):
+                board_name = board.get('name', '')
+                enriched_board = dict(board)
+            else:
+                board_name = str(board) if board else ''
+                enriched_board = {'name': board_name}
+
+            # 如果已有 change_pct 且非空，跳过
+            if enriched_board.get('change_pct') is not None:
+                enriched.append(enriched_board)
+                continue
+
+            # 尝试匹配行情数据
+            matched_quote = None
+            for quote_name, quote in quote_map.items():
+                if board_name == quote_name or board_name in quote_name or quote_name in board_name:
+                    matched_quote = quote
+                    break
+                # 特殊后缀处理
+                suffix_map = {'Ⅲ': '概念', 'Ⅱ': '概念', 'Ⅰ': '概念'}
+                for suffix, replacement in suffix_map.items():
+                    if board_name.endswith(suffix):
+                        core_name = board_name[:-len(suffix)] + replacement
+                        if core_name in quote_name or quote_name in core_name:
+                            matched_quote = quote
+                            break
+                if matched_quote:
+                    break
+
+            if matched_quote:
+                enriched_board['price'] = matched_quote.get('price')
+                enriched_board['change_pct'] = matched_quote.get('change_pct')
+                enriched_board['volume'] = matched_quote.get('volume')
+
+            enriched.append(enriched_board)
+
+        return enriched
 
     def _ensure_agent_history(self, code: str, min_days: int = 240) -> None:
         """Ensure at least *min_days* of K-line history is in DB for agent tools."""

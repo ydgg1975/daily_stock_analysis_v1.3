@@ -1283,12 +1283,38 @@ def _inject_financial_data_to_dashboard(
     if not isinstance(dividend_metrics, dict):
         dividend_metrics = {}
 
-    # 如果 dividend 是字典但包含 events，需要提取 TTM 值
-    if isinstance(dividend_metrics, dict) and 'events' in dividend_metrics:
+    # 优先使用 adapter 预计算的 TTM 字段，只有在这些字段缺失时才使用 fallback 计算
+    has_ttm_fields = (
+        dividend_metrics.get('ttm_dividend_yield_pct') is not None
+        or dividend_metrics.get('ttm_cash_dividend_per_share') is not None
+    )
+
+    # Fallback: 只有当 TTM 字段缺失但有 events 时，才从 events 汇总计算
+    if not has_ttm_fields and isinstance(dividend_metrics, dict) and 'events' in dividend_metrics:
         events = dividend_metrics.get('events', [])
         if events:
-            ttm_cash = sum(e.get('cash_dividend_per_share', 0) for e in events if e.get('ex_dividend_date'))
-            ttm_count = len([e for e in events if e.get('ex_dividend_date')])
+            from datetime import datetime, timedelta
+            cutoff_date = datetime.now() - timedelta(days=365)
+
+            # 过滤最近 365 天内的分红事件，并安全处理 None 值
+            recent_events = []
+            for e in events:
+                ex_date_str = e.get('ex_dividend_date')
+                if not ex_date_str:
+                    continue
+                try:
+                    ex_date = datetime.strptime(str(ex_date_str)[:10], '%Y-%m-%d')
+                    if ex_date >= cutoff_date:
+                        recent_events.append(e)
+                except (ValueError, TypeError):
+                    continue
+
+            # 安全计算每股分红，跳过 None 值
+            cash_values = [e.get('cash_dividend_per_share') for e in recent_events
+                          if e.get('cash_dividend_per_share') is not None]
+            ttm_cash = sum(cash_values) if cash_values else 0
+            ttm_count = len(recent_events)
+
             dividend_metrics = {
                 'ttm_cash_dividend_per_share': ttm_cash,
                 'ttm_event_count': ttm_count,
@@ -1318,10 +1344,9 @@ def _inject_financial_data_to_dashboard(
             'ttm_event_count': dividend_metrics.get('ttm_event_count'),
         }
 
+    # 板块数据已在 pipeline 阶段预 enriched，直接使用
     if belong_boards:
-        # 为关联板块查询实时行情
-        enriched_boards = _enrich_belong_boards_with_quote(belong_boards)
-        intelligence['belong_boards'] = enriched_boards if isinstance(enriched_boards, list) else []
+        intelligence['belong_boards'] = belong_boards if isinstance(belong_boards, list) else []
 
     if sector_rankings:
         intelligence['sector_rankings'] = sector_rankings if isinstance(sector_rankings, dict) else {}
