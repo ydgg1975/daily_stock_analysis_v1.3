@@ -1688,11 +1688,17 @@ class DataFetcherManager:
         # 支持 cn(A股)、us(美股)、hk(港股)
         if market not in ("cn", "us", "hk"):
             return []
+
+        # efinance 港股板块查询需要纯数字代码 (如 "00700" 而非 "HK00700")
+        query_code = stock_code
+        if market == "hk" and stock_code.startswith("HK"):
+            query_code = stock_code[2:]  # HK00700 -> 00700
+
         for fetcher in self._fetchers:
             if not hasattr(fetcher, "get_belong_board"):
                 continue
             try:
-                raw_data = fetcher.get_belong_board(stock_code)
+                raw_data = fetcher.get_belong_board(query_code)
                 boards = self._normalize_belong_boards(raw_data)
                 if boards:
                     logger.info(f"[{fetcher.name}] 获取所属板块成功: {stock_code}, count={len(boards)}")

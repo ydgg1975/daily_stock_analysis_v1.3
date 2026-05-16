@@ -1469,12 +1469,19 @@ class NotificationService(
                 # ========== 关联板块 ==========
                 belong_boards = intel.get('belong_boards', []) if intel else []
                 if belong_boards and isinstance(belong_boards, list):
+                    # 检查是否有有效的 change_pct 数据
+                    has_any_change = any(
+                        isinstance(board, dict) and board.get('change_pct') is not None
+                        for board in belong_boards[:5]
+                    )
                     # 始终以表格形式展示
+                    header = "| 板块 | 涨跌幅 |" if has_any_change else "| 板块 |"
+                    sep = "| --- | --- |" if has_any_change else "| --- |"
                     lines.extend([
                         f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
                         "",
-                        f"| 板块 | 涨跌幅 |",
-                        f"| --- | --- |",
+                        header,
+                        sep,
                     ])
                     for board in belong_boards[:5]:
                         if isinstance(board, dict):
@@ -1486,7 +1493,7 @@ class NotificationService(
                                     emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
                                     change_str = f"{emoji} {change_str}"
                                 else:
-                                    change_str = "NaN"
+                                    change_str = "-"
                                 lines.append(f"| {name} | {change_str} |")
                     lines.append("")
 
@@ -1495,32 +1502,45 @@ class NotificationService(
                 dividend_metrics = intel.get('dividend_metrics', {}) if intel else {}
                 if financial_report or dividend_metrics:
                     fin_lines = []
+                    # 收集所有指标
+                    metrics = []
                     if financial_report and isinstance(financial_report, dict):
                         revenue = financial_report.get('revenue', '')
                         net_profit = financial_report.get('net_profit_parent', '')
                         roe = financial_report.get('roe', '')
-                        if any([revenue, net_profit, roe]):
-                            fin_lines.append("### 💰 财务数据")
-                            if revenue:
-                                fin_lines.append(f"营收: {revenue}")
-                            if net_profit:
-                                fin_lines.append(f"净利润: {net_profit}")
-                            if roe:
-                                fin_lines.append(f"ROE: {roe}")
+                        report_date = financial_report.get('report_date', '')
+                        if revenue:
+                            metrics.append(("营业收入", _format_large_number(revenue)))
+                        if net_profit:
+                            metrics.append(("归母净利润", _format_large_number(net_profit)))
+                        if roe:
+                            metrics.append(("ROE", _format_percentage(roe)))
+                        if report_date:
+                            metrics.append(("报告期", report_date))
 
                     if dividend_metrics and isinstance(dividend_metrics, dict):
                         ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct')
                         ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share')
-                        if ttm_yield or ttm_cash:
-                            fin_lines.append("### 💵 分红指标")
-                            if ttm_yield:
-                                fin_lines.append(f"股息率: {ttm_yield}%")
-                            if ttm_cash:
-                                fin_lines.append(f"每股分红: {ttm_cash}元")
+                        if ttm_yield:
+                            try:
+                                metrics.append(("TTM股息率", f"{float(ttm_yield):.2f}%"))
+                            except (ValueError, TypeError):
+                                metrics.append(("TTM股息率", f"{ttm_yield}%"))
+                        if ttm_cash:
+                            try:
+                                metrics.append(("TTM每股分红", f"{float(ttm_cash):.2f}元"))
+                            except (ValueError, TypeError):
+                                metrics.append(("TTM每股分红", f"{ttm_cash}元"))
 
-                    if fin_lines:
-                        lines.extend(fin_lines)
-                        lines.append("")
+                    if metrics:
+                        fin_lines.append("### 💰 财务与分红数据")
+                        # 表格展示
+                        fin_lines.append("")
+                        fin_lines.append("| 指标 | 数值 |")
+                        fin_lines.append("| --- | --- |")
+                        for name, value in metrics:
+                            fin_lines.append(f"| {name} | {value} |")
+                        fin_lines.append("")
 
                 # 检查清单简化版
                 checklist = battle.get('action_checklist', []) if battle else []
@@ -1763,66 +1783,104 @@ class NotificationService(
         # ========== 关联板块 ==========
         belong_boards = intel.get('belong_boards', [])
         if belong_boards and isinstance(belong_boards, list):
-            # 始终以表格形式展示
+            # 检查是否所有板块的 change_pct 和 price 都是 None
+            has_any_change = any(
+                isinstance(board, dict) and board.get('change_pct') is not None
+                for board in belong_boards[:5]
+            )
+            has_any_price = any(
+                isinstance(board, dict) and board.get('price') is not None
+                for board in belong_boards[:5]
+            )
             lines.extend([
                 "",
                 f"### 🏭 {labels.get('belong_boards_heading', '关联板块')}",
                 "",
-                f"| 板块 | 涨跌幅 | 最新价 |",
-                f"| --- | --- | --- |",
             ])
+            # 根据数据情况决定表格列
+            header_row = "| 板块"
+            sep_row = "| ---"
+            if has_any_change:
+                header_row += " | 涨跌幅"
+                sep_row += " | ---"
+            if has_any_price:
+                header_row += " | 最新价"
+                sep_row += " | ---"
+            header_row += " |"
+            sep_row += " |"
+            if header_row != "| 板块 |":
+                lines.extend([header_row, sep_row])
             for board in belong_boards[:5]:
                 if isinstance(board, dict):
                     name = board.get('name', '')
                     change_pct = board.get('change_pct')
-                    price = board.get('price')
+                    price_raw = board.get('price')
+                    try:
+                        price = float(price_raw) if price_raw is not None else None
+                    except (ValueError, TypeError):
+                        price = None
                     if name:
-                        if change_pct is not None:
-                            change_str = f"{change_pct:+.2f}%"
-                            emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
-                            change_str = f"{emoji} {change_str}"
-                        else:
-                            change_str = "NaN"
-                        if price is not None:
-                            price_str = f"¥{price:.2f}"
-                        else:
-                            price_str = "NaN"
-                        lines.append(f"| {name} | {change_str} | {price_str} |")
+                        row = f"| {name}"
+                        if has_any_change:
+                            if change_pct is not None:
+                                change_str = f"{change_pct:+.2f}%"
+                                emoji = "🟢" if change_pct > 0 else "🔴" if change_pct < 0 else "⚪"
+                                change_str = f"{emoji} {change_str}"
+                            else:
+                                change_str = "-"
+                            row += f" | {change_str}"
+                        if has_any_price:
+                            if price is not None:
+                                price_str = f"¥{price:.2f}"
+                            else:
+                                price_str = "-"
+                            row += f" | {price_str}"
+                        row += " |"
+                        lines.append(row)
 
         # ========== 财务与分红数据 ==========
         financial_report = intel.get('financial_report', {})
         dividend_metrics = intel.get('dividend_metrics', {})
         if financial_report or dividend_metrics:
             lines.append("")
+            # 收集所有指标
+            metrics = []
             if financial_report and isinstance(financial_report, dict):
                 report_date = financial_report.get('report_date', '')
                 revenue = financial_report.get('revenue', '')
                 net_profit = financial_report.get('net_profit_parent', '')
                 roe = financial_report.get('roe', '')
-                if any([report_date, revenue, net_profit, roe]):
-                    lines.append(f"### 💰 {labels.get('financial_data_heading', '财务数据')}")
-                    lines.append("")
-                    if report_date:
-                        lines.append(f"报告期: {report_date}")
-                    if revenue:
-                        lines.append(f"营业收入: {revenue}")
-                    if net_profit:
-                        lines.append(f"归母净利润: {net_profit}")
-                    if roe:
-                        lines.append(f"ROE: {roe}")
-                    lines.append("")
+                if report_date:
+                    metrics.append(("报告期", report_date))
+                if revenue:
+                    metrics.append(("营业收入", _format_large_number(revenue)))
+                if net_profit:
+                    metrics.append(("归母净利润", _format_large_number(net_profit)))
+                if roe:
+                    metrics.append(("ROE", _format_percentage(roe)))
 
             if dividend_metrics and isinstance(dividend_metrics, dict):
                 ttm_yield = dividend_metrics.get('ttm_dividend_yield_pct')
                 ttm_cash = dividend_metrics.get('ttm_cash_dividend_per_share')
-                if ttm_yield or ttm_cash:
-                    lines.append(f"### 💵 {labels.get('dividend_data_heading', '分红指标')}")
-                    lines.append("")
-                    if ttm_yield:
-                        lines.append(f"TTM股息率: {ttm_yield}%")
-                    if ttm_cash:
-                        lines.append(f"TTM每股分红: {ttm_cash}元")
-                    lines.append("")
+                if ttm_yield:
+                    try:
+                        metrics.append(("TTM股息率", f"{float(ttm_yield):.2f}%"))
+                    except (ValueError, TypeError):
+                        metrics.append(("TTM股息率", f"{ttm_yield}"))
+                if ttm_cash:
+                    try:
+                        metrics.append(("TTM每股分红", f"{float(ttm_cash):.2f}元"))
+                    except (ValueError, TypeError):
+                        metrics.append(("TTM每股分红", f"{ttm_cash}元"))
+
+            if metrics:
+                lines.append(f"### 💰 {labels.get('financial_data_heading', '财务与分红数据')}")
+                lines.append("")
+                lines.append("| 指标 | 数值 |")
+                lines.append("| --- | --- |")
+                for name, value in metrics:
+                    lines.append(f"| {name} | {value} |")
+                lines.append("")
 
         if info_added:
             lines.append("")
