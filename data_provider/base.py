@@ -1132,13 +1132,15 @@ class DataFetcherManager:
             logger.error(f"[数据源终止] {stock_code} 获取失败: {error_summary}")
             raise DataFetchError(error_summary)
 
-        # 美股（含美股指数）使用 Longbridge/YFinance 特殊路由；港股走下方通用数据源循环
+        # 美股（含美股指数）使用专用路由；港股走下方通用数据源循环
+        # Failover chain: Finnhub(P2) -> AlphaVantage(P3) -> Yfinance(P4) -> Longbridge(P5)
+        # When Longbridge preferred: Longbridge -> Finnhub -> AlphaVantage -> Yfinance
         if is_us:
             prefer_lb = self._longbridge_preferred(capability="daily_data") and not is_us_index
             source_order = (
-                ["LongbridgeFetcher", "YfinanceFetcher"]
+                ["LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher"]
                 if prefer_lb
-                else ["YfinanceFetcher", "LongbridgeFetcher"]
+                else ["FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher", "LongbridgeFetcher"]
             )
             market_label = "美股指数" if is_us_index else "美股"
 

@@ -182,12 +182,40 @@ class TestAlphaVantageFetcherInit(unittest.TestCase):
         f = AlphaVantageFetcher()
         self.assertEqual(f._api_key, 'AVTEST123')
 
+    @patch.dict(os.environ, {}, clear=False)
     @patch('src.config.get_config')
     def test_init_without_key(self, mock_config):
+        os.environ.pop('ALPHAVANTAGE_API_KEY', None)
         mock_config.return_value = MagicMock(alphavantage_api_key=None)
         from data_provider.alphavantage_fetcher import AlphaVantageFetcher
         f = AlphaVantageFetcher()
         self.assertIsNone(f._api_key)
+
+
+class TestAlphaVantageFetcherNewestFirst(unittest.TestCase):
+    """Verify pct_chg is correct when API returns newest-first data."""
+
+    def setUp(self):
+        from data_provider.alphavantage_fetcher import AlphaVantageFetcher
+        self.fetcher = AlphaVantageFetcher()
+
+    def test_pct_chg_correct_newest_first(self):
+        """AlphaVantage returns newest date first; pct_chg must still be correct."""
+        import pandas as pd
+        # Simulate newest-first raw data: 2024-06-12 (close=156) before 2024-06-10 (close=150)
+        raw = pd.DataFrame({
+            '1. open': [155.0, 152.0, 149.5],
+            '2. high': [157.0, 154.0, 151.0],
+            '3. low': [154.0, 151.0, 149.0],
+            '4. close': [156.0, 153.0, 150.0],
+            '5. volume': [1100000, 1200000, 1000000],
+        }, index=pd.to_datetime(['2024-06-12', '2024-06-11', '2024-06-10']))
+        result = self.fetcher._normalize_data(raw, 'AAPL')
+
+        # After sorting ascending: row0=2024-06-10(150), row1=2024-06-11(153), row2=2024-06-12(156)
+        self.assertAlmostEqual(result.iloc[0]['pct_chg'], 0.0)  # first row = 0
+        self.assertAlmostEqual(result.iloc[1]['pct_chg'], 2.0, places=1)  # (153-150)/150
+        self.assertAlmostEqual(result.iloc[2]['pct_chg'], round((156 - 153) / 153 * 100, 2), places=1)
 
 
 if __name__ == '__main__':

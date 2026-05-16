@@ -101,6 +101,8 @@ class AlphaVantageFetcher(BaseFetcher):
             '1. open': 'open', '2. high': 'high', '3. low': 'low',
             '4. close': 'close', '5. volume': 'volume',
         })
+        # AlphaVantage returns newest-first; sort ascending before computing pct_chg
+        df = df.sort_values('date', ascending=True).reset_index(drop=True)
         df['pct_chg'] = df['close'].pct_change() * 100
         df['pct_chg'] = df['pct_chg'].fillna(0).round(2)
         df['amount'] = df['volume'] * df['close']
