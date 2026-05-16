@@ -173,11 +173,9 @@ class EmailSender:
             msg['Subject'] = Header(subject, 'utf-8')
             msg['From'] = self._format_sender_address(sender)
             msg['To'] = ', '.join(receivers)
-            
-            # 添加纯文本和 HTML 两个版本
-            text_part = MIMEText(content, 'plain', 'utf-8')
+
+            # 只发送 HTML 版本，确保表格等格式正确显示
             html_part = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(text_part)
             msg.attach(html_part)
             
             # 自动识别 SMTP 配置
