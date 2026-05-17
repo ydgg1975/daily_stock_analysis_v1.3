@@ -1,0 +1,30 @@
+name: rules_analysis
+display_name: 规则引擎分析
+description: 基于技术指标规则引擎的分析策略，支持股票和ETF
+category: technical
+core_rules: [1, 2, 3]
+required_tools:
+  - analyze_rules
+  - get_realtime_quote
+  - get_daily_history
+aliases: [规则, 规则分析, 技术规则, 指标规则]
+default_active: true
+default_router: false
+default_priority: 20
+market_regimes: [trending_up, trending_down, ranging]
+
+instructions: |
+  **规则引擎分析策略**
+
+  适用场景：需要快速了解标的技术面信号概况时使用。
+
+  分析框架：
+  1. 调用 analyze_rules 获取规则引擎结果
+  2. 查看匹配的规则列表和维度汇总
+  3. 结合实时行情判断当前市场状态
+
+  评分调整建议：
+  - 规则评分 > 2.0: `sentiment_score +15`
+  - 规则评分 > 1.0: `sentiment_score +10`
+  - 规则评分 < -2.0: `sentiment_score -15`
+  - 规则评分 < -1.0: `sentiment_score -10`
