@@ -1356,6 +1356,12 @@ class AnalysisResult:
     # ========== 历史对比（Report Engine P0）==========
     query_id: Optional[str] = None  # 本次分析 query_id，用于历史对比时排除本次记录
 
+    # ========== 规则分析（Rules Engine）==========
+    rules_tags: Optional[str] = None
+    rules_tags_html: Optional[str] = None
+    rules_score: Optional[float] = None
+    rules_dimension_summary: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
