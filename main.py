@@ -141,6 +141,22 @@ def _setup_bootstrap_logging(debug: bool = False) -> None:
         root.addHandler(handler)
 
 
+def _setup_runtime_logging(log_dir: str, debug: bool = False) -> bool:
+    """Switch to configured logging, falling back to console on file I/O errors."""
+    try:
+        setup_logging(log_prefix="stock_analysis", debug=debug, log_dir=log_dir)
+        return True
+    except OSError as exc:
+        logger.warning(
+            "文件日志初始化失败，已降级为控制台日志输出；日志目录 %r 当前不可写或不可创建: %s。"
+            "官方 Docker 镜像启动入口会自动修复默认挂载目录权限；若仍失败，"
+            "请检查是否使用了 --user、只读挂载、rootless Docker 或 NFS 等限制写入的环境。",
+            log_dir,
+            exc,
+        )
+        return False
+
+
 def _get_stock_analysis_pipeline():
     """Lazily import StockAnalysisPipeline for external consumers.
 
@@ -767,7 +783,7 @@ def main() -> int:
 
     # 配置日志（输出到控制台和文件）
     try:
-        setup_logging(log_prefix="stock_analysis", debug=args.debug, log_dir=config.log_dir)
+        _setup_runtime_logging(config.log_dir, debug=args.debug)
     except Exception as exc:
         logger.exception("切换到配置日志目录失败: %s", exc)
         return 1
@@ -921,25 +937,23 @@ def main() -> int:
 
             background_tasks = []
             if getattr(config, 'agent_event_monitor_enabled', False):
-                from src.agent.events import build_event_monitor_from_config, run_event_monitor_once
+                from src.services.alert_worker import AlertWorker
 
-                monitor = build_event_monitor_from_config(config)
-                if monitor is not None:
-                    interval_minutes = max(1, getattr(config, 'agent_event_monitor_interval_minutes', 5))
+                interval_minutes = max(1, getattr(config, 'agent_event_monitor_interval_minutes', 5))
+                alert_worker = AlertWorker(config_provider=_reload_runtime_config)
 
-                    def event_monitor_task():
-                        triggered = run_event_monitor_once(monitor)
-                        if triggered:
-                            logger.info("[EventMonitor] 本轮触发 %d 条提醒", len(triggered))
+                def event_monitor_task():
+                    stats = alert_worker.run_once()
+                    triggered_count = stats.get("triggered", 0)
+                    if triggered_count:
+                        logger.info("[EventMonitor] 本轮触发 %d 条提醒", triggered_count)
 
-                    background_tasks.append({
-                        "task": event_monitor_task,
-                        "interval_seconds": interval_minutes * 60,
-                        "run_immediately": True,
-                        "name": "agent_event_monitor",
-                    })
-                else:
-                    logger.info("EventMonitor 已启用，但未加载到有效规则，跳过后台提醒任务")
+                background_tasks.append({
+                    "task": event_monitor_task,
+                    "interval_seconds": interval_minutes * 60,
+                    "run_immediately": True,
+                    "name": "agent_event_monitor",
+                })
 
             run_with_schedule(
                 task=scheduled_task,

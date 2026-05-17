@@ -27,6 +27,12 @@ from src.notification_routing import (
     get_notification_route_config,
     split_notification_route_channels,
 )
+from src.notification_noise import (
+    NotificationNoiseDecision,
+    evaluate_notification_noise,
+    record_notification_noise,
+    release_notification_noise,
+)
 from src.report_language import (
     get_localized_stock_name,
     get_report_labels,
@@ -44,13 +50,17 @@ from src.notification_sender import (
     DiscordSender,
     EmailSender,
     FeishuSender,
+    GotifySender,
+    NtfySender,
     PushoverSender,
     PushplusSender,
     Serverchan3Sender,
     SlackSender,
     TelegramSender,
     WechatSender,
-    WECHAT_IMAGE_MAX_BYTES
+    WECHAT_IMAGE_MAX_BYTES,
+    resolve_gotify_message_endpoint,
+    resolve_ntfy_endpoint,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,6 +76,8 @@ class NotificationChannel(Enum):
     TELEGRAM = "telegram"  # Telegram
     EMAIL = "email"        # 邮件
     PUSHOVER = "pushover"  # Pushover（手机/桌面推送）
+    NTFY = "ntfy"          # ntfy
+    GOTIFY = "gotify"      # Gotify
     PUSHPLUS = "pushplus"  # PushPlus（国内推送服务）
     SERVERCHAN3 = "serverchan3"  # Server酱3（手机APP推送服务）
     CUSTOM = "custom"      # 自定义 Webhook
@@ -91,6 +103,8 @@ class ChannelDetector:
             NotificationChannel.TELEGRAM: "Telegram",
             NotificationChannel.EMAIL: "邮件",
             NotificationChannel.PUSHOVER: "Pushover",
+            NotificationChannel.NTFY: "ntfy",
+            NotificationChannel.GOTIFY: "Gotify",
             NotificationChannel.PUSHPLUS: "PushPlus",
             NotificationChannel.SERVERCHAN3: "Server酱3",
             NotificationChannel.CUSTOM: "自定义Webhook",
@@ -108,6 +122,8 @@ class NotificationService(
     DiscordSender,
     EmailSender,
     FeishuSender,
+    GotifySender,
+    NtfySender,
     PushoverSender,
     PushplusSender,
     Serverchan3Sender,
@@ -154,6 +170,7 @@ class NotificationService(
 
         # 仅分析结果摘要（Issue #262）：true 时只推送汇总，不含个股详情
         self._report_summary_only = getattr(config, 'report_summary_only', False)
+        self._report_show_llm_model = getattr(config, 'report_show_llm_model', True)
         self._history_compare_cache: Dict[Tuple[int, Tuple[Tuple[str, str], ...]], Dict[str, List[Dict[str, Any]]]] = {}
 
         # 初始化各渠道
@@ -162,6 +179,8 @@ class NotificationService(
         DiscordSender.__init__(self, config)
         EmailSender.__init__(self, config)
         FeishuSender.__init__(self, config)
+        GotifySender.__init__(self, config)
+        NtfySender.__init__(self, config)
         PushoverSender.__init__(self, config)
         PushplusSender.__init__(self, config)
         Serverchan3Sender.__init__(self, config)
@@ -258,12 +277,17 @@ class NotificationService(
         return self.generate_dashboard_report(results, report_date=report_date)
 
     def _collect_models_used(self, results: List[AnalysisResult]) -> List[str]:
+        if not self._should_show_llm_model():
+            return []
         models: List[str] = []
         for result in results:
             model = normalize_model_used(getattr(result, "model_used", None))
             if model:
                 models.append(model)
         return list(dict.fromkeys(models))
+
+    def _should_show_llm_model(self) -> bool:
+        return bool(getattr(self._config, "report_show_llm_model", self._report_show_llm_model))
     
     @staticmethod
     def detect_configured_channels(config: Config) -> List[NotificationChannel]:
@@ -296,6 +320,14 @@ class NotificationService(
             and getattr(config, "pushover_api_token", None)
         ):
             channels.append(NotificationChannel.PUSHOVER)
+
+        ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(getattr(config, "ntfy_url", None))
+        if ntfy_server_url and ntfy_topic:
+            channels.append(NotificationChannel.NTFY)
+
+        gotify_endpoint = resolve_gotify_message_endpoint(getattr(config, "gotify_url", None))
+        if gotify_endpoint and (getattr(config, "gotify_token", None) or "").strip():
+            channels.append(NotificationChannel.GOTIFY)
 
         if getattr(config, "pushplus_token", None):
             channels.append(NotificationChannel.PUSHPLUS)
@@ -388,6 +420,35 @@ class NotificationService(
         if self._has_context_channel():
             names.append("钉钉会话")
         return ', '.join(names)
+
+    def evaluate_noise_control(
+        self,
+        content: str,
+        *,
+        route_type: Optional[str] = None,
+        severity: Optional[str] = None,
+        dedup_key: Optional[str] = None,
+        cooldown_key: Optional[str] = None,
+    ) -> NotificationNoiseDecision:
+        """Evaluate static-channel notification noise controls."""
+        return evaluate_notification_noise(
+            self._config,
+            content=content,
+            route_type=route_type,
+            severity=severity,
+            dedup_key=dedup_key,
+            cooldown_key=cooldown_key,
+        )
+
+    @staticmethod
+    def record_noise_control(decision: NotificationNoiseDecision) -> None:
+        """Record static-channel notification noise state after a successful send."""
+        record_notification_noise(decision)
+
+    @staticmethod
+    def release_noise_control(decision: NotificationNoiseDecision) -> None:
+        """Release static-channel in-flight noise reservation after send failure."""
+        release_notification_noise(decision)
 
     # ===== Context channel =====
     def _has_context_channel(self) -> bool:
@@ -1129,6 +1190,9 @@ class NotificationService(
             "",
             f"*{labels['generated_at_label']}：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
         ])
+        models = self._collect_models_used(results)
+        if models:
+            report_lines.append(f"*{labels['analysis_model_label']}：{', '.join(models)}*")
         
         return "\n".join(report_lines)
     
@@ -1429,6 +1493,9 @@ class NotificationService(
             )
         lines.append("")
         lines.append(f"*{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+        models = self._collect_models_used(results)
+        if models:
+            lines.append(f"*{labels['analysis_model_label']}: {', '.join(models)}*")
         return "\n".join(lines)
 
     def generate_single_stock_report(self, result: AnalysisResult) -> str:
@@ -1541,9 +1608,10 @@ class NotificationService(
             ])
         
         lines.append("---")
-        model_used = normalize_model_used(getattr(result, "model_used", None))
-        if model_used:
-            lines.append(f"*{labels['analysis_model_label']}: {model_used}*")
+        if self._should_show_llm_model():
+            model_used = normalize_model_used(getattr(result, "model_used", None))
+            if model_used:
+                lines.append(f"*{labels['analysis_model_label']}: {model_used}*")
         lines.append(f"*{labels['not_investment_advice']}*")
 
         return "\n".join(lines)
@@ -1627,6 +1695,9 @@ class NotificationService(
         email_stock_codes: Optional[List[str]] = None,
         email_send_to_all: bool = False,
         route_type: Optional[str] = None,
+        severity: Optional[str] = None,
+        dedup_key: Optional[str] = None,
+        cooldown_key: Optional[str] = None,
     ) -> bool:
         """
         统一发送接口 - 向所有已配置的渠道发送
@@ -1644,6 +1715,9 @@ class NotificationService(
             email_stock_codes: 股票代码列表（可选，用于邮件渠道路由到对应分组邮箱，Issue #268）
             email_send_to_all: 邮件是否发往所有配置邮箱（用于大盘复盘等无股票归属的内容）
             route_type: 通知路由类型；None 保持旧行为，report/alert/system_error 按配置过滤静态渠道
+            severity: 通知严重级别；未设置时按路由类型推断
+            dedup_key: 可选稳定去重 key；未设置时使用内容 hash
+            cooldown_key: 可选冷却 key；未设置时使用路由/级别默认 key
 
         Returns:
             是否至少有一个渠道发送成功
@@ -1665,12 +1739,24 @@ class NotificationService(
             logger.warning("通知路由 %s 未命中任何已配置渠道，跳过静态通知渠道", route_type)
             return False
 
+        noise_decision = self.evaluate_noise_control(
+            content,
+            route_type=route_type,
+            severity=severity,
+            dedup_key=dedup_key,
+            cooldown_key=cooldown_key,
+        )
+        if not noise_decision.should_send:
+            logger.info(noise_decision.message)
+            return context_success
+
         # Markdown to image (Issue #289): convert once if any channel needs it.
         # Per-channel decision via _should_use_image_for_channel (see send() docstring for fallback rules).
         image_bytes = None
         channels_needing_image = {
             ch for ch in target_channels
             if ch.value in self._markdown_to_image_channels
+            and ch not in {NotificationChannel.NTFY, NotificationChannel.GOTIFY}
         }
         if channels_needing_image:
             from src.md2img import markdown_to_image
@@ -1731,6 +1817,10 @@ class NotificationService(
                         result = self.send_to_email(content, receivers=receivers)
                 elif channel == NotificationChannel.PUSHOVER:
                     result = self.send_to_pushover(content)
+                elif channel == NotificationChannel.NTFY:
+                    result = self.send_to_ntfy(content)
+                elif channel == NotificationChannel.GOTIFY:
+                    result = self.send_to_gotify(content)
                 elif channel == NotificationChannel.PUSHPLUS:
                     result = self.send_to_pushplus(content)
                 elif channel == NotificationChannel.SERVERCHAN3:
@@ -1767,6 +1857,10 @@ class NotificationService(
                 fail_count += 1
 
         logger.info(f"通知发送完成：成功 {success_count} 个，失败 {fail_count} 个")
+        if success_count > 0:
+            self.record_noise_control(noise_decision)
+        else:
+            self.release_noise_control(noise_decision)
         return success_count > 0 or context_success
    
     def save_report_to_file(

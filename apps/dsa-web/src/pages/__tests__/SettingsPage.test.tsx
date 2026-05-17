@@ -9,6 +9,7 @@ const {
   importEnv,
   desktopCheckForUpdates,
   desktopGetUpdateState,
+  desktopInstallDownloadedUpdate,
   desktopOnUpdateStateChange,
   desktopOpenReleasePage,
   load,
@@ -20,6 +21,7 @@ const {
   applyPartialUpdate,
   refreshAfterExternalSave,
   refreshStatus,
+  settingsPanelErrorBoundary,
   useAuthMock,
   useSystemConfigMock,
   webBuildInfoMock,
@@ -28,6 +30,7 @@ const {
   importEnv: vi.fn(),
   desktopCheckForUpdates: vi.fn(),
   desktopGetUpdateState: vi.fn(),
+  desktopInstallDownloadedUpdate: vi.fn(),
   desktopOnUpdateStateChange: vi.fn(),
   desktopOpenReleasePage: vi.fn(),
   load: vi.fn(),
@@ -39,6 +42,7 @@ const {
   applyPartialUpdate: vi.fn(),
   refreshAfterExternalSave: vi.fn(),
   refreshStatus: vi.fn(),
+  settingsPanelErrorBoundary: vi.fn(),
   useAuthMock: vi.fn(),
   useSystemConfigMock: vi.fn(),
   webBuildInfoMock: {
@@ -139,6 +143,23 @@ vi.mock('../../components/settings', () => ({
   ),
   SettingsField: ({ item }: { item: { key: string } }) => <div>{item.key}</div>,
   SettingsLoading: () => <div>loading</div>,
+  SettingsPanelErrorBoundary: ({
+    title,
+    diagnosticHint,
+    children,
+  }: {
+    title: string;
+    diagnosticHint?: React.ReactNode;
+    children: React.ReactNode;
+  }) => {
+    settingsPanelErrorBoundary(title);
+    return (
+      <>
+        {diagnosticHint ? <div>{diagnosticHint}</div> : null}
+        {children}
+      </>
+    );
+  },
   SettingsSectionCard: ({
     title,
     description,
@@ -161,6 +182,7 @@ function createDesktopRuntime(overrides: Record<string, unknown> = {}) {
     version: '3.12.0',
     getUpdateState: desktopGetUpdateState,
     checkForUpdates: desktopCheckForUpdates,
+    installDownloadedUpdate: desktopInstallDownloadedUpdate,
     openReleasePage: desktopOpenReleasePage,
     onUpdateStateChange: desktopOnUpdateStateChange,
     ...overrides,
@@ -371,6 +393,7 @@ describe('SettingsPage', () => {
       latestVersion: '3.12.0',
       message: '当前桌面端已是最新版本。',
     });
+    desktopInstallDownloadedUpdate.mockResolvedValue(true);
     desktopOpenReleasePage.mockResolvedValue(true);
     desktopOnUpdateStateChange.mockImplementation(() => () => undefined);
     useAuthMock.mockReturnValue({
@@ -574,6 +597,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('AGENT_ORCHESTRATOR_TIMEOUT_S')).toBeInTheDocument();
     expect(screen.getByText('AGENT_DEEP_RESEARCH_BUDGET')).toBeInTheDocument();
     expect(screen.getByText('AGENT_EVENT_MONITOR_ENABLED')).toBeInTheDocument();
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('Agent 设置');
   });
 
   it('reset button semantic: discards local changes without network request', () => {
@@ -629,6 +653,27 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('通知测试面板:WECHAT_WEBHOOK_URL')).toBeInTheDocument();
     expect(screen.getByText('WECHAT_WEBHOOK_URL')).toBeInTheDocument();
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('通知测试');
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('通知设置');
+  });
+
+  it('uses browser and backend logs in settings panel diagnostic hints outside desktop runtime', () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
+
+    render(<SettingsPage />);
+
+    expect(screen.getAllByText(/浏览器开发者工具控制台与后端日志/)).toHaveLength(2);
+    expect(screen.queryByText('desktop.log')).not.toBeInTheDocument();
+  });
+
+  it('uses desktop log in settings panel diagnostic hints during desktop runtime', () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
+    (window as { dsaDesktop?: unknown }).dsaDesktop = createDesktopRuntime();
+
+    render(<SettingsPage />);
+
+    expect(screen.getAllByText('desktop.log')).toHaveLength(2);
+    expect(screen.queryByText(/浏览器开发者工具控制台与后端日志/)).not.toBeInTheDocument();
   });
 
   it('renders env backup actions outside desktop runtime', () => {
@@ -795,5 +840,26 @@ describe('SettingsPage', () => {
         'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0'
       );
     });
+  });
+
+  it('renders downloaded desktop update and starts install on demand', async () => {
+    desktopGetUpdateState.mockResolvedValue({
+      status: 'update-downloaded',
+      updateMode: 'auto',
+      currentVersion: '3.12.0',
+      latestVersion: '3.13.0',
+      releaseUrl: 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0',
+      message: '新版本 3.13.0 已下载，可重启应用完成安装。',
+      downloadPercent: 100,
+    });
+    (window as { dsaDesktop?: unknown }).dsaDesktop = createDesktopRuntime();
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText('更新已下载:新版本 3.13.0 已下载，可重启应用完成安装。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '重启安装' }));
+
+    await waitFor(() => expect(desktopInstallDownloadedUpdate).toHaveBeenCalledTimes(1));
   });
 });
