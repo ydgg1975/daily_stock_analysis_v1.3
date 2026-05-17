@@ -1137,11 +1137,13 @@ class DataFetcherManager:
         # When Longbridge preferred: Longbridge -> Finnhub -> AlphaVantage -> Yfinance
         if is_us:
             prefer_lb = self._longbridge_preferred(capability="daily_data") and not is_us_index
-            source_order = (
-                ["LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher"]
-                if prefer_lb
-                else ["FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher", "LongbridgeFetcher"]
-            )
+            if is_us_index:
+                # 指数始终 YFinance 首选（Longbridge 不提供指数K线）
+                source_order = ["YfinanceFetcher", "FinnhubFetcher"]
+            elif prefer_lb:
+                source_order = ["LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher"]
+            else:
+                source_order = ["FinnhubFetcher", "AlphaVantageFetcher", "YfinanceFetcher", "LongbridgeFetcher"]
             market_label = "美股指数" if is_us_index else "美股"
 
             for src_name in source_order:
@@ -1376,6 +1378,12 @@ class DataFetcherManager:
             primary_quote = self._supplement_quote(
                 stock_code, primary_quote, secondary_src, **secondary_kw,
             )
+            # 美股个股（非指数）尝试从 Finnhub/AlphaVantage 补充缺失字段
+            if is_us and not is_us_index and primary_quote is not None:
+                for extra_src in ["FinnhubFetcher", "AlphaVantageFetcher"]:
+                    primary_quote = self._supplement_quote(
+                        stock_code, primary_quote, extra_src,
+                    )
             if primary_quote is not None:
                 return primary_quote
             if log_final_failure:
@@ -1658,7 +1666,7 @@ class DataFetcherManager:
         # 3. 依次尝试各个数据源
         from .akshare_fetcher import _is_us_code
         is_us = _is_us_code(stock_code)
-        _US_CAPABLE_FETCHERS = {"YfinanceFetcher", "LongbridgeFetcher"}
+        _US_CAPABLE_FETCHERS = {"YfinanceFetcher", "LongbridgeFetcher", "FinnhubFetcher", "AlphaVantageFetcher"}
         for fetcher in self._get_fetchers_snapshot():
             if not hasattr(fetcher, 'get_stock_name'):
                 continue
