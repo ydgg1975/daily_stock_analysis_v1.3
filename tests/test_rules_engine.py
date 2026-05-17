@@ -57,6 +57,23 @@ class TestRuleEngineEvaluate(unittest.TestCase):
         val_rules = [r for r in results if r.dimension == "valuation"]
         self.assertTrue(all(not r.matched for r in val_rules))
 
+    def test_pe_percentile_low(self):
+        results = self.engine.evaluate({"pe_percentile": 15.0})
+        rule = [r for r in results if r.rule_id == "V01"][0]
+        self.assertTrue(rule.matched)
+
+    def test_pe_percentile_high(self):
+        results = self.engine.evaluate({"pe_percentile": 85.0})
+        rule = [r for r in results if r.rule_id == "V02"][0]
+        self.assertTrue(rule.matched)
+
+    def test_pe_percentile_moderate(self):
+        results = self.engine.evaluate({"pe_percentile": 50.0})
+        v03 = [r for r in results if r.rule_id == "V03"][0]
+        self.assertTrue(v03.matched)
+        self.assertFalse([r for r in results if r.rule_id == "V01"][0].matched)
+        self.assertFalse([r for r in results if r.rule_id == "V02"][0].matched)
+
 
 class TestDimensionSummary(unittest.TestCase):
 

@@ -45,6 +45,16 @@ class TestComputeRulesForDf(unittest.TestCase):
         result = svc.compute_rules_for_df(None)
         self.assertEqual(result.rules_tags, "")
 
+    def test_compute_with_valuation_data(self):
+        from src.services.rules_analysis_service import RulesAnalysisService
+        svc = RulesAnalysisService()
+        result = svc.compute_rules_for_df(
+            _make_ohlcv(120), symbol="000001",
+            valuation={"pe_percentile": 15.0},
+        )
+        v01 = [r for r in result.matched_rules if r.rule_id == "V01"][0]
+        self.assertTrue(v01.matched)
+
 
 if __name__ == "__main__":
     unittest.main()

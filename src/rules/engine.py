@@ -69,10 +69,10 @@ def _build_conditions() -> Dict[str, Callable[[Dict[str, Any]], bool]]:
             d.get("close") is not None and d.get("boll_lower") is not None
             and d["close"] < d["boll_lower"]
         ),
-        # Valuation (require external PE percentile data, deferred)
-        "pe_percentile_low": lambda d: False,
-        "pe_percentile_high": lambda d: False,
-        "pe_percentile_moderate": lambda d: False,
+        # Valuation
+        "pe_percentile_low": lambda d: d.get("pe_percentile") is not None and d["pe_percentile"] < 20,
+        "pe_percentile_high": lambda d: d.get("pe_percentile") is not None and d["pe_percentile"] > 80,
+        "pe_percentile_moderate": lambda d: d.get("pe_percentile") is not None and 20 <= d["pe_percentile"] <= 80,
     }
 
 

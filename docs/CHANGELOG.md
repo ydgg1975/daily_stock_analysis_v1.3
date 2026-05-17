@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 新增小白客户端安装与配置指南，说明桌面客户端下载、基础模型配置、新闻源配置和常见问题。
 - [新功能] Web 首页个股分析支持选择策略。
 - [新功能] 新增热点题材、事件驱动、成长质量和预期重估策略。
+- [新功能] 新增通用技术规则引擎，支持 22 条规则 4 维度分析（技术面/趋势面/资金面/估值面），报告展示彩色信号标签
+- [新功能] 新增 `analyze_rules` Agent Tool，支持通过 Agent 调用规则引擎分析
+- [新功能] 新增规则引擎 REST API（`POST /api/v1/rules/analyze`、`POST /api/v1/rules/batch`）
+- [新功能] 新增 `rules_analysis` 分析策略（`strategies/rules_analysis.yaml`）
 
 ## [3.17.1] - 2026-05-16
 

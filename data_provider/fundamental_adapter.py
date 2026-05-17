@@ -530,3 +530,76 @@ class AkshareFundamentalAdapter:
         result["status"] = "ok"
         result["source_chain"].append(f"dragon_tiger:{source}")
         return result
+
+    # ------------------------------------------------------------------
+    # PE Percentile (Tushare -> AkShare fallback)
+    # ------------------------------------------------------------------
+
+    def get_pe_percentile(self, stock_code: str, years: int = 3) -> Optional[float]:
+        """
+        Compute PE percentile rank (0-100) from historical PE data.
+        Tries Tushare daily_basic first, falls back to AkShare stock_a_indicator_lg.
+        Returns None if data unavailable (ETF, HK/US, API failure).
+        """
+        code = str(stock_code).strip()
+        if not code.isdigit() or len(code) != 6:
+            return None
+        if code[:2] in ("51", "52", "56", "58", "15", "16", "18"):
+            return None
+
+        result = self._get_pe_percentile_tushare(code, years)
+        if result is not None:
+            return result
+
+        return self._get_pe_percentile_akshare(code, years)
+
+    def _get_pe_percentile_tushare(self, code: str, years: int) -> Optional[float]:
+        """Fetch historical PE from Tushare daily_basic, compute percentile."""
+        try:
+            from src.config import get_config
+            config = get_config()
+            if not config.tushare_token:
+                return None
+            from data_provider.tushare_fetcher import _TushareHttpClient
+            api = _TushareHttpClient(token=config.tushare_token)
+            ts_code = f"{code}.SH" if code.startswith(("6", "9")) else f"{code}.SZ"
+            end = datetime.now().strftime("%Y%m%d")
+            start = (datetime.now() - timedelta(days=years * 365)).strftime("%Y%m%d")
+            df = api.query("daily_basic", ts_code=ts_code, start_date=start, end_date=end,
+                            fields="ts_code,trade_date,pe")
+            if df is None or df.empty or "pe" not in df.columns:
+                return None
+            return self._compute_percentile_from_pe_series(df["pe"])
+        except Exception:
+            return None
+
+    def _get_pe_percentile_akshare(self, code: str, years: int) -> Optional[float]:
+        """Fetch historical PE from AkShare stock_zh_valuation_baidu, compute percentile."""
+        try:
+            import akshare as ak
+        except Exception:
+            return None
+        try:
+            period_map = {1: "近一年", 3: "近三年", 5: "近五年"}
+            period = period_map.get(years, "近三年")
+            df = ak.stock_zh_valuation_baidu(symbol=code, indicator="市盈率(TTM)", period=period)
+            if df is None or df.empty:
+                return None
+        except Exception:
+            return None
+        if "value" not in df.columns:
+            return None
+        pe_series = pd.to_numeric(df["value"], errors="coerce").dropna()
+        return self._compute_percentile_from_pe_series(pe_series)
+
+    @staticmethod
+    def _compute_percentile_from_pe_series(pe_series: pd.Series) -> Optional[float]:
+        """Compute PE percentile from a pandas Series. Returns 0-100 or None."""
+        pe_series = pd.to_numeric(pe_series, errors="coerce").dropna()
+        if len(pe_series) < 30:
+            return None
+        current_pe = float(pe_series.iloc[-1])
+        if current_pe <= 0:
+            return None
+        percentile = (pe_series < current_pe).sum() / len(pe_series) * 100
+        return round(float(percentile), 1)

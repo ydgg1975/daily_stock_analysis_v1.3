@@ -553,9 +553,18 @@ class StockAnalysisPipeline:
                         pass
                     if _rules_df is not None and not _rules_df.empty:
                         _rules_svc = RulesAnalysisService()
+                        # Fetch PE percentile for valuation rules
+                        _pe_percentile = None
+                        try:
+                            if not _is_etf_code(code) and code.isdigit():
+                                _pe_percentile = self.fetcher_manager._fundamental_adapter.get_pe_percentile(code)
+                        except Exception:
+                            pass
+                        _valuation = {"pe_percentile": _pe_percentile} if _pe_percentile is not None else None
                         _rules_result = _rules_svc.compute_rules_for_df(
                             _rules_df, symbol=code,
                             asset_type="etf" if _is_etf_code(code) else "stock",
+                            valuation=_valuation,
                         )
                         result.rules_tags = _rules_result.rules_tags or ""
                         result.rules_tags_html = _rules_result.rules_tags_html or ""
