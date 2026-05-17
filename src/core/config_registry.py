@@ -11,6 +11,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from src.config import AGENT_MAX_STEPS_DEFAULT
+from src.notification_noise import NOTIFICATION_SEVERITIES
 from src.notification_routing import ROUTABLE_NOTIFICATION_CHANNELS
 
 SCHEMA_VERSION = "2026-05-10"
@@ -144,6 +145,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 2,
+        "help_key": "settings.ai_model.AGENT_LITELLM_MODEL",
+        "examples": [
+            "AGENT_LITELLM_MODEL=deepseek/deepseek-v4-pro",
+            "AGENT_LITELLM_MODEL=gemini/gemini-3.1-pro-preview",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "完整指南：AI 模型配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+            },
+        ],
+        "warning_codes": ["inherits_primary_when_empty"],
     },
     "LITELLM_FALLBACK_MODELS": {
         "title": "Fallback Models",
@@ -158,6 +175,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 2,
+        "help_key": "settings.ai_model.LITELLM_FALLBACK_MODELS",
+        "examples": [
+            "LITELLM_FALLBACK_MODELS=deepseek/deepseek-v4-pro,gemini/gemini-3-flash-preview",
+            "LITELLM_FALLBACK_MODELS=openai/gpt-5.4-mini",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "完整指南：AI 模型配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+            },
+        ],
+        "warning_codes": ["fallback_models_must_be_available"],
     },
     # ------------------------------------------------------------------
     # AI Model – Multi-channel LLM configuration
@@ -175,6 +208,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 3,
+        "help_key": "settings.ai_model.LITELLM_CONFIG",
+        "examples": [
+            "LITELLM_CONFIG=./litellm_config.yaml",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南：YAML 模式",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#方式三litellm-原生-yaml-配置适合专家或复杂路由",
+            },
+        ],
+        "warning_codes": ["yaml_config_overrides_channel_editor"],
     },
     "LLM_CHANNELS": {
         "title": "LLM Channels",
@@ -221,6 +265,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"min": 0.0, "max": 2.0},
         "display_order": 5,
+        "help_key": "settings.ai_model.LLM_TEMPERATURE",
+        "examples": [
+            "LLM_TEMPERATURE=0.2",
+            "LLM_TEMPERATURE=0.7",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：AI 模型配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+            },
+        ],
+        "warning_codes": [],
     },
     "AIHUBMIX_KEY": {
         "title": "AIHubmix Key",
@@ -235,6 +291,21 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 5,
+        "help_key": "settings.ai_model.provider_keys",
+        "examples": [
+            "AIHUBMIX_KEY=sk-xxxx",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "ANSPIRE_LLM_ENABLED": {
         "title": "Anspire LLM Enabled",
@@ -294,6 +365,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 6,
+        "help_key": "settings.ai_model.provider_keys",
+        "examples": [
+            "DEEPSEEK_API_KEY=sk-xxxx",
+            "LITELLM_MODEL=deepseek/deepseek-v4-flash",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "DEEPSEEK_API_KEYS": {
         "title": "DeepSeek API Keys (Multi)",
@@ -322,6 +409,21 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 10,
+        "help_key": "settings.data_source.TUSHARE_TOKEN",
+        "examples": [
+            "TUSHARE_TOKEN=your_tushare_token",
+        ],
+        "docs": [
+            {
+                "label": "Tushare 股票列表指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
+            },
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "TICKFLOW_API_KEY": {
         "title": "TickFlow API Key",
@@ -350,6 +452,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 20,
+        "help_key": "settings.data_source.REALTIME_SOURCE_PRIORITY",
+        "examples": [
+            "REALTIME_SOURCE_PRIORITY=tencent,akshare_sina,efinance,akshare_em",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：数据源配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+            },
+        ],
+        "warning_codes": ["provider_priority_order"],
     },
     "ENABLE_REALTIME_TECHNICAL_INDICATORS": {
         "title": "Realtime Technical Indicators",
@@ -364,6 +477,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 21,
+        "help_key": "settings.data_source.realtime_quotes",
+        "examples": [
+            "ENABLE_REALTIME_TECHNICAL_INDICATORS=true",
+            "ENABLE_REALTIME_TECHNICAL_INDICATORS=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：数据源配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+            },
+        ],
+        "warning_codes": [],
     },
     "ANSPIRE_API_KEYS": {
         "title": "Anspire API Keys",
@@ -378,6 +503,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 22,
+        "help_key": "settings.data_source.search_api_keys",
+        "examples": [
+            "ANSPIRE_API_KEYS=key1,key2",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：搜索服务配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+            },
+        ],
+        "warning_codes": ["secret_value", "comma_separated_keys"],
     },
     "TAVILY_API_KEYS": {
         "title": "Tavily API Keys",
@@ -392,6 +528,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 30,
+        "help_key": "settings.data_source.search_api_keys",
+        "examples": [
+            "TAVILY_API_KEYS=tvly-xxxx",
+            "TAVILY_API_KEYS=tvly-key-1,tvly-key-2",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：搜索服务配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+            },
+        ],
+        "warning_codes": ["secret_value", "comma_separated_keys"],
     },
     "SERPAPI_API_KEYS": {
         "title": "SerpAPI Keys",
@@ -467,6 +615,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "allowed_schemes": ["http", "https"],
         },
         "display_order": 52,
+        "help_key": "settings.data_source.SEARXNG_BASE_URLS",
+        "examples": [
+            "SEARXNG_BASE_URLS=https://search.example.com",
+            "SEARXNG_PUBLIC_INSTANCES_ENABLED=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：搜索服务配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+            },
+        ],
+        "warning_codes": ["requires_json_format"],
     },
     "SEARXNG_PUBLIC_INSTANCES_ENABLED": {
         "title": "SearXNG Public Instances",
@@ -495,6 +655,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 22,
+        "help_key": "settings.data_source.realtime_quotes",
+        "examples": [
+            "ENABLE_REALTIME_QUOTE=true",
+            "ENABLE_REALTIME_QUOTE=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：数据源配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+            },
+        ],
+        "warning_codes": [],
     },
     "ENABLE_CHIP_DISTRIBUTION": {
         "title": "Enable Chip Distribution",
@@ -509,6 +681,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 23,
+        "help_key": "settings.data_source.ENABLE_CHIP_DISTRIBUTION",
+        "examples": [
+            "ENABLE_CHIP_DISTRIBUTION=true",
+            "ENABLE_CHIP_DISTRIBUTION=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：数据源配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+            },
+        ],
+        "warning_codes": ["cloud_deployments_may_disable"],
     },
     "NEWS_MAX_AGE_DAYS": {
         "title": "News Max Age (Days)",
@@ -523,6 +707,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"min": 1, "max": 30},
         "display_order": 60,
+        "help_key": "settings.data_source.news_window",
+        "examples": [
+            "NEWS_MAX_AGE_DAYS=3",
+            "NEWS_STRATEGY_PROFILE=short",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
     },
     "NEWS_STRATEGY_PROFILE": {
         "title": "News Strategy Profile",
@@ -537,6 +733,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": ["ultra_short", "short", "medium", "long"],
         "validation": {"enum": ["ultra_short", "short", "medium", "long"]},
         "display_order": 61,
+        "help_key": "settings.data_source.news_window",
+        "examples": [
+            "NEWS_STRATEGY_PROFILE=short",
+            "NEWS_MAX_AGE_DAYS=3",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
     },
     "BIAS_THRESHOLD": {
         "title": "Bias Threshold (%)",
@@ -607,6 +815,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 10,
+        "help_key": "settings.ai_model.provider_keys",
+        "examples": [
+            "GEMINI_API_KEY=your_gemini_api_key",
+            "LITELLM_MODEL=gemini/gemini-3.1-pro-preview",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "GEMINI_API_KEYS": {
         "title": "Gemini API Keys (Multi)",
@@ -677,6 +901,23 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 40,
+        "help_key": "settings.ai_model.provider_keys",
+        "examples": [
+            "OPENAI_API_KEY=sk-xxxx",
+            "OPENAI_BASE_URL=https://api.example.com/v1",
+            "LITELLM_MODEL=openai/gpt-5.5",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "OPENAI_API_KEYS": {
         "title": "OpenAI API Keys (Multi)",
@@ -705,6 +946,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 50,
+        "help_key": "settings.ai_model.OPENAI_BASE_URL",
+        "examples": [
+            "OPENAI_BASE_URL=https://api.openai.com/v1",
+            "OPENAI_BASE_URL=https://api.example.com/v1",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["base_url_must_match_provider"],
     },
     "OPENAI_MODEL": {
         "title": "OpenAI Model",
@@ -761,6 +1018,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 35,
+        "help_key": "settings.ai_model.provider_keys",
+        "examples": [
+            "ANTHROPIC_API_KEY=sk-ant-xxxx",
+            "LITELLM_MODEL=anthropic/claude-sonnet-4-6",
+        ],
+        "docs": [
+            {
+                "label": "LLM 配置指南",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+            },
+            {
+                "label": "LLM 服务商配置速查",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "ANTHROPIC_API_KEYS": {
         "title": "Anthropic API Keys (Multi)",
@@ -831,6 +1104,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 10,
+        "help_key": "settings.notification.webhooks",
+        "examples": [
+            "WECHAT_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：通知渠道配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#通知渠道详细配置",
+            },
+        ],
+        "warning_codes": ["webhook_secret_value"],
     },
     "DINGTALK_APP_KEY": {
         "title": "DingTalk App Key",
@@ -876,7 +1160,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "CUSTOM_WEBHOOK_URLS": {
         "title": "Custom Webhook URLs",
-        "description": "Comma-separated webhook URLs for custom notifications (DingTalk, Discord, Slack, etc.).",
+        "description": "Comma-separated webhook URLs for custom notifications (DingTalk, Bark, Discord, Slack, etc.).",
         "category": "notification",
         "data_type": "array",
         "ui_control": "textarea",
@@ -885,8 +1169,25 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_editable": True,
         "default_value": None,
         "options": [],
+        "help_key": "settings.notification.CUSTOM_WEBHOOK_URLS",
+        "examples": [
+            "https://api.day.app/YOUR_BARK_KEY",
+            "https://oapi.dingtalk.com/robot/send?access_token=xxx",
+        ],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 50,
+        "help_key": "settings.notification.CUSTOM_WEBHOOK_URLS",
+        "examples": [
+            "CUSTOM_WEBHOOK_URLS=https://example.com/webhook",
+            "CUSTOM_WEBHOOK_BODY_TEMPLATE={\"msg_type\":\"text\",\"content\":$content_json}",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：自定义 Webhook",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#自定义-webhook",
+            },
+        ],
+        "warning_codes": ["json_template_must_render_object"],
     },
     "CUSTOM_WEBHOOK_BEARER_TOKEN": {
         "title": "Custom Webhook Bearer Token",
@@ -934,6 +1235,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 53,
+        "help_key": "settings.notification.WEBHOOK_VERIFY_SSL",
+        "examples": [
+            "WEBHOOK_VERIFY_SSL=true",
+            "WEBHOOK_VERIFY_SSL=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：自定义 Webhook",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#自定义-webhook",
+            },
+        ],
+        "warning_codes": ["disabling_ssl_verify_is_risky"],
     },
     "REPORT_SUMMARY_ONLY": {
         "title": "Report Summary Only",
@@ -948,6 +1261,20 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 53,
+    },
+    "REPORT_SHOW_LLM_MODEL": {
+        "title": "Show LLM Model in Reports",
+        "description": "Show the LLM model name in notification report footers. Disable to hide runtime model metadata. This option only affects report rendering and does not change runtime provider/model/Base URL/LiteLLM routing, migration, persistence, or cleanup behavior.",
+        "category": "notification",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "true",
+        "options": [],
+        "validation": {},
+        "display_order": 54,
     },
     # ------------------------------------------------------------------
     # Notification – Feishu
@@ -1058,6 +1385,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 17,
+        "help_key": "settings.notification.telegram",
+        "examples": [
+            "TELEGRAM_BOT_TOKEN=123456:ABC-DEF",
+            "TELEGRAM_CHAT_ID=-1001234567890",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：Telegram",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "TELEGRAM_CHAT_ID": {
         "title": "Telegram Chat ID",
@@ -1072,6 +1411,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 18,
+        "help_key": "settings.notification.telegram",
+        "examples": [
+            "TELEGRAM_CHAT_ID=-1001234567890",
+            "TELEGRAM_MESSAGE_THREAD_ID=123",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：Telegram",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
+            },
+        ],
+        "warning_codes": [],
     },
     "TELEGRAM_MESSAGE_THREAD_ID": {
         "title": "Telegram Thread ID",
@@ -1103,6 +1454,19 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 25,
+        "help_key": "settings.notification.email",
+        "examples": [
+            "EMAIL_SENDER=sender@example.com",
+            "EMAIL_PASSWORD=your_smtp_authorization_code",
+            "EMAIL_RECEIVERS=user1@example.com,user2@example.com",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：邮件",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+            },
+        ],
+        "warning_codes": [],
     },
     "EMAIL_PASSWORD": {
         "title": "Email Password",
@@ -1117,6 +1481,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 26,
+        "help_key": "settings.notification.email",
+        "examples": [
+            "EMAIL_PASSWORD=your_smtp_authorization_code",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：邮件",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+            },
+        ],
+        "warning_codes": ["secret_value", "smtp_authorization_code"],
     },
     "EMAIL_RECEIVERS": {
         "title": "Email Receivers",
@@ -1131,6 +1506,19 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 27,
+        "help_key": "settings.notification.email",
+        "examples": [
+            "EMAIL_RECEIVERS=user1@example.com,user2@example.com",
+            "STOCK_GROUP_1=600519,300750",
+            "EMAIL_GROUP_1=user1@example.com",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：邮件",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+            },
+        ],
+        "warning_codes": ["comma_separated_values"],
     },
     # ------------------------------------------------------------------
     # Notification – Discord
@@ -1148,6 +1536,17 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 33,
+        "help_key": "settings.notification.chat_bots",
+        "examples": [
+            "DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxx/yyy",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：Discord",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
+            },
+        ],
+        "warning_codes": ["webhook_secret_value"],
     },
     "DISCORD_BOT_TOKEN": {
         "title": "Discord Bot Token",
@@ -1162,6 +1561,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 34,
+        "help_key": "settings.notification.chat_bots",
+        "examples": [
+            "DISCORD_BOT_TOKEN=your_discord_bot_token",
+            "DISCORD_MAIN_CHANNEL_ID=123456789012345678",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：Discord",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "DISCORD_MAIN_CHANNEL_ID": {
         "title": "Discord Channel ID",
@@ -1207,6 +1618,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 37,
+        "help_key": "settings.notification.chat_bots",
+        "examples": [
+            "SLACK_BOT_TOKEN=xoxb-xxxx",
+            "SLACK_CHANNEL_ID=C0123456789",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：通知渠道配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#通知渠道详细配置",
+            },
+        ],
+        "warning_codes": ["secret_value"],
     },
     "SLACK_CHANNEL_ID": {
         "title": "Slack Channel ID",
@@ -1267,6 +1690,68 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {},
         "display_order": 43,
     },
+    "NTFY_URL": {
+        "title": "ntfy URL",
+        "description": "Full ntfy publish endpoint including topic path, e.g. https://ntfy.sh/my-topic.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {
+            "item_type": "url",
+            "allowed_schemes": ["http", "https"],
+        },
+        "display_order": 44,
+    },
+    "NTFY_TOKEN": {
+        "title": "ntfy Token",
+        "description": "Optional ntfy bearer token for protected topics or self-hosted servers.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 45,
+    },
+    "GOTIFY_URL": {
+        "title": "Gotify URL",
+        "description": "Gotify server base URL. Do not include /message; the sender appends it.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {
+            "item_type": "url",
+            "allowed_schemes": ["http", "https"],
+        },
+        "display_order": 46,
+    },
+    "GOTIFY_TOKEN": {
+        "title": "Gotify Token",
+        "description": "Gotify application token sent via the X-Gotify-Key header.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "password",
+        "is_sensitive": True,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 47,
+    },
     "PUSHPLUS_TOPIC": {
         "title": "PushPlus Topic",
         "description": "PushPlus group topic code for one-to-many push.",
@@ -1296,7 +1781,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": None,
         "options": [],
         "validation": {},
-        "display_order": 45,
+        "display_order": 46,
     },
     "ASTRBOT_URL": {
         "title": "AstrBot URL",
@@ -1313,7 +1798,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             "item_type": "url",
             "allowed_schemes": ["http", "https"],
         },
-        "display_order": 46,
+        "display_order": 47,
     },
     "ASTRBOT_TOKEN": {
         "title": "AstrBot Token",
@@ -1327,7 +1812,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": None,
         "options": [],
         "validation": {},
-        "display_order": 47,
+        "display_order": 48,
     },
     "SINGLE_STOCK_NOTIFY": {
         "title": "Single Stock Notify",
@@ -1356,6 +1841,19 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": ["simple", "full", "brief"],
         "validation": {"enum": ["simple", "full", "brief"]},
         "display_order": 55,
+        "help_key": "settings.notification.report_output",
+        "examples": [
+            "REPORT_TYPE=simple",
+            "REPORT_TYPE=full",
+            "REPORT_LANGUAGE=zh",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
     },
     "REPORT_LANGUAGE": {
         "title": "Report Language",
@@ -1373,6 +1871,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "validation": {"enum": ["zh", "en"]},
         "display_order": 56,
+        "help_key": "settings.notification.report_output",
+        "examples": [
+            "REPORT_LANGUAGE=zh",
+            "REPORT_LANGUAGE=en",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
     },
     "REPORT_TEMPLATES_DIR": {
         "title": "Report Templates Dir",
@@ -1500,6 +2010,93 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "validation": {"allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS), "delimiter": ","},
         "display_order": 64,
     },
+    "NOTIFICATION_DEDUP_TTL_SECONDS": {
+        "title": "Notification Dedup TTL Seconds",
+        "description": "Suppress duplicate static notifications with the same dedup key within this TTL. 0 disables deduplication.",
+        "category": "notification",
+        "data_type": "integer",
+        "ui_control": "number",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "0",
+        "options": [],
+        "validation": {"min": 0},
+        "display_order": 65,
+    },
+    "NOTIFICATION_COOLDOWN_SECONDS": {
+        "title": "Notification Cooldown Seconds",
+        "description": "Suppress repeated static notifications with the same cooldown key during this window. 0 disables cooldown.",
+        "category": "notification",
+        "data_type": "integer",
+        "ui_control": "number",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "0",
+        "options": [],
+        "validation": {"min": 0},
+        "display_order": 66,
+    },
+    "NOTIFICATION_QUIET_HOURS": {
+        "title": "Notification Quiet Hours",
+        "description": "Quiet window in HH:MM-HH:MM format. Supports overnight ranges. Empty disables quiet hours.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "",
+        "options": [],
+        "validation": {"pattern": r"^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$"},
+        "display_order": 67,
+    },
+    "NOTIFICATION_TIMEZONE": {
+        "title": "Notification Timezone",
+        "description": "IANA timezone for quiet hours, e.g. Asia/Shanghai. Empty follows TZ or the local system timezone.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "",
+        "options": [],
+        "validation": {"timezone": True},
+        "display_order": 68,
+    },
+    "NOTIFICATION_MIN_SEVERITY": {
+        "title": "Notification Minimum Severity",
+        "description": "Suppress static notifications below this severity. Empty keeps current behavior.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "",
+        "options": [
+            {"label": "Not set", "value": ""},
+            *({"label": severity, "value": severity} for severity in NOTIFICATION_SEVERITIES),
+        ],
+        "validation": {"enum": ["", *NOTIFICATION_SEVERITIES]},
+        "display_order": 69,
+    },
+    "NOTIFICATION_DAILY_DIGEST_ENABLED": {
+        "title": "Notification Daily Digest Enabled (Reserved)",
+        "description": "Reserved P4 flag. It is visible for compatibility but does not send daily digests yet.",
+        "category": "notification",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "false",
+        "options": [],
+        "validation": {},
+        "display_order": 70,
+    },
     "SCHEDULE_TIME": {
         "title": "Schedule Time",
         "description": "Daily schedule time in HH:MM format.",
@@ -1513,6 +2110,19 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"pattern": r"^([01]\d|2[0-3]):[0-5]\d$"},
         "display_order": 10,
+        "help_key": "settings.system.schedule",
+        "examples": [
+            "SCHEDULE_TIME=18:00",
+            "SCHEDULE_ENABLED=true",
+            "SCHEDULE_RUN_IMMEDIATELY=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": ["local_timezone"],
     },
     "HTTP_PROXY": {
         "title": "HTTP Proxy",
@@ -1527,6 +2137,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 20,
+        "help_key": "settings.system.HTTP_PROXY",
+        "examples": [
+            "HTTP_PROXY=http://127.0.0.1:7890",
+            "HTTPS_PROXY=http://127.0.0.1:7890",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": ["network_scope"],
     },
     "LOG_LEVEL": {
         "title": "Log Level",
@@ -1585,6 +2207,22 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {"min": 1, "max": 65535},
         "display_order": 40,
+        "help_key": "settings.system.WEBUI_PORT",
+        "examples": [
+            "WEBUI_PORT=8000",
+            "WEBUI_PORT=18000",
+        ],
+        "docs": [
+            {
+                "label": "云服务器访问 WebUI",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+            },
+            {
+                "label": "完整指南：WebUI 与 API",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-与-api-服务",
+            },
+        ],
+        "warning_codes": ["port_mapping_required", "restart_required"],
     },
     "RUN_IMMEDIATELY": {
         "title": "Run Immediately",
@@ -1599,6 +2237,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 45,
+        "help_key": "settings.system.RUN_IMMEDIATELY",
+        "examples": [
+            "RUN_IMMEDIATELY=true",
+            "RUN_IMMEDIATELY=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": ["restart_required"],
     },
     "SCHEDULE_ENABLED": {
         "title": "Schedule Enabled",
@@ -1613,6 +2263,79 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 8,
+        "help_key": "settings.system.schedule",
+        "examples": [
+            "SCHEDULE_ENABLED=true",
+            "SCHEDULE_TIME=18:00",
+            "SCHEDULE_RUN_IMMEDIATELY=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": ["restart_required"],
+    },
+    "ADMIN_AUTH_ENABLED": {
+        "title": "Admin Auth Enabled",
+        "description": "Enable password protection for Web UI. The first visit initializes the admin password.",
+        "category": "system",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": False,
+        "default_value": "false",
+        "options": [],
+        "validation": {},
+        "display_order": 41,
+        "help_key": "settings.system.ADMIN_AUTH_ENABLED",
+        "examples": [
+            "ADMIN_AUTH_ENABLED=true",
+            "python -m src.auth reset_password",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+            {
+                "label": "云服务器访问 WebUI",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+            },
+        ],
+        "warning_codes": ["public_webui_requires_auth", "auth_settings_endpoint_required"],
+    },
+    "TRUST_X_FORWARDED_FOR": {
+        "title": "Trust X-Forwarded-For",
+        "description": "Use X-Forwarded-For as the client IP behind one trusted reverse proxy.",
+        "category": "system",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "false",
+        "options": [],
+        "validation": {},
+        "display_order": 42,
+        "help_key": "settings.system.TRUST_X_FORWARDED_FOR",
+        "examples": [
+            "TRUST_X_FORWARDED_FOR=false",
+            "TRUST_X_FORWARDED_FOR=true",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+            {
+                "label": "云服务器访问 WebUI",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+            },
+        ],
+        "warning_codes": ["trusted_proxy_only"],
     },
     "SCHEDULE_RUN_IMMEDIATELY": {
         "title": "Schedule Run Immediately",
@@ -1627,6 +2350,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 11,
+        "help_key": "settings.system.schedule",
+        "examples": [
+            "SCHEDULE_RUN_IMMEDIATELY=true",
+            "SCHEDULE_RUN_IMMEDIATELY=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": ["restart_required"],
     },
     "TRADING_DAY_CHECK_ENABLED": {
         "title": "Trading Day Check",
@@ -1641,6 +2376,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 12,
+        "help_key": "settings.system.TRADING_DAY_CHECK_ENABLED",
+        "examples": [
+            "TRADING_DAY_CHECK_ENABLED=true",
+            "TRADING_DAY_CHECK_ENABLED=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：其他配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+            },
+        ],
+        "warning_codes": ["force_run_override"],
     },
     "MARKET_REVIEW_ENABLED": {
         "title": "Market Review Enabled",
@@ -1669,6 +2416,23 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": ["cn", "hk", "us", "both"],
         "validation": {"enum": ["cn", "hk", "us", "both"]},
         "display_order": 47,
+    },
+    "MARKET_REVIEW_COLOR_SCHEME": {
+        "title": "Market Review Color Scheme",
+        "description": "Index change color style in market-review tables: green_up (green for gains, red for losses) or red_up (red for gains, green for losses).",
+        "category": "system",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "green_up",
+        "options": [
+            {"label": "Green Up / Red Down", "value": "green_up"},
+            {"label": "Red Up / Green Down", "value": "red_up"},
+        ],
+        "validation": {"enum": ["green_up", "red_up"]},
+        "display_order": 48,
     },
     "MAX_WORKERS": {
         "title": "Max Workers",
@@ -2155,6 +2919,8 @@ def _infer_category(key: str) -> str:
         "TELEGRAM",
         "EMAIL",
         "PUSHOVER",
+        "NTFY",
+        "GOTIFY",
         "PUSHPLUS",
         "SERVERCHAN",
         "DINGTALK",
