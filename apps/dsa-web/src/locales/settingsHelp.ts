@@ -111,7 +111,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.ai_model.provider_keys': {
     title: '模型服务 API Key',
     summary: '配置模型服务商或聚合网关的访问密钥。',
-    usage: '在对应服务商控制台创建 API Key 后填入；多 Key 字段使用英文逗号分隔。',
+    usage: '在对应服务商控制台创建 API Key 后填入；如需轮换或负载均衡，对应的多 Key 变体字段使用英文逗号分隔。',
     valueNotes: [
       '密钥字段会在 Web 设置页以密码控件展示，保存后通常只显示掩码。',
       '渠道模式优先读取 LLM_<NAME>_API_KEY(S)，legacy key 主要用于兼容旧配置。',
@@ -138,10 +138,18 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['影响部分 A 股基础数据、股票列表和相关增强数据获取。'],
     notes: ['不要把 token 提交到仓库或公开日志。'],
   },
+  'settings.data_source.REALTIME_SOURCE_PRIORITY': {
+    title: '实时行情源优先级',
+    summary: '配置多个实时行情源的尝试顺序。',
+    usage: '优先级使用英文逗号分隔；系统会按顺序尝试可用数据源。',
+    valueNotes: ['前面的数据源优先使用，失败后再降级到后续数据源。'],
+    impact: ['影响现价、盘中分析和依赖实时价格的报告字段。'],
+    notes: ['单一数据源失败应降级到后续数据源，不应拖垮主流程。'],
+  },
   'settings.data_source.realtime_quotes': {
     title: '实时行情配置',
-    summary: '控制实时行情是否启用，以及多个行情源的优先级。',
-    usage: '优先级使用英文逗号分隔；系统会按顺序尝试可用数据源。',
+    summary: '控制实时行情和盘中技术指标是否启用。',
+    usage: '开关字段使用 true/false；行情源顺序由 REALTIME_SOURCE_PRIORITY 单独配置。',
     valueNotes: [
       '关闭实时行情后，分析会更依赖历史收盘价。',
       '实时技术指标会把盘中价格纳入均线和趋势判断。',
@@ -199,9 +207,9 @@ const settingsHelpZhCN: SettingsHelpMap = {
     ],
   },
   'settings.notification.webhooks': {
-    title: 'Webhook 推送',
-    summary: '通过企业微信、钉钉、Discord、Slack 或自定义 HTTP Webhook 推送报告。',
-    usage: '在目标平台创建机器人或 Webhook 后复制 URL；多个自定义 Webhook 使用英文逗号分隔。',
+    title: '企业微信 Webhook',
+    summary: '配置企业微信群机器人 Webhook，用于把分析报告推送到指定群。',
+    usage: '在企业微信群中创建机器人后，复制 qyapi.weixin.qq.com/cgi-bin/webhook/send 开头的 Webhook URL。',
     valueNotes: [
       'Webhook URL 通常包含敏感 token，应按密钥处理。',
       '不同平台对消息长度、格式和频率限制不同。',
@@ -268,7 +276,7 @@ const settingsHelpZhCN: SettingsHelpMap = {
     summary: '控制 WebUI 服务绑定在哪个网络地址上。',
     usage: '本机访问通常使用 127.0.0.1；云服务器、Docker 或需要外部访问时通常使用 0.0.0.0。',
     valueNotes: [
-      '.env 里的 WEBUI_HOST 在进程启动读取时优先级高于命令行 --host 参数。',
+      '当前启动逻辑会在 host 为默认 0.0.0.0 时读取 WEBUI_HOST；即使显式传入 --host 0.0.0.0，也可能被 .env 中的 WEBUI_HOST 覆盖。',
       '在设置页保存后，只会写入 .env 并重载运行时配置对象，不会让当前 WebUI/API 进程重新绑定监听地址。',
       'Docker Compose 中通常会在容器内使用 0.0.0.0，宿主机访问还取决于端口映射。',
     ],
@@ -295,10 +303,10 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.system.ADMIN_AUTH_ENABLED': {
     title: 'Web 登录保护',
     summary: '启用 WebUI 管理员密码保护。',
-    usage: '设为 true 后，首次访问会在网页初始化密码；忘记密码可运行 python -m src.auth reset_password。',
-    valueNotes: ['直连公网、局域网共享或反向代理部署时建议启用。'],
+    usage: '请通过 WebUI 的认证设置入口启用或关闭；忘记密码可运行 python -m src.auth reset_password。',
+    valueNotes: ['直连公网、局域网共享或反向代理部署时建议启用。', '该字段在通用配置页仅作说明展示，避免绕过认证设置流程。'],
     impact: ['影响 WebUI 登录、设置页访问和管理操作保护。'],
-    notes: ['启用前请确认部署环境可以持久化认证数据。'],
+    notes: ['启用前请确认部署环境可以持久化认证数据；手动改 .env 后需要重启进程或使用认证设置流程刷新状态。'],
   },
   'settings.system.TRUST_X_FORWARDED_FOR': {
     title: '信任 X-Forwarded-For',
@@ -518,7 +526,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.ai_model.provider_keys': {
     title: 'Provider API Key',
     summary: 'Configures credentials for model providers or gateways.',
-    usage: 'Create a key in the provider console. Multi-key fields use English commas.',
+    usage: 'Create a key in the provider console. Related multi-key variants use English commas for rotation or load balancing.',
     valueNotes: ['Secret fields are masked in the Web settings page.', 'Channel mode reads LLM_<NAME>_API_KEY(S) first.'],
     impact: ['Affects model calls, connection tests, and model discovery for the provider.'],
     notes: ['Do not expose real keys in issues, logs, or screenshots.'],
@@ -539,10 +547,18 @@ const settingsHelpEnUS: SettingsHelpMap = {
     impact: ['Affects some A-share base data, stock lists, and enrichment data.'],
     notes: ['Do not commit the token or print it in public logs.'],
   },
+  'settings.data_source.REALTIME_SOURCE_PRIORITY': {
+    title: 'Realtime Source Priority',
+    summary: 'Configures the provider order for realtime quotes.',
+    usage: 'Use comma-separated provider names; the system tries them in order.',
+    valueNotes: ['Earlier providers are preferred; failures fall back to later providers.'],
+    impact: ['Affects current price, intraday analysis, and report fields that depend on realtime prices.'],
+    notes: ['A single provider failure should fall back to the next source.'],
+  },
   'settings.data_source.realtime_quotes': {
     title: 'Realtime Quotes',
-    summary: 'Controls realtime quote usage and provider priority.',
-    usage: 'Use comma-separated provider names; the system tries them in order.',
+    summary: 'Controls whether realtime quotes and intraday technical indicators are enabled.',
+    usage: 'Switch fields use true/false. Provider order is configured separately by REALTIME_SOURCE_PRIORITY.',
     valueNotes: ['Disabling realtime quotes falls back toward historical close prices.', 'Realtime technical indicators use intraday prices.'],
     impact: ['Affects current price, technical indicators, intraday analysis, and report fields.'],
     notes: ['A single provider failure should fall back to the next source.'],
@@ -595,9 +611,9 @@ const settingsHelpEnUS: SettingsHelpMap = {
     ],
   },
   'settings.notification.webhooks': {
-    title: 'Webhook Delivery',
-    summary: 'Sends reports through WeCom, DingTalk, Discord, Slack, or custom HTTP webhooks.',
-    usage: 'Create a bot or webhook in the target platform and paste the URL. Custom webhook URLs use English commas.',
+    title: 'Enterprise WeChat Webhook',
+    summary: 'Configures an Enterprise WeChat group bot webhook for report delivery.',
+    usage: 'Create a group bot in Enterprise WeChat and paste the Webhook URL that starts with qyapi.weixin.qq.com/cgi-bin/webhook/send.',
     valueNotes: ['Webhook URLs often contain sensitive tokens.', 'Platforms differ in message length, format, and rate limits.'],
     impact: ['Affects delivery for the corresponding webhook channel.'],
     notes: ['A single notification failure should not block the main analysis flow.'],
@@ -655,7 +671,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
     summary: 'Controls the network address the WebUI service binds to.',
     usage: 'Use 127.0.0.1 for local-only access. Use 0.0.0.0 for cloud, Docker, or external access.',
     valueNotes: [
-      'WEBUI_HOST in .env has higher priority than the --host command-line argument when the process starts.',
+      'Current startup logic reads WEBUI_HOST when the host is the default 0.0.0.0; even an explicit --host 0.0.0.0 can still be overwritten by WEBUI_HOST in .env.',
       'Saving it from the settings page writes .env and reloads runtime config objects, but the running WebUI/API process will not rebind its host.',
       'Docker Compose commonly binds 0.0.0.0 inside the container; host access also depends on port mapping.',
     ],
@@ -680,10 +696,10 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.system.ADMIN_AUTH_ENABLED': {
     title: 'Web Login Protection',
     summary: 'Enables admin password protection for WebUI.',
-    usage: 'Set true, then initialize the password on first visit. Reset with python -m src.auth reset_password if needed.',
-    valueNotes: ['Recommended for public, shared LAN, or reverse-proxy deployments.'],
+    usage: 'Use the WebUI auth settings entry to enable or disable this. Reset with python -m src.auth reset_password if needed.',
+    valueNotes: ['Recommended for public, shared LAN, or reverse-proxy deployments.', 'This field is shown read-only in the generic config page to avoid bypassing the auth settings flow.'],
     impact: ['Affects WebUI login, settings access, and admin operations.'],
-    notes: ['Make sure auth data is persisted in the deployment environment.'],
+    notes: ['Make sure auth data is persisted in the deployment environment. Manual .env edits require a process restart or the auth settings flow to refresh state.'],
   },
   'settings.system.TRUST_X_FORWARDED_FOR': {
     title: 'Trust X-Forwarded-For',

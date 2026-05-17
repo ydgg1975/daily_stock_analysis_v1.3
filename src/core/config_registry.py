@@ -452,7 +452,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": [],
         "validation": {},
         "display_order": 20,
-        "help_key": "settings.data_source.realtime_quotes",
+        "help_key": "settings.data_source.REALTIME_SOURCE_PRIORITY",
         "examples": [
             "REALTIME_SOURCE_PRIORITY=tencent,akshare_sina,efinance,akshare_em",
         ],
@@ -733,6 +733,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "options": ["ultra_short", "short", "medium", "long"],
         "validation": {"enum": ["ultra_short", "short", "medium", "long"]},
         "display_order": 61,
+        "help_key": "settings.data_source.news_window",
+        "examples": [
+            "NEWS_STRATEGY_PROFILE=short",
+            "NEWS_MAX_AGE_DAYS=3",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
     },
     "BIAS_THRESHOLD": {
         "title": "Bias Threshold (%)",
@@ -2273,7 +2285,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "ui_control": "switch",
         "is_sensitive": False,
         "is_required": False,
-        "is_editable": True,
+        "is_editable": False,
         "default_value": "false",
         "options": [],
         "validation": {},
@@ -2293,7 +2305,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
         ],
-        "warning_codes": ["public_webui_requires_auth"],
+        "warning_codes": ["public_webui_requires_auth", "auth_settings_endpoint_required"],
     },
     "TRUST_X_FORWARDED_FOR": {
         "title": "Trust X-Forwarded-For",

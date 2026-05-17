@@ -2169,6 +2169,19 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertNotIn("重启当前进程", schedule_time_warning)
         self.assertNotIn("不会因为本次保存启动、停止或重建 scheduler", schedule_time_warning)
 
+    def test_update_schedule_time_blank_warning_reports_effective_default(self) -> None:
+        response = self.service.update(
+            config_version=self.manager.get_config_version(),
+            items=[{"key": "SCHEDULE_TIME", "value": "   "}],
+            reload_now=True,
+        )
+
+        self.assertTrue(response["success"])
+        self.assertTrue(
+            any("SCHEDULE_TIME=18:00 已写入 .env" in warning for warning in response["warnings"]),
+            response["warnings"],
+        )
+
     def test_update_appends_webui_bind_restart_warning(self) -> None:
         response = self.service.update(
             config_version=self.manager.get_config_version(),

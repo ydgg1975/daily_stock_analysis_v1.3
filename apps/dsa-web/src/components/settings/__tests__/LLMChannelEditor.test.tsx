@@ -77,6 +77,18 @@ describe('LLMChannelEditor', () => {
     expect(screen.getByRole('dialog', { name: 'Base URL' })).toBeInTheDocument();
     expect(screen.getByText('该渠道的接口根地址。')).toBeInTheDocument();
     expect(screen.getByText('LLM_DEEPSEEK_BASE_URL=https://api.deepseek.com')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(await screen.findByRole('button', { name: '查看 Temperature 配置说明' }));
+
+    expect(screen.getByRole('dialog', { name: 'Temperature' })).toBeInTheDocument();
+    expect(screen.getByText('运行时统一采样温度。')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(await screen.findByRole('button', { name: '查看 运行时能力检测 配置说明' }));
+
+    expect(screen.getByRole('dialog', { name: '运行时能力检测' })).toBeInTheDocument();
+    expect(screen.getByText('选择能力后点击检测；检测会发起真实 LLM 请求。')).toBeInTheDocument();
   });
 
   it('hides LiteLLM wording when advanced YAML routing is enabled', () => {
