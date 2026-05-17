@@ -1,0 +1,27 @@
+[
+  {"id": "T01", "dimension": "technical", "name": "均线金叉", "description": "MA5 上穿 MA10", "signal": "bullish", "weight": 0.8, "condition_key": "ma_golden_cross"},
+  {"id": "T02", "dimension": "technical", "name": "均线死叉", "description": "MA5 下穿 MA10", "signal": "bearish", "weight": 0.8, "condition_key": "ma_death_cross"},
+  {"id": "T03", "dimension": "technical", "name": "多头排列", "description": "MA5 > MA10 > MA20", "signal": "bullish", "weight": 1.0, "condition_key": "ma_bullish_alignment"},
+  {"id": "T04", "dimension": "technical", "name": "空头排列", "description": "MA5 < MA10 < MA20", "signal": "bearish", "weight": 1.0, "condition_key": "ma_bearish_alignment"},
+  {"id": "T05", "dimension": "technical", "name": "MACD金叉", "description": "DIF 上穿 DEA", "signal": "bullish", "weight": 0.9, "condition_key": "macd_golden_cross"},
+  {"id": "T06", "dimension": "technical", "name": "MACD死叉", "description": "DIF 下穿 DEA", "signal": "bearish", "weight": 0.9, "condition_key": "macd_death_cross"},
+  {"id": "T07", "dimension": "technical", "name": "RSI超买", "description": "RSI > 70", "signal": "warning", "weight": 0.7, "condition_key": "rsi_overbought"},
+  {"id": "T08", "dimension": "technical", "name": "RSI超卖", "description": "RSI < 30", "signal": "warning", "weight": 0.7, "condition_key": "rsi_oversold"},
+
+  {"id": "TR01", "dimension": "trend", "name": "上升趋势", "description": "收盘价站上MA20且MA20斜率向上", "signal": "bullish", "weight": 1.0, "condition_key": "uptrend"},
+  {"id": "TR02", "dimension": "trend", "name": "下降趋势", "description": "收盘价跌破MA20且MA20斜率向下", "signal": "bearish", "weight": 1.0, "condition_key": "downtrend"},
+  {"id": "TR03", "dimension": "trend", "name": "20日新高", "description": "创20日新高", "signal": "bullish", "weight": 0.8, "condition_key": "new_high_20d"},
+  {"id": "TR04", "dimension": "trend", "name": "20日新低", "description": "创20日新低", "signal": "bearish", "weight": 0.8, "condition_key": "new_low_20d"},
+  {"id": "TR05", "dimension": "trend", "name": "60日新高", "description": "创60日新高", "signal": "bullish", "weight": 1.2, "condition_key": "new_high_60d"},
+  {"id": "TR06", "dimension": "trend", "name": "60日新低", "description": "创60日新低", "signal": "bearish", "weight": 1.2, "condition_key": "new_low_60d"},
+  {"id": "TR07", "dimension": "trend", "name": "短期强势", "description": "5日涨幅 > 5%", "signal": "bullish", "weight": 0.6, "condition_key": "short_term_strong"},
+
+  {"id": "C01", "dimension": "capital", "name": "放量上涨", "description": "量比 > 2 且 收盘价 > MA5", "signal": "bullish", "weight": 0.8, "condition_key": "volume_surge_up"},
+  {"id": "C02", "dimension": "capital", "name": "缩量下跌", "description": "量比 < 0.5 且 收盘价 < MA5", "signal": "bearish", "weight": 0.6, "condition_key": "volume_shrink_down"},
+  {"id": "C03", "dimension": "capital", "name": "突破布林上轨", "description": "收盘价 > 布林上轨", "signal": "warning", "weight": 0.7, "condition_key": "break_boll_upper"},
+  {"id": "C04", "dimension": "capital", "name": "跌破布林下轨", "description": "收盘价 < 布林下轨", "signal": "warning", "weight": 0.7, "condition_key": "break_boll_lower"},
+
+  {"id": "V01", "dimension": "valuation", "name": "PE百分位偏低", "description": "PE百分位 < 20%", "signal": "bullish", "weight": 0.8, "condition_key": "pe_percentile_low"},
+  {"id": "V02", "dimension": "valuation", "name": "PE百分位偏高", "description": "PE百分位 > 80%", "signal": "bearish", "weight": 0.8, "condition_key": "pe_percentile_high"},
+  {"id": "V03", "dimension": "valuation", "name": "PE百分位适中", "description": "PE百分位 20%-80%", "signal": "neutral", "weight": 0.3, "condition_key": "pe_percentile_moderate"}
+]
