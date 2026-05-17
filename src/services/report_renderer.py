@@ -166,12 +166,20 @@ def render(
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,
         "localize_chip_health": localize_chip_health,
+        "rules_tags": "",
     }
     if extra_context:
         safe_extra_context = dict(extra_context)
         safe_extra_context.pop("labels", None)
         safe_extra_context.pop("report_language", None)
         context.update(safe_extra_context)
+
+    if not context.get("rules_tags"):
+        for e in sorted_enriched:
+            tags = getattr(e.get("result"), "rules_tags", "")
+            if tags:
+                context["rules_tags"] = tags
+                break
 
     try:
         env = Environment(

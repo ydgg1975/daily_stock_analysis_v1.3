@@ -152,6 +152,11 @@
 {% endfor %}
 {% endif %}
 
+{% if result.rules_tags %}
+**📊 规则信号**
+{{ result.rules_tags }}
+
+{% endif %}
 ---
 {% endfor %}
 {% endif %}
