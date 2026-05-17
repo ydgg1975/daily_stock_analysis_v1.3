@@ -692,3 +692,56 @@ get_capital_flow_tool = ToolDefinition(
 
 
 ALL_DATA_TOOLS.append(get_capital_flow_tool)
+
+
+# ============================================================
+# analyze_rules
+# ============================================================
+
+def _handle_analyze_rules(stock_code: str) -> dict:
+    """Handler for rules engine analysis tool."""
+    try:
+        from src.services.rules_analysis_service import RulesAnalysisService
+        from data_provider.base import DataFetcherManager, _is_etf_code
+
+        manager = DataFetcherManager()
+        df, _ = manager.get_daily_data(stock_code, days=150)
+        if df is None or df.empty:
+            return {"error": f"No historical data available for {stock_code}"}
+
+        svc = RulesAnalysisService()
+        asset_type = "etf" if _is_etf_code(stock_code) else "stock"
+        result = svc.compute_rules_for_df(df, symbol=stock_code, asset_type=asset_type)
+
+        return {
+            "symbol": result.symbol,
+            "asset_type": result.asset_type,
+            "total_score": result.total_score,
+            "matched_rules": [
+                {"rule_id": r.rule_id, "dimension": r.dimension,
+                 "name": r.name, "signal": r.signal, "weight": r.weight}
+                for r in result.matched_rules if r.matched
+            ],
+            "dimension_summary": result.dimension_summary,
+            "tags": result.rules_tags,
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+analyze_rules_tool = ToolDefinition(
+    name="analyze_rules",
+    description="Analyze stock/ETF using 22 technical rules across 4 dimensions. "
+                "Returns matched rules, scores, and signal tags.",
+    parameters=[
+        ToolParameter(
+            name="stock_code",
+            type="string",
+            description="Stock or ETF code (e.g. '600519', '510300', 'AAPL')",
+        ),
+    ],
+    handler=_handle_analyze_rules,
+    category="data",
+)
+
+ALL_DATA_TOOLS.append(analyze_rules_tool)
