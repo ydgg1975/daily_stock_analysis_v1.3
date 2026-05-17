@@ -57,6 +57,14 @@ const rule = {
   updatedAt: '2026-05-18T09:30:00',
 };
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   listRules.mockResolvedValue({ items: [rule], total: 1, page: 1, pageSize: 20 });
@@ -181,6 +189,29 @@ describe('AlertsPage', () => {
       });
     });
     expect(await screen.findByText('茅台价格突破')).toBeInTheDocument();
+  });
+
+  it('keeps the latest rules response when filter requests resolve out of order', async () => {
+    const initialRequest = createDeferred<{ items: Array<typeof rule>; total: number; page: number; pageSize: number }>();
+    const filteredRequest = createDeferred<{ items: Array<typeof rule>; total: number; page: number; pageSize: number }>();
+    const staleRule = { ...rule, id: 3, name: '旧筛选规则', enabled: true };
+    const filteredRule = { ...rule, id: 4, name: '停用规则', enabled: false };
+    listRules
+      .mockReset()
+      .mockReturnValueOnce(initialRequest.promise)
+      .mockReturnValueOnce(filteredRequest.promise);
+
+    render(<AlertsPage />);
+
+    fireEvent.change(screen.getByLabelText('启停状态'), { target: { value: 'disabled' } });
+    await waitFor(() => expect(listRules).toHaveBeenCalledTimes(2));
+
+    filteredRequest.resolve({ items: [filteredRule], total: 1, page: 1, pageSize: 20 });
+    expect(await screen.findByText('停用规则')).toBeInTheDocument();
+
+    initialRequest.resolve({ items: [staleRule], total: 1, page: 1, pageSize: 20 });
+    await waitFor(() => expect(screen.queryByText('旧筛选规则')).not.toBeInTheDocument());
+    expect(screen.getByText('停用规则')).toBeInTheDocument();
   });
 
   it('renders API errors through ApiErrorAlert', async () => {

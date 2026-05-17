@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BellRing } from 'lucide-react';
 import { alertsApi } from '../api/alerts';
 import type { ParsedApiError } from '../api/error';
@@ -67,8 +67,12 @@ const AlertsPage: React.FC = () => {
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [busyRule, setBusyRule] = useState<AlertRuleBusyState | null>(null);
   const [testResult, setTestResult] = useState<AlertRuleTestResponse | null>(null);
+  const rulesRequestIdRef = useRef(0);
 
   const loadRules = useCallback(async (pageOverride?: number) => {
+    const requestId = rulesRequestIdRef.current + 1;
+    rulesRequestIdRef.current = requestId;
+    const isLatestRequest = () => rulesRequestIdRef.current === requestId;
     const requestedPage = pageOverride ?? rulesPage;
     const baseQuery = {
       enabled: enabledFilterToQuery(enabledFilter),
@@ -78,10 +82,12 @@ const AlertsPage: React.FC = () => {
     setRulesLoading(true);
     try {
       let response = await alertsApi.listRules({ ...baseQuery, page: requestedPage });
+      if (!isLatestRequest()) return null;
       const lastPage = Math.max(1, Math.ceil(response.total / PAGE_SIZE));
       if (response.items.length === 0 && response.total > 0 && requestedPage > lastPage) {
         setRulesPage(lastPage);
         response = await alertsApi.listRules({ ...baseQuery, page: lastPage });
+        if (!isLatestRequest()) return null;
       } else if (pageOverride !== undefined && pageOverride !== rulesPage) {
         setRulesPage(pageOverride);
       }
@@ -91,10 +97,13 @@ const AlertsPage: React.FC = () => {
       setRulesLoaded(true);
       return response;
     } catch (error) {
+      if (!isLatestRequest()) return null;
       setRulesError(getParsedApiError(error));
       return null;
     } finally {
-      setRulesLoading(false);
+      if (isLatestRequest()) {
+        setRulesLoading(false);
+      }
     }
   }, [alertTypeFilter, enabledFilter, rulesPage]);
 
