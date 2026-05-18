@@ -15,6 +15,7 @@ const rules: AlertRuleItem[] = [
     severity: 'warning',
     enabled: true,
     source: 'api',
+    cooldownUntil: '2099-05-18T10:30:00',
     createdAt: '2026-05-18T09:00:00',
     updatedAt: '2026-05-18T09:30:00',
   },
@@ -59,6 +60,7 @@ describe('AlertRuleList', () => {
     expect(screen.getByText('600519')).toBeInTheDocument();
     expect(screen.getAllByText('价格突破').length).toBeGreaterThan(0);
     expect(screen.getByText('上破 1800')).toBeInTheDocument();
+    expect(screen.getByText('冷却中')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('启停状态'), { target: { value: 'enabled' } });
     fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'price_cross' } });

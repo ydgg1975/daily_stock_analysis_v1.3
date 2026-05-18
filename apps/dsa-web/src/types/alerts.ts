@@ -24,6 +24,8 @@ export interface AlertRuleItem {
   source: string;
   cooldownPolicy?: Record<string, unknown> | null;
   notificationPolicy?: Record<string, unknown> | null;
+  lastTriggeredAt?: string | null;
+  cooldownUntil?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

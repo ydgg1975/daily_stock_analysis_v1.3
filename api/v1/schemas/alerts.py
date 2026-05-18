@@ -49,6 +49,8 @@ class AlertRuleItem(BaseModel):
     source: str
     cooldown_policy: Optional[Dict[str, Any]] = None
     notification_policy: Optional[Dict[str, Any]] = None
+    last_triggered_at: Optional[str] = None
+    cooldown_until: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
