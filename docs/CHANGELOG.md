@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [新功能] 新增 `analyze_rules` Agent Tool，支持通过 Agent 调用规则引擎分析
 - [新功能] 新增规则引擎 REST API（`POST /api/v1/rules/analyze`、`POST /api/v1/rules/batch`）
 - [新功能] 新增 `rules_analysis` 分析策略（`strategies/rules_analysis.yaml`）
+- [新功能] Web 新增告警中心 MVP，支持现有三类告警规则的创建、列表、启停、删除、dry-run 测试和触发历史查看。
 
 ## [3.17.1] - 2026-05-16
 
