@@ -41,6 +41,8 @@ const CROSS_DIRECTION_OPTIONS = [
   { value: 'bearish_cross', label: '死叉' },
 ];
 
+const MAX_REQUESTED_DAYS = 365;
+
 interface AlertRuleFormProps {
   onSubmit: (payload: AlertRuleCreateRequest) => Promise<boolean | void> | boolean | void;
   isSubmitting?: boolean;
@@ -143,6 +145,14 @@ export const AlertRuleForm: React.FC<AlertRuleFormProps> = ({ onSubmit, isSubmit
     return parsed;
   };
 
+  const ensureRequiredBarsWithinLimit = (label: string, requiredBars: number): boolean => {
+    if (requiredBars > MAX_REQUESTED_DAYS) {
+      setFormError(`${label} 周期组合需要 ${requiredBars} 根日线，最多支持 ${MAX_REQUESTED_DAYS} 根`);
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const targetValidation = validateStockCode(target);
@@ -182,6 +192,7 @@ export const AlertRuleForm: React.FC<AlertRuleFormProps> = ({ onSubmit, isSubmit
         setFormError('快线周期必须小于慢线周期');
         return;
       }
+      if (!ensureRequiredBarsWithinLimit('MACD', parsedSlow + parsedSignal + 1)) return;
       parameters = {
         direction: crossDirection,
         fastPeriod: parsedFast,
@@ -193,6 +204,7 @@ export const AlertRuleForm: React.FC<AlertRuleFormProps> = ({ onSubmit, isSubmit
       const parsedK = parseIntegerInRange(kPeriod, 'K 平滑周期');
       const parsedD = parseIntegerInRange(dPeriod, 'D 平滑周期');
       if (parsedPeriod == null || parsedK == null || parsedD == null) return;
+      if (!ensureRequiredBarsWithinLimit('KDJ', parsedPeriod + parsedK + parsedD + 1)) return;
       parameters = { direction: crossDirection, period: parsedPeriod, kPeriod: parsedK, dPeriod: parsedD };
     } else {
       const parsedPeriod = parseIntegerInRange(period, 'CCI 周期');

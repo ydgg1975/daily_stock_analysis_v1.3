@@ -244,7 +244,7 @@ P5 支持的 `alert_type` 与 `parameters`：
 - KDJ 使用最近 `period` 日最高/最低价计算 RSV，并用 `alpha=1/k_period`、`alpha=1/d_period` 的 EMA 得到 K/D；金叉/死叉比较 K-D 相对 0 的边缘穿越。
 - CCI 使用典型价格 `(high + low + close) / 3`，按 `period` 日均值和平均绝对偏差计算 `(TP - MA(TP)) / (0.015 * mean_deviation)`。
 - `compute_required_bars(alert_type, params)` 定义最少有效 closed bars：MA=`window+1`，RSI=`period+1`，MACD=`slow_period+signal_period+1`，KDJ=`period+k_period+d_period+1`，CCI=`period+1`。
-- 拉取天数使用 `requested_days = min(max(required_bars * 3, required_bars + 30), 365)`；同一 worker 轮次按 `(stock_code, requested_days)` 缓存日线数据，轮次结束释放。
+- 拉取天数使用 `requested_days = min(max(required_bars * 3, required_bars + 30), 365)`；API 会拒绝 `required_bars > 365` 的组合周期，避免创建永久样本不足的规则；同一 worker 轮次按 `(stock_code, requested_days)` 缓存日线数据，轮次结束释放。
 - 缺数据、缺列或有效样本少于 `required_bars` 写入 `degraded`；数据源异常沿用 `volume_spike` 语义返回 `evaluation_error` / `failed`，不发送通知。
 
 兼容边界：

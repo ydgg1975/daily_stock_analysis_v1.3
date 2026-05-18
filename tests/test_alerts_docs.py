@@ -191,6 +191,7 @@ def test_alerts_doc_defines_p5_indicator_scope() -> None:
         "cci_threshold",
         "compute_required_bars",
         "requested_days",
+        "required_bars > 365",
         "最近两根已收盘日线",
         "prev <= threshold < current",
         "EMA(fast_period)",

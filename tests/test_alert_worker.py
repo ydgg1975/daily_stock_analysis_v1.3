@@ -47,6 +47,17 @@ class AlertIndicatorHelperTestCase(unittest.TestCase):
                 min(max(required_bars * 3, required_bars + 30), 365),
             )
 
+    def test_rejects_indicator_periods_that_exceed_fetchable_history(self) -> None:
+        cases = [
+            ("macd_cross", {"fast_period": 2, "slow_period": 250, "signal_period": 250}),
+            ("kdj_cross", {"period": 250, "k_period": 250, "d_period": 250}),
+        ]
+
+        for alert_type, params in cases:
+            with self.subTest(alert_type=alert_type):
+                with self.assertRaisesRegex(ValueError, "at most 365 days"):
+                    normalize_indicator_parameters(alert_type, params)
+
     def test_indicator_edge_cross_and_level_only_semantics(self) -> None:
         ma_params = normalize_indicator_parameters("ma_price_cross", {"window": 2, "direction": "above"})
         triggered = evaluate_indicator_alert(

@@ -21,6 +21,7 @@ TECHNICAL_ALERT_TYPES = frozenset({
 
 ABOVE_BELOW_DIRECTIONS = frozenset({"above", "below"})
 CROSS_DIRECTIONS = frozenset({"bullish_cross", "bearish_cross"})
+MAX_REQUESTED_DAYS = 365
 
 
 @dataclass
@@ -45,40 +46,45 @@ def normalize_indicator_parameters(alert_type: str, parameters: Dict[str, Any]) 
         raise ValueError("parameters must be an object")
 
     if alert_type == "ma_price_cross":
-        return {
+        normalized = {
             "direction": _direction(parameters.get("direction"), ABOVE_BELOW_DIRECTIONS, default="above"),
             "window": _int_in_range(parameters.get("window"), "window", default=20),
         }
+        return _ensure_required_bars_fetchable(alert_type, normalized)
     if alert_type == "rsi_threshold":
-        return {
+        normalized = {
             "direction": _direction(parameters.get("direction"), ABOVE_BELOW_DIRECTIONS, default="above"),
             "period": _int_in_range(parameters.get("period"), "period", default=12),
             "threshold": _float_in_range(parameters.get("threshold"), "threshold", minimum=0.0, maximum=100.0),
         }
+        return _ensure_required_bars_fetchable(alert_type, normalized)
     if alert_type == "macd_cross":
         fast_period = _int_in_range(parameters.get("fast_period"), "fast_period", default=12)
         slow_period = _int_in_range(parameters.get("slow_period"), "slow_period", default=26)
         if fast_period >= slow_period:
             raise ValueError("fast_period must be < slow_period")
-        return {
+        normalized = {
             "direction": _direction(parameters.get("direction"), CROSS_DIRECTIONS, default="bullish_cross"),
             "fast_period": fast_period,
             "slow_period": slow_period,
             "signal_period": _int_in_range(parameters.get("signal_period"), "signal_period", default=9),
         }
+        return _ensure_required_bars_fetchable(alert_type, normalized)
     if alert_type == "kdj_cross":
-        return {
+        normalized = {
             "direction": _direction(parameters.get("direction"), CROSS_DIRECTIONS, default="bullish_cross"),
             "period": _int_in_range(parameters.get("period"), "period", default=9),
             "k_period": _int_in_range(parameters.get("k_period"), "k_period", default=3),
             "d_period": _int_in_range(parameters.get("d_period"), "d_period", default=3),
         }
+        return _ensure_required_bars_fetchable(alert_type, normalized)
     if alert_type == "cci_threshold":
-        return {
+        normalized = {
             "direction": _direction(parameters.get("direction"), ABOVE_BELOW_DIRECTIONS, default="above"),
             "period": _int_in_range(parameters.get("period"), "period", default=14),
             "threshold": _finite_float(parameters.get("threshold"), "threshold"),
         }
+        return _ensure_required_bars_fetchable(alert_type, normalized)
     raise ValueError(f"unsupported technical alert_type: {alert_type}")
 
 
@@ -98,7 +104,7 @@ def compute_required_bars(alert_type: str, params: Dict[str, Any]) -> int:
 
 def compute_requested_days(alert_type: str, params: Dict[str, Any]) -> int:
     required_bars = compute_required_bars(alert_type, params)
-    return min(max(required_bars * 3, required_bars + 30), 365)
+    return min(max(required_bars * 3, required_bars + 30), MAX_REQUESTED_DAYS)
 
 
 def threshold_for_indicator(alert_type: str, params: Dict[str, Any]) -> Optional[float]:
@@ -347,6 +353,16 @@ def _evaluate_cci(stock_code: str, params: Dict[str, Any], df: pd.DataFrame) -> 
         message=message,
         data_timestamp=latest,
     )
+
+
+def _ensure_required_bars_fetchable(alert_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    required_bars = compute_required_bars(alert_type, params)
+    if required_bars > MAX_REQUESTED_DAYS:
+        raise ValueError(
+            f"{alert_type} periods require {required_bars} bars, "
+            f"but at most {MAX_REQUESTED_DAYS} days can be requested"
+        )
+    return params
 
 
 def _direction(value: Any, allowed: frozenset[str], *, default: str) -> str:

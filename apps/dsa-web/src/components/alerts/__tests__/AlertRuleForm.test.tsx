@@ -107,6 +107,20 @@ describe('AlertRuleForm', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('rejects indicator period combinations that exceed fetchable history', () => {
+    render(<AlertRuleForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'macd_cross' } });
+    fireEvent.change(screen.getByLabelText('快线周期'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('慢线周期'), { target: { value: '250' } });
+    fireEvent.change(screen.getByLabelText('信号周期'), { target: { value: '250' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('MACD 周期组合需要 501 根日线，最多支持 365 根');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('rejects empty required technical indicator thresholds before submit', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 

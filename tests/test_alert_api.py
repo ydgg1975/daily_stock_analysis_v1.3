@@ -291,6 +291,8 @@ class AlertApiTestCase(unittest.TestCase):
             ("rsi_threshold", {"period": -1, "threshold": 50, "direction": "above"}),
             ("rsi_threshold", {"period": 12, "threshold": 200, "direction": "above"}),
             ("macd_cross", {"fast_period": 26, "slow_period": 12, "signal_period": 9}),
+            ("macd_cross", {"fast_period": 2, "slow_period": 250, "signal_period": 250}),
+            ("kdj_cross", {"period": 250, "k_period": 250, "d_period": 250}),
             ("kdj_cross", {"period": 9, "k_period": 3, "d_period": 3, "direction": "golden"}),
         ]
 
