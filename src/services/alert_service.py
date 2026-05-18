@@ -725,6 +725,7 @@ class AlertService:
         data.update({
             "last_triggered_at": cooldown_summary.get("last_triggered_at"),
             "cooldown_until": cooldown_summary.get("cooldown_until"),
+            "cooldown_active": cooldown_summary.get("cooldown_active"),
         })
         return data
 
@@ -745,7 +746,7 @@ class AlertService:
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
-    def _cooldown_summary_for_rule(self, row: AlertRuleRecord) -> Dict[str, Optional[str]]:
+    def _cooldown_summary_for_rule(self, row: AlertRuleRecord) -> Dict[str, Any]:
         try:
             cooldown = self.repo.get_rule_cooldown_summary(
                 rule_id=int(row.id),
@@ -758,16 +759,22 @@ class AlertService:
                 getattr(row, "id", "?"),
                 self._sanitize_text(str(exc) or "cooldown summary read failed"),
             )
-            return {"last_triggered_at": None, "cooldown_until": None}
+            return {"last_triggered_at": None, "cooldown_until": None, "cooldown_active": False}
         return self._serialize_cooldown_summary(cooldown)
 
     @staticmethod
-    def _serialize_cooldown_summary(row: Optional[AlertCooldownRecord]) -> Dict[str, Optional[str]]:
+    def _serialize_cooldown_summary(row: Optional[AlertCooldownRecord]) -> Dict[str, Any]:
         if row is None:
-            return {"last_triggered_at": None, "cooldown_until": None}
+            return {"last_triggered_at": None, "cooldown_until": None, "cooldown_active": False}
+        cooldown_active = bool(
+            row.state == "active"
+            and row.cooldown_until is not None
+            and row.cooldown_until > datetime.now()
+        )
         return {
             "last_triggered_at": row.last_triggered_at.isoformat() if row.last_triggered_at else None,
             "cooldown_until": row.cooldown_until.isoformat() if row.cooldown_until else None,
+            "cooldown_active": cooldown_active,
         }
 
     def _serialize_trigger(self, row: AlertTriggerRecord) -> Dict[str, Any]:

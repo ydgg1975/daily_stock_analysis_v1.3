@@ -42,6 +42,7 @@ function testVariant(result: AlertRuleTestResponse): 'success' | 'warning' | 'da
 
 const notificationChannelLabel: Record<string, string> = {
   __cooldown__: '业务冷却',
+  __cooldown_read_failed__: '冷却读取失败',
   __noise_suppressed__: '通知降噪',
   __no_channel__: '无可用渠道',
   __dispatch__: '通知调度',
@@ -55,6 +56,7 @@ function formatNotificationChannel(channel: string): string {
 function formatNotificationStatus(notification: AlertNotificationItem): string {
   if (notification.success) return '成功';
   if (notification.errorCode === 'cooldown_active') return '冷却抑制';
+  if (notification.errorCode === 'cooldown_read_failed') return '冷却读取失败';
   if (notification.errorCode === 'noise_suppressed') return '降噪抑制';
   if (notification.errorCode === 'no_channel') return '无渠道';
   return '失败';

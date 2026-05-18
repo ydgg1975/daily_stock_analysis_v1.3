@@ -592,6 +592,74 @@ class AlertWorkerTestCase(unittest.TestCase):
         self.assertEqual(len(cooldown_attempts), 1)
         self.assertEqual(cooldown_attempts[0]["error_code"], "cooldown_active")
 
+    def test_db_cooldown_read_failure_uses_fingerprint_fallback(self) -> None:
+        self._create_rule(target="600519", cooldown_policy={"cooldown_seconds": 60})
+        notifier = self._notifier()
+        now = {"value": 1000.0}
+
+        worker = AlertWorker(
+            config_provider=lambda: self._config(),
+            service=self.service,
+            notifier=notifier,
+            now_provider=lambda: now["value"],
+            fingerprint_ttl_seconds=86400,
+        )
+        with patch.object(
+            self.service.repo,
+            "get_active_cooldown",
+            side_effect=RuntimeError("database locked token=secret-token"),
+        ), patch(
+            "src.agent.events.EventMonitor._get_realtime_quote",
+            new=AsyncMock(return_value=SimpleNamespace(price=1810.0)),
+        ):
+            first = worker.run_once()
+            now["value"] += 10
+            second = worker.run_once()
+            now["value"] += 61
+            third = worker.run_once()
+
+        self.assertEqual(first["notified"], 1)
+        self.assertEqual(second["cooldown_suppressed"], 1)
+        self.assertEqual(third["notified"], 1)
+        self.assertEqual(notifier.send_with_results.call_count, 2)
+        self.assertEqual(len(self._triggers(status="triggered")), 3)
+        suppressed_attempts = self._notifications(channel="__cooldown_read_failed__")
+        self.assertEqual(len(suppressed_attempts), 1)
+        self.assertEqual(suppressed_attempts[0]["error_code"], "cooldown_read_failed")
+        self.assertNotIn("secret-token", suppressed_attempts[0]["diagnostics"] or "")
+
+    def test_failed_db_notification_does_not_start_read_failure_fallback_window(self) -> None:
+        self._create_rule(target="600519", cooldown_policy={"cooldown_seconds": 60})
+        notifier = self._notifier(self._dispatch_result(False), self._dispatch_result(True))
+        now = {"value": 1000.0}
+
+        worker = AlertWorker(
+            config_provider=lambda: self._config(),
+            service=self.service,
+            notifier=notifier,
+            now_provider=lambda: now["value"],
+            fingerprint_ttl_seconds=60,
+        )
+        with patch.object(
+            self.service.repo,
+            "get_active_cooldown",
+            side_effect=RuntimeError("database locked"),
+        ), patch(
+            "src.agent.events.EventMonitor._get_realtime_quote",
+            new=AsyncMock(return_value=SimpleNamespace(price=1810.0)),
+        ):
+            first = worker.run_once()
+            now["value"] += 10
+            second = worker.run_once()
+            now["value"] += 10
+            third = worker.run_once()
+
+        self.assertEqual(first["notified"], 0)
+        self.assertEqual(second["notified"], 1)
+        self.assertEqual(third["cooldown_suppressed"], 1)
+        self.assertEqual(notifier.send_with_results.call_count, 2)
+        self.assertEqual(len(self._notifications(channel="__cooldown_read_failed__")), 1)
+
     def test_db_rule_with_cooldown_zero_is_not_suppressed_by_fingerprint(self) -> None:
         self._create_rule(target="600519", cooldown_policy={"cooldown_seconds": 0})
         notifier = self._notifier()

@@ -41,6 +41,13 @@ class RuntimeAlertRule:
     cooldown_policy: Optional[Dict[str, Any]] = None
 
 
+@dataclass
+class DBCooldownDecision:
+    suppressed: bool = False
+    fallback_key: Optional[str] = None
+    fallback_ttl_seconds: Optional[int] = None
+
+
 class AlertWorker:
     """Evaluate alert-center rules for schedule-mode background polling."""
 
@@ -59,6 +66,7 @@ class AlertWorker:
         self.now_provider = now_provider or time.time
         self.fingerprint_ttl_seconds = max(1, int(fingerprint_ttl_seconds))
         self._trigger_fingerprints: Dict[str, float] = {}
+        self._trigger_fingerprint_ttls: Dict[str, int] = {}
 
     @staticmethod
     def _default_config_provider():
@@ -133,7 +141,8 @@ class AlertWorker:
             if record_status == "triggered":
                 stats["triggered"] += 1
                 if runtime_rule.source == "db":
-                    if self._is_db_cooldown_active(runtime_rule, trigger_id):
+                    cooldown_decision = self._check_db_cooldown(runtime_rule, trigger_id)
+                    if cooldown_decision.suppressed:
                         stats["cooldown_suppressed"] += 1
                         stats["notification_attempts"] += 1
                         continue
@@ -141,6 +150,11 @@ class AlertWorker:
                     stats["notification_attempts"] += self._record_notification_attempts_safely(trigger_id, dispatch)
                     if self._dispatch_has_real_channel_success(dispatch):
                         self._upsert_db_cooldown_safely(runtime_rule, result)
+                        if cooldown_decision.fallback_key:
+                            self._mark_notified(
+                                cooldown_decision.fallback_key,
+                                ttl_seconds=cooldown_decision.fallback_ttl_seconds,
+                            )
                         stats["notified"] += 1
                 elif self._should_notify(runtime_rule.key):
                     dispatch = self._send_notification_safely(runtime_rule, result)
@@ -286,25 +300,40 @@ class AlertWorker:
             return None
         return result.get("message") or result.get("reason")
 
-    def _should_notify(self, rule_key: str) -> bool:
+    def _should_notify(self, rule_key: str, *, ttl_seconds: Optional[int] = None) -> bool:
         now = self.now_provider()
         last_seen = self._trigger_fingerprints.get(rule_key)
-        if last_seen is not None and now - last_seen < self.fingerprint_ttl_seconds:
+        ttl = self._fingerprint_ttl(rule_key, ttl_seconds=ttl_seconds)
+        if last_seen is not None and now - last_seen < ttl:
             return False
         return True
 
-    def _mark_notified(self, rule_key: str) -> None:
+    def _mark_notified(self, rule_key: str, *, ttl_seconds: Optional[int] = None) -> None:
         self._trigger_fingerprints[rule_key] = self.now_provider()
+        if ttl_seconds is None:
+            self._trigger_fingerprint_ttls.pop(rule_key, None)
+        else:
+            self._trigger_fingerprint_ttls[rule_key] = max(1, int(ttl_seconds))
 
     def _prune_fingerprints(self) -> None:
         now = self.now_provider()
         expired_keys = [
             key
             for key, last_seen in self._trigger_fingerprints.items()
-            if now - last_seen >= self.fingerprint_ttl_seconds
+            if now - last_seen >= self._fingerprint_ttl(key)
         ]
         for key in expired_keys:
             self._trigger_fingerprints.pop(key, None)
+            self._trigger_fingerprint_ttls.pop(key, None)
+
+    def _fingerprint_ttl(self, rule_key: str, *, ttl_seconds: Optional[int] = None) -> int:
+        if ttl_seconds is not None:
+            return max(1, int(ttl_seconds))
+        return self._trigger_fingerprint_ttls.get(rule_key, self.fingerprint_ttl_seconds)
+
+    @staticmethod
+    def _db_cooldown_fallback_key(rule_key: str) -> str:
+        return f"db_cooldown:{rule_key}"
 
     def _send_notification(self, runtime_rule: RuntimeAlertRule, result: Dict[str, Any]) -> "NotificationDispatchResult":
         from src.notification import NotificationBuilder, NotificationService
@@ -417,18 +446,20 @@ class AlertWorker:
                 return True
         return False
 
-    def _is_db_cooldown_active(self, runtime_rule: RuntimeAlertRule, trigger_id: Optional[int]) -> bool:
-        """Return whether DB cooldown suppresses this trigger.
+    def _check_db_cooldown(self, runtime_rule: RuntimeAlertRule, trigger_id: Optional[int]) -> DBCooldownDecision:
+        """Return the DB cooldown decision for this trigger.
 
-        When active, this also records a ``__cooldown__`` synthetic notification
-        attempt for the current trigger so the suppression remains auditable.
+        Active persisted cooldowns record a ``__cooldown__`` synthetic
+        notification attempt. If reading the cooldown state fails, the worker
+        uses the process-local fingerprint as a temporary guard so DB outages
+        do not turn persisted rules into one-notification-per-cycle spam.
         """
         cooldown_seconds = self._cooldown_seconds(runtime_rule)
         if cooldown_seconds <= 0:
-            return False
+            return DBCooldownDecision()
         rule_id = self.service._runtime_rule_id(runtime_rule.rule)
         if rule_id <= 0:
-            return False
+            return DBCooldownDecision()
 
         now_dt = self._now_datetime()
         try:
@@ -444,10 +475,18 @@ class AlertWorker:
                 getattr(runtime_rule.rule, "stock_code", "?"),
                 self.service._sanitize_text(str(exc) or "cooldown read failed"),
             )
-            return False
+            fallback_key = self._db_cooldown_fallback_key(runtime_rule.key)
+            if self._should_notify(fallback_key, ttl_seconds=cooldown_seconds):
+                return DBCooldownDecision(
+                    suppressed=False,
+                    fallback_key=fallback_key,
+                    fallback_ttl_seconds=cooldown_seconds,
+                )
+            self._record_cooldown_read_failure_suppression(trigger_id, exc)
+            return DBCooldownDecision(suppressed=True)
 
         if cooldown is None:
-            return False
+            return DBCooldownDecision()
 
         from src.notification import ChannelAttemptResult, NotificationDispatchResult
 
@@ -472,7 +511,30 @@ class AlertWorker:
                 message="alert cooldown active",
             ),
         )
-        return True
+        return DBCooldownDecision(suppressed=True)
+
+    def _record_cooldown_read_failure_suppression(self, trigger_id: Optional[int], exc: Exception) -> None:
+        from src.notification import ChannelAttemptResult, NotificationDispatchResult
+
+        sanitized = self.service._sanitize_text(str(exc) or "cooldown read failed")
+        self._record_notification_attempts_safely(
+            trigger_id,
+            NotificationDispatchResult(
+                dispatched=False,
+                success=False,
+                status="cooldown_read_failed",
+                channel_results=[
+                    ChannelAttemptResult(
+                        channel="__cooldown_read_failed__",
+                        success=False,
+                        error_code="cooldown_read_failed",
+                        retryable=False,
+                        diagnostics=sanitized,
+                    )
+                ],
+                message=sanitized,
+            ),
+        )
 
     def _upsert_db_cooldown_safely(self, runtime_rule: RuntimeAlertRule, result: Dict[str, Any]) -> None:
         cooldown_seconds = self._cooldown_seconds(runtime_rule)

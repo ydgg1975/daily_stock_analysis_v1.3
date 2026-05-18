@@ -50,9 +50,7 @@ function formatParameters(rule: AlertRuleItem): string {
 }
 
 function isCoolingDown(rule: AlertRuleItem): boolean {
-  if (!rule.cooldownUntil) return false;
-  const timestamp = new Date(rule.cooldownUntil).getTime();
-  return Number.isFinite(timestamp) && timestamp > Date.now();
+  return rule.cooldownActive === true;
 }
 
 interface AlertRuleListProps {

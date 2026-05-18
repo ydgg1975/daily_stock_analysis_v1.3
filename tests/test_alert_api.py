@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -100,6 +100,7 @@ class AlertApiTestCase(unittest.TestCase):
         self.assertEqual(created["source"], "api")
         self.assertIsNone(created["last_triggered_at"])
         self.assertIsNone(created["cooldown_until"])
+        self.assertFalse(created["cooldown_active"])
         self.assertIsNotNone(created["created_at"])
         self.assertIsNotNone(created["updated_at"])
 
@@ -135,6 +136,43 @@ class AlertApiTestCase(unittest.TestCase):
 
         missing_resp = self.client.get(f"/api/v1/alerts/rules/{rule_id}")
         self.assertEqual(missing_resp.status_code, 404)
+
+    def test_rule_response_includes_server_cooldown_active_flag(self) -> None:
+        created = self._create_rule()
+        repo = AlertRepository(self.db)
+        now_dt = datetime.now()
+        cooldown_until = now_dt + timedelta(minutes=5)
+        repo.upsert_cooldown(
+            rule_id=created["id"],
+            rule_key="single_symbol:600519:price_cross:{}",
+            target="600519",
+            severity="warning",
+            last_triggered_at=now_dt,
+            cooldown_until=cooldown_until,
+            reason="active cooldown",
+        )
+
+        list_resp = self.client.get("/api/v1/alerts/rules")
+        self.assertEqual(list_resp.status_code, 200, list_resp.text)
+        item = list_resp.json()["items"][0]
+        self.assertEqual(item["id"], created["id"])
+        self.assertEqual(item["cooldown_until"], cooldown_until.isoformat())
+        self.assertTrue(item["cooldown_active"])
+
+        expired_at = datetime.now() - timedelta(minutes=5)
+        repo.upsert_cooldown(
+            rule_id=created["id"],
+            rule_key="single_symbol:600519:price_cross:{}",
+            target="600519",
+            severity="warning",
+            last_triggered_at=expired_at,
+            cooldown_until=expired_at,
+            reason="expired cooldown",
+        )
+
+        detail_resp = self.client.get(f"/api/v1/alerts/rules/{created['id']}")
+        self.assertEqual(detail_resp.status_code, 200, detail_resp.text)
+        self.assertFalse(detail_resp.json()["cooldown_active"])
 
     def test_rule_update_rejects_empty_payload(self) -> None:
         rule = self._create_rule()

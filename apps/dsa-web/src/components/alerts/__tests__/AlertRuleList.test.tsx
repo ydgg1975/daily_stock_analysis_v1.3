@@ -16,6 +16,7 @@ const rules: AlertRuleItem[] = [
     enabled: true,
     source: 'api',
     cooldownUntil: '2099-05-18T10:30:00',
+    cooldownActive: true,
     createdAt: '2026-05-18T09:00:00',
     updatedAt: '2026-05-18T09:30:00',
   },
@@ -69,6 +70,20 @@ describe('AlertRuleList', () => {
     expect(onEnabledFilterChange).toHaveBeenCalledWith('enabled');
     expect(onAlertTypeFilterChange).toHaveBeenCalledWith('price_cross');
     expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it('uses backend cooldownActive instead of parsing cooldownUntil locally', () => {
+    renderList({
+      rules: [
+        {
+          ...rules[0],
+          cooldownUntil: '2099-05-18T10:30:00',
+          cooldownActive: false,
+        },
+      ],
+    });
+
+    expect(screen.getByText('未冷却')).toBeInTheDocument();
   });
 
   it('runs test and toggles enabled state', () => {

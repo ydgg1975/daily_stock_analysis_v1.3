@@ -200,15 +200,16 @@ P4 让真实告警触发具备可排障的通知结果，并让通过 Alert API 
 - `alert_notifications` 记录真实 per-channel notification attempt，包括 `channel`、`success`、`error_code`、`retryable`、`latency_ms` 和脱敏后的 `diagnostics`。
 - 非渠道发送状态使用 synthetic channel 记录：
   - `__cooldown__`：告警业务冷却抑制，`error_code="cooldown_active"`。
+  - `__cooldown_read_failed__`：读取持久化冷却状态失败后，由 worker 进程内临时兜底抑制，`error_code="cooldown_read_failed"`。
   - `__noise_suppressed__`：通知基础设施降噪抑制，`error_code="noise_suppressed"`。
   - `__no_channel__`：alert 路由未命中任何可用通知渠道。
   - `__dispatch__`：通知调度级 fallback 或异常。
 - cooldown 分层：
-  - DB 持久化规则使用 `alert_cooldowns` 作为唯一告警业务冷却，不再使用 worker 进程内 fingerprint。
+  - DB 持久化规则正常路径使用 `alert_cooldowns` 作为告警业务冷却，不再由 worker 进程内 fingerprint 决定；仅当读取持久化冷却状态失败时，临时使用进程内 fingerprint 防止同一规则在 DB 异常期间每轮重复推送。
   - legacy `AGENT_EVENT_ALERT_RULES_JSON` 规则继续使用 worker 进程内 fingerprint，不写 `alert_cooldowns`。
   - `notification_noise.py` 仍作为通知基础设施层的全局安全网；它不是告警业务 cooldown，且被其抑制时不会写入或延长 `alert_cooldowns`。
 - DB 规则的 `cooldown_policy.cooldown_seconds` 归一为非负整数；缺失时使用默认 24 小时业务冷却，`0` 表示关闭 DB 业务冷却。
-- `GET /api/v1/alerts/rules` 会返回只读 `last_triggered_at` / `cooldown_until` 摘要；`GET /api/v1/alerts/notifications` 可查询真实和 synthetic notification attempts。
+- `GET /api/v1/alerts/rules` 会返回只读 `last_triggered_at` / `cooldown_until` / `cooldown_active` 摘要；`cooldown_active` 由后端按同一冷却时间语义计算，Web 不在浏览器本地解析 naive ISO 字符串来推断状态。
 - Web 告警中心只读展示冷却状态和通知结果，不提供 cooldown policy 编辑表单。
 
 P4 不做：
