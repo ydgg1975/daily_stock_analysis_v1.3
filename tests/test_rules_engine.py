@@ -90,14 +90,16 @@ class TestDimensionSummary(unittest.TestCase):
         self.assertEqual(summary["technical"]["bullish"], 1)
         self.assertEqual(summary["technical"]["bearish"], 1)
 
-    def test_unmatched_dimension_excluded(self):
+    def test_unmatched_dimension_present_with_zero_counts(self):
         from src.rules.engine import dimension_summary
         from src.schemas.rules import RuleResult
         results = [
             RuleResult("T01", "technical", "test", "", "bullish", False, 0.8),
         ]
         summary = dimension_summary(results)
-        self.assertNotIn("technical", summary)
+        self.assertIn("technical", summary)
+        self.assertEqual(summary["technical"]["bullish"], 0)
+        self.assertEqual(summary["technical"]["bearish"], 0)
 
 
 class TestComputeTotalScore(unittest.TestCase):
