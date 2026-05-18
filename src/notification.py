@@ -50,6 +50,7 @@ from src.notification_sender import (
     DiscordSender,
     EmailSender,
     FeishuSender,
+    GotifySender,
     NtfySender,
     PushoverSender,
     PushplusSender,
@@ -58,6 +59,7 @@ from src.notification_sender import (
     TelegramSender,
     WechatSender,
     WECHAT_IMAGE_MAX_BYTES,
+    resolve_gotify_message_endpoint,
     resolve_ntfy_endpoint,
 )
 
@@ -75,6 +77,7 @@ class NotificationChannel(Enum):
     EMAIL = "email"        # 邮件
     PUSHOVER = "pushover"  # Pushover（手机/桌面推送）
     NTFY = "ntfy"          # ntfy
+    GOTIFY = "gotify"      # Gotify
     PUSHPLUS = "pushplus"  # PushPlus（国内推送服务）
     SERVERCHAN3 = "serverchan3"  # Server酱3（手机APP推送服务）
     CUSTOM = "custom"      # 自定义 Webhook
@@ -101,6 +104,7 @@ class ChannelDetector:
             NotificationChannel.EMAIL: "邮件",
             NotificationChannel.PUSHOVER: "Pushover",
             NotificationChannel.NTFY: "ntfy",
+            NotificationChannel.GOTIFY: "Gotify",
             NotificationChannel.PUSHPLUS: "PushPlus",
             NotificationChannel.SERVERCHAN3: "Server酱3",
             NotificationChannel.CUSTOM: "自定义Webhook",
@@ -118,6 +122,7 @@ class NotificationService(
     DiscordSender,
     EmailSender,
     FeishuSender,
+    GotifySender,
     NtfySender,
     PushoverSender,
     PushplusSender,
@@ -165,6 +170,7 @@ class NotificationService(
 
         # 仅分析结果摘要（Issue #262）：true 时只推送汇总，不含个股详情
         self._report_summary_only = getattr(config, 'report_summary_only', False)
+        self._report_show_llm_model = getattr(config, 'report_show_llm_model', True)
         self._history_compare_cache: Dict[Tuple[int, Tuple[Tuple[str, str], ...]], Dict[str, List[Dict[str, Any]]]] = {}
 
         # 初始化各渠道
@@ -173,6 +179,7 @@ class NotificationService(
         DiscordSender.__init__(self, config)
         EmailSender.__init__(self, config)
         FeishuSender.__init__(self, config)
+        GotifySender.__init__(self, config)
         NtfySender.__init__(self, config)
         PushoverSender.__init__(self, config)
         PushplusSender.__init__(self, config)
@@ -270,12 +277,17 @@ class NotificationService(
         return self.generate_dashboard_report(results, report_date=report_date)
 
     def _collect_models_used(self, results: List[AnalysisResult]) -> List[str]:
+        if not self._should_show_llm_model():
+            return []
         models: List[str] = []
         for result in results:
             model = normalize_model_used(getattr(result, "model_used", None))
             if model:
                 models.append(model)
         return list(dict.fromkeys(models))
+
+    def _should_show_llm_model(self) -> bool:
+        return bool(getattr(self._config, "report_show_llm_model", self._report_show_llm_model))
     
     @staticmethod
     def detect_configured_channels(config: Config) -> List[NotificationChannel]:
@@ -312,6 +324,10 @@ class NotificationService(
         ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(getattr(config, "ntfy_url", None))
         if ntfy_server_url and ntfy_topic:
             channels.append(NotificationChannel.NTFY)
+
+        gotify_endpoint = resolve_gotify_message_endpoint(getattr(config, "gotify_url", None))
+        if gotify_endpoint and (getattr(config, "gotify_token", None) or "").strip():
+            channels.append(NotificationChannel.GOTIFY)
 
         if getattr(config, "pushplus_token", None):
             channels.append(NotificationChannel.PUSHPLUS)
@@ -1174,6 +1190,9 @@ class NotificationService(
             "",
             f"*{labels['generated_at_label']}：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
         ])
+        models = self._collect_models_used(results)
+        if models:
+            report_lines.append(f"*{labels['analysis_model_label']}：{', '.join(models)}*")
         
         return "\n".join(report_lines)
     
@@ -1474,6 +1493,9 @@ class NotificationService(
             )
         lines.append("")
         lines.append(f"*{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
+        models = self._collect_models_used(results)
+        if models:
+            lines.append(f"*{labels['analysis_model_label']}: {', '.join(models)}*")
         return "\n".join(lines)
 
     def generate_single_stock_report(self, result: AnalysisResult) -> str:
@@ -1586,9 +1608,10 @@ class NotificationService(
             ])
         
         lines.append("---")
-        model_used = normalize_model_used(getattr(result, "model_used", None))
-        if model_used:
-            lines.append(f"*{labels['analysis_model_label']}: {model_used}*")
+        if self._should_show_llm_model():
+            model_used = normalize_model_used(getattr(result, "model_used", None))
+            if model_used:
+                lines.append(f"*{labels['analysis_model_label']}: {model_used}*")
         lines.append(f"*{labels['not_investment_advice']}*")
 
         return "\n".join(lines)
@@ -1733,7 +1756,7 @@ class NotificationService(
         channels_needing_image = {
             ch for ch in target_channels
             if ch.value in self._markdown_to_image_channels
-            and ch != NotificationChannel.NTFY
+            and ch not in {NotificationChannel.NTFY, NotificationChannel.GOTIFY}
         }
         if channels_needing_image:
             from src.md2img import markdown_to_image
@@ -1796,6 +1819,8 @@ class NotificationService(
                     result = self.send_to_pushover(content)
                 elif channel == NotificationChannel.NTFY:
                     result = self.send_to_ntfy(content)
+                elif channel == NotificationChannel.GOTIFY:
+                    result = self.send_to_gotify(content)
                 elif channel == NotificationChannel.PUSHPLUS:
                     result = self.send_to_pushplus(content)
                 elif channel == NotificationChannel.SERVERCHAN3:
