@@ -24,7 +24,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
   // 使用 report id，因为 queryId 在批量分析时可能重复，且历史报告详情接口需要 recordId 来获取关联资讯和详情数据
   const recordId = report.meta.id;
 
-  const { meta, summary, strategy, details } = report;
+  const { meta, summary, strategy, details, rules } = report;
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
   const modelUsed = (meta.modelUsed || '').trim();
@@ -39,6 +39,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
         meta={meta}
         summary={summary}
         details={details}
+        rules={rules}
         isHistory={isHistory}
       />
 

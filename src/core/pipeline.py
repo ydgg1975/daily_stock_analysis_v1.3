@@ -513,28 +513,7 @@ class StockAnalysisPipeline:
                 fill_price_position_if_needed(result, trend_result, realtime_quote)
                 stabilize_decision_with_structure(result, trend_result, fundamental_context)
 
-            # Step 8: 保存分析历史记录
-            if result and result.success:
-                try:
-                    self._emit_progress(97, f"{stock_name}：正在保存分析报告")
-                    context_snapshot = self._build_context_snapshot(
-                        enhanced_context=enhanced_context,
-                        news_content=news_context,
-                        realtime_quote=realtime_quote,
-                        chip_data=chip_data
-                    )
-                    self.db.save_analysis_history(
-                        result=result,
-                        query_id=query_id,
-                        report_type=report_type.value,
-                        news_content=news_context,
-                        context_snapshot=context_snapshot,
-                        save_snapshot=self.save_context_snapshot
-                    )
-                except Exception as e:
-                    logger.warning(f"{stock_name}({code}) 保存分析历史失败: {e}")
-
-            # --- Rules Engine Integration ---
+            # --- Rules Engine Integration (before save) ---
             if result:
                 try:
                     from src.services.rules_analysis_service import RulesAnalysisService
@@ -545,8 +524,16 @@ class StockAnalysisPipeline:
                         _mkt = get_market_for_stock(normalize_stock_code(code))
                         frozen = get_frozen_target_date()
                         _end = frozen if frozen else get_market_now(_mkt).date()
-                        _start = _end - timedelta(days=89)
+                        _start = _end - timedelta(days=180)
                         _bars = self.db.get_data_range(code, _start, _end)
+                        if not _bars or len(_bars) < 60:
+                            try:
+                                _df_hist, _hist_src = self.fetcher_manager.get_daily_data(code, days=120)
+                                if _df_hist is not None and not _df_hist.empty:
+                                    self.db.save_daily_data(_df_hist, code, _hist_src)
+                                    _bars = self.db.get_data_range(code, _start, _end)
+                            except Exception:
+                                pass
                         if _bars:
                             _rules_df = pd.DataFrame([b.to_dict() for b in _bars])
                     except Exception:
@@ -570,9 +557,34 @@ class StockAnalysisPipeline:
                         result.rules_tags_html = _rules_result.rules_tags_html or ""
                         result.rules_score = _rules_result.total_score
                         result.rules_dimension_summary = _rules_result.dimension_summary or {}
-                        logger.debug("[规则引擎] %s 规则计算完成, score=%.2f", code, _rules_result.total_score)
+                        result.rules_matched_tags = [
+                            {"rule_id": r.rule_id, "dimension": r.dimension, "name": r.name, "signal": r.signal, "description": r.description}
+                            for r in _rules_result.matched_rules if r.matched
+                        ]
+                        logger.info("[规则引擎] %s 规则计算完成, score=%.2f", code, _rules_result.total_score)
                 except Exception as exc:
-                    logger.debug("[规则引擎] %s 规则计算跳过: %s", code, exc)
+                    logger.warning("[规则引擎] %s 规则计算跳过: %s", code, exc)
+
+            # Step 8: 保存分析历史记录
+            if result and result.success:
+                try:
+                    self._emit_progress(97, f"{stock_name}：正在保存分析报告")
+                    context_snapshot = self._build_context_snapshot(
+                        enhanced_context=enhanced_context,
+                        news_content=news_context,
+                        realtime_quote=realtime_quote,
+                        chip_data=chip_data
+                    )
+                    self.db.save_analysis_history(
+                        result=result,
+                        query_id=query_id,
+                        report_type=report_type.value,
+                        news_content=news_context,
+                        context_snapshot=context_snapshot,
+                        save_snapshot=self.save_context_snapshot
+                    )
+                except Exception as e:
+                    logger.warning(f"{stock_name}({code}) 保存分析历史失败: {e}")
 
             return result
 
@@ -947,6 +959,57 @@ class StockAnalysisPipeline:
                         logger.info(f"[{code}] Agent 模式: 新闻情报已保存 {len(news_response.results)} 条")
                 except Exception as e:
                     logger.warning(f"[{code}] Agent 模式保存新闻情报失败: {e}")
+
+            # --- Rules Engine Integration (Agent path) ---
+            if result:
+                try:
+                    from src.services.rules_analysis_service import RulesAnalysisService
+                    from data_provider.base import _is_etf_code
+                    _rules_df = None
+                    try:
+                        from src.services.history_loader import get_frozen_target_date
+                        _mkt = get_market_for_stock(normalize_stock_code(code))
+                        frozen = get_frozen_target_date()
+                        _end = frozen if frozen else get_market_now(_mkt).date()
+                        _start = _end - timedelta(days=180)
+                        _bars = self.db.get_data_range(code, _start, _end)
+                        if not _bars or len(_bars) < 60:
+                            try:
+                                _df_hist, _hist_src = self.fetcher_manager.get_daily_data(code, days=120)
+                                if _df_hist is not None and not _df_hist.empty:
+                                    self.db.save_daily_data(_df_hist, code, _hist_src)
+                                    _bars = self.db.get_data_range(code, _start, _end)
+                            except Exception:
+                                pass
+                        if _bars:
+                            _rules_df = pd.DataFrame([b.to_dict() for b in _bars])
+                    except Exception:
+                        pass
+                    if _rules_df is not None and not _rules_df.empty:
+                        _rules_svc = RulesAnalysisService()
+                        _pe_percentile = None
+                        try:
+                            if not _is_etf_code(code) and code.isdigit():
+                                _pe_percentile = self.fetcher_manager._fundamental_adapter.get_pe_percentile(code)
+                        except Exception:
+                            pass
+                        _valuation = {"pe_percentile": _pe_percentile} if _pe_percentile is not None else None
+                        _rules_result = _rules_svc.compute_rules_for_df(
+                            _rules_df, symbol=code,
+                            asset_type="etf" if _is_etf_code(code) else "stock",
+                            valuation=_valuation,
+                        )
+                        result.rules_tags = _rules_result.rules_tags or ""
+                        result.rules_tags_html = _rules_result.rules_tags_html or ""
+                        result.rules_score = _rules_result.total_score
+                        result.rules_dimension_summary = _rules_result.dimension_summary or {}
+                        result.rules_matched_tags = [
+                            {"rule_id": r.rule_id, "dimension": r.dimension, "name": r.name, "signal": r.signal, "description": r.description}
+                            for r in _rules_result.matched_rules if r.matched
+                        ]
+                        logger.debug("[规则引擎] %s (agent) 规则计算完成, score=%.2f", code, _rules_result.total_score)
+                except Exception as exc:
+                    logger.debug("[规则引擎] %s (agent) 规则计算跳过: %s", code, exc)
 
             # 保存分析历史记录
             if result and result.success:

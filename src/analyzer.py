@@ -1361,6 +1361,7 @@ class AnalysisResult:
     rules_tags_html: Optional[str] = None
     rules_score: Optional[float] = None
     rules_dimension_summary: Optional[Dict[str, Any]] = None
+    rules_matched_tags: Optional[List[Dict[str, str]]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -1398,6 +1399,11 @@ class AnalysisResult:
             'current_price': self.current_price,
             'change_pct': self.change_pct,
             'model_used': self.model_used,
+            'rules_tags': self.rules_tags,
+            'rules_tags_html': self.rules_tags_html,
+            'rules_score': self.rules_score,
+            'rules_dimension_summary': self.rules_dimension_summary,
+            'rules_matched_tags': self.rules_matched_tags,
         }
 
     def get_core_conclusion(self) -> str:

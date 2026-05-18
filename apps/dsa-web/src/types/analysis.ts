@@ -107,12 +107,42 @@ export interface ReportDetails {
   sectorRankings?: SectorRankings;
 }
 
+/** Single rule signal tag */
+export interface RuleTag {
+  ruleId: string;
+  dimension: 'technical' | 'trend' | 'capital' | 'valuation';
+  name: string;
+  signal: 'bullish' | 'bearish' | 'warning' | 'neutral';
+  description?: string;
+}
+
+export type DimensionSignalCounts = {
+  bullish?: number;
+  bearish?: number;
+  warning?: number;
+  neutral?: number;
+};
+
+/** Rules engine signal summary */
+export interface ReportRules {
+  score: number;
+  matchedCount: number;
+  tags?: RuleTag[];
+  dimensionSummary?: {
+    technical?: DimensionSignalCounts;
+    trend?: DimensionSignalCounts;
+    capital?: DimensionSignalCounts;
+    valuation?: DimensionSignalCounts;
+  };
+}
+
 /** Full analysis report */
 export interface AnalysisReport {
   meta: ReportMeta;
   summary: ReportSummary;
   strategy?: ReportStrategy;
   details?: ReportDetails;
+  rules?: ReportRules;
 }
 
 // ============ Analysis Result Types ============

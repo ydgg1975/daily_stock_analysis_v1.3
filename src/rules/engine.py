@@ -108,14 +108,17 @@ class RuleEngine:
 
 def dimension_summary(results: List[RuleResult]) -> Dict[str, Dict[str, int]]:
     """Aggregate matched results by dimension, counting signals."""
-    summary: Dict[str, Dict[str, int]] = {}
+    summary: Dict[str, Dict[str, int]] = {
+        dim: {"bullish": 0, "bearish": 0, "warning": 0, "neutral": 0}
+        for dim in ("technical", "trend", "capital", "valuation")
+    }
     for r in results:
         if not r.matched:
             continue
         dim = summary.setdefault(r.dimension, {"bullish": 0, "bearish": 0, "warning": 0, "neutral": 0})
         if r.signal in dim:
             dim[r.signal] += 1
-    return {k: v for k, v in summary.items() if sum(v.values()) > 0}
+    return summary
 
 
 def compute_total_score(results: List[RuleResult]) -> float:

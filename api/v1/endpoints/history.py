@@ -324,11 +324,24 @@ def get_history_detail(
             sector_rankings=extracted_boards.get("sector_rankings"),
         )
         
+        # Extract rules data from raw_result
+        rules_data = None
+        _rules_matched_tags = raw_result.get("rules_matched_tags")
+        _rules_dim_summary = raw_result.get("rules_dimension_summary")
+        if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
+            rules_data = {
+                "score": raw_result.get("rules_score", 0.0) or 0.0,
+                "matched_count": len(_rules_matched_tags),
+                "tags": _rules_matched_tags,
+                "dimension_summary": _rules_dim_summary if isinstance(_rules_dim_summary, dict) else {},
+            }
+
         return AnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details
+            details=details,
+            rules=rules_data,
         )
         
     except HTTPException:

@@ -580,6 +580,11 @@ class HistoryService:
                 current_price=raw_result.get("current_price"),
                 change_pct=raw_result.get("change_pct"),
                 model_used=raw_result.get("model_used"),
+                rules_tags=raw_result.get("rules_tags", ""),
+                rules_tags_html=raw_result.get("rules_tags_html", ""),
+                rules_score=raw_result.get("rules_score", 0.0),
+                rules_dimension_summary=raw_result.get("rules_dimension_summary", {}),
+                rules_matched_tags=raw_result.get("rules_matched_tags"),
             )
         except Exception as e:
             logger.error(f"Failed to rebuild AnalysisResult: {e}", exc_info=True)

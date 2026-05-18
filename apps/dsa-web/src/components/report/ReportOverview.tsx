@@ -2,9 +2,10 @@ import type React from 'react';
 import type {
   ReportDetails as ReportDetailsType,
   ReportMeta,
+  ReportRules,
   ReportSummary as ReportSummaryType,
 } from '../../types/analysis';
-import { Badge, Card, ScoreGauge } from '../common';
+import { Badge, Card, ScoreGauge, Tooltip } from '../common';
 import { formatDateTime } from '../../utils/format';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
@@ -12,6 +13,7 @@ interface ReportOverviewProps {
   meta: ReportMeta;
   summary: ReportSummaryType;
   details?: ReportDetailsType;
+  rules?: ReportRules;
   isHistory?: boolean;
 }
 
@@ -77,6 +79,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
   summary,
   details,
+  rules,
 }) => {
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
@@ -121,6 +124,43 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
     return 'danger';
   };
 
+  const signalToBadgeVariant = (signal: string): 'success' | 'danger' | 'warning' | 'default' => {
+    switch (signal) {
+      case 'bullish': return 'success';
+      case 'bearish': return 'danger';
+      case 'warning': return 'warning';
+      default: return 'default';
+    }
+  };
+
+  const signalToLabel = (signal: string): string => {
+    switch (signal) {
+      case 'bullish': return '偏多';
+      case 'bearish': return '偏空';
+      case 'warning': return '注意';
+      default: return '中性';
+    }
+  };
+
+  const hasRules = rules && rules.tags && rules.tags.length > 0;
+  const hasDimensionSummary = rules?.dimensionSummary && Object.keys(rules.dimensionSummary).length > 0;
+
+  type DimensionKey = 'technical' | 'trend' | 'capital' | 'valuation';
+  const dimensionLabels: Record<DimensionKey, string> = {
+    technical: '技术面',
+    trend: '趋势面',
+    capital: '资金面',
+    valuation: '估值面',
+  };
+
+  const dimensionVerdict = (counts?: { bullish?: number; bearish?: number; warning?: number; neutral?: number }): { label: string; variant: 'success' | 'danger' | 'warning' | 'default' } => {
+    if (!counts) return { label: '中性', variant: 'default' };
+    if ((counts.warning ?? 0) > 0) return { label: '注意', variant: 'warning' };
+    if ((counts.bearish ?? 0) > (counts.bullish ?? 0)) return { label: '偏空', variant: 'danger' };
+    if ((counts.bullish ?? 0) > (counts.bearish ?? 0)) return { label: '偏多', variant: 'success' };
+    return { label: '中性', variant: 'default' };
+  };
+
   return (
     <div className="space-y-5">
       {/* 主信息区 - 两列布局，items-stretch 确保右侧与左侧同高 */}
@@ -158,6 +198,49 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                     {formatDateTime(meta.createdAt)}
                   </span>
                 </div>
+
+                {/* 规则信号标签 */}
+                {(hasRules || hasDimensionSummary) && (
+                  <div className="mt-2.5 space-y-2">
+                    {hasDimensionSummary && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        {(['technical', 'trend', 'capital', 'valuation'] as DimensionKey[]).map((dim) => {
+                          const counts = rules!.dimensionSummary![dim];
+                          const verdict = dimensionVerdict(counts);
+                          return (
+                            <span key={dim} className="flex items-center gap-1">
+                              <span className={verdict.variant === 'success' ? 'text-success' : verdict.variant === 'danger' ? 'text-danger' : verdict.variant === 'warning' ? 'text-warning' : 'text-muted-text'}>
+                                ●
+                              </span>
+                              <span className="text-muted-text">{dimensionLabels[dim]}</span>
+                              <span className={verdict.variant === 'success' ? 'text-success font-medium' : verdict.variant === 'danger' ? 'text-danger font-medium' : verdict.variant === 'warning' ? 'text-warning font-medium' : 'text-muted-text'}>
+                                {verdict.label}
+                              </span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {hasRules && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-text mr-0.5">
+                          {text.rulesSignal}
+                        </span>
+                        {rules.tags!.map((tag) => (
+                          <Tooltip
+                            key={tag.ruleId}
+                            side="bottom"
+                            content={`${tag.description || ''}，为${signalToLabel(tag.signal)}信号`}
+                          >
+                            <Badge variant={signalToBadgeVariant(tag.signal)} size="sm">
+                              {tag.name}
+                            </Badge>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

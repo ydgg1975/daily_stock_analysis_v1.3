@@ -49,6 +49,7 @@ const REPORT_TEXT = {
     laggingBoard: '领跌',
     neutralBoard: '中性',
     reanalyze: '重新分析',
+    rulesSignal: '规则信号',
   },
   en: {
     keyInsights: 'KEY INSIGHTS',
@@ -95,6 +96,7 @@ const REPORT_TEXT = {
     laggingBoard: 'Lagging',
     neutralBoard: 'Neutral',
     reanalyze: 'Reanalyze',
+    rulesSignal: 'RULES',
   },
 } as const;
 

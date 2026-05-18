@@ -1607,6 +1607,16 @@ class NotificationService(
                 "",
             ])
         
+        # 规则信号
+        rules_tags = getattr(result, 'rules_tags', '')
+        if rules_tags:
+            lines.extend([
+                f"### 📊 {labels.get('rules_signal_heading', '规则信号')}",
+                "",
+                rules_tags,
+                "",
+            ])
+
         lines.append("---")
         if self._should_show_llm_model():
             model_used = normalize_model_used(getattr(result, "model_used", None))

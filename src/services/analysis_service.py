@@ -175,7 +175,17 @@ class AnalysisService:
                 "risk_warning": result.risk_warning,
             }
         }
-        
+
+        # Rules engine signals
+        _rules_matched_tags = getattr(result, 'rules_matched_tags', None)
+        if _rules_matched_tags:
+            report["rules"] = {
+                "score": getattr(result, 'rules_score', 0.0) or 0.0,
+                "matched_count": len(_rules_matched_tags),
+                "tags": _rules_matched_tags,
+                "dimension_summary": getattr(result, 'rules_dimension_summary', {}) or {},
+            }
+
         return {
             "stock_code": result.code,
             "stock_name": stock_name,

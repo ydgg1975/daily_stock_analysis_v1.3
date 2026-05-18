@@ -839,6 +839,16 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     take_profit=_stringify_report_strategy_value(getattr(record, 'take_profit', None)),
                 ),
             ).model_dump()
+
+            # Restore rules data from raw_result if available
+            if isinstance(raw_result, dict):
+                _rules_matched_tags = raw_result.get("rules_matched_tags")
+                if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
+                    report_dict["rules"] = {
+                        "score": raw_result.get("rules_score", 0.0) or 0.0,
+                        "matched_count": len(_rules_matched_tags),
+                        "tags": _rules_matched_tags,
+                    }
             return TaskStatus(
                 task_id=task_id,
                 status="completed",
