@@ -843,8 +843,10 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             # Restore rules data from raw_result if available
             if isinstance(raw_result, dict):
                 _rules_matched_tags = raw_result.get("rules_matched_tags")
-                if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
-                    from api.v1.schemas.rules import ReportRulesSchema, RuleTagSchema
+                _has_tags = isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0
+                _rules_dim_summary = raw_result.get("rules_dimension_summary")
+                if _has_tags or isinstance(_rules_dim_summary, dict):
+                    from api.v1.schemas.rules import ReportRulesSchema, RuleTagSchema, DimensionSignalCounts
                     _tags = [
                         RuleTagSchema(
                             rule_id=t.get("rule_id", ""),
@@ -853,12 +855,19 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                             signal=t.get("signal", ""),
                             description=t.get("description", ""),
                         )
-                        for t in _rules_matched_tags
+                        for t in (_rules_matched_tags if _has_tags else [])
                     ]
+                    _dim_summary = None
+                    if isinstance(_rules_dim_summary, dict):
+                        _dim_summary = {
+                            k: DimensionSignalCounts(**v) if isinstance(v, dict) else DimensionSignalCounts()
+                            for k, v in _rules_dim_summary.items()
+                        }
                     rules_schema = ReportRulesSchema(
                         score=raw_result.get("rules_score", 0.0) or 0.0,
-                        matched_count=len(_rules_matched_tags),
-                        tags=_tags,
+                        matched_count=len(_rules_matched_tags) if _has_tags else 0,
+                        tags=_tags if _tags else None,
+                        dimension_summary=_dim_summary,
                     )
                     report_dict["rules"] = rules_schema.model_dump(by_alias=True)
             return TaskStatus(

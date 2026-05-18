@@ -178,12 +178,14 @@ class AnalysisService:
 
         # Rules engine signals
         _rules_matched_tags = getattr(result, 'rules_matched_tags', None)
-        if _rules_matched_tags:
+        _rules_dim_summary = getattr(result, 'rules_dimension_summary', None) or {}
+        _has_tags = _rules_matched_tags and len(_rules_matched_tags) > 0
+        if _has_tags or _rules_dim_summary:
             report["rules"] = {
                 "score": getattr(result, 'rules_score', 0.0) or 0.0,
-                "matched_count": len(_rules_matched_tags),
-                "tags": _rules_matched_tags,
-                "dimension_summary": getattr(result, 'rules_dimension_summary', {}) or {},
+                "matched_count": len(_rules_matched_tags) if _rules_matched_tags else 0,
+                "tags": _rules_matched_tags if _has_tags else [],
+                "dimension_summary": _rules_dim_summary,
             }
 
         return {
