@@ -116,6 +116,7 @@ def compute_indicators(df: Optional[pd.DataFrame]) -> Dict[str, Any]:
         avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean()
         rs = avg_gain / avg_loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
+        rsi = rsi.where(avg_loss != 0, np.where(avg_gain > 0, 100.0, 50.0))
         result["rsi"] = _safe(rsi.iloc[-1])
     else:
         result["rsi"] = None

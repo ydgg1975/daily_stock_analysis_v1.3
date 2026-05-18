@@ -328,7 +328,8 @@ def get_history_detail(
         rules_data = None
         _rules_matched_tags = raw_result.get("rules_matched_tags")
         _rules_dim_summary = raw_result.get("rules_dimension_summary")
-        if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
+        _has_tags = isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0
+        if _has_tags or isinstance(_rules_dim_summary, dict):
             from api.v1.schemas.rules import ReportRulesSchema, RuleTagSchema, DimensionSignalCounts
             _tags = [
                 RuleTagSchema(
@@ -338,7 +339,7 @@ def get_history_detail(
                     signal=t.get("signal", ""),
                     description=t.get("description", ""),
                 )
-                for t in _rules_matched_tags
+                for t in (_rules_matched_tags if _has_tags else [])
             ]
             _dim_summary = None
             if isinstance(_rules_dim_summary, dict):
@@ -348,8 +349,8 @@ def get_history_detail(
                 }
             rules_data = ReportRulesSchema(
                 score=raw_result.get("rules_score", 0.0) or 0.0,
-                matched_count=len(_rules_matched_tags),
-                tags=_tags,
+                matched_count=len(_rules_matched_tags) if _has_tags else 0,
+                tags=_tags if _tags else None,
                 dimension_summary=_dim_summary,
             )
 

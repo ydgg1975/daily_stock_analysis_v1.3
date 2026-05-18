@@ -75,6 +75,34 @@ class TestRuleEngineEvaluate(unittest.TestCase):
         self.assertFalse([r for r in results if r.rule_id == "V02"][0].matched)
 
 
+class TestRSIBoundaryHandling(unittest.TestCase):
+
+    def _make_uptrend_df(self, days=20, start=10.0, step=1.0):
+        """Create a DataFrame with strictly increasing close prices."""
+        import pandas as pd
+        closes = [start + i * step for i in range(days)]
+        return pd.DataFrame({"close": closes, "volume": [100000] * days})
+
+    def _make_flat_df(self, days=20, price=10.0):
+        """Create a DataFrame with zero price movement."""
+        import pandas as pd
+        return pd.DataFrame({"close": [price] * days, "volume": [100000] * days})
+
+    def test_rsi_pure_uptrend_returns_100(self):
+        from src.rules.indicators import compute_indicators
+        df = self._make_uptrend_df()
+        result = compute_indicators(df)
+        self.assertIsNotNone(result.get("rsi"))
+        self.assertAlmostEqual(result["rsi"], 100.0, places=1)
+
+    def test_rsi_zero_movement_returns_50(self):
+        from src.rules.indicators import compute_indicators
+        df = self._make_flat_df()
+        result = compute_indicators(df)
+        self.assertIsNotNone(result.get("rsi"))
+        self.assertAlmostEqual(result["rsi"], 50.0, places=1)
+
+
 class TestDimensionSummary(unittest.TestCase):
 
     def test_summary_counts_signals(self):

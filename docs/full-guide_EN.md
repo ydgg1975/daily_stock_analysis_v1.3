@@ -1183,6 +1183,72 @@ The P2 worker writes `triggered`, `skipped`, `degraded`, and `failed` rows to `a
 
 The WebUI "Alerts" page can manage the current three persisted rule types, run one-shot dry-run tests, and view trigger history. See [Real-Time Alert Center](alerts.md) for detailed boundaries.
 
+## Rules Engine
+
+The rules engine automatically computes technical indicators from OHLCV data and matches 22 declarative rules across 4 dimensions (Technical/Trend/Capital/Valuation), producing weighted scores and signal tags.
+
+### Dimensions and Signals
+
+| Dimension | Description | Rules |
+|-----------|-------------|-------|
+| Technical | MA cross, bullish/bearish alignment, MACD cross, RSI overbought/oversold | 8 |
+| Trend | MA20 trend direction, 20/60-day highs/lows, short-term momentum | 7 |
+| Capital | Volume-price confirmation, Bollinger Band breakout | 4 |
+| Valuation | PE percentile (low/high/moderate) | 3 |
+
+Signal types per rule: `bullish`, `bearish`, `warning`, `neutral`.
+
+### dimension_summary Semantics
+
+The `dimension_summary` in analysis results always returns all 4 dimensions, each containing counts for all 4 signal types:
+
+```json
+{
+  "technical": {"bullish": 2, "bearish": 1, "warning": 0, "neutral": 0},
+  "trend": {"bullish": 1, "bearish": 0, "warning": 0, "neutral": 0},
+  "capital": {"bullish": 0, "bearish": 0, "warning": 0, "neutral": 0},
+  "valuation": {"bullish": 0, "bearish": 0, "warning": 0, "neutral": 1}
+}
+```
+
+Dimensions are returned even when no rules match (all counts are 0).
+
+### REST API
+
+**POST /api/v1/rules/analyze** — Single symbol analysis
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rules/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "600519"}'
+```
+
+Response includes `symbol`, `asset_type`, `total_score` (weighted), `matched_rules`, `dimension_summary`, `tags` (comma-separated rule names).
+
+**POST /api/v1/rules/batch** — Batch analysis (max 10 symbols)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/rules/batch \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["600519", "300750"]}'
+```
+
+### Agent Tool: analyze_rules
+
+Agents can invoke the rules engine via the `analyze_rules` tool:
+
+- Parameter: `stock_code` (stock/ETF code, e.g., `600519`, `510300`, `AAPL`)
+- Returns: `symbol`, `asset_type`, `total_score`, `matched_rules` (matched only), `dimension_summary`, `tags`
+
+### Strategy: rules_analysis
+
+Built-in strategy (`strategies/rules_analysis.yaml`), aliases: rules, rules analysis, technical rules, indicator rules. Adjusts sentiment score based on rules engine score:
+
+- score > 2.0: sentiment_score +15
+- score > 1.0: sentiment_score +10
+- score < -2.0: sentiment_score -15
+- score < -1.0: sentiment_score -10
+
 ---
 
 For more questions, please [submit an Issue](https://github.com/ZhuLinsen/daily_stock_analysis/issues)
