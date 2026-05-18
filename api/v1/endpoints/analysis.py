@@ -1035,9 +1035,39 @@ def _build_analysis_report(
             sector_rankings=extracted_boards.get("sector_rankings"),
         )
 
+    rules_data = None
+    rules_dict = report_data.get("rules")
+    if isinstance(rules_dict, dict):
+        from api.v1.schemas.rules import ReportRulesSchema as _RRS, RuleTagSchema as _RTS, DimensionSignalCounts as _DSC
+        _raw_tags = rules_dict.get("tags") or []
+        _tags = [
+            _RTS(
+                rule_id=t.get("rule_id", ""),
+                dimension=t.get("dimension", ""),
+                name=t.get("name", ""),
+                signal=t.get("signal", ""),
+                description=t.get("description", ""),
+            )
+            for t in _raw_tags if isinstance(t, dict)
+        ]
+        _raw_dim = rules_dict.get("dimension_summary")
+        _dim = None
+        if isinstance(_raw_dim, dict):
+            _dim = {
+                k: _DSC(**v) if isinstance(v, dict) else _DSC()
+                for k, v in _raw_dim.items()
+            }
+        rules_data = _RRS(
+            score=rules_dict.get("score", 0.0) or 0.0,
+            matched_count=rules_dict.get("matched_count", 0),
+            tags=_tags if _tags else None,
+            dimension_summary=_dim,
+        )
+
     return AnalysisReport(
         meta=meta,
         summary=summary,
         strategy=strategy,
-        details=details
+        details=details,
+        rules=rules_data,
     )

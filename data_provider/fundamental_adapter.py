@@ -569,6 +569,7 @@ class AkshareFundamentalAdapter:
                             fields="ts_code,trade_date,pe")
             if df is None or df.empty or "pe" not in df.columns:
                 return None
+            df = df.sort_values("trade_date")
             return self._compute_percentile_from_pe_series(df["pe"])
         except Exception:
             return None
