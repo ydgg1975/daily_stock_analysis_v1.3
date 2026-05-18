@@ -36,3 +36,25 @@ class RulesAnalysisResponse(BaseModel):
 
 class RulesBatchResponse(BaseModel):
     results: List[RulesAnalysisResponse]
+
+
+class DimensionSignalCounts(BaseModel):
+    bullish: int = 0
+    bearish: int = 0
+    warning: int = 0
+    neutral: int = 0
+
+
+class RuleTagSchema(BaseModel):
+    rule_id: str
+    dimension: str
+    name: str
+    signal: str
+    description: str = ""
+
+
+class ReportRulesSchema(BaseModel):
+    score: float = 0.0
+    matched_count: int = 0
+    tags: Optional[List[RuleTagSchema]] = None
+    dimension_summary: Optional[Dict[str, DimensionSignalCounts]] = None

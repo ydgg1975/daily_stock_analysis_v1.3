@@ -135,10 +135,10 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
 
   const signalToLabel = (signal: string): string => {
     switch (signal) {
-      case 'bullish': return '偏多';
-      case 'bearish': return '偏空';
-      case 'warning': return '注意';
-      default: return '中性';
+      case 'bullish': return text.verdictBullish;
+      case 'bearish': return text.verdictBearish;
+      case 'warning': return text.verdictWarning;
+      default: return text.verdictNeutral;
     }
   };
 
@@ -147,18 +147,18 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
 
   type DimensionKey = 'technical' | 'trend' | 'capital' | 'valuation';
   const dimensionLabels: Record<DimensionKey, string> = {
-    technical: '技术面',
-    trend: '趋势面',
-    capital: '资金面',
-    valuation: '估值面',
+    technical: text.dimensionTechnical,
+    trend: text.dimensionTrend,
+    capital: text.dimensionCapital,
+    valuation: text.dimensionValuation,
   };
 
   const dimensionVerdict = (counts?: { bullish?: number; bearish?: number; warning?: number; neutral?: number }): { label: string; variant: 'success' | 'danger' | 'warning' | 'default' } => {
-    if (!counts) return { label: '中性', variant: 'default' };
-    if ((counts.warning ?? 0) > 0) return { label: '注意', variant: 'warning' };
-    if ((counts.bearish ?? 0) > (counts.bullish ?? 0)) return { label: '偏空', variant: 'danger' };
-    if ((counts.bullish ?? 0) > (counts.bearish ?? 0)) return { label: '偏多', variant: 'success' };
-    return { label: '中性', variant: 'default' };
+    if (!counts) return { label: text.verdictNeutral, variant: 'default' };
+    if ((counts.warning ?? 0) > 0) return { label: text.verdictWarning, variant: 'warning' };
+    if ((counts.bearish ?? 0) > (counts.bullish ?? 0)) return { label: text.verdictBearish, variant: 'danger' };
+    if ((counts.bullish ?? 0) > (counts.bearish ?? 0)) return { label: text.verdictBullish, variant: 'success' };
+    return { label: text.verdictNeutral, variant: 'default' };
   };
 
   return (

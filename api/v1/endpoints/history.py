@@ -329,12 +329,29 @@ def get_history_detail(
         _rules_matched_tags = raw_result.get("rules_matched_tags")
         _rules_dim_summary = raw_result.get("rules_dimension_summary")
         if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
-            rules_data = {
-                "score": raw_result.get("rules_score", 0.0) or 0.0,
-                "matched_count": len(_rules_matched_tags),
-                "tags": _rules_matched_tags,
-                "dimension_summary": _rules_dim_summary if isinstance(_rules_dim_summary, dict) else {},
-            }
+            from api.v1.schemas.rules import ReportRulesSchema, RuleTagSchema, DimensionSignalCounts
+            _tags = [
+                RuleTagSchema(
+                    rule_id=t.get("rule_id", ""),
+                    dimension=t.get("dimension", ""),
+                    name=t.get("name", ""),
+                    signal=t.get("signal", ""),
+                    description=t.get("description", ""),
+                )
+                for t in _rules_matched_tags
+            ]
+            _dim_summary = None
+            if isinstance(_rules_dim_summary, dict):
+                _dim_summary = {
+                    k: DimensionSignalCounts(**v) if isinstance(v, dict) else DimensionSignalCounts()
+                    for k, v in _rules_dim_summary.items()
+                }
+            rules_data = ReportRulesSchema(
+                score=raw_result.get("rules_score", 0.0) or 0.0,
+                matched_count=len(_rules_matched_tags),
+                tags=_tags,
+                dimension_summary=_dim_summary,
+            )
 
         return AnalysisReport(
             meta=meta,

@@ -844,11 +844,23 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             if isinstance(raw_result, dict):
                 _rules_matched_tags = raw_result.get("rules_matched_tags")
                 if isinstance(_rules_matched_tags, list) and len(_rules_matched_tags) > 0:
-                    report_dict["rules"] = {
-                        "score": raw_result.get("rules_score", 0.0) or 0.0,
-                        "matched_count": len(_rules_matched_tags),
-                        "tags": _rules_matched_tags,
-                    }
+                    from api.v1.schemas.rules import ReportRulesSchema, RuleTagSchema
+                    _tags = [
+                        RuleTagSchema(
+                            rule_id=t.get("rule_id", ""),
+                            dimension=t.get("dimension", ""),
+                            name=t.get("name", ""),
+                            signal=t.get("signal", ""),
+                            description=t.get("description", ""),
+                        )
+                        for t in _rules_matched_tags
+                    ]
+                    rules_schema = ReportRulesSchema(
+                        score=raw_result.get("rules_score", 0.0) or 0.0,
+                        matched_count=len(_rules_matched_tags),
+                        tags=_tags,
+                    )
+                    report_dict["rules"] = rules_schema.model_dump(by_alias=True)
             return TaskStatus(
                 task_id=task_id,
                 status="completed",

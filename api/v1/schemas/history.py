@@ -13,6 +13,8 @@ from typing import Optional, List, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.v1.schemas.rules import ReportRulesSchema
+
 
 class HistoryItem(BaseModel):
     """历史记录摘要（列表展示用）"""
@@ -165,7 +167,7 @@ class AnalysisReport(BaseModel):
     summary: ReportSummary = Field(..., description="概览区")
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
-    rules: Optional[Any] = Field(None, description="规则引擎信号")
+    rules: Optional["ReportRulesSchema"] = Field(None, description="规则引擎信号")
 
     class Config:
         json_schema_extra = {
