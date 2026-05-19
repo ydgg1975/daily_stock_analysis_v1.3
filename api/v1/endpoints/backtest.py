@@ -90,15 +90,15 @@ def _validate_analysis_date_range(
 
     responses={
 
-        200: {"description": "huicezhixingwancheng"},
+        200: {"description": "백테스트 실행 완료"},
 
         500: {"description": "fuwuqicuowu", "model": ErrorResponse},
 
     },
 
-    summary="chufahuice",
+    summary="백테스트 실행",
 
-    description="duilishianalysisrecordjinxinghuicepinggu竊똟ingxieru backtest_results/backtest_summaries",
+    description="과거 분석 기록을 기준으로 백테스트를 실행하고 결과를 저장합니다.",
 
 )
 
@@ -138,7 +138,7 @@ def run_backtest(
 
             status_code=500,
 
-            detail={"error": "internal_error", "message": f"huicezhixingshibai: {str(exc)}"},
+            detail={"error": "internal_error", "message": f"백테스트 실행에 실패했습니다: {str(exc)}"},
 
         )
 
@@ -154,31 +154,31 @@ def run_backtest(
 
     responses={
 
-        200: {"description": "huicejieguoliebiao"},
+        200: {"description": "백테스트 결과 목록"},
 
-        500: {"description": "fuwuqicuowu", "model": ErrorResponse},
+        500: {"description": "서버 오류", "model": ErrorResponse},
 
     },
 
-    summary="huoquhuicejieguo",
+    summary="백테스트 결과 조회",
 
-    description="fenyehuoquhuicejieguo竊똺hichianstockdaimaguolv",
+    description="백테스트 결과를 페이지 단위로 조회합니다. 종목 코드로 필터링할 수 있습니다.",
 
 )
 
 def get_backtest_results(
 
-    code: Optional[str] = Query(None, description="stockdaimashaixuan"),
+    code: Optional[str] = Query(None, description="종목 코드 필터"),
 
-    eval_window_days: Optional[int] = Query(None, ge=1, le=120, description="pingguchuangkouguolv"),
+    eval_window_days: Optional[int] = Query(None, ge=1, le=120, description="평가 기간 필터"),
 
     analysis_date_from: Optional[date] = Query(None, description="Analysis date start, inclusive"),
 
     analysis_date_to: Optional[date] = Query(None, description="Analysis date end, inclusive"),
 
-    page: int = Query(1, ge=1, description="yema"),
+    page: int = Query(1, ge=1, description="페이지 번호"),
 
-    limit: int = Query(20, ge=1, le=200, description="meiyeshuliang"),
+    limit: int = Query(20, ge=1, le=200, description="페이지당 항목 수"),
 
     db_manager: DatabaseManager = Depends(get_database_manager),
 
@@ -232,7 +232,7 @@ def get_backtest_results(
 
             status_code=500,
 
-            detail={"error": "internal_error", "message": f"chaxunhuicejieguoshibai: {str(exc)}"},
+            detail={"error": "internal_error", "message": f"백테스트 결과 조회에 실패했습니다: {str(exc)}"},
 
         )
 
@@ -248,15 +248,15 @@ def get_backtest_results(
 
     responses={
 
-        200: {"description": "zhengtihuicebiaoxian"},
+        200: {"description": "전체 백테스트 성과"},
 
-        404: {"description": "wuhuicehuizong", "model": ErrorResponse},
+        404: {"description": "백테스트 요약 없음", "model": ErrorResponse},
 
         500: {"description": "fuwuqicuowu", "model": ErrorResponse},
 
     },
 
-    summary="huoquzhengtihuicebiaoxian",
+    summary="전체 백테스트 성과 조회",
 
 )
 
@@ -298,7 +298,7 @@ def get_overall_performance(
 
                 status_code=404,
 
-                detail={"error": "not_found", "message": "weizhaodaozhengtihuicehuizong"},
+                detail={"error": "not_found", "message": "전체 백테스트 요약을 찾을 수 없습니다."},
 
             )
 
@@ -326,7 +326,7 @@ def get_overall_performance(
 
             status_code=500,
 
-            detail={"error": "internal_error", "message": f"chaxunzhengtibiaoxianshibai: {str(exc)}"},
+            detail={"error": "internal_error", "message": f"전체 백테스트 성과 조회에 실패했습니다: {str(exc)}"},
 
         )
 
@@ -342,15 +342,15 @@ def get_overall_performance(
 
     responses={
 
-        200: {"description": "danguhuicebiaoxian"},
+        200: {"description": "단일 종목 백테스트 성과"},
 
-        404: {"description": "wuhuicehuizong", "model": ErrorResponse},
+        404: {"description": "백테스트 요약 없음", "model": ErrorResponse},
 
         500: {"description": "fuwuqicuowu", "model": ErrorResponse},
 
     },
 
-    summary="huoqudanguhuicebiaoxian",
+    summary="단일 종목 백테스트 성과 조회",
 
 )
 
@@ -394,7 +394,7 @@ def get_stock_performance(
 
                 status_code=404,
 
-                detail={"error": "not_found", "message": f"weizhaodao {code} dehuicehuizong"},
+                detail={"error": "not_found", "message": f"{code}의 백테스트 요약을 찾을 수 없습니다."},
 
             )
 
@@ -422,7 +422,7 @@ def get_stock_performance(
 
             status_code=500,
 
-            detail={"error": "internal_error", "message": f"chaxundangubiaoxianshibai: {str(exc)}"},
+            detail={"error": "internal_error", "message": f"단일 종목 백테스트 성과 조회에 실패했습니다: {str(exc)}"},
 
         )
 

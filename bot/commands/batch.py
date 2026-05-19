@@ -77,7 +77,7 @@ class BatchCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "pilianganalysiswatchlistgu"
+        return "관심 종목을 일괄 분석합니다"
 
     
 
@@ -85,7 +85,7 @@ class BatchCommand(BotCommand):
 
     def usage(self) -> str:
 
-        return "/batch [shuliang]"
+        return "/batch [수량]"
 
     
 
@@ -121,7 +121,7 @@ class BatchCommand(BotCommand):
 
             return BotResponse.error_response(
 
-                "watchlistguliebiaoweikong竊똰ingxianconfig STOCK_LIST"
+                "관심 종목 목록이 비어 있습니다. 먼저 STOCK_LIST를 설정하세요."
 
             )
 
@@ -139,11 +139,11 @@ class BatchCommand(BotCommand):
 
                 if limit <= 0:
 
-                    return BotResponse.error_response("shuliangbixudayu0")
+                    return BotResponse.error_response("분석 수량은 0보다 커야 합니다.")
 
             except ValueError:
 
-                return BotResponse.error_response(f"wuxiaodeshuliang: {args[0]}")
+                return BotResponse.error_response(f"유효하지 않은 수량입니다: {args[0]}")
 
         
 
@@ -177,15 +177,15 @@ class BatchCommand(BotCommand):
 
         return BotResponse.markdown_response(
 
-            f"??**pilianganalysisrenwuyiqidong**\n\n"
+            f"**일괄 분석 작업이 시작되었습니다**\n\n"
 
-            f"??analysisshuliang: {len(stock_list)} zhi\n"
+            f"분석 수량: {len(stock_list)}개\n"
 
-            f"??stockliebiao: {', '.join(stock_list[:5])}"
+            f"종목 목록: {', '.join(stock_list[:5])}"
 
             f"{'...' if len(stock_list) > 5 else ''}\n\n"
 
-            f"analysiswanchenghoujiangzidongtuisonghuizongbaogao??"
+            f"분석이 완료되면 요약 보고서를 자동으로 보냅니다."
 
         )
 

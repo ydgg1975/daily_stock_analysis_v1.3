@@ -1,6 +1,6 @@
-# 문서 센터
+# 문서 인덱스
 
-이 문서는 Daily Stock Analysis의 주요 문서 입구입니다. 처음 사용하는 경우 `README.md`, `beginner-client-setup.md`, `full-guide.md` 순서로 보는 것을 권장합니다.
+Daily Stock Analysis의 주요 문서 진입점입니다. 처음 사용하는 경우 `README.md`, `beginner-client-setup.md`, `full-guide.md` 순서로 읽는 것을 권장합니다.
 
 ## 시작하기
 
@@ -49,5 +49,5 @@
 ## 운영 메모
 
 - 한국어 사용자 경험을 우선합니다.
-- 새 사용자 노출 문구는 중국어 한자, 깨진 문자, 병음식 문자열을 넣지 않습니다.
+- 사용자 노출 문구에는 깨진 문자, 중국어 한자, 로마자화된 임시 문구를 남기지 않습니다.
 - 언어 아티팩트 검사는 `python scripts/check_language_artifacts.py`로 실행합니다.

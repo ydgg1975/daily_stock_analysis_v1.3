@@ -294,7 +294,7 @@ def _invalid_analysis_input_error() -> HTTPException:
 
             "error": "validation_error",
 
-            "message": "inputruyouxiaodestockdaimahuostockmingcheng",
+            "message": "유효한 종목 코드나 종목명을 입력하세요.",
 
         },
 
@@ -406,15 +406,15 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
 
         },
 
-        400: {"description": "qingqiucanshucuowu", "model": ErrorResponse},
+        400: {"description": "요청 파라미터 오류", "model": ErrorResponse},
 
         409: {"description": "Duplicate analysis task rejected", "model": DuplicateTaskErrorResponse},
 
-        500: {"description": "analysisshibai", "model": ErrorResponse},
+        500: {"description": "분석 실패", "model": ErrorResponse},
 
     },
 
-    summary="chufastockanalysis",
+    summary="종목 분석 실행",
 
     description="Start an AI stock analysis task. Supports sync and async modes."
 
@@ -495,7 +495,7 @@ def trigger_analysis(
 
                 "error": "validation_error",
 
-                "message": "bixutigong stock_code huo stock_codes canshu"
+                "message": "stock_code 또는 stock_codes 값을 입력하세요."
 
             }
 
@@ -549,7 +549,7 @@ def trigger_analysis(
 
                 "error": "validation_error",
 
-                "message": f"dancianalysisqingqiuzuiduozhichi {MAX_BATCH_SIZE} zhistock"
+                "message": f"한 번의 분석 요청은 최대 {MAX_BATCH_SIZE}개 종목까지 지원합니다."
 
             }
 
@@ -567,7 +567,7 @@ def trigger_analysis(
 
                 "error": "validation_error",
 
-                "message": "stockdaimabunengweikonghuojinbaohankongbaizifu"
+                "message": "종목 코드는 비어 있거나 공백만 포함할 수 없습니다."
 
             }
 
@@ -589,7 +589,7 @@ def trigger_analysis(
 
                     "error": "validation_error",
 
-                    "message": "tongbumoshijinzhichidanzhistockanalysis竊똰ingshiyong async_mode=true jinxingpilianganalysis"
+                    "message": "동기 모드는 단일 종목 분석만 지원합니다. 여러 종목은 async_mode=true로 요청하세요."
 
                 }
 
@@ -949,17 +949,17 @@ def _handle_sync_analysis(
 
     responses={
 
-        202: {"description": "dapanfupanrenwuyijieshou", "model": MarketReviewAccepted},
+        202: {"description": "시장 리뷰 작업 접수", "model": MarketReviewAccepted},
 
-        409: {"description": "dapanfupanin_progresszhixing", "model": ErrorResponse},
+        409: {"description": "시장 리뷰가 이미 실행 중입니다", "model": ErrorResponse},
 
-        500: {"description": "tijiaoshibai", "model": ErrorResponse},
+        500: {"description": "작업 제출 실패", "model": ErrorResponse},
 
     },
 
-    summary="chufadapanfupan",
+    summary="시장 리뷰 실행",
 
-    description="tijiaoyigehoutaidapanfupanrenwu竊똣uyong CLI dedapanfupanlianlubingsavebaogao?굁iekouneibujintigongjinchengnei/danjifangzhong竊똱uduoshili竊늕uo Worker/duorongqi竊뎏ushu竊똸ujiehewaibumidengjizhibimianchongfuchufa??",
+    description="백그라운드 시장 리뷰 작업을 제출합니다. 작업은 보고서를 저장하고 설정에 따라 알림을 보냅니다.",
 
 )
 
@@ -985,7 +985,7 @@ def trigger_market_review(
 
             status="accepted",
 
-            message="jinridapanfupanrelatedmarketjunweifeijiaoyiri竊똹itiaoguodapanfupan",
+            message="오늘 시장 리뷰 대상 시장이 모두 휴장일이라 시장 리뷰를 건너뜁니다.",
 
             send_notification=request.send_notification,
 
@@ -1005,7 +1005,7 @@ def trigger_market_review(
 
                 "error": "duplicate_market_review",
 
-                "message": "dapanfupanin_progresszhixingzhong竊똰inglaterzaishi",
+                "message": "시장 리뷰가 이미 실행 중입니다. 잠시 후 다시 시도하세요.",
 
             },
 
@@ -1037,7 +1037,7 @@ def trigger_market_review(
 
             stock_name="dapanfupan",
 
-            message="dapanfupanrenwuyitijiao",
+            message="시장 리뷰 작업이 제출되었습니다.",
 
             task_id=task_id,
 
@@ -1055,7 +1055,7 @@ def trigger_market_review(
 
         status="accepted",
 
-        message="dapanfupanrenwuyitijiao竊똷anchenghouhuisavebaogaobinganconfigtuisongnotification",
+        message="시장 리뷰 작업이 제출되었습니다. 완료 후 보고서를 저장하고 설정에 따라 알림을 보냅니다.",
 
         send_notification=request.send_notification,
 
@@ -1083,13 +1083,13 @@ def trigger_market_review(
 
     responses={
 
-        200: {"description": "renwuliebiao"},
+        200: {"description": "분석 작업 목록"},
 
     },
 
-    summary="huoquanalysisrenwuliebiao",
+    summary="분석 작업 목록 조회",
 
-    description="huoqudangqiansuoyouanalysisrenwu竊똩eanzhuangtaishaixuan"
+    description="현재 분석 작업 목록을 조회합니다. 상태로 필터링할 수 있습니다."
 
 )
 
@@ -1099,7 +1099,7 @@ def get_task_list(
 
         None,
 
-        description="shaixuanzhuangtai竊쉚ending, processing, completed, failed竊늷hichidouhaofengeduoge竊?"
+        description="상태 필터. pending, processing, completed, failed를 쉼표로 여러 개 지정할 수 있습니다."
 
     ),
 
@@ -1398,9 +1398,9 @@ def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
 
     },
 
-    summary="chaxunanalysisrenwuzhuangtai",
+    summary="분석 작업 상태 조회",
 
-    description="genju task_id chaxundangerenwudezhuangtai"
+    description="task_id로 단일 분석 작업 상태를 조회합니다."
 
 )
 
@@ -1714,7 +1714,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
 
                 "error": "internal_error",
 
-                "message": f"chaxunrenwuzhuangtaishibai: {str(e)}"
+                "message": f"작업 상태 조회에 실패했습니다: {str(e)}"
 
             }
 

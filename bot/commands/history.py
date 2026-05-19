@@ -118,7 +118,7 @@ class HistoryCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "view Agent duihualishi"
+        return "Agent 대화 기록을 조회합니다"
 
 
 
@@ -170,7 +170,7 @@ class HistoryCommand(BotCommand):
 
                 return BotResponse.text_response(
 
-                    f"??yiqingchudangqianhuihua ({deleted} tiaoxiaoxi)"
+                    f"현재 대화를 삭제했습니다. 삭제된 메시지: {deleted}개"
 
                 )
 
@@ -178,7 +178,7 @@ class HistoryCommand(BotCommand):
 
                 logger.error(f"History clear failed: {e}")
 
-                return BotResponse.text_response(f"?좑툘 qingchushibai: {str(e)}")
+                return BotResponse.text_response(f"대화 삭제에 실패했습니다: {str(e)}")
 
 
 
@@ -192,7 +192,7 @@ class HistoryCommand(BotCommand):
 
             if not (session_id.startswith(prefix) or session_id == legacy_chat_session_id):
 
-                return BotResponse.text_response("?좑툘 nizhinengviewzijidehuihuarecord??")
+                return BotResponse.text_response("본인의 대화 기록만 볼 수 있습니다.")
 
             try:
 
@@ -200,11 +200,11 @@ class HistoryCommand(BotCommand):
 
                 if not messages_list:
 
-                    return BotResponse.text_response(f"?벊 huihua `{session_id}` wuxiaoxirecord")
+                    return BotResponse.text_response(f"대화 `{session_id}`에 메시지 기록이 없습니다.")
 
 
 
-                lines = [f"?뮠 **huihuaxiangqing**: `{session_id}`", ""]
+                lines = [f"**대화 상세**: `{session_id}`", ""]
 
                 for msg in messages_list:
 
@@ -232,7 +232,7 @@ class HistoryCommand(BotCommand):
 
                 logger.error(f"History detail failed: {e}")
 
-                return BotResponse.text_response(f"?좑툘 huoquhuihuaxiangqingshibai: {str(e)}")
+                return BotResponse.text_response(f"대화 상세 조회에 실패했습니다: {str(e)}")
 
 
 
@@ -260,15 +260,15 @@ class HistoryCommand(BotCommand):
 
             if not sessions:
 
-                return BotResponse.text_response("?벊 noneduihualishirecord")
+                return BotResponse.text_response("대화 기록이 없습니다.")
 
 
 
-            lines = ["?뱥 **zuijinduihuahuihua**", ""]
+            lines = ["**최근 대화 기록**", ""]
 
             for i, sess in enumerate(sessions, 1):
 
-                title = sess.get("title", "xinduihua")
+                title = sess.get("title", "새 대화")
 
                 msg_count = sess.get("message_count", 0)
 
@@ -278,7 +278,7 @@ class HistoryCommand(BotCommand):
 
                 lines.append(f"**{i}.** {title}")
 
-                lines.append(f"   ?뮠 {msg_count} tiaoxiaoxi | ?븧 {last_active}")
+                lines.append(f"   메시지 {msg_count}개 | {last_active}")
 
                 lines.append(f"   ID: `{sid}`")
 
@@ -286,7 +286,7 @@ class HistoryCommand(BotCommand):
 
 
 
-            lines.append(f"?뮕 shiyong `/history <session_id>` viewjutihuihuaneirong")
+            lines.append("`/history <session_id>`로 특정 대화 내용을 볼 수 있습니다.")
 
             return BotResponse.markdown_response("\n".join(lines))
 
@@ -296,6 +296,6 @@ class HistoryCommand(BotCommand):
 
             logger.error(f"History list failed: {e}")
 
-            return BotResponse.text_response(f"?좑툘 huoquhuihualiebiaoshibai: {str(e)}")
+            return BotResponse.text_response(f"대화 목록 조회에 실패했습니다: {str(e)}")
 
 

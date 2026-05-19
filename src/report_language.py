@@ -960,7 +960,7 @@ def _is_placeholder_stock_name(value: Any, code: Any = None) -> bool:
 
 
 
-    return text.startswith("stock")
+    return text.startswith("stock") or text.startswith("gupiao")
 
 
 

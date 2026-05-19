@@ -118,7 +118,7 @@ class ChatCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "yu AI zhushoujinxingziyouduihua (xukaiqi Agent moshi)"
+        return "AI 도우미와 자유 대화를 시작합니다. Agent 모드가 필요합니다."
 
         
 
@@ -126,7 +126,7 @@ class ChatCommand(BotCommand):
 
     def usage(self) -> str:
 
-        return "/chat <wenti>"
+        return "/chat <질문>"
 
         
 
@@ -200,7 +200,7 @@ class ChatCommand(BotCommand):
 
             else:
 
-                return BotResponse.text_response(f"?좑툘 duihuashibai: {result.error}")
+                return BotResponse.text_response(f"대화 처리에 실패했습니다: {result.error}")
 
                 
 
@@ -210,6 +210,6 @@ class ChatCommand(BotCommand):
 
             logger.exception("Chat error details:")
 
-            return BotResponse.text_response(f"?좑툘 duihuazhixingchucuo: {str(e)}")
+            return BotResponse.text_response(f"대화 실행 중 오류가 발생했습니다: {str(e)}")
 
 

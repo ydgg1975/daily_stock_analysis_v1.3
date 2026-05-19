@@ -117,13 +117,13 @@ router = APIRouter()
 
     summary="huoqulishianalysisliebiao",
 
-    description="fenyehuoqulishianalysisrecordzhaiyao竊똺hichianstockdaimaheriqifanweishaixuan"
+    description="분석 기록 요약을 페이지 단위로 조회합니다. 종목 코드와 날짜 범위로 필터링할 수 있습니다."
 
 )
 
 def get_history_list(
 
-    stock_code: Optional[str] = Query(None, description="stockdaimashaixuan"),
+    stock_code: Optional[str] = Query(None, description="종목 코드 필터"),
 
     start_date: Optional[str] = Query(None, description="kaishiriqi (YYYY-MM-DD)"),
 
@@ -249,7 +249,7 @@ def get_history_list(
 
                 "error": "internal_error",
 
-                "message": f"chaxunlishiliebiaoshibai: {str(e)}"
+                "message": f"분석 기록 목록 조회에 실패했습니다: {str(e)}"
 
             }
 
@@ -267,17 +267,17 @@ def get_history_list(
 
     responses={
 
-        200: {"description": "deletechenggong"},
+        200: {"description": "삭제 성공"},
 
-        400: {"description": "qingqiucanshucuowu", "model": ErrorResponse},
+        400: {"description": "요청 파라미터 오류", "model": ErrorResponse},
 
-        500: {"description": "fuwuqicuowu", "model": ErrorResponse},
+        500: {"description": "서버 오류", "model": ErrorResponse},
 
     },
 
-    summary="deletelishianalysisrecord",
+    summary="분석 기록 삭제",
 
-    description="anlishirecordzhujian ID piliangdeleteanalysislishi"
+    description="분석 기록 ID 목록을 받아 분석 기록을 일괄 삭제합니다."
 
 )
 
@@ -306,7 +306,7 @@ def delete_history_records(
 
                 "error": "invalid_request",
 
-                "message": "record_ids bunengweikong"
+                "message": "record_ids는 비어 있을 수 없습니다."
 
             }
 
@@ -338,7 +338,7 @@ def delete_history_records(
 
                 "error": "internal_error",
 
-                "message": f"deletelishirecordshibai: {str(e)}"
+                "message": f"분석 기록 삭제에 실패했습니다: {str(e)}"
 
             }
 
@@ -673,7 +673,7 @@ def get_history_detail(
 
                 "error": "internal_error",
 
-                "message": f"chaxunlishixiangqingshibai: {str(e)}"
+                "message": f"분석 기록 상세 조회에 실패했습니다: {str(e)}"
 
             }
 
@@ -786,7 +786,7 @@ def get_history_news(
 
                 "error": "internal_error",
 
-                "message": f"chaxunxinwenqingbaoshibai: {str(e)}"
+                "message": f"관련 뉴스 정보 조회에 실패했습니다: {str(e)}"
 
             }
 
@@ -875,7 +875,7 @@ def get_history_markdown(
 
                 "error": "generation_failed",
 
-                "message": f"shengcheng Markdown baogaoshibai: {e.message}"
+                "message": f"Markdown 보고서 생성에 실패했습니다: {e.message}"
 
             }
 
@@ -893,7 +893,7 @@ def get_history_markdown(
 
                 "error": "internal_error",
 
-                "message": f"huoqu Markdown baogaoshibai: {str(e)}"
+                "message": f"Markdown 보고서 조회에 실패했습니다: {str(e)}"
 
             }
 

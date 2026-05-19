@@ -81,7 +81,7 @@ class MarketCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "dapanfupananalysis"
+        return "시장 리뷰를 실행합니다"
 
 
 
@@ -135,7 +135,7 @@ class MarketCommand(BotCommand):
 
             return BotResponse.error_response(
 
-                "dapanfupanqidongshibai竊똹ishifangyunxingsuo竊썃inglaterretry"
+                "시장 리뷰 시작에 실패했습니다. 실행 잠금을 해제했으니 잠시 후 다시 시도하세요."
 
             )
 
@@ -143,19 +143,19 @@ class MarketCommand(BotCommand):
 
         return BotResponse.markdown_response(
 
-            "??**dapanfupanrenwuyiqidong**\n\n"
+            "**시장 리뷰 작업이 시작되었습니다**\n\n"
 
-            "in_progressanalysis竊?n"
+            "분석을 진행 중입니다.\n"
 
-            "??zhuyaozhishubiaoxian\n"
+            "- 주요 지수 흐름\n"
 
-            "??bankuairediananalysis\n"
+            "- 업종/테마 동향\n"
 
-            "??shicquotexupanduan\n"
+            "- 시세 흐름 판단\n"
 
-            "??houshizhanwang\n\n"
+            "- 향후 전망\n\n"
 
-            "analysiswanchenghoujiangzidongtuisongjieguo??"
+            "분석이 완료되면 결과를 자동으로 보냅니다."
 
         )
 
@@ -253,7 +253,7 @@ class MarketCommand(BotCommand):
 
                     notifier.send(
 
-                        "?렞 dapanfupan\n\njinrirelatedmarketxiushi竊똹itiaoguodapanfupan??",
+                        "시장 리뷰\n\n오늘 시장 리뷰 대상 시장이 모두 휴장일이라 시장 리뷰를 건너뜁니다.",
 
                         email_send_to_all=True,
 

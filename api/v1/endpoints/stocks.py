@@ -97,15 +97,15 @@ ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
 
     responses={
 
-        200: {"description": "tiqudestockdaima"},
+        200: {"description": "추출된 종목 코드"},
 
-        400: {"description": "tupianwuxiao", "model": ErrorResponse},
+        400: {"description": "유효하지 않은 이미지", "model": ErrorResponse},
 
-        500: {"description": "fuwuqicuowu", "model": ErrorResponse},
+        500: {"description": "서버 오류", "model": ErrorResponse},
 
     },
 
-    summary="congtupiantiqustockdaima",
+    summary="이미지에서 종목 코드 추출",
 
     description="Upload an image and extract stock codes with a Vision LLM. Supports JPEG, PNG, WebP, and GIF up to 5 MB.",
 
@@ -115,7 +115,7 @@ def extract_from_image(
 
     file: Optional[UploadFile] = File(None, description="Image file. Form field name: file"),
 
-    include_raw: bool = Query(False, description="shifouzaijieguozhongbaohanyuanshi LLM xiangying"),
+    include_raw: bool = Query(False, description="결과에 원본 LLM 응답을 포함할지 여부"),
 
 ) -> ExtractFromImageResponse:
 
@@ -133,7 +133,7 @@ def extract_from_image(
 
             status_code=400,
 
-            detail={"error": "bad_request", "message": "weitigongwenjian竊똰ingshiyongbiaodanziduan file shangchuantupian"},
+            detail={"error": "bad_request", "message": "파일이 제공되지 않았습니다. form-data의 file 필드로 이미지를 업로드하세요."},
 
         )
 
@@ -151,7 +151,7 @@ def extract_from_image(
 
                 "error": "unsupported_type",
 
-                "message": f"buzhichideleixing: {content_type}?굖unxu: {ALLOWED_MIME_STR}",
+                "message": f"지원하지 않는 파일 형식입니다: {content_type}. 허용 형식: {ALLOWED_MIME_STR}",
 
             },
 
@@ -174,7 +174,7 @@ def extract_from_image(
 
                     "error": "file_too_large",
 
-                    "message": f"tupianchaoguo {MAX_SIZE_BYTES // (1024 * 1024)}MB xianzhi",
+                    "message": f"이미지는 {MAX_SIZE_BYTES // (1024 * 1024)}MB를 초과할 수 없습니다.",
 
                 },
 
@@ -192,7 +192,7 @@ def extract_from_image(
 
             status_code=400,
 
-            detail={"error": "read_failed", "message": "duqushangchuanwenjianshibai"},
+            detail={"error": "read_failed", "message": "업로드된 파일을 읽지 못했습니다."},
 
         )
 
@@ -232,7 +232,7 @@ def extract_from_image(
 
             status_code=500,
 
-            detail={"error": "internal_error", "message": "tupiantiqushibai"},
+            detail={"error": "internal_error", "message": "이미지에서 종목 정보를 추출하지 못했습니다."},
 
         )
 
@@ -248,17 +248,17 @@ def extract_from_image(
 
     responses={
 
-        200: {"description": "jiexijieguo"},
+        200: {"description": "파싱 결과"},
 
-        400: {"description": "weitigongshujuhuojiexishibai", "model": ErrorResponse},
+        400: {"description": "데이터가 없거나 파싱에 실패했습니다", "model": ErrorResponse},
 
-        500: {"description": "fuwuqicuowu", "model": ErrorResponse},
+        500: {"description": "서버 오류", "model": ErrorResponse},
 
     },
 
-    summary="jiexi CSV/Excel/jiantieban",
+    summary="CSV/Excel/클립보드 텍스트 파싱",
 
-    description="shangchuan CSV/Excel wenjianhuozhantiewenben竊똺idongjiexistockdaima?굓enjianshangxian 2MB竊똷enbenshangxian 100KB??",
+    description="CSV/Excel 파일 또는 붙여넣은 텍스트에서 종목 코드를 파싱합니다. 파일은 2MB, 텍스트는 100KB까지 지원합니다.",
 
 )
 
@@ -295,7 +295,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
                 status_code=400,
 
-                detail={"error": "invalid_json", "message": f"JSON jiexishibai: {e}"},
+                detail={"error": "invalid_json", "message": f"JSON 파싱에 실패했습니다: {e}"},
 
             )
 
@@ -307,7 +307,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
                 status_code=400,
 
-                detail={"error": "bad_request", "message": "weitigong text竊똰ingshiyong {\"text\": \"...\"}"},
+                detail={"error": "bad_request", "message": "text 값이 없습니다. {\"text\": \"...\"} 형식으로 요청하세요."},
 
             )
 
@@ -343,7 +343,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
                 status_code=400,
 
-                detail={"error": "bad_request", "message": "weitigongwenjian竊똰ingshiyongbiaodanziduan file"},
+                detail={"error": "bad_request", "message": "파일이 제공되지 않았습니다. form-data의 file 필드를 사용하세요."},
 
             )
 
@@ -411,7 +411,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
                 status_code=400,
 
-                detail={"error": "read_failed", "message": "duquwenjianshibai"},
+                detail={"error": "read_failed", "message": "파일을 읽지 못했습니다."},
 
             )
 
@@ -451,7 +451,7 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 
                 "error": "bad_request",
 
-                "message": "qingshiyong multipart/form-data shangchuanwenjian竊똦uo application/json tijiao {\"text\": \"...\"}",
+                "message": "파일 업로드는 multipart/form-data를 사용하고, 텍스트 입력은 application/json으로 {\"text\": \"...\"}를 제출하세요.",
 
             },
 
@@ -602,7 +602,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
 
                 "error": "internal_error",
 
-                "message": f"huoqushishixingqingshibai: {str(e)}"
+                "message": f"실시간 시세 조회에 실패했습니다: {str(e)}"
 
             }
 
@@ -763,7 +763,7 @@ def get_stock_history(
 
                 "error": "internal_error",
 
-                "message": f"huoqulishiquoteshibai: {str(e)}"
+                "message": f"과거 시세 조회에 실패했습니다: {str(e)}"
 
             }
 

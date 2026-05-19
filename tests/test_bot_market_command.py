@@ -336,7 +336,7 @@ class MarketCommandRegionFilterTestCase(unittest.TestCase):
 
         sent = notify_notifier.send.call_args.args[0]
 
-        self.assertIn("xiushi", sent)
+        self.assertIn("휴장일", sent)
 
         self.assertEqual(notify_notifier.send.call_args.kwargs["route_type"], "report")
 
@@ -468,7 +468,10 @@ class MarketCommandRegionFilterTestCase(unittest.TestCase):
 
         release_market_review_lock.assert_called_once_with(lock_token)
 
-        self.assertEqual(response.text, "❌ cuowu：dapanfupanqidongshibai，yishifangyunxingsuo；qingshaohouzhongshi")
+        self.assertEqual(
+            response.text,
+            "Error: 시장 리뷰 시작에 실패했습니다. 실행 잠금을 해제했으니 잠시 후 다시 시도하세요.",
+        )
 
 
 

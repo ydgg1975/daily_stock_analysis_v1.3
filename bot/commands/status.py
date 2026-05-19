@@ -36,7 +36,7 @@ class StatusCommand(BotCommand):
     
     @property
     def description(self) -> str:
-        return "xianshixitongzhuangtai"
+        return "시스템 상태를 표시합니다"
     
     @property
     def usage(self) -> str:
@@ -74,7 +74,7 @@ class StatusCommand(BotCommand):
         llm_model = (getattr(config, "litellm_model", "") or "").strip()
         agent_model = (getattr(config, "agent_litellm_model", "") or "").strip()
         status["ai_primary_model"] = llm_model
-        status["ai_agent_model"] = agent_model or ("jichengzhumodel" if llm_model else "")
+        status["ai_agent_model"] = agent_model or ("주 모델 상속" if llm_model else "")
         status["ai_channels"] = [
             str(channel.get("name") or "").strip()
             for channel in llm_channels
@@ -149,54 +149,54 @@ class StatusCommand(BotCommand):
             return "ON" if enabled else "OFF"
         
         lines = [
-            "?뱤 **stockanalysiszhushou - xitongzhuangtai**",
+            "**주식 분석 도우미 - 시스템 상태**",
             "",
-            f"?븧 shijian: {status['timestamp']}",
-            f"?릫 Python: {status['python_version']}",
-            f"?뮲 pingtai: {status['platform']}",
+            f"시간: {status['timestamp']}",
+            f"Python: {status['python_version']}",
+            f"플랫폼: {status['platform']}",
             "",
             "---",
             "",
-            "**?뱢 watchlistguconfig**",
-            f"??stockshuliang: {status['stock_count']} zhi",
+            "**관심 종목 설정**",
+            f"종목 수: {status['stock_count']}개",
         ]
         
         if status['stock_list']:
             stocks_preview = ", ".join(status['stock_list'])
             if status['stock_count'] > 5:
-                stocks_preview += f" ... deng {status['stock_count']} zhi"
-            lines.append(f"??stockliebiao: {stocks_preview}")
+                stocks_preview += f" ... 총 {status['stock_count']}개"
+            lines.append(f"종목 목록: {stocks_preview}")
         
         lines.extend([
             "",
-            "**?쨼 AI analysisfuwu**",
-            f"??zhumodel: {status['ai_primary_model'] or 'weiconfig'}",
-            f"??Agent model: {status['ai_agent_model'] or 'weiconfig'}",
-            f"??LLM qudao: {', '.join(status['ai_channels']) if status['ai_channels'] else 'weiconfig'}",
-            f"??LiteLLM YAML: {icon(status['ai_yaml'])}",
-            "??Legacy Key: "
+            "**AI 분석 서비스**",
+            f"주 모델: {status['ai_primary_model'] or '미설정'}",
+            f"Agent 모델: {status['ai_agent_model'] or '미설정'}",
+            f"LLM 채널: {', '.join(status['ai_channels']) if status['ai_channels'] else '미설정'}",
+            f"LiteLLM YAML: {icon(status['ai_yaml'])}",
+            "Legacy Key: "
             + ", ".join(
                 f"{name}{icon(enabled)}"
                 for name, enabled in status["ai_legacy_keys"].items()
             ),
             "",
-            "**?뵇 sousuofuwu**",
-            f"??Bocha: {icon(status['search_bocha'])}",
-            f"??Tavily: {icon(status['search_tavily'])}",
-            f"??Brave: {icon(status['search_brave'])}",
-            f"??SerpAPI: {icon(status['search_serpapi'])}",
-            f"??MiniMax: {icon(status['search_minimax'])}",
-            f"??SearXNG: {icon(status['search_searxng'])}",
+            "**검색 서비스**",
+            f"Bocha: {icon(status['search_bocha'])}",
+            f"Tavily: {icon(status['search_tavily'])}",
+            f"Brave: {icon(status['search_brave'])}",
+            f"SerpAPI: {icon(status['search_serpapi'])}",
+            f"MiniMax: {icon(status['search_minimax'])}",
+            f"SearXNG: {icon(status['search_searxng'])}",
             "",
-            "**?뱼 notificationqudao**",
-            f"??qiyeweixin: {icon(status['notify_wechat'])}",
-            f"??feishu: {icon(status['notify_feishu'])}",
-            f"??Telegram: {icon(status['notify_telegram'])}",
-            f"??youjian: {icon(status['notify_email'])}",
-            f"??zidingyi Webhook: {icon(status['notify_custom'])}",
-            f"??Discord: {icon(status['notify_discord'])}",
-            f"??Slack: {icon(status['notify_slack'])}",
-            f"??PushPlus/Pushover/Serverjiang3: {icon(status['notify_push'])}",
+            "**알림 채널**",
+            f"WeChat Work: {icon(status['notify_wechat'])}",
+            f"Feishu: {icon(status['notify_feishu'])}",
+            f"Telegram: {icon(status['notify_telegram'])}",
+            f"Email: {icon(status['notify_email'])}",
+            f"Custom Webhook: {icon(status['notify_custom'])}",
+            f"Discord: {icon(status['notify_discord'])}",
+            f"Slack: {icon(status['notify_slack'])}",
+            f"PushPlus/Pushover/ServerChan3: {icon(status['notify_push'])}",
         ])
         
         # AI fuwuzongtizhuangtai
@@ -204,14 +204,14 @@ class StatusCommand(BotCommand):
             lines.extend([
                 "",
                 "---",
-                "??**xitongjiuxu竊똩eyikaishianalysis竊?*",
+                "**시스템 준비 완료. 분석을 시작할 수 있습니다.**",
             ])
         else:
             lines.extend([
                 "",
                 "---",
-                "?좑툘 **AI fuwuweiconfig竊똣enxigongnengbukeyong**",
-                "qingconfig LITELLM_MODEL?갟LM_CHANNELS?갟ITELLM_CONFIG huorenyi provider API Key",
+                "**AI 서비스가 설정되지 않아 분석 기능을 사용할 수 없습니다.**",
+                "LITELLM_MODEL, LLM_CHANNELS, LITELLM_CONFIG 또는 공급자 API Key 중 하나를 설정하세요.",
             ])
         
         return "\n".join(lines)

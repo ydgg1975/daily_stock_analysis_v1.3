@@ -265,7 +265,7 @@ async def send_chat_to_notification(request: SendChatRequest):
         return {
             "success": False,
             "error": "no_channels",
-            "message": "weiconfignotificationqudao竊똰ingxianzaishezhizhongconfig",
+            "message": "설정된 알림 채널이 없습니다. 설정에서 알림 채널을 먼저 구성하세요.",
         }
     return {"success": True}
 

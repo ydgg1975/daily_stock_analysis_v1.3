@@ -68,7 +68,7 @@ class HelpCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "xianshibangzhuxinxi"
+        return "도움말을 표시합니다"
 
     
 
@@ -76,7 +76,7 @@ class HelpCommand(BotCommand):
 
     def usage(self) -> str:
 
-        return "/help [minglingming]"
+        return "/help [명령명]"
 
     
 
@@ -138,11 +138,11 @@ class HelpCommand(BotCommand):
 
         lines = [
 
-            "?뱴 **stockanalysiszhushou - minglingbangzhu**",
+            "**주식 분석 도우미 - 명령 도움말**",
 
             "",
 
-            "keyongmingling竊?",
+            "사용 가능한 명령:",
 
             "",
 
@@ -168,7 +168,7 @@ class HelpCommand(BotCommand):
 
             
 
-            lines.append(f"??{prefix}{cmd.name}{aliases_str} - {cmd.description}")
+            lines.append(f"- `{prefix}{cmd.name}`{aliases_str} - {cmd.description}")
 
             lines.append("")
 
@@ -180,23 +180,23 @@ class HelpCommand(BotCommand):
 
             "---",
 
-            f"?뮕 shuru {prefix}help <minglingming> viewxiangxiyongfa",
+            f"`{prefix}help <명령명>`을 입력하면 자세한 사용법을 볼 수 있습니다.",
 
             "",
 
-            "**shili竊?*",
+            "**예시**",
 
             "",
 
-            f"??{prefix}analyze 301023 - yifanchuandong",
+            f"- `{prefix}analyze 301023` - 종목 분석",
 
             "",
 
-            f"??{prefix}market - viewdapanfupan",
+            f"- `{prefix}market` - 시장 리뷰 확인",
 
             "",
 
-            f"??{prefix}batch - pilianganalysiswatchlistgu",
+            f"- `{prefix}batch` - 관심 종목 일괄 분석",
 
         ])
 
@@ -212,11 +212,11 @@ class HelpCommand(BotCommand):
 
         lines = [
 
-            f"?뱰 **{prefix}{command.name}** - {command.description}",
+            f"**{prefix}{command.name}** - {command.description}",
 
             "",
 
-            f"**yongfa竊?* `{command.usage}`",
+            f"**사용법** `{command.usage}`",
 
             "",
 
@@ -230,7 +230,7 @@ class HelpCommand(BotCommand):
 
             aliases = [f"`{prefix}{a}`" if a.isascii() else f"`{a}`" for a in command.aliases]
 
-            lines.append(f"**bieming竊?* {', '.join(aliases)}")
+            lines.append(f"**별칭** {', '.join(aliases)}")
 
             lines.append("")
 
@@ -240,7 +240,7 @@ class HelpCommand(BotCommand):
 
         if command.admin_only:
 
-            lines.append("?좑툘 **xuyaoguanliyuanquanxian**")
+            lines.append("**관리자 권한이 필요합니다.**")
 
             lines.append("")
 

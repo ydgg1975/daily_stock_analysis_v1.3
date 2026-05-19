@@ -49,7 +49,19 @@ def ensure_symlink() -> None:
     if not CLAUDE.exists():
         fail("CLAUDE.md is missing")
     if not CLAUDE.is_symlink():
-        fail("CLAUDE.md must be a symlink to AGENTS.md")
+        result = subprocess.run(
+            ["git", "ls-files", "-s", "--", "CLAUDE.md"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        index_entry = result.stdout.strip()
+        if not index_entry.startswith("120000 "):
+            fail("CLAUDE.md must be a symlink to AGENTS.md")
+        if CLAUDE.read_text(encoding="utf-8") != "AGENTS.md":
+            fail("CLAUDE.md symlink checkout must contain AGENTS.md")
+        return
 
     target = Path(CLAUDE.readlink())
     if target != Path("AGENTS.md"):

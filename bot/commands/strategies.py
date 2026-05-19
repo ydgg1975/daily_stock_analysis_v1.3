@@ -68,7 +68,7 @@ class StrategiesCommand(BotCommand):
 
     def description(self) -> str:
 
-        return "viewkeyongjiaoyicelve"
+        return "사용 가능한 거래 전략을 표시합니다"
 
 
 
@@ -128,7 +128,7 @@ class StrategiesCommand(BotCommand):
 
                 if not skills:
 
-                    return BotResponse.text_response("?뱥 dangqianmeiyoujihuodecelve??")
+                    return BotResponse.text_response("현재 활성화된 전략이 없습니다.")
 
 
 
@@ -146,7 +146,7 @@ class StrategiesCommand(BotCommand):
 
 
 
-            lines = ["?뱥 **jiaoyicelveliebiao**", ""]
+            lines = ["**거래 전략 목록**", ""]
 
 
 
@@ -160,7 +160,7 @@ class StrategiesCommand(BotCommand):
 
                     continue
 
-                cat_label = categories.get(cat_key, f"?뱦 {cat_key}")
+                cat_label = categories.get(cat_key, cat_key)
 
                 lines.append(f"**{cat_label}**")
 
@@ -172,9 +172,9 @@ class StrategiesCommand(BotCommand):
 
                     if s.source and s.source != "builtin":
 
-                        source_tag = " (zidingyi)"
+                        source_tag = " (사용자 정의)"
 
-                    lines.append(f"  {status} `{s.name}` ??{s.display_name}{source_tag}")
+                    lines.append(f"  {status} `{s.name}` - {s.display_name}{source_tag}")
 
                     lines.append(f"      {s.description}")
 
@@ -186,9 +186,9 @@ class StrategiesCommand(BotCommand):
 
             total_count = len(all_skills)
 
-            lines.append(f"gong {total_count} gecelve竊똹ijihuo {active_count} ge")
+            lines.append(f"총 {total_count}개 전략, 활성화 {active_count}개")
 
-            lines.append(f"\n?뮕 shiyong `/ask <stockdaima> <celveming>` zhidingcelveanalysis")
+            lines.append("\n`/ask <종목코드> <전략명>`으로 특정 전략 분석을 요청할 수 있습니다.")
 
 
 
@@ -202,6 +202,6 @@ class StrategiesCommand(BotCommand):
 
             logger.exception("Strategies error details:")
 
-            return BotResponse.text_response(f"?좑툘 huoqucelveliebiaoshibai: {str(e)}")
+            return BotResponse.text_response(f"전략 목록 조회에 실패했습니다: {str(e)}")
 
 

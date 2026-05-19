@@ -150,7 +150,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(kwargs["stock_name"], "dapanfupan")
 
-        self.assertEqual(kwargs["message"], "dapanfupanrenwuyitijiao")
+        self.assertEqual(kwargs["message"], "시장 리뷰 작업이 제출되었습니다.")
 
 
 
@@ -315,7 +315,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(response.status, "accepted")
 
-        self.assertIn("feijiaoyiri", response.message)
+        self.assertIn("휴장일", response.message)
 
         acquire.assert_not_called()
 
@@ -702,7 +702,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
                 stock_name="dapanfupan",
 
-                message="dapanfupanrenwuyitijiao",
+                message="시장 리뷰 작업이 제출되었습니다.",
 
             )
 
@@ -1939,7 +1939,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertTrue(response.send_notification)
 
-        self.assertIn("feijiaoyiri", response.message)
+        self.assertIn("휴장일", response.message)
 
 
 
@@ -1981,7 +1981,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
             ctx.exception.detail["message"],
 
-            "gupiaodaimabunengweikonghuojinbaohankongbaizifu",
+            "종목 코드는 비어 있거나 공백만 포함할 수 없습니다.",
 
         )
 
@@ -2023,7 +2023,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
 
-        self.assertEqual(ctx.exception.detail["message"], "qingshuruyouxiaodegupiaodaimahuogupiaomingcheng")
+        self.assertEqual(ctx.exception.detail["message"], "유효한 종목 코드나 종목명을 입력하세요.")
 
         resolve_mock.assert_not_called()
 
@@ -2066,7 +2066,7 @@ class AnalysisApiContractTestCase(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
 
-        self.assertEqual(ctx.exception.detail["message"], "qingshuruyouxiaodegupiaodaimahuogupiaomingcheng")
+        self.assertEqual(ctx.exception.detail["message"], "유효한 종목 코드나 종목명을 입력하세요.")
 
         queue_mock.assert_not_called()
 
@@ -3184,7 +3184,7 @@ class BatchTaskQueueContractTestCase(unittest.TestCase):
 
 
 
-        with self.assertRaisesRegex(ValueError, "gupiaodaimabunengweikonghuojinbaohankongbaizifu"):
+        with self.assertRaisesRegex(ValueError, "종목 코드는 비어 있거나 공백만 포함할 수 없습니다."):
 
             queue.submit_task("   ", report_type="detailed")
 
