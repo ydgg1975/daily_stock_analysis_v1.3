@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] 将 RSI 计算口径从 SMA 调整为 Wilder's EMA / SMMA，统一分析报告与告警阈值口径。
 - [改进] 大盘复盘将红绿灯与盘面温度合并为终端友好的盘面信号分数，移除色块进度条与重复温度行。
 - [改进] 大盘复盘近三日市场线索改为标题与来源链接列表，移除摘要片段，降低中英混排和误读风险。
+- [修复] 告警中心对 DB 持久化规则的同一数据点 `triggered` 历史做 best-effort 去重，避免重复轮询刷出语义相同的触发记录。
 
 ## [3.17.1] - 2026-05-16
 
