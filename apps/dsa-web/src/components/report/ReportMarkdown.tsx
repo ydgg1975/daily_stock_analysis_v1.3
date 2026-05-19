@@ -7,6 +7,7 @@ import { Drawer } from '../common/Drawer';
 import { Tooltip } from '../common/Tooltip';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import type { ReportLanguage } from '../../types/analysis';
+import { localizeLegacyText } from '../../utils/legacyKoreanText';
 import { markdownToPlainText } from '../../utils/markdown';
 
 interface ReportMarkdownProps {
@@ -77,7 +78,7 @@ export const ReportMarkdown: React.FC<ReportMarkdownProps> = ({
       try {
         const markdownContent = await historyApi.getMarkdown(recordId);
         if (isMounted) {
-          setContent(markdownContent);
+          setContent(localizeLegacyText(markdownContent));
         }
       } catch (err) {
         if (isMounted) {

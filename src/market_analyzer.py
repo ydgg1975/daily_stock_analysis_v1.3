@@ -285,13 +285,13 @@ class MarketAnalyzer:
 
         if self.region == "hk":
 
-            return "Hong Kong market" if review_language == "en" else "ganggumarket"
+            return "Hong Kong market" if review_language == "en" else "홍콩 시장"
 
         if review_language == "en":
 
             return "A-share market"
 
-        return "Agumarket"
+        return "A주 시장"
 
 
 
@@ -301,13 +301,13 @@ class MarketAnalyzer:
 
         if self.region == "us":
 
-            return "USD bn" if self._get_review_language() == "en" else "shiyimeiyuan"
+            return "USD bn" if self._get_review_language() == "en" else "십억 달러"
 
         if self.region == "hk":
 
-            return "HKD bn" if self._get_review_language() == "en" else "shiyigangyuan"
+            return "HKD bn" if self._get_review_language() == "en" else "십억 홍콩달러"
 
-        return "CNY 100m" if self._get_review_language() == "en" else "yi"
+        return "CNY 100m" if self._get_review_language() == "en" else "억"
 
 
 
@@ -341,7 +341,7 @@ class MarketAnalyzer:
         if color_scheme == "red_up":
 
             return "↑" if change_pct > 0 else "↓"
-        return "?윟" if change_pct > 0 else "?뵶"
+        return "↑" if change_pct > 0 else "↓"
 
 
 
@@ -355,7 +355,7 @@ class MarketAnalyzer:
 
             return f"## {date} {market_name}"
 
-        return f"## {date} dapanfupan"
+        return f"## {date} 시장 리뷰"
 
 
 
@@ -547,15 +547,15 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             mapping = {
 
-                "strong_up": "qiangshishangzhang",
+                "strong_up": "강한 상승",
 
-                "mild_up": "xiaofushangzhang",
+                "mild_up": "소폭 상승",
 
-                "mild_down": "xiaofuxiadie",
+                "mild_down": "소폭 하락",
 
-                "strong_down": "mingxianxiadie",
+                "strong_down": "뚜렷한 하락",
 
-                "range": "zhendangzhengli",
+                "range": "박스권 등락",
 
             }
 
@@ -1337,7 +1337,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             lines = [
 
-                "| zhishu | zuixin | zhangdiefu | kaipan | zuigao | zuidi | zhenfu | chengjiaoe(yi) |",
+                "| 지수 | 현재가 | 등락률 | 시가 | 고가 | 저가 | 진폭 | 거래대금(억) |",
 
                 "|------|------|--------|------|------|------|------|-----------|",
 
@@ -1393,9 +1393,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
                 lines.extend([
 
-                    "#### lingzhangbankuai Top 5",
+                    "#### 상승 주도 섹터 Top 5",
 
-                    "| paiming | bankuai | zhangdiefu |",
+                    "| 순위 | 섹터 | 등락률 |",
 
                     "|------|------|--------|",
 
@@ -1431,9 +1431,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
                 lines.extend([
 
-                    "#### lingdiebankuai Top 5",
+                    "#### 하락 섹터 Top 5",
 
-                    "| paiming | bankuai | zhangdiefu |",
+                    "| 순위 | 섹터 | 등락률 |",
 
                     "|------|------|--------|",
 
@@ -1475,9 +1475,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             lines = [
 
-                "#### jinsanricuihuaxiansuo",
+                "#### 최근 3일 뉴스 촉매",
 
-                "| xuhao | shijian/biaoti | zhaiyao/xiansuopianduan | laiyuan |",
+                "| 번호 | 시간/제목 | 요약/단서 | 출처 |",
 
                 "|------|-----------|----------------|------|",
 
@@ -2189,9 +2189,9 @@ Market conditions can change quickly. The data above is for reference only and d
 
 
 
-        market_labels = {"cn": "Agu", "us": "meigu", "hk": "ganggu"}
+        market_labels = {"cn": "A주", "us": "미국", "hk": "홍콩"}
 
-        market_label = market_labels.get(self.region, "Agu")
+        market_label = market_labels.get(self.region, "시장")
 
         dashboard_block = self._build_stats_block(overview)
 

@@ -860,6 +860,8 @@ class SystemConfigService:
 
         ]
 
+        checks = [self._localize_setup_check(check) for check in checks]
+
         return {
 
             "is_complete": not required_missing,
@@ -873,6 +875,60 @@ class SystemConfigService:
             "checks": checks,
 
         }
+
+    @staticmethod
+    def _localize_setup_check(check: Dict[str, Any]) -> Dict[str, Any]:
+        """Return Korean first-run setup labels for user-visible API responses."""
+        localized = dict(check)
+        key = str(localized.get("key") or "")
+        status = str(localized.get("status") or "")
+
+        title_by_key = {
+            "llm_primary": "LLM 주 채널",
+            "llm_agent": "Agent 채널",
+            "stock_list": "관심 종목",
+            "notification": "알림 채널",
+            "storage": "데이터베이스 / 로컬 저장소",
+        }
+        localized["title"] = title_by_key.get(key, str(localized.get("title") or "설정 항목"))
+
+        if key == "llm_primary":
+            if status == "configured":
+                localized["message"] = "LLM 주 채널이 설정되어 있습니다."
+                localized["next_step"] = None
+            else:
+                localized["message"] = "주 모델 설정을 아직 찾지 못했습니다."
+                localized["next_step"] = "LITELLM_MODEL, LLM_CHANNELS, LITELLM_CONFIG 또는 기존 제공자 API Key를 설정하세요."
+        elif key == "llm_agent":
+            if status in {"configured", "inherited"}:
+                localized["message"] = "Agent 채널을 사용할 수 있습니다."
+                localized["next_step"] = None
+            else:
+                localized["message"] = "Agent 전용 모델이 없고 LLM 주 채널도 아직 사용할 수 없습니다."
+                localized["next_step"] = "먼저 LLM 주 채널 설정을 완료하세요."
+        elif key == "stock_list":
+            if status == "configured":
+                localized["message"] = "관심 종목이 설정되어 있습니다."
+                localized["next_step"] = None
+            else:
+                localized["message"] = "현재 STOCK_LIST가 비어 있습니다."
+                localized["next_step"] = "첫 실행을 위해 최소 1개 종목을 추가하세요. 예: KR005930, AAPL"
+        elif key == "notification":
+            if status == "configured":
+                localized["message"] = "최소 1개 알림 채널 설정을 확인했습니다."
+                localized["next_step"] = None
+            else:
+                localized["message"] = "알림은 선택 사항이며, 설정하지 않아도 첫 실행에는 영향이 없습니다."
+                localized["next_step"] = "푸시가 필요하면 나중에 알림 채널을 설정하세요."
+        elif key == "storage":
+            if status == "configured":
+                localized["message"] = "데이터베이스 경로를 사용할 수 있습니다."
+                localized["next_step"] = None
+            else:
+                localized["message"] = "데이터베이스 경로 또는 폴더 권한을 확인해야 합니다."
+                localized["next_step"] = "DATABASE_PATH 또는 상위 폴더 권한을 확인하세요."
+
+        return localized
 
 
 

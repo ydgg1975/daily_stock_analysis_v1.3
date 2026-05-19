@@ -6,6 +6,7 @@ import type {
 } from '../../types/analysis';
 import { Badge, Card, ScoreGauge } from '../common';
 import { formatDateTime } from '../../utils/format';
+import { localizeLegacyText } from '../../utils/legacyKoreanText';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
 interface ReportOverviewProps {
@@ -79,6 +80,10 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
 }) => {
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
+  const displayStockName = localizeLegacyText(meta.stockName || meta.stockCode);
+  const displaySummary = localizeLegacyText(summary.analysisSummary);
+  const displayAdvice = localizeLegacyText(summary.operationAdvice);
+  const displayTrend = localizeLegacyText(summary.trendPrediction);
   const relatedBoards = (Array.isArray(details?.belongBoards) ? details.belongBoards : [])
     .filter((board) => normalizeBoardName(board?.name).length > 0)
     .slice(0, 3);
@@ -129,7 +134,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <h2 className="text-[28px] font-bold leading-tight text-foreground">
-                    {meta.stockName || meta.stockCode}
+                    {displayStockName}
                   </h2>
                   {meta.currentPrice != null && (
                     <div className="flex items-baseline gap-2">
@@ -159,7 +164,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
             <div className="home-divider border-t pt-5">
               <span className="label-uppercase">{text.keyInsights}</span>
               <p className="mt-2 max-w-[62ch] whitespace-pre-wrap text-left text-[15px] leading-7 text-foreground">
-                {summary.analysisSummary || text.noAnalysisSummary}
+                {displaySummary || text.noAnalysisSummary}
               </p>
             </div>
           </Card>
@@ -181,7 +186,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 <div className="space-y-1.5">
                   <h4 className="home-insight-title text-[11px] font-medium uppercase tracking-[0.16em]">{text.actionAdvice}</h4>
                   <p className="home-insight-body text-sm leading-6">
-                    {summary.operationAdvice || text.noAdvice}
+                    {displayAdvice || text.noAdvice}
                   </p>
                 </div>
               </div>
@@ -203,7 +208,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                 <div className="space-y-1.5">
                   <h4 className="home-insight-title text-[11px] font-medium uppercase tracking-[0.16em]">{text.trendPrediction}</h4>
                   <p className="home-insight-body text-sm leading-6">
-                    {summary.trendPrediction || text.noPrediction}
+                    {displayTrend || text.noPrediction}
                   </p>
                 </div>
               </div>

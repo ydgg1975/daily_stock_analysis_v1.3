@@ -33,20 +33,20 @@ def _get_market_review_text(language: str) -> dict[str, str]:
     normalized = normalize_report_language(language)
     if normalized == "en":
         return {
-            "root_title": "# ?렞 Market Review",
-            "push_title": "?렞 Market Review",
+            "root_title": "# Market Review",
+            "push_title": "Market Review",
             "cn_title": "# A-share Market Recap",
             "us_title": "# US Market Recap",
             "hk_title": "# HK Market Recap",
             "separator": "> Next market recap follows",
         }
     return {
-        "root_title": "# ?렞 dapanfupan",
-        "push_title": "?렞 dapanfupan",
-        "cn_title": "# Agudapanfupan",
-        "us_title": "# meigudapanfupan",
-        "hk_title": "# ganggudapanfupan",
-        "separator": "> yixiaweixiayimarketdapanfupan",
+        "root_title": "# 시장 리뷰",
+        "push_title": "시장 리뷰",
+        "cn_title": "# A주 시장 리뷰",
+        "us_title": "# 미국 시장 리뷰",
+        "hk_title": "# 홍콩 시장 리뷰",
+        "separator": "> 다음 시장 리뷰입니다.",
     }
 
 
@@ -82,7 +82,7 @@ def run_market_review(
         if override_region is not None
         else (getattr(config, 'market_review_region', 'cn') or 'cn')
     )
-    _ALL_MARKETS = [('cn', 'cn_title', 'A gu'), ('hk', 'hk_title', 'ganggu'), ('us', 'us_title', 'meigu')]
+    _ALL_MARKETS = [('cn', 'cn_title', 'A주'), ('hk', 'hk_title', '홍콩'), ('us', 'us_title', '미국')]
     _VALID_SINGLES = {'cn', 'us', 'hk'}
 
     # Determine which markets to run.
@@ -182,9 +182,9 @@ def _persist_market_review_history(
             operation_advice = "View review"
             trend_prediction = "Market review"
         else:
-            stock_name = "dapanfupan"
-            operation_advice = "viewfupan"
-            trend_prediction = "dapanfupan"
+            stock_name = "시장 리뷰"
+            operation_advice = "리뷰 확인"
+            trend_prediction = "시장 리뷰"
 
         result = AnalysisResult(
             code=MARKET_REVIEW_HISTORY_CODE,

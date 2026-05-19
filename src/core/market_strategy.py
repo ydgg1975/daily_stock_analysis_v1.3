@@ -96,7 +96,7 @@ class MarketStrategyBlueprint:
 
         dims = "\n".join([f"- **{dim.name}**: {dim.objective}" for dim in self.dimensions])
 
-        section_title = "### VI. Strategy Framework" if self.region == "us" else "### liu?갷elvekuangjia"
+        section_title = "### VI. Strategy Framework" if self.region == "us" else "### 6. 전략 프레임워크"
 
         return f"{section_title}\n{dims}\n"
 
