@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """Market strategy blueprints for CN/HK/US daily market recap."""
 

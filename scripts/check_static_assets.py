@@ -7,7 +7,7 @@ Validates that ``index.html`` only references ``/assets/*.js`` and
 ``/assets/*.css`` files that actually exist on disk. A mismatch here is the
 most common cause of the "Preparing backend..." / blank-page bug reported in
 GitHub issues #1064, #1065, #1050: vite re-builds with a new content hash,
-but the packaging step picks up a stale ``static/`` directory or copies the
+but the packaging (pinyin removed) picks up a stale ``static/`` directory or copies the
 files out of sync, so the browser receives a 404 (often as JSON) for the
 main bundle and refuses to execute it.
 
@@ -16,6 +16,21 @@ Usage:
 
 Exits 0 when consistent, non-zero with a human-readable message otherwise.
 """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 from __future__ import annotations
 

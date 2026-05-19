@@ -1,16 +1,16 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
 ===================================
 
-pilianganalysismingling
+일괄 분석mingling
 
 ===================================
 
 
 
-pilianganalysiswatchlistguliebiaozhongdesuoyoustock??
+일괄 분석관심 종목 목록zhongde모든 종목??
 """
 
 
@@ -40,20 +40,8 @@ logger = logging.getLogger(__name__)
 class BatchCommand(BotCommand):
 
     """
-
-    pilianganalysismingling
-
-    
-
-    pilianganalysisconfigzhongdewatchlistguliebiao竊똲hengchenghuizongbaogao??
-    
-
-    yongfa竊?
-        /batch      - analysissuoyouwatchlistgu
-
-        /batch 3    - zhianalysisqian3zhi
-
-    """
+Daily Stock Analysis - Batch
+"""
 
     
 
@@ -101,7 +89,7 @@ class BatchCommand(BotCommand):
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
 
-        """zhixingpilianganalysismingling"""
+        """일괄 분석 명령 실행"""
 
         from src.config import get_config
 
@@ -127,7 +115,6 @@ class BatchCommand(BotCommand):
 
         
 
-        # jiexishuliangcanshu
 
         limit = None
 
@@ -147,7 +134,7 @@ class BatchCommand(BotCommand):
 
         
 
-        # xianzhianalysisshuliang
+        # 분석 수량 제한
 
         if limit:
 
@@ -155,11 +142,11 @@ class BatchCommand(BotCommand):
 
         
 
-        logger.info(f"[BatchCommand] kaishipilianganalysis {len(stock_list)} zhistock")
+        logger.info(f"[BatchCommand] 일괄 분석 시작 {len(stock_list)} 종목")
 
         
 
-        # zaihoutaixianchengzhongzhixinganalysis
+        # 백그라운드 스레드에서 분석 실행
 
         thread = threading.Thread(
 
@@ -193,7 +180,7 @@ class BatchCommand(BotCommand):
 
     def _run_batch_analysis(self, stock_list: List[str], message: BotMessage) -> None:
 
-        """houtaizhixingpilianganalysis"""
+        """백그라운드 실행 일괄 분석"""
 
         try:
 
@@ -223,7 +210,6 @@ class BatchCommand(BotCommand):
 
             
 
-            # zhixinganalysis竊늜uizidongtuisonghuizongbaogao竊?
             results = pipeline.run(
 
                 stock_codes=stock_list,
@@ -236,13 +222,13 @@ class BatchCommand(BotCommand):
 
             
 
-            logger.info(f"[BatchCommand] pilianganalysiswancheng竊똠henggong {len(results)} zhi")
+            logger.info(f"[BatchCommand] 일괄 분석wancheng竊똠henggong {len(results)} zhi")
 
             
 
         except Exception as e:
 
-            logger.error(f"[BatchCommand] pilianganalysisshibai: {e}")
+            logger.error(f"[BatchCommand] 일괄 분석shibai: {e}")
 
             logger.exception(e)
 

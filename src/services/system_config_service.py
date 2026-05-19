@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """System configuration service for `.env` based settings."""
 
@@ -2826,7 +2826,7 @@ class SystemConfigService:
 
                 (
 
-                    "xinwenchuangkouyiancelvejisuan竊?"
+                    "xinwenchuangkouyiancelvejisuan："
 
                     f"NEWS_STRATEGY_PROFILE={profile}, "
 
@@ -2858,7 +2858,7 @@ class SystemConfigService:
 
                     (
 
-                        f"MAX_WORKERS={max_workers} yisave?굍enwuduiliekongxianshihuizidongyingyong竊?"
+                        f"MAX_WORKERS={max_workers} yisave?굍enwuduiliekongxianshihuizidongyingyong："
 
                         "ruodangqiancunzaiyunxingzhongrenwu竊똨iangzaiduiliekongxianhoushengxiao??"
 
@@ -2896,7 +2896,7 @@ class SystemConfigService:
 
                     f"{', '.join(sorted(startup_only_run_keys))} yixieru .env??"
 
-                    "tashuyuqidongqidanciyunxingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavelijichufaanalysis竊?"
+                    "tashuyuqidongqidanciyunxingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavelijichufaanalysis："
 
                     "qingchongqidangqianjinchenghou竊똺aifei schedule moshixiaanxinzhishengxiao??"
 
@@ -2942,7 +2942,7 @@ class SystemConfigService:
 
                     f"SCHEDULE_TIME={schedule_time} yixieru .env??"
 
-                    "ruguodangqianjinchengyijingyi schedule moshiyunxing竊똲cheduler huizaixiayilunjianchazhongzidongchongjian daily job竊?"
+                    "ruguodangqianjinchengyijingyi schedule moshiyunxing竊똲cheduler huizaixiayilunjianchazhongzidongchongjian daily job："
 
                     "ruguodangqianjinchengweiyi schedule moshiyunxing竊똟encisavebuhuiqidong scheduler??"
 
@@ -2968,7 +2968,7 @@ class SystemConfigService:
 
                     f"{', '.join(sorted(startup_only_bind_keys))} yixieru .env??"
 
-                    "zhexieshuyuqidongqijiantingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavechongxinbangdingjiantingdizhihuoduankou竊?"
+                    "zhexieshuyuqidongqijiantingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavechongxinbangdingjiantingdizhihuoduankou："
 
                     "qingchongqidangqianjincheng?갆ocker rongqihuofuwuguanliqihoushengxiao??"
 
@@ -3064,7 +3064,7 @@ class SystemConfigService:
 
             f"Detected stale runtime model references that were cleaned: {cleaned_text}. "
 
-            "ruxuhuifu竊똰ingxianbuhuiduiyingqudaomodelliebiaohouchongxinxuanze竊?"
+            "ruxuhuifu竊똰ingxianbuhuiduiyingqudaomodelliebiaohouchongxinxuanze："
 
             "yekeyongzhuomianduandaochubeifenhuoshoudong .env huanyuanzhiqiande LLM_* / "
 
@@ -5296,7 +5296,7 @@ class SystemConfigService:
 
                 "storage",
 
-                "shujuku / bendicunchu",
+                "数据库 / bendicunchu",
 
                 "system",
 
@@ -5304,7 +5304,7 @@ class SystemConfigService:
 
                 "needs_action",
 
-                f"shujukulujingfumulubukeyong: {parent}",
+                f"数据库lujingfumulubukeyong: {parent}",
 
                 "qingjiancha DATABASE_PATH huoshangjimuluquanxian??",
 
@@ -5314,17 +5314,17 @@ class SystemConfigService:
 
         if os.access(probe, os.W_OK):
 
-            detail = f"shujukulujingkeyong: {db_path}"
+            detail = f"数据库lujingkeyong: {db_path}"
 
             if not parent.exists():
 
-                detail = f"shujukushangjimulukechuangjian: {parent}"
+                detail = f"数据库shangjimulukechuangjian: {parent}"
 
             return self._setup_check(
 
                 "storage",
 
-                "shujuku / bendicunchu",
+                "数据库 / bendicunchu",
 
                 "system",
 
@@ -5342,7 +5342,7 @@ class SystemConfigService:
 
             "storage",
 
-            "shujuku / bendicunchu",
+            "数据库 / bendicunchu",
 
             "system",
 
@@ -5350,7 +5350,7 @@ class SystemConfigService:
 
             "needs_action",
 
-            f"shujukulujingshangjimulubukexie: {probe}",
+            f"数据库lujingshangjimulubukexie: {probe}",
 
             "qingdiaozheng DATABASE_PATH huomuluquanxian??",
 
@@ -5790,15 +5790,15 @@ class SystemConfigService:
 
         model_candidates = [
 
-            re.search(r"model\s+not\s+found\s*[:竊??\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"model\s+not\s+found\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
             re.search(r"model\s*[`\"']?\s*([a-z0-9._/-]{2,})\s*[`\"']?\s+does\s+not\s+exist", lowered),
 
-            re.search(r"model\s+does\s+not\s+exist\s*[:竊??\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"model\s+does\s+not\s+exist\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
-            re.search(r"unknown\s+model\s*[:竊??\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"unknown\s+model\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
-            re.search(r"no\s+such\s+model\s*[:竊??\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"no\s+such\s+model\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
         ]
 
@@ -6420,7 +6420,7 @@ class SystemConfigService:
 
                     "message": (
 
-                        "jinconfig FEISHU_APP_ID / FEISHU_APP_SECRET buhuikaiqifeishuqun Webhook tuisong竊?"
+                        "jinconfig FEISHU_APP_ID / FEISHU_APP_SECRET buhuikaiqifeishuqun Webhook tuisong："
 
                         "ruxunotificationtuisongqingtianxie FEISHU_WEBHOOK_URL竊똱uoyaoshiyongyingyongjiqirenqingtongshikaiqi "
 

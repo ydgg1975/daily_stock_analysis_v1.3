@@ -1,23 +1,32 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
-
+===================================
+설정 관리 모듈
 ===================================
 
-Aguwatchlistguzhinenganalysisxitong - configguanlimokuai
-
-===================================
-
-
-
-zhize竊?
-1. shiyongdanlimoshiguanliquanjuconfig
-
-2. cong .env wenjianjiazaiminganconfig
-
-3. tigongleixinganquandeconfigfangwenjiekou
-
+설계 패턴: 싱글턴
+- 한 번만 초기화되며 전역에서 공유
+- .env 파일에서 민감 설정을 안전하게 로드
+- 타입 안전한 설정 인터페이스 제공
 """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1030,13 +1039,26 @@ class Config:
     
 
     shejishuoming竊?
-    - shiyong dataclass jianhuaconfigshuxingdingyi
+    - 사용 dataclass jianhuaconfigshuxingdingyi
 
-    - suoyouconfigxiangconghuanjingbianliangduqu竊똺hichimorenzhi
+    - suoyouconfigxiangcong환경 변수duqu竊똺hichimorenzhi
 
     - leifangfa get_instance() shixiandanlifangwen
 
     """
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     
 
@@ -1827,11 +1849,24 @@ class Config:
         danlimoshiquebao竊?
         1. quanjuzhiyouyigeconfigshili
 
-        2. configzhiconghuanjingbianliangjiazaiyici
+        2. configzhicong환경 변수jiazaiyici
 
         3. suoyoumokuaigongxiangxiangtongconfig
 
         """
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         if cls._instance is None:
 
@@ -1852,13 +1887,26 @@ class Config:
         
 
         jiazaiyouxianji竊?
-        1. daduoshuconfigbaochixitonghuanjingbianliangyouxian
+        1. daduoshuconfigbaochixitong환경 변수우선
 
-        2. WebUI kexiedeyunxingqiguanjianjianyouxianfuyongchijiuhua `.env`竊똡anbaoliuqidongshixianshijinchenghuanjingbianliangde override
+        2. WebUI kexiedeyunxingqiguanjianjianyouxianfuyongchijiuhua `.env`竊똡anbaoliuqidongshixianshijincheng환경 변수의 override
 
         3. daimazhongdemorenzhi
 
         """
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         cls._capture_bootstrap_runtime_env_overrides()
 
@@ -4353,16 +4401,27 @@ class Config:
 
         """
 
-        reduqu STOCK_LIST huanjingbianliangbinggengxinconfigzhongdewatchlistguliebiao
+        reduqu STOCK_LIST 환경 변수binggengxinconfigzhongdewatchlistguliebiao
 
         
 
         zhichiliangzhongconfigfangshi竊?
         1. .env wenjian竊늒endikaifa?갺ingshirenwumoshi竊?- xiugaihouxiacizhixingzidongshengxiao
 
-        2. xitonghuanjingbianliang竊뉷itHub Actions?갆ocker竊?- qidongshiguding竊똹unxingzhongbubian
+        2. xitong환경 변수竊뉷itHub Actions?갆ocker竊?- qidongshiguding竊똹unxingzhongbubian
 
         """
+
+
+
+
+
+
+
+
+
+
+
 
         # youxiancong .env wenjianduquzuixinconfig竊똺heyangjishizairongqihuanjingzhongxiugaile .env wenjian竊?
         # yenenghuoqudaozuixindestockliebiaoconfig
@@ -5132,12 +5191,19 @@ class Config:
 
         """
 
-        huoqu SQLAlchemy shujukulianjie URL
+        조회 SQLAlchemy shujukulianjie URL
 
         
 
         zidongchuangjianshujukumulu竊늭uguobucunzai竊?
         """
+
+
+
+
+
+
+
 
         db_path = Path(self.database_path)
 

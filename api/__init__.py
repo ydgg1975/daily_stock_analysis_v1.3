@@ -1,12 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-===================================
-API mokuaichushihua
-===================================
-
-zhize：
-1. daochu API mokuaidegonggongjiekou
-2. tongyibanbenguanli
-"""
-
-__version__ = "1.0.0"
+# -*- coding: utf-8 -*-
+"""
+Daily Stock Analysis -   Init  
+"""
+

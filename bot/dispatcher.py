@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
@@ -46,26 +46,16 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
 
     """
-
-    jiandandepinlvxianzhiqi
-
-
-
-    jiyuhuadongchuangkousuanfa竊똸ianzhimeigeyonghudeqingqiupinlv??
-    """
+Daily Stock Analysis - Dispatcher
+"""
 
 
 
     def __init__(self, max_requests: int = 10, window_seconds: int = 60):
 
         """
-
-        Args:
-
-            max_requests: chuangkouneizuidaqingqiushu
-
-            window_seconds: chuangkoushijian竊늤iao竊?
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self.max_requests = max_requests
 
@@ -131,7 +121,9 @@ class RateLimiter:
 
     def get_remaining(self, user_id: str) -> int:
 
-        """huoqushengyukeyongqingqiushu"""
+        """
+Daily Stock Analysis - Dispatcher
+"""
 
         now = time.time()
 
@@ -160,34 +152,8 @@ class RateLimiter:
 class CommandDispatcher:
 
     """
-
-    minglingfenfaqi
-
-
-
-    zhize竊?
-    1. zhuceheguanliminglingchuliqi
-
-    2. jiexixiaoxizhongdeminglinghecanshu
-
-    3. fenfaminglingdaoduiyingchuliqi
-
-    4. chuliweizhiminglinghecuowu
-
-
-
-    shiyongshili竊?
-        dispatcher = CommandDispatcher()
-
-        dispatcher.register(AnalyzeCommand())
-
-        dispatcher.register(HelpCommand())
-
-
-
-        response = dispatcher.dispatch(message)
-
-    """
+Daily Stock Analysis - Dispatcher
+"""
 
 
 
@@ -206,17 +172,8 @@ class CommandDispatcher:
     ):
 
         """
-
-        Args:
-
-            command_prefix: minglingqianzhui竊똫oren "/"
-
-            rate_limit_requests: pinlvxianzhi竊쉉huangkouneizuidaqingqiushu
-
-            rate_limit_window: pinlvxianzhi竊쉉huangkoushijian竊늤iao竊?
-            admin_users: guanliyuanyonghu ID liebiao
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self.command_prefix = command_prefix
 
@@ -232,7 +189,6 @@ class CommandDispatcher:
 
 
 
-        # huidiaohanshu竊쉎uoqubangzhuminglingdeminglingliebiao
 
         self._help_command_getter: Optional[Callable] = None
 
@@ -241,16 +197,8 @@ class CommandDispatcher:
     def register(self, command: BotCommand) -> None:
 
         """
-
-        zhucemingling
-
-
-
-        Args:
-
-            command: minglingshili
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         name = command.name.lower()
 
@@ -287,15 +235,8 @@ class CommandDispatcher:
     def register_class(self, command_class: Type[BotCommand]) -> None:
 
         """
-
-        zhuceminglinglei竊늷idongshilihua竊?
-
-
-        Args:
-
-            command_class: minglinglei
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self.register(command_class())
 
@@ -304,22 +245,8 @@ class CommandDispatcher:
     def unregister(self, name: str) -> bool:
 
         """
-
-        zhuxiaomingling
-
-
-
-        Args:
-
-            name: minglingmingcheng
-
-
-
-        Returns:
-
-            shifouchenggongzhuxiao
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         name = name.lower()
 
@@ -352,25 +279,8 @@ class CommandDispatcher:
     def get_command(self, name: str) -> Optional[BotCommand]:
 
         """
-
-        huoqumingling
-
-
-
-        zhichiminglingminghebiemingchaxun??
-
-
-        Args:
-
-            name: minglingminghuobieming
-
-
-
-        Returns:
-
-            minglingshili竊똦uo None
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         name = name.lower()
 
@@ -432,7 +342,9 @@ class CommandDispatcher:
 
     def is_admin(self, user_id: str) -> bool:
 
-        """jianchayonghushifoushiguanliyuan"""
+        """
+Daily Stock Analysis - Dispatcher
+"""
 
         return user_id in self.admin_users
 
@@ -440,7 +352,9 @@ class CommandDispatcher:
 
     def add_admin(self, user_id: str) -> None:
 
-        """addguanliyuan"""
+        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self.admin_users.add(user_id)
 
@@ -448,7 +362,9 @@ class CommandDispatcher:
 
     def remove_admin(self, user_id: str) -> None:
 
-        """yichuguanliyuan"""
+        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self.admin_users.discard(user_id)
 
@@ -628,22 +544,8 @@ class CommandDispatcher:
     async def dispatch_async(self, message: BotMessage) -> BotResponse:
 
         """
-
-        yibufenfaxiaoxidaoduiyingmingling
-
-
-
-        Args:
-
-            message: xiaoxiduixiang
-
-
-
-        Returns:
-
-            xiangyingduixiang
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         cmd_name, args, command, early_response = self._prepare_dispatch(message)
 
@@ -675,7 +577,6 @@ class CommandDispatcher:
 
                 )
 
-            # feiminglingxiaoxi竊똟uchuli
 
             return BotResponse.text_response("")
 
@@ -710,19 +611,8 @@ class CommandDispatcher:
     def set_help_command_getter(self, getter: Callable) -> None:
 
         """
-
-        shezhibangzhuminglingdeminglingliebiaohuoquqi
-
-
-
-        yongyurang HelpCommand huoquminglingliebiao??
-
-
-        Args:
-
-            getter: huidiaohanshu竊똣anhuiminglingliebiao
-
-        """
+Daily Stock Analysis - Dispatcher
+"""
 
         self._help_command_getter = getter
 
@@ -1442,7 +1332,6 @@ User: "analyze TSLA and NVDA using trend strategy"
 
 
 
-# quanjufenfaqishili
 
 _dispatcher: Optional[CommandDispatcher] = None
 
@@ -1453,13 +1342,8 @@ _dispatcher: Optional[CommandDispatcher] = None
 def get_dispatcher() -> CommandDispatcher:
 
     """
-
-    huoququanjufenfaqishili
-
-
-
-    shiyongdanlimoshi竊똲houcidiaoyongshizidongchushihuabingzhucesuoyoumingling??
-    """
+Daily Stock Analysis - Dispatcher
+"""
 
     global _dispatcher
 

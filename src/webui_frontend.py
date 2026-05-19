@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
@@ -230,7 +230,7 @@ def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path
 
         logger.error(
 
-            "qianduanminglingzhixingshibai竊늖xit_code=%s竊? %s",
+            "qianduanminglingzhixingshibai竊늖xit_code=%s： %s",
 
             getattr(exc, "returncode", "N/A"),
 

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """Backtest API schemas."""
 
@@ -24,9 +24,9 @@ class BacktestRunRequest(BaseModel):
 
     force: bool = Field(False, description="qiangzhichongxinjisuan")
 
-    eval_window_days: Optional[int] = Field(None, ge=1, le=120, description="pingguchuangkou竊늞iaoyirishu竊?")
+    eval_window_days: Optional[int] = Field(None, ge=1, le=120, description="pingguchuangkou竊늞iaoyirishu：")
 
-    min_age_days: Optional[int] = Field(None, ge=0, le=365, description="analysisrecordzuixiaotianling竊?=buxian竊?")
+    min_age_days: Optional[int] = Field(None, ge=0, le=365, description="analysisrecordzuixiaotianling：=buxian：")
 
     limit: int = Field(200, ge=1, le=2000, description="zuiduochulideanalysisrecordshu")
 

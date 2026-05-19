@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
@@ -824,7 +824,6 @@ class HistoryService:
 
 
 
-        # lishidoudilianluyezuofabushijianyingguolv竊똟imianjiukuzangshujuchongxinmaochu??
         cfg = get_config()
 
         window_days = resolve_news_window_days(
@@ -1269,7 +1268,6 @@ class HistoryService:
 
 
 
-        # ========== yuqingyujibenmiangailan竊늗angzaizuiqianmian竊?=========
 
         intel = dashboard.get('intelligence', {}) if dashboard else {}
 
@@ -1295,7 +1293,6 @@ class HistoryService:
 
                 report_lines.append(f"**?뱤 {labels['earnings_outlook_label']}**: {intel['earnings_outlook']}")
 
-            # fengxianjingbao竊늵ingmuxianshi竊?
             risk_alerts = intel.get('risk_alerts', [])
 
             if risk_alerts:
@@ -1392,7 +1389,6 @@ class HistoryService:
 
 
 
-        # ========== shujutoushi ==========
 
         data_persp = dashboard.get('data_perspective', {}) if dashboard else {}
 
@@ -1568,7 +1564,6 @@ class HistoryService:
 
                 ])
 
-            # cangweicelve
 
             position = battle.get('position_strategy', {})
 
@@ -1608,7 +1603,6 @@ class HistoryService:
 
 
 
-        # ========== ruguomeiyou dashboard竊똸ianshichuantonggeshi ==========
 
         if not dashboard:
 
@@ -1624,7 +1618,6 @@ class HistoryService:
 
                 ])
 
-            # fengxiantishi
 
             if result.risk_warning:
 

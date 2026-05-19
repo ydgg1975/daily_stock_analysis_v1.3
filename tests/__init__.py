@@ -1,10 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-===================================
-Aguzixuanguzhinengfenxixitong - ceshibao
-===================================
-
-zhize：
-1. tigongdanyuanceshibaojiegou
-2. tongyiceshimokuairukou
-"""
+# -*- coding: utf-8 -*-
+"""
+Daily Stock Analysis -   Init  
+"""
+

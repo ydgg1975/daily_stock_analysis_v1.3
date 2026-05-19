@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
@@ -692,7 +692,7 @@ class AskCommand(BotCommand):
 
                 else:
 
-                    errors[code] = "analysischaoshi竊늳eizai 150 miaoneiwancheng竊?"
+                    errors[code] = "analysischaoshi竊늳eizai 150 miaoneiwancheng："
 
         finally:
 
@@ -982,13 +982,13 @@ class AskCommand(BotCommand):
 
         prefixes = (
 
-            "lixiangmairudian竊?",
+            "lixiangmairudian：",
 
-            "ciyoumairudian竊?",
+            "ciyoumairudian：",
 
-            "zhisunwei竊?",
+            "zhisunwei：",
 
-            "mubiaowei竊?",
+            "mubiaowei：",
 
             "lixiangmairudian:",
 

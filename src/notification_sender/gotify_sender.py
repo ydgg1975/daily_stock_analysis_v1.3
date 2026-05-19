@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """알림 sender 설명입니다."""
 
@@ -226,7 +226,7 @@ class GotifySender:
 
         except requests.exceptions.RequestException as exc:
 
-            logger.error("send Gotify xiaoxishibai: wangluoqingqiuyichang")
+            logger.error("send Gotify xiaoxishibai: 网络请求yichang")
 
             logger.debug("Gotify qingqiuyichangleixing: %s", type(exc).__name__)
 

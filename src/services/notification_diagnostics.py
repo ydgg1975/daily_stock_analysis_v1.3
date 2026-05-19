@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """Read-only notification configuration diagnostics."""
 
@@ -950,7 +950,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                     (
 
-                        f"{route_config['env_key']} baohanweizhinotificationqudao: {', '.join(invalid_channels)}竊?"
+                        f"{route_config['env_key']} baohanweizhinotificationqudao: {', '.join(invalid_channels)}："
 
                         f"yunxuzhi: {', '.join(ROUTABLE_NOTIFICATION_CHANNELS)}??"
 
@@ -1058,7 +1058,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 (
 
-                    "NOTIFICATION_MIN_SEVERITY configwuxiao竊?"
+                    "NOTIFICATION_MIN_SEVERITY configwuxiao："
 
                     f"yunxuzhi: {', '.join(NOTIFICATION_SEVERITIES)}??"
 
@@ -1084,7 +1084,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 (
 
-                    "NOTIFICATION_DAILY_DIGEST_ENABLED dangqianweiyuliuconfig竊?"
+                    "NOTIFICATION_DAILY_DIGEST_ENABLED dangqianweiyuliuconfig："
 
                     "P4 buhuisendmeirizhaiyaohuochijiuhuazhaiyaoneirong??"
 

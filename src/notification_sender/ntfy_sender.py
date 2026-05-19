@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """알림 sender 설명입니다."""
 
@@ -234,7 +234,7 @@ class NtfySender:
 
         except requests.exceptions.RequestException as exc:
 
-            logger.error("send ntfy xiaoxishibai: wangluoqingqiuyichang")
+            logger.error("send ntfy xiaoxishibai: 网络请求yichang")
 
             logger.debug("ntfy qingqiuyichangleixing: %s", type(exc).__name__)
 

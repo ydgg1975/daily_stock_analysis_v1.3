@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 
@@ -10,14 +10,31 @@ Discord pingtaishipeiqi
 
 
 
-fuze竊?
-1. yanzheng Discord Webhook qingqiu
+fuze：
+1. yanzheng Discord Webhook (pinyin removed)
 
 2. jiexi Discord xiaoxiweitongyigeshi
 
-3. jiangxiangyingzhuanhuanwei Discord geshi
+3. jiangxiangyingzhuanhuanwei Discord (pinyin removed)
 
 """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -87,30 +104,9 @@ class DiscordPlatform(BotPlatform):
 
     def verify_request(self, headers: Dict[str, str], body: bytes) -> bool:
 
-        """yanzheng Discord Webhook qingqiuqianming
-
-        
-
-        Discord Webhook qianmingyanzheng竊?
-        1. congqingqiutouhuoqu X-Signature-Ed25519 he X-Signature-Timestamp
-
-        2. shiyonggongyaoyanzhengqianming
-
-        
-
-        Args:
-
-            headers: HTTP qingqiutou
-
-            body: qingqiutiyuanshizijie
-
-            
-
-        Returns:
-
-            qianmingshifouyouxiao
-
         """
+Daily Stock Analysis - Discord
+"""
 
         if not self._interactions_public_key:
 
@@ -136,7 +132,6 @@ class DiscordPlatform(BotPlatform):
 
 
 
-        # jiaoyan timestamp geshiyushixiaoxing竊똣angzhizhongfanggongji
 
         try:
 
@@ -162,7 +157,6 @@ class DiscordPlatform(BotPlatform):
 
 
 
-        # yunxudeshijianchuangkou竊슿? fenzhong
 
         if abs(now_ts - ts_int) > 300:
 
@@ -272,20 +266,9 @@ class DiscordPlatform(BotPlatform):
 
     def parse_message(self, data: Dict[str, Any]) -> Optional[BotMessage]:
 
-        """jiexi Discord xiaoxiweitongyigeshi
-
-        
-
-        Args:
-
-            data: jiexihoude JSON shuju
-
-            
-
-        Returns:
-
-            BotMessage duixiang竊똦uo None竊늒uxuyaochuli竊?
         """
+Daily Stock Analysis - Discord
+"""
 
         interaction_type = data.get("type")
 
@@ -377,28 +360,9 @@ class DiscordPlatform(BotPlatform):
 
     def format_response(self, response: Any, message: BotMessage) -> WebhookResponse:
 
-        """jiangtongyixiangyingzhuanhuanwei Discord geshi
-
-        
-
-        duiyu Interaction竊늯ype=2竊뎢ingqiu竊똣anhui Discord Interaction Response
-
-        callback geshi竊늯ype=4 CHANNEL_MESSAGE_WITH_SOURCE + nested data竊됥?
-        
-
-        Args:
-
-            response: tongyixiangyingduixiang
-
-            message: yuanshixiaoxiduixiang
-
-            
-
-        Returns:
-
-            WebhookResponse duixiang
-
         """
+Daily Stock Analysis - Discord
+"""
 
         content = response.text if hasattr(response, "text") else str(response)
 
@@ -422,7 +386,6 @@ class DiscordPlatform(BotPlatform):
 
 
 
-        # Interaction竊늮lash-command竊뎪uyao Interaction Response huidiaogeshi
 
         if message.raw_data.get("type") == 2:
 
@@ -598,24 +561,9 @@ class DiscordPlatform(BotPlatform):
 
     def handle_challenge(self, data: Dict[str, Any]) -> Optional[WebhookResponse]:
 
-        """chuli Discord yanzhengqingqiu
-
-        
-
-        Discord zaiconfig Webhook shihuisendyanzhengqingqiu
-
-        
-
-        Args:
-
-            data: qingqiushuju
-
-            
-
-        Returns:
-
-            yanzhengxiangying竊똦uo None竊늒ushiyanzhengqingqiu竊?
         """
+Daily Stock Analysis - Discord
+"""
 
         # Discord Webhook yanzhengqingqiuleixingshi 1
 
