@@ -78,10 +78,10 @@ def build_market_review_runtime(
     if has_configured_llm_runtime(config):
         analyzer = GeminiAnalyzer(config=config)
         if not analyzer.is_available():
-            logger.warning("AI analysisqichushihuahoubukeyong竊똰ingjiancha LLM config")
+            logger.warning("AI analysisqichushihuahoubukeyong(chinese removed)똰ingjiancha LLM config")
             analyzer = None
     else:
-        logger.warning("weijiancedao LLM modelconfig竊똨iangjinshiyongmubanshengchengbaogao")
+        logger.warning("weijiancedao LLM modelconfig(chinese removed)똨iangjinshiyongmubanshengchengbaogao")
 
     return notifier, analyzer, search_service
 

@@ -115,8 +115,8 @@ class TestReportRenderer(unittest.TestCase):
             out = render("markdown", [r], summary_only=True)
 
         self.assertIsNotNone(out)
-        self.assertIn("baogaoshengchengshijian：", out)
-        self.assertIn("fenximoxing：gemini/gemini-2.5-flash", out)
+        self.assertIn("baogaoshengchengshijian:", out)
+        self.assertIn("fenximoxing:gemini/gemini-2.5-flash", out)
         self.assertNotIn("fenximoxing: gemini/gemini-2.5-flash", out)
 
     def test_render_markdown_in_english(self) -> None:

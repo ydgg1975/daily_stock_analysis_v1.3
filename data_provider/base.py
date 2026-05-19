@@ -10,15 +10,15 @@
 
 
 
-설계 패턴：전략 패턴 (Strategy Pattern)
+설계 패턴:전략 패턴 (Strategy Pattern)
 
-- BaseFetcher: 추상 기본 클래스，통일된 인터페이스 정의
+- BaseFetcher: 추상 기본 클래스,통일된 인터페이스 정의
 
-- DataFetcherManager: 전략 관리자，자동 전환 구현
+- DataFetcherManager: 전략 관리자,자동 전환 구현
 
 
 
-차단 방지 전략：
+차단 방지 전략:
 
 1. 각 Fetcher의 내장 속도 제어 로직
 
@@ -518,7 +518,7 @@ class BaseFetcher(ABC):
 
     
 
-    역할：
+    역할:
 
     1. 통일된 데이터 조회인터페이스
 
@@ -528,7 +528,7 @@ class BaseFetcher(ABC):
 
     
 
-    자식 클래스 구현 항목：
+    자식 클래스 구현 항목:
 
     - _fetch_raw_data(): 구체적 데이터 소스에서 원시 데이터 조회
 
@@ -578,11 +578,11 @@ class BaseFetcher(ABC):
 
         Args:
 
-            stock_code: 주식 코드，ru '600519', '000001'
+            stock_code: 주식 코드,ru '600519', '000001'
 
-            start_date: 시작 날짜，포맷 'YYYY-MM-DD'
+            start_date: 시작 날짜,포맷 'YYYY-MM-DD'
 
-            end_date: 종료 날짜，포맷 'YYYY-MM-DD'
+            end_date: 종료 날짜,포맷 'YYYY-MM-DD'
 
             
 
@@ -626,7 +626,7 @@ class BaseFetcher(ABC):
 
 
 
-        다른 데이터 소스의 컬럼 이름을 통일：
+        다른 데이터 소스의 컬럼 이름을 통일:
 
         ['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']
 
@@ -656,13 +656,13 @@ class BaseFetcher(ABC):
 
         Args:
 
-            region: 시장 영역，cn=Agu us=미국
+            region: 시장 영역,cn=Agu us=미국
 
 
 
         Returns:
 
-            List[Dict]: 지수 목록，각 요소는 딕셔너리，baohan:
+            List[Dict]: 지수 목록,각 요소는 딕셔너리,baohan:
 
                 - code: 지수 코드
 
@@ -880,7 +880,7 @@ class BaseFetcher(ABC):
 
         Args:
 
-            date: YYYYMMDD，기본값은 구체적 데이터 소스가 결정
+            date: YYYYMMDD,기본값은 구체적 데이터 소스가 결정
 
             n: 반환 건수
 
@@ -922,7 +922,7 @@ class BaseFetcher(ABC):
 
         
 
-        흐름：
+        흐름:
 
         1. 날짜 범위 계산
 
@@ -942,13 +942,13 @@ class BaseFetcher(ABC):
 
             end_date: 종료 날짜 (옵션, 기본값 오늘)
 
-            days: 조회 기간（~인 경우 start_date 알 수 없는dingshi사용）
+            days: 조회 기간(~인 경우 start_date 알 수 없는dingshi사용)
 
             
 
         Returns:
 
-            표준화된 DataFrame，baohanjishuzhibiao
+            표준화된 DataFrame,baohanjishuzhibiao
 
         """
 
@@ -996,7 +996,7 @@ class BaseFetcher(ABC):
 
         if start_date is None:
 
-            # morenhuoquzuijin 30 gejiaoyiri（anrilirigusuan，duoquyixie）
+            # morenhuoquzuijin 30 gejiaoyiri(anrilirigusuan,duoquyixie)
 
             from datetime import timedelta
 
@@ -1084,7 +1084,7 @@ class BaseFetcher(ABC):
 
         
 
-        처리：
+        처리:
 
         1. 날짜 컬럼 포맷 확인
 
@@ -1160,7 +1160,7 @@ class BaseFetcher(ABC):
 
         
 
-        jisuanzhibiao：
+        jisuanzhibiao:
 
         - MA5, MA10, MA20: 이동평균선
 
@@ -1194,13 +1194,13 @@ class BaseFetcher(ABC):
 
         
 
-        # liangbi：dangrichengjiaoliang / 5ripingjunchengjiaoliang
+        # liangbi:dangrichengjiaoliang / 5ripingjunchengjiaoliang
 
-        # zhuyi：cichude volume_ratio shi“rixianchengjiaoliang / qian5rijunliang(shift 1)”dexiangduibeishu，
+        # zhuyi:cichude volume_ratio shi“rixianchengjiaoliang / qian5rijunliang(shift 1)”dexiangduibeishu,
 
-        # yubufenjiaoyiruanjiankoujingde“fenshiliangbi（tongyishikeduibi）”butong，hanyigengjiejin“fangliangbeishu”。
+        # yubufenjiaoyiruanjiankoujingde“fenshiliangbi(tongyishikeduibi)”butong,hanyigengjiejin“fangliangbeishu”。
 
-        # gaixingweimuqianbaoliu（anxuqiubugailuoji）。
+        # gaixingweimuqianbaoliu(anxuqiubugailuoji)。
 
         avg_volume_5 = df['volume'].rolling(window=5, min_periods=1).mean()
 
@@ -1234,7 +1234,7 @@ class BaseFetcher(ABC):
 
         
 
-        차단 방지 전략：사람 행동 모의 무작위 지연
+        차단 방지 전략:사람 행동 모의 무작위 지연
 
         요청 사이에 불규칙적 대기 시간 추가
 
@@ -1268,17 +1268,17 @@ class DataFetcherManager:
 
     
 
-    역할：
+    역할:
 
-    1. guanliduogeshujuyuan（anyouxianjipaixu）
+    1. guanliduogeshujuyuan(anyouxianjipaixu)
 
-    2. zidongguzhang전환（Failover）
+    2. zidongguzhang전환(Failover)
 
     3. tigongtongyi의 데이터huoqujiekou
 
     
 
-    전환celve：
+    전환celve:
 
     - 고우선순위 데이터 소스 선택적 사용
 
@@ -2274,15 +2274,15 @@ class DataFetcherManager:
 
 
 
-        youxianjidongtaitiaozhengluoji：
+        youxianjidongtaitiaozhengluoji:
 
-        - ruguopeizhile TUSHARE_TOKEN：shilihua TushareFetcher，binganqineibuluojitishengyouxianji
+        - ruguopeizhile TUSHARE_TOKEN:shilihua TushareFetcher,binganqineibuluojitishengyouxianji
 
-        - ruguopeizhile Longbridge pingju：shilihua LongbridgeFetcher zuoweimeigu/ganggudoudi
+        - ruguopeizhile Longbridge pingju:shilihua LongbridgeFetcher zuoweimeigu/ganggudoudi
 
-        - weipeizhidekexuanshujuyuanbushilihua，bimianzaipilianglaqushifanfutancewuxiaoyuan
+        - weipeizhidekexuanshujuyuanbushilihua,bimianzaipilianglaqushifanfutancewuxiaoyuan
 
-        - morenyouxianji：
+        - morenyouxianji:
 
           0. EfinanceFetcher (Priority 0) - zuigaoyouxianji
 
@@ -2340,13 +2340,13 @@ class DataFetcherManager:
 
         config = get_config()
 
-        # chuangjiansuoyoushujuyuanshili（youxianjizaige Fetcher de __init__ zhongqueding）
+        # chuangjiansuoyoushujuyuanshili(youxianjizaige Fetcher de __init__ zhongqueding)
 
         efinance = EfinanceFetcher()
 
         akshare = AkshareFetcher()
 
-        pytdx = PytdxFetcher()      # tongdaxinshujuyuan（kepei PYTDX_HOST/PYTDX_PORT）
+        pytdx = PytdxFetcher()      # tongdaxinshujuyuan(kepei PYTDX_HOST/PYTDX_PORT)
 
         baostock = BaostockFetcher()
 
@@ -2380,7 +2380,7 @@ class DataFetcherManager:
 
         if has_longbridge_creds:
 
-            optional_fetchers.append(LongbridgeFetcher())  # zhangqiao（meigu/ganggudoudi，lanjiazai）
+            optional_fetchers.append(LongbridgeFetcher())  # zhangqiao(meigu/ganggudoudi,lanjiazai)
 
         else:
 
@@ -2440,7 +2440,7 @@ class DataFetcherManager:
 
 
 
-            # anyouxianjipaixu（Tushare ruguopeizhile Token qiechushihuachenggong，youxianjiwei 0）
+            # anyouxianjipaixu(Tushare ruguopeizhile Token qiechushihuachenggong,youxianjiwei 0)
 
             self._fetchers.sort(key=lambda f: f.priority)
 
@@ -2452,7 +2452,7 @@ class DataFetcherManager:
 
         priority_info = ", ".join([f"{f.name}(P{f.priority})" for f in self._get_fetchers_snapshot()])
 
-        logger.info(f"yichushihua {len(self._fetchers)} geshujuyuan（anyouxianji）: {priority_info}")
+        logger.info(f"yichushihua {len(self._fetchers)} geshujuyuan(anyouxianji): {priority_info}")
 
     
 
@@ -2488,11 +2488,11 @@ class DataFetcherManager:
 
         """
 
-        조회일분 데이터（자동전환데이터 소스）
+        조회일분 데이터(자동전환데이터 소스)
 
         
 
-        guzhang전환celve：
+        guzhang전환celve:
 
         1. meiguzhishu/meigugupiaozhijieluyoudao YfinanceFetcher
 
@@ -2590,13 +2590,13 @@ class DataFetcherManager:
 
 
 
-        # kuaisulujing：meigushiyongzhuanyongshujuyuanluyou；gangguxianguolvbuzhichiganggurixiandeshujuyuan
+        # kuaisulujing:meigushiyongzhuanyongshujuyuanluyou;gangguxianguolvbuzhichiganggurixiandeshujuyuan
 
         #   - peizhizhangqiaopingjuhou: Longbridge weishouxuan, YFinance/AkShare doudi
 
-        #   - weipeizhizhangqiao:     YFinance weishouxuan（meigu）, tongyong fetcher xunhuan（ganggu）
+        #   - weipeizhizhangqiao:     YFinance weishouxuan(meigu), tongyong fetcher xunhuan(ganggu)
 
-        #   - meiguzhishu:       shizhong YFinance weishouxuan（Longbridge butigongzhishuKxian）
+        #   - meiguzhishu:       shizhong YFinance weishouxuan(Longbridge butigongzhishuKxian)
 
         is_us_index = is_us_index_code(stock_code)
 
@@ -2626,7 +2626,7 @@ class DataFetcherManager:
 
 
 
-        # meigu（hanmeiguzhishu）shiyongzhuanyongluyou；gangguzouxiafangtongyongshujuyuanxunhuan
+        # meigu(hanmeiguzhishu)shiyongzhuanyongluyou;gangguzouxiafangtongyongshujuyuanxunhuan
 
         # Failover chain: Finnhub(P2) -> AlphaVantage(P3) -> Yfinance(P4) -> Longbridge(P5)
 
@@ -2638,7 +2638,7 @@ class DataFetcherManager:
 
             if is_us_index:
 
-                # zhishushizhong YFinance shouxuan（Longbridge butigongzhishuKxian）
+                # zhishushizhong YFinance shouxuan(Longbridge butigongzhishuKxian)
 
                 source_order = ["YfinanceFetcher", "FinnhubFetcher"]
 
@@ -2828,25 +2828,25 @@ class DataFetcherManager:
 
         """
 
-        piliangyuqushishixingqingshuju（zaifenxikaishiqiandiaoyong）
+        piliangyuqushishixingqingshuju(zaifenxikaishiqiandiaoyong)
 
         
 
-        celve：
+        celve:
 
-        1. jianchayouxianjizhongshifoubaohanquanlianglaqushujuyuan（efinance/akshare_em）
+        1. jianchayouxianjizhongshifoubaohanquanlianglaqushujuyuan(efinance/akshare_em)
 
-        2. ruguobubaohan，tiaoguoyuqu（xinlang/tengxunshi~인 경우upiaochaxun，wuxuyuqu）
+        2. ruguobubaohan,tiaoguoyuqu(xinlang/tengxunshi~인 경우upiaochaxun,wuxuyuqu)
 
-        3. ruguozixuangushuliang >= 5 qie사용quanliangshujuyuan，zeyuqutianchonghuancun
+        3. ruguozixuangushuliang >= 5 qie사용quanliangshujuyuan,zeyuqutianchonghuancun
 
         
 
-        zheyangzuodehaochu：
+        zheyangzuodehaochu:
 
-        - 사용xinlang/tengxunshi：meizhigupiaodulichaxun，wuquanlianglaquwenti
+        - 사용xinlang/tengxunshi:meizhigupiaodulichaxun,wuquanlianglaquwenti
 
-        - 사용 efinance/dongcaishi：yuquyici，houxuhuancunmingzhong
+        - 사용 efinance/dongcaishi:yuquyici,houxuhuancunmingzhong
 
         
 
@@ -2858,7 +2858,7 @@ class DataFetcherManager:
 
         Returns:
 
-            yuqudegupiaoshuliang（0 biaoshitiaoguoyuqu）
+            yuqudegupiaoshuliang(0 biaoshitiaoguoyuqu)
 
         """
 
@@ -2910,21 +2910,21 @@ class DataFetcherManager:
 
 
 
-        # Issue #455: PREFETCH_REALTIME_QUOTES=false kejinyongyuqu，bimianquanshichanglaqu
+        # Issue #455: PREFETCH_REALTIME_QUOTES=false kejinyongyuqu,bimianquanshichanglaqu
 
         if not getattr(config, "prefetch_realtime_quotes", True):
 
-            logger.debug("[yuqu] PREFETCH_REALTIME_QUOTES=false，tiaoguopiliangyuqu")
+            logger.debug("[yuqu] PREFETCH_REALTIME_QUOTES=false,tiaoguopiliangyuqu")
 
             return 0
 
 
 
-        # ruguoshishixingqingbeijinyong，tiaoguoyuqu
+        # ruguoshishixingqingbeijinyong,tiaoguoyuqu
 
         if not config.enable_realtime_quote:
 
-            logger.debug("[yuqu] shishixingqinggongnengyijinyong，tiaoguoyuqu")
+            logger.debug("[yuqu] shishixingqinggongnengyijinyong,tiaoguoyuqu")
 
             return 0
 
@@ -2932,9 +2932,9 @@ class DataFetcherManager:
 
         # jianchayouxianjizhongshifoubaohanquanlianglaqushujuyuan
 
-        # zhuyi：xinzengquanliangjiekou（ru tushare_realtime）shixutongbugengxinciliebiao
+        # zhuyi:xinzengquanliangjiekou(ru tushare_realtime)shixutongbugengxinciliebiao
 
-        # quanliangjiekoutezheng：yici API diaoyonglaququanshichang 5000+ gupiaoshuju
+        # quanliangjiekoutezheng:yici API diaoyonglaququanshichang 5000+ gupiaoshuju
 
         priority = config.realtime_source_priority.lower()
 
@@ -2942,9 +2942,9 @@ class DataFetcherManager:
 
         
 
-        # ruguoyouxianjizhongqianlianggedoubushiquanliangshujuyuan，tiaoguoyuqu
+        # ruguoyouxianjizhongqianlianggedoubushiquanliangshujuyuan,tiaoguoyuqu
 
-        # yinweixinlang/tengxunshidangupiaochaxun，buxuyaoyuqu
+        # yinweixinlang/tengxunshidangupiaochaxun,buxuyaoyuqu
 
         priority_list = [s.strip() for s in priority.split(',')]
 
@@ -2960,33 +2960,33 @@ class DataFetcherManager:
 
         
 
-        # ruguomeiyouquanliangshujuyuan，huozhequanliangshujuyuanpaizaidi 3 weizhihou，tiaoguoyuqu
+        # ruguomeiyouquanliangshujuyuan,huozhequanliangshujuyuanpaizaidi 3 weizhihou,tiaoguoyuqu
 
         if first_bulk_source_index is None or first_bulk_source_index >= 2:
 
-            logger.info(f"[yuqu] dangqianyouxianjishiyongqingliangjishujuyuan(sina/tencent)，wuxuyuqu")
+            logger.info(f"[yuqu] dangqianyouxianjishiyongqingliangjishujuyuan(sina/tencent),wuxuyuqu")
 
             return 0
 
         
 
-        # ruguogupiaoshuliangshaoyu 5 ge，bujinxingpiliangyuqu（zhugechaxungenggaoxiao）
+        # ruguogupiaoshuliangshaoyu 5 ge,bujinxingpiliangyuqu(zhugechaxungenggaoxiao)
 
         if len(stock_codes) < 5:
 
-            logger.info(f"[yuqu] gupiaoshuliang {len(stock_codes)} < 5，tiaoguopiliangyuqu")
+            logger.info(f"[yuqu] gupiaoshuliang {len(stock_codes)} < 5,tiaoguopiliangyuqu")
 
             return 0
 
         
 
-        logger.info(f"[yuqu] kaishipiliangyuqushishixingqing，gong {len(stock_codes)} zhigupiao...")
+        logger.info(f"[yuqu] kaishipiliangyuqushishixingqing,gong {len(stock_codes)} zhigupiao...")
 
         
 
         # changshitongguo efinance huo akshare yuqu
 
-        # zhixuyaodiaoyongyici get_realtime_quote，huancunjizhihuizidonglaququanshichangshuju
+        # zhixuyaodiaoyongyici get_realtime_quote,huancunjizhihuizidonglaququanshichangshuju
 
         try:
 
@@ -3000,13 +3000,13 @@ class DataFetcherManager:
 
             if quote:
 
-                logger.info(f"[yuqu] piliangyuquwancheng，huancunyitianchong")
+                logger.info(f"[yuqu] piliangyuquwancheng,huancunyitianchong")
 
                 return len(stock_codes)
 
             else:
 
-                logger.warning(f"[yuqu] piliangyuqushibai，jiangshiyongzhugechaxunmoshi")
+                logger.warning(f"[yuqu] piliangyuqushibai,jiangshiyongzhugechaxunmoshi")
 
                 return 0
 
@@ -3024,13 +3024,13 @@ class DataFetcherManager:
 
         """
 
-        huoqushishixingqingshuju（zidongguzhang전환）
+        huoqushishixingqingshuju(zidongguzhang전환)
 
         
 
-        guzhang전환celve（anpeizhideyouxianji）：
+        guzhang전환celve(anpeizhideyouxianji):
 
-        1. 미국：사용 YfinanceFetcher.get_realtime_quote()
+        1. 미국:사용 YfinanceFetcher.get_realtime_quote()
 
         2. EfinanceFetcher.get_realtime_quote()
 
@@ -3040,7 +3040,7 @@ class DataFetcherManager:
 
         5. AkshareFetcher.get_realtime_quote(source="tencent") - tengxun
 
-        6. 반환 None（jiangjidoudi）
+        6. 반환 None(jiangjidoudi)
 
         
 
@@ -3056,7 +3056,7 @@ class DataFetcherManager:
 
         Returns:
 
-            UnifiedRealtimeQuote duixiang，suoyoushujuyuandoushibaizefanhui None
+            UnifiedRealtimeQuote duixiang,suoyoushujuyuandoushibaizefanhui None
 
         """
 
@@ -3116,11 +3116,11 @@ class DataFetcherManager:
 
 
 
-        # ruguoshishixingqinggongnengbeijinyong，zhijiefanhui None
+        # ruguoshishixingqinggongnengbeijinyong,zhijiefanhui None
 
         if not config.enable_realtime_quote:
 
-            logger.debug(f"[shishixingqing] gongnengyijinyong，tiaoguo {stock_code}")
+            logger.debug(f"[shishixingqing] gongnengyijinyong,tiaoguo {stock_code}")
 
             return None
 
@@ -3134,7 +3134,7 @@ class DataFetcherManager:
 
         #   weipeizhizhangqiao: YFinance/AkShare shouxuan, Longbridge buchong
 
-        #   meiguzhishu:   shizhong YFinance shouxuan（Longbridge butigongzhishuhangqing）
+        #   meiguzhishu:   shizhong YFinance shouxuan(Longbridge butigongzhishuhangqing)
 
         # ----------------------------------------------------------
 
@@ -3188,7 +3188,7 @@ class DataFetcherManager:
 
             )
 
-            # meigugegu（feizhishu）changshicong Finnhub/AlphaVantage buchongqueshiziduan
+            # meigugegu(feizhishu)changshicong Finnhub/AlphaVantage buchongqueshiziduan
 
             if is_us and not is_us_index and primary_quote is not None:
 
@@ -3308,7 +3308,7 @@ class DataFetcherManager:
 
                         # Otherwise, continue to try later sources for missing fields
 
-                        logger.debug(f"[shishixingqing] {stock_code} bufenziduanqueshi，changshiconghouxushujuyuanbuchong")
+                        logger.debug(f"[shishixingqing] {stock_code} bufenziduanqueshi,changshiconghouxushujuyuanbuchong")
 
                         supplement_attempts = 0
 
@@ -3320,7 +3320,7 @@ class DataFetcherManager:
 
                         if supplement_attempts > 1:
 
-                            logger.debug(f"[shishixingqing] {stock_code} buchongchangshiyidashangxian，tingzhijixu")
+                            logger.debug(f"[shishixingqing] {stock_code} buchongchangshiyidashangxian,tingzhijixu")
 
                             break
 
@@ -3342,7 +3342,7 @@ class DataFetcherManager:
 
                 error_msg = f"[{source}] shibai: {str(e)}"
 
-                logger.info(f"[shishixingqing] {stock_code} {error_msg}，jixuchangshixiayigeshujuyuan")
+                logger.info(f"[shishixingqing] {stock_code} {error_msg},jixuchangshixiayigeshujuyuan")
 
                 errors.append(error_msg)
 
@@ -3358,7 +3358,7 @@ class DataFetcherManager:
 
 
 
-        # suoyoushujuyuandoushibai，fanhui None（jiangjidoudi）
+        # suoyoushujuyuandoushibai,fanhui None(jiangjidoudi)
 
         if log_final_failure:
 
@@ -3546,19 +3546,19 @@ class DataFetcherManager:
 
         """
 
-        huoquchoumafenbushuju（dairongduanheduoshujuyuanjiangji）
+        huoquchoumafenbushuju(dairongduanheduoshujuyuanjiangji)
 
 
 
-        celve：
+        celve:
 
         1. jianchapeizhikaiguan
 
         2. jiancharongduanqizhuangtai
 
-        3. yicichangshiduogeshujuyuan：shujuyuanyouxianjiyuhuoqudaily의 데이터youxianjiyizhi
+        3. yicichangshiduogeshujuyuan:shujuyuanyouxianjiyuhuoqudaily의 데이터youxianjiyizhi
 
-        4. suoyoushujuyuanshibaizefanhui None（jiangjidoudi）
+        4. suoyoushujuyuanshibaizefanhui None(jiangjidoudi)
 
 
 
@@ -3570,7 +3570,7 @@ class DataFetcherManager:
 
         Returns:
 
-            ChipDistribution duixiang，shibaizefanhui None
+            ChipDistribution duixiang,shibaizefanhui None
 
         """
 
@@ -3618,11 +3618,11 @@ class DataFetcherManager:
 
 
 
-        # ruguochoumafenbugongnengbeijinyong，zhijiefanhui None
+        # ruguochoumafenbugongnengbeijinyong,zhijiefanhui None
 
         if not config.enable_chip_distribution:
 
-            logger.debug(f"[choumafenbu] gongnengyijinyong，tiaoguo {stock_code}")
+            logger.debug(f"[choumafenbu] gongnengyijinyong,tiaoguo {stock_code}")
 
             return None
 
@@ -3646,7 +3646,7 @@ class DataFetcherManager:
 
             fetcher_name = fetcher.name
 
-            # dongtaishengchengrongduanqide key，liru "TushareFetcher" -> "tushare_chip"
+            # dongtaishengchengrongduanqide key,liru "TushareFetcher" -> "tushare_chip"
 
             source_key = f"{fetcher_name.replace('Fetcher', '').lower()}_chip"
 
@@ -3656,7 +3656,7 @@ class DataFetcherManager:
 
             if not circuit_breaker.is_available(source_key):
 
-                logger.debug(f"[rongduan] {fetcher_name} choumajiekouchuyurongduanzhuangtai，changshixiayige")
+                logger.debug(f"[rongduan] {fetcher_name} choumajiekouchuyurongduanzhuangtai,changshixiayige")
 
                 continue
 
@@ -3676,7 +3676,7 @@ class DataFetcherManager:
 
                 else:
 
-                    # kongjieguo：shifang HALF_OPEN tanceminge，bimiankasi
+                    # kongjieguo:shifang HALF_OPEN tanceminge,bimiankasi
 
                     circuit_breaker.record_inconclusive(source_key)
 
@@ -3700,13 +3700,13 @@ class DataFetcherManager:
 
         """
 
-        huoqugupiaozhongwenmingcheng（자동전환데이터 소스）
+        huoqugupiaozhongwenmingcheng(자동전환데이터 소스)
 
         
 
-        changshicongduogeshujuyuanhuoqugupiaomingcheng：
+        changshicongduogeshujuyuanhuoqugupiaomingcheng:
 
-        1. xiancongneicunhuancunzhonghuoqu（ruguoyou）
+        1. xiancongneicunhuancunzhonghuoqu(ruguoyou)
 
         2. zaichangshibendiweihuyingsheyu stocks.index.json suoyin
 
@@ -3730,7 +3730,7 @@ class DataFetcherManager:
 
         Returns:
 
-            gupiaozhongwenmingcheng，suoyoushujuyuandoushibaizefanhui None
+            gupiaozhongwenmingcheng,suoyoushujuyuandoushibaizefanhui None
 
         """
 
@@ -3802,7 +3802,7 @@ class DataFetcherManager:
 
 
 
-        # 2. changshicongshishixingqingzhonghuoqu（zuikuai，keanxujinyong）
+        # 2. changshicongshishixingqingzhonghuoqu(zuikuai,keanxujinyong)
 
         if allow_realtime:
 
@@ -3968,7 +3968,7 @@ class DataFetcherManager:
 
         
 
-        xianchangshicongzhichipiliangchaxun의 데이터yuanhuoqugupiaoliebiao，
+        xianchangshicongzhichipiliangchaxun의 데이터yuanhuoqugupiaoliebiao,
 
         ranhouzaizhugechaxunqueshidegupiaomingcheng。
 
@@ -4090,7 +4090,7 @@ class DataFetcherManager:
 
                     
 
-                    logger.info(f"[gupiaomingcheng] cong {fetcher.name} pilianghuoquwancheng，shengyu {len(missing_codes)} gedaicha")
+                    logger.info(f"[gupiaomingcheng] cong {fetcher.name} pilianghuoquwancheng,shengyu {len(missing_codes)} gedaicha")
 
             except Exception as e:
 
@@ -4114,7 +4114,7 @@ class DataFetcherManager:
 
         
 
-        logger.info(f"[gupiaomingcheng] pilianghuoquwancheng，chenggong {len(result)}/{len(stock_codes)}")
+        logger.info(f"[gupiaomingcheng] pilianghuoquwancheng,chenggong {len(result)}/{len(stock_codes)}")
 
         return result
 
@@ -4122,7 +4122,7 @@ class DataFetcherManager:
 
     def get_main_indices(self, region: str = "cn") -> List[Dict[str, Any]]:
 
-        """주요 지수 실시 현황 조회（자동전환데이터 소스）"""
+        """주요 지수 실시 현황 조회(자동전환데이터 소스)"""
 
         if region == "cn":
 
@@ -4170,7 +4170,7 @@ class DataFetcherManager:
 
     def get_market_stats(self) -> Dict[str, Any]:
 
-        """시장 등락/하락 통계 조회（자동전환데이터 소스）"""
+        """시장 등락/하락 통계 조회(자동전환데이터 소스)"""
 
         tickflow_fetcher = self._get_tickflow_fetcher()
 
@@ -5864,9 +5864,9 @@ class DataFetcherManager:
 
     def get_sector_rankings(self, n: int = 5) -> Tuple[List[Dict], List[Dict]]:
 
-        """섹터 등락/하락 순위 조회（자동전환데이터 소스）"""
+        """섹터 등락/하락 순위 조회(자동전환데이터 소스)"""
 
-        # anxuqiugudinghuituishunxu：Akshare(EM) -> Akshare(Sina) -> Tushare -> Efinance
+        # anxuqiugudinghuituishunxu:Akshare(EM) -> Akshare(Sina) -> Tushare -> Efinance
 
         top, bottom, _, last_error = self._get_sector_rankings_with_meta(n)
 
@@ -5874,7 +5874,7 @@ class DataFetcherManager:
 
             return top, bottom
 
-        logger.warning(f"[bankuaipaihang] suoyoushujuyuanjunshibai，zuizhongcuowu: {last_error}")
+        logger.warning(f"[bankuaipaihang] suoyoushujuyuanjunshibai,zuizhongcuowu: {last_error}")
 
         return [], []
 
@@ -5882,7 +5882,7 @@ class DataFetcherManager:
 
     def get_concept_rankings(self, n: int = 5) -> Tuple[List[Dict], List[Dict]]:
 
-        """테맄/토픽 등락/하락 순위 조회（자동전환데이터 소스）。"""
+        """테맄/토픽 등락/하락 순위 조회(자동전환데이터 소스)。"""
 
         last_error = ""
 
@@ -5910,7 +5910,7 @@ class DataFetcherManager:
 
         if last_error:
 
-            logger.warning(f"[gainianpaihang] suoyoushujuyuanjunshibai，zuizhongcuowu: {last_error}")
+            logger.warning(f"[gainianpaihang] suoyoushujuyuanjunshibai,zuizhongcuowu: {last_error}")
 
         return [], []
 
@@ -5918,7 +5918,7 @@ class DataFetcherManager:
 
     def get_hot_stocks(self, n: int = 10) -> List[Dict[str, Any]]:
 
-        """시장 인기 종목 순위 조회（자동전환데이터 소스）。"""
+        """시장 인기 종목 순위 조회(자동전환데이터 소스)。"""
 
         last_error = ""
 
@@ -5946,7 +5946,7 @@ class DataFetcherManager:
 
         if last_error:
 
-            logger.warning(f"[renqigu] suoyoushujuyuanjunshibai，zuizhongcuowu: {last_error}")
+            logger.warning(f"[renqigu] suoyoushujuyuanjunshibai,zuizhongcuowu: {last_error}")
 
         return []
 
@@ -5962,7 +5962,7 @@ class DataFetcherManager:
 
     ) -> List[Dict[str, Any]]:
 
-        """상한가 리스트yu연속 상한가 대업（자동전환데이터 소스）。"""
+        """상한가 리스트yu연속 상한가 대업(자동전환데이터 소스)。"""
 
         last_error = ""
 
@@ -5990,7 +5990,7 @@ class DataFetcherManager:
 
         if last_error:
 
-            logger.warning(f"[zhangtingchi] suoyoushujuyuanjunshibai，zuizhongcuowu: {last_error}")
+            logger.warning(f"[zhangtingchi] suoyoushujuyuanjunshibai,zuizhongcuowu: {last_error}")
 
         return []
 

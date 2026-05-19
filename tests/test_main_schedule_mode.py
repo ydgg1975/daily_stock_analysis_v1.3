@@ -271,7 +271,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
         warning_log.assert_any_call(
 
-            "dingshimoshixiajiancedao --stocks canshu；jihuazhixingjianghulveqidongshigupiaokuaizhao，bingzaimeiciyunxingqianchongxinduquzuixinde STOCK_LIST。"
+            "dingshimoshixiajiancedao --stocks canshu;jihuazhixingjianghulveqidongshigupiaokuaizhao,bingzaimeiciyunxingqianchongxinduquzuixinde STOCK_LIST。"
 
         )
 
@@ -1177,7 +1177,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
         output = capture_stream.getvalue()
 
-        self.assertIn("wenjianrizhichushihuashibai，yijiangjiweikongzhitairizhishuchu", output)
+        self.assertIn("wenjianrizhichushihuashibai,yijiangjiweikongzhitairizhishuchu", output)
 
         self.assertIn("/app/logs", output)
 

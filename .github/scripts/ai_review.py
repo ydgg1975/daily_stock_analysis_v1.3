@@ -86,15 +86,15 @@ def _build_ci_context():
 Daily Stock Analysis - Ai Review
 """
 
-    lines = ["\n## CI jianchazhuangtai（laizibenci PR dezidonghualiushuixian）"]
+    lines = ["\n## CI jianchazhuangtai(laizibenci PR dezidonghualiushuixian)"]
     lines.append(f"- jingtaijianchazongtijieguo: **{'✅ tongguo' if auto_check_result == 'success' else '❌ shibai'}**")
     if has_py == 'true':
         lines.append(f"- Python yufajiancha (py_compile): **{'✅ tongguo' if syntax_ok == 'true' else '❌ shibai' if syntax_ok == 'false' else '⏭️ weizhixing'}**")
-        lines.append("- Flake8 yanzhongcuowujiancha (E9/F63/F7/F82): **✅ tongguo**（ruoweitongguozejingtaijianchazongtihuishibai）")
+        lines.append("- Flake8 yanzhongcuowujiancha (E9/F63/F7/F82): **✅ tongguo**(ruoweitongguozejingtaijianchazongtihuishibai)")
     else:
-        lines.append("- Python wenjian: wubiangeng，yufajianchayitiaoguo")
+        lines.append("- Python wenjian: wubiangeng,yufajianchayitiaoguo")
     lines.append("")
-    lines.append("> yishang CI jinfugaiyufazhengquexing（py_compile）hezhiming lint cuowu（flake8 E9/F63/F7/F82）。`./scripts/ci_gate.sh` **weibaohanzai CI zhong**：dui Python houduangaidong，ruo PR miaoshuweishuominggai gate shifouzhixing（huogeichutiaoguoyuanyin），yingzaijianyixiangzhongzhuming，danbugouchengzuduan。yufa/flake8 yitongguozewuxuchongfutieduiyingbendishuchu。")
+    lines.append("> yishang CI jinfugaiyufazhengquexing(py_compile)hezhiming lint cuowu(flake8 E9/F63/F7/F82)。`./scripts/ci_gate.sh` **weibaohanzai CI zhong**:dui Python houduangaidong,ruo PR miaoshuweishuominggai gate shifouzhixing(huogeichutiaoguoyuanyin),yingzaijianyixiangzhongzhuming,danbugouchengzuduan。yufa/flake8 yitongguozewuxuchongfutieduiyingbendishuchu。")
     lines.append("")
     return '\n'.join(lines)
 
@@ -103,7 +103,7 @@ def build_prompt(diff_content, files, truncated, pr_title, pr_body):
     """Build AI review prompt aligned with AGENTS.md requirements."""
     truncate_notice = ''
     if truncated:
-        truncate_notice = "\n\n> ⚠️ zhuyi：diff guochangyijieduan，qingjiyukejianneirongshenchabingbiaozhubuquedingdian。\n"
+        truncate_notice = "\n\n> ⚠️ zhuyi:diff guochangyijieduan,qingjiyukejianneirongshenchabingbiaozhubuquedingdian。\n"
 
     py_files, doc_files, frontend_files, ci_files, config_files = classify_files(files)
     ci_context = _build_ci_context()
@@ -118,7 +118,7 @@ def review_with_gemini(prompt):
     model = os.environ.get('GEMINI_MODEL') or os.environ.get('GEMINI_MODEL_FALLBACK') or 'gemini-2.5-flash'
 
     if not api_key:
-        print("❌ Gemini API Key weipeizhi（jiancha GitHub Secrets: GEMINI_API_KEY）")
+        print("❌ Gemini API Key weipeizhi(jiancha GitHub Secrets: GEMINI_API_KEY)")
         return None
 
     print(f"🤖 shiyongmoxing: {model}")
@@ -149,7 +149,7 @@ def review_with_openai(prompt):
     model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
     if not api_key:
-        print("❌ OpenAI API Key weipeizhi（jiancha GitHub Secrets: OPENAI_API_KEY）")
+        print("❌ OpenAI API Key weipeizhi(jiancha GitHub Secrets: OPENAI_API_KEY)")
         return None
 
     print(f"🌐 Base URL: {base_url}")
@@ -164,14 +164,14 @@ def review_with_openai(prompt):
             max_tokens=2000,
             temperature=0.3
         )
-        print(f"✅ OpenAI jianrong接口 ({model}) shenchachenggong")
+        print(f"✅ OpenAI jianrong(chinese removed) ({model}) shenchachenggong")
         return response.choices[0].message.content
     except ImportError as e:
         print(f"❌ OpenAI yilaiweianzhuang: {e}")
         print("   qingquebaoanzhuangle openai: pip install openai")
         return None
     except Exception as e:
-        print(f"❌ OpenAI jianrong接口shenchashibai: {e}")
+        print(f"❌ OpenAI jianrong(chinese removed)shenchashibai: {e}")
         traceback.print_exc()
         return None
 
@@ -185,7 +185,7 @@ def ai_review(diff_content, files, truncated):
     if result:
         return result
 
-    print("changshishiyong OpenAI jianrong接口...")
+    print("changshishiyong OpenAI jianrong(chinese removed)...")
     result = review_with_openai(prompt)
     if result:
         return result
@@ -198,7 +198,7 @@ def main():
     files = get_changed_files()
 
     if not diff or not files:
-        print("meiyoukeshenchadedaima/wendang/peizhibiangeng，tiaoguo AI shencha")
+        print("meiyoukeshenchadedaima/wendang/peizhibiangeng,tiaoguo AI shencha")
         summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
         if summary_file:
             with open(summary_file, 'a', encoding='utf-8') as f:
@@ -225,10 +225,10 @@ def main():
 
         print("AI shenchawancheng")
     else:
-        print("⚠️ suoyou AI 接口doubukeyong")
+        print("⚠️ suoyou AI (chinese removed)doubukeyong")
         if summary_file:
             with open(summary_file, 'a', encoding='utf-8') as f:
-                f.write("## 🤖 AI daimashencha\n\n⚠️ AI 接口bukeyong，qingjianchapeizhi\n")
+                f.write("## 🤖 AI daimashencha\n\n⚠️ AI (chinese removed)bukeyong,qingjianchapeizhi\n")
         if strict_mode:
             raise SystemExit("AI_REVIEW_STRICT=true and no AI review result is available")
 

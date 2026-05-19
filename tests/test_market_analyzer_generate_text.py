@@ -1340,7 +1340,7 @@ class TestAnalyzerGenerateText:
 
 
 
-        result = GeminiAnalyzer._parse_response(analyzer, "zheshiyiduanchunwenbenfenxi，meiyou JSON。", "600519", "guizhoumaotai")
+        result = GeminiAnalyzer._parse_response(analyzer, "zheshiyiduanchunwenbenfenxi,meiyou JSON。", "600519", "guizhoumaotai")
 
         assert result.success is False
 
@@ -1610,7 +1610,7 @@ class TestAnalyzerGenerateText:
 
             "all failed",
 
-            last_response_text="zhebushi JSON，ershichunwenbenfenxijieguo",
+            last_response_text="zhebushi JSON,ershichunwenbenfenxijieguo",
 
             last_model="provider/fallback-model",
 
@@ -1661,7 +1661,7 @@ class TestAnalyzerGenerateText:
 
         assert mock_parse.call_count == 2
 
-        mock_parse.assert_called_with("zhebushi JSON，ershichunwenbenfenxijieguo", "600519", "guizhoumaotai")
+        mock_parse.assert_called_with("zhebushi JSON,ershichunwenbenfenxijieguo", "600519", "guizhoumaotai")
 
 
 
@@ -1970,7 +1970,7 @@ class TestMarketAnalyzerBypassFix:
 
         assert "### 6. Strategy Framework" in result
 
-        assert "### yi、shichangzongjie" not in result
+        assert "### yi,shichangzongjie" not in result
 
 
 
@@ -2024,7 +2024,7 @@ class TestMarketAnalyzerBypassFix:
 
         assert "## 2026-03-05 dapanfupan" in result
 
-        assert "### yi、panmianzonglan" in result
+        assert "### yi,panmianzonglan" in result
 
         assert "jinrimeigushichangzhengtichengxian**xiaofuxiadie**taishi" in result
 
@@ -2188,31 +2188,31 @@ Sector text.
 
         )
 
-        news = [{"title": "AIsuanlibankuaizouqiang", "snippet": "suanlichanyelianyanxuhuoyue，chengjiaoefangda"}]
+        news = [{"title": "AIsuanlibankuaizouqiang", "snippet": "suanlichanyelianyanxuhuoyue,chengjiaoefangda"}]
 
         review = """## 2026-03-05 dapanfupan
 
 
 
-### yi、panmianzonglan
+### yi,panmianzonglan
 
 zongjie。
 
 
 
-### er、zhishujiegou
+### er,zhishujiegou
 
 zhishu。
 
 
 
-### san、bankuaizhuxian
+### san,bankuaizhuxian
 
 bankuai。
 
 
 
-### wu、xiaoxicuihua
+### wu,xiaoxicuihua
 
 xinwen。
 
@@ -2226,7 +2226,7 @@ xinwen。
 
         assert "dapanhonglvdeng" in result
 
-        assert "green（kejingong）" in result
+        assert "green(kejingong)" in result
 
         assert "hexinyuanyin" in result
 
@@ -2264,9 +2264,9 @@ xinwen。
 
         long_snippet = (
 
-            "fupanbidu 2026-05-06 fupandeyiyizaiyugengqingxidibawoshichangmaibo，"
+            "fupanbidu 2026-05-06 fupandeyiyizaiyugengqingxidibawoshichangmaibo,"
 
-            "zonghemiaoshu A gusandazhishujinrijitifantan，chengjiaoefangda，kejichengzhangfangxianglingzhang。"
+            "zonghemiaoshu A gusandazhishujinrijitifantan,chengjiaoefangda,kejichengzhangfangxianglingzhang。"
 
         )
 
@@ -2276,7 +2276,7 @@ xinwen。
 
             {
 
-                "title": "Agushouping：kechuang50zhishufangliangfantanzhang5.47% liangshichengjiaoezhonghui3wanyiyuan",
+                "title": "Agushouping:kechuang50zhishufangliangfantanzhang5.47% liangshichengjiaoezhonghui3wanyiyuan",
 
                 "snippet": long_snippet,
 
@@ -2356,7 +2356,7 @@ xinwen。
 
                 {
 
-                    "title": "Agushouping：zhishufangliangfantan",
+                    "title": "Agushouping:zhishufangliangfantan",
 
                     "snippet": "kejichengzhangfangxianglingzhang",
 

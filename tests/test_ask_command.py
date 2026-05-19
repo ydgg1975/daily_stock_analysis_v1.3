@@ -167,7 +167,7 @@ class TestAskCommandMultiStock(unittest.TestCase):
 
         def fake_run(self, ctx, progress_callback=None):
             ctx.data["portfolio_assessment"] = {
-                "summary": "zuhepianxiaofeijizhong，jianyikongzhicangwei。",
+                "summary": "zuhepianxiaofeijizhong,jianyikongzhicangwei。",
                 "portfolio_risk_score": 7,
                 "sector_warnings": ["baijiubankuaijizhongduguogao"],
                 "correlation_warnings": ["600519 yu 000858 xiangguanxingpiangao"],

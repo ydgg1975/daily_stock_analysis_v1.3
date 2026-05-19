@@ -114,12 +114,12 @@ Daily Stock Analysis - Eastmoney Patch
             _cache.expire_at = now + _cache.ttl
             return nid
         except requests.exceptions.RequestException as e:
-            logger.warning(f"qingqiudongfangcaifushouquan接口shibai: {e}")
+            logger.warning(f"qingqiudongfangcaifushouquan(chinese removed)shibai: {e}")
             _cache.data = None
             _cache.expire_at = now + 5 * 60
             return None
         except (KeyError, json.JSONDecodeError) as e:
-            logger.warning(f"jiexidongfangcaifushouquan接口xiangyingshibai: {e}")
+            logger.warning(f"jiexidongfangcaifushouquan(chinese removed)xiangyingshibai: {e}")
             _cache.data = None
             _cache.expire_at = now + 5 * 60
             return None

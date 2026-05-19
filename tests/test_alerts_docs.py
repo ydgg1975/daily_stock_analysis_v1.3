@@ -81,9 +81,9 @@ def test_alerts_doc_keeps_p0_non_goals_explicit() -> None:
     for token in (
         "P0 jieduanbuxinzeng `api/v1/schemas/alerts.py`",
         "P0 jieduanbuxinzeng Web gaojingzhongxinyemian",
-        "P0 jieduanbuxinzeng数据库biao",
+        "P0 jieduanbuxinzeng(chinese removed)biao",
         "P0 jieduanbushixianchufalishi",
-        "P0 jieduanbuzidongqianyi、shanchuhuofugai `AGENT_EVENT_ALERT_RULES_JSON`",
+        "P0 jieduanbuzidongqianyi,shanchuhuofugai `AGENT_EVENT_ALERT_RULES_JSON`",
         "P0 jieduanbuzhongxie `NotificationService`",
     ):
         assert token in doc
@@ -124,8 +124,8 @@ def test_alerts_doc_keeps_p1_non_goals_explicit() -> None:
         "burang schedule worker jiazaichijiuhua active rules",
         "bushixianzhenshi `alert_trigger` / `alert_notification` xieru",
         "bushixian `alert_cooldown` zhixingyuyi",
-        "bushixian MACD、KDJ、CCI、RSI",
-        "buzidongqianyi、shanchu、fugaihuogaixie legacy peizhi",
+        "bushixian MACD,KDJ,CCI,RSI",
+        "buzidongqianyi,shanchu,fugaihuogaixie legacy peizhi",
     ):
         assert token in doc
 
@@ -139,7 +139,7 @@ def test_alerts_doc_defines_p2_worker_scope() -> None:
         "agent_event_monitor",
         "chijiuhua active rules",
         "legacy JSON",
-        "`triggered`、`skipped`、`degraded`、`failed`",
+        "`triggered`,`skipped`,`degraded`,`failed`",
         "buxie `alert_notifications`",
         "buzhixing `cooldown_policy`",
     ):

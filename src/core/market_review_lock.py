@@ -84,7 +84,7 @@ def _is_windows_process_alive(pid: int) -> bool:
         finally:
             kernel32.CloseHandle(handle)
     except Exception as exc:
-        logger.warning("Windows jinchengcunhuotantestbai竊똟aoshoushiweirengzaiyunxing: %s", exc)
+        logger.warning("Windows jinchengcunhuotantestbai(chinese removed)똟aoshoushiweirengzaiyunxing: %s", exc)
         return True
 
 

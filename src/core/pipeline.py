@@ -10,7 +10,7 @@ Aguwatchlistguzhinenganalysisxitong - hexinanalysisliushuixian
 
 
 
-역할竊?
+역할(chinese removed)?
 1. guanlizhenggeanalysis흐름
 
 2. xietiaoshujuhuoqu?갷unchu?걌ousuo?갽enxi?걎ongzhidengmokuai
@@ -140,7 +140,7 @@ logger = logging.getLogger(__name__)
 
 
 
-# fangyuxing guard竊쉊angshiliraoguo __init__竊늭utestzhong __new__竊뎖ouzaoshi竊?
+# fangyuxing guard(chinese removed)쉊angshiliraoguo __init__(chinese removed)늭utestzhong __new__(chinese removed)뎖ouzaoshi(chinese removed)?
 # double-check chushihua _single_stock_notify_lock rengranxianchenganquan??
 _SINGLE_STOCK_NOTIFY_LOCK_INIT_GUARD = threading.Lock()
 
@@ -156,7 +156,7 @@ class StockAnalysisPipeline:
 
     
 
-    역할竊?
+    역할(chinese removed)?
     1. guanlizhenggeanalysis흐름
 
     2. xietiaoshujuhuoqu?갷unchu?걌ousuo?갽enxi?걎ongzhidengmokuai
@@ -210,8 +210,8 @@ class StockAnalysisPipeline:
 
         Args:
 
-            config: configduixiang竊늟exuan竊똫oren사용quanjuconfig竊?
-            max_workers: zuidabingfaxianchengshu竊늟exuan竊똫orencongconfigduqu竊?
+            config: configduixiang(chinese removed)늟exuan(chinese removed)똫oren사용quanjuconfig(chinese removed)?
+            max_workers: zuidabingfaxianchengshu(chinese removed)늟exuan(chinese removed)똫orencongconfigduqu(chinese removed)?
         """
 
 
@@ -252,7 +252,7 @@ class StockAnalysisPipeline:
 
         self.fetcher_manager = DataFetcherManager()
 
-        # buzaidanduchuangjian akshare_fetcher竊똳ongyishiyong fetcher_manager huoquzengqiangshuju
+        # buzaidanduchuangjian akshare_fetcher(chinese removed)똳ongyishiyong fetcher_manager huoquzengqiangshuju
 
         self.trend_analyzer = StockTrendAnalyzer()  # jishuanalysisqi
 
@@ -264,7 +264,7 @@ class StockAnalysisPipeline:
 
         
 
-        # chushihuasousuofuwu竊늟exuan竊똠hushihuashibaibuyingzuduanzhuanalysisliucheng竊?
+        # chushihuasousuofuwu(chinese removed)늟exuan(chinese removed)똠hushihuashibaibuyingzuduanzhuanalysisliucheng(chinese removed)?
         try:
 
             self.search_service = SearchService(
@@ -293,13 +293,13 @@ class StockAnalysisPipeline:
 
         except Exception as exc:
 
-            logger.warning("sousuofuwuchushihuashibai竊똨iangyiwusousuomoshiyunxing: %s", exc, exc_info=True)
+            logger.warning("sousuofuwuchushihuashibai(chinese removed)똨iangyiwusousuomoshiyunxing: %s", exc, exc_info=True)
 
             self.search_service = None
 
         
 
-        logger.info(f"diaoduqichushihuawancheng竊똺uidabingfashu: {self.max_workers}")
+        logger.info(f"diaoduqichushihuawancheng(chinese removed)똺uidabingfashu: {self.max_workers}")
 
         logger.info("Technical analysis engine enabled (moving averages / trend / volume-price indicators)")
         # dayinshishixingqing/choumaconfigzhuangtai
@@ -310,7 +310,7 @@ class StockAnalysisPipeline:
 
         else:
 
-            logger.info("shishixingqingyijinyong竊똨iangshiyonglishishoupanjia")
+            logger.info("shishixingqingyijinyong(chinese removed)똨iangshiyonglishishoupanjia")
 
         if self.config.enable_chip_distribution:
 
@@ -332,7 +332,7 @@ class StockAnalysisPipeline:
             logger.warning("Search service is disabled because no search provider is configured")
 
 
-        # chushihuashejiaoyuqingfuwu竊늞inmeigu竊똩exuan竊?
+        # chushihuashejiaoyuqingfuwu(chinese removed)늞inmeigu(chinese removed)똩exuan(chinese removed)?
         try:
 
             self.social_sentiment_service = SocialSentimentService(
@@ -351,7 +351,7 @@ class StockAnalysisPipeline:
 
             logger.warning(
 
-                "shejiaoyuqingfuwuchushihuashibai竊똨iangtiaoguoyuqinganalysis: %s",
+                "shejiaoyuqingfuwuchushihuashibai(chinese removed)똨iangtiaoguoyuqinganalysis: %s",
 
                 exc,
 
@@ -425,10 +425,10 @@ class StockAnalysisPipeline:
 
         
 
-        duandianxuchuanluoji竊?
+        duandianxuchuanluoji(chinese removed)?
         1. jianchashujukushifouyiyouzuixinkefuyongjiaoyirishuju
 
-        2. ruguoyouqiebuqiangzhirefresh竊똺etiaoguowangluoqingqiu
+        2. ruguoyouqiebuqiangzhirefresh(chinese removed)똺etiaoguowangluoqingqiu
 
         3. fouzecongshujuyuanhuoqubingsave
 
@@ -438,8 +438,8 @@ class StockAnalysisPipeline:
 
             code: stockdaima
 
-            force_refresh: shifouqiangzhirefresh竊늜ulvebendihuancun竊?
-            current_time: benlunyunxingdongjiedecankaoshijian竊똹ongyutongyiduandianxuchuanmubiaojiaoyiripanduan
+            force_refresh: shifouqiangzhirefresh(chinese removed)늜ulvebendihuancun(chinese removed)?
+            current_time: benlunyunxingdongjiedecankaoshijian(chinese removed)똹ongyutongyiduandianxuchuanmubiaojiaoyiripanduan
 
             
 
@@ -467,7 +467,7 @@ class StockAnalysisPipeline:
 
 
 
-            # duandianxuchuanjiancha竊쉜uguozuixinkefuyongjiaoyirideshujuyicunzai竊똺etiaoguo
+            # duandianxuchuanjiancha(chinese removed)쉜uguozuixinkefuyongjiaoyirideshujuyicunzai(chinese removed)똺etiaoguo
 
             if not force_refresh and self.db.has_today_data(code, target_date):
 
@@ -519,16 +519,16 @@ class StockAnalysisPipeline:
 
         """
 
-        analysisdanzhistock竊늷engqiangban竊쉎anliangbi?갿uanshoulv?갷houmaanalysis?갺uoweiduqingbao竊?
+        analysisdanzhistock(chinese removed)늷engqiangban(chinese removed)쉎anliangbi?갿uanshoulv?갷houmaanalysis?갺uoweiduqingbao(chinese removed)?
         
 
-        흐름竊?
-        1. huoqushishixingqing竊늢iangbi?갿uanshoulv竊? tongguo DataFetcherManager zidongguzhang전환
+        흐름(chinese removed)?
+        1. huoqushishixingqing(chinese removed)늢iangbi?갿uanshoulv(chinese removed)? tongguo DataFetcherManager zidongguzhang전환
 
         2. huoquchoumafenbu - tongguo DataFetcherManager dairongduanbaohu
 
-        3. jinxingqushianalysis竊늞iyujiaoyilinian竊?
-        4. duoweiduqingbaosousuo竊늷uixinxiaoxi+fengxianpaicha+yejiyuqi竊?
+        3. jinxingqushianalysis(chinese removed)늞iyujiaoyilinian(chinese removed)?
+        4. duoweiduqingbaosousuo(chinese removed)늷uixinxiaoxi+fengxianpaicha+yejiyuqi(chinese removed)?
         5. congshujukuhuoquanalysisshangxiawen
 
         6. 호출 AI jinxingzongheanalysis
@@ -547,7 +547,7 @@ class StockAnalysisPipeline:
 
         Returns:
 
-            AnalysisResult huo None竊늭uguoanalysisshibai竊?
+            AnalysisResult huo None(chinese removed)늭uguoanalysisshibai(chinese removed)?
         """
 
 
@@ -585,14 +585,14 @@ class StockAnalysisPipeline:
 
         try:
 
-            self._emit_progress(18, f"{code}竊쉦hengzaihuoququoteyuchoumashuju")
+            self._emit_progress(18, f"{code}(chinese removed)쉦hengzaihuoququoteyuchoumashuju")
 
-            # huoqustockmingcheng竊늵ianzouqingliangmingchenglujing竊똦ouxuruo realtime_quote you name zaifugai竊?
+            # huoqustockmingcheng(chinese removed)늵ianzouqingliangmingchenglujing(chinese removed)똦ouxuruo realtime_quote you name zaifugai(chinese removed)?
             stock_name = self.fetcher_manager.get_stock_name(code, allow_realtime=False)
 
 
 
-            # Step 1: huoqushishixingqing竊늢iangbi?갿uanshoulvdeng竊? shiyongtongyirukou竊똺idongguzhangqiehuan
+            # Step 1: huoqushishixingqing(chinese removed)늢iangbi?갿uanshoulvdeng(chinese removed)? shiyongtongyirukou(chinese removed)똺idongguzhangqiehuan
 
             realtime_quote = None
 
@@ -610,7 +610,7 @@ class StockAnalysisPipeline:
 
                             stock_name = realtime_quote.name
 
-                        # jianrongbutongshujuyuandeziduan竊늶ouxieshujuyuankenengmeiyou volume_ratio竊?
+                        # jianrongbutongshujuyuandeziduan(chinese removed)늶ouxieshujuyuankenengmeiyou volume_ratio(chinese removed)?
                         volume_ratio = getattr(realtime_quote, 'volume_ratio', None)
 
                         turnover_rate = getattr(realtime_quote, 'turnover_rate', None)
@@ -623,19 +623,19 @@ class StockAnalysisPipeline:
 
                     else:
 
-                        logger.warning(f"{stock_name}({code}) suoyoushishixinginputjuyuanjunbukeyong竊똹ijiangjiweilishishoupanjiajixuanalysis")
+                        logger.warning(f"{stock_name}({code}) suoyoushishixinginputjuyuanjunbukeyong(chinese removed)똹ijiangjiweilishishoupanjiajixuanalysis")
 
                 else:
 
-                    logger.info(f"{stock_name}({code}) shishixingqingyijinyong竊똲hiyonglishishoupanjiajixuanalysis")
+                    logger.info(f"{stock_name}({code}) shishixingqingyijinyong(chinese removed)똲hiyonglishishoupanjiajixuanalysis")
 
             except Exception as e:
 
-                logger.warning(f"{stock_name}({code}) shishixingqinglianluyichang竊똹ijiangjiweilishishoupanjiajixuanalysis: {e}")
+                logger.warning(f"{stock_name}({code}) shishixingqinglianluyichang(chinese removed)똹ijiangjiweilishishoupanjiajixuanalysis: {e}")
 
 
 
-            # ruguohaishimeiyoumingcheng竊똲hiyongdaimazuoweimingcheng
+            # ruguohaishimeiyoumingcheng(chinese removed)똲hiyongdaimazuoweimingcheng
 
             if not stock_name:
 
@@ -643,7 +643,7 @@ class StockAnalysisPipeline:
 
 
 
-            # Step 2: huoquchoumafenbu - shiyongtongyirukou竊똡airongduanbaohu
+            # Step 2: huoquchoumafenbu - shiyongtongyirukou(chinese removed)똡airongduanbaohu
 
             chip_data = None
 
@@ -701,12 +701,12 @@ class StockAnalysisPipeline:
 
 
 
-            self._emit_progress(32, f"{stock_name}竊쉦hengzaijuhejibenmianyuqushishuju")
+            self._emit_progress(32, f"{stock_name}(chinese removed)쉦hengzaijuhejibenmianyuqushishuju")
 
 
 
-            # Step 2.5: jibenmiannenglijuhe竊늯ongyirukou竊똹ichangjiangji竊?
-            # - shibaishifanhui partial/failed竊똟uyingxiangjiyoujishumian/xinwenlianlu
+            # Step 2.5: jibenmiannenglijuhe(chinese removed)늯ongyirukou(chinese removed)똹ichangjiangji(chinese removed)?
+            # - shibaishifanhui partial/failed(chinese removed)똟uyingxiangjiyoujishumian/xinwenlianlu
 
             # - closekaiguanshirengfanhui not_supported jiegou
 
@@ -772,7 +772,7 @@ class StockAnalysisPipeline:
 
 
 
-            # Step 3: qushianalysis竊늞iyujiaoyilinian竊됤?zai Agent fenzhizhiqianzhixing竊똤ongliangtiaolujinggongyong
+            # Step 3: qushianalysis(chinese removed)늞iyujiaoyilinian(chinese removed)됤?zai Agent fenzhizhiqianzhixing(chinese removed)똤ongliangtiaolujinggongyong
 
             trend_result: Optional[TrendAnalysisResult] = None
 
@@ -816,7 +816,7 @@ class StockAnalysisPipeline:
 
                 logger.info(f"{stock_name}({code}) qiyong Agent moshijinxinganalysis")
 
-                self._emit_progress(58, f"{stock_name}竊쉦hengzaiqiehuan Agent analysislianlu")
+                self._emit_progress(58, f"{stock_name}(chinese removed)쉦hengzaiqiehuan Agent analysislianlu")
 
                 return self._analyze_with_agent(
 
@@ -840,10 +840,10 @@ class StockAnalysisPipeline:
 
 
 
-            # Step 4: duoweiduqingbaosousuo竊늷uixinxiaoxi+fengxianpaicha+yejiyuqi竊?
+            # Step 4: duoweiduqingbaosousuo(chinese removed)늷uixinxiaoxi+fengxianpaicha+yejiyuqi(chinese removed)?
             news_context = None
 
-            self._emit_progress(46, f"{stock_name}竊쉦hengzaijiansuoxinwenyuyuqing")
+            self._emit_progress(46, f"{stock_name}(chinese removed)쉦hengzaijiansuoxinwenyuyuqing")
 
             if self.search_service is not None and self.search_service.is_available:
 
@@ -851,7 +851,7 @@ class StockAnalysisPipeline:
 
 
 
-                # shiyongduoweidusousuo竊늷uiduo5cisousuo竊?
+                # shiyongduoweidusousuo(chinese removed)늷uiduo5cisousuo(chinese removed)?
                 intel_results = self.search_service.search_comprehensive_intel(
 
                     stock_code=code,
@@ -882,7 +882,7 @@ class StockAnalysisPipeline:
 
 
 
-                    # savexinwenqingbaodaoshujuku竊늶ongyuhouxufupanyuchaxun竊?
+                    # savexinwenqingbaodaoshujuku(chinese removed)늶ongyuhouxufupanyuchaxun(chinese removed)?
                     try:
 
                         query_context = self._build_query_context(query_id=query_id)
@@ -913,7 +913,7 @@ class StockAnalysisPipeline:
 
             else:
 
-                logger.info(f"{stock_name}({code}) sousuofuwubukeyong竊똳iaoguoqingbaosousuo")
+                logger.info(f"{stock_name}({code}) sousuofuwubukeyong(chinese removed)똳iaoguoqingbaosousuo")
 
 
 
@@ -943,8 +943,8 @@ class StockAnalysisPipeline:
 
 
 
-            # Step 5: huoquanalysisshangxiawen竊늞ishumianshuju竊?
-            self._emit_progress(58, f"{stock_name}竊쉦hengzaizhenglianalysisshangxiawen")
+            # Step 5: huoquanalysisshangxiawen(chinese removed)늞ishumianshuju(chinese removed)?
+            self._emit_progress(58, f"{stock_name}(chinese removed)쉦hengzaizhenglianalysisshangxiawen")
 
             context = self.db.get_analysis_context(code)
 
@@ -952,7 +952,7 @@ class StockAnalysisPipeline:
 
             if context is None:
 
-                logger.warning(f"{stock_name}({code}) wufahuoqulishiquoteshuju竊똨iangjinjiyuxinwenheshishixingqinganalysis")
+                logger.warning(f"{stock_name}({code}) wufahuoqulishiquoteshuju(chinese removed)똨iangjinjiyuxinwenheshishixingqinganalysis")
 
                 _mkt_date = get_market_now(
 
@@ -978,7 +978,7 @@ class StockAnalysisPipeline:
 
             
 
-            # Step 6: zengqiangshangxiawenshuju竊늯ianjiashishixingqing?갷houma?걉ushianalysisjieguo?갾upiaomingcheng竊?
+            # Step 6: zengqiangshangxiawenshuju(chinese removed)늯ianjiashishixingqing?갷houma?걉ushianalysisjieguo?갾upiaomingcheng(chinese removed)?
             enhanced_context = self._enhance_context(
 
                 context, 
@@ -997,7 +997,7 @@ class StockAnalysisPipeline:
 
             
 
-            # Step 7: diaoyong AI analysis竊늓huanruzengqiangdeshangxiawenhexinwen竊?
+            # Step 7: diaoyong AI analysis(chinese removed)늓huanruzengqiangdeshangxiawenhexinwen(chinese removed)?
             llm_progress_state = {"last_progress": 64}
 
 
@@ -1021,7 +1021,7 @@ class StockAnalysisPipeline:
 
 
 
-            self._emit_progress(64, f"{stock_name}竊쉦hengzaiqingqiu LLM shengchengbaogao")
+            self._emit_progress(64, f"{stock_name}(chinese removed)쉦hengzaiqingqiu LLM shengchengbaogao")
 
             result = self.analyzer.analyze(
 
@@ -1041,7 +1041,7 @@ class StockAnalysisPipeline:
 
             if result:
 
-                self._emit_progress(94, f"{stock_name}竊쉦hengzaijiaoyanbingzhenglianalysisjieguo")
+                self._emit_progress(94, f"{stock_name}(chinese removed)쉦hengzaijiaoyanbingzhenglianalysisjieguo")
 
                 result.query_id = query_id
 
@@ -1077,7 +1077,7 @@ class StockAnalysisPipeline:
 
                 try:
 
-                    self._emit_progress(97, f"{stock_name}竊쉦hengzaisaveanalysisbaogao")
+                    self._emit_progress(97, f"{stock_name}(chinese removed)쉦hengzaisaveanalysisbaogao")
 
                     context_snapshot = self._build_context_snapshot(
 
@@ -1159,7 +1159,7 @@ class StockAnalysisPipeline:
 
             context: yuanshishangxiawen
 
-            realtime_quote: shishixinginputju竊늈nifiedRealtimeQuote huo None竊?
+            realtime_quote: shishixinginputju(chinese removed)늈nifiedRealtimeQuote huo None(chinese removed)?
             chip_data: choumafenbushuju
 
             trend_result: qushianalysisjieguo
@@ -1192,16 +1192,16 @@ class StockAnalysisPipeline:
 
 
 
-        # jiangyunxingshisousuochuangkoutouchuangei analyzer竊똟imianyuquanjuconfigchongxinduquchanshengchuangkoubuyizhi
+        # jiangyunxingshisousuochuangkoutouchuangei analyzer(chinese removed)똟imianyuquanjuconfigchongxinduquchanshengchuangkoubuyizhi
 
         enhanced['news_window_days'] = getattr(self.search_service, "news_window_days", 3)
 
         
 
-        # addshishixingqing竊늞ianrongbutongshujuyuandeziduanchayi竊?
+        # addshishixingqing(chinese removed)늞ianrongbutongshujuyuandeziduanchayi(chinese removed)?
         if realtime_quote:
 
-            # shiyong getattr anquanhuoquziduan竊똰ueshiziduanfanhui None huomorenzhi
+            # shiyong getattr anquanhuoquziduan(chinese removed)똰ueshiziduanfanhui None huomorenzhi
 
             volume_ratio = getattr(realtime_quote, 'volume_ratio', None)
 
@@ -1778,7 +1778,7 @@ class StockAnalysisPipeline:
 
                     logger.info(
 
-                        "[LLMwanzhengxing] integrity_mode=agent_weak bitianziduanqueshi %s竊똹izhanweibuquan",
+                        "[LLMwanzhengxing] integrity_mode=agent_weak bitianziduanqueshi %s(chinese removed)똹izhanweibuquan",
 
                         missing,
 
@@ -1814,8 +1814,8 @@ class StockAnalysisPipeline:
 
 
 
-            # savexinwenqingbaodaoshujuku竊뉯gent gongjujieguojinyongyu LLM shangxiawen竊똷eichijiuhua竊똅ixes #396竊?
-            # shiyong search_stock_news竊늶u Agent gongjudiaoyongluojiyizhi竊됵펽jin 1 ci API diaoyong竊똷uewaiyanchi
+            # savexinwenqingbaodaoshujuku(chinese removed)뉯gent gongjujieguojinyongyu LLM shangxiawen(chinese removed)똷eichijiuhua(chinese removed)똅ixes #396(chinese removed)?
+            # shiyong search_stock_news(chinese removed)늶u Agent gongjudiaoyongluojiyizhi(chinese removed)됵펽jin 1 ci API diaoyong(chinese removed)똷uewaiyanchi
 
             if self.search_service is not None and self.search_service.is_available:
 
@@ -3198,27 +3198,27 @@ class StockAnalysisPipeline:
         jiexiqingqiulaiyuan??
 
 
-        우선순위竊늓onggaodaodi竊됵폏
+        우선순위(chinese removed)늓onggaodaodi(chinese removed)됵폏
 
-        1. xianshichuanrude query_source竊쉊iaoyongfangmingquezhidingshiyouxian사용竊똟ianyufugaituiduanjieguohuojianrongweilai source_message laizifei bot dechangjing
+        1. xianshichuanrude query_source(chinese removed)쉊iaoyongfangmingquezhidingshiyouxian사용(chinese removed)똟ianyufugaituiduanjieguohuojianrongweilai source_message laizifei bot dechangjing
 
-        2. cunzai source_message shituiduanwei "bot"竊쉊angqianyuedingweijiqirenhuihuashangxiawen
+        2. cunzai source_message shituiduanwei "bot"(chinese removed)쉊angqianyuedingweijiqirenhuihuashangxiawen
 
-        3. cunzai query_id shituiduanwei "web"竊쉂eb chufadeqingqiuhuidaishang query_id
+        3. cunzai query_id shituiduanwei "web"(chinese removed)쉂eb chufadeqingqiuhuidaishang query_id
 
-        4. 기본값 "system"竊쉊ingshirenwuhuo CLI dengwushangshushangxiawenshi
+        4. 기본값 "system"(chinese removed)쉊ingshirenwuhuo CLI dengwushangshushangxiawenshi
 
 
 
         Args:
 
-            query_source: diaoyongfangxianshizhidingdelaiyuan竊똱u "bot" / "web" / "cli" / "system"
+            query_source: diaoyongfangxianshizhidingdelaiyuan(chinese removed)똱u "bot" / "web" / "cli" / "system"
 
 
 
         Returns:
 
-            guiyihuahoudelaiyuanbiaoshizifuchuan竊똱u "bot" / "web" / "cli" / "system"
+            guiyihuahoudelaiyuanbiaoshizifuchuan(chinese removed)똱u "bot" / "web" / "cli" / "system"
 
         """
 
@@ -3335,17 +3335,17 @@ class StockAnalysisPipeline:
 
 
 
-        baokuo竊?
+        baokuo(chinese removed)?
         1. huoqushuju
 
         2. saveshuju
 
         3. AI analysis
 
-        4. ~인 경우utuisong竊늟exuan竊?55竊?
+        4. ~인 경우utuisong(chinese removed)늟exuan(chinese removed)?55(chinese removed)?
 
 
-        cifangfahuibeixianchengchidiaoyong竊똸uyaochulihaoyichang
+        cifangfahuibeixianchengchidiaoyong(chinese removed)똸uyaochulihaoyichang
 
 
 
@@ -3357,9 +3357,9 @@ class StockAnalysisPipeline:
 
             skip_analysis: shifoutiaoguo AI analysis
 
-            single_stock_notify: shifouqiyong~인 경우utuisongmoshi竊늤eianalysiswanyizhilijituisong竊?
-            report_type: baogaoleixingmeiju竊늓ongconfigduqu竊똈ssue #119竊?
-            current_time: benlunyunxingdongjiedecankaoshijian竊똹ongyutongyiduandianxuchuanmubiaojiaoyiripanduan
+            single_stock_notify: shifouqiyong~인 경우utuisongmoshi(chinese removed)늤eianalysiswanyizhilijituisong(chinese removed)?
+            report_type: baogaoleixingmeiju(chinese removed)늓ongconfigduqu(chinese removed)똈ssue #119(chinese removed)?
+            current_time: benlunyunxingdongjiedecankaoshijian(chinese removed)똹ongyutongyiduandianxuchuanmubiaojiaoyiripanduan
 
 
 
@@ -3419,7 +3419,7 @@ class StockAnalysisPipeline:
 
         try:
 
-            self._emit_progress(12, f"{code}竊쉦hengzaizhunbeianalysisrenwu")
+            self._emit_progress(12, f"{code}(chinese removed)쉦hengzaizhunbeianalysisrenwu")
 
             # Step 1: huoqubingsaveshuju
 
@@ -3435,11 +3435,11 @@ class StockAnalysisPipeline:
 
                 logger.warning(f"[{code}] shujuhuoqushibai: {error}")
 
-                # jishihuoqushibai竊똹echangshiyongyiyoushujuanalysis
+                # jishihuoqushibai(chinese removed)똹echangshiyongyiyoushujuanalysis
 
             else:
 
-                self._emit_progress(16, f"{code}竊쉎anginputjuzhunbeiwancheng")
+                self._emit_progress(16, f"{code}(chinese removed)쉎anginputjuzhunbeiwancheng")
 
             
 
@@ -3470,7 +3470,7 @@ class StockAnalysisPipeline:
 
                 
 
-                # dangutuisongmoshi竊?55竊됵폏meianalysiswanyizhistocklijituisong
+                # dangutuisongmoshi(chinese removed)?55(chinese removed)됵폏meianalysiswanyizhistocklijituisong
 
                 if single_stock_notify:
 
@@ -3500,7 +3500,7 @@ class StockAnalysisPipeline:
 
         except Exception as e:
 
-            # buhuosuoyouyichang竊똰uebaodangushibaibuyingxiangzhengti
+            # buhuosuoyouyichang(chinese removed)똰uebaodangushibaibuyingxiangzhengti
 
             logger.exception(f"[{code}] chuliguochengfashengweizhiyichang: {e}")
 
@@ -3532,7 +3532,7 @@ class StockAnalysisPipeline:
 
 
 
-        흐름竊?
+        흐름(chinese removed)?
         1. huoqudaianalysisdestockliebiao
 
         2. 사용xianchengchibingfachuli
@@ -3545,12 +3545,12 @@ class StockAnalysisPipeline:
 
         Args:
 
-            stock_codes: stockdaimaliebiao竊늟exuan竊똫oren사용configzhongdewatchlistgu竊?
+            stock_codes: stockdaimaliebiao(chinese removed)늟exuan(chinese removed)똫oren사용configzhongdewatchlistgu(chinese removed)?
             dry_run: shifoujinhuoqushujubuanalysis
 
             send_notification: shifousendtuisongnotification
 
-            merge_notification: shifouhebingtuisong竊늯iaoguobencituisong竊똹ou main cenghebinggegu+dapanhoutongyisend竊똈ssue #190竊?
+            merge_notification: shifouhebingtuisong(chinese removed)늯iaoguobencituisong(chinese removed)똹ou main cenghebinggegu+dapanhoutongyisend(chinese removed)똈ssue #190(chinese removed)?
 
 
         Returns:
@@ -3606,7 +3606,7 @@ class StockAnalysisPipeline:
 
         if not stock_codes:
 
-            logger.error("weiconfigwatchlistguliebiao竊똰ingzai .env wenjianzhongshezhi STOCK_LIST")
+            logger.error("weiconfigwatchlistguliebiao(chinese removed)똰ingzai .env wenjianzhongshezhi STOCK_LIST")
 
             return []
 
@@ -3620,14 +3620,14 @@ class StockAnalysisPipeline:
 
 
 
-        # dongjiebenlunyunxingdetongyicankaoshijian竊똟imiankuamarketshoupanbianjieshitongpistockshiyongbutongmubiaojiaoyiri??
+        # dongjiebenlunyunxingdetongyicankaoshijian(chinese removed)똟imiankuamarketshoupanbianjieshitongpistockshiyongbutongmubiaojiaoyiri??
         resume_reference_time = datetime.now(timezone.utc)
 
         
 
-        # === piliangyuqushishixingqing竊늶ouhua竊쉇imianmeizhistockdouchufaquanlianglaqu竊?==
+        # === piliangyuqushishixingqing(chinese removed)늶ouhua(chinese removed)쉇imianmeizhistockdouchufaquanlianglaqu(chinese removed)?==
 
-        # zhiyoustockshuliang >= 5 shicaijinxingyuqu竊똲haoliangstockzhijiezhugechaxungenggaoxiao
+        # zhiyoustockshuliang >= 5 shicaijinxingyuqu(chinese removed)똲haoliangstockzhijiezhugechaxungenggaoxiao
 
         if len(stock_codes) >= 5:
 
@@ -3638,8 +3638,8 @@ class StockAnalysisPipeline:
                 logger.info(f"Realtime quote prefetch enabled: fetched shared market data for {len(stock_codes)} stocks")
 
 
-        # Issue #455: yuqustockmingcheng竊똟imianbingfaanalysisshixianshi?똤upiaoxxxxx??
-        # dry_run jinzuoshujulaqu竊똟uxuyaomingchengyuqu竊똟imianewaiwangluokaixiao
+        # Issue #455: yuqustockmingcheng(chinese removed)똟imianbingfaanalysisshixianshi?똤upiaoxxxxx??
+        # dry_run jinzuoshujulaqu(chinese removed)똟uxuyaomingchengyuqu(chinese removed)똟imianewaiwangluokaixiao
 
         if not dry_run:
 
@@ -3647,7 +3647,7 @@ class StockAnalysisPipeline:
 
 
 
-        # dangutuisongmoshi竊?55竊됵폏congconfigduqu
+        # dangutuisongmoshi(chinese removed)?55(chinese removed)됵폏congconfigduqu
 
         single_stock_notify = getattr(self.config, 'single_stock_notify', False)
 
@@ -3690,7 +3690,7 @@ class StockAnalysisPipeline:
 
         # shiyongxianchengchibingfachuli
 
-        # zhuyi竊쉖ax_workers shezhijiaodi竊늤oren3竊뎫ibimianchufafanpa
+        # zhuyi(chinese removed)쉖ax_workers shezhijiaodi(chinese removed)늤oren3(chinese removed)뎫ibimianchufafanpa
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
 
@@ -3752,7 +3752,7 @@ class StockAnalysisPipeline:
 
                         logger.warning(
 
-                            f"[{code}] analysisjieguobiaojiweishibai竊똟ujiruhuizong: "
+                            f"[{code}] analysisjieguobiaojiweishibai(chinese removed)똟ujiruhuizong: "
 
                             f"{result.error_message or 'weizhiyuanyin'}"
 
@@ -3764,10 +3764,10 @@ class StockAnalysisPipeline:
 
                     if idx < len(stock_codes) - 1 and analysis_delay > 0:
 
-                        # zhuyi竊쉉i sleep fashengzai?쐚huxianchengshouji future dexunhuan?쓟hong竊?
+                        # zhuyi(chinese removed)쉉i sleep fashengzai?쐚huxianchengshouji future dexunhuan?쓟hong(chinese removed)?
                         # bingbuhuizuzhixianchengchizhongderenwutongshifaqiwangluoqingqiu??
-                        # yincitaduijiangdibingfaqingqiufengzhidexiaoguoyouxian竊썍henzhengdefengzhizhuyaoyou max_workers jueding??
-                        # gaixingweimuqianbaoliu竊늏nxuqiubugailuoji竊됥?
+                        # yincitaduijiangdibingfaqingqiufengzhidexiaoguoyouxian(chinese removed)썍henzhengdefengzhizhuyaoyou max_workers jueding??
+                        # gaixingweimuqianbaoliu(chinese removed)늏nxuqiubugailuoji(chinese removed)됥?
                         logger.debug(f"dengdai {analysis_delay} miaohoujixuxiayizhistock...")
 
                         time.sleep(analysis_delay)
@@ -3786,7 +3786,7 @@ class StockAnalysisPipeline:
 
         
 
-        # dry-run moshixia竊똲hujuhuoquchenggongjishiweichenggong
+        # dry-run moshixia(chinese removed)똲hujuhuoquchenggongjishiweichenggong
 
         if dry_run:
 
@@ -3828,29 +3828,29 @@ class StockAnalysisPipeline:
 
         
 
-        # savebaogaodaobendiwenjian竊늳ulunshifoutuisongnotificationdousave竊?
+        # savebaogaodaobendiwenjian(chinese removed)늳ulunshifoutuisongnotificationdousave(chinese removed)?
         if results and not dry_run:
 
             self._save_local_report(results, report_type)
 
 
 
-        # sendnotification竊늕angutuisongmoshixiatiaoguohuizongtuisong竊똟imianchongfu竊?
+        # sendnotification(chinese removed)늕angutuisongmoshixiatiaoguohuizongtuisong(chinese removed)똟imianchongfu(chinese removed)?
         if results and send_notification and not dry_run:
 
             if single_stock_notify:
 
-                # dangutuisongmoshi竊쉦hisavehuizongbaogao竊똟uzaichongfutuisong
+                # dangutuisongmoshi(chinese removed)쉦hisavehuizongbaogao(chinese removed)똟uzaichongfutuisong
 
-                logger.info("dangutuisongmoshi竊쉞iaoguohuizongtuisong竊똨insavebaogaodaobendi")
+                logger.info("dangutuisongmoshi(chinese removed)쉞iaoguohuizongtuisong(chinese removed)똨insavebaogaodaobendi")
 
                 self._send_notifications(results, report_type, skip_push=True)
 
             elif merge_notification:
 
-                # hebingmoshi竊뉹ssue #190竊됵폏jinsave竊똟utuisong竊똹ou main cenghebinggegu+dapanhoutongyisend
+                # hebingmoshi(chinese removed)뉹ssue #190(chinese removed)됵폏jinsave(chinese removed)똟utuisong(chinese removed)똹ou main cenghebinggegu+dapanhoutongyisend
 
-                logger.info("hebingtuisongmoshi竊쉞iaoguobencituisong竊똨iangzaigegu+dapanfupanhoutongyisend")
+                logger.info("hebingtuisongmoshi(chinese removed)쉞iaoguobencituisong(chinese removed)똨iangzaigegu+dapanfupanhoutongyisend")
 
                 self._send_notifications(results, report_type, skip_push=True)
 
@@ -4004,7 +4004,7 @@ class StockAnalysisPipeline:
 
             results: analysisjieguoliebiao
 
-            skip_push: shifoutiaoguotuisong竊늞insavedaobendi竊똹ongyu~인 경우utuisongmoshi竊?
+            skip_push: shifoutiaoguotuisong(chinese removed)늞insavedaobendi(chinese removed)똹ongyu~인 경우utuisongmoshi(chinese removed)?
         """
 
 
@@ -4034,7 +4034,7 @@ class StockAnalysisPipeline:
 
             
 
-            # tiaoguotuisong竊늕angutuisongmoshi / hebingmoshi竊쉇aogaoyiyou _save_local_report save竊?
+            # tiaoguotuisong(chinese removed)늕angutuisongmoshi / hebingmoshi(chinese removed)쉇aogaoyiyou _save_local_report save(chinese removed)?
             if skip_push:
 
                 return
@@ -4085,7 +4085,7 @@ class StockAnalysisPipeline:
 
 
 
-                # Issue #455: Markdown zhuantupian竊늶u notification.send luojiyizhi竊?
+                # Issue #455: Markdown zhuantupian(chinese removed)늶u notification.send luojiyizhi(chinese removed)?
                 from src.md2img import markdown_to_image
 
 
@@ -4138,7 +4138,7 @@ class StockAnalysisPipeline:
 
                         logger.exception(
 
-                            "notificationqudao %s tuisongyichang竊똨ixuchangshiqitaqudao: %s",
+                            "notificationqudao %s tuisongyichang(chinese removed)똨ixuchangshiqitaqudao: %s",
 
                             channel_label,
 
@@ -4164,7 +4164,7 @@ class StockAnalysisPipeline:
 
                         logger.info(
 
-                            "Markdown yizhuanhuanweitupian竊똨iangxiang %s sendtupian",
+                            "Markdown yizhuanhuanweitupian(chinese removed)똨iangxiang %s sendtupian",
 
                             [ch.value for ch in non_wechat_channels_needing_image],
 
@@ -4174,7 +4174,7 @@ class StockAnalysisPipeline:
 
                         logger.warning(
 
-                            "Markdown zhuantupianshibai竊똨ianghuituiweiwenbensend?굌ingjiancha MARKDOWN_TO_IMAGE_CHANNELS configbinganzhuang %s",
+                            "Markdown zhuantupianshibai(chinese removed)똨ianghuituiweiwenbensend?굌ingjiancha MARKDOWN_TO_IMAGE_CHANNELS configbinganzhuang %s",
 
                             _get_md2img_hint(),
 
@@ -4182,7 +4182,7 @@ class StockAnalysisPipeline:
 
 
 
-                # qiyeweixin竊쉦hifajingjianban竊늩ingtaixianzhi竊?
+                # qiyeweixin(chinese removed)쉦hifajingjianban(chinese removed)늩ingtaixianzhi(chinese removed)?
                 wechat_success = False
 
                 if NotificationChannel.WECHAT in channels:
@@ -4217,7 +4217,7 @@ class StockAnalysisPipeline:
 
                                 logger.warning(
 
-                                    "qiyeweixin Markdown zhuantupianshibai竊똨ianghuituiweiwenbensend?굌ingjiancha MARKDOWN_TO_IMAGE_CHANNELS configbinganzhuang %s",
+                                    "qiyeweixin Markdown zhuantupianshibai(chinese removed)똨ianghuituiweiwenbensend?굌ingjiancha MARKDOWN_TO_IMAGE_CHANNELS configbinganzhuang %s",
 
                                     _get_md2img_hint(),
 
@@ -4247,7 +4247,7 @@ class StockAnalysisPipeline:
 
 
 
-                # qitaqudao竊쉌awanzhengbaogao竊늒imianzidingyi Webhook bei wechat jieduanluojiwuran竊?
+                # qitaqudao(chinese removed)쉌awanzhengbaogao(chinese removed)늒imianzidingyi Webhook bei wechat jieduanluojiwuran(chinese removed)?
                 non_wechat_success = False
 
                 stock_email_groups = getattr(self.config, 'stock_email_groups', []) or []
@@ -4592,7 +4592,7 @@ class StockAnalysisPipeline:
 
             else:
 
-                logger.info("notificationqudaoweiconfig竊똳iaoguotuisong")
+                logger.info("notificationqudaoweiconfig(chinese removed)똳iaoguotuisong")
 
                 
 

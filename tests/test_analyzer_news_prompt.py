@@ -23,29 +23,29 @@ from src.analyzer import (
 
 class AnalyzerNewsPromptTestCase(unittest.TestCase):
     def test_contains_trend_hint_treats_non_adjacent_negation_as_negated(self) -> None:
-        self.assertFalse(_contains_trend_hint("shangweixingchengshangshengqushi，jixuguancha。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("weixingchengshangshengqushi，jixuguancha。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("bingweixingchengshangshengqushi，jixuguancha。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("meiyouxingchengduotoupailie，jixuguancha。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("dangqianwuduotoupailie，rengxuguancha。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("shangbushuyushangshengqushi，fantanrengdaiqueren。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("dangqianfeiduotoupailie，rengxuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("shangweixingchengshangshengqushi,jixuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("weixingchengshangshengqushi,jixuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("bingweixingchengshangshengqushi,jixuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("meiyouxingchengduotoupailie,jixuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("dangqianwuduotoupailie,rengxuguancha。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("shangbushuyushangshengqushi,fantanrengdaiqueren。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("dangqianfeiduotoupailie,rengxuguancha。", _BULLISH_TREND_HINTS))
         self.assertFalse(_contains_trend_hint("This is not a bullish trend yet.", _BULLISH_TREND_HINTS))
 
     def test_contains_trend_hint_scans_later_non_negated_occurrences(self) -> None:
         self.assertTrue(
             _contains_trend_hint(
-                "bushiduotoupailie，houxufanglianghouzaicichuxianduotoupailiexinhao。",
+                "bushiduotoupailie,houxufanglianghouzaicichuxianduotoupailiexinhao。",
                 _BULLISH_TREND_HINTS,
             )
         )
 
     def test_contains_trend_hint_keeps_contrast_clause_target_hint(self) -> None:
-        self.assertTrue(_contains_trend_hint("bushikongtouershiduotoupailie，qushixiufu。", _BULLISH_TREND_HINTS))
-        self.assertFalse(_contains_trend_hint("weizhuanweishangshengqushi，fantanrengdaiqueren。", _BULLISH_TREND_HINTS))
+        self.assertTrue(_contains_trend_hint("bushikongtouershiduotoupailie,qushixiufu。", _BULLISH_TREND_HINTS))
+        self.assertFalse(_contains_trend_hint("weizhuanweishangshengqushi,fantanrengdaiqueren。", _BULLISH_TREND_HINTS))
 
     def test_contains_trend_hint_ignores_single_character_prefixes_in_common_words(self) -> None:
-        self.assertTrue(_contains_trend_hint("feichangmingxiandeduotoupailie，qushirengzaiyanxu。", _BULLISH_TREND_HINTS))
+        self.assertTrue(_contains_trend_hint("feichangmingxiandeduotoupailie,qushirengzaiyanxu。", _BULLISH_TREND_HINTS))
         self.assertTrue(_contains_trend_hint("weilaishangshengqushiruofangliangjiangjinyibuqueren。", _BULLISH_TREND_HINTS))
         self.assertEqual(
             _infer_trend_direction({"trend_status": "feichangmingxiandeduotoupailie", "ma_alignment": "weilaishangshengqushizhubumingque"}),
@@ -54,11 +54,11 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
     def test_infer_trend_direction_recognizes_weak_bullish_and_bearish_states(self) -> None:
         self.assertEqual(
-            _infer_trend_direction({"trend_status": "ruoshiduotou", "ma_alignment": "ruoshiduotou，MA5>MA10 dan MA10≤MA20"}),
+            _infer_trend_direction({"trend_status": "ruoshiduotou", "ma_alignment": "ruoshiduotou,MA5>MA10 dan MA10≤MA20"}),
             "bullish",
         )
         self.assertEqual(
-            _infer_trend_direction({"trend_status": "ruoshikongtou", "ma_alignment": "ruoshikongtou，MA5<MA10 dan MA10≥MA20"}),
+            _infer_trend_direction({"trend_status": "ruoshikongtou", "ma_alignment": "ruoshikongtou,MA5<MA10 dan MA10≥MA20"}),
             "bearish",
         )
 
@@ -103,13 +103,13 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
         self.assertIn("### jineng 1: chanlun", prompt)
         self.assertNotIn("zhuanzhuyuqushijiaoyi", prompt)
-        self.assertNotIn("duotoupailie：MA5 > MA10 > MA20", prompt)
+        self.assertNotIn("duotoupailie:MA5 > MA10 > MA20", prompt)
 
     def test_analysis_prompt_keeps_injected_default_policy_for_implicit_default_run(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
             analyzer = GeminiAnalyzer(
                 skill_instructions="### jineng 1: morenduotouqushi",
-                default_skill_policy="## morenjinengjixian（bixuyangezunshou）\n- **duotoupailiebixutiaojian**：MA5 > MA10 > MA20",
+                default_skill_policy="## morenjinengjixian(bixuyangezunshou)\n- **duotoupailiebixutiaojian**:MA5 > MA10 > MA20",
                 use_legacy_default_prompt=True,
             )
 
@@ -117,7 +117,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
         self.assertIn("zhuanzhuyuqushijiaoyi", prompt)
         self.assertIn("duotoupailiebixutiaojian", prompt)
-        self.assertIn("duotoupailie：MA5 > MA10 > MA20", prompt)
+        self.assertIn("duotoupailie:MA5 > MA10 > MA20", prompt)
 
     def test_analysis_prompt_contains_actionability_guardrails(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
@@ -156,10 +156,10 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
             prompt = analyzer._format_prompt(context, "guizhoumaotai", news_context="news")
 
         self.assertIn("jin7ridexinwensousuojieguo", prompt)
-        self.assertIn("meiyitiaodoubixudaijutiriqi（YYYY-MM-DD）", prompt)
+        self.assertIn("meiyitiaodoubixudaijutiriqi(YYYY-MM-DD)", prompt)
         self.assertIn("chaochujin7richuangkoudexinwenyilvhulve", prompt)
-        self.assertIn("shijianweizhi、wufaquedingfaburiqidexinwenyilvhulve", prompt)
-        self.assertIn("caibaoyufenhong（jiazhitouzikoujing）", prompt)
+        self.assertIn("shijianweizhi,wufaquedingfaburiqidexinwenyilvhulve", prompt)
+        self.assertIn("caibaoyufenhong(jiazhitouzikoujing)", prompt)
         self.assertIn("jinzhibianzao", prompt)
 
     def test_prompt_includes_capital_flow_as_operation_filter(self) -> None:
@@ -191,7 +191,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
         prompt = analyzer._format_prompt(context, "enjiegufen", news_context=None)
 
-        self.assertIn("zhulizijinliuxiang（caozuojianyiguolvqi）", prompt)
+        self.assertIn("zhulizijinliuxiang(caozuojianyiguolvqi)", prompt)
         self.assertIn("zhulijingliuru", prompt)
         self.assertIn("-1200000", prompt)
         self.assertIn("jiejinyaliqiezhuliliuchushibudezhuimai", prompt)
@@ -277,21 +277,21 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
                 "volume_trend": "fangliangzhendang",
                 "buy_signal": "guancha",
                 "signal_score": 41,
-                "signal_reasons": ["duotoupailie，chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
-                "risk_factors": ["diepoMA20，qushichengya"],
+                "signal_reasons": ["duotoupailie,chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
+                "risk_factors": ["diepoMA20,qushichengya"],
             },
         }
 
         prompt = analyzer._format_prompt(
             context,
             "yaomingkangde",
-            news_context="2026-04-27 yijibaochaoyuqi，dingdanzengzhang。",
+            news_context="2026-04-27 yijibaochaoyuqi,dingdanzengzhang。",
         )
 
         self.assertIn("kongtoupailie MA5<MA10<MA20", prompt)
-        self.assertNotIn("duotoupailie，chixushangzhang", prompt)
+        self.assertNotIn("duotoupailie,chixushangzhang", prompt)
         self.assertIn("shijiancuihuacunzaidanjishudaiqueren", prompt)
-        self.assertIn("shijianxianxing、jishudaiqueren", prompt)
+        self.assertIn("shijianxianxing,jishudaiqueren", prompt)
         self.assertIn("liangnengyichangtishi", prompt)
         self.assertIn("jishumianyizhixing", prompt)
 
@@ -318,8 +318,8 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
                 "volume_trend": "liangjiapeihe",
                 "buy_signal": "pianqiang",
                 "signal_score": 73,
-                "signal_reasons": ["duotoupailie，chixushangzhang", "kongtoupailie，chixuxiadie"],
-                "risk_factors": ["kongtoupailie，chixuxiadie", "caibaopiluqianbodongkenengfangda"],
+                "signal_reasons": ["duotoupailie,chixushangzhang", "kongtoupailie,chixuxiadie"],
+                "risk_factors": ["kongtoupailie,chixuxiadie", "caibaopiluqianbodongkenengfangda"],
             },
         }
 
@@ -327,8 +327,8 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
 
         self.assertIn("duotoupailie MA5>MA10>MA20", prompt)
         self.assertIn("caibaopiluqianbodongkenengfangda", prompt)
-        self.assertNotIn("kongtoupailie，chixuxiadie\n", prompt)
-        self.assertNotIn("kongtoupailie，chixuxiadie", prompt)
+        self.assertNotIn("kongtoupailie,chixuxiadie\n", prompt)
+        self.assertNotIn("kongtoupailie,chixuxiadie", prompt)
         self.assertIn("yitichuyuduotouzhupanduanzhijiechongtudekongtoujiegouliyou", prompt)
         self.assertIn("yitichuyuduotouzhupanduanzhijiechongtudekongtoujiegoufengxianbiaoshu", prompt)
 
@@ -347,7 +347,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
             "today": {"close": 178.5, "ma5": 176.0, "ma10": 180.2, "ma20": 179.9},
             "trend_analysis": {
                 "trend_status": "ruoshikongtou",
-                "ma_alignment": "ruoshikongtou，MA5<MA10 dan MA10≥MA20",
+                "ma_alignment": "ruoshikongtou,MA5<MA10 dan MA10≥MA20",
                 "trend_strength": 43,
                 "bias_ma5": 1.4,
                 "bias_ma10": -0.9,
@@ -355,7 +355,7 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
                 "volume_trend": "liangnengyiban",
                 "buy_signal": "guancha",
                 "signal_score": 45,
-                "signal_reasons": ["ruoshiduotouxiufu", "duotoupailie，chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
+                "signal_reasons": ["ruoshiduotouxiufu", "duotoupailie,chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
                 "risk_factors": ["MA10 yazhirengzai"],
             },
         }
@@ -363,12 +363,12 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         prompt = analyzer._format_prompt(
             context,
             "ningdeshidai",
-            news_context="2026-04-27 xinchanpinfabu，shichangqingxuhuinuan。",
+            news_context="2026-04-27 xinchanpinfabu,shichangqingxuhuinuan。",
         )
 
-        self.assertIn("ruoshikongtou，MA5<MA10 dan MA10≥MA20", prompt)
+        self.assertIn("ruoshikongtou,MA5<MA10 dan MA10≥MA20", prompt)
         self.assertNotIn("ruoshiduotouxiufu", prompt)
-        self.assertNotIn("duotoupailie，chixushangzhang", prompt)
+        self.assertNotIn("duotoupailie,chixushangzhang", prompt)
         self.assertIn("shijiancuihuacunzaidanjishudaiqueren", prompt)
         self.assertIn("yitichuyukongtouzhupanduanzhijiechongtudekanduojiegouliyou", prompt)
 
@@ -376,19 +376,19 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
         original = {
             "trend_status": "kongtoupailie",
             "ma_alignment": "kongtoupailie MA5<MA10<MA20",
-            "signal_reasons": ["duotoupailie，chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
-            "risk_factors": ["diepoMA20，qushichengya"],
+            "signal_reasons": ["duotoupailie,chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
+            "risk_factors": ["diepoMA20,qushichengya"],
         }
 
         sanitized = _sanitize_trend_analysis_for_prompt(original, volume_change_ratio=12.4)
 
         self.assertEqual(
             original["signal_reasons"],
-            ["duotoupailie，chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
+            ["duotoupailie,chixushangzhang", "shijiancuihuacunzaidanjishudaiqueren"],
         )
         self.assertNotIn("prompt_consistency_notes", original)
         self.assertNotIn("prompt_trend_direction", original)
-        self.assertNotIn("duotoupailie，chixushangzhang", sanitized["signal_reasons"])
+        self.assertNotIn("duotoupailie,chixushangzhang", sanitized["signal_reasons"])
         self.assertEqual(sanitized["prompt_trend_direction"], "bearish")
 
 

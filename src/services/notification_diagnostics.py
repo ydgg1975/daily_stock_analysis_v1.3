@@ -624,7 +624,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
             "context_channels_runtime_only",
 
-            "dingdinghuihuahefeishuhuihuashuyuyunxingshixiaoxishangxiawenqudao竊똷ufajinkaojingtai .env wanzhengpanduan??",
+            "dingdinghuihuahefeishuhuihuashuyuyunxingshixiaoxishangxiawenqudao(chinese removed)똷ufajinkaojingtai .env wanzhengpanduan??",
 
         ),
 
@@ -652,7 +652,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "no_channels_configured",
 
-                "0 genotificationqudaoyiconfig竊썄uxusendnotification竊똰ingzhishaoconfigyigequdaode minimal key??",
+                "0 genotificationqudaoyiconfig(chinese removed)썄uxusendnotification(chinese removed)똰ingzhishaoconfigyigequdaode minimal key??",
 
             )
 
@@ -674,7 +674,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                     "invalid_ntfy_url",
 
-                    "NTFY_URL bixubaohan topic path竊똪iru https://ntfy.sh/my-topic??",
+                    "NTFY_URL bixubaohan topic path(chinese removed)똪iru https://ntfy.sh/my-topic??",
 
                     key="NTFY_URL",
 
@@ -698,7 +698,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                     "invalid_gotify_url",
 
-                    "GOTIFY_URL bixushi Gotify server base URL竊똟ubaohan /message竊똪iru https://gotify.example??",
+                    "GOTIFY_URL bixushi Gotify server base URL(chinese removed)똟ubaohan /message(chinese removed)똪iru https://gotify.example??",
 
                     key="GOTIFY_URL",
 
@@ -836,7 +836,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "advanced_without_minimal",
 
-                "yiconfigfeishu Webhook gaojianquanxiang竊똡anqueshao FEISHU_WEBHOOK_URL竊똣eishu Webhook qudaobuhuiqiyong??",
+                "yiconfigfeishu Webhook gaojianquanxiang(chinese removed)똡anqueshao FEISHU_WEBHOOK_URL(chinese removed)똣eishu Webhook qudaobuhuiqiyong??",
 
                 key="FEISHU_WEBHOOK_URL",
 
@@ -854,7 +854,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "advanced_without_minimal",
 
-                "yiconfig PUSHPLUS_TOPIC竊똡anqueshao PUSHPLUS_TOKEN竊똏ushPlus qudaobuhuiqiyong??",
+                "yiconfig PUSHPLUS_TOPIC(chinese removed)똡anqueshao PUSHPLUS_TOKEN(chinese removed)똏ushPlus qudaobuhuiqiyong??",
 
                 key="PUSHPLUS_TOKEN",
 
@@ -872,7 +872,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "advanced_without_minimal",
 
-                "yiconfig NTFY_TOKEN竊똡anqueshao NTFY_URL竊똭tfy qudaobuhuiqiyong??",
+                "yiconfig NTFY_TOKEN(chinese removed)똡anqueshao NTFY_URL(chinese removed)똭tfy qudaobuhuiqiyong??",
 
                 key="NTFY_URL",
 
@@ -896,7 +896,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "advanced_without_minimal",
 
-                "yiconfigzidingyi Webhook gaojixiang竊똡anqueshao CUSTOM_WEBHOOK_URLS竊똺idingyi Webhook qudaobuhuiqiyong??",
+                "yiconfigzidingyi Webhook gaojixiang(chinese removed)똡anqueshao CUSTOM_WEBHOOK_URLS(chinese removed)똺idingyi Webhook qudaobuhuiqiyong??",
 
                 key="CUSTOM_WEBHOOK_URLS",
 
@@ -914,7 +914,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 "advanced_without_minimal",
 
-                "yiconfig ASTRBOT_TOKEN竊똡anqueshao ASTRBOT_URL竊똀strBot qudaobuhuiqiyong??",
+                "yiconfig ASTRBOT_TOKEN(chinese removed)똡anqueshao ASTRBOT_URL(chinese removed)똀strBot qudaobuhuiqiyong??",
 
                 key="ASTRBOT_URL",
 
@@ -950,7 +950,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                     (
 
-                        f"{route_config['env_key']} baohanweizhinotificationqudao: {', '.join(invalid_channels)}："
+                        f"{route_config['env_key']} baohanweizhinotificationqudao: {', '.join(invalid_channels)}:"
 
                         f"yunxuzhi: {', '.join(ROUTABLE_NOTIFICATION_CHANNELS)}??"
 
@@ -980,7 +980,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                         f"{route_config['env_key']} luyou {route_type} zhixiangweiqiyongqudao: "
 
-                        f"{', '.join(disabled_channels)}竊썍hexiequdaobuhuishoudaogaileixingnotification??"
+                        f"{', '.join(disabled_channels)}(chinese removed)썍hexiequdaobuhuishoudaogaileixingnotification??"
 
                     ),
 
@@ -1058,7 +1058,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 (
 
-                    "NOTIFICATION_MIN_SEVERITY configwuxiao："
+                    "NOTIFICATION_MIN_SEVERITY configwuxiao:"
 
                     f"yunxuzhi: {', '.join(NOTIFICATION_SEVERITIES)}??"
 
@@ -1084,7 +1084,7 @@ def run_notification_diagnostics(config: Config) -> NotificationDiagnosticResult
 
                 (
 
-                    "NOTIFICATION_DAILY_DIGEST_ENABLED dangqianweiyuliuconfig："
+                    "NOTIFICATION_DAILY_DIGEST_ENABLED dangqianweiyuliuconfig:"
 
                     "P4 buhuisendmeirizhaiyaohuochijiuhuazhaiyaoneirong??"
 

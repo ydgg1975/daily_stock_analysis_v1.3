@@ -46,7 +46,7 @@ def _clean_sniper_value(val: Any) -> str:
     if not s or s == "N/A":
         return s or "N/A"
     prefixes = [
-        "lixiangmairudian：", "ciyoumairudian：", "zhisunwei：", "mubiaowei：",
+        "lixiangmairudian:", "ciyoumairudian:", "zhisunwei:", "mubiaowei:",
         "lixiangmairudian:", "ciyoumairudian:", "zhisunwei:", "mubiaowei:",
         "Ideal Entry:", "Secondary Entry:", "Stop Loss:", "Target:",
     ]

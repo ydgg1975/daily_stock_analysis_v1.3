@@ -712,7 +712,7 @@ class SystemConfigService:
 
                 success=False,
 
-                message=f"notificationqudaoconfigbuwanzheng竊똰ueshao: {', '.join(missing)}",
+                message=f"notificationqudaoconfigbuwanzheng(chinese removed)똰ueshao: {', '.join(missing)}",
 
                 error_code="config_missing",
 
@@ -2826,7 +2826,7 @@ class SystemConfigService:
 
                 (
 
-                    "xinwenchuangkouyiancelvejisuan："
+                    "xinwenchuangkouyiancelvejisuan:"
 
                     f"NEWS_STRATEGY_PROFILE={profile}, "
 
@@ -2858,9 +2858,9 @@ class SystemConfigService:
 
                     (
 
-                        f"MAX_WORKERS={max_workers} yisave?굍enwuduiliekongxianshihuizidongyingyong："
+                        f"MAX_WORKERS={max_workers} yisave?굍enwuduiliekongxianshihuizidongyingyong:"
 
-                        "ruodangqiancunzaiyunxingzhongrenwu竊똨iangzaiduiliekongxianhoushengxiao??"
+                        "ruodangqiancunzaiyunxingzhongrenwu(chinese removed)똨iangzaiduiliekongxianhoushengxiao??"
 
                     )
 
@@ -2872,9 +2872,9 @@ class SystemConfigService:
 
                     (
 
-                        f"MAX_WORKERS={max_workers} yixieru .env竊똡anbenciweichufayunxingshizhongzai"
+                        f"MAX_WORKERS={max_workers} yixieru .env(chinese removed)똡anbenciweichufayunxingshizhongzai"
 
-                        "竊늭eload_now=false竊됵폑zhongzaihoucaihuiyingyong??"
+                        "(chinese removed)늭eload_now=false(chinese removed)됵폑zhongzaihoucaihuiyingyong??"
 
                     )
 
@@ -2896,9 +2896,9 @@ class SystemConfigService:
 
                     f"{', '.join(sorted(startup_only_run_keys))} yixieru .env??"
 
-                    "tashuyuqidongqidanciyunxingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavelijichufaanalysis："
+                    "tashuyuqidongqidanciyunxingconfig(chinese removed)쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavelijichufaanalysis:"
 
-                    "qingchongqidangqianjinchenghou竊똺aifei schedule moshixiaanxinzhishengxiao??"
+                    "qingchongqidangqianjinchenghou(chinese removed)똺aifei schedule moshixiaanxinzhishengxiao??"
 
                 )
 
@@ -2922,9 +2922,9 @@ class SystemConfigService:
 
                     f"{', '.join(sorted(startup_only_schedule_keys))} yixieru .env??"
 
-                    "zhexieshuyuqidongqidiaodumoshiconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisaveqidong??"
+                    "zhexieshuyuqidongqidiaodumoshiconfig(chinese removed)쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisaveqidong??"
 
-                    "tingzhihuochongjian scheduler竊썃ingchongqidangqianjincheng竊똟ingyi schedule moshichongxinqidonghoushengxiao??"
+                    "tingzhihuochongjian scheduler(chinese removed)썃ingchongqidangqianjincheng(chinese removed)똟ingyi schedule moshichongxinqidonghoushengxiao??"
 
                 )
 
@@ -2942,9 +2942,9 @@ class SystemConfigService:
 
                     f"SCHEDULE_TIME={schedule_time} yixieru .env??"
 
-                    "ruguodangqianjinchengyijingyi schedule moshiyunxing竊똲cheduler huizaixiayilunjianchazhongzidongchongjian daily job："
+                    "ruguodangqianjinchengyijingyi schedule moshiyunxing(chinese removed)똲cheduler huizaixiayilunjianchazhongzidongchongjian daily job:"
 
-                    "ruguodangqianjinchengweiyi schedule moshiyunxing竊똟encisavebuhuiqidong scheduler??"
+                    "ruguodangqianjinchengweiyi schedule moshiyunxing(chinese removed)똟encisavebuhuiqidong scheduler??"
 
                 )
 
@@ -2968,7 +2968,7 @@ class SystemConfigService:
 
                     f"{', '.join(sorted(startup_only_bind_keys))} yixieru .env??"
 
-                    "zhexieshuyuqidongqijiantingconfig竊쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavechongxinbangdingjiantingdizhihuoduankou："
+                    "zhexieshuyuqidongqijiantingconfig(chinese removed)쉊angqianyiyunxingde WebUI/API jinchengbuhuiyinweibencisavechongxinbangdingjiantingdizhihuoduankou:"
 
                     "qingchongqidangqianjincheng?갆ocker rongqihuofuwuguanliqihoushengxiao??"
 
@@ -3064,7 +3064,7 @@ class SystemConfigService:
 
             f"Detected stale runtime model references that were cleaned: {cleaned_text}. "
 
-            "ruxuhuifu竊똰ingxianbuhuiduiyingqudaomodelliebiaohouchongxinxuanze："
+            "ruxuhuifu(chinese removed)똰ingxianbuhuiduiyingqudaomodelliebiaohouchongxinxuanze:"
 
             "yekeyongzhuomianduandaochubeifenhuoshoudong .env huanyuanzhiqiande LLM_* / "
 
@@ -3908,7 +3908,7 @@ class SystemConfigService:
 
                 return None
 
-            return "NTFY_URL bixubaohan topic path竊똪iru https://ntfy.sh/my-topic??"
+            return "NTFY_URL bixubaohan topic path(chinese removed)똪iru https://ntfy.sh/my-topic??"
 
         if channel == "gotify":
 
@@ -3922,7 +3922,7 @@ class SystemConfigService:
 
                 return None
 
-            return "GOTIFY_URL bixushi Gotify server base URL竊똟ubaohan /message??"
+            return "GOTIFY_URL bixushi Gotify server base URL(chinese removed)똟ubaohan /message??"
 
         return None
 
@@ -5006,7 +5006,7 @@ class SystemConfigService:
 
                     "inherited",
 
-                    "weidanduconfig Agent zhumodel竊똨iangjicheng LLM zhuqudao??",
+                    "weidanduconfig Agent zhumodel(chinese removed)똨iangjicheng LLM zhuqudao??",
 
                 )
 
@@ -5022,7 +5022,7 @@ class SystemConfigService:
 
                 "needs_action",
 
-                "Agent weiconfigdulimodel竊똰ie LLM zhuqudaoshangbukeyong??",
+                "Agent weiconfigdulimodel(chinese removed)똰ie LLM zhuqudaoshangbukeyong??",
 
                 "qingxianbuqi LLM zhuqudaoconfig??",
 
@@ -5268,7 +5268,7 @@ class SystemConfigService:
 
             "optional",
 
-            "notificationweikexuanxiang竊똷eiconfigyebuyingxiangshoucipaotong??",
+            "notificationweikexuanxiang(chinese removed)똷eiconfigyebuyingxiangshoucipaotong??",
 
             "xuyaotuisongshikelaterconfigfeishu?갩elegram?걓oujianhuoqitanotificationqudao??",
 
@@ -5296,7 +5296,7 @@ class SystemConfigService:
 
                 "storage",
 
-                "数据库 / bendicunchu",
+                "(chinese removed) / bendicunchu",
 
                 "system",
 
@@ -5304,7 +5304,7 @@ class SystemConfigService:
 
                 "needs_action",
 
-                f"数据库lujingfumulubukeyong: {parent}",
+                f"(chinese removed)lujingfumulubukeyong: {parent}",
 
                 "qingjiancha DATABASE_PATH huoshangjimuluquanxian??",
 
@@ -5314,17 +5314,17 @@ class SystemConfigService:
 
         if os.access(probe, os.W_OK):
 
-            detail = f"数据库lujingkeyong: {db_path}"
+            detail = f"(chinese removed)lujingkeyong: {db_path}"
 
             if not parent.exists():
 
-                detail = f"数据库shangjimulukechuangjian: {parent}"
+                detail = f"(chinese removed)shangjimulukechuangjian: {parent}"
 
             return self._setup_check(
 
                 "storage",
 
-                "数据库 / bendicunchu",
+                "(chinese removed) / bendicunchu",
 
                 "system",
 
@@ -5342,7 +5342,7 @@ class SystemConfigService:
 
             "storage",
 
-            "数据库 / bendicunchu",
+            "(chinese removed) / bendicunchu",
 
             "system",
 
@@ -5350,7 +5350,7 @@ class SystemConfigService:
 
             "needs_action",
 
-            f"数据库lujingshangjimulubukexie: {probe}",
+            f"(chinese removed)lujingshangjimulubukexie: {probe}",
 
             "qingdiaozheng DATABASE_PATH huomuluquanxian??",
 
@@ -5790,15 +5790,15 @@ class SystemConfigService:
 
         model_candidates = [
 
-            re.search(r"model\s+not\s+found\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"model\s+not\s+found\s*[::?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
             re.search(r"model\s*[`\"']?\s*([a-z0-9._/-]{2,})\s*[`\"']?\s+does\s+not\s+exist", lowered),
 
-            re.search(r"model\s+does\s+not\s+exist\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"model\s+does\s+not\s+exist\s*[::?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
-            re.search(r"unknown\s+model\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"unknown\s+model\s*[::?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
-            re.search(r"no\s+such\s+model\s*[:：?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(r"no\s+such\s+model\s*[::?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
 
         ]
 
@@ -6420,9 +6420,9 @@ class SystemConfigService:
 
                     "message": (
 
-                        "jinconfig FEISHU_APP_ID / FEISHU_APP_SECRET buhuikaiqifeishuqun Webhook tuisong："
+                        "jinconfig FEISHU_APP_ID / FEISHU_APP_SECRET buhuikaiqifeishuqun Webhook tuisong:"
 
-                        "ruxunotificationtuisongqingtianxie FEISHU_WEBHOOK_URL竊똱uoyaoshiyongyingyongjiqirenqingtongshikaiqi "
+                        "ruxunotificationtuisongqingtianxie FEISHU_WEBHOOK_URL(chinese removed)똱uoyaoshiyongyingyongjiqirenqingtongshikaiqi "
 
                         "FEISHU_STREAM_ENABLED bingwanchengyingyongfabuyuquanxianconfig??"
 

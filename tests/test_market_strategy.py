@@ -55,7 +55,7 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
         self.assertIn("# Today's Market Data", prompt)
         self.assertIn("### 1. Market Summary", prompt)
         self.assertIn("A-share Three-Phase Recap Strategy", prompt)
-        self.assertNotIn("### yi、shichangzongjie", prompt)
+        self.assertNotIn("### yi,shichangzongjie", prompt)
         self.assertNotIn("Agushichangsanduanshifupancelve", prompt)
 
 

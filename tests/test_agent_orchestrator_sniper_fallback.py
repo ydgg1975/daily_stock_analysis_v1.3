@@ -26,7 +26,7 @@ class TestAgentOrchestratorSniperFallback(unittest.TestCase):
 
         payload = {
             "decision_type": "buy",
-            "analysis_summary": "qushirengqiang，dengdaihuicai。",
+            "analysis_summary": "qushirengqiang,dengdaihuicai。",
             "dashboard": {
                 "key_levels": {
                     "support": 301.61,
@@ -52,7 +52,7 @@ class TestAgentOrchestratorSniperFallback(unittest.TestCase):
 
         payload = {
             "decision_type": "buy",
-            "analysis_summary": "qushirengqiang，dengdaihuicai。",
+            "analysis_summary": "qushirengqiang,dengdaihuicai。",
             "dashboard": {
                 "battle_plan": {
                     "sniper_points": {

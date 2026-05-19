@@ -271,7 +271,7 @@ class TickFlowFetcher(BaseFetcher):
                 self._universe_query_supported = False
                 self._universe_query_checked_at = now
                 logger.info(
-                    "[TickFlowFetcher] dangqiantaocanbuzhichibiaodichichaxun，shichangtongjihuituidaoxianyoushujuyuan"
+                    "[TickFlowFetcher] dangqiantaocanbuzhichibiaodichichaxun,shichangtongjihuituidaoxianyoushujuyuan"
                 )
                 return None
             raise
@@ -310,7 +310,7 @@ class TickFlowFetcher(BaseFetcher):
 
             name = self._extract_name(quote)
             if not name:
-                logger.debug("[TickFlowFetcher] queshaogupiaomingcheng，anfei ST chuli: %s", symbol)
+                logger.debug("[TickFlowFetcher] queshaogupiaomingcheng,anfei ST chuli: %s", symbol)
 
             ratio = self._get_limit_ratio(pure_code, name)
             limit_up = self._round_limit_price(prev_close, ratio)

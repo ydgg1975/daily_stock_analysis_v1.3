@@ -113,7 +113,7 @@ Daily Stock Analysis - Test Hk Stock Name Fallback
 """
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot_em.side_effect = Exception("接口yichang：shujuyuanbukeyong")
+        ak_mock.stock_hk_spot_em.side_effect = Exception("(chinese removed)yichang:shujuyuanbukeyong")
         ak_mock.stock_hk_spot.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
@@ -131,8 +131,8 @@ Daily Stock Analysis - Test Hk Stock Name Fallback
 """
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot_em.side_effect = Exception("dongfangcaifu接口chaoshi")
-        ak_mock.stock_hk_spot.side_effect = Exception("xinlang接口chaoshi")
+        ak_mock.stock_hk_spot_em.side_effect = Exception("dongfangcaifu(chinese removed)chaoshi")
+        ak_mock.stock_hk_spot.side_effect = Exception("xinlang(chinese removed)chaoshi")
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")

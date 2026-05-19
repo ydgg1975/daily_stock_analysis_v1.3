@@ -26,7 +26,7 @@ class TestFundamentalAdapter(unittest.TestCase):
         self.assertAlmostEqual(_parse_dividend_plan_to_per_share("10pai3yuan(hanshui)"), 0.3, places=6)
         self.assertAlmostEqual(_parse_dividend_plan_to_per_share("mei10gupaifa2.5yuan"), 0.25, places=6)
         self.assertAlmostEqual(_parse_dividend_plan_to_per_share("meigupai0.8yuan"), 0.8, places=6)
-        self.assertIsNone(_parse_dividend_plan_to_per_share("jinsonggu，buxianjinfenhong"))
+        self.assertIsNone(_parse_dividend_plan_to_per_share("jinsonggu,buxianjinfenhong"))
 
     def test_extract_latest_row_returns_none_when_code_mismatch(self) -> None:
         df = pd.DataFrame(

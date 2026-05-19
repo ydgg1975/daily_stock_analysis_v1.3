@@ -1102,7 +1102,7 @@ class TestAgentResultConversion(unittest.TestCase):
 
         self.assertEqual(result.sentiment_score, 68)
 
-        self.assertEqual(result.analysis_summary, "qushijielun：duotoupailie；caozuojianyi：mairu。")
+        self.assertEqual(result.analysis_summary, "qushijielun:duotoupailie;caozuojianyi:mairu。")
 
         self.assertEqual(result.dashboard["sentiment_score"], 68)
 

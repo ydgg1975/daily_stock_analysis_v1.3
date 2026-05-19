@@ -722,7 +722,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "day_offset": -(n - 1 - i),
 
-                "strength": "ruo", "desc": "duokongpingheng竊똩enengbianpanxinhao"
+                "strength": "ruo", "desc": "duokongpingheng(chinese removed)똩enengbianpanxinhao"
 
             })
 
@@ -740,7 +740,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "day_offset": -(n - 1 - i),
 
-                "strength": "zhong", "desc": "xiayingxianzhang竊똰ianzaizhicheng/fanzhuan"
+                "strength": "zhong", "desc": "xiayingxianzhang(chinese removed)똰ianzaizhicheng/fanzhuan"
 
             })
 
@@ -758,7 +758,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "day_offset": -(n - 1 - i),
 
-                "strength": "zhong", "desc": "shangyingxianzhang竊똰ianzaiyali/fanzhuan"
+                "strength": "zhong", "desc": "shangyingxianzhang(chinese removed)똰ianzaiyali/fanzhuan"
 
             })
 
@@ -778,7 +778,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "day_offset": -(n - 1 - i),
 
-                "strength": "qiang", "desc": "shitida竊똣angxiangmingque"
+                "strength": "qiang", "desc": "shitida(chinese removed)똣angxiangmingque"
 
             })
 
@@ -880,7 +880,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                     "day_offset": -(n - 1 - lo2),
 
-                    "strength": "qiang", "desc": "lianggexiangjindidian竊똚xingdibuxingtai"
+                    "strength": "qiang", "desc": "lianggexiangjindidian(chinese removed)똚xingdibuxingtai"
 
                 })
 
@@ -898,7 +898,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "pattern": "fangliangtupo20rigaodian", "type": "bullish_breakout",
 
-                "day_offset": 0, "strength": "qiang", "desc": "shoupantupojin20rizuigao竊똪iangnengpeihe"
+                "day_offset": 0, "strength": "qiang", "desc": "shoupantupojin20rizuigao(chinese removed)똪iangnengpeihe"
 
             })
 
@@ -922,7 +922,7 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
 
                 "day_offset": 0, "strength": "zhong",
 
-                "desc": f"jin10ribofu {box_range_pct:.1f}%竊똨iagezaiqujianneizhendang"
+                "desc": f"jin10ribofu {box_range_pct:.1f}%(chinese removed)똨iagezaiqujianneizhendang"
 
             })
 

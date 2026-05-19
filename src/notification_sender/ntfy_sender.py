@@ -142,7 +142,7 @@ class NtfySender:
 
         if not self._is_ntfy_configured():
 
-            logger.warning("ntfy URL weiconfig竊똳iaoguotuisong")
+            logger.warning("ntfy URL weiconfig(chinese removed)똳iaoguotuisong")
 
             return False
 
@@ -152,7 +152,7 @@ class NtfySender:
 
         if not server_url or not topic:
 
-            logger.error("NTFY_URL bixushibaohan topic path dewanzheng endpoint竊똪iru https://ntfy.sh/my-topic")
+            logger.error("NTFY_URL bixushibaohan topic path dewanzheng endpoint(chinese removed)똪iru https://ntfy.sh/my-topic")
 
             return False
 
@@ -234,7 +234,7 @@ class NtfySender:
 
         except requests.exceptions.RequestException as exc:
 
-            logger.error("send ntfy xiaoxishibai: 网络请求yichang")
+            logger.error("send ntfy xiaoxishibai: (chinese removed)yichang")
 
             logger.debug("ntfy qingqiuyichangleixing: %s", type(exc).__name__)
 

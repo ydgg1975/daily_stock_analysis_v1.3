@@ -104,7 +104,7 @@ class TestNormalizeStockCode(unittest.TestCase):
         self.assertEqual(normalize_stock_code("0700.hk"), "HK00700")
 
     def test_hk_prefix_is_zero_padded(self):
-        """HK qianzhuideduanshuzigeshiyingbuzudao 5 wei，bianyuhouxuhuancunyuquzhong。"""
+        """HK qianzhuideduanshuzigeshiyingbuzudao 5 wei,bianyuhouxuhuancunyuquzhong。"""
         self.assertEqual(normalize_stock_code("hk1810"), "HK01810")
         self.assertEqual(normalize_stock_code("HK700"), "HK00700")
 

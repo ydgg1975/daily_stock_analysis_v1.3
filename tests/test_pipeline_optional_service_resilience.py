@@ -98,7 +98,7 @@ def test_search_service_init_failure_logs_traceback_and_failure_state(caplog):
 
     init_failure_records = [
 
-        record for record in caplog.records if "sousuofuwuchushihuashibai，jiangyiwusousuomoshiyunxing" in record.message
+        record for record in caplog.records if "sousuofuwuchushihuashibai,jiangyiwusousuomoshiyunxing" in record.message
 
     ]
 
@@ -106,9 +106,9 @@ def test_search_service_init_failure_logs_traceback_and_failure_state(caplog):
 
     assert init_failure_records[0].exc_info is not None
 
-    assert "sousuofuwuweiqiyong（chushihuashibaihuoyilaiqueshi）" in caplog.text
+    assert "sousuofuwuweiqiyong(chushihuashibaihuoyilaiqueshi)" in caplog.text
 
-    assert "sousuofuwuweiqiyong（weipeizhisousuonengli）" not in caplog.text
+    assert "sousuofuwuweiqiyong(weipeizhisousuonengli)" not in caplog.text
 
 
 
@@ -138,7 +138,7 @@ def test_social_sentiment_init_failure_logs_traceback(caplog):
 
     init_failure_records = [
 
-        record for record in caplog.records if "shejiaoyuqingfuwuchushihuashibai，jiangtiaoguoyuqingfenxi" in record.message
+        record for record in caplog.records if "shejiaoyuqingfuwuchushihuashibai,jiangtiaoguoyuqingfenxi" in record.message
 
     ]
 

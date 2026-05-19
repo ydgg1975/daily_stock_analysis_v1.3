@@ -168,7 +168,7 @@ def resolve_name_to_code(name: str) -> Optional[str]:
     if s in local_reverse:
         return local_reverse[s]
     if s in _LOCAL_AMBIGUOUS_NAMES:
-        logger.debug(f"[NameResolver] mingzhongbendiqiyimingcheng竊똩uaisufanhui None: {s}")
+        logger.debug(f"[NameResolver] mingzhongbendiqiyimingcheng(chinese removed)똩uaisufanhui None: {s}")
         return None
 
     # 3. Pinyin match (exact)

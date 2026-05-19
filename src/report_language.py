@@ -658,7 +658,7 @@ _DECISION_INTENT_NEGATIONS = (
 
 
 
-_DECISION_INTENT_NEGATION_SCOPE_BREAK_CHARS = ".,;:!?，。；：！？"
+_DECISION_INTENT_NEGATION_SCOPE_BREAK_CHARS = ".,;:!?,。;:！?"
 
 _DECISION_INTENT_NEGATION_CONNECTORS = (
 
@@ -808,7 +808,7 @@ def _iter_lookup_candidates(value: Any) -> list[str]:
 
     candidates = [raw_text]
 
-    for part in re.split(r"[/|,，、]+", raw_text):
+    for part in re.split(r"[/|,,,]+", raw_text):
 
         normalized = part.strip()
 

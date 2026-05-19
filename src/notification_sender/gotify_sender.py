@@ -134,7 +134,7 @@ class GotifySender:
 
         if not self._is_gotify_configured():
 
-            logger.warning("Gotify configbuwanzheng竊똳iaoguotuisong")
+            logger.warning("Gotify configbuwanzheng(chinese removed)똳iaoguotuisong")
 
             return False
 
@@ -144,7 +144,7 @@ class GotifySender:
 
         if not endpoint:
 
-            logger.error("GOTIFY_URL bixushi Gotify server base URL竊똟ubaohan /message")
+            logger.error("GOTIFY_URL bixushi Gotify server base URL(chinese removed)똟ubaohan /message")
 
             return False
 
@@ -226,7 +226,7 @@ class GotifySender:
 
         except requests.exceptions.RequestException as exc:
 
-            logger.error("send Gotify xiaoxishibai: 网络请求yichang")
+            logger.error("send Gotify xiaoxishibai: (chinese removed)yichang")
 
             logger.debug("Gotify qingqiuyichangleixing: %s", type(exc).__name__)
 

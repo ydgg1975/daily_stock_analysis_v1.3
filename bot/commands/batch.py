@@ -222,7 +222,7 @@ Daily Stock Analysis - Batch
 
             
 
-            logger.info(f"[BatchCommand] 일괄 분석wancheng竊똠henggong {len(results)} zhi")
+            logger.info(f"[BatchCommand] 일괄 분석wancheng(chinese removed)똠henggong {len(results)} zhi")
 
             
 

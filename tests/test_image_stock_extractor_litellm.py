@@ -445,7 +445,7 @@ class TestParseCodesFromText:
 
     def test_parses_fallback_from_plain_text(self):
 
-        text = "guanzhu 600519、300750 he AAPL。"
+        text = "guanzhu 600519,300750 he AAPL。"
 
         codes = _parse_codes_from_text(text)
 

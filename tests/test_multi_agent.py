@@ -1326,7 +1326,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 confidence=0.8,
 
-                reasoning="jishumianjiegouweichuxianmingxianguaidian，qushipianqiang。",
+                reasoning="jishumianjiegouweichuxianmingxianguaidian,qushipianqiang。",
 
                 raw_data={"ma_alignment": "bullish", "trend_score": 82, "volume_status": "normal"},
 
@@ -1398,7 +1398,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 confidence=0.8,
 
-                reasoning="jishumianjiegouweichuxianmingxianguaidian，qushipianqiang。",
+                reasoning="jishumianjiegouweichuxianmingxianguaidian,qushipianqiang。",
 
                 raw_data={"ma_alignment": "bullish", "trend_score": 82, "volume_status": "normal"},
 
@@ -1424,7 +1424,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 confidence=0.87,
 
-                reasoning="zonghejishuyuqingxupanduan，qingxiangyumairu。",
+                reasoning="zonghejishuyuqingxupanduan,qingxiangyumairu。",
 
             ))
 
@@ -1558,7 +1558,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 },
 
-                "analysis_summary": "qushirengqiang，huicaikeguancha。",
+                "analysis_summary": "qushirengqiang,huicaikeguancha。",
 
                 "dashboard": {
 
@@ -1586,7 +1586,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 confidence=0.88,
 
-                reasoning="qushirengqiang，huicaikeguancha。",
+                reasoning="qushirengqiang,huicaikeguancha。",
 
                 raw_data=dashboard,
 
@@ -1654,7 +1654,7 @@ class TestOrchestratorExecution(unittest.TestCase):
 
                 confidence=0.75,
 
-                reasoning="qiangshiduotoupailie，jiagehuicai MA5。",
+                reasoning="qiangshiduotoupailie,jiagehuicai MA5。",
 
                 key_levels={"support": 301.61, "resistance": 340.44, "stop_loss": 295.0},
 
@@ -2028,13 +2028,13 @@ class TestDecisionAgentChatMode(unittest.TestCase):
 
 
 
-        opinion = agent.post_process(ctx, "jianyijixuguanchaliangjiapeihe，fenpicanyu。")
+        opinion = agent.post_process(ctx, "jianyijixuguanchaliangjiapeihe,fenpicanyu。")
 
 
 
         self.assertIsNotNone(opinion)
 
-        self.assertEqual(ctx.get_data("final_response_text"), "jianyijixuguanchaliangjiapeihe，fenpicanyu。")
+        self.assertEqual(ctx.get_data("final_response_text"), "jianyijixuguanchaliangjiapeihe,fenpicanyu。")
 
         self.assertIsNone(ctx.get_data("final_dashboard"))
 

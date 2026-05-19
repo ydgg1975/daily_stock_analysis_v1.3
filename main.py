@@ -5,7 +5,7 @@
 A주 지능형 분석 시스템 - 메인 진입점
 ===================================
 
-역할：
+역할:
 1. 각 모듈을 조율하여 주식 분석 흐름 완성
 2. 다중 스레드/프로세스 스케줄링
 3. 전역 예외 처리 - 실패필 경우 전체에 영향 없음
@@ -13,7 +13,7 @@ A주 지능형 분석 시스템 - 메인 진입점
 
 
 
-사용fangshi：
+사용fangshi:
 
     python main.py              # zhengchangyunxing
 
@@ -23,15 +23,15 @@ A주 지능형 분석 시스템 - 메인 진입점
 
 
 
-jiaoyilinian（yirongrufenxi）：
+jiaoyilinian(yirongrufenxi):
 
-- yanjincelve：buzhuigao，guaililv > 5% bumairu
+- yanjincelve:buzhuigao,guaililv > 5% bumairu
 
-- qushijiaoyi：zhizuo MA5>MA10>MA20 duotoupailie
+- qushijiaoyi:zhizuo MA5>MA10>MA20 duotoupailie
 
-- xiaolvyouxian：guanzhuchoumajizhongduhaodegupiao
+- xiaolvyouxian:guanzhuchoumajizhongduhaodegupiao
 
-- maidianpianhao：suolianghuicai MA5/MA10 zhicheng
+- maidianpianhao:suolianghuicai MA5/MA10 zhicheng
 
 """
 
@@ -101,13 +101,13 @@ setup_env()
 
 
 
-# dailipeizhi - tongguo USE_PROXY huanjingbianliangkongzhi，morenguanbi
+# dailipeizhi - tongguo USE_PROXY huanjingbianliangkongzhi,morenguanbi
 
 # GitHub Actions huanjingzidongtiaoguodailipeizhi
 
 if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
 
-    # bendikaifahuanjing，qiyongdaili（kezai .env zhongpeizhi PROXY_HOST he PROXY_PORT）
+    # bendikaifahuanjing,qiyongdaili(kezai .env zhongpeizhi PROXY_HOST he PROXY_PORT)
 
     proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
 
@@ -185,7 +185,7 @@ def _read_active_env_values() -> Optional[Dict[str, str]]:
 
     except Exception as exc:  # pragma: no cover - defensive branch
 
-        logger.warning("duqupeizhiwenjian %s shibai，jixuyanyongdangqianhuanjingbianliang: %s", env_path, exc)
+        logger.warning("duqupeizhiwenjian %s shibai,jixuyanyongdangqianhuanjingbianliang: %s", env_path, exc)
 
         return None
 
@@ -331,11 +331,11 @@ def _setup_runtime_logging(log_dir: str, debug: bool = False) -> bool:
 
         logger.warning(
 
-            "wenjianrizhichushihuashibai，yijiangjiweikongzhitairizhishuchu；rizhimulu %r dangqianbukexiehuobukechuangjian: %s。"
+            "wenjianrizhichushihuashibai,yijiangjiweikongzhitairizhishuchu;rizhimulu %r dangqianbukexiehuobukechuangjian: %s。"
 
-            "guanfang Docker jingxiangqidongrukouhuizidongxiufumorenguazaimuluquanxian；ruorengshibai，"
+            "guanfang Docker jingxiangqidongrukouhuizidongxiufumorenguazaimuluquanxian;ruorengshibai,"
 
-            "qingjianchashifoushiyongle --user、zhiduguazai、rootless Docker huo NFS dengxianzhixierudehuanjing。",
+            "qingjianchashifoushiyongle --user,zhiduguazai,rootless Docker huo NFS dengxianzhixierudehuanjing。",
 
             log_dir,
 
@@ -489,15 +489,15 @@ shili:
 
   python main.py --debug            # tiaoshimoshi
 
-  python main.py --dry-run          # jinhuoqushuju，bujinxing AI fenxi
+  python main.py --dry-run          # jinhuoqushuju,bujinxing AI fenxi
 
   python main.py --stocks 600519,000001  # zhidingfenxitedinggupiao
 
   python main.py --no-notify        # bufasongtuisongtongzhi
 
-  python main.py --check-notify     # jianchatongzhipeizhi，bufasongtongzhi
+  python main.py --check-notify     # jianchatongzhipeizhi,bufasongtongzhi
 
-  python main.py --single-notify    # qiyongdangutuisongmoshi（meifenxiwanyizhilijituisong）
+  python main.py --single-notify    # qiyongdangutuisongmoshi(meifenxiwanyizhilijituisong)
 
   python main.py --schedule         # qiyongdingshirenwumoshi
 
@@ -515,7 +515,7 @@ shili:
 
         action='store_true',
 
-        help='qiyongtiaoshimoshi，shuchuxiangxirizhi'
+        help='qiyongtiaoshimoshi,shuchuxiangxirizhi'
 
     )
 
@@ -527,7 +527,7 @@ shili:
 
         action='store_true',
 
-        help='jinhuoqushuju，bujinxing AI fenxi'
+        help='jinhuoqushuju,bujinxing AI fenxi'
 
     )
 
@@ -539,7 +539,7 @@ shili:
 
         type=str,
 
-        help='zhidingyaofenxidegupiaodaima，douhaofenge（fugaipeizhiwenjian）'
+        help='zhidingyaofenxidegupiaodaima,douhaofenge(fugaipeizhiwenjian)'
 
     )
 
@@ -563,7 +563,7 @@ shili:
 
         action='store_true',
 
-        help='zhidujianchatongzhiqudaopeizhi，bufasongtongzhi'
+        help='zhidujianchatongzhiqudaopeizhi,bufasongtongzhi'
 
     )
 
@@ -575,7 +575,7 @@ shili:
 
         action='store_true',
 
-        help='qiyongdangutuisongmoshi：meifenxiwanyizhigupiaolijituisong，erbushihuizongtuisong'
+        help='qiyongdangutuisongmoshi:meifenxiwanyizhigupiaolijituisong,erbushihuizongtuisong'
 
     )
 
@@ -589,7 +589,7 @@ shili:
 
         default=None,
 
-        help='bingfaxianchengshu（morenshiyongpeizhizhi）'
+        help='bingfaxianchengshu(morenshiyongpeizhizhi)'
 
     )
 
@@ -601,7 +601,7 @@ shili:
 
         action='store_true',
 
-        help='qiyongdingshirenwumoshi，meiridingshizhixing'
+        help='qiyongdingshirenwumoshi,meiridingshizhixing'
 
     )
 
@@ -649,7 +649,7 @@ shili:
 
         action='store_true',
 
-        help='tiaoguojiaoyirijiancha，qiangzhizhixingquanliangfenxi（Issue #373）'
+        help='tiaoguojiaoyirijiancha,qiangzhizhixingquanliangfenxi(Issue #373)'
 
     )
 
@@ -673,7 +673,7 @@ shili:
 
         action='store_true',
 
-        help='jinqidong Web fuwu，buzhixingzidongfenxi'
+        help='jinqidong Web fuwu,buzhixingzidongfenxi'
 
     )
 
@@ -685,7 +685,7 @@ shili:
 
         action='store_true',
 
-        help='qidong FastAPI houduanfuwu（tongshizhixingfenxirenwu）'
+        help='qidong FastAPI houduanfuwu(tongshizhixingfenxirenwu)'
 
     )
 
@@ -697,7 +697,7 @@ shili:
 
         action='store_true',
 
-        help='jinqidong FastAPI houduanfuwu，buzidongzhixingfenxi'
+        help='jinqidong FastAPI houduanfuwu,buzidongzhixingfenxi'
 
     )
 
@@ -711,7 +711,7 @@ shili:
 
         default=8000,
 
-        help='FastAPI fuwuduankou（moren 8000）'
+        help='FastAPI fuwuduankou(moren 8000)'
 
     )
 
@@ -725,7 +725,7 @@ shili:
 
         default='0.0.0.0',
 
-        help='FastAPI fuwujiantingdizhi（moren 0.0.0.0）'
+        help='FastAPI fuwujiantingdizhi(moren 0.0.0.0)'
 
     )
 
@@ -751,7 +751,7 @@ shili:
 
         action='store_true',
 
-        help='yunxinghuice（duilishifenxijieguojinxingpinggu）'
+        help='yunxinghuice(duilishifenxijieguojinxingpinggu)'
 
     )
 
@@ -779,7 +779,7 @@ shili:
 
         default=None,
 
-        help='huicepingguchuangkou（jiaoyirishu，morenshiyongpeizhi）'
+        help='huicepingguchuangkou(jiaoyirishu,morenshiyongpeizhi)'
 
     )
 
@@ -791,7 +791,7 @@ shili:
 
         action='store_true',
 
-        help='qiangzhihuice（jishiyiyouhuicejieguoyechongxinjisuan）'
+        help='qiangzhihuice(jishiyiyouhuicejieguoyechongxinjisuan)'
 
     )
 
@@ -911,7 +911,7 @@ def _run_market_review_with_shared_lock(
 
     if lock_token is None:
 
-        logger.warning("dapanfupanzhengzaizhixingzhong，tiaoguobencidapanfupan")
+        logger.warning("dapanfupanzhengzaizhixingzhong,tiaoguobencidapanfupan")
 
         return None
 
@@ -941,7 +941,7 @@ def run_full_analysis(
 
     """
 
-    zhixingwanzhengdefenxi흐름（gegu + dapanfupan）
+    zhixingwanzhengdefenxi흐름(gegu + dapanfupan)
 
 
 
@@ -991,7 +991,7 @@ def run_full_analysis(
 
             logger.info(
 
-                "jinrisuoyouxiangguanshichangjunweifeijiaoyiri，tiaoguozhixing。keshiyong --force-run qiangzhizhixing。"
+                "jinrisuoyouxiangguanshichangjunweifeijiaoyiri,tiaoguozhixing。keshiyong --force-run qiangzhizhixing。"
 
             )
 
@@ -1007,7 +1007,7 @@ def run_full_analysis(
 
 
 
-        # minglingxingcanshu --single-notify fugaipeizhi（#55）
+        # minglingxingcanshu --single-notify fugaipeizhi(#55)
 
         if getattr(args, 'single_notify', False):
 
@@ -1089,13 +1089,13 @@ def run_full_analysis(
 
         ):
 
-            logger.info(f"dengdai {analysis_delay} miaohouzhixingdapanfupan（bimianAPIxianliu）...")
+            logger.info(f"dengdai {analysis_delay} miaohouzhixingdapanfupan(bimianAPIxianliu)...")
 
             time.sleep(analysis_delay)
 
 
 
-        # 2. yunxingdapanfupan（ruguoqiyongqiebushijingegumoshi）
+        # 2. yunxingdapanfupan(ruguoqiyongqiebushijingegumoshi)
 
         market_report = ""
 
@@ -1129,7 +1129,7 @@ def run_full_analysis(
 
             )
 
-            # ruguoyoujieguo，fuzhigei market_report yongyuhouxufeishuwendangshengcheng
+            # ruguoyoujieguo,fuzhigei market_report yongyuhouxufeishuwendangshengcheng
 
             if review_result:
 
@@ -1137,7 +1137,7 @@ def run_full_analysis(
 
 
 
-        # Issue #190: hebingtuisong（gegu+dapanfupan）
+        # Issue #190: hebingtuisong(gegu+dapanfupan)
 
         if merge_notification and (results or market_report) and not args.no_notify:
 
@@ -1167,7 +1167,7 @@ def run_full_analysis(
 
                     if pipeline.notifier.send(combined_content, email_send_to_all=True, route_type="report"):
 
-                        logger.info("yihebingtuisong（gegu+dapanfupan）")
+                        logger.info("yihebingtuisong(gegu+dapanfupan)")
 
                     else:
 
@@ -1199,7 +1199,7 @@ def run_full_analysis(
 
 
 
-        # === xinzeng：shengchengfeishuyunwendang ===
+        # === xinzeng:shengchengfeishuyunwendang ===
 
         try:
 
@@ -1231,7 +1231,7 @@ def run_full_analysis(
 
 
 
-                # tianjiadapanfupanneirong（ruguoyou）
+                # tianjiadapanfupanneirong(ruguoyou)
 
                 if market_report:
 
@@ -1239,7 +1239,7 @@ def run_full_analysis(
 
 
 
-                # tianjiagegujueceyibiaopan（shiyong NotificationService shengcheng，an report_type fenzhi）
+                # tianjiagegujueceyibiaopan(shiyong NotificationService shengcheng,an report_type fenzhi)
 
                 if results:
 
@@ -1263,7 +1263,7 @@ def run_full_analysis(
 
                     logger.info(f"feishuyunwendangchuangjianchenggong: {doc_url}")
 
-                    # kexuan：jiangwendanglianjieyetuisongdaoqunli
+                    # kexuan:jiangwendanglianjieyetuisongdaoqunli
 
                     if not args.no_notify:
 
@@ -1319,7 +1319,7 @@ def run_full_analysis(
 
         except Exception as e:
 
-            logger.warning(f"zidonghuiceshibai（yihulve）: {e}")
+            logger.warning(f"zidonghuiceshibai(yihulve): {e}")
 
 
 
@@ -1471,7 +1471,7 @@ def _resolve_scheduled_stock_codes(stock_codes: Optional[List[str]]) -> Optional
 
         logger.warning(
 
-            "dingshimoshixiajiancedao --stocks canshu；jihuazhixingjianghulveqidongshigupiaokuaizhao，bingzaimeiciyunxingqianchongxinduquzuixinde STOCK_LIST。"
+            "dingshimoshixiajiancedao --stocks canshu;jihuazhixingjianghulveqidongshigupiaokuaizhao,bingzaimeiciyunxingqianchongxinduquzuixinde STOCK_LIST。"
 
         )
 
@@ -1559,7 +1559,7 @@ def main() -> int:
 
     Returns:
 
-        tuichuma（0 biaoshichenggong）
+        tuichuma(0 biaoshichenggong)
 
     """
 
@@ -1569,7 +1569,7 @@ def main() -> int:
 
 
 
-    # zaipeizhijiazaiqianxianchushihua bootstrap rizhi，quebaozaoqishibaiyenengluopan
+    # zaipeizhijiazaiqianxianchushihua bootstrap rizhi,quebaozaoqishibaiyenengluopan
 
     try:
 
@@ -1587,11 +1587,11 @@ def main() -> int:
 
         )
 
-        logger.warning("Bootstrap rizhichushihuashibai，yihuituidao stderr: %s", exc)
+        logger.warning("Bootstrap rizhichushihuashibai,yihuituidao stderr: %s", exc)
 
 
 
-    # jiazaipeizhi（zai bootstrap logging zhihouzhixing，quebaoyichangyourizhi）
+    # jiazaipeizhi(zai bootstrap logging zhihouzhixing,quebaoyichangyourizhi)
 
     try:
 
@@ -1605,7 +1605,7 @@ def main() -> int:
 
 
 
-    # peizhirizhi（shuchudaokongzhitaihewenjian）
+    # peizhirizhi(shuchudaokongzhitaihewenjian)
 
     try:
 
@@ -1659,7 +1659,7 @@ def main() -> int:
 
 
 
-    # jiexigupiaoliebiao（tongyiweidaxie Issue #355）
+    # jiexigupiaoliebiao(tongyiweidaxie Issue #355)
 
     stock_codes = None
 
@@ -1671,7 +1671,7 @@ def main() -> int:
 
 
 
-    # === chuli --webui / --webui-only canshu，yingshedao --serve / --serve-only ===
+    # === chuli --webui / --webui-only canshu,yingshedao --serve / --serve-only ===
 
     if args.webui:
 
@@ -1697,7 +1697,7 @@ def main() -> int:
 
 
 
-    # jianrongjiuban WEBUI_HOST/WEBUI_PORT：ruguoyonghuweitongguo --host/--port zhiding，zeshiyongjiubianliang
+    # jianrongjiuban WEBUI_HOST/WEBUI_PORT:ruguoyonghuweitongguo --host/--port zhiding,zeshiyongjiubianliang
 
     if start_serve:
 
@@ -1717,7 +1717,7 @@ def main() -> int:
 
         if not prepare_webui_frontend_assets():
 
-            logger.warning("qianduanjingtaiziyuanweijiuxu，jixuqidong FastAPI fuwu（Web yemiankenengbukeyong）")
+            logger.warning("qianduanjingtaiziyuanweijiuxu,jixuqidong FastAPI fuwu(Web yemiankenengbukeyong)")
 
         try:
 
@@ -1737,7 +1737,7 @@ def main() -> int:
 
 
 
-    # === jin Web fuwumoshi：buzidongzhixingfenxi ===
+    # === jin Web fuwumoshi:buzidongzhixingfenxi ===
 
     if args.serve_only:
 
@@ -1759,7 +1759,7 @@ def main() -> int:
 
         except KeyboardInterrupt:
 
-            logger.info("\nyonghuzhongduan，chengxutuichu")
+            logger.info("\nyonghuzhongduan,chengxutuichu")
 
         return 0
 
@@ -1835,7 +1835,7 @@ def main() -> int:
 
                 if effective_region == '':
 
-                    logger.info("jinridapanfupanxiangguanshichangjunweifeijiaoyiri，tiaoguozhixing。keshiyong --force-run qiangzhizhixing。")
+                    logger.info("jinridapanfupanxiangguanshichangjunweifeijiaoyiri,tiaoguozhixing。keshiyong --force-run qiangzhizhixing。")
 
                     return 0
 
@@ -1987,7 +1987,7 @@ def main() -> int:
 
 
 
-        # ruguoqiyonglefuwuqieshifeidingshirenwumoshi，baochichengxuyunxing
+        # ruguoqiyonglefuwuqieshifeidingshirenwumoshi,baochichengxuyunxing
 
         keep_running = start_serve and not (args.schedule or config.schedule_enabled)
 
@@ -2013,7 +2013,7 @@ def main() -> int:
 
     except KeyboardInterrupt:
 
-        logger.info("\nyonghuzhongduan，chengxutuichu")
+        logger.info("\nyonghuzhongduan,chengxutuichu")
 
         return 130
 

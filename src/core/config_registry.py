@@ -88,7 +88,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
             {
@@ -126,7 +126,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "wanzhengzhinan竊숤I modelconfig",
+                "label": "wanzhengzhinan(chinese removed)숤I modelconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-modelconfig",
             },
         ],
@@ -156,7 +156,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "wanzhengzhinan竊숤I modelconfig",
+                "label": "wanzhengzhinan(chinese removed)숤I modelconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-modelconfig",
             },
         ],
@@ -186,7 +186,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "wanzhengzhinan竊숤I modelconfig",
+                "label": "wanzhengzhinan(chinese removed)숤I modelconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-modelconfig",
             },
         ],
@@ -214,7 +214,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM configzhinan竊쉄AML moshi",
+                "label": "LLM configzhinan(chinese removed)쉄AML moshi",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#fangshisanlitellm-yuansheng-yaml-configshihezhuanjiahuofuzaluyou",
             },
         ],
@@ -242,7 +242,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM configzhinan竊쉛udaomoshi",
+                "label": "LLM configzhinan(chinese removed)쉛udaomoshi",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#fangshierqudaochannelsmoshiconfigshihejinjieduomodel",
             },
             {
@@ -272,7 +272,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊숤I modelconfig",
+                "label": "wanzhengzhinan(chinese removed)숤I modelconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-modelconfig",
             },
         ],
@@ -419,7 +419,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
             },
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -458,7 +458,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝hujuyuanconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝hujuyuanconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#shujuyuanconfig",
             },
         ],
@@ -484,7 +484,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝hujuyuanconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝hujuyuanconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#shujuyuanconfig",
             },
         ],
@@ -509,7 +509,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝ousuofuwuconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝ousuofuwuconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#sousuofuwuconfig",
             },
         ],
@@ -535,7 +535,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝ousuofuwuconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝ousuofuwuconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#sousuofuwuconfig",
             },
         ],
@@ -622,7 +622,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝ousuofuwuconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝ousuofuwuconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#sousuofuwuconfig",
             },
         ],
@@ -662,7 +662,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝hujuyuanconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝hujuyuanconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#shujuyuanconfig",
             },
         ],
@@ -688,7 +688,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉝hujuyuanconfig",
+                "label": "wanzhengzhinan(chinese removed)쉝hujuyuanconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#shujuyuanconfig",
             },
         ],
@@ -714,7 +714,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -740,7 +740,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -1110,7 +1110,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉞ongzhiqudaoconfig",
+                "label": "wanzhengzhinan(chinese removed)쉞ongzhiqudaoconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#notificationqudaoxiangxiconfig",
             },
         ],
@@ -1183,7 +1183,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉦idingyi Webhook",
+                "label": "wanzhengzhinan(chinese removed)쉦idingyi Webhook",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#zidingyi-webhook",
             },
         ],
@@ -1242,7 +1242,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉦idingyi Webhook",
+                "label": "wanzhengzhinan(chinese removed)쉦idingyi Webhook",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#zidingyi-webhook",
             },
         ],
@@ -1303,7 +1303,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉌eishunotificationconfig",
+                "label": "wanzhengzhinan(chinese removed)쉌eishunotificationconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#feishu",
             },
             {
@@ -1392,7 +1392,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊숿elegram",
+                "label": "wanzhengzhinan(chinese removed)숿elegram",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
             },
         ],
@@ -1418,7 +1418,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊숿elegram",
+                "label": "wanzhengzhinan(chinese removed)숿elegram",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
             },
         ],
@@ -1462,7 +1462,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉤oujian",
+                "label": "wanzhengzhinan(chinese removed)쉤oujian",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#youjian",
             },
         ],
@@ -1487,7 +1487,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉤oujian",
+                "label": "wanzhengzhinan(chinese removed)쉤oujian",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#youjian",
             },
         ],
@@ -1514,7 +1514,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉤oujian",
+                "label": "wanzhengzhinan(chinese removed)쉤oujian",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#youjian",
             },
         ],
@@ -1542,7 +1542,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊숧iscord",
+                "label": "wanzhengzhinan(chinese removed)숧iscord",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
             },
         ],
@@ -1568,7 +1568,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊숧iscord",
+                "label": "wanzhengzhinan(chinese removed)숧iscord",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
             },
         ],
@@ -1625,7 +1625,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉞ongzhiqudaoconfig",
+                "label": "wanzhengzhinan(chinese removed)쉞ongzhiqudaoconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#notificationqudaoxiangxiconfig",
             },
         ],
@@ -1849,7 +1849,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -1878,7 +1878,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -2118,7 +2118,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
         ],
@@ -2144,7 +2144,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉎uanjingbianliangwanzhengliebiao",
+                "label": "wanzhengzhinan(chinese removed)쉎uanjingbianliangwanzhengliebiao",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#huanjingbianliangwanzhengliebiao",
             },
         ],
@@ -2188,7 +2188,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
             {
-                "label": "wanzhengzhinan竊쉂ebUI yu API",
+                "label": "wanzhengzhinan(chinese removed)쉂ebUI yu API",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-yu-api-fuwu",
             },
         ],
@@ -2218,7 +2218,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
             {
-                "label": "wanzhengzhinan竊쉂ebUI yu API",
+                "label": "wanzhengzhinan(chinese removed)쉂ebUI yu API",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-yu-api-fuwu",
             },
         ],
@@ -2244,7 +2244,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
         ],
@@ -2271,7 +2271,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
         ],
@@ -2297,7 +2297,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
             {
@@ -2327,7 +2327,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
             {
@@ -2357,7 +2357,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
         ],
@@ -2383,7 +2383,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "wanzhengzhinan竊쉛itaconfig",
+                "label": "wanzhengzhinan(chinese removed)쉛itaconfig",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#qitaconfig",
             },
         ],

@@ -460,7 +460,7 @@ class BacktestEngine:
         if any(stripped.endswith(neg) for neg in cls._NEGATION_PATTERNS):
             return True
 
-        # xianding“fouding + dongzuodongci”pipei，bimianjiang“tiaojianweifouding”wushanghexinjianyiyitu。
+        # xianding“fouding + dongzuodongci”pipei,bimianjiang“tiaojianweifouding”wushanghexinjianyiyitu。
         lookback = stripped[-12:]
         for neg in cls._NEGATION_PATTERNS:
             if not neg:
@@ -472,7 +472,7 @@ class BacktestEngine:
             suffix_gap = lookback[neg_idx + len(neg):].strip()
             if not suffix_gap:
                 return True
-            if any(ch in suffix_gap for ch in "，,。；;:!?！？"):
+            if any(ch in suffix_gap for ch in ",,。;;:!?！?"):
                 continue
 
             if cls._contains_keyword(suffix_gap, target):
@@ -502,7 +502,7 @@ class BacktestEngine:
     @classmethod
     def _is_negation_connector_gap(cls, gap: str) -> bool:
         """Whether a short Chinese negation gap is still a valid negation bridge."""
-        compact = re.sub(r"[\s,，。；;:!?！？]", "", gap).strip()
+        compact = re.sub(r"[\s,,。;;:!?！?]", "", gap).strip()
         if not compact:
             return True
         return compact in cls._NEGATION_CONNECTOR_WORDS

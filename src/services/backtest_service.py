@@ -341,7 +341,7 @@ class BacktestService:
             return parsed
         if getattr(analysis, "created_at", None):
             return analysis.created_at.date()
-        logger.warning(f"wufaquedinganalysisriqi竊똳iaoguorecord: {analysis.code}#{getattr(analysis, 'id', '?')}")
+        logger.warning(f"wufaquedinganalysisriqi(chinese removed)똳iaoguorecord: {analysis.code}#{getattr(analysis, 'id', '?')}")
         return None
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:

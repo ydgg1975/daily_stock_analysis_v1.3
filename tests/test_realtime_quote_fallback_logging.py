@@ -123,7 +123,7 @@ def test_pipeline_warns_once_when_all_realtime_sources_fail(caplog):
         for record in caplog.records
         if "lishishoupanjiajixufenxi" in record.message
     ]
-    assert downgrade_logs == ["guizhoumaotai(600519) suoyoushishixingqingshujuyuanjunbukeyong，yijiangjiweilishishoupanjiajixufenxi"]
+    assert downgrade_logs == ["guizhoumaotai(600519) suoyoushishixingqingshujuyuanjunbukeyong,yijiangjiweilishishoupanjiajixufenxi"]
 
 
 @patch("src.config.get_config")
@@ -168,4 +168,4 @@ def test_pipeline_logs_disabled_realtime_once_without_fetching_quote(caplog):
         for record in caplog.records
         if "lishishoupanjiajixufenxi" in record.message
     ]
-    assert downgrade_logs == ["guizhoumaotai(600519) shishixingqingyijinyong，shiyonglishishoupanjiajixufenxi"]
+    assert downgrade_logs == ["guizhoumaotai(600519) shishixingqingyijinyong,shiyonglishishoupanjiajixufenxi"]

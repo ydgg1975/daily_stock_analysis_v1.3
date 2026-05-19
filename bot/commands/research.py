@@ -142,7 +142,7 @@ class ResearchCommand(BotCommand):
 
         # Try to detect a stock code in the first argument
 
-        first = query_parts[0].upper().replace("，", "")
+        first = query_parts[0].upper().replace(",", "")
 
         if _RESEARCH_STOCK_CODE_RE.match(first):
 

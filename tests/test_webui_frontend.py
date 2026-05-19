@@ -35,8 +35,8 @@ def test_prepare_webui_frontend_assets_reuses_prebuilt_static_without_source(tmp
         assert webui_frontend.prepare_webui_frontend_assets() is True
 
     assert "jiancedaokezhijiefuyongdeqianduanjingtaichanwu" in caplog.text
-    assert "weizhaodaoqianduanxiangmu，wufazidonggoujian" not in caplog.text
-    assert "weijiancedao npm，wufazidonggoujianqianduan" not in caplog.text
+    assert "weizhaodaoqianduanxiangmu,wufazidonggoujian" not in caplog.text
+    assert "weijiancedao npm,wufazidonggoujianqianduan" not in caplog.text
     assert "assets/ mulubucunzaihuowu CSS/JS wenjian" not in caplog.text
 
 
@@ -49,7 +49,7 @@ def test_prepare_webui_frontend_assets_fails_without_static_or_source(tmp_path, 
     with caplog.at_level(logging.WARNING):
         assert webui_frontend.prepare_webui_frontend_assets() is False
 
-    assert "weizhaodaoqianduanxiangmu，wufazidonggoujian" in caplog.text
+    assert "weizhaodaoqianduanxiangmu,wufazidonggoujian" in caplog.text
 
 
 def test_prepare_webui_frontend_assets_warns_when_assets_missing(tmp_path, monkeypatch, caplog):

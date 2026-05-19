@@ -127,7 +127,7 @@ def determine_market_and_type(code: str) -> tuple:
             # Four digits: likely a US symbol or special market code.
             return 'US', 'stock'
 
-    # zimudaima，meiguhuoqita
+    # zimudaima,meiguhuoqita
     return 'US', 'stock'
 
 
@@ -142,7 +142,7 @@ def market_to_suffix(market: str) -> str:
         Market suffix
     """
     suffix_map = {
-        'CN': 'SH',  # jianhuachuli，morenshanghai
+        'CN': 'SH',  # jianhuachuli,morenshanghai
         'HK': 'HK',
         'US': 'US',
         'INDEX': 'SH',

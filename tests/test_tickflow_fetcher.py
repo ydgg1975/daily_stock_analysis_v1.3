@@ -249,7 +249,7 @@ class TestTickFlowFetcher(unittest.TestCase):
     def test_get_market_stats_returns_none_when_universe_query_not_supported(self):
         fetcher = TickFlowFetcher(api_key="sk-test")
         fetcher._client = _FakeClient(
-            universe_data=RuntimeError("dangqiantaocanbuzhichibiaodichichaxun，qingshengjihuoshiyong symbols canshu")
+            universe_data=RuntimeError("dangqiantaocanbuzhichibiaodichichaxun,qingshengjihuoshiyong symbols canshu")
         )
 
         self.assertIsNone(fetcher.get_market_stats())

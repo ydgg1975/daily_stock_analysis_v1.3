@@ -165,7 +165,7 @@ def test_invalid_public_key_configuration_is_rejected():
 
 
 def test_expired_timestamp_is_rejected():
-    """guoqi timestamp（chaochu ±5 fenzhongchuangkou）yingbeijujue，fangzhongfanggongji。"""
+    """guoqi timestamp(chaochu ±5 fenzhongchuangkou)yingbeijujue,fangzhongfanggongji。"""
     signing_key = SigningKey.generate()
     platform = _make_platform(signing_key.verify_key.encode().hex())
     payload = {"type": 1}
@@ -246,7 +246,7 @@ def test_send_followup_patches_original_message():
 
 
 def test_send_followup_chunks_long_content():
-    """chaoguo 2000 zifude follow-up yingbeifenkuai：shoukuai PATCH，houxu POST。"""
+    """chaoguo 2000 zifude follow-up yingbeifenkuai:shoukuai PATCH,houxu POST。"""
     from bot.models import BotMessage, BotResponse, ChatType
 
     platform = _make_platform("00" * 32)
@@ -323,7 +323,7 @@ def test_non_numeric_timestamp_is_rejected():
 
 
 def test_boolean_option_true_emits_name():
-    """buer True xuanxiangyingshuchu option name，erfeizimian 'true'。"""
+    """buer True xuanxiangyingshuchu option name,erfeizimian 'true'。"""
     platform = _make_platform("00" * 32)
     interaction_data = {
         "name": "analyze",
@@ -337,7 +337,7 @@ def test_boolean_option_true_emits_name():
 
 
 def test_boolean_option_false_is_omitted():
-    """buer False xuanxiangyingbeihulve，buchuxianzaiminglingneirongzhong。"""
+    """buer False xuanxiangyingbeihulve,buchuxianzaiminglingneirongzhong。"""
     platform = _make_platform("00" * 32)
     interaction_data = {
         "name": "analyze",

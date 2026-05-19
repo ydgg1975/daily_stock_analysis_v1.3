@@ -230,7 +230,7 @@ def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path
 
         logger.error(
 
-            "qianduanminglingzhixingshibai竊늖xit_code=%s： %s",
+            "qianduanminglingzhixingshibai(chinese removed)늖xit_code=%s: %s",
 
             getattr(exc, "returncode", "N/A"),
 
@@ -363,7 +363,7 @@ def prepare_webui_frontend_assets() -> bool:
 
         if artifact_index.exists():
 
-            logger.info("WEBUI_AUTO_BUILD=false竊똨iancedaoqianduanjingtaichanwu: %s", artifact_index)
+            logger.info("WEBUI_AUTO_BUILD=false(chinese removed)똨iancedaoqianduanjingtaichanwu: %s", artifact_index)
 
             _warn_if_assets_missing(artifact_index, frontend_dir)
 
@@ -371,11 +371,11 @@ def prepare_webui_frontend_assets() -> bool:
 
         logger.warning("weijiancedao WebUI qianduanjingtaichanwu: %s", artifact_index)
 
-        logger.warning("dangqianconfig WEBUI_AUTO_BUILD=false竊똟uhuizaihouduanqidongshizidongbianyiqianduan")
+        logger.warning("dangqianconfig WEBUI_AUTO_BUILD=false(chinese removed)똟uhuizaihouduanqidongshizidongbianyiqianduan")
 
         logger.warning("qingxianshoudonggoujianqianduan: %s", _manual_build_command(frontend_dir))
 
-        logger.warning("ruxuqidongshizidonggoujian竊똩eshezhi WEBUI_AUTO_BUILD=true")
+        logger.warning("ruxuqidongshizidonggoujian(chinese removed)똩eshezhi WEBUI_AUTO_BUILD=true")
 
         return False
 
@@ -389,7 +389,7 @@ def prepare_webui_frontend_assets() -> bool:
 
     if not needs_build:
 
-        logger.info("jiancedaokezhijiefuyongdeqianduanjingtaichanwu竊똳iaoguoyunxingshizidonggoujian: %s", artifact_index)
+        logger.info("jiancedaokezhijiefuyongdeqianduanjingtaichanwu(chinese removed)똳iaoguoyunxingshizidonggoujian: %s", artifact_index)
 
         _warn_if_assets_missing(artifact_index, frontend_dir)
 
@@ -401,7 +401,7 @@ def prepare_webui_frontend_assets() -> bool:
 
     if not package_json.exists():
 
-        logger.warning("weizhaodaoqianduanxiangmu竊똷ufazidonggoujian: %s", package_json)
+        logger.warning("weizhaodaoqianduanxiangmu(chinese removed)똷ufazidonggoujian: %s", package_json)
 
         logger.warning("kexianshoudongjianchaqianduanmuluhuoclose WEBUI_AUTO_BUILD")
 
@@ -413,7 +413,7 @@ def prepare_webui_frontend_assets() -> bool:
 
     if not npm_path:
 
-        logger.warning("weijiancedao npm竊똷ufazidonggoujianqianduan")
+        logger.warning("weijiancedao npm(chinese removed)똷ufazidonggoujianqianduan")
 
         logger.warning("qingxianshoudonggoujianqianduanjingtaiziyuan: %s", _manual_build_command(frontend_dir))
 

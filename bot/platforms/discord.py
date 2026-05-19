@@ -10,7 +10,7 @@ Discord pingtaishipeiqi
 
 
 
-fuze：
+fuze:
 1. yanzheng Discord Webhook (pinyin removed)
 
 2. jiexi Discord xiaoxiweitongyigeshi
@@ -110,7 +110,7 @@ Daily Stock Analysis - Discord
 
         if not self._interactions_public_key:
 
-            logger.warning("[Discord] weiconfig interactions public key竊똨ujueqingqiu")
+            logger.warning("[Discord] weiconfig interactions public key(chinese removed)똨ujueqingqiu")
 
             return False
 
@@ -126,7 +126,7 @@ Daily Stock Analysis - Discord
 
         if not signature or not timestamp:
 
-            logger.warning("[Discord] queshaoqianmingtou竊똨ujueqingqiu")
+            logger.warning("[Discord] queshaoqianmingtou(chinese removed)똨ujueqingqiu")
 
             return False
 
@@ -139,7 +139,7 @@ Daily Stock Analysis - Discord
 
         except (TypeError, ValueError):
 
-            logger.warning("[Discord] feifade timestamp竊쉇ixuwei Unix miaozhengshu竊똨ujueqingqiu")
+            logger.warning("[Discord] feifade timestamp(chinese removed)쉇ixuwei Unix miaozhengshu(chinese removed)똨ujueqingqiu")
 
             return False
 
@@ -151,7 +151,7 @@ Daily Stock Analysis - Discord
 
         except Exception as exc:
 
-            logger.warning("[Discord] huoqudangqianshijianshibai: %s竊똨ujueqingqiu", exc)
+            logger.warning("[Discord] huoqudangqianshijianshibai: %s(chinese removed)똨ujueqingqiu", exc)
 
             return False
 
@@ -162,7 +162,7 @@ Daily Stock Analysis - Discord
 
             logger.warning(
 
-                "[Discord] qingqiu timestamp chaochuyunxuchuangkou竊똩enengweizhongfanggongji竊쉞imestamp=%s, now=%s",
+                "[Discord] qingqiu timestamp chaochuyunxuchuangkou(chinese removed)똩enengweizhongfanggongji(chinese removed)쉞imestamp=%s, now=%s",
 
                 ts_int,
 
@@ -182,7 +182,7 @@ Daily Stock Analysis - Discord
 
         except ValueError:
 
-            logger.warning("[Discord] gongyaohuoqianmingbushihefashiliujinzhi竊똨ujueqingqiu")
+            logger.warning("[Discord] gongyaohuoqianmingbushihefashiliujinzhi(chinese removed)똨ujueqingqiu")
 
             return False
 
@@ -439,7 +439,7 @@ Daily Stock Analysis - Discord
 
             logger.warning(
 
-                "[Discord] queshao application_id huo interaction token竊똷ufasend follow-up"
+                "[Discord] queshao application_id huo interaction token(chinese removed)똷ufasend follow-up"
 
             )
 
@@ -465,7 +465,7 @@ Daily Stock Analysis - Discord
 
         except (ValueError, Exception) as exc:
 
-            logger.warning("[Discord] xiaoxifenkuaishibai: %s竊똠hangshizhengduansend", exc)
+            logger.warning("[Discord] xiaoxifenkuaishibai: %s(chinese removed)똠hangshizhengduansend", exc)
 
             chunks = [content]
 

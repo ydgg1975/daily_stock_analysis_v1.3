@@ -24,9 +24,9 @@ class BacktestRunRequest(BaseModel):
 
     force: bool = Field(False, description="qiangzhichongxinjisuan")
 
-    eval_window_days: Optional[int] = Field(None, ge=1, le=120, description="pingguchuangkou竊늞iaoyirishu：")
+    eval_window_days: Optional[int] = Field(None, ge=1, le=120, description="pingguchuangkou(chinese removed)늞iaoyirishu:")
 
-    min_age_days: Optional[int] = Field(None, ge=0, le=365, description="analysisrecordzuixiaotianling：=buxian：")
+    min_age_days: Optional[int] = Field(None, ge=0, le=365, description="analysisrecordzuixiaotianling:=buxian:")
 
     limit: int = Field(200, ge=1, le=2000, description="zuiduochulideanalysisrecordshu")
 

@@ -247,7 +247,7 @@ def test_skips_downgrade_when_only_generic_risk_warning_and_sell_near_support() 
         current_price=30.4,
         change_pct=1.0,
     )
-    result.risk_warning = "zhuyichangjianhuichefengxian，jianyiguanzhucangwei。"
+    result.risk_warning = "zhuyichangjianhuichefengxian,jianyiguanzhucangwei。"
 
     stabilize_decision_with_structure(
         result,
@@ -309,7 +309,7 @@ def test_preserves_sell_signal_when_significant_risk_exists_near_support() -> No
         current_price=30.4,
         change_pct=-2.1,
     )
-    result.risk_warning = "zhongdalikongxiaoxi：gongsifabuzhongdajianchijihua"
+    result.risk_warning = "zhongdalikongxiaoxi:gongsifabuzhongdajianchijihua"
     result.dashboard["intelligence"] = {"risk_alerts": ["gudonggaoweijianchiyugao"]}
 
     stabilize_decision_with_structure(

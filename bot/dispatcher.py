@@ -206,7 +206,7 @@ Daily Stock Analysis - Dispatcher
 
         if name in self._commands:
 
-            logger.warning(f"[Dispatcher] mingling '{name}' yicunzai竊똨iangbeifugai")
+            logger.warning(f"[Dispatcher] mingling '{name}' yicunzai(chinese removed)똨iangbeifugai")
 
 
 
@@ -224,7 +224,7 @@ Daily Stock Analysis - Dispatcher
 
             if alias_lower in self._aliases:
 
-                logger.warning(f"[Dispatcher] bieming '{alias_lower}' yicunzai竊똨iangbeifugai")
+                logger.warning(f"[Dispatcher] bieming '{alias_lower}' yicunzai(chinese removed)똨iangbeifugai")
 
             self._aliases[alias_lower] = name
 
@@ -430,7 +430,7 @@ Daily Stock Analysis - Dispatcher
 
             return None, [], None, BotResponse.error_response(
 
-                f"qingqiuguoyupinfan竊똰ing {remaining_time} miaohouzaishi"
+                f"qingqiuguoyupinfan(chinese removed)똰ing {remaining_time} miaohouzaishi"
 
             )
 
@@ -1385,7 +1385,7 @@ Daily Stock Analysis - Dispatcher
 
 
 
-        logger.info(f"[Dispatcher] chushihuawancheng竊똹izhuce {len(_dispatcher._commands)} gemingling")
+        logger.info(f"[Dispatcher] chushihuawancheng(chinese removed)똹izhuce {len(_dispatcher._commands)} gemingling")
 
 
 

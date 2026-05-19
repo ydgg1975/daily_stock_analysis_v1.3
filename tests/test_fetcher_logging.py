@@ -46,7 +46,7 @@ class _FailureFetcher(BaseFetcher):
 
     def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         raise DataFetchError(
-            "Eastmoney lishiKxian接口shibai: "
+            "Eastmoney lishiKxian(chinese removed)shibai: "
             "endpoint=push2his.eastmoney.com/api/qt/stock/kline/get, "
             "category=remote_disconnect"
         )
@@ -143,7 +143,7 @@ class TestFetcherLogging(unittest.TestCase):
                         fetcher.get_daily_data("601006", start_date="2026-01-07", end_date="2026-03-08")
 
         log_text = "\n".join(captured.output)
-        self.assertIn("Eastmoney lishiKxian接口shibai:", log_text)
+        self.assertIn("Eastmoney lishiKxian(chinese removed)shibai:", log_text)
         self.assertIn("endpoint=push2his.eastmoney.com/api/qt/stock/kline/get", log_text)
         self.assertIn("category=remote_disconnect", log_text)
         self.assertIn("[EfinanceFetcher] 601006 huoqushibai:", log_text)

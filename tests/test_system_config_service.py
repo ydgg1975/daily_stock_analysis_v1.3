@@ -4291,7 +4291,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertIn("SCHEDULE_RUN_IMMEDIATELY", schedule_warning)
 
-        self.assertIn("buhuiyinweibencibaocunqidong、tingzhihuochongjian scheduler", schedule_warning)
+        self.assertIn("buhuiyinweibencibaocunqidong,tingzhihuochongjian scheduler", schedule_warning)
 
         self.assertIn("yi schedule moshichongxinqidonghoushengxiao", schedule_warning)
 
@@ -4335,7 +4335,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertNotIn("chongqidangqianjincheng", schedule_time_warning)
 
-        self.assertNotIn("buhuiyinweibencibaocunqidong、tingzhihuochongjian scheduler", schedule_time_warning)
+        self.assertNotIn("buhuiyinweibencibaocunqidong,tingzhihuochongjian scheduler", schedule_time_warning)
 
 
 
@@ -4403,7 +4403,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertIn("buhuiyinweibencibaocunchongxinbangdingjiantingdizhihuoduankou", bind_warning)
 
-        self.assertIn("chongqidangqianjincheng、Docker rongqihuofuwuguanliqihoushengxiao", bind_warning)
+        self.assertIn("chongqidangqianjincheng,Docker rongqihuofuwuguanliqihoushengxiao", bind_warning)
 
 
 

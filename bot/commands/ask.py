@@ -176,7 +176,7 @@ class AskCommand(BotCommand):
 
         """Parse one or more stock codes from the first argument."""
 
-        parts = [p.strip().upper() for p in raw.replace("，", ",").split(",") if p.strip()]
+        parts = [p.strip().upper() for p in raw.replace(",", ",").split(",") if p.strip()]
 
         return [canonical_stock_code(part) for part in parts]
 
@@ -692,7 +692,7 @@ class AskCommand(BotCommand):
 
                 else:
 
-                    errors[code] = "analysischaoshi竊늳eizai 150 miaoneiwancheng："
+                    errors[code] = "analysischaoshi(chinese removed)늳eizai 150 miaoneiwancheng:"
 
         finally:
 
@@ -982,13 +982,13 @@ class AskCommand(BotCommand):
 
         prefixes = (
 
-            "lixiangmairudian：",
+            "lixiangmairudian:",
 
-            "ciyoumairudian：",
+            "ciyoumairudian:",
 
-            "zhisunwei：",
+            "zhisunwei:",
 
-            "mubiaowei：",
+            "mubiaowei:",
 
             "lixiangmairudian:",
 
@@ -1024,7 +1024,7 @@ class AskCommand(BotCommand):
 
             if len(content) > 800:
 
-                content = content[:800] + "\n... (yijieduan竊똷anzhenganalysisqingdanduchaxun)"
+                content = content[:800] + "\n... (yijieduan(chinese removed)똷anzhenganalysisqingdanduchaxun)"
 
             return content
 

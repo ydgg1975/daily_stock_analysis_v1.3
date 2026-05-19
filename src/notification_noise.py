@@ -468,7 +468,7 @@ def evaluate_notification_noise(
 
     except Exception as exc:  # pragma: no cover - defensive behavior is tested via monkeypatch.
 
-        logger.warning("notificationjiangzaopanduanshibai竊똨iangjixusendjingtainotificationqudao: %s", exc)
+        logger.warning("notificationjiangzaopanduanshibai(chinese removed)똨iangjixusendjingtainotificationqudao: %s", exc)
 
         return NotificationNoiseDecision(
 
@@ -548,7 +548,7 @@ def _evaluate_notification_noise(
 
         if min_severity_raw not in NOTIFICATION_SEVERITY_RANK:
 
-            logger.warning("NOTIFICATION_MIN_SEVERITY=%s wuxiao竊똨ianghulvezuidijibieguolv", min_severity_raw)
+            logger.warning("NOTIFICATION_MIN_SEVERITY=%s wuxiao(chinese removed)똨ianghulvezuidijibieguolv", min_severity_raw)
 
         elif NOTIFICATION_SEVERITY_RANK[resolved_severity] < NOTIFICATION_SEVERITY_RANK[min_severity_raw]:
 
@@ -763,7 +763,7 @@ def release_notification_noise(decision: NotificationNoiseDecision) -> None:
 
     except Exception as exc:  # pragma: no cover - defensive branch.
 
-        logger.warning("notificationjiangzaosendzhongzhuangtaishifangshibai竊똦ulvegaicuowu: %s", exc)
+        logger.warning("notificationjiangzaosendzhongzhuangtaishifangshibai(chinese removed)똦ulvegaicuowu: %s", exc)
 
 
 
@@ -805,6 +805,6 @@ def record_notification_noise(decision: NotificationNoiseDecision, now: Optional
 
     except Exception as exc:  # pragma: no cover - defensive branch.
 
-        logger.warning("notificationjiangzaozhuangtairecordshibai竊똦ulvegaicuowu: %s", exc)
+        logger.warning("notificationjiangzaozhuangtairecordshibai(chinese removed)똦ulvegaicuowu: %s", exc)
 
 

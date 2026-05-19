@@ -882,7 +882,7 @@ class AgentOrchestrator:
             ma_alignment = tech_raw.get("ma_alignment")
             trend_score = tech_raw.get("trend_score")
             if ma_alignment or trend_score is not None:
-                trend_prediction = f"jishumian{ma_alignment or 'neutral'}竊똰ushipingfen {trend_score if trend_score is not None else 'N/A'}"
+                trend_prediction = f"jishumian{ma_alignment or 'neutral'}(chinese removed)똰ushipingfen {trend_score if trend_score is not None else 'N/A'}"
             else:
                 trend_prediction = "daijiehegengduojieduanjieguoconfirm"
 

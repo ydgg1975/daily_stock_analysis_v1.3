@@ -246,7 +246,7 @@ class SystemConfigApiTestCase(unittest.TestCase):
 
         self.assertIn("fei schedule moshi", run_warning)
         self.assertNotIn("yi schedule moshi", run_warning)
-        self.assertIn("buhuiyinweibencibaocunqidong、tingzhihuochongjian scheduler", schedule_warning)
+        self.assertIn("buhuiyinweibencibaocunqidong,tingzhihuochongjian scheduler", schedule_warning)
         self.assertIn("yi schedule moshichongxinqidonghoushengxiao", schedule_warning)
         self.assertNotIn("tashuyuqidongqidanciyunxingpeizhi", schedule_warning)
 

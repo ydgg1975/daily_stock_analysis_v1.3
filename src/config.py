@@ -1038,10 +1038,10 @@ class Config:
 
     
 
-    shejishuoming竊?
+    shejishuoming(chinese removed)?
     - 사용 dataclass jianhuaconfigshuxingdingyi
 
-    - suoyouconfigxiangcong환경 변수duqu竊똺hichimorenzhi
+    - suoyouconfigxiangcong환경 변수duqu(chinese removed)똺hichimorenzhi
 
     - leifangfa get_instance() shixiandanlifangwen
 
@@ -1152,17 +1152,17 @@ class Config:
 
     gemini_model_fallback: str = "gemini-3-flash-preview"  # fallbackmodel
 
-    gemini_temperature: float = 0.7  # wenducanshu竊?.0-2.0竊똩ongzhishuchusuijixing竊똫oren0.7竊?
+    gemini_temperature: float = 0.7  # wenducanshu(chinese removed)?.0-2.0(chinese removed)똩ongzhishuchusuijixing(chinese removed)똫oren0.7(chinese removed)?
 
 
-    # Gemini API qingqiuconfig竊늗angzhi 429 xianliu竊?
-    gemini_request_delay: float = 2.0  # qingqiujiange竊늤iao竊?
+    # Gemini API qingqiuconfig(chinese removed)늗angzhi 429 xianliu(chinese removed)?
+    gemini_request_delay: float = 2.0  # qingqiujiange(chinese removed)늤iao(chinese removed)?
     gemini_max_retries: int = 5  # zuidaretrycishu
 
-    gemini_retry_delay: float = 5.0  # retryjichuyanshi竊늤iao竊?
+    gemini_retry_delay: float = 5.0  # retryjichuyanshi(chinese removed)늤iao(chinese removed)?
 
 
-    # Anthropic Claude API竊늒eixuan竊똡ang Gemini bukeyongshishiyong竊?
+    # Anthropic Claude API(chinese removed)늒eixuan(chinese removed)똡ang Gemini bukeyongshishiyong(chinese removed)?
     anthropic_api_key: Optional[str] = None
 
     anthropic_model: str = "claude-sonnet-4-6"  # Claude model name
@@ -1173,7 +1173,7 @@ class Config:
 
 
 
-    # OpenAI jianrong API竊늒eixuan竊똡ang Gemini/Anthropic bukeyongshishiyong竊?
+    # OpenAI jianrong API(chinese removed)늒eixuan(chinese removed)똡ang Gemini/Anthropic bukeyongshishiyong(chinese removed)?
     openai_api_key: Optional[str] = None
 
     openai_base_url: Optional[str] = None  # ru: https://api.openai.com/v1
@@ -1182,7 +1182,7 @@ class Config:
 
     openai_vision_model: Optional[str] = None  # Deprecated: use VISION_MODEL instead
 
-    openai_temperature: float = 0.7  # OpenAI wenducanshu竊?.0-2.0竊똫oren0.7竊?
+    openai_temperature: float = 0.7  # OpenAI wenducanshu(chinese removed)?.0-2.0(chinese removed)똫oren0.7(chinese removed)?
 
 
     # === Vision config ===
@@ -1199,7 +1199,7 @@ class Config:
 
 
 
-    # === sousuoyinqingconfig竊늷hichiduo Key fuzaijunheng竊?==
+    # === sousuoyinqingconfig(chinese removed)늷hichiduo Key fuzaijunheng(chinese removed)?==
 
     anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys
 
@@ -1229,10 +1229,10 @@ class Config:
 
     # === xinwenyuanalysisshaixuanconfig ===
 
-    news_max_age_days: int = 3   # xinwenzuidashixiao竊늯ian竊?
-    news_strategy_profile: str = "short"  # xinwenchuangkoucelvedangwei竊쉟ltra_short/short/medium/long
+    news_max_age_days: int = 3   # xinwenzuidashixiao(chinese removed)늯ian(chinese removed)?
+    news_strategy_profile: str = "short"  # xinwenchuangkoucelvedangwei(chinese removed)쉟ltra_short/short/medium/long
 
-    bias_threshold: float = 5.0  # guaililvyuzhi竊?竊됵펽chaoguocizhitishibuzhuigao
+    bias_threshold: float = 5.0  # guaililvyuzhi(chinese removed)?(chinese removed)됵펽chaoguocizhitishibuzhuigao
 
 
 
@@ -1278,7 +1278,7 @@ class Config:
 
 
 
-    # === notificationconfig竊늟etongshiconfigduoge竊똰uanbutuisong竊?==
+    # === notificationconfig(chinese removed)늟etongshiconfigduoge(chinese removed)똰uanbutuisong(chinese removed)?==
 
     
 
@@ -1292,26 +1292,26 @@ class Config:
 
     feishu_webhook_url: Optional[str] = None
 
-    feishu_webhook_secret: Optional[str] = None  # zidingyijiqirenqianmingmiyao竊늟exuan竊?
-    feishu_webhook_keyword: Optional[str] = None  # zidingyijiqirenguanjianci竊늟exuan竊?
+    feishu_webhook_secret: Optional[str] = None  # zidingyijiqirenqianmingmiyao(chinese removed)늟exuan(chinese removed)?
+    feishu_webhook_keyword: Optional[str] = None  # zidingyijiqirenguanjianci(chinese removed)늟exuan(chinese removed)?
     
 
-    # Telegram config竊늵uyaotongshiconfig Bot Token he Chat ID竊?
-    telegram_bot_token: Optional[str] = None  # Bot Token竊?BotFather huoqu竊?
+    # Telegram config(chinese removed)늵uyaotongshiconfig Bot Token he Chat ID(chinese removed)?
+    telegram_bot_token: Optional[str] = None  # Bot Token(chinese removed)?BotFather huoqu(chinese removed)?
     telegram_chat_id: Optional[str] = None  # Chat ID
 
     telegram_message_thread_id: Optional[str] = None  # Topic ID (Message Thread ID) for groups
 
     
 
-    # youjianconfig竊늷hixuyouxiangheshouquanma竊똕MTP zidongshibie竊?
+    # youjianconfig(chinese removed)늷hixuyouxiangheshouquanma(chinese removed)똕MTP zidongshibie(chinese removed)?
     email_sender: Optional[str] = None  # fajianrenyouxiang
 
     email_sender_name: str = "daily_stock_analysisstockanalysiszhushou"  # fajianrenxianshimingcheng
 
     email_password: Optional[str] = None  # youxiangpassword/shouquanma
 
-    email_receivers: List[str] = field(default_factory=list)  # shoujianrenliebiao竊늢iukongzefageiziji竊?
+    email_receivers: List[str] = field(default_factory=list)  # shoujianrenliebiao(chinese removed)늢iukongzefageiziji(chinese removed)?
 
 
     # Stock-to-email group routing (Issue #268): STOCK_GROUP_N + EMAIL_GROUP_N
@@ -1322,35 +1322,35 @@ class Config:
 
 
 
-    # Pushover config竊늮houji/zhuomiantuisongnotification竊?
-    pushover_user_key: Optional[str] = None  # yonghu Key竊늜ttps://pushover.net huoqu竊?
+    # Pushover config(chinese removed)늮houji/zhuomiantuisongnotification(chinese removed)?
+    pushover_user_key: Optional[str] = None  # yonghu Key(chinese removed)늜ttps://pushover.net huoqu(chinese removed)?
     pushover_api_token: Optional[str] = None  # yingyong API Token
 
 
 
-    # ntfy config竊늳anzheng topic endpoint竊똪iru https://ntfy.sh/my-topic竊?
+    # ntfy config(chinese removed)늳anzheng topic endpoint(chinese removed)똪iru https://ntfy.sh/my-topic(chinese removed)?
     ntfy_url: Optional[str] = None
 
     ntfy_token: Optional[str] = None
 
 
 
-    # Gotify config竊늮erver base URL竊썆ender huipinjie /message竊?
+    # Gotify config(chinese removed)늮erver base URL(chinese removed)썆ender huipinjie /message(chinese removed)?
     gotify_url: Optional[str] = None
 
     gotify_token: Optional[str] = None
 
     
 
-    # zidingyi Webhook竊늷hichiduoge竊똡ouhaofenge竊?
-    # shiyongyu竊쉊ingding?갆iscord?갨lack?걕ijianfuwudengrenyizhichi POST JSON de Webhook
+    # zidingyi Webhook(chinese removed)늷hichiduoge(chinese removed)똡ouhaofenge(chinese removed)?
+    # shiyongyu(chinese removed)쉊ingding?갆iscord?갨lack?걕ijianfuwudengrenyizhichi POST JSON de Webhook
 
     custom_webhook_urls: List[str] = field(default_factory=list)
 
-    custom_webhook_bearer_token: Optional[str] = None  # Bearer Token竊늶ongyuxuyaoauthde Webhook竊?
+    custom_webhook_bearer_token: Optional[str] = None  # Bearer Token(chinese removed)늶ongyuxuyaoauthde Webhook(chinese removed)?
     custom_webhook_body_template: Optional[str] = None  # zidingyi Webhook JSON body muban
 
-    webhook_verify_ssl: bool = True  # Webhook HTTPS zhengshujiaoyan竊똣alse kezhichiziqianming竊늶ou MITM fengxian竊?
+    webhook_verify_ssl: bool = True  # Webhook HTTPS zhengshujiaoyan(chinese removed)똣alse kezhichiziqianming(chinese removed)늶ou MITM fengxian(chinese removed)?
 
 
     # Discord notificationconfig
@@ -1383,7 +1383,7 @@ class Config:
 
 
 
-    # notificationluyoucelve竊뉹ssue #1200 P3竊됵폏liukongbiaoshigaileixingshiyongquanbuyiconfigqudao
+    # notificationluyoucelve(chinese removed)뉹ssue #1200 P3(chinese removed)됵폏liukongbiaoshigaileixingshiyongquanbuyiconfigqudao
 
     notification_report_channels: List[str] = field(default_factory=list)
 
@@ -1393,7 +1393,7 @@ class Config:
 
 
 
-    # notificationjiangzaojizhi竊뉹ssue #1200 P4竊됵폏morenquanbuclose竊똨induijingtainotificationqudaoshengxiao
+    # notificationjiangzaojizhi(chinese removed)뉹ssue #1200 P4(chinese removed)됵폏morenquanbuclose(chinese removed)똨induijingtainotificationqudaoshengxiao
 
     notification_dedup_ttl_seconds: int = 0
 
@@ -1409,13 +1409,13 @@ class Config:
 
 
 
-    # dangutuisongmoshi竊쉖eianalysiswanyizhistocklijituisong竊똢rbushihuizonghoutuisong
+    # dangutuisongmoshi(chinese removed)쉖eianalysiswanyizhistocklijituisong(chinese removed)똢rbushihuizonghoutuisong
 
     single_stock_notify: bool = False
 
 
 
-    # baogaoleixing竊쉝imple(jingjian) huo full(wanzheng)
+    # baogaoleixing(chinese removed)쉝imple(jingjian) huo full(wanzheng)
 
     report_type: str = "simple"
 
@@ -1423,7 +1423,7 @@ class Config:
 
 
 
-    # jinanalysisjieguozhaiyao竊쉞rue shizhituisonghuizong竊똟uhangeguxiangqing竊뉹ssue #262竊?
+    # jinanalysisjieguozhaiyao(chinese removed)쉞rue shizhituisonghuizong(chinese removed)똟uhangeguxiangqing(chinese removed)뉹ssue #262(chinese removed)?
     report_summary_only: bool = False
 
     report_show_llm_model: bool = True
@@ -1448,7 +1448,7 @@ class Config:
 
     pushplus_token: Optional[str] = None  # PushPlus Token
 
-    pushplus_topic: Optional[str] = None  # PushPlus qunzubianma竊늶iduiduotuisong竊?
+    pushplus_topic: Optional[str] = None  # PushPlus qunzubianma(chinese removed)늶iduiduotuisong(chinese removed)?
 
 
     # Serverjiang3 tuisongconfig
@@ -1457,7 +1457,7 @@ class Config:
 
 
 
-    # analysisjiangeshijian竊늤iao竊? yongyubimianAPIxianliu
+    # analysisjiangeshijian(chinese removed)늤iao(chinese removed)? yongyubimianAPIxianliu
 
     analysis_delay: float = 0.0  # geguanalysisyudapananalysiszhijiandeyanchi
 
@@ -1469,29 +1469,29 @@ class Config:
 
 
 
-    # xiaoxichangduxianzhi竊늷ijie竊? chaochangzidongfenpisend
+    # xiaoxichangduxianzhi(chinese removed)늷ijie(chinese removed)? chaochangzidongfenpisend
 
-    feishu_max_bytes: int = 20000  # feishuxianzhiyue 20KB竊똫oren 20000 zijie
+    feishu_max_bytes: int = 20000  # feishuxianzhiyue 20KB(chinese removed)똫oren 20000 zijie
 
-    wechat_max_bytes: int = 4000   # qiyeweixinxianzhi 4096 zijie竊똫oren 4000 zijie
+    wechat_max_bytes: int = 4000   # qiyeweixinxianzhi 4096 zijie(chinese removed)똫oren 4000 zijie
 
-    discord_max_words: int = 2000  # Discord xianzhi 2000 zi竊똫oren 2000 zi
+    discord_max_words: int = 2000  # Discord xianzhi 2000 zi(chinese removed)똫oren 2000 zi
 
-    wechat_msg_type: str = "markdown"  # qiyeweixinxiaoxileixing竊똫oren markdown leixing
+    wechat_msg_type: str = "markdown"  # qiyeweixinxiaoxileixing(chinese removed)똫oren markdown leixing
 
 
 
-    # Markdown zhuantupian竊뉹ssue #289竊됵폏duibuzhichi Markdown dequdaoyitupiansend
+    # Markdown zhuantupian(chinese removed)뉹ssue #289(chinese removed)됵폏duibuzhichi Markdown dequdaoyitupiansend
 
-    markdown_to_image_channels: List[str] = field(default_factory=list)  # douhaofenge竊쉞elegram,wechat,custom,email
+    markdown_to_image_channels: List[str] = field(default_factory=list)  # douhaofenge(chinese removed)쉞elegram,wechat,custom,email
 
-    markdown_to_image_max_chars: int = 15000  # chaoguocichangdubuzhuanhuan竊똟imianchaodatupian
+    markdown_to_image_max_chars: int = 15000  # chaoguocichangdubuzhuanhuan(chinese removed)똟imianchaodatupian
 
     md2img_engine: str = "wkhtmltoimage"  # wkhtmltoimage | markdown-to-file (Issue #455, better emoji support)
 
 
 
-    # shishixingqingyuqu竊뉹ssue #455竊됵폏shewei false kejinyong竊똟imian efinance/akshare_em quanmarketlaqu
+    # shishixingqingyuqu(chinese removed)뉹ssue #455(chinese removed)됵폏shewei false kejinyong(chinese removed)똟imian efinance/akshare_em quanmarketlaqu
 
     prefetch_realtime_quotes: bool = True
 
@@ -1511,7 +1511,7 @@ class Config:
 
 
 
-    # shifousaveanalysisshangxiawenkuaizhao竊늶ongyulishihuisu竊?
+    # shifousaveanalysisshangxiawenkuaizhao(chinese removed)늶ongyulishihuisu(chinese removed)?
     save_context_snapshot: bool = True
 
 
@@ -1554,77 +1554,77 @@ class Config:
 
     schedule_enabled: bool = False            # shifouqiyongdingshirenwu
 
-    schedule_time: str = "18:00"              # meirituisongshijian竊뉸H:MM geshi竊?
+    schedule_time: str = "18:00"              # meirituisongshijian(chinese removed)뉸H:MM geshi(chinese removed)?
     schedule_run_immediately: bool = True     # qidongshishifoulijizhixingyici
 
-    run_immediately: bool = True              # qidongshishifoulijizhixingyici竊늗eidingshimoshi竊?
+    run_immediately: bool = True              # qidongshishifoulijizhixingyici(chinese removed)늗eidingshimoshi(chinese removed)?
     market_review_enabled: bool = True        # shifouqiyongdapanfupan
 
-    # dapanfupanmarketquyu竊쉉n(Agu)?갿k(ganggu)?걏s(meigu)?갶oth(sanmarket)竊똵s shihejinguanzhumeigudeyonghu
+    # dapanfupanmarketquyu(chinese removed)쉉n(Agu)?갿k(ganggu)?걏s(meigu)?갶oth(sanmarket)(chinese removed)똵s shihejinguanzhumeigudeyonghu
 
     market_review_region: str = "cn"
 
     market_review_color_scheme: str = "green_up"
 
-    # jiaoyirijiancha竊쉖orenqiyong竊똣eijiaoyiritiaoguozhixing竊썆hewei false huo --force-run keqiangzhizhixing竊뉹ssue #373竊?
+    # jiaoyirijiancha(chinese removed)쉖orenqiyong(chinese removed)똣eijiaoyiritiaoguozhixing(chinese removed)썆hewei false huo --force-run keqiangzhizhixing(chinese removed)뉹ssue #373(chinese removed)?
     trading_day_check_enabled: bool = True
 
 
 
     # === shishixingqingzengqiangshujuconfig ===
 
-    # shishixingqingkaiguan竊늛uanbihoushiyonglishishoupanjiajinxinganalysis竊?
+    # shishixingqingkaiguan(chinese removed)늛uanbihoushiyonglishishoupanjiajinxinganalysis(chinese removed)?
     enable_realtime_quote: bool = True
 
-    # panretryshijishumian竊쉛iyongshiyongshishijiajisuan MA/duotoupailie竊뉹ssue #234竊됵폑closezeyongzuorishoupan
+    # panretryshijishumian(chinese removed)쉛iyongshiyongshishijiajisuan MA/duotoupailie(chinese removed)뉹ssue #234(chinese removed)됵폑closezeyongzuorishoupan
 
     enable_realtime_technical_indicators: bool = True
 
-    # choumafenbukaiguan竊늛aijiekoubuwending竊똹unduanbushujianyiclose竊?
+    # choumafenbukaiguan(chinese removed)늛aijiekoubuwending(chinese removed)똹unduanbushujianyiclose(chinese removed)?
     enable_chip_distribution: bool = True
 
     # dongcaijiekoubudingkaiguan
 
     enable_eastmoney_patch: bool = False
 
-    # shishixinginputjuyuanyouxianji竊늕ouhaofenge竊?
-    # tuijianshunxu竊쉞encent > akshare_sina > efinance > akshare_em > tushare
+    # shishixinginputjuyuanyouxianji(chinese removed)늕ouhaofenge(chinese removed)?
+    # tuijianshunxu(chinese removed)쉞encent > akshare_sina > efinance > akshare_em > tushare
 
-    # - tencent: tengxuncaijing竊똹ouliangbi/huanshoulv/shiyinglvdeng竊똡anguchaxunwending竊늯uijian竊?
-    # - akshare_sina: xinlangcaijing竊똨ibenquotewending竊똡anwuliangbi
+    # - tencent: tengxuncaijing(chinese removed)똹ouliangbi/huanshoulv/shiyinglvdeng(chinese removed)똡anguchaxunwending(chinese removed)늯uijian(chinese removed)?
+    # - akshare_sina: xinlangcaijing(chinese removed)똨ibenquotewending(chinese removed)똡anwuliangbi
 
-    # - efinance/akshare_em: dongcaiquanliangjiekou竊똲hujuzuiquandanrongyibeifeng
+    # - efinance/akshare_em: dongcaiquanliangjiekou(chinese removed)똲hujuzuiquandanrongyibeifeng
 
-    # - tushare: Tushare Pro竊똸uyao2000jifen竊똲hujuquanmian竊늗ufeiyonghukeyouxianshiyong竊?
+    # - tushare: Tushare Pro(chinese removed)똸uyao2000jifen(chinese removed)똲hujuquanmian(chinese removed)늗ufeiyonghukeyouxianshiyong(chinese removed)?
     realtime_source_priority: str = "tencent,akshare_sina,efinance,akshare_em"
 
-    # shishixingqinghuancunshijian竊늤iao竊?
+    # shishixingqinghuancunshijian(chinese removed)늤iao(chinese removed)?
     realtime_cache_ttl: int = 600
 
-    # rongduanqilengqueshijian竊늤iao竊?
+    # rongduanqilengqueshijian(chinese removed)늤iao(chinese removed)?
     circuit_breaker_cooldown: int = 300
 
 
 
     # === jibenmianjuhekaiguanyujiangjibaohu ===
 
-    # quanjuzongkaiguan竊쌹uanbishifanhui not_supported bingbaochizhuliuchengwubianhua
+    # quanjuzongkaiguan(chinese removed)쌹uanbishifanhui not_supported bingbaochizhuliuchengwubianhua
 
     enable_fundamental_pipeline: bool = True
 
-    # jibenmianjieduanzongyusuan竊늤iao竊?
+    # jibenmianjieduanzongyusuan(chinese removed)늤iao(chinese removed)?
     fundamental_stage_timeout_seconds: float = FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT
 
-    # dannengliyuandiaoyongchaoshi竊늤iao竊?
+    # dannengliyuandiaoyongchaoshi(chinese removed)늤iao(chinese removed)?
     fundamental_fetch_timeout_seconds: float = 3.0
 
-    # dannenglishibairetrycishu竊늶ibaohanshouci竊?
+    # dannenglishibairetrycishu(chinese removed)늶ibaohanshouci(chinese removed)?
     fundamental_retry_max: int = 1
 
-    # jibenmianshangxiawenduan TTL竊늤iao竊?
+    # jibenmianshangxiawenduan TTL(chinese removed)늤iao(chinese removed)?
     fundamental_cache_ttl_seconds: int = 120
 
-    # jibenmianhuancunzuidatiaomushu竊늒imianzhangshijianyunxingneicunzengzhang竊?
+    # jibenmianhuancunzuidatiaomushu(chinese removed)늒imianzhangshijianyunxingneicunzengzhang(chinese removed)?
     fundamental_cache_max_entries: int = 256
 
 
@@ -1651,16 +1651,16 @@ class Config:
 
 
 
-    # === liukongconfig竊늗angfengjinguanjiancanshu竊?==
+    # === liukongconfig(chinese removed)늗angfengjinguanjiancanshu(chinese removed)?==
 
-    # Akshare qingqiujiangefanwei竊늤iao竊?
+    # Akshare qingqiujiangefanwei(chinese removed)늤iao(chinese removed)?
     akshare_sleep_min: float = 2.0
 
     akshare_sleep_max: float = 5.0
 
     
 
-    # Tushare meifenzhongzuidaqingqiushu竊늤ianfeipeie竊?
+    # Tushare meifenzhongzuidaqingqiushu(chinese removed)늤ianfeipeie(chinese removed)?
     tushare_rate_limit_per_minute: int = 80
 
     
@@ -1691,19 +1691,19 @@ class Config:
 
     bot_command_prefix: str = "/"         # minglingqianzhui
 
-    bot_rate_limit_requests: int = 10     # pinlvxianzhi竊쉉huangkouneizuidaqingqiushu
+    bot_rate_limit_requests: int = 10     # pinlvxianzhi(chinese removed)쉉huangkouneizuidaqingqiushu
 
-    bot_rate_limit_window: int = 60       # pinlvxianzhi竊쉉huangkoushijian竊늤iao竊?
+    bot_rate_limit_window: int = 60       # pinlvxianzhi(chinese removed)쉉huangkoushijian(chinese removed)늤iao(chinese removed)?
     bot_admin_users: List[str] = field(default_factory=list)  # guanliyuanyonghu ID liebiao
 
     
 
-    # feishujiqiren竊늮hijiandingyue竊? yiyou feishu_app_id, feishu_app_secret
+    # feishujiqiren(chinese removed)늮hijiandingyue(chinese removed)? yiyou feishu_app_id, feishu_app_secret
 
     feishu_verification_token: Optional[str] = None  # shijiandingyueyanzheng Token
 
-    feishu_encrypt_key: Optional[str] = None         # xiaoxijiamimiyao竊늟exuan竊?
-    feishu_stream_enabled: bool = False              # shifouqiyong Stream zhanglianjiemoshi竊늳uxugongwangIP竊?
+    feishu_encrypt_key: Optional[str] = None         # xiaoxijiamimiyao(chinese removed)늟exuan(chinese removed)?
+    feishu_stream_enabled: bool = False              # shifouqiyong Stream zhanglianjiemoshi(chinese removed)늳uxugongwangIP(chinese removed)?
     
 
     # dingdingjiqiren
@@ -1712,10 +1712,10 @@ class Config:
 
     dingtalk_app_secret: Optional[str] = None   # yingyong AppSecret
 
-    dingtalk_stream_enabled: bool = False       # shifouqiyong Stream moshi竊늳uxugongwangIP竊?
+    dingtalk_stream_enabled: bool = False       # shifouqiyong Stream moshi(chinese removed)늳uxugongwangIP(chinese removed)?
     
 
-    # qiyeweixinjiqiren竊늜uidiaomoshi竊?
+    # qiyeweixinjiqiren(chinese removed)늜uidiaomoshi(chinese removed)?
     wecom_corpid: Optional[str] = None              # qiye ID
 
     wecom_token: Optional[str] = None               # huidiao Token
@@ -1846,7 +1846,7 @@ class Config:
 
         
 
-        danlimoshiquebao竊?
+        danlimoshiquebao(chinese removed)?
         1. quanjuzhiyouyigeconfigshili
 
         2. configzhicong환경 변수jiazaiyici
@@ -1886,10 +1886,10 @@ class Config:
 
         
 
-        jiazaiyouxianji竊?
+        jiazaiyouxianji(chinese removed)?
         1. daduoshuconfigbaochixitong환경 변수우선
 
-        2. WebUI kexiedeyunxingqiguanjianjianyouxianfuyongchijiuhua `.env`竊똡anbaoliuqidongshixianshijincheng환경 변수의 override
+        2. WebUI kexiedeyunxingqiguanjianjianyouxianfuyongchijiuhua `.env`(chinese removed)똡anbaoliuqidongshixianshijincheng환경 변수의 override
 
         3. daimazhongdemorenzhi
 
@@ -1922,7 +1922,7 @@ class Config:
 
         # === zhinengdailiconfig (guanjianxiufu) ===
 
-        # ruguoconfigledaili竊똺idongshezhi NO_PROXY yipaichuguoneishujuyuan竊똟imianquotehuoqushibai
+        # ruguoconfigledaili(chinese removed)똺idongshezhi NO_PROXY yipaichuguoneishujuyuan(chinese removed)똟imianquotehuoqushibai
 
         http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
 
@@ -1982,7 +1982,7 @@ class Config:
 
 
 
-            # quebao HTTP_PROXY yebeizhengqueshezhi竊늶ifangjinzai .env zhongdingyidanweidaochu竊?
+            # quebao HTTP_PROXY yebeizhengqueshezhi(chinese removed)늶ifangjinzai .env zhongdingyidanweidaochu(chinese removed)?
             os.environ['HTTP_PROXY'] = http_proxy
 
             os.environ['http_proxy'] = http_proxy
@@ -2003,7 +2003,7 @@ class Config:
 
         
 
-        # jiexiwatchlistguliebiao竊늕ouhaofenge竊똳ongyiweidaxie Issue #355竊?
+        # jiexiwatchlistguliebiao(chinese removed)늕ouhaofenge(chinese removed)똳ongyiweidaxie Issue #355(chinese removed)?
         stock_list_str = cls._resolve_env_value(
 
             'STOCK_LIST',
@@ -2026,7 +2026,7 @@ class Config:
 
         
 
-        # ruguomeiyouconfig竊똲hiyongmorendeshilistock
+        # ruguomeiyouconfig(chinese removed)똲hiyongmorendeshilistock
 
         if not stock_list:
 
@@ -2374,7 +2374,7 @@ class Config:
 
 
 
-        # jiexisousuoyinqing API Keys竊늷hichiduoge key竊똡ouhaofenge竊?
+        # jiexisousuoyinqing API Keys(chinese removed)늷hichiduoge key(chinese removed)똡ouhaofenge(chinese removed)?
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
 
         bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
@@ -2427,7 +2427,7 @@ class Config:
 
             logger.warning(
 
-                "SEARXNG_BASE_URLS zhongcunzaiwuxiao URL竊똹ihulve: %s",
+                "SEARXNG_BASE_URLS zhongcunzaiwuxiao URL(chinese removed)똹ihulve: %s",
 
                 ", ".join(invalid_searxng_urls[:3]),
 
@@ -2467,7 +2467,7 @@ class Config:
 
         else:
 
-            # weixianshiconfigshi竊똤enjuxiaoxileixingxuanzemorenzijieshu
+            # weixianshiconfigshi(chinese removed)똤enjuxiaoxileixingxuanzemorenzijieshu
 
             wechat_max_bytes = 2048 if wechat_msg_type_lower == 'text' else 4000
 
@@ -3163,13 +3163,13 @@ class Config:
 
             enable_eastmoney_patch=os.getenv('ENABLE_EASTMONEY_PATCH', 'false').lower() == 'true',
 
-            # shishixinginputjuyuanyouxianji竊?
-            # - tencent: tengxuncaijing竊똹ouliangbi/huanshoulv/PE/PBdeng竊똡anguchaxunwending竊늯uijian竊?
-            # - akshare_sina: xinlangcaijing竊똨ibenquotewending竊똡anwuliangbi
+            # shishixinginputjuyuanyouxianji(chinese removed)?
+            # - tencent: tengxuncaijing(chinese removed)똹ouliangbi/huanshoulv/PE/PBdeng(chinese removed)똡anguchaxunwending(chinese removed)늯uijian(chinese removed)?
+            # - akshare_sina: xinlangcaijing(chinese removed)똨ibenquotewending(chinese removed)똡anwuliangbi
 
-            # - efinance/akshare_em: dongcaiquanliangjiekou竊똲hujuzuiquandanrongyibeifeng
+            # - efinance/akshare_em: dongcaiquanliangjiekou(chinese removed)똲hujuzuiquandanrongyibeifeng
 
-            # - tushare: Tushare Pro竊똸uyao2000jifen竊똲hujuquanmian
+            # - tushare: Tushare Pro(chinese removed)똸uyao2000jifen(chinese removed)똲hujuquanmian
 
             realtime_source_priority=cls._resolve_realtime_source_priority(),
 
@@ -4405,10 +4405,10 @@ class Config:
 
         
 
-        zhichiliangzhongconfigfangshi竊?
-        1. .env wenjian竊늒endikaifa?갺ingshirenwumoshi竊?- xiugaihouxiacizhixingzidongshengxiao
+        zhichiliangzhongconfigfangshi(chinese removed)?
+        1. .env wenjian(chinese removed)늒endikaifa?갺ingshirenwumoshi(chinese removed)?- xiugaihouxiacizhixingzidongshengxiao
 
-        2. xitong환경 변수竊뉷itHub Actions?갆ocker竊?- qidongshiguding竊똹unxingzhongbubian
+        2. xitong환경 변수(chinese removed)뉷itHub Actions?갆ocker(chinese removed)?- qidongshiguding(chinese removed)똹unxingzhongbubian
 
         """
 
@@ -4423,7 +4423,7 @@ class Config:
 
 
 
-        # youxiancong .env wenjianduquzuixinconfig竊똺heyangjishizairongqihuanjingzhongxiugaile .env wenjian竊?
+        # youxiancong .env wenjianduquzuixinconfig(chinese removed)똺heyangjishizairongqihuanjingzhongxiugaile .env wenjian(chinese removed)?
         # yenenghuoqudaozuixindestockliebiaoconfig
 
         env_file = os.getenv("ENV_FILE")
@@ -4442,7 +4442,7 @@ class Config:
 
 
 
-        # ruguo .env wenjianbucunzaihuoweiconfig竊똠aichangshicongxitonghuanjingbianliangduqu
+        # ruguo .env wenjianbucunzaihuoweiconfig(chinese removed)똠aichangshicongxitonghuanjingbianliangduqu
 
         if not stock_list_str:
 
@@ -4585,7 +4585,7 @@ class Config:
 
                 severity="info",
 
-                message="weiconfig Tushare Token竊똨iangshiyongqitashujuyuan",
+                message="weiconfig Tushare Token(chinese removed)똨iangshiyongqitashujuyuan",
 
                 field="TUSHARE_TOKEN",
 
@@ -4611,7 +4611,7 @@ class Config:
 
                 message=(
 
-                    "weiconfigrenhekeyongde AI modeljieru竊늛aojimodelluyouconfig / qudao / API Key竊됵펽"
+                    "weiconfigrenhekeyongde AI modeljieru(chinese removed)늛aojimodelluyouconfig / qudao / API Key(chinese removed)됵펽"
 
                     "AI analysisgongnengjiangbukeyong"
 
@@ -4815,7 +4815,7 @@ class Config:
 
                 severity="info",
 
-                message="weiconfigsousuoyinqingnengli (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)竊똸inwensousuogongnengjiangbukeyong",
+                message="weiconfigsousuoyinqingnengli (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)(chinese removed)똸inwensousuogongnengjiangbukeyong",
 
                 field="BOCHA_API_KEYS",
 
@@ -4875,7 +4875,7 @@ class Config:
 
                 severity="warning",
 
-                message="weiconfignotificationqudao竊똨iangbusendtuisongnotification",
+                message="weiconfignotificationqudao(chinese removed)똨iangbusendtuisongnotification",
 
                 field="WECHAT_WEBHOOK_URL",
 
@@ -4889,7 +4889,7 @@ class Config:
 
                 severity="error",
 
-                message="NTFY_URL bixubaohan topic path竊똪iru https://ntfy.sh/my-topic",
+                message="NTFY_URL bixubaohan topic path(chinese removed)똪iru https://ntfy.sh/my-topic",
 
                 field="NTFY_URL",
 
@@ -4903,7 +4903,7 @@ class Config:
 
                 severity="error",
 
-                message="GOTIFY_URL bixushi Gotify server base URL竊똟ubaohan /message竊똪iru https://gotify.example",
+                message="GOTIFY_URL bixushi Gotify server base URL(chinese removed)똟ubaohan /message(chinese removed)똪iru https://gotify.example",
 
                 field="GOTIFY_URL",
 
@@ -4925,7 +4925,7 @@ class Config:
 
                 severity="warning",
 
-                message="yiconfig GOTIFY_URL竊똡anqueshao GOTIFY_TOKEN竊똆otify qudaobuhuiqiyong",
+                message="yiconfig GOTIFY_URL(chinese removed)똡anqueshao GOTIFY_TOKEN(chinese removed)똆otify qudaobuhuiqiyong",
 
                 field="GOTIFY_TOKEN",
 
@@ -5195,7 +5195,7 @@ class Config:
 
         
 
-        zidongchuangjianshujukumulu竊늭uguobucunzai竊?
+        zidongchuangjianshujukumulu(chinese removed)늭uguobucunzai(chinese removed)?
         """
 
 

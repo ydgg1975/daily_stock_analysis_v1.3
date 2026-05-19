@@ -111,7 +111,7 @@ class TestAgentExecutor(unittest.TestCase):
         prompt = adapter.call_with_tools.call_args.args[0][0]["content"]
         self.assertIn("### jineng 1: chanlun", prompt)
         self.assertNotIn("zhuanzhuyuqushijiaoyi", prompt)
-        self.assertNotIn("duotoupailie：MA5 > MA10 > MA20", prompt)
+        self.assertNotIn("duotoupailie:MA5 > MA10 > MA20", prompt)
 
     def test_prompt_keeps_injected_default_policy_for_implicit_default_run(self):
         """Implicit default runs can still inject the default bull-trend baseline explicitly."""
@@ -128,7 +128,7 @@ class TestAgentExecutor(unittest.TestCase):
             registry,
             adapter,
             skill_instructions="### jineng 1: morenduotouqushi",
-            default_skill_policy="## morenjinengjixian（bixuyangezunshou）\n- **duotoupailiebixutiaojian**：MA5 > MA10 > MA20",
+            default_skill_policy="## morenjinengjixian(bixuyangezunshou)\n- **duotoupailiebixutiaojian**:MA5 > MA10 > MA20",
             use_legacy_default_prompt=True,
             max_steps=2,
         )
@@ -139,7 +139,7 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertIn("### jineng 1: morenduotouqushi", prompt)
         self.assertIn("zhuanzhuyuqushijiaoyi", prompt)
         self.assertIn("duotoupailiebixutiaojian", prompt)
-        self.assertIn("duotoupailie：MA5 > MA10 > MA20", prompt)
+        self.assertIn("duotoupailie:MA5 > MA10 > MA20", prompt)
 
     def test_simple_text_response(self):
         """Agent returns text immediately (no tool calls) with JSON dashboard."""

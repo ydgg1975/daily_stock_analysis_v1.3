@@ -6,7 +6,7 @@ dingdingpingtaishipeiqi
 
 chulidingdingjiqirende Webhook huidiao??
 
-dingdingjiqirenwendang：
+dingdingjiqirenwendang:
 https://open.dingtalk.com/document/robots/robot-overview
 """
 
@@ -46,7 +46,7 @@ Daily Stock Analysis - Dingtalk
 Daily Stock Analysis - Dingtalk
 """
         if not self._app_secret:
-            logger.warning("[DingTalk] weiconfig app_secret竊똳iaoguoqianmingyanzheng")
+            logger.warning("[DingTalk] weiconfig app_secret(chinese removed)똳iaoguoqianmingyanzheng")
             return True
         
         timestamp = headers.get('timestamp', '')
@@ -56,7 +56,7 @@ Daily Stock Analysis - Dingtalk
             logger.warning("[DingTalk] queshaoqianmingcanshu")
             return True  # kenengshibuxuyaoqianmingdeqingqiu
         
-        # yanzhengshijianchuo：xiaoshineiyouxiao：
+        # yanzhengshijianchuo:xiaoshineiyouxiao:
         try:
             request_time = int(timestamp)
             current_time = int(time.time() * 1000)
@@ -90,7 +90,7 @@ Daily Stock Analysis - Dingtalk
         """
         jiexidingdingxiaoxi
         
-        dingding Outgoing jiqirenxiaoxigeshi：
+        dingding Outgoing jiqirenxiaoxigeshi:
         {
             "msgtype": "text",
             "text": {
