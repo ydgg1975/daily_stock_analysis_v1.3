@@ -84,12 +84,13 @@ export function SuggestionsList({
 
 // Helper component: Market badge
 const MARKET_BADGE_CONFIG = {
-  CN: { label: 'A股', className: 'border-danger/25 bg-danger/10 text-danger' },
-  HK: { label: '港股', className: 'border-success/25 bg-success/10 text-success' },
-  US: { label: '美股', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
-  INDEX: { label: '指数', className: 'border-purple/25 bg-purple/10 text-purple' },
+  CN: { label: 'A주', className: 'border-danger/25 bg-danger/10 text-danger' },
+  HK: { label: '홍콩 주식', className: 'border-success/25 bg-success/10 text-success' },
+  US: { label: '미국 주식', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
+  KR: { label: '한국 주식', className: 'border-primary/25 bg-primary/10 text-primary' },
+  INDEX: { label: '지수', className: 'border-purple/25 bg-purple/10 text-purple' },
   ETF: { label: 'ETF', className: 'border-warning/25 bg-warning/10 text-warning' },
-  BSE: { label: '北交所', className: 'border-orange-500/25 bg-orange-500/10 text-orange-500' },
+  BSE: { label: '베이징거래소', className: 'border-orange-500/25 bg-orange-500/10 text-orange-500' },
 } as const;
 
 function MarketBadge({ market }: { market: string }) {
@@ -109,10 +110,10 @@ function MarketBadge({ market }: { market: string }) {
 // Helper component: Match type badge
 function MatchTypeBadge({ matchType }: { matchType: string }) {
   const configMap = {
-    exact: { label: '精确', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
-    prefix: { label: '前缀', className: 'border-purple/25 bg-purple/10 text-purple' },
-    contains: { label: '包含', className: 'border-warning/25 bg-warning/10 text-warning' },
-    fuzzy: { label: '模糊', className: 'border-border/55 bg-elevated/75 text-muted-text' },
+    exact: { label: '정확', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
+    prefix: { label: '접두사', className: 'border-purple/25 bg-purple/10 text-purple' },
+    contains: { label: '포함', className: 'border-warning/25 bg-warning/10 text-warning' },
+    fuzzy: { label: '퍼지', className: 'border-border/55 bg-elevated/75 text-muted-text' },
   };
 
   const config = configMap[matchType as keyof typeof configMap] || configMap.fuzzy;

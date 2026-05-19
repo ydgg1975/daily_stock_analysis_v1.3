@@ -1,208 +1,416 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
+
 """
-===================================
-历史记录相关模型
+
 ===================================
 
-职责：
-1. 定义历史记录列表和详情模型
-2. 定义分析报告完整模型
+lishirecordrelatedmodel
+
+===================================
+
+
+
+zhize竊?
+1. dingyilishirecordliebiaohexiangqingmodel
+
+2. dingyianalysisbaogaowanzhengmodel
+
 """
+
+
 
 from typing import Optional, List, Any
+
+
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class HistoryItem(BaseModel):
-    """历史记录摘要（列表展示用）"""
 
-    id: Optional[int] = Field(None, description="分析历史记录主键 ID")
-    query_id: str = Field(..., description="分析记录关联 query_id（批量分析时重复）")
-    stock_code: str = Field(..., description="股票代码")
-    stock_name: Optional[str] = Field(None, description="股票名称")
-    report_type: Optional[str] = Field(None, description="报告类型")
+
+
+class HistoryItem(BaseModel):
+
+    """History record summary for list views."""
+
+
+
+    id: Optional[int] = Field(None, description="analysislishirecordzhujian ID")
+
+    query_id: str = Field(..., description="analysisrecordguanlian query_id竊늩ilianganalysisshichongfu竊?")
+
+    stock_code: str = Field(..., description="stockdaima")
+
+    stock_name: Optional[str] = Field(None, description="stockmingcheng")
+
+    report_type: Optional[str] = Field(None, description="baogaoleixing")
+
     sentiment_score: Optional[int] = Field(
+
         None,
-        description="情绪评分（历史数据可能超出 0-100 范围，读取时不做约束）",
+
+        description="qingxupingfen竊늢ishishujukenengchaochu 0-100 fanwei竊똡uqushibuzuoyueshu竊?",
+
     )
-    operation_advice: Optional[str] = Field(None, description="操作建议")
-    created_at: Optional[str] = Field(None, description="创建时间")
+
+    operation_advice: Optional[str] = Field(None, description="caozuojianyi")
+
+    created_at: Optional[str] = Field(None, description="chuangjianshijian")
+
     
+
     class Config:
+
         json_schema_extra = {
+
             "example": {
+
                 "id": 1234,
+
                 "query_id": "abc123",
+
                 "stock_code": "600519",
-                "stock_name": "贵州茅台",
+
+                "stock_name": "Samsung Electronics",
+
                 "report_type": "detailed",
+
                 "sentiment_score": 75,
-                "operation_advice": "持有",
+
+                "operation_advice": "chiyou",
+
                 "created_at": "2024-01-01T12:00:00"
+
             }
+
         }
+
+
+
 
 
 class HistoryListResponse(BaseModel):
-    """历史记录列表响应"""
+
+    """lishirecordliebiaoxiangying"""
+
     
-    total: int = Field(..., description="总记录数")
-    page: int = Field(..., description="当前页码")
-    limit: int = Field(..., description="每页数量")
-    items: List[HistoryItem] = Field(default_factory=list, description="记录列表")
+
+    total: int = Field(..., description="zongrecordshu")
+
+    page: int = Field(..., description="dangqianyema")
+
+    limit: int = Field(..., description="meiyeshuliang")
+
+    items: List[HistoryItem] = Field(default_factory=list, description="recordliebiao")
+
     
+
     class Config:
+
         json_schema_extra = {
+
             "example": {
+
                 "total": 100,
+
                 "page": 1,
+
                 "limit": 20,
+
                 "items": []
+
             }
+
         }
+
+
+
 
 
 class DeleteHistoryRequest(BaseModel):
-    """删除历史记录请求"""
 
-    record_ids: List[int] = Field(default_factory=list, description="要删除的历史记录主键 ID 列表")
+    """deletelishirecordqingqiu"""
+
+
+
+    record_ids: List[int] = Field(default_factory=list, description="yaodeletedelishirecordzhujian ID liebiao")
+
+
+
 
 
 class DeleteHistoryResponse(BaseModel):
-    """删除历史记录响应"""
 
-    deleted: int = Field(..., description="实际删除的历史记录数量")
+    """deletelishirecordxiangying"""
+
+
+
+    deleted: int = Field(..., description="shijideletedelishirecordshuliang")
+
+
+
 
 
 class NewsIntelItem(BaseModel):
-    """新闻情报条目"""
 
-    title: str = Field(..., description="新闻标题")
-    snippet: str = Field("", description="新闻摘要（最多200字）")
-    url: str = Field(..., description="新闻链接")
+    """xinwenqingbaotiaomu"""
+
+
+
+    title: str = Field(..., description="xinwenbiaoti")
+
+    snippet: str = Field("", description="xinwenzhaiyao竊늷uiduo200zi竊?")
+
+    url: str = Field(..., description="xinwenlianjie")
+
+
 
     class Config:
+
         json_schema_extra = {
+
             "example": {
-                "title": "公司发布业绩快报，营收同比增长 20%",
-                "snippet": "公司公告显示，季度营收同比增长 20%...",
+
+                "title": "gongsifabuyejikuaibao竊똹ingshoutongbizengzhang 20%",
+
+                "snippet": "gongsigonggaoxianshi竊똨iduyingshoutongbizengzhang 20%...",
+
                 "url": "https://example.com/news/123"
+
             }
+
         }
+
+
+
 
 
 class NewsIntelResponse(BaseModel):
-    """新闻情报响应"""
 
-    total: int = Field(..., description="新闻条数")
-    items: List[NewsIntelItem] = Field(default_factory=list, description="新闻列表")
+    """xinwenqingbaoxiangying"""
+
+
+
+    total: int = Field(..., description="xinwentiaoshu")
+
+    items: List[NewsIntelItem] = Field(default_factory=list, description="xinwenliebiao")
+
+
 
     class Config:
+
         json_schema_extra = {
+
             "example": {
+
                 "total": 2,
+
                 "items": []
+
             }
+
         }
+
+
+
 
 
 class ReportMeta(BaseModel):
-    """报告元信息"""
+
+    """baogaoyuanxinxi"""
+
+
 
     model_config = ConfigDict(protected_namespaces=("model_validate", "model_dump"))
 
-    id: Optional[int] = Field(None, description="分析历史记录主键 ID（仅历史报告有此字段）")
-    query_id: str = Field(..., description="分析记录关联 query_id（批量分析时重复）")
-    stock_code: str = Field(..., description="股票代码")
-    stock_name: Optional[str] = Field(None, description="股票名称")
-    report_type: Optional[str] = Field(None, description="报告类型")
-    report_language: Optional[str] = Field(None, description="报告输出语言（zh/en）")
-    created_at: Optional[str] = Field(None, description="创建时间")
-    current_price: Optional[float] = Field(None, description="分析时股价")
-    change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
-    model_used: Optional[str] = Field(None, description="分析使用的 LLM 模型")
+
+
+    id: Optional[int] = Field(None, description="analysislishirecordzhujian ID竊늞inlishibaogaoyouciziduan竊?")
+
+    query_id: str = Field(..., description="analysisrecordguanlian query_id竊늩ilianganalysisshichongfu竊?")
+
+    stock_code: str = Field(..., description="stockdaima")
+
+    stock_name: Optional[str] = Field(None, description="stockmingcheng")
+
+    report_type: Optional[str] = Field(None, description="baogaoleixing")
+
+    report_language: Optional[str] = Field(None, description="baogaoshuchuyuyan竊늷h/en竊?")
+
+    created_at: Optional[str] = Field(None, description="chuangjianshijian")
+
+    current_price: Optional[float] = Field(None, description="analysisshigujia")
+
+    change_pct: Optional[float] = Field(None, description="analysisshizhangdiefu(%)")
+
+    model_used: Optional[str] = Field(None, description="analysisshiyongde LLM model")
+
+
+
 
 
 class ReportSummary(BaseModel):
-    """报告概览区"""
+
+    """baogaogailanqu"""
+
     
-    analysis_summary: Optional[str] = Field(None, description="关键结论")
-    operation_advice: Optional[str] = Field(None, description="操作建议")
-    trend_prediction: Optional[str] = Field(None, description="趋势预测")
+
+    analysis_summary: Optional[str] = Field(None, description="guanjianjielun")
+
+    operation_advice: Optional[str] = Field(None, description="caozuojianyi")
+
+    trend_prediction: Optional[str] = Field(None, description="qushiyuce")
+
     sentiment_score: Optional[int] = Field(
+
         None,
-        description="情绪评分（历史数据可能超出 0-100 范围，读取时不做约束）",
+
+        description="qingxupingfen竊늢ishishujukenengchaochu 0-100 fanwei竊똡uqushibuzuoyueshu竊?",
+
     )
-    sentiment_label: Optional[str] = Field(None, description="情绪标签")
+
+    sentiment_label: Optional[str] = Field(None, description="qingxubiaoqian")
+
+
+
 
 
 class ReportStrategy(BaseModel):
-    """策略点位区"""
+
+    """celvedianweiqu"""
+
     
-    ideal_buy: Optional[str] = Field(None, description="理想买入价")
-    secondary_buy: Optional[str] = Field(None, description="第二买入价")
-    stop_loss: Optional[str] = Field(None, description="止损价")
-    take_profit: Optional[str] = Field(None, description="止盈价")
+
+    ideal_buy: Optional[str] = Field(None, description="lixiangmairujia")
+
+    secondary_buy: Optional[str] = Field(None, description="diermairujia")
+
+    stop_loss: Optional[str] = Field(None, description="zhisunjia")
+
+    take_profit: Optional[str] = Field(None, description="zhiyingjia")
+
+
+
 
 
 class ReportDetails(BaseModel):
-    """报告详情区"""
+
+    """baogaoxiangqingqu"""
+
     
-    news_content: Optional[str] = Field(None, description="新闻摘要")
-    raw_result: Optional[Any] = Field(None, description="原始分析结果（JSON）")
-    context_snapshot: Optional[Any] = Field(None, description="分析时上下文快照（JSON）")
-    financial_report: Optional[Any] = Field(None, description="结构化财报摘要（来自 fundamental_context）")
-    dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
-    belong_boards: Optional[Any] = Field(None, description="关联板块列表")
-    sector_rankings: Optional[Any] = Field(None, description="板块涨跌榜（结构 {top, bottom}）")
+
+    news_content: Optional[str] = Field(None, description="xinwenzhaiyao")
+
+    raw_result: Optional[Any] = Field(None, description="yuanshianalysisjieguo竊뉺SON竊?")
+
+    context_snapshot: Optional[Any] = Field(None, description="analysisshishangxiawenkuaizhao竊뉺SON竊?")
+
+    financial_report: Optional[Any] = Field(None, description="jiegouhuacaibaozhaiyao竊늢aizi fundamental_context竊?")
+
+    dividend_metrics: Optional[Any] = Field(None, description="jiegouhuafenhongzhibiao竊늜an TTM koujing竊?")
+
+    belong_boards: Optional[Any] = Field(None, description="guanlianbankuailiebiao")
+
+    sector_rankings: Optional[Any] = Field(None, description="bankuaizhangdiebang竊늞iegou {top, bottom}竊?")
+
+
+
 
 
 class AnalysisReport(BaseModel):
-    """完整分析报告"""
 
-    meta: ReportMeta = Field(..., description="元信息")
-    summary: ReportSummary = Field(..., description="概览区")
-    strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
-    details: Optional[ReportDetails] = Field(None, description="详情区")
+    """wanzhenganalysisbaogao"""
+
+
+
+    meta: ReportMeta = Field(..., description="yuanxinxi")
+
+    summary: ReportSummary = Field(..., description="gailanqu")
+
+    strategy: Optional[ReportStrategy] = Field(None, description="celvedianweiqu")
+
+    details: Optional[ReportDetails] = Field(None, description="xiangqingqu")
+
+
 
     class Config:
+
         json_schema_extra = {
+
             "example": {
+
                 "meta": {
+
                     "query_id": "abc123",
+
                     "stock_code": "600519",
-                    "stock_name": "贵州茅台",
+
+                    "stock_name": "Samsung Electronics",
+
                     "report_type": "detailed",
+
                     "report_language": "zh",
+
                     "created_at": "2024-01-01T12:00:00"
+
                 },
+
                 "summary": {
-                    "analysis_summary": "技术面向好，建议持有",
-                    "operation_advice": "持有",
-                    "trend_prediction": "看多",
+
+                    "analysis_summary": "jishumianxianghao竊똨ianyichiyou",
+
+                    "operation_advice": "chiyou",
+
+                    "trend_prediction": "kanduo",
+
                     "sentiment_score": 75,
-                    "sentiment_label": "乐观"
+
+                    "sentiment_label": "leguan"
+
                 },
+
                 "strategy": {
+
                     "ideal_buy": "1800.00",
+
                     "secondary_buy": "1750.00",
+
                     "stop_loss": "1700.00",
+
                     "take_profit": "2000.00"
+
                 },
+
                 "details": None
+
             }
+
         }
+
+
+
 
 
 class MarkdownReportResponse(BaseModel):
-    """Markdown 格式报告响应"""
 
-    content: str = Field(..., description="Markdown 格式的完整报告内容")
+    """Markdown geshibaogaoxiangying"""
+
+
+
+    content: str = Field(..., description="Markdown geshidewanzhengbaogaoneirong")
+
+
 
     class Config:
+
         json_schema_extra = {
+
             "example": {
-                "content": "# 📊 贵州茅台 (600519) 分析报告\n\n> 分析日期：**2024-01-01**\n\n..."
+
+                "content": "# ?뱤 Samsung Electronics (600519) analysisbaogao\n\n> analysisriqi竊?*2024-01-01**\n\n..."
+
             }
+
         }
+
+

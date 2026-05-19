@@ -15,7 +15,7 @@ const LoginPage: React.FC = () => {
 
   // Set page title
   useEffect(() => {
-    document.title = '登录 - DSA';
+    document.title = '로그인 - DSA';
   }, []);
   const [searchParams] = useSearchParams();
   const rawRedirect = searchParams.get('redirect') ?? '';
@@ -52,7 +52,7 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     if (isFirstTime && password !== passwordConfirm) {
-      setError('两次输入的密码不一致');
+      setError('두 번 입력한 비밀번호가 일치하지 않습니다');
       return;
     }
     setIsSubmitting(true);
@@ -61,7 +61,7 @@ const LoginPage: React.FC = () => {
       if (result.success) {
         navigate(redirect, { replace: true });
       } else {
-        setError(result.error ?? '登录失败');
+        setError(result.error ?? '로그인에 실패했습니다');
       }
     } finally {
       setIsSubmitting(false);
@@ -154,19 +154,19 @@ const LoginPage: React.FC = () => {
                 {isFirstTime ? (
                   <>
                     <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                    <span>设置初始密码</span>
+                    <span>초기 비밀번호 설정</span>
                   </>
                 ) : (
                   <>
                     <Lock className="h-5 w-5 text-[var(--login-accent-text)]" />
-                    <span>管理员登录</span>
+                    <span>관리자 로그인</span>
                   </>
                 )}
               </h1>
               <p className="mt-2 text-sm text-[var(--login-text-secondary)]">
                 {isFirstTime
-                  ? '首次启用认证，请为系统工作台设置管理员密码。'
-                  : '访问 DSA 量化决策引擎需要有效的身份凭证。'}
+                  ? '인증을 처음 활성화했습니다. 시스템 작업대의 관리자 비밀번호를 설정하세요.'
+                  : 'DSA 퀀트 의사결정 엔진에 접근하려면 유효한 인증 정보가 필요합니다.'}
               </p>
             </div>
 
@@ -178,8 +178,8 @@ const LoginPage: React.FC = () => {
                   appearance="login"
                   allowTogglePassword
                   iconType="password"
-                  label={isFirstTime ? '管理员密码' : '登录密码'}
-                  placeholder={isFirstTime ? '请设置 6 位以上密码' : '请输入密码'}
+                  label={isFirstTime ? '관리자 비밀번호' : '로그인 비밀번호'}
+                  placeholder={isFirstTime ? '6자리 이상의 비밀번호를 설정하세요' : '비밀번호를 입력하세요'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isSubmitting}
@@ -194,8 +194,8 @@ const LoginPage: React.FC = () => {
                     appearance="login"
                     allowTogglePassword
                     iconType="password"
-                    label="确认密码"
-                    placeholder="再次确认管理员密码"
+                    label="비밀번호 확인"
+                    placeholder="관리자 비밀번호를 다시 입력하세요"
                     value={passwordConfirm}
                     onChange={(e) => setPasswordConfirm(e.target.value)}
                     disabled={isSubmitting}
@@ -211,7 +211,7 @@ const LoginPage: React.FC = () => {
                   className="overflow-hidden"
                 >
                   <SettingsAlert
-                    title={isFirstTime ? '配置失败' : '验证未通过'}
+                    title={isFirstTime ? '설정 실패' : '검증 실패'}
                     message={isParsedApiError(error) ? error.message : error}
                     variant="error"
                     className="!border-[var(--login-error-border)] !bg-[var(--login-error-bg)] !text-[var(--login-error-text)]"
@@ -230,10 +230,10 @@ const LoginPage: React.FC = () => {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{isFirstTime ? '初始化中...' : '正在建立连接...'}</span>
+                      <span>{isFirstTime ? '초기화 중...' : '연결 중...'}</span>
                     </>
                   ) : (
-                    <span>{isFirstTime ? '完成设置并登录' : '授权进入工作台'}</span>
+                    <span>{isFirstTime ? '설정 완료 후 로그인' : '작업대로 이동'}</span>
                   )}
                 </div>
                 <div className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] pointer-events-none" />

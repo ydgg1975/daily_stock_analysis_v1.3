@@ -35,7 +35,6 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
 );
 
 /**
- * 策略点位区组件 - 终端风格
  */
 export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, language = 'zh' }) => {
   if (!strategy) {

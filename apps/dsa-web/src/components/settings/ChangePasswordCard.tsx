@@ -23,19 +23,19 @@ export const ChangePasswordCard: React.FC = () => {
     setSuccess(false);
 
     if (!currentPassword.trim()) {
-      setError('请输入当前密码');
+      setError('현재 비밀번호를 입력하세요');
       return;
     }
     if (!newPassword.trim()) {
-      setError('请输入新密码');
+      setError('새 비밀번호를 입력하세요');
       return;
     }
     if (newPassword.length < 6) {
-      setError('新密码至少 6 位');
+      setError('새 비밀번호는 최소 6자여야 합니다');
       return;
     }
     if (newPassword !== newPasswordConfirm) {
-      setError('两次输入的新密码不一致');
+      setError('두 번 입력한 새 비밀번호가 일치하지 않습니다');
       return;
     }
 
@@ -49,7 +49,7 @@ export const ChangePasswordCard: React.FC = () => {
         setNewPasswordConfirm('');
         setTimeout(() => setSuccess(false), 4000);
       } else {
-        setError(result.error ?? '修改失败');
+        setError(result.error ?? '변경 실패');
       }
     } finally {
       setIsSubmitting(false);
@@ -58,8 +58,8 @@ export const ChangePasswordCard: React.FC = () => {
 
   return (
     <SettingsSectionCard
-      title="修改密码"
-      description="更新当前管理员登录密码。修改成功后，后续登录请使用新密码。"
+      title="비밀번호 변경"
+      description="현재 관리자 로그인 비밀번호를 업데이트합니다. 변경 후에는 새 비밀번호로 로그인하세요."
     >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid gap-4 md:grid-cols-2">
@@ -69,8 +69,8 @@ export const ChangePasswordCard: React.FC = () => {
               type="password"
               allowTogglePassword
               iconType="password"
-              label="当前密码"
-              placeholder="输入当前密码"
+              label="현재 비밀번호"
+              placeholder="현재 비밀번호 입력"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               disabled={isSubmitting}
@@ -84,9 +84,9 @@ export const ChangePasswordCard: React.FC = () => {
               type="password"
               allowTogglePassword
               iconType="password"
-              label="新密码"
-              hint="至少 6 位。"
-              placeholder="输入新密码"
+              label="새 비밀번호"
+              hint="최소 6자."
+              placeholder="새 비밀번호 입력"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               disabled={isSubmitting}
@@ -101,8 +101,8 @@ export const ChangePasswordCard: React.FC = () => {
             type="password"
             allowTogglePassword
             iconType="password"
-            label="确认新密码"
-            placeholder="再次输入新密码"
+            label="새 비밀번호 확인"
+            placeholder="새 비밀번호 다시 입력"
             value={newPasswordConfirm}
             onChange={(e) => setNewPasswordConfirm(e.target.value)}
             disabled={isSubmitting}
@@ -112,15 +112,15 @@ export const ChangePasswordCard: React.FC = () => {
 
         {error
           ? isParsedApiError(error)
-            ? <SettingsAlert title="修改失败" message={error.message} variant="error" className="!mt-3" />
-            : <SettingsAlert title="修改失败" message={error} variant="error" className="!mt-3" />
+            ? <SettingsAlert title="변경 실패" message={error.message} variant="error" className="!mt-3" />
+            : <SettingsAlert title="변경 실패" message={error} variant="error" className="!mt-3" />
           : null}
         {success ? (
-          <SettingsAlert title="修改成功" message="管理员密码已更新。" variant="success" />
+          <SettingsAlert title="변경 성공" message="관리자 비밀번호가 업데이트되었습니다." variant="success" />
         ) : null}
 
         <Button type="submit" variant="primary" isLoading={isSubmitting}>
-          保存新密码
+          새 비밀번호 저장
         </Button>
       </form>
     </SettingsSectionCard>

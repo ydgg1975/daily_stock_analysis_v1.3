@@ -1,70 +1,53 @@
-# 文档中心
+# 문서 센터
 
-这里是项目文档入口。README 负责项目概览和快速开始；更完整的配置、部署、功能说明和排障内容从这里进入。
+이 문서는 Daily Stock Analysis의 주요 문서 입구입니다. 처음 사용하는 경우 `README.md`, `beginner-client-setup.md`, `full-guide.md` 순서로 보는 것을 권장합니다.
 
-## 按场景选择
+## 시작하기
 
-| 我想要 | 先看 | 继续看 |
-| --- | --- | --- |
-| 快速了解项目能做什么 | [README](../README.md) | [完整配置与部署指南](full-guide.md) |
-| 第一次把项目跑起来 | [小白客户端安装与配置](beginner-client-setup.md) | [完整配置与部署指南](full-guide.md) |
-| 配置大模型渠道 | [LLM 配置指南](LLM_CONFIG_GUIDE.md) | [LLM 服务商配置指南](llm-providers.md) |
-| 配置推送通知 | [通知能力基线](notifications.md) | [完整配置与部署指南](full-guide.md) |
-| 部署到服务器或云平台 | [部署指南](DEPLOY.md) | [云端 WebUI 部署](deploy-webui-cloud.md)、[Zeabur 部署](docker/zeabur-deployment.md) |
-| 使用 Bot / IM 接入 | [Bot 命令与接入](bot-command.md) | [Bot 平台配置](bot/) |
-| 排查运行问题 | [FAQ](FAQ.md) | [更新日志](CHANGELOG.md) |
-| 参与开发或提交 PR | [贡献指南](CONTRIBUTING.md) | [API 规格](architecture/api_spec.json) |
-
-## 快速开始
-
-| 文档 | 内容 |
+| 문서 | 내용 |
 | --- | --- |
-| [README](../README.md) | 项目定位、核心能力、快速开始、推送效果 |
-| [小白客户端安装与配置](beginner-client-setup.md) | 面向不会代码用户的客户端下载、Anspire Open / AIHubMix 模型配置、新闻源配置和常见问题 |
-| [完整配置与部署指南](full-guide.md) | 环境准备、运行方式、配置说明、部署路径和常见问题 |
-| [FAQ](FAQ.md) | 常见配置、模型、通知、部署和运行问题 |
-| [更新日志](CHANGELOG.md) | 版本变化、能力调整和迁移说明 |
+| [README](../README.md) | 프로젝트 개요, 빠른 시작, 주요 기능 |
+| [초보자용 클라이언트 설정](beginner-client-setup.md) | 데스크톱/클라이언트 설치와 기본 설정 |
+| [전체 가이드](full-guide.md) | 실행, 설정, 배포, 운영 전반 |
+| [FAQ](FAQ.md) | 자주 발생하는 문제와 해결 방법 |
 
-## 配置
+## 설정
 
-| 文档 | 内容 |
+| 문서 | 내용 |
 | --- | --- |
-| [LLM 配置指南](LLM_CONFIG_GUIDE.md) | 大模型渠道、三层配置、Web 设置页和常见模型配置 |
-| [LLM 服务商配置指南](llm-providers.md) | Provider 预设、Actions 映射、错误分类和诊断建议 |
-| [LiteLLM YAML 示例](examples/litellm_config.example.yaml) | LiteLLM 多渠道配置示例 |
-| [通知能力基线](notifications.md) | 企业微信、飞书、Telegram、Discord、Slack、邮件等通知渠道配置 |
-| [Tushare 股票列表指南](TUSHARE_STOCK_LIST_GUIDE.md) | Tushare 股票列表相关配置和使用说明 |
+| [LLM 설정 가이드](LLM_CONFIG_GUIDE.md) | AI 모델과 채널 설정 |
+| [LLM 공급자 설정](llm-providers.md) | 공급자별 설정과 진단 |
+| [설정 도움말](settings-help.md) | Web 설정 화면의 필드 설명 |
+| [알림 설정](notifications.md) | 알림 채널, 라우팅, 진단 |
 
-## 使用专题
+## 기능
 
-| 文档 | 内容 |
+| 문서 | 내용 |
 | --- | --- |
-| [Bot 命令与接入](bot-command.md) | Bot 命令、Webhook、平台接入和回调说明 |
-| [Bot 平台配置](bot/) | 飞书、钉钉、Discord 等 Bot 配置截图和补充说明 |
-| [实时告警中心](alerts.md) | EventMonitor 基线、Web 规则管理、通知结果、冷却状态和 Phase 边界 |
-| [图片识别 Prompt](image-extract-prompt.md) | 图片识别股票信息的 Prompt 与使用边界 |
-| [OpenClaw Skill 集成](openclaw-skill-integration.md) | OpenClaw / Skill 外部集成说明 |
+| [Bot 명령](bot-command.md) | 메신저 봇 명령과 사용법 |
+| [알림 센터](alerts.md) | 규칙 생성, 테스트, 트리거 기록 |
+| [이미지 종목 추출 Prompt](image-extract-prompt.md) | 이미지에서 종목 코드를 추출하는 Prompt |
+| [OpenClaw Skill 연동](openclaw-skill-integration.md) | 외부 Skill 연동 방식 |
 
-## 部署与打包
+## 배포와 패키징
 
-| 文档 | 内容 |
+| 문서 | 내용 |
 | --- | --- |
-| [部署指南](DEPLOY.md) | 服务器部署、Docker、systemd、Supervisor 等部署方式 |
-| [云端 WebUI 部署](deploy-webui-cloud.md) | 云服务器访问 WebUI 的部署说明 |
-| [Zeabur 部署](docker/zeabur-deployment.md) | Zeabur 平台部署说明 |
-| [桌面端打包说明](desktop-package.md) | Electron 桌面端和 Web 构建产物打包说明 |
+| [배포 가이드](DEPLOY.md) | 서버, Docker, 운영 배포 |
+| [Web UI 클라우드 배포](deploy-webui-cloud.md) | 클라우드에서 Web UI 열기 |
+| [데스크톱 패키징](desktop-package.md) | Electron 데스크톱 빌드와 배포 |
+| [Zeabur 배포](docker/zeabur-deployment.md) | Zeabur 배포 참고 |
 
-## 参考与开发
+## 개발
 
-| 文档 | 内容 |
+| 문서 | 내용 |
 | --- | --- |
-| [API 规格](architecture/api_spec.json) | FastAPI OpenAPI 规格产物 |
-| [贡献指南](CONTRIBUTING.md) | Issue、PR、测试、文档同步和协作要求 |
+| [기여 가이드](CONTRIBUTING.md) | 개발 참여와 PR 규칙 |
+| [API 스펙](architecture/api_spec.json) | OpenAPI 산출물 |
+| [변경 이력](CHANGELOG.md) | 릴리스와 주요 변경 |
 
-## 多语言
+## 운영 메모
 
-| 文档 | 内容 |
-| --- | --- |
-| [英文文档索引](INDEX_EN.md) | English documentation index |
-| [英文 README](README_EN.md) | English project overview and quick start |
-| [繁中 README](README_CHT.md) | 繁體中文項目概覽與快速開始 |
+- 한국어 사용자 경험을 우선합니다.
+- 새 사용자 노출 문구는 중국어 한자, 깨진 문자, 병음식 문자열을 넣지 않습니다.
+- 언어 아티팩트 검사는 `python scripts/check_language_artifacts.py`로 실행합니다.

@@ -1,39 +1,31 @@
-# 钉钉企业机器人配置
+# DingTalk Bot 설정
 
-## 钉钉机器人
-钉钉机器人接收消息需要使用企业机器人能力
-https://open.dingtalk.com/document/dingstart/configure-the-robot-application
+DingTalk 알림 또는 Bot 연동을 위한 기본 안내입니다.
 
-接收消息分为 `Http模式`（需要配置公网地址） 和 `Stream模式` 两种, 推荐使用 `Stream模式`
+## 1. 앱 생성
 
-创建应用步骤：https://open.dingtalk.com/document/dingstart/create-application
+DingTalk 개발자 콘솔에서 내부 앱을 만들고 Bot 기능을 활성화합니다.
 
-应用开发 > 企业内部应用 > 钉钉应用 > 创建应用 > 添加应用能力 > 机器人
+참고: https://open.dingtalk.com/document/dingstart/create-application
 
-### 添加机器人
+## 2. 환경 변수
 
-![img.png](add-dingding-bot.png)
+필요한 값을 `.env` 또는 배포 환경 변수에 설정합니다.
 
-### 配置机器人使用 Stream模式
+```env
+DINGTALK_CLIENT_ID=your_client_id
+DINGTALK_CLIENT_SECRET=your_client_secret
+```
 
-![configbot.png](configbot.png)
+Webhook 방식을 사용하는 경우 Webhook URL과 보안 설정을 함께 확인하세요.
 
-### 获取应用凭证
-![img.png](appkey.png)
+## 3. 테스트
 
-### 配置钉钉凭证
-把钉钉应用凭证配置到配置文件中
-![img.png](envconfig.png)
+설정 후 테스트 메시지를 보내 Bot이 정상 응답하는지 확인합니다.
 
-### 发布应用
-![img.png](img.png)
+확인 항목:
 
-![img.png](group.png)
-
-![img.png](add-group-bot.png)
-
-### 往下滚动会看到增加的企业机器人
-![img_1.png](img_1.png)
-
-### 测试机器人命令
-![img_3.png](img_3.png)
+- 앱 권한
+- Webhook 보안 설정
+- 네트워크 접근 가능 여부
+- 로그 오류 메시지

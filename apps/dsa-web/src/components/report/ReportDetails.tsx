@@ -7,13 +7,9 @@ import { getReportText, normalizeReportLanguage } from '../../utils/reportLangua
 
 interface ReportDetailsProps {
   details?: ReportDetailsType;
-  recordId?: number;  // 分析历史记录主键 ID
+  recordId?: number;
   language?: ReportLanguage;
 }
-
-/**
- * 透明度与追溯区组件 - 终端风格
- */
 export const ReportDetails: React.FC<ReportDetailsProps> = ({
   details,
   recordId,
@@ -109,9 +105,7 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         </div>
       )}
 
-      {/* 折叠区域 */}
       <div className="space-y-2">
-        {/* 原始分析结果 */}
         {details?.rawResult && (
           <div>
             <button
@@ -137,7 +131,6 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
           </div>
         )}
 
-        {/* 分析快照 */}
         {details?.contextSnapshot && (
           <div>
             <button

@@ -80,7 +80,7 @@ function renderFieldControl(
           onChange={onChange}
           options={normalizeSelectOptions(schema.options)}
           disabled={disabled || !schema.isEditable}
-          placeholder="请选择"
+          placeholder="선택하세요"
         />
       );
   }
@@ -96,7 +96,7 @@ function renderFieldControl(
           disabled={disabled || !schema?.isEditable}
           onChange={(event) => onChange(event.target.checked ? 'true' : 'false')}
         />
-        <span className="text-sm text-secondary-text">{checked ? '已启用' : '未启用'}</span>
+        <span className="text-sm text-secondary-text">{checked ? '활성화됨' : '비활성화됨'}</span>
       </label>
     );
   }
@@ -139,7 +139,7 @@ function renderFieldControl(
                   onChange(serializeMultiValues(nextValues.length ? nextValues : ['']));
                 }}
               >
-                删除
+                삭제
               </Button>
             </div>
           ))}
@@ -153,7 +153,7 @@ function renderFieldControl(
               disabled={disabled || !schema?.isEditable}
               onClick={() => onChange(serializeMultiValues([...values, '']))}
             >
-              添加 Key
+              Key 추가
             </Button>
           </div>
         </div>
@@ -224,12 +224,12 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
         />
         {schema?.isSensitive ? (
           <Badge variant="history" size="sm">
-            敏感
+            민감
           </Badge>
         ) : null}
         {!schema?.isEditable ? (
           <Badge variant="default" size="sm">
-            只读
+            읽기 전용
           </Badge>
         ) : null}
       </div>
@@ -254,8 +254,8 @@ export const SettingsField: React.FC<SettingsFieldProps> = ({
 
       {schema?.isSensitive ? (
         <p className="mt-3 text-[11px] leading-5 text-secondary-text">
-          敏感内容默认隐藏，可点击眼睛图标查看明文。
-          {isMultiValue ? ' 支持添加多个输入框进行增删。' : ''}
+          민감한 내용은 기본적으로 숨겨집니다. 눈 아이콘을 눌러 원문을 볼 수 있습니다.
+          {isMultiValue ? ' 여러 입력칸을 추가하거나 삭제할 수 있습니다.' : ''}
         </p>
       ) : null}
 

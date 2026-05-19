@@ -223,7 +223,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
     const streamSessionId = payload.session_id || storeSessionId;
     const skillNames = meta?.skillNames?.length
       ? meta.skillNames
-      : [meta?.skillName ?? '通用'];
+      : [meta?.skillName ?? '일반'];
     const skillName = skillNames.join('、');
 
     const userMessage: Message = {
@@ -269,14 +269,14 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
           if (event.type === 'done') {
             const doneEvent = event as unknown as StreamFailureEvent;
             if (doneEvent.success === false) {
-              throw getStreamFailureError(doneEvent, '大模型调用出错，请检查 API Key 配置');
+              throw getStreamFailureError(doneEvent, '대형 모델 호출 오류입니다. API Key 설정을 확인하세요');
             }
             finalContent = doneEvent.content ?? '';
             return;
           }
 
           if (event.type === 'error') {
-            throw getStreamFailureError(event as unknown as StreamFailureEvent, '分析出错');
+            throw getStreamFailureError(event as unknown as StreamFailureEvent, '분석 오류');
           }
 
         currentProgressSteps.push(event);
@@ -322,7 +322,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
             {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: finalContent || '（无内容）',
+              content: finalContent || '(내용 없음)',
               skills: payload.skills,
               skill: payload.skills?.[0],
               skillNames,

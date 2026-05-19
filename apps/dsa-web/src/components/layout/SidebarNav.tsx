@@ -24,12 +24,12 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'home', label: '首页', to: '/', icon: Home, exact: true },
-  { key: 'chat', label: '问股', to: '/chat', icon: MessageSquareQuote, badge: 'completion' },
-  { key: 'portfolio', label: '持仓', to: '/portfolio', icon: BriefcaseBusiness },
-  { key: 'backtest', label: '回测', to: '/backtest', icon: BarChart3 },
-  { key: 'alerts', label: '告警', to: '/alerts', icon: Bell },
-  { key: 'settings', label: '设置', to: '/settings', icon: Settings2 },
+  { key: 'home', label: '홈', to: '/', icon: Home, exact: true },
+  { key: 'chat', label: 'AI 종목 상담', to: '/chat', icon: MessageSquareQuote, badge: 'completion' },
+  { key: 'portfolio', label: '포트폴리오', to: '/portfolio', icon: BriefcaseBusiness },
+  { key: 'backtest', label: '백테스트', to: '/backtest', icon: BarChart3 },
+  { key: 'alerts', label: '알림', to: '/alerts', icon: Bell },
+  { key: 'settings', label: '설정', to: '/settings', icon: Settings2 },
 ];
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNavigate }) => {
@@ -48,7 +48,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
         ) : null}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5" aria-label="主导航">
+      <nav className="flex flex-1 flex-col gap-1.5" aria-label="주 메뉴">
         {NAV_ITEMS.map(({ key, label, to, icon: Icon, exact, badge }) => (
           <NavLink
             key={key}
@@ -63,14 +63,14 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                 collapsed ? 'justify-center px-0' : 'px-[var(--nav-item-padding-x)]',
                 isActive
                   ? 'border-[var(--nav-active-border)] bg-[var(--nav-active-bg)] text-[hsl(var(--primary))] font-medium'
-                  : 'border-transparent text-secondary-text hover:bg-[var(--nav-hover-bg)] hover:text-foreground'
+                  : 'border-transparent text-secondary-text hover:bg-[var(--nav-hover-bg)] hover:text-foreground',
               )
             }
           >
             {({ isActive }) => (
               <>
                 {isActive && (
-                  <motion.div 
+                  <motion.div
                     layoutId="activeIndicator"
                     className="absolute top-0 bottom-0 left-0 w-[var(--nav-indicator-width)] bg-[var(--nav-indicator-bg)] shadow-[0_0_10px_var(--nav-indicator-shadow)]"
                     initial={{ opacity: 0 }}
@@ -86,9 +86,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
                     data-testid="chat-completion-badge"
                     className={cn(
                       'absolute right-3 border-2 border-background shadow-[0_0_10px_var(--nav-indicator-shadow)]',
-                      collapsed ? 'right-2 top-2' : ''
+                      collapsed ? 'right-2 top-2' : '',
                     )}
-                    aria-label="问股有新消息"
+                    aria-label="AI 종목 상담 새 메시지"
                   />
                 ) : null}
               </>
@@ -107,20 +107,20 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({ collapsed = false, onNav
           onClick={() => setShowLogoutConfirm(true)}
           className={cn(
             'mt-5 flex h-11 w-full cursor-pointer select-none items-center gap-3 rounded-2xl border border-transparent px-3 text-sm text-secondary-text transition-all hover:border-border/70 hover:bg-hover hover:text-foreground',
-            collapsed ? 'justify-center px-2' : ''
+            collapsed ? 'justify-center px-2' : '',
           )}
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          {!collapsed ? <span>退出</span> : null}
+          {!collapsed ? <span>로그아웃</span> : null}
         </button>
       ) : null}
 
       <ConfirmDialog
         isOpen={showLogoutConfirm}
-        title="退出登录"
-        message="确认退出当前登录状态吗？退出后需要重新输入密码。"
-        confirmText="确认退出"
-        cancelText="取消"
+        title="로그아웃"
+        message="현재 로그인 상태에서 나가시겠습니까? 다시 접속하려면 비밀번호를 입력해야 합니다."
+        confirmText="로그아웃"
+        cancelText="취소"
         isDanger
         onConfirm={() => {
           setShowLogoutConfirm(false);

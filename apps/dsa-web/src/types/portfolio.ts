@@ -8,7 +8,7 @@ export interface PortfolioAccountItem {
   ownerId?: string | null;
   name: string;
   broker?: string | null;
-  market: 'cn' | 'hk' | 'us';
+  market: 'cn' | 'hk' | 'us' | 'kr';
   baseCurrency: string;
   isActive: boolean;
   createdAt?: string | null;
@@ -22,7 +22,7 @@ export interface PortfolioAccountListResponse {
 export interface PortfolioAccountCreateRequest {
   name: string;
   broker?: string;
-  market: 'cn' | 'hk' | 'us';
+  market: 'cn' | 'hk' | 'us' | 'kr';
   baseCurrency: string;
   ownerId?: string;
 }
@@ -153,7 +153,7 @@ export interface PortfolioTradeCreateRequest {
   price: number;
   fee?: number;
   tax?: number;
-  market?: 'cn' | 'hk' | 'us';
+  market?: 'cn' | 'hk' | 'us' | 'kr';
   currency?: string;
   tradeUid?: string;
   note?: string;
@@ -173,7 +173,7 @@ export interface PortfolioCorporateActionCreateRequest {
   symbol: string;
   effectiveDate: string;
   actionType: PortfolioCorporateActionType;
-  market?: 'cn' | 'hk' | 'us';
+  market?: 'cn' | 'hk' | 'us' | 'kr';
   currency?: string;
   cashDividendPerShare?: number;
   splitRatio?: number;

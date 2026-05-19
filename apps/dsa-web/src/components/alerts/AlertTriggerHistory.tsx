@@ -5,10 +5,10 @@ import type { AlertTriggerItem } from '../../types/alerts';
 import { formatDateTime } from '../../utils/format';
 
 const statusLabel: Record<string, string> = {
-  triggered: '已触发',
-  skipped: '已跳过',
-  degraded: '降级',
-  failed: '失败',
+  triggered: '트리거됨',
+  skipped: '건너뜀',
+  degraded: '제한 모드',
+  failed: '실패',
 };
 
 function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'default' {
@@ -30,13 +30,13 @@ interface AlertTriggerHistoryProps {
 
 export const AlertTriggerHistory: React.FC<AlertTriggerHistoryProps> = ({ triggers, isLoading = false }) => {
   return (
-    <Card title="触发历史" subtitle="评估记录" variant="bordered" padding="md">
-      {isLoading ? <Loading label="正在加载触发历史" /> : null}
+    <Card title="트리거 기록" subtitle="평가 기록" variant="bordered" padding="md">
+      {isLoading ? <Loading label="트리거 기록을 불러오는 중" /> : null}
       {!isLoading && triggers.length === 0 ? (
         <EmptyState
           icon={<Activity className="h-6 w-6" />}
-          title="暂无触发历史"
-          description="后台评估会记录 triggered、skipped、degraded 和 failed 状态；正常未触发不会写入历史。"
+          title="트리거 기록 없음"
+          description="백그라운드 평가는 triggered, skipped, degraded, failed 상태를 기록합니다. 정상적으로 트리거되지 않은 종목은 기록되지 않을 수 있습니다."
         />
       ) : null}
       {!isLoading && triggers.length > 0 ? (
@@ -44,13 +44,13 @@ export const AlertTriggerHistory: React.FC<AlertTriggerHistoryProps> = ({ trigge
           <table className="w-full min-w-[780px] text-left text-sm">
             <thead className="border-b border-border/60 text-xs uppercase text-muted-text">
               <tr>
-                <th className="px-3 py-2 font-medium">状态</th>
-                <th className="px-3 py-2 font-medium">目标</th>
-                <th className="px-3 py-2 font-medium">观察值</th>
-                <th className="px-3 py-2 font-medium">阈值</th>
-                <th className="px-3 py-2 font-medium">数据源</th>
-                <th className="px-3 py-2 font-medium">数据时间</th>
-                <th className="px-3 py-2 font-medium">原因</th>
+                <th className="px-3 py-2 font-medium">상태</th>
+                <th className="px-3 py-2 font-medium">종목</th>
+                <th className="px-3 py-2 font-medium">관측값</th>
+                <th className="px-3 py-2 font-medium">임계값</th>
+                <th className="px-3 py-2 font-medium">데이터 소스</th>
+                <th className="px-3 py-2 font-medium">데이터 시간</th>
+                <th className="px-3 py-2 font-medium">사유</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">

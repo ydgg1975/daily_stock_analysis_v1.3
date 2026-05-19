@@ -39,8 +39,8 @@ function getSafeErrorSummary(error: unknown) {
     ? error.message
     : typeof error === 'string'
       ? error
-      : '未知前端运行时异常';
-  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || '未知前端运行时异常';
+      : '알 수 없는 프런트엔드 런타임 오류';
+  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || '알 수 없는 프런트엔드 런타임 오류';
   const sanitized = sanitizeUrlLikeText(normalized)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted]')
     .replace(/\b(sk-[A-Za-z0-9_-]{8,})\b/g, '[redacted-key]')
@@ -90,21 +90,21 @@ export class SettingsPanelErrorBoundary extends Component<
     return (
       <div className={cn('rounded-[1.5rem] border settings-border bg-card/94 p-5 shadow-soft-card-strong backdrop-blur-sm', this.props.className)}>
         <InlineAlert
-          title={`${this.props.title}加载失败`}
+          title={`${this.props.title}불러오기 실패`}
           variant="danger"
           message={(
             <div className="space-y-2">
               <p>
-                该设置区域发生前端运行时异常，页面其他设置仍可继续使用。
+                이 설정 영역에서 프런트엔드 런타임 오류가 발생했습니다. 다른 설정은 계속 사용할 수 있습니다.
               </p>
               {this.props.diagnosticHint ? (
                 <p>{this.props.diagnosticHint}</p>
               ) : (
-                <p>请补充 release 版本、运行环境和触发入口，便于定位问题。</p>
+                <p>문제 확인을 위해 릴리스 버전, 실행 환경, 발생 위치를 함께 제공해 주세요.</p>
               )}
               {this.state.errorSummary ? (
                 <p className="break-words font-mono text-xs opacity-80">
-                  错误摘要：{this.state.errorSummary}
+                  오류 요약: {this.state.errorSummary}
                 </p>
               ) : null}
             </div>

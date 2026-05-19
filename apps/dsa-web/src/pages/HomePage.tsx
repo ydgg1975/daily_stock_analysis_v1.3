@@ -103,7 +103,7 @@ const HomePage: React.FC = () => {
   } = useHomeDashboardState();
 
   useEffect(() => {
-    document.title = '每日选股分析 - DSA';
+    document.title = '일일 종목 분석 - DSA';
   }, []);
 
   useEffect(() => {
@@ -180,7 +180,7 @@ const HomePage: React.FC = () => {
   );
   const strategyOptions = useMemo(
     () => [
-      { id: '', name: '默认策略', description: '沿用系统默认分析框架' },
+      { id: '', name: '기본 전략', description: '시스템 기본 분석 프레임워크 사용' },
       ...analysisSkills.map((skill) => ({
         id: skill.id,
         name: skill.name,
@@ -355,8 +355,8 @@ const HomePage: React.FC = () => {
           setMarketReviewReport(null);
           setMarketReviewNotice({
             variant: 'danger',
-            title: '大盘复盘已超时',
-            message: '任务长时间未返回最终结果，请在任务列表/历史中查看。',
+            title: '시장 리뷰 시간 초과',
+            message: '작업이 오랫동안 최종 결과를 반환하지 않았습니다. 작업 목록이나 기록에서 확인하세요.',
           });
           scrollMarketReviewFeedbackIntoView();
           return false;
@@ -370,11 +370,11 @@ const HomePage: React.FC = () => {
             setMarketReviewReport(null);
             const progress = typeof status.progress === 'number'
               ? `${status.progress}%`
-              : '进行中';
+              : '진행 중';
             setMarketReviewNotice({
               variant: 'warning',
-              title: '大盘复盘进行中',
-              message: `任务状态：${status.status}（${progress}）`,
+              title: '시장 리뷰 진행 중',
+              message: `작업 상태: ${status.status} (${progress})`,
             });
             return true;
           }
@@ -387,8 +387,8 @@ const HomePage: React.FC = () => {
             setMarketReviewReport(marketReviewText ? marketReviewText.trim() : null);
             setMarketReviewNotice({
               variant: 'success',
-              title: '大盘复盘已完成',
-              message: marketReviewText ? '大盘复盘任务已完成，结果如下：' : '大盘复盘任务已完成，结果已生成并按配置推送。',
+              title: '시장 리뷰 완료',
+              message: marketReviewText ? '시장 리뷰 작업이 완료되었습니다. 결과는 다음과 같습니다.' : '시장 리뷰 작업이 완료되었고 설정에 따라 결과가 전송되었습니다.',
             });
             setMarketReviewError(null);
             scrollMarketReviewFeedbackIntoView();
@@ -404,7 +404,7 @@ const HomePage: React.FC = () => {
                   status: 500,
                   data: {
                     error: 'market_review_failed',
-                    message: status.error || '大盘复盘执行失败。',
+                    message: status.error || '시장 리뷰 실행에 실패했습니다.',
                   },
                 },
               }),
@@ -418,8 +418,8 @@ const HomePage: React.FC = () => {
           setMarketReviewReport(null);
           setMarketReviewNotice({
             variant: 'danger',
-            title: '大盘复盘状态异常',
-            message: `收到未知任务状态：${status.status}`,
+            title: '시장 리뷰 상태 이상',
+            message: `알 수 없는 작업 상태를 받았습니다: ${status.status}`,
           });
           scrollMarketReviewFeedbackIntoView();
           return false;
@@ -462,7 +462,7 @@ const HomePage: React.FC = () => {
       const result = await analysisApi.triggerMarketReview({ sendNotification: notify });
       setMarketReviewNotice({
         variant: 'success',
-        title: '大盘复盘已提交',
+        title: '시장 리뷰 제출됨',
         message: result.message,
       });
       scrollMarketReviewFeedbackIntoView();
@@ -490,7 +490,7 @@ const HomePage: React.FC = () => {
         setTimeout(() => setMarketReviewReportCopied(false), 2000);
       },
       (err) => {
-        console.error('复制失败:', err);
+        console.error('복사 실패:', err);
       },
     );
   }, [marketReviewReport]);
@@ -549,7 +549,7 @@ const HomePage: React.FC = () => {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden -ml-1 flex-shrink-0 rounded-lg p-1.5 text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                aria-label="历史记录"
+                aria-label="분석 기록"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -562,7 +562,7 @@ const HomePage: React.FC = () => {
                   onSubmit={(stockCode, stockName, selectionSource) => {
                     handleSubmitAnalysis(stockCode, stockName, selectionSource);
                   }}
-                  placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
+                  placeholder="종목 코드나 이름을 입력하세요. 예: 600519, AAPL"
                   disabled={isAnalyzing}
                   className={inputError ? 'border-danger/50' : undefined}
                 />
@@ -582,7 +582,7 @@ const HomePage: React.FC = () => {
                     className="home-surface-button flex h-10 max-w-[8.5rem] items-center gap-1.5 rounded-xl px-3 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-[11rem]"
                   >
                     <SlidersHorizontal className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">{selectedStrategy?.name || '策略'}</span>
+                    <span className="truncate">{selectedStrategy?.name || '전략'}</span>
                   </button>
                   {strategyMenuOpen ? (
                     <div
@@ -628,19 +628,19 @@ const HomePage: React.FC = () => {
                   onChange={(e) => setNotify(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border accent-primary"
                 />
-                推送通知
+                알림 보내기
               </label>
               <Button
                 type="button"
                 variant="secondary"
                 size="md"
                 isLoading={isSubmittingMarketReview}
-                loadingText="提交中"
+                loadingText="제출 중"
                 onClick={() => void handleTriggerMarketReview()}
                 className="h-10 flex-1 whitespace-nowrap md:flex-none"
               >
                 <BarChart3 className="h-4 w-4" aria-hidden="true" />
-                大盘复盘
+                시장 리뷰
               </Button>
               <button
                 type="button"
@@ -654,10 +654,10 @@ const HomePage: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    分析中
+                    분석 중
                   </>
                 ) : (
-                  '分析'
+                  '분석'
                 )}
               </button>
             </div>
@@ -669,7 +669,7 @@ const HomePage: React.FC = () => {
             {inputError ? (
               <InlineAlert
                 variant="danger"
-                title="输入有误"
+                title="입력 오류"
                 message={inputError}
                 className="rounded-xl px-3 py-2 text-xs shadow-none"
               />
@@ -677,7 +677,7 @@ const HomePage: React.FC = () => {
             {!inputError && duplicateError ? (
               <InlineAlert
                 variant="warning"
-                title="任务已存在"
+                title="작업이 이미 있습니다"
                 message={duplicateError}
                 className="rounded-xl px-3 py-2 text-xs shadow-none"
               />
@@ -689,11 +689,11 @@ const HomePage: React.FC = () => {
           <div className="px-3 pb-2 md:px-4">
             <InlineAlert
               variant="warning"
-              title="基础配置未完成"
+              title="기본 설정 미완료"
               message={
                 setupMissingLabels
-                  ? `还缺少 ${setupMissingLabels}，完成后即可开始最小可用分析。`
-                  : '还缺少基础配置，完成后即可开始最小可用分析。'
+                  ? `${setupMissingLabels} 설정이 아직 필요합니다. 완료 후 최소 분석을 시작할 수 있습니다.`
+                  : '기본 설정이 아직 필요합니다. 완료 후 최소 분석을 시작할 수 있습니다.'
               }
               action={(
                 <Button
@@ -702,7 +702,7 @@ const HomePage: React.FC = () => {
                   size="sm"
                   onClick={() => navigate('/settings')}
                 >
-                  去配置
+                  설정으로 이동
                 </Button>
               )}
               className="rounded-xl px-3 py-2 text-xs shadow-none"
@@ -756,14 +756,14 @@ const HomePage: React.FC = () => {
             {marketReviewReport ? (
               <div className="mb-3 rounded-xl border border-subtle bg-surface/70 px-3 py-3 text-xs text-secondary-text shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="font-semibold text-foreground">大盘复盘报告</p>
+                  <p className="font-semibold text-foreground">시장 리뷰 리포트</p>
                   <button
                     type="button"
                     className="home-surface-button h-7 rounded-md px-3 py-1 text-xs text-foreground"
                     disabled={marketReviewReportCopied}
                     onClick={() => void handleCopyMarketReviewReport()}
                   >
-                    {marketReviewReportCopied ? '已复制' : '复制'}
+                    {marketReviewReportCopied ? '복사됨' : '복사'}
                   </button>
                 </div>
                 <pre
@@ -784,7 +784,7 @@ const HomePage: React.FC = () => {
             ) : null}
             {isLoadingReport ? (
               <div className="flex h-full flex-col items-center justify-center">
-                <DashboardStateBlock title="加载报告中..." loading />
+                <DashboardStateBlock title="리포트를 불러오는 중..." loading />
               </div>
             ) : selectedReport ? (
               <div className="max-w-4xl space-y-4 pb-8">
@@ -809,7 +809,7 @@ const HomePage: React.FC = () => {
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    追问 AI
+                    AI에게 이어서 질문
                   </Button>
                   <Button
                     variant="home-action-ai"
@@ -828,8 +828,8 @@ const HomePage: React.FC = () => {
             ) : (
               <div className="flex h-full items-center justify-center">
                 <EmptyState
-                  title="开始分析"
-                  description="输入股票代码进行分析，或从左侧选择历史报告查看。"
+                  title="분석 시작"
+                  description="종목 코드를 입력해 분석하거나 왼쪽에서 이전 리포트를 선택하세요."
                   className="max-w-xl border-dashed"
                   icon={(
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -855,14 +855,14 @@ const HomePage: React.FC = () => {
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="删除历史记录"
+        title="분석 기록 삭제"
         message={
           selectedHistoryIds.length === 1
-            ? '确认删除这条历史记录吗？删除后将不可恢复。'
-            : `确认删除选中的 ${selectedHistoryIds.length} 条历史记录吗？删除后将不可恢复。`
+            ? '이 분석 기록을 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.'
+            : `선택한 분석 기록 ${selectedHistoryIds.length}개를 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.`
         }
-        confirmText={isDeletingHistory ? '删除中...' : '确认删除'}
-        cancelText="取消"
+        confirmText={isDeletingHistory ? '삭제 중...' : '삭제'}
+        cancelText="취소"
         isDanger={true}
         onConfirm={handleDeleteSelectedHistory}
         onCancel={() => setShowDeleteConfirm(false)}

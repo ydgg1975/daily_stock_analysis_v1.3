@@ -71,7 +71,6 @@ const buildBoardSignalMap = (details?: ReportDetailsType): Map<string, BoardSign
 };
 
 /**
- * 报告概览区组件 - 终端风格
  */
 export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
@@ -123,11 +122,8 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* 主信息区 - 两列布局，items-stretch 确保右侧与左侧同高 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
-        {/* 左侧：股票信息与结论 */}
         <div className="lg:col-span-2 space-y-5">
-          {/* 股票头部 */}
           <Card variant="gradient" padding="md" className="home-report-hero">
             <div className="flex items-start justify-between mb-5">
               <div className="flex-1">
@@ -135,7 +131,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   <h2 className="text-[28px] font-bold leading-tight text-foreground">
                     {meta.stockName || meta.stockCode}
                   </h2>
-                  {/* 价格和涨跌幅 */}
                   {meta.currentPrice != null && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-xl font-bold font-mono" style={getPriceChangeStyle(meta.changePct)}>
@@ -161,7 +156,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
               </div>
             </div>
 
-            {/* 关键结论 */}
             <div className="home-divider border-t pt-5">
               <span className="label-uppercase">{text.keyInsights}</span>
               <p className="mt-2 max-w-[62ch] whitespace-pre-wrap text-left text-[15px] leading-7 text-foreground">
@@ -170,9 +164,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
             </div>
           </Card>
 
-          {/* 操作建议和趋势预测 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 操作建议 */}
             <Card
               variant="bordered"
               padding="sm"
@@ -195,7 +187,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
               </div>
             </Card>
 
-            {/* 趋势预测 */}
             <Card
               variant="bordered"
               padding="sm"
@@ -267,7 +258,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
           )}
         </div>
 
-        {/* 右侧：情绪指标 - 填满格子高度，消除与 STRATEGY POINTS 之间的空隙 */}
         <div className="flex flex-col self-stretch min-h-full">
           <Card variant="bordered" padding="md" className="home-panel-card home-rail-card !overflow-visible flex-1 flex flex-col min-h-0">
             <div className="text-center flex-1 flex flex-col justify-center">

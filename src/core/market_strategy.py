@@ -1,126 +1,139 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
+
 """Market strategy blueprints for CN/HK/US daily market recap."""
 
+
+
 from dataclasses import dataclass
+
 from typing import List
 
 
+
+
+
 @dataclass(frozen=True)
+
 class StrategyDimension:
+
     """Single strategy dimension used by market recap prompts."""
 
+
+
     name: str
+
     objective: str
+
     checkpoints: List[str]
 
 
+
+
+
 @dataclass(frozen=True)
+
 class MarketStrategyBlueprint:
+
     """Region specific market strategy blueprint."""
 
+
+
     region: str
+
     title: str
+
     positioning: str
+
     principles: List[str]
+
     dimensions: List[StrategyDimension]
+
     action_framework: List[str]
 
+
+
     def to_prompt_block(self) -> str:
+
         """Render blueprint as prompt instructions."""
+
         principles_text = "\n".join([f"- {item}" for item in self.principles])
+
         action_text = "\n".join([f"- {item}" for item in self.action_framework])
 
+
+
         dims = []
+
         for dim in self.dimensions:
+
             checkpoints = "\n".join([f"  - {cp}" for cp in dim.checkpoints])
+
             dims.append(f"- {dim.name}: {dim.objective}\n{checkpoints}")
+
         dimensions_text = "\n".join(dims)
 
+
+
         return (
+
             f"## Strategy Blueprint: {self.title}\n"
+
             f"{self.positioning}\n\n"
+
             f"### Strategy Principles\n{principles_text}\n\n"
+
             f"### Analysis Dimensions\n{dimensions_text}\n\n"
+
             f"### Action Framework\n{action_text}"
+
         )
 
+
+
     def to_markdown_block(self) -> str:
+
         """Render blueprint as markdown section for template fallback report."""
+
         dims = "\n".join([f"- **{dim.name}**: {dim.objective}" for dim in self.dimensions])
-        section_title = "### VI. Strategy Framework" if self.region == "us" else "### 六、策略框架"
+
+        section_title = "### VI. Strategy Framework" if self.region == "us" else "### liu?갷elvekuangjia"
+
         return f"{section_title}\n{dims}\n"
+
+
+
 
 
 CN_BLUEPRINT = MarketStrategyBlueprint(
     region="cn",
-    title="A股市场三段式复盘策略",
-    positioning="聚焦指数趋势、资金博弈与板块轮动，形成次日交易计划。",
+    title="A주 시장 3단계 복기 전략",
+    positioning="지수 추세, 자금 흐름, 섹터 순환을 함께 보고 다음 거래일 계획을 세웁니다.",
     principles=[
-        "先看指数方向，再看量能结构，最后看板块持续性。",
-        "结论必须映射到仓位、节奏与风险控制动作。",
-        "判断使用当日数据与近3日新闻，不臆测未验证信息。",
+        "먼저 지수 방향을 보고, 다음으로 거래량 구조와 섹터 지속성을 확인합니다.",
+        "결론은 반드시 포지션, 리듬, 리스크 통제 행동으로 연결합니다.",
+        "당일 데이터와 최근 3일 뉴스를 기준으로 판단하고 검증되지 않은 정보는 배제합니다.",
     ],
     dimensions=[
-        StrategyDimension(
-            name="趋势结构",
-            objective="判断市场处于上升、震荡还是防守阶段。",
-            checkpoints=["上证/深证/创业板是否同向", "放量上涨或缩量下跌是否成立", "关键支撑阻力是否被突破"],
-        ),
-        StrategyDimension(
-            name="资金情绪",
-            objective="识别短线风险偏好与情绪温度。",
-            checkpoints=["涨跌家数与涨跌停结构", "成交额是否扩张", "高位股是否出现分歧"],
-        ),
-        StrategyDimension(
-            name="主线板块",
-            objective="提炼可交易主线与规避方向。",
-            checkpoints=["领涨板块是否具备事件催化", "板块内部是否有龙头带动", "领跌板块是否扩散"],
-        ),
-    ],
-    action_framework=[
-        "进攻：指数共振上行 + 成交额放大 + 主线强化。",
-        "均衡：指数分化或缩量震荡，控制仓位并等待确认。",
-        "防守：指数转弱 + 领跌扩散，优先风控与减仓。",
+        StrategyDimension("지수", "상승/하락/횡보 방향과 변동성을 판정합니다."),
+        StrategyDimension("자금", "거래대금과 주도 업종의 수급을 확인합니다."),
+        StrategyDimension("섹터", "주도 섹터의 확산과 지속 가능성을 점검합니다."),
+        StrategyDimension("계획", "다음 거래일의 관찰 조건과 대응을 정리합니다."),
     ],
 )
 
 US_BLUEPRINT = MarketStrategyBlueprint(
     region="us",
-    title="US Market Regime Strategy",
-    positioning="Focus on index trend, macro narrative, and sector rotation to define next-session risk posture.",
+    title="US Market Three-Step Review Strategy",
+    positioning="Read index trend, macro flows, and sector rotation to form the next-session plan.",
     principles=[
         "Read market regime from S&P 500, Nasdaq, and Dow alignment first.",
         "Separate beta move from theme-driven alpha rotation.",
         "Translate recap into actionable risk-on/risk-off stance with clear invalidation points.",
     ],
     dimensions=[
-        StrategyDimension(
-            name="Trend Regime",
-            objective="Classify the market as momentum, range, or risk-off.",
-            checkpoints=[
-                "Are SPX/NDX/DJI directionally aligned",
-                "Did volume confirm the move",
-                "Are key index levels reclaimed or lost",
-            ],
-        ),
-        StrategyDimension(
-            name="Macro & Flows",
-            objective="Map policy/rates narrative into equity risk appetite.",
-            checkpoints=[
-                "Treasury yield and USD implications",
-                "Breadth and leadership concentration",
-                "Defensive vs growth factor rotation",
-            ],
-        ),
-        StrategyDimension(
-            name="Sector Themes",
-            objective="Identify persistent leaders and vulnerable laggards.",
-            checkpoints=[
-                "AI/semiconductor/software trend persistence",
-                "Energy/financials sensitivity to macro data",
-                "Volatility signals from VIX and large-cap earnings",
-            ],
-        ),
+        StrategyDimension("Trend Regime", "Classify the market as momentum, range, or risk-off."),
+        StrategyDimension("Macro & Flows", "Map policy and rates narrative into equity risk appetite."),
+        StrategyDimension("Sector Themes", "Identify persistent leaders and vulnerable laggards."),
     ],
     action_framework=[
         "Risk-on: broad index breakout with expanding participation.",
@@ -131,42 +144,41 @@ US_BLUEPRINT = MarketStrategyBlueprint(
 
 HK_BLUEPRINT = MarketStrategyBlueprint(
     region="hk",
-    title="港股市场三段式复盘策略",
-    positioning="聚焦恒生指数趋势、南向资金博弈与板块轮动，形成次日交易计划。",
+    title="홍콩 시장 3단계 복기 전략",
+    positioning="항셍 지수, 남향 자금, 섹터 순환을 함께 보고 다음 거래일 계획을 세웁니다.",
     principles=[
-        "先看恒指/恒科/国企指数方向，再看南向资金情绪，最后看板块持续性。",
-        "结论必须映射到仓位、节奏与风险控制动作。",
-        "判断使用当日数据与近3日新闻，不臆测未验证信息。",
+        "항셍/항셍테크/국企지수 방향을 먼저 확인합니다.",
+        "남향 자금과 주도 섹터의 지속성을 함께 확인합니다.",
+        "결론은 포지션, 리듬, 리스크 통제 행동으로 연결합니다.",
     ],
     dimensions=[
-        StrategyDimension(
-            name="趋势结构",
-            objective="判断市场处于上升、震荡还是防守阶段。",
-            checkpoints=["恒指/恒科/国企指数是否同向", "放量上涨或缩量下跌是否成立", "关键支撑阻力是否被突破"],
-        ),
-        StrategyDimension(
-            name="资金情绪",
-            objective="识别南向资金风险偏好与情绪温度。",
-            checkpoints=["南向资金净流入方向与规模", "港元汇率与内地政策含义", "市场广度与龙头集中度"],
-        ),
-        StrategyDimension(
-            name="主线板块",
-            objective="提炼可交易主线与规避方向。",
-            checkpoints=["科技/互联网平台趋势持续性", "金融/地产对政策转向的敏感度", "防御与成长因子轮动"],
-        ),
+        StrategyDimension("추세 구조", "시장이 상승, 횡보, 방어 국면 중 어디에 있는지 판정합니다."),
+        StrategyDimension("자금 심리", "남향 자금과 환율, 정책 기대가 위험 선호에 주는 영향을 확인합니다."),
+        StrategyDimension("주도 섹터", "기술, 플랫폼, 금융, 부동산 등 주요 섹터의 지속성을 점검합니다."),
     ],
     action_framework=[
-        "进攻：恒指共振上行 + 南向资金持续流入 + 主线强化。",
-        "均衡：指数分化或缩量震荡，控制仓位并等待确认。",
-        "防守：指数转弱 + 波动率上升，优先风控与减仓。",
+        "공격: 지수 공진 상승, 남향 자금 유입, 주도 섹터 강화.",
+        "균형: 지수 분화나 횡보, 포지션 관리와 확인 대기.",
+        "방어: 지수 약화와 변동성 확대, 리스크 관리 우선.",
     ],
 )
 
 
+
+
+
 def get_market_strategy_blueprint(region: str) -> MarketStrategyBlueprint:
+
     """Return strategy blueprint by market region."""
+
     if region == "us":
+
         return US_BLUEPRINT
+
     if region == "hk":
+
         return HK_BLUEPRINT
+
     return CN_BLUEPRINT
+
+

@@ -9,12 +9,12 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 
 function createNextModeLabel(authEnabled: boolean, desiredEnabled: boolean) {
   if (authEnabled && !desiredEnabled) {
-    return '关闭认证';
+    return '인증 끄기';
   }
   if (!authEnabled && desiredEnabled) {
-    return '开启认证';
+    return '인증 켜기';
   }
-  return authEnabled ? '保持已开启' : '保持已关闭';
+  return authEnabled ? '켜진 상태 유지' : '꺼진 상태 유지';
 }
 
 export const AuthSettingsCard: React.FC = () => {
@@ -33,15 +33,15 @@ export const AuthSettingsCard: React.FC = () => {
   const helperText = useMemo(() => {
     switch (setupState) {
       case 'no_password':
-        return '系统尚未设置密码。启用认证前请先设置初始管理员密码，设置后请妥善保管。';
+        return '시스템에 아직 비밀번호가 없습니다. 인증을 켜기 전에 초기 관리자 비밀번호를 설정하고 안전하게 보관하세요.';
       case 'password_retained':
-        return '系统已保留之前设置的管理员密码。输入当前密码即可快速重新启用认证。';
+        return '시스템에 이전 관리자 비밀번호가 보관되어 있습니다. 현재 비밀번호를 입력하면 인증을 다시 켤 수 있습니다.';
       case 'enabled':
         return !desiredEnabled 
-          ? '若当前登录会话仍有效，可直接关闭认证；若会话已失效，请输入当前管理员密码。'
-          : '管理员认证已启用。如需更新密码，请使用下方的“修改密码”功能。';
+          ? '현재 로그인 세션이 유효하면 인증을 바로 끌 수 있습니다. 세션이 만료되었다면 현재 관리자 비밀번호를 입력하세요.'
+          : '관리자 인증이 활성화되어 있습니다. 비밀번호를 변경하려면 아래의 “비밀번호 변경” 기능을 사용하세요.';
       default:
-        return '管理员认证可保护 Web 设置页及 API 接口，防止未经授权的访问。';
+        return '관리자 인증은 Web 설정 페이지와 API를 보호해 무단 접근을 막습니다.';
     }
   }, [setupState, desiredEnabled]);
 
@@ -63,11 +63,11 @@ export const AuthSettingsCard: React.FC = () => {
     // Initial setup validation
     if (setupState === 'no_password' && desiredEnabled) {
       if (!password) {
-        setError('设置新密码是必填项');
+        setError('새 비밀번호는 필수입니다');
         return;
       }
       if (password !== passwordConfirm) {
-        setError('两次输入的新密码不一致');
+        setError('두 번 입력한 새 비밀번호가 일치하지 않습니다');
         return;
       }
     }
@@ -81,7 +81,7 @@ export const AuthSettingsCard: React.FC = () => {
         currentPassword.trim() || undefined,
       );
       await refreshStatus();
-      setSuccessMessage(desiredEnabled ? '认证设置已更新' : '认证已关闭');
+      setSuccessMessage(desiredEnabled ? '인증 설정이 업데이트되었습니다' : '인증이 꺼졌습니다');
       resetForm();
     } catch (err: unknown) {
       setError(getParsedApiError(err));
@@ -92,15 +92,15 @@ export const AuthSettingsCard: React.FC = () => {
 
   return (
     <SettingsSectionCard
-      title="认证与登录保护"
-      description="管理管理员密码认证，保护您的系统配置安全。"
+      title="인증 및 로그인 보호"
+      description="관리자 비밀번호 인증을 관리해 시스템 설정을 보호합니다."
       actions={
         <Badge
           variant={authEnabled ? 'success' : 'default'}
           size="sm"
           className={authEnabled ? '' : 'border-[var(--settings-border)] bg-[var(--settings-surface-hover)] text-secondary-text'}
         >
-          {authEnabled ? '已启用' : '未启用'}
+          {authEnabled ? '활성화됨' : '비활성화됨'}
         </Badge>
       }
     >
@@ -108,13 +108,13 @@ export const AuthSettingsCard: React.FC = () => {
         <div className="rounded-xl border border-[var(--settings-border)] bg-[var(--settings-surface)] p-4 shadow-soft-card transition-[background-color,border-color] duration-200 hover:border-[var(--settings-border-strong)] hover:bg-[var(--settings-surface-hover)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">管理员认证</p>
+              <p className="text-sm font-semibold text-foreground">관리자 인증</p>
               <p className="text-xs leading-6 text-muted-text">{helperText}</p>
             </div>
             <Checkbox
               checked={desiredEnabled}
               disabled={isSubmitting}
-              label={desiredEnabled ? '开启' : '关闭'}
+              label={desiredEnabled ? '켜기' : '닫기'}
               onChange={(event) => setDesiredEnabled(event.target.checked)}
               containerClassName="rounded-full border border-[var(--settings-border)] bg-[var(--settings-surface-hover)] px-4 py-2 shadow-soft-card transition-[background-color,border-color] duration-200 hover:border-[var(--settings-border-strong)] hover:bg-[var(--settings-surface)]"
             />
@@ -129,7 +129,7 @@ export const AuthSettingsCard: React.FC = () => {
              (setupState === 'enabled' && !desiredEnabled) ? (
               <div className="space-y-3">
                 <Input
-                  label="当前管理员密码"
+                  label="현재 관리자 비밀번호"
                   type="password"
                   allowTogglePassword
                   iconType="password"
@@ -137,8 +137,8 @@ export const AuthSettingsCard: React.FC = () => {
                   onChange={(event) => setCurrentPassword(event.target.value)}
                   autoComplete="current-password"
                   disabled={isSubmitting}
-                  placeholder="请输入当前密码"
-                  hint={setupState === 'password_retained' ? '输入旧密码以重新激活认证' : '关闭认证前可能需要验证身份'}
+                  placeholder="현재 비밀번호를 입력하세요"
+                  hint={setupState === 'password_retained' ? '인증을 다시 활성화하려면 기존 비밀번호를 입력하세요' : '인증을 끄기 전에 신원 확인이 필요할 수 있습니다'}
                 />
               </div>
             ) : null}
@@ -148,7 +148,7 @@ export const AuthSettingsCard: React.FC = () => {
               <>
                 <div className="space-y-3">
                   <Input
-                    label="设置管理员密码"
+                    label="관리자 비밀번호 설정"
                     type="password"
                     allowTogglePassword
                     iconType="password"
@@ -156,12 +156,12 @@ export const AuthSettingsCard: React.FC = () => {
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="new-password"
                     disabled={isSubmitting}
-                    placeholder="输入新密码 (至少 6 位)"
+                    placeholder="새 비밀번호 입력(최소 6자)"
                   />
                 </div>
                 <div className="space-y-3">
                   <Input
-                    label="确认新密码"
+                    label="새 비밀번호 확인"
                     type="password"
                     allowTogglePassword
                     iconType="password"
@@ -169,7 +169,7 @@ export const AuthSettingsCard: React.FC = () => {
                     onChange={(event) => setPasswordConfirm(event.target.value)}
                     autoComplete="new-password"
                     disabled={isSubmitting}
-                    placeholder="再次输入以确认"
+                    placeholder="확인을 위해 다시 입력"
                   />
                 </div>
               </>
@@ -180,17 +180,17 @@ export const AuthSettingsCard: React.FC = () => {
         {error ? (
           isParsedApiError(error) ? (
             <SettingsAlert
-              title="认证设置失败"
+              title="인증 설정 실패"
               message={error.message}
               variant="error"
             />
           ) : (
-            <SettingsAlert title="认证设置失败" message={error} variant="error" />
+            <SettingsAlert title="인증 설정 실패" message={error} variant="error" />
           )
         ) : null}
 
         {successMessage ? (
-          <SettingsAlert title="操作成功" message={successMessage} variant="success" />
+          <SettingsAlert title="작업 성공" message={successMessage} variant="success" />
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +208,7 @@ export const AuthSettingsCard: React.FC = () => {
             }}
             disabled={isSubmitting || !isDirty}
           >
-            还原
+            되돌리기
           </Button>
         </div>
       </form>

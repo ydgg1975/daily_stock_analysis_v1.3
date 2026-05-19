@@ -27,12 +27,12 @@ import { getReportText } from '../utils/reportLanguage';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
-  { label: '用缠论分析茅台', skill: 'chan_theory' },
-  { label: '波浪理论看宁德时代', skill: 'wave_theory' },
-  { label: '分析比亚迪趋势', skill: 'bull_trend' },
-  { label: '箱体震荡技能看中芯国际', skill: 'box_oscillation' },
-  { label: '分析腾讯 hk00700', skill: 'bull_trend' },
-  { label: '用情绪周期分析东方财富', skill: 'emotion_cycle' },
+  { label: '찬 이론으로 600519 분석', skill: 'chan_theory' },
+  { label: '파동 이론으로 CATL 추세 보기', skill: 'wave_theory' },
+  { label: 'BYD 추세 분석', skill: 'bull_trend' },
+  { label: '박스권 전략으로 SMIC 보기', skill: 'box_oscillation' },
+  { label: 'Tencent hk00700 분석', skill: 'bull_trend' },
+  { label: '감정 사이클로 종목 분석', skill: 'emotion_cycle' },
 ];
 
 const MAX_SELECTED_SKILLS = 3;
@@ -94,7 +94,7 @@ const ChatPage: React.FC = () => {
 
   // Set page title
   useEffect(() => {
-    document.title = '问股 - DSA';
+    document.title = 'AI 종목 상담 - DSA';
   }, []);
 
   useEffect(() => () => {
@@ -254,7 +254,6 @@ const ChatPage: React.FC = () => {
     setDeleteConfirmId(null);
   }, [deleteConfirmId, sessionId, loadSessions, handleStartNewChat]);
 
-  // Handle follow-up from report page: ?stock=600519&name=贵州茅台&recordId=xxx
   useEffect(() => {
     const stock = sanitizeFollowUpStockCode(searchParams.get('stock'));
     const name = sanitizeFollowUpStockName(searchParams.get('name'));
@@ -296,7 +295,7 @@ const ChatPage: React.FC = () => {
       const msgText = (overrideMessage ?? input).trim();
       if (!msgText || loading) return;
       const usedSkillIds = normalizeSelectedSkillIds(overrideSkillIds ?? selectedSkillIds);
-      const usedSkillNames = usedSkillIds.length > 0 ? getSkillNames(usedSkillIds) : ['通用'];
+      const usedSkillNames = usedSkillIds.length > 0 ? getSkillNames(usedSkillIds) : ['일반'];
 
       const payload = {
         message: msgText,
@@ -373,7 +372,7 @@ const ChatPage: React.FC = () => {
 
   const downloadMessageAsMarkdown = useCallback((msg: Message) => {
     const skillLabel = getMessageSkillLabel(msg);
-    const heading = msg.role === 'user' ? '# 用户消息' : `# AI 回复${skillLabel ? ` · ${skillLabel}` : ''}`;
+    const heading = msg.role === 'user' ? '# 사용자 메시지' : `# AI 답변${skillLabel ? ` · ${skillLabel}` : ''}`;
     const content = [heading, '', msg.content].join('\n');
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -387,16 +386,16 @@ const ChatPage: React.FC = () => {
   }, []);
 
   const getCurrentStage = (steps: ProgressStep[]): string => {
-    if (steps.length === 0) return '正在连接...';
+    if (steps.length === 0) return '연결 중...';
     const last = steps[steps.length - 1];
-    if (last.type === 'thinking') return last.message || 'AI 正在思考...';
+    if (last.type === 'thinking') return last.message || 'AI가 생각하는 중...';
     if (last.type === 'tool_start')
       return `${last.display_name || last.tool}...`;
     if (last.type === 'tool_done')
-      return `${last.display_name || last.tool} 完成`;
+      return `${last.display_name || last.tool} 완료`;
     if (last.type === 'generating')
-      return last.message || '正在生成最终分析...';
-    return '处理中...';
+      return last.message || '최종 분석을 생성하는 중...';
+    return '처리 중...';
   };
 
   const renderThinkingBlock = (msg: Message) => {
@@ -407,7 +406,7 @@ const ChatPage: React.FC = () => {
       (sum, s) => sum + (s.duration || 0),
       0,
     );
-    const summary = `${toolSteps.length} 个工具调用 · ${totalDuration.toFixed(1)}s`;
+    const summary = `도구 호출 ${toolSteps.length}회 · ${totalDuration.toFixed(1)}s`;
 
     return (
       <button
@@ -428,7 +427,7 @@ const ChatPage: React.FC = () => {
           />
         </svg>
         <span className="flex items-center gap-1.5">
-          <span className="opacity-60">思考过程</span>
+          <span className="opacity-60">추론 과정</span>
           <span className="text-muted-text/50">·</span>
           <span className="opacity-50">{summary}</span>
         </span>
@@ -443,7 +442,7 @@ const ChatPage: React.FC = () => {
         let iconClass = 'chat-progress-dot-muted';
         let text = '';
         if (step.type === 'thinking') {
-          text = step.message || `第 ${step.step} 步：思考`;
+          text = step.message || `${step.step}단계: 사고`;
           statusClass = 'chat-progress-item-thinking';
           iconClass = 'chat-progress-dot-thinking';
         } else if (step.type === 'tool_start') {
@@ -455,7 +454,7 @@ const ChatPage: React.FC = () => {
           statusClass = step.success ? 'chat-progress-item-success' : 'chat-progress-item-danger';
           iconClass = step.success ? 'chat-progress-dot-success' : 'chat-progress-dot-danger';
         } else if (step.type === 'generating') {
-          text = step.message || '生成分析';
+          text = step.message || '분석 생성';
           statusClass = 'chat-progress-item-generating';
           iconClass = 'chat-progress-dot-generating';
         }
@@ -479,12 +478,12 @@ const ChatPage: React.FC = () => {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          历史对话
+          대화 기록
         </h2>
         <button
           onClick={handleStartNewChat}
           className="rounded-lg p-1.5 text-muted-text transition-all hover:bg-white/10 hover:text-foreground"
-          aria-label="开启新对话"
+          aria-label="새 대화 시작"
         >
           <svg
             className="w-4 h-4"
@@ -506,14 +505,14 @@ const ChatPage: React.FC = () => {
           <DashboardStateBlock
             loading
             compact
-            title="加载对话中..."
+            title="대화를 불러오는 중..."
             className="rounded-2xl border border-dashed border-border/50 bg-surface/30"
           />
         ) : sessions.length === 0 ? (
           <DashboardStateBlock
             compact
-            title="暂无历史对话"
-            description="开始提问后，这里会保留会话记录。"
+            title="아직 대화 기록이 없습니다"
+            description="질문을 시작하면 여기에 대화 기록이 저장됩니다."
             className="rounded-2xl border border-dashed border-border/50 bg-surface/30"
           />
         ) : (
@@ -524,7 +523,7 @@ const ChatPage: React.FC = () => {
                   type="button"
                   onClick={() => handleSwitchSession(s.session_id)}
                   className={`session-item ${s.session_id === sessionId ? 'active' : ''}`}
-                  aria-label={`切换到对话 ${s.title}`}
+                  aria-label={`대화 ${s.title}로 전환`}
                   aria-current={s.session_id === sessionId ? 'page' : undefined}
                 >
                   <div className="indicator" />
@@ -532,7 +531,7 @@ const ChatPage: React.FC = () => {
                     <span className="title">{s.title}</span>
                     <div className="mt-0.5 flex items-center gap-2">
                       <span className="meta">
-                        {s.message_count} 条对话
+                        대화 {s.message_count}개
                       </span>
                       {s.last_active && (
                         <>
@@ -551,7 +550,7 @@ const ChatPage: React.FC = () => {
                   onClick={() => {
                     setDeleteConfirmId(s.session_id);
                   }}
-                  aria-label={`删除对话 ${s.title}`}
+                  aria-label={`대화 ${s.title} 삭제`}
                 >
                   <svg
                     className="w-3.5 h-3.5"
@@ -604,10 +603,10 @@ const ChatPage: React.FC = () => {
       {/* Delete confirmation dialog */}
       <ConfirmDialog
         isOpen={Boolean(deleteConfirmId)}
-        title="删除对话"
-        message="删除后，该对话将不可恢复，确认删除吗？"
-        confirmText="删除"
-        cancelText="取消"
+        title="대화 삭제"
+        message="삭제 후에는 이 대화를 복구할 수 없습니다. 삭제하시겠습니까?"
+        confirmText="삭제"
+        cancelText="취소"
         isDanger
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmId(null)}
@@ -621,7 +620,7 @@ const ChatPage: React.FC = () => {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-hover transition-colors text-secondary-text hover:text-foreground"
-                aria-label="历史对话"
+                aria-label="대화 기록"
               >
                 <svg
                   className="w-5 h-5"
@@ -650,17 +649,17 @@ const ChatPage: React.FC = () => {
                   d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
                 />
               </svg>
-              问股
+              AI 종목 상담
             </h1>
             {messages.length > 0 && (
               <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                <Tooltip content="导出会话为 Markdown 文件">
+                <Tooltip content="대화를 Markdown 파일로 내보내기">
                   <span className="inline-flex">
                     <Button
                       variant="action-primary"
                       size="sm"
                       onClick={() => downloadSession(messages)}
-                      aria-label="导出会话为 Markdown 文件"
+                      aria-label="대화를 Markdown 파일로 내보내기"
                     >
                       <svg
                         className="w-4 h-4"
@@ -675,11 +674,11 @@ const ChatPage: React.FC = () => {
                           d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                         />
                       </svg>
-                      导出会话
+                      대화 내보내기
                     </Button>
                   </span>
                 </Tooltip>
-                <Tooltip content="发送到已配置的通知机器人/邮箱">
+                <Tooltip content="설정된 알림 봇/이메일로 보내기">
                   <span className="inline-flex">
                     <Button
                       variant="action-primary"
@@ -692,18 +691,18 @@ const ChatPage: React.FC = () => {
                         try {
                           const content = formatSessionAsMarkdown(messages);
                           await agentApi.sendChat(content);
-                          showSendFeedback({ type: 'success', message: '已发送到通知渠道' }, 3000);
+                          showSendFeedback({ type: 'success', message: '알림 채널로 전송했습니다' }, 3000);
                         } catch (err) {
                           const parsed = getParsedApiError(err);
                           showSendFeedback({
                             type: 'error',
-                            message: parsed.message || '发送失败',
+                            message: parsed.message || '전송 실패',
                           }, 5000);
                         } finally {
                           setSending(false);
                         }
                       }}
-                      aria-label="发送到已配置的通知机器人/邮箱"
+                      aria-label="설정된 알림 봇/이메일로 보내기"
                     >
                       {sending ? (
                         <svg
@@ -740,7 +739,7 @@ const ChatPage: React.FC = () => {
                           />
                         </svg>
                       )}
-                      发送
+                      보내기
                     </Button>
                   </span>
                 </Tooltip>
@@ -748,12 +747,12 @@ const ChatPage: React.FC = () => {
             )}
           </div>
           <p className="text-secondary-text text-sm">
-            向 AI 询问个股分析，获取基于技能视角的交易建议与实时决策报告。
+            AI에게 종목 분석을 질문하고, 전략 관점 기반의 매매 의견과 실시간 판단 리포트를 받습니다.
           </p>
           {sendToast ? (
             <InlineAlert
               variant={sendToast.type === 'success' ? 'success' : 'danger'}
-              title={sendToast.type === 'success' ? '发送成功' : '发送失败'}
+              title={sendToast.type === 'success' ? '전송 성공' : '전송 실패'}
               message={sendToast.message}
               className="max-w-md rounded-xl px-3 py-2 text-xs shadow-none"
             />
@@ -772,8 +771,8 @@ const ChatPage: React.FC = () => {
             {messages.length === 0 && !loading ? (
               <div className="flex h-full items-center justify-center">
                 <EmptyState
-                  title="开始问股"
-                  description="输入「分析 600519」或「茅台现在能买吗」，AI 将调用实时数据工具为您生成决策报告。"
+                  title="상담 시작"
+                  description="예: 「분석 600519」 또는 「AAPL 지금 사도 될까?」를 입력하면 AI가 실시간 데이터 도구를 호출해 판단 리포트를 생성합니다."
                   className="max-w-2xl border-dashed bg-card/55"
                   icon={(
                     <svg
@@ -829,7 +828,7 @@ const ChatPage: React.FC = () => {
                   >
                     {msg.role === 'assistant' && skillLabel && (
                       <div className="mb-2">
-                        <Badge variant="info" className="chat-skill-badge shadow-none" aria-label={`技能 ${skillLabel}`}>
+                        <Badge variant="info" className="chat-skill-badge shadow-none" aria-label={`전략 ${skillLabel}`}>
                           <svg
                             className="w-3 h-3"
                             fill="none"
@@ -867,9 +866,9 @@ const ChatPage: React.FC = () => {
                             type="button"
                             onClick={() => downloadMessageAsMarkdown(msg)}
                             className="chat-copy-btn"
-                            aria-label="导出此条消息为 Markdown"
+                            aria-label="이 메시지를 Markdown으로 내보내기"
                           >
-                            导出
+                            내보내기
                           </button>
                         </div>
                         <div className="chat-prose pr-20 sm:pr-24">
@@ -927,7 +926,7 @@ const ChatPage: React.FC = () => {
                   requestScrollToBottom('smooth');
                   scrollToBottom('smooth');
                 }}
-                aria-label="查看最新消息"
+                aria-label="최신 메시지 보기"
               >
                 <svg
                   className="h-3.5 w-3.5"
@@ -942,7 +941,7 @@ const ChatPage: React.FC = () => {
                     d="M19 14l-7 7m0 0l-7-7m7 7V3"
                   />
                 </svg>
-                有新消息
+                새 메시지
               </button>
             </div>
           )}
@@ -954,15 +953,15 @@ const ChatPage: React.FC = () => {
               {isFollowUpContextLoading ? (
                 <InlineAlert
                   variant="info"
-                  title="追问上下文加载中"
-                  message="正在加载历史分析上下文；现在可直接发送追问。"
+                  title="이어질문 컨텍스트 로딩 중"
+                  message="이전 분석 컨텍스트를 불러오는 중입니다. 지금 바로 이어서 질문할 수 있습니다."
                   className="rounded-xl px-3 py-2 text-xs shadow-none"
                 />
               ) : null}
             {skills.length > 0 && (
               <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
                 <span className="text-xs text-muted-text font-medium uppercase tracking-wider flex-shrink-0 mt-1">
-                  策略
+                  전략
                 </span>
                 <label className="flex items-center gap-1.5 text-sm cursor-pointer group mt-0.5">
                   <input
@@ -976,7 +975,7 @@ const ChatPage: React.FC = () => {
                   <span
                     className={`transition-colors text-sm ${selectedSkillIds.length === 0 ? 'text-foreground font-medium' : 'text-secondary-text group-hover:text-foreground'}`}
                   >
-                    通用分析
+                    일반 분석
                   </span>
                 </label>
                 {skills.map((s) => {
@@ -1020,7 +1019,7 @@ const ChatPage: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="例如：分析 600519 / 茅台现在适合买入吗？ (Enter 发送, Shift+Enter 换行)"
+                  placeholder="예: 분석 600519 / AAPL 지금 매수해도 될까? (Enter 전송, Shift+Enter 줄바꿈)"
                   disabled={loading}
                   rows={1}
                   className="input-surface input-focus-glow flex-1 min-h-[44px] max-h-[200px] rounded-xl border bg-transparent px-4 py-2.5 text-sm transition-all focus:outline-none resize-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -1038,7 +1037,7 @@ const ChatPage: React.FC = () => {
                   isLoading={loading}
                   className="btn-primary flex-shrink-0"
                 >
-                  发送
+                  보내기
                 </Button>
               </div>
             </div>

@@ -12,19 +12,19 @@ const THEME_OPTIONS: Array<{
   label: string;
   icon: typeof Sun;
 }> = [
-  { value: 'light', label: '浅色', icon: Sun },
-  { value: 'dark', label: '深色', icon: Moon },
-  { value: 'system', label: '跟随系统', icon: Monitor },
+  { value: 'light', label: '라이트', icon: Sun },
+  { value: 'dark', label: '다크', icon: Moon },
+  { value: 'system', label: '시스템 설정', icon: Monitor },
 ];
 
 function resolveThemeLabel(theme: string | undefined) {
   switch (theme) {
     case 'light':
-      return '浅色';
+      return '라이트';
     case 'dark':
-      return '深色';
+      return '다크';
     default:
-      return '跟随系统';
+      return '시스템 설정';
   }
 }
 
@@ -77,11 +77,11 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         )}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="切换主题"
+        aria-label="테마 전환"
       >
         <TriggerIcon className={cn('shrink-0', isNavVariant ? 'h-5 w-5' : 'h-4 w-4')} />
         {isNavVariant ? (
-          collapsed ? null : <span className="truncate text-[1.02rem] font-medium">主题</span>
+          collapsed ? null : <span className="truncate text-[1.02rem] font-medium">테마</span>
         ) : (
           <span className="hidden sm:inline">{resolveThemeLabel(activeTheme)}</span>
         )}
@@ -90,7 +90,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
       {open ? (
         <div
           role="menu"
-          aria-label="主题模式"
+          aria-label="테마 모드"
           className={cn(
             'z-[100] min-w-[8rem] overflow-hidden rounded-2xl border border-border/70 bg-elevated p-1.5 shadow-[0_24px_48px_rgba(3,8,20,0.32)] backdrop-blur-xl',
             isNavVariant

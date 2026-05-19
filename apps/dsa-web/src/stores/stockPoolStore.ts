@@ -314,12 +314,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const skills = options?.skills;
 
     if (!stockCodeInput) {
-      set({ inputError: '请输入股票代码', duplicateError: null });
+      set({ inputError: '종목 코드를 입력하세요', duplicateError: null });
       return;
     }
 
     if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
-      set({ inputError: '请输入有效的股票代码或股票名称', duplicateError: null });
+      set({ inputError: '유효한 종목 코드 또는 종목명을 입력하세요', duplicateError: null });
       return;
     }
 
@@ -368,7 +368,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
       if (error instanceof DuplicateTaskError) {
         set({
-          duplicateError: `股票 ${error.stockCode} 正在分析中，请等待完成`,
+          duplicateError: `종목 ${error.stockCode}  분석 중입니다. 완료될 때까지 기다려 주세요`,
         });
         return;
       }
@@ -405,7 +405,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
   syncTaskFailed: (task) => {
     get().syncTaskUpdated(task);
-    set({ error: getParsedApiError(task.error || '分析失败') });
+    set({ error: getParsedApiError(task.error || '분석 실패') });
   },
 
   removeTask: (taskId) => {

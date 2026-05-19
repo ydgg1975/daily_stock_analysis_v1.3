@@ -4,7 +4,7 @@
  * Stock data index for autocomplete functionality
  */
 
-export type Market = 'CN' | 'HK' | 'US' | 'INDEX' | 'ETF' | 'BSE';
+export type Market = 'CN' | 'HK' | 'US' | 'KR' | 'INDEX' | 'ETF' | 'BSE';
 export type AssetType = 'stock' | 'index' | 'etf';
 
 /**
@@ -15,15 +15,15 @@ export interface StockIndexItem {
   canonicalCode: string;
   /** Display code: 600519 */
   displayCode: string;
-  /** Chinese name: 贵州茅台 */
+  /** Localized stock name */
   nameZh: string;
   /** English name: Kweichow Moutai */
   nameEn?: string;
-  /** Pinyin full: guizhoumaotai */
+  /** Romanized full name, when available */
   pinyinFull?: string;
   /** Pinyin abbreviation: gzmt */
   pinyinAbbr?: string;
-  /** Aliases: ["茅台"] */
+  /** Search aliases */
   aliases?: string[];
   /** Market */
   market: Market;
@@ -43,7 +43,7 @@ export interface StockSuggestion {
   canonicalCode: string;
   /** Display code */
   displayCode: string;
-  /** Chinese name */
+  /** Localized stock name */
   nameZh: string;
   /** Market */
   market: Market;

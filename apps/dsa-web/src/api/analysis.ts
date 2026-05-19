@@ -110,7 +110,7 @@ export const analysisApi = {
       const message = detail && typeof detail === 'object' && 'message' in detail
         ? String((detail as { message?: unknown }).message || '')
         : String(response.data?.message || '');
-      throw new Error(message || '大盘复盘正在执行中，请稍后再试');
+      throw new Error(message || '시장 리뷰가 실행 중입니다. 잠시 후 다시 시도하세요');
     }
 
     return toCamelCase<MarketReviewAccepted>(response.data);
@@ -176,7 +176,7 @@ export class DuplicateTaskError extends Error {
   existingTaskId: string;
 
   constructor(stockCode: string, existingTaskId: string, message?: string) {
-    super(message || `股票 ${stockCode} 正在分析中`);
+    super(message || `종목 ${stockCode}  분석 중입니다`);
     this.name = 'DuplicateTaskError';
     this.stockCode = stockCode;
     this.existingTaskId = existingTaskId;

@@ -29,7 +29,7 @@ export const Select: React.FC<SelectProps> = ({
   onChange,
   options,
   label,
-  placeholder = '请选择',
+  placeholder = '선택하세요',
   disabled = false,
   className = '',
 }) => {

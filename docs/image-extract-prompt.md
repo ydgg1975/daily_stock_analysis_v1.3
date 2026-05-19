@@ -1,31 +1,25 @@
-# Image Extract Prompt (Vision LLM)
+# 이미지 종목 추출 프롬프트
 
-本文档记录 `src/services/image_stock_extractor.py` 中 `EXTRACT_PROMPT` 的完整内容，便于 PR 审查时评估指令效果。
+이 문서는 `src/services/image_stock_extractor.py`의 `EXTRACT_PROMPT`를 검토할 때 참고하는 문서입니다.
 
-**当修改 EXTRACT_PROMPT 时**：请同步更新此文件，并在 PR 描述中展示完整变更（before/after），以便审查者评估针对 code+name+confidence 提取的优化程度。
+프롬프트를 수정하면 PR 설명에 변경 전후와 검증 결과를 함께 적으세요.
 
----
+## 현재 목적
 
-## 当前 Prompt（完整）
+이미지나 스크린샷에서 보이는 종목 코드와 종목명을 추출합니다.
 
+반환 형식:
+
+```json
+[
+  {"code": "KR005930", "name": "삼성전자", "confidence": "high"}
+]
 ```
-请分析这张股票市场截图或图片，提取其中所有可见的股票代码及名称。
 
-重要：若图中同时显示股票名称和代码（如自选股列表、ETF 列表），必须同时提取两者，每个元素必须包含 code 和 name 字段。
+## 규칙
 
-输出格式：仅返回有效的 JSON 数组，不要 markdown、不要解释。
-每个元素为对象：{"code":"股票代码","name":"股票名称","confidence":"high|medium|low"}
-- code: 必填，股票代码（A股6位、港股5位、美股1-5字母、ETF 如 159887/512880）
-- name: 若图中有名称则必填（如 贵州茅台、银行ETF、证券ETF），与代码一一对应；仅当图中确实无名称时可省略
-- confidence: 必填，识别置信度，high=确定、medium=较确定、low=不确定
-
-示例（图中同时有名称和代码时）：
-- 个股：600519 贵州茅台、300750 宁德时代
-- 港股：00700 腾讯控股、09988 阿里巴巴
-- 美股：AAPL 苹果、TSLA 特斯拉
-- ETF：159887 银行ETF、512880 证券ETF、512000 券商ETF、512480 半导体ETF、515030 新能源车ETF
-
-输出示例：[{"code":"600519","name":"贵州茅台","confidence":"high"},{"code":"159887","name":"银行ETF","confidence":"high"}]
-
-禁止只返回代码数组如 ["159887","512880"]，必须使用对象格式。若未找到任何股票代码，返回：[]
-```
+- 보이는 종목 코드와 종목명을 함께 추출합니다.
+- 찾지 못하면 빈 배열을 반환합니다.
+- 단순 코드 배열이 아니라 객체 배열을 반환합니다.
+- confidence 값은 `high`, `medium`, `low` 중 하나를 사용합니다.
+- 한국, 미국, 홍콩, 중국 시장 코드를 구분합니다.

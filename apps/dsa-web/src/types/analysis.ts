@@ -34,7 +34,7 @@ export interface MarketReviewAccepted {
 
 // ============ Report Types ============
 
-export type ReportLanguage = 'zh' | 'en';
+export type ReportLanguage = 'zh' | 'en' | 'ko';
 
 /** Report metadata */
 export interface ReportMeta {
@@ -52,16 +52,21 @@ export interface ReportMeta {
 
 /** Sentiment label */
 export type SentimentLabel =
-  | '极度悲观'
-  | '悲观'
-  | '中性'
-  | '乐观'
-  | '极度乐观'
+  | 'ZH_VERY_BEARISH'
+  | 'ZH_BEARISH'
+  | 'ZH_NEUTRAL'
+  | 'ZH_BULLISH'
+  | 'ZH_VERY_BULLISH'
   | 'Very Bearish'
   | 'Bearish'
   | 'Neutral'
   | 'Bullish'
-  | 'Very Bullish';
+  | 'Very Bullish'
+  | '매우 비관'
+  | '비관'
+  | '중립'
+  | '낙관'
+  | '매우 낙관';
 
 /** Report summary section */
 export interface ReportSummary {
@@ -270,11 +275,18 @@ export const getSentimentLabel = (score: number, language: ReportLanguage = 'zh'
     if (score <= 80) return 'Bullish';
     return 'Very Bullish';
   }
-  if (score <= 20) return '极度悲观';
-  if (score <= 40) return '悲观';
-  if (score <= 60) return '中性';
-  if (score <= 80) return '乐观';
-  return '极度乐观';
+  if (language === 'ko') {
+    if (score <= 20) return '매우 비관';
+    if (score <= 40) return '비관';
+    if (score <= 60) return '중립';
+    if (score <= 80) return '낙관';
+    return '매우 낙관';
+  }
+  if (score <= 20) return 'ZH_VERY_BEARISH';
+  if (score <= 40) return 'ZH_BEARISH';
+  if (score <= 60) return 'ZH_NEUTRAL';
+  if (score <= 80) return 'ZH_BULLISH';
+  return 'ZH_VERY_BULLISH';
 };
 
 /** Get sentiment color by score */

@@ -1,49 +1,49 @@
-# Default Bull Trend Strategy / 默认多头趋势
-
-name: bull_trend
-display_name: 默认多头趋势
-description: 默认个股分析优先策略，识别多头排列、趋势延续与回踩低吸机会。
-category: trend
-core_rules: [1, 2, 3]
-required_tools:
-  - get_daily_history
-  - analyze_trend
-aliases: [趋势, 趋势分析, 多头趋势]
-default_active: true
-default_router: true
-default_priority: 10
-market_regimes: [trending_up]
-
-instructions: |
-  **默认多头趋势（Default Bull Trend Strategy）**
-
-  适用场景：
-  - 常规个股分析的默认策略。
-  - 优先寻找“趋势向上 + 风险可控 + 不追高”的机会。
-
-  分析框架：
-
-  1. **趋势确认（优先级最高）**
-     - 使用 `analyze_trend` 判断 MA5/MA10/MA20 排列。
-     - MA5 >= MA10 >= MA20 且 MA20 斜率向上，视为多头结构。
-     - 若价格显著跌破 MA20，则降低看多权重。
-
-  2. **位置与节奏**
-     - 优先“回踩不破”而非“高位追涨”。
-     - 当价格距离 MA5/MA10 过远时，提示等待回踩。
-     - 放量突破有效阻力时可提高胜率评级。
-
-  3. **量价验证**
-     - 使用 `get_daily_history` 检查突破日/反弹日是否放量。
-     - 缩量上涨需谨慎，放量滞涨需警惕分歧。
-
-  4. **交易建议输出**
-     - 输出明确的“买入/观望/减仓”倾向及触发条件。
-     - 必须给出止损参考（如 MA20 下方或结构低点）。
-     - 若无清晰优势，明确写“暂不出手”，避免过度交易。
-
-  评分调整建议：
-  - 多头排列 + 趋势强度良好：`sentiment_score +12`
-  - 回踩关键均线后企稳：`sentiment_score +8`
-  - 放量突破关键阻力：`sentiment_score +10`
-  - 跌破 MA20 或趋势转弱：`sentiment_score -12`
+# Default Bull Trend Strategy / morenduotouqushi
+
+name: bull_trend
+display_name: morenduotouqushi
+description: morengegufenxiyouxiancelve，shibieduotoupailie、qushiyanxuyuhuicaidixijihui。
+category: trend
+core_rules: [1, 2, 3]
+required_tools:
+  - get_daily_history
+  - analyze_trend
+aliases: [qushi, qushifenxi, duotouqushi]
+default_active: true
+default_router: true
+default_priority: 10
+market_regimes: [trending_up]
+
+instructions: |
+  **morenduotouqushi（Default Bull Trend Strategy）**
+
+  shiyongchangjing：
+  - changguigegufenxidemorencelve。
+  - youxianxunzhao“qushixiangshang + fengxiankekong + buzhuigao”dejihui。
+
+  fenxikuangjia：
+
+  1. **qushiqueren（youxianjizuigao）**
+     - shiyong `analyze_trend` panduan MA5/MA10/MA20 pailie。
+     - MA5 >= MA10 >= MA20 qie MA20 xielvxiangshang，shiweiduotoujiegou。
+     - ruojiagexianzhudiepo MA20，zejiangdikanduoquanzhong。
+
+  2. **weizhiyujiezou**
+     - youxian“huicaibupo”erfei“gaoweizhuizhang”。
+     - dangjiagejuli MA5/MA10 guoyuanshi，tishidengdaihuicai。
+     - fangliangtupoyouxiaozulishiketigaoshenglvpingji。
+
+  3. **liangjiayanzheng**
+     - shiyong `get_daily_history` jianchatupori/fantanrishifoufangliang。
+     - suoliangshangzhangxujinshen，fangliangzhizhangxujingtifenqi。
+
+  4. **jiaoyijianyishuchu**
+     - shuchumingquede“mairu/guanwang/jiancang”qingxiangjichufatiaojian。
+     - bixugeichuzhisuncankao（ru MA20 xiafanghuojiegoudidian）。
+     - ruowuqingxiyoushi，mingquexie“zanbuchushou”，bimianguodujiaoyi。
+
+  pingfentiaozhengjianyi：
+  - duotoupailie + qushiqiangdulianghao：`sentiment_score +12`
+  - huicaiguanjianjunxianhouqiwen：`sentiment_score +8`
+  - fangliangtupoguanjianzuli：`sentiment_score +10`
+  - diepo MA20 huoqushizhuanruo：`sentiment_score -12`

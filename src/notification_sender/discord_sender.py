@@ -1,140 +1,277 @@
-# -*- coding: utf-8 -*-
-"""
-Discord 发送提醒服务
+﻿# -*- coding: utf-8 -*-
 
-职责：
-1. 通过 webhook 或 Discord bot API 发送 Discord 消息
 """
+
+Discord sendtixingfuwu
+
+
+
+zhize竊?
+1. tongguo webhook huo Discord bot API send Discord xiaoxi
+
+"""
+
 import logging
+
 from typing import Optional
+
+
 
 import requests
 
+
+
 from src.config import Config
+
 from src.formatters import chunk_content_by_max_words
+
+
+
 
 
 logger = logging.getLogger(__name__)
 
 
+
+
+
 class DiscordSender:
+
     
+
     def __init__(self, config: Config):
+
         """
-        初始化 Discord 配置
+
+        chushihua Discord config
+
+
 
         Args:
-            config: 配置对象
+
+            config: configduixiang
+
         """
+
         self._discord_config = {
+
             'bot_token': getattr(config, 'discord_bot_token', None),
+
             'channel_id': getattr(config, 'discord_main_channel_id', None),
+
             'webhook_url': getattr(config, 'discord_webhook_url', None),
+
         }
+
         self._discord_max_words = getattr(config, 'discord_max_words', 2000)
+
         self._webhook_verify_ssl = getattr(config, 'webhook_verify_ssl', True)
+
     
+
     def _is_discord_configured(self) -> bool:
-        """检查 Discord 配置是否完整（支持 Bot 或 Webhook）"""
-        # 只要配置了 Webhook 或完整的 Bot Token+Channel，即视为可用
+
+        """알림 sender 설명입니다."""
+
+        # zhiyaoconfigle Webhook huowanzhengde Bot Token+Channel竊똨ishiweikeyong
+
         bot_ok = bool(self._discord_config['bot_token'] and self._discord_config['channel_id'])
+
         webhook_ok = bool(self._discord_config['webhook_url'])
+
         return bot_ok or webhook_ok
+
     
+
     def send_to_discord(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+
         """
-        推送消息到 Discord（支持 Webhook 和 Bot API）
+
+        tuisongxiaoxidao Discord竊늷hichi Webhook he Bot API竊?
         
+
         Args:
-            content: Markdown 格式的消息内容
+
+            content: Markdown geshidexiaoxineirong
+
             
+
         Returns:
-            是否发送成功
+
+            shifousendchenggong
+
         """
-        # 分割内容，避免单条消息超过 Discord 限制
+
+        # fengeneirong竊똟imiandantiaoxiaoxichaoguo Discord xianzhi
+
         try:
+
             chunks = chunk_content_by_max_words(content, self._discord_max_words)
+
         except ValueError as e:
-            logger.error(f"分割 Discord 消息失败: {e}, 尝试整段发送。")
+
+            logger.error(f"Discord 메시지 분할 실패: {e}. 전체 메시지 전송을 시도합니다.")
+
             chunks = [content]
 
-        # 优先使用 Webhook（配置简单，权限低）
+
+
+        # youxianshiyong Webhook竊늩eizhijiandan竊똰uanxiandi竊?
         if self._discord_config['webhook_url']:
+
             return all(self._send_discord_webhook(chunk, timeout_seconds=timeout_seconds) for chunk in chunks)
 
-        # 其次使用 Bot API（权限高，需要 channel_id）
+
+
+        # qicishiyong Bot API竊늫uanxiangao竊똸uyao channel_id竊?
         if self._discord_config['bot_token'] and self._discord_config['channel_id']:
+
             return all(self._send_discord_bot(chunk, timeout_seconds=timeout_seconds) for chunk in chunks)
 
-        logger.warning("Discord 配置不完整，跳过推送")
+
+
+        logger.warning("Discord configbuwanzheng竊똳iaoguotuisong")
+
         return False
 
+
+
   
+
     def _send_discord_webhook(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+
         """
-        使用 Webhook 发送消息到 Discord
+
+        shiyong Webhook sendxiaoxidao Discord
+
         
-        Discord Webhook 支持 Markdown 格式
+
+        Discord Webhook zhichi Markdown geshi
+
         
+
         Args:
-            content: Markdown 格式的消息内容
+
+            content: Markdown geshidexiaoxineirong
+
             
+
         Returns:
-            是否发送成功
+
+            shifousendchenggong
+
         """
+
         try:
+
             payload = {
+
                 'content': content,
-                'username': 'A股分析机器人',
+
+                'username': 'Aguanalysisjiqiren',
+
                 'avatar_url': 'https://picsum.photos/200'
+
             }
+
             
+
             response = requests.post(
+
                 self._discord_config['webhook_url'],
+
                 json=payload,
+
                 timeout=timeout_seconds or 10,
+
                 verify=self._webhook_verify_ssl
+
             )
+
             
+
             if response.status_code in [200, 204]:
-                logger.info("Discord Webhook 消息发送成功")
+
+                logger.info("Discord Webhook xiaoxisendchenggong")
+
                 return True
+
             else:
-                logger.error(f"Discord Webhook 发送失败: {response.status_code} {response.text}")
+
+                logger.error(f"Discord Webhook sendshibai: {response.status_code} {response.text}")
+
                 return False
+
         except Exception as e:
-            logger.error(f"Discord Webhook 发送异常: {e}")
+
+            logger.error(f"Discord Webhook sendyichang: {e}")
+
             return False
+
     
+
     def _send_discord_bot(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+
         """
-        使用 Bot API 发送消息到 Discord
+
+        shiyong Bot API sendxiaoxidao Discord
+
         
+
         Args:
-            content: Markdown 格式的消息内容
+
+            content: Markdown geshidexiaoxineirong
+
             
+
         Returns:
-            是否发送成功
+
+            shifousendchenggong
+
         """
+
         try:
+
             headers = {
+
                 'Authorization': f'Bot {self._discord_config["bot_token"]}',
+
                 'Content-Type': 'application/json'
+
             }
+
             
+
             payload = {
+
                 'content': content
+
             }
+
             
+
             url = f'https://discord.com/api/v10/channels/{self._discord_config["channel_id"]}/messages'
+
             response = requests.post(url, json=payload, headers=headers, timeout=timeout_seconds or 10)
+
             
+
             if response.status_code == 200:
-                logger.info("Discord Bot 消息发送成功")
+
+                logger.info("Discord Bot xiaoxisendchenggong")
+
                 return True
+
             else:
-                logger.error(f"Discord Bot 发送失败: {response.status_code} {response.text}")
+
+                logger.error(f"Discord Bot sendshibai: {response.status_code} {response.text}")
+
                 return False
+
         except Exception as e:
-            logger.error(f"Discord Bot 发送异常: {e}")
+
+            logger.error(f"Discord Bot sendyichang: {e}")
+
             return False
+
+

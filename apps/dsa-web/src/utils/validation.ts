@@ -4,15 +4,17 @@ interface ValidationResult {
   normalized: string;
 }
 
-const SUPPORTED_QUERY_CHARACTERS = /^[A-Z0-9.\u3400-\u9FFF\s]+$/;
+const SUPPORTED_QUERY_CHARACTERS = /^[A-Z0-9.\u3400-\u9FFF\uAC00-\uD7A3\s]+$/;
 
 const STOCK_CODE_PATTERNS = [
   /^\d{6}$/, // A-share 6-digit code
-  /^(SH|SZ|BJ)\d{6}$/, // A-share code with exchange prefix
-  /^\d{6}\.(SH|SZ|SS|BJ)$/, // A-share code with exchange suffix
+  /^(CN|SH|SZ|BJ)\d{6}$/, // A-share code with market/exchange prefix
+  /^\d{6}\.(CN|SH|SZ|SS|BJ)$/, // A-share code with market/exchange suffix
   /^\d{5}$/, // HK code without prefix
   /^HK\d{1,5}$/, // HK-prefixed code, for example HK00700
   /^\d{1,5}\.HK$/, // HK suffix format, for example 00700.HK
+  /^(KR|KS|KQ)\d{6}$/, // Korean stock code, for example KR005930 or KQ035720
+  /^\d{6}\.(KS|KQ)$/, // Korean stock suffix format, for example 005930.KS
   /^[A-Z]{1,5}(?:\.(?:US|[A-Z]))?$/, // Common US ticker format
 ];
 
@@ -25,20 +27,20 @@ export const looksLikeStockCode = (value: string): boolean => {
 };
 
 /**
- * Validate common A-share, HK, and US stock code formats.
+ * Validate common A-share, HK, US, and Korean stock code formats.
  */
 export const validateStockCode = (value: string): ValidationResult => {
   const normalized = value.trim().toUpperCase();
 
   if (!normalized) {
-    return { valid: false, message: '请输入股票代码', normalized };
+    return { valid: false, message: '종목 코드를 입력하세요.', normalized };
   }
 
   const valid = looksLikeStockCode(normalized);
 
   return {
     valid,
-    message: valid ? undefined : '股票代码格式不正确',
+    message: valid ? undefined : '종목 코드 형식이 올바르지 않습니다.',
     normalized,
   };
 };

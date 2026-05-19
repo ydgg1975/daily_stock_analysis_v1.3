@@ -8,12 +8,13 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from data_provider.base import is_bse_code
-
-
 # Known exchange prefixes (case-insensitive) and the digit lengths they accept.
 # e.g. SH600519 -> 600519, HK00700 -> 00700
 _PREFIX_DIGIT_LENS: dict = {
+    "CN": (6,),
+    "KR": (6,),
+    "KS": (6,),
+    "KQ": (6,),
     "SH": (6,),
     "SZ": (6,),
     "SS": (6,),
@@ -22,12 +23,25 @@ _PREFIX_DIGIT_LENS: dict = {
 }
 
 _SUFFIX_DIGIT_LENS: dict = {
+    ".CN": (6,),
+    ".KS": (6,),
+    ".KQ": (6,),
     ".SH": (6,),
     ".SZ": (6,),
     ".SS": (6,),
     ".BJ": (6,),
     ".HK": (1, 2, 3, 4, 5),
 }
+
+
+def is_bse_code(code: str) -> bool:
+    """Return whether a 6-digit code belongs to the Beijing Stock Exchange."""
+    c = (code or "").strip().split(".")[0]
+    if len(c) != 6 or not c.isdigit():
+        return False
+    if c.startswith("900"):
+        return False
+    return c.startswith(("92", "43", "81", "82", "83", "87", "88"))
 
 
 def _valid_exchange_code(exchange: str, base: str, digit_lens: tuple[int, ...]) -> bool:
@@ -44,6 +58,10 @@ def _strip_exchange_prefix(text: str) -> Optional[str]:
         if text.startswith(prefix):
             base = text[len(prefix):]
             if _valid_exchange_code(prefix, base, digit_lens):
+                if prefix in {"KR", "KS"}:
+                    return f"{base}.KS"
+                if prefix == "KQ":
+                    return f"{base}.KQ"
                 return base.zfill(5) if prefix == "HK" else base
     return None
 
@@ -55,6 +73,8 @@ def _strip_exchange_suffix(text: str) -> Optional[str]:
             base = text[: -len(suffix)].strip()
             exchange = suffix.lstrip(".")
             if _valid_exchange_code(exchange, base, digit_lens):
+                if suffix in {".KS", ".KQ"}:
+                    return f"{base}.{exchange}"
                 return base.zfill(5) if suffix == ".HK" else base
     return None
 

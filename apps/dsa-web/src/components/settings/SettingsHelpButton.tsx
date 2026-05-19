@@ -175,13 +175,13 @@ export const SettingsHelpButton: React.FC<SettingsHelpButtonProps> = ({
 
   return (
     <>
-      <Tooltip content="查看配置说明">
+      <Tooltip content="설정 설명 보기">
         <span className="inline-flex">
           <button
             ref={buttonRef}
             type="button"
             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-muted-text transition-colors hover:border-[var(--settings-border)] hover:bg-[var(--settings-surface-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan/15"
-            aria-label={`查看 ${title} 配置说明`}
+            aria-label={`${title} 설정 설명 보기`}
             aria-expanded={open}
             aria-controls={open ? titleId : undefined}
             onClick={() => setOpen(true)}
@@ -197,7 +197,7 @@ export const SettingsHelpButton: React.FC<SettingsHelpButtonProps> = ({
               <button
                 type="button"
                 className="absolute inset-0 cursor-default"
-                aria-label="关闭配置说明"
+                aria-label="닫기설정 설명"
                 tabIndex={-1}
                 onClick={() => setOpen(false)}
               />
@@ -230,35 +230,35 @@ export const SettingsHelpButton: React.FC<SettingsHelpButtonProps> = ({
                     type="button"
                     onClick={() => setOpen(false)}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card/80 text-secondary-text transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan/15"
-                    aria-label="关闭配置说明"
+                    aria-label="닫기설정 설명"
                   >
                     <X aria-hidden="true" className="h-4 w-4" />
                   </button>
                 </div>
 
                 <div className="space-y-5 overflow-y-auto px-5 py-5">
-                  <HelpSection title="用途">
+                  <HelpSection title="용도">
                     {help.usage ? <p className="text-sm leading-6 text-secondary-text">{help.usage}</p> : null}
                   </HelpSection>
 
-                  <HelpSection title="取值说明">
+                  <HelpSection title="값 설명">
                     <HelpList items={help.valueNotes} />
                   </HelpSection>
 
-                  <HelpSection title="配置样例">
+                  <HelpSection title="설정 예시">
                     <CodeExamples examples={examples} />
                   </HelpSection>
 
-                  <HelpSection title="影响范围">
+                  <HelpSection title="영향 범위">
                     <HelpList items={help.impact} />
                   </HelpSection>
 
-                  <HelpSection title="注意事项">
+                  <HelpSection title="주의 사항">
                     <HelpList items={help.notes} />
                   </HelpSection>
 
                   {hasItems(docs) ? (
-                    <HelpSection title="相关文档">
+                    <HelpSection title="관련 문서">
                       <div className="flex flex-wrap gap-2">
                         {docs.map((doc) => (
                           <a

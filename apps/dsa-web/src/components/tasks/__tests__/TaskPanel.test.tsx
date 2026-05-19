@@ -5,11 +5,11 @@ import type { TaskInfo } from '../../../types/analysis';
 
 const baseTask: TaskInfo = {
   taskId: 'task-1',
-  stockCode: '600519',
-  stockName: '贵州茅台',
+  stockCode: 'KR005930',
+  stockName: '삼성전자',
   status: 'processing',
   progress: 40,
-  message: '正在抓取最新行情',
+  message: '최신 시세를 가져오는 중',
   reportType: 'detailed',
   createdAt: '2026-03-21T08:00:00Z',
 };
@@ -26,18 +26,18 @@ describe('TaskPanel', () => {
             stockCode: 'AAPL',
             stockName: 'Apple',
             status: 'pending',
-            message: '等待分析队列',
+            message: '분석 대기열에서 대기 중',
           },
         ]}
       />,
     );
 
-    expect(screen.getByText('分析任务')).toBeInTheDocument();
-    expect(screen.getByText('1 进行中')).toBeInTheDocument();
-    expect(screen.getByText('1 等待中')).toBeInTheDocument();
-    expect(screen.getByText('贵州茅台')).toBeInTheDocument();
+    expect(screen.getByText('분석 작업')).toBeInTheDocument();
+    expect(screen.getByText('1 진행 중')).toBeInTheDocument();
+    expect(screen.getByText('1 대기 중')).toBeInTheDocument();
+    expect(screen.getByText('삼성전자')).toBeInTheDocument();
     expect(screen.getByText('AAPL')).toBeInTheDocument();
-    expect(screen.getByLabelText('任务状态：分析中')).toBeInTheDocument();
+    expect(screen.getByLabelText('작업 상태: 분석 중')).toBeInTheDocument();
     expect(container.querySelector('.home-panel-card')).toBeTruthy();
     expect(container.querySelector('.home-subpanel')).toBeTruthy();
   });

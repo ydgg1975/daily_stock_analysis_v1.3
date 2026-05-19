@@ -52,7 +52,7 @@ export const getTodayInShanghai = (): string =>
 
 export const formatReportType = (value?: string): string => {
   if (!value) return '—';
-  if (value === 'simple') return '普通';
-  if (value === 'detailed') return '标准';
+  if (value === 'simple') return '일반';
+  if (value === 'detailed') return '표준';
   return value;
 };

@@ -17,22 +17,24 @@ interface HistoryListItemProps {
 const getOperationBadgeLabel = (advice?: string) => {
   const normalized = advice?.trim();
   if (!normalized) {
-    return '情绪';
+    return '의견 없음';
   }
-  if (normalized.includes('减仓')) {
-    return '减仓';
+  const lower = normalized.toLowerCase();
+  if (normalized.includes('매수') || lower.includes('buy')) {
+    return '매수';
   }
-  if (normalized.includes('卖')) {
-    return '卖出';
+  if (normalized.includes('매도') || lower.includes('sell')) {
+    return '매도';
   }
-  if (normalized.includes('观望') || normalized.includes('等待')) {
-    return '观望';
+  if (normalized.includes('보유') || lower.includes('hold')) {
+    return '보유';
   }
-  if (normalized.includes('买') || normalized.includes('布局')) {
-    return '买入';
+  if (normalized.includes('관망') || lower.includes('wait')) {
+    return '관망';
   }
-  return normalized.split(/[，。；、\s]/)[0] || '建议';
+  return normalized.split(/[,.!?;\s]/)[0] || '의견 없음';
 };
+
 
 export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   item,

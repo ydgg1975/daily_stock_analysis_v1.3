@@ -1,349 +1,681 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
+
 """
+
 ===================================
-钉钉 Stream 模式适配器
+
+dingding Stream moshishipeiqi
+
 ===================================
 
-使用钉钉官方 Stream SDK 接入机器人，无需公网 IP 和 Webhook 配置。
 
-优势：
-- 不需要公网 IP 或域名
-- 不需要配置 Webhook URL
-- 通过 WebSocket 长连接接收消息
-- 更简单的接入方式
 
-依赖：
+shiyongdingdingguanfang Stream SDK jierujiqiren竊똷uxugongwang IP he Webhook config??
+
+
+youshi竊?
+- buxuyaogongwang IP huoyuming
+
+- buxuyaoconfig Webhook URL
+
+- tongguo WebSocket zhanglianjiejieshouxiaoxi
+
+- gengjiandandejierufangshi
+
+
+
+yilai竊?
 pip install dingtalk-stream
 
-钉钉 Stream SDK：
+
+
+dingding Stream SDK竊?
 https://github.com/open-dingtalk/dingtalk-stream-sdk-python
+
 """
 
+
+
 import logging
+
 import inspect
+
 import threading
+
 from datetime import datetime
+
 from typing import Optional, Callable, Any
+
+
 
 logger = logging.getLogger(__name__)
 
-# 尝试导入钉钉 Stream SDK
+
+
+# changshidaorudingding Stream SDK
+
 try:
+
     import dingtalk_stream
+
     from dingtalk_stream import AckMessage
 
+
+
     DINGTALK_STREAM_AVAILABLE = True
+
 except ImportError:
+
     DINGTALK_STREAM_AVAILABLE = False
-    logger.warning("[DingTalk Stream] dingtalk-stream SDK 未安装，Stream 模式不可用")
-    logger.warning("[DingTalk Stream] 请运行: pip install dingtalk-stream")
+
+    logger.warning("[DingTalk Stream] dingtalk-stream SDK weianzhuang竊똕tream moshibukeyong")
+
+    logger.warning("[DingTalk Stream] qingyunxing: pip install dingtalk-stream")
+
+
 
 from bot.models import BotMessage, BotResponse, ChatType
 
 
-class DingtalkStreamHandler:
-    """
-    钉钉 Stream 模式消息处理器
 
-    将 Stream SDK 的回调转换为统一的 BotMessage 格式，
-    并调用命令分发器处理。
+
+
+class DingtalkStreamHandler:
+
     """
+
+    dingding Stream moshixiaoxichuliqi
+
+
+
+    jiang Stream SDK dehuidiaozhuanhuanweitongyide BotMessage geshi竊?
+    bingdiaoyongminglingfenfaqichuli??
+    """
+
+
 
     def __init__(self, on_message: Callable[[BotMessage], Any]):
+
         """
+
         Args:
-            on_message: 消息处理回调函数，接收 BotMessage 返回 BotResponse
+
+            on_message: xiaoxichulihuidiaohanshu竊똨ieshou BotMessage fanhui BotResponse
+
         """
+
         self._on_message = on_message
+
         self._logger = logger
 
+
+
     @staticmethod
+
     def _truncate_log_content(text: str, max_len: int = 200) -> str:
+
         cleaned = text.replace("\n", " ").strip()
+
         if len(cleaned) > max_len:
+
             return f"{cleaned[:max_len]}..."
+
         return cleaned
 
+
+
     def _log_incoming_message(self, message: BotMessage) -> None:
+
         content = message.raw_content or message.content or ""
+
         summary = self._truncate_log_content(content)
+
         self._logger.info(
+
             "[DingTalk Stream] Incoming message: msg_id=%s user_id=%s chat_id=%s chat_type=%s content=%s",
+
             message.message_id,
+
             message.user_id,
+
             message.chat_id,
+
             getattr(message.chat_type, "value", message.chat_type),
+
             summary,
+
         )
 
+
+
     if DINGTALK_STREAM_AVAILABLE:
+
         class _ChatbotHandler(dingtalk_stream.ChatbotHandler):
-            """内部消息处理器"""
+
+            """설명 문자열입니다."""
+
+
 
             def __init__(self, parent: 'DingtalkStreamHandler'):
+
                 super().__init__()
+
                 self._parent = parent
+
                 self.logger = logger
 
+
+
             async def process(self, callback: dingtalk_stream.CallbackMessage):
-                """处理收到的消息"""
+
+                """설명 문자열입니다."""
+
                 try:
-                    # 解析消息
+
+                    # jiexixiaoxi
+
                     incoming = dingtalk_stream.ChatbotMessage.from_dict(callback.data)
 
-                    # 转换为统一格式
+
+
+                    # zhuanhuanweitongyigeshi
+
                     bot_message = self._parent._parse_stream_message(incoming, callback.data)
 
+
+
                     if bot_message:
+
                         self._parent._log_incoming_message(bot_message)
-                        # 调用消息处理回调
+
+                        # diaoyongxiaoxichulihuidiao
+
                         response = self._parent._on_message(bot_message)
+
                         if inspect.isawaitable(response):
+
                             response = await response
 
-                        # 发送回复
+
+
+                        # sendhuifu
+
                         if response and response.text:
-                            # 构建 @用户 前缀（群聊场景下需要在文本中包含 @用户名）
+
+                            # goujian @yonghu qianzhui竊늫unliaochangjingxiaxuyaozaiwenbenzhongbaohan @yonghuming竊?
                             if response.at_user and incoming.sender_nick:
+
                                 if response.markdown:
+
                                     self.reply_markdown(
-                                        title="股票分析助手",
+
+                                        title="stockanalysiszhushou",
+
                                         text=f"@{incoming.sender_nick} " + response.text,
+
                                         incoming_message=incoming
+
                                     )
+
                                 else:
+
                                     self.reply_text(response.text, incoming)
+
+
 
                     return AckMessage.STATUS_OK, 'OK'
 
+
+
                 except Exception as e:
-                    self.logger.error(f"[DingTalk Stream] 处理消息失败: {e}")
+
+                    self.logger.error(f"[DingTalk Stream] chulixiaoxishibai: {e}")
+
                     self.logger.exception(e)
+
                     return AckMessage.STATUS_SYSTEM_EXCEPTION, str(e)
 
+
+
         def create_handler(self) -> '_ChatbotHandler':
-            """创建 SDK 需要的处理器实例"""
+
+            """설명 문자열입니다."""
+
             return self._ChatbotHandler(self)
 
+
+
     def _parse_stream_message(self, incoming: Any, raw_data: dict) -> Optional[BotMessage]:
+
         """
-        解析 Stream 消息为统一格式
+
+        jiexi Stream xiaoxiweitongyigeshi
+
+
 
         Args:
-            incoming: ChatbotMessage 对象
-            raw_data: 原始回调数据
+
+            incoming: ChatbotMessage duixiang
+
+            raw_data: yuanshihuidiaoshuju
+
         """
+
         try:
+
             raw_data = dict(raw_data or {})
 
-            # 获取消息内容
+
+
+            # huoquxiaoxineirong
+
             raw_content = incoming.text.content if incoming.text else ''
 
-            # 提取命令（去除 @机器人）
+
+
+            # tiqumingling竊늫uchu @jiqiren竊?
             content = self._extract_command(raw_content)
 
-            # 会话类型
+
+
+            # huihualeixing
+
             conversation_type = getattr(incoming, 'conversation_type', None)
+
             if conversation_type == '1':
+
                 chat_type = ChatType.PRIVATE
+
             elif conversation_type == '2':
+
                 chat_type = ChatType.GROUP
+
             else:
+
                 chat_type = ChatType.UNKNOWN
 
-            # 是否 @了机器人（Stream 模式下收到的消息一般都是 @机器人的）
+
+
+            # shifou @lejiqiren竊늆tream moshixiashoudaodexiaoxiyibandoushi @jiqirende竊?
             mentioned = True
 
-            # 提取 sessionWebhook，便于异步推送
+
+
+            # tiqu sessionWebhook竊똟ianyuyibutuisong
+
             session_webhook = (
+
                     getattr(incoming, 'session_webhook', None)
+
                     or raw_data.get('sessionWebhook')
+
                     or raw_data.get('session_webhook')
+
             )
+
             if session_webhook:
+
                 raw_data['_session_webhook'] = session_webhook
 
+
+
             return BotMessage(
+
                 platform='dingtalk',
+
                 message_id=getattr(incoming, 'msg_id', '') or '',
+
                 user_id=getattr(incoming, 'sender_id', '') or '',
+
                 user_name=getattr(incoming, 'sender_nick', '') or '',
+
                 chat_id=getattr(incoming, 'conversation_id', '') or '',
+
                 chat_type=chat_type,
+
                 content=content,
+
                 raw_content=raw_content,
+
                 mentioned=mentioned,
+
                 mentions=[],
+
                 timestamp=datetime.now(),
+
                 raw_data=raw_data,
+
             )
 
+
+
         except Exception as e:
-            logger.error(f"[DingTalk Stream] 解析消息失败: {e}")
+
+            logger.error(f"[DingTalk Stream] jiexixiaoxishibai: {e}")
+
             return None
 
+
+
     def _extract_command(self, text: str) -> str:
-        """提取命令内容（去除 @机器人）"""
+
+        """설명 문자열입니다."""
+
         import re
+
         text = re.sub(r'^@[\S]+\s*', '', text.strip())
+
         return text.strip()
 
 
+
+
+
 class DingtalkStreamClient:
+
     """
-    钉钉 Stream 模式客户端
 
-    封装 dingtalk-stream SDK，提供简单的启动接口。
+    dingding Stream moshikehuduan
 
-    使用方式：
+
+
+    fengzhuang dingtalk-stream SDK竊똳igongjiandandeqidongjiekou??
+
+
+    shiyongfangshi竊?
         client = DingtalkStreamClient()
-        client.start()  # 阻塞运行
 
-        # 或者在后台运行
+        client.start()  # zuseyunxing
+
+
+
+        # huozhezaihoutaiyunxing
+
         client.start_background()
+
     """
+
+
 
     def __init__(
+
             self,
+
             client_id: Optional[str] = None,
+
             client_secret: Optional[str] = None
+
     ):
+
         """
+
         Args:
-            client_id: 应用 AppKey（不传则从配置读取）
-            client_secret: 应用 AppSecret（不传则从配置读取）
+
+            client_id: yingyong AppKey竊늒uchuanzecongconfigduqu竊?
+            client_secret: yingyong AppSecret竊늒uchuanzecongconfigduqu竊?
         """
+
         if not DINGTALK_STREAM_AVAILABLE:
+
             raise ImportError(
-                "dingtalk-stream SDK 未安装。\n"
-                "请运行: pip install dingtalk-stream"
+
+                "dingtalk-stream SDK weianzhuang??n"
+
+                "qingyunxing: pip install dingtalk-stream"
+
             )
+
+
 
         from src.config import get_config
+
         config = get_config()
 
+
+
         self._client_id = client_id or getattr(config, 'dingtalk_app_key', None)
+
         self._client_secret = client_secret or getattr(config, 'dingtalk_app_secret', None)
 
+
+
         if not self._client_id or not self._client_secret:
+
             raise ValueError(
-                "钉钉 Stream 模式需要配置 DINGTALK_APP_KEY 和 DINGTALK_APP_SECRET"
+
+                "dingding Stream moshixuyaoconfig DINGTALK_APP_KEY he DINGTALK_APP_SECRET"
+
             )
 
+
+
         self._client: Optional[dingtalk_stream.DingTalkStreamClient] = None
+
         self._background_thread: Optional[threading.Thread] = None
+
         self._running = False
 
+
+
     def _create_message_handler(self) -> Callable[[BotMessage], Any]:
-        """创建消息处理函数"""
+
+        """설명 문자열입니다."""
+
+
 
         async def handle_message(message: BotMessage) -> BotResponse:
+
             from bot.dispatcher import get_dispatcher
+
             dispatcher = get_dispatcher()
+
             return await dispatcher.dispatch_async(message)
+
+
 
         return handle_message
 
+
+
     def start(self) -> None:
-        """
-        启动 Stream 客户端（阻塞）
 
-        此方法会阻塞当前线程，直到客户端停止。
         """
-        logger.info("[DingTalk Stream] 正在启动...")
 
-        # 创建凭证
+        qidong Stream kehuduan竊늷use竊?
+
+
+        cifangfahuizusedangqianxiancheng竊똺hidaokehuduantingzhi??
+        """
+
+        logger.info("[DingTalk Stream] in_progressqidong...")
+
+
+
+        # chuangjianpingzheng
+
         credential = dingtalk_stream.Credential(
+
             self._client_id,
+
             self._client_secret
+
         )
 
-        # 创建客户端
+
+
+        # chuangjiankehuduan
+
         self._client = dingtalk_stream.DingTalkStreamClient(credential)
 
-        # 注册消息处理器
+
+
+        # zhucexiaoxichuliqi
+
         handler = DingtalkStreamHandler(self._create_message_handler())
+
         self._client.register_callback_handler(
+
             dingtalk_stream.chatbot.ChatbotMessage.TOPIC,
+
             handler.create_handler()
+
         )
 
-        self._running = True
-        logger.info("[DingTalk Stream] 客户端已启动，等待消息...")
 
-        # 启动（阻塞）
+
+        self._running = True
+
+        logger.info("[DingTalk Stream] kehuduanyiqidong竊똡engdaixiaoxi...")
+
+
+
+        # qidong竊늷use竊?
         self._client.start_forever()
 
-    def start_background(self) -> None:
-        """
-        在后台线程启动 Stream 客户端（非阻塞）
 
-        适用于与其他服务（如 WebUI）同时运行的场景。
+
+    def start_background(self) -> None:
+
         """
+
+        zaihoutaixianchengqidong Stream kehuduan竊늗eizuse竊?
+
+
+        shiyongyuyuqitafuwu竊늭u WebUI竊뎥ongshiyunxingdechangjing??
+        """
+
         if self._background_thread and self._background_thread.is_alive():
-            logger.warning("[DingTalk Stream] 客户端已在运行")
+
+            logger.warning("[DingTalk Stream] kehuduanyizaiyunxing")
+
             return
 
+
+
         self._running = True
+
         self._background_thread = threading.Thread(
+
             target=self._run_in_background,
+
             daemon=True,
+
             name="DingtalkStreamClient"
+
         )
+
         self._background_thread.start()
-        logger.info("[DingTalk Stream] 后台客户端已启动")
+
+        logger.info("[DingTalk Stream] houtaikehuduanyiqidong")
+
+
 
     def _run_in_background(self) -> None:
-        """后台运行（处理异常和重连）"""
+
+        """설명 문자열입니다."""
+
         import time
 
+
+
         while self._running:
+
             try:
+
                 self.start()
+
             except Exception as e:
-                logger.error(f"[DingTalk Stream] 运行异常: {e}")
+
+                logger.error(f"[DingTalk Stream] yunxingyichang: {e}")
+
                 if self._running:
-                    logger.info("[DingTalk Stream] 5 秒后重连...")
+
+                    logger.info("[DingTalk Stream] 5 miaohouzhonglian...")
+
                     time.sleep(5)
 
+
+
     def stop(self) -> None:
-        """停止客户端"""
+
+        """설명 문자열입니다."""
+
         self._running = False
-        logger.info("[DingTalk Stream] 客户端已停止")
+
+        logger.info("[DingTalk Stream] kehuduanyitingzhi")
+
+
 
     @property
+
     def is_running(self) -> bool:
-        """是否正在运行"""
+
+        """설명 문자열입니다."""
+
         return self._running
 
 
-# 全局客户端实例
+
+
+
+# quanjukehuduanshili
+
 _stream_client: Optional[DingtalkStreamClient] = None
 
 
+
+
+
 def get_dingtalk_stream_client() -> Optional[DingtalkStreamClient]:
-    """获取全局 Stream 客户端实例"""
+
+    """설명 문자열입니다."""
+
     global _stream_client
 
+
+
     if _stream_client is None and DINGTALK_STREAM_AVAILABLE:
+
         try:
+
             _stream_client = DingtalkStreamClient()
+
         except (ImportError, ValueError) as e:
-            logger.warning(f"[DingTalk Stream] 无法创建客户端: {e}")
+
+            logger.warning(f"[DingTalk Stream] wufachuangjiankehuduan: {e}")
+
             return None
+
+
 
     return _stream_client
 
 
+
+
+
 def start_dingtalk_stream_background() -> bool:
+
     """
-    在后台启动钉钉 Stream 客户端
+
+    zaihoutaiqidongdingding Stream kehuduan
+
+
 
     Returns:
-        是否成功启动
+
+        shifouchenggongqidong
+
     """
+
     client = get_dingtalk_stream_client()
+
     if client:
+
         client.start_background()
+
         return True
+
     return False
+
+
