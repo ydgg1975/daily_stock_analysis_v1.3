@@ -1,11 +1,11 @@
-blank_issues_enabled: true
-contact_links:
-  - name: 💬 taolunqu / Discussions
-    url: https://github.com/ZhuLinsen/daily_stock_analysis/discussions
-    about: youwentixiangtaolun？huanyinglaitaolunqujiaoliu / Want to chat? Join the discussion board
-  - name: 📖 shiyongwendang / Documentation
-    url: https://github.com/ZhuLinsen/daily_stock_analysis#-kuaisukaishi
-    about: chakanzhongwen README huoqushiyongbangzhu / View the Chinese README for setup help
-  - name: 📋 English Docs Index
-    url: https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/INDEX_EN.md
-    about: All English-language documentation in one place
+blank_issues_enabled: true
+contact_links:
+  - name: Discussions
+    url: https://github.com/ZhuLinsen/daily_stock_analysis/discussions
+    about: Ask questions or discuss ideas with the community.
+  - name: Documentation
+    url: https://github.com/ZhuLinsen/daily_stock_analysis#-quick-start
+    about: Read the project README for setup help.
+  - name: English Docs Index
+    url: https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/INDEX_EN.md
+    about: All English-language documentation in one place.

@@ -1,6 +1,6 @@
 name: Auto Tag
 
-# chufatiaojian：dangdaima push dao main fenzhishi
+# Trigger condition: run when code is pushed to the main branch.
 on:
   push:
     branches: [main]

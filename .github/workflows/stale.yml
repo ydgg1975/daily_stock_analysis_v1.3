@@ -1,79 +1,62 @@
-# zidongguanbiguoqide Issues he PR
-# meitianjianchayici，biaojizhangshijianwuxiangyingde issues/PRs
-
-name: Stale Issues & PRs
-
-on:
-  schedule:
-    # meitian UTC 0:00（beijingshijian 8:00）jianchayici
-    - cron: '0 0 * * *'
-  # zhichishoudongchufa
-  workflow_dispatch:
-
-permissions:
-  issues: write
-  pull-requests: write
-
-jobs:
-  stale:
-    name: 🧹 qingliguoqi Issues/PRs
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: 🏷️ biaojibingguanbiguoqineirong
-        uses: actions/stale@v10
-        with:
-          # ===== Issue peizhi =====
-          days-before-issue-stale: 7
-          days-before-issue-close: 7
-          stale-issue-label: 'stale'
-          stale-issue-message: |
-            👋 zhege Issue yijing **7 tian** meiyouhuodongle。
-            
-            ruguowentirengrancunzai，qinghuifushuomingzuixinqingkuang，womenhuijixugenjin。
-            ruguowentiyijiejuehuobuzaixuyao，keyizhijieguanbici Issue。
-            
-            **ruguo 7 tianneimeiyouhuifu，ci Issue jiangzidongguanbi。**
-          close-issue-message: |
-            🔒 youyuzhangshijianmeiyouhuodong，ci Issue yizidongguanbi。
-            
-            ruguowentirengrancunzai，huanyingchongxindakaihuochuangjianxinde Issue。
-          
-          # ===== PR peizhi =====
-          days-before-pr-stale: 21
-          days-before-pr-close: 14
-          stale-pr-label: 'stale'
-          stale-pr-message: |
-            👋 zhege PR yijing **21 tian** meiyouhuodongle。
-            
-            qingjianchashifouxuyao：
-            - jiejuehebingchongtu
-            - huifu review yijian
-            - gengxindaima
-            
-            **ruguo 14 tianneimeiyougengxin，ci PR jiangzidongguanbi。**
-          close-pr-message: |
-            🔒 youyuzhangshijianmeiyouhuodong，ci PR yizidongguanbi。
-            
-            ruguoninrengxiwangheruzhexiegenggai，qingchongxindakaihuochuangjianxinde PR。
-          
-          # ===== paichuguize =====
-          # daiyouzhexiebiaoqiandebuhuibeibiaojiwei stale
-          exempt-issue-labels: 'pinned,security,enhancement,help wanted,good first issue'
-          exempt-pr-labels: 'pinned,security,work-in-progress,wip'
-          
-          # paichucaogao PR
-          exempt-draft-pr: true
-          
-          # ===== qitapeizhi =====
-          # meiciyunxingzuiduochulideshuliang
-          operations-per-run: 50
-          
-          # zhichulizhexiezhuangtaide
-          only-labels: ''
-          
-          # yichu stale biaoqian（dangyouxinhuodongshi）
-          remove-stale-when-updated: true
-          
-          # tiaoshimoshi（shewei true shizhidayinbushijicaozuo）
-          debug-only: false
+# Automatically mark inactive issues and pull requests as stale.
+
+name: Stale Issues & PRs
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Clean Up Stale Issues & PRs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mark and close stale items
+        uses: actions/stale@v10
+        with:
+          days-before-issue-stale: 7
+          days-before-issue-close: 7
+          stale-issue-label: 'stale'
+          stale-issue-message: |
+            This issue has been inactive for 7 days.
+
+            If the problem still exists, please reply with the latest details so we can continue investigating.
+            If the issue has been resolved or is no longer needed, you can close it directly.
+
+            This issue will be closed automatically if there is no activity for another 7 days.
+          close-issue-message: |
+            This issue was closed automatically because there has been no activity for an extended period.
+
+            If the problem still exists, please open a new issue with the latest details.
+
+          days-before-pr-stale: 21
+          days-before-pr-close: 14
+          stale-pr-label: 'stale'
+          stale-pr-message: |
+            This PR has been inactive for 21 days.
+
+            Please check whether it needs:
+            - merge conflict resolution
+            - review comment follow-up
+            - code updates
+
+            This PR will be closed automatically if there is no activity for another 14 days.
+          close-pr-message: |
+            This PR was closed automatically because there has been no activity for an extended period.
+
+            If you still want to merge these changes, please open a new PR.
+
+          exempt-issue-labels: 'pinned,security,enhancement,help wanted,good first issue'
+          exempt-pr-labels: 'pinned,security,work-in-progress,wip'
+          exempt-draft-pr: true
+          operations-per-run: 50
+          only-labels: ''
+          remove-stale-when-updated: true
+          debug-only: false

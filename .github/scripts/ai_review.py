@@ -86,15 +86,15 @@ def _build_ci_context():
 Daily Stock Analysis - Ai Review
 """
 
-    lines = ["\n## CI jianchazhuangtai(laizibenci PR dezidonghualiushuixian)"]
-    lines.append(f"- jingtaijianchazongtijieguo: **{'✅ tongguo' if auto_check_result == 'success' else '❌ shibai'}**")
+    lines = ["\n## CI Check Status (from this PR workflow)"]
+    lines.append(f"- Static check result: **{'passed' if auto_check_result == 'success' else 'failed'}**")
     if has_py == 'true':
-        lines.append(f"- Python yufajiancha (py_compile): **{'✅ tongguo' if syntax_ok == 'true' else '❌ shibai' if syntax_ok == 'false' else '⏭️ weizhixing'}**")
-        lines.append("- Flake8 yanzhongcuowujiancha (E9/F63/F7/F82): **✅ tongguo**(ruoweitongguozejingtaijianchazongtihuishibai)")
+        lines.append(f"- Python syntax check (py_compile): **{'passed' if syntax_ok == 'true' else 'failed' if syntax_ok == 'false' else 'not run'}**")
+        lines.append("- Flake8 critical checks (E9/F63/F7/F82): **passed** when the static check result is successful.")
     else:
-        lines.append("- Python wenjian: wubiangeng,yufajianchayitiaoguo")
+        lines.append("- Python files: no changes, syntax check skipped.")
     lines.append("")
-    lines.append("> yishang CI jinfugaiyufazhengquexing(py_compile)hezhiming lint cuowu(flake8 E9/F63/F7/F82)。`./scripts/ci_gate.sh` **weibaohanzai CI zhong**:dui Python houduangaidong,ruo PR miaoshuweishuominggai gate shifouzhixing(huogeichutiaoguoyuanyin),yingzaijianyixiangzhongzhuming,danbugouchengzuduan。yufa/flake8 yitongguozewuxuchongfutieduiyingbendishuchu。")
+    lines.append("> CI covers Python syntax and critical lint errors here. For backend changes, mention whether `./scripts/ci_gate.sh` was run locally or explain why it was skipped.")
     lines.append("")
     return '\n'.join(lines)
 
@@ -103,7 +103,7 @@ def build_prompt(diff_content, files, truncated, pr_title, pr_body):
     """Build AI review prompt aligned with AGENTS.md requirements."""
     truncate_notice = ''
     if truncated:
-        truncate_notice = "\n\n> ⚠️ zhuyi:diff guochangyijieduan,qingjiyukejianneirongshenchabingbiaozhubuquedingdian。\n"
+        truncate_notice = "\n\n> Note: the diff was truncated. Review visible changes and call out uncertain areas.\n"
 
     py_files, doc_files, frontend_files, ci_files, config_files = classify_files(files)
     ci_context = _build_ci_context()
@@ -118,10 +118,10 @@ def review_with_gemini(prompt):
     model = os.environ.get('GEMINI_MODEL') or os.environ.get('GEMINI_MODEL_FALLBACK') or 'gemini-2.5-flash'
 
     if not api_key:
-        print("❌ Gemini API Key weipeizhi(jiancha GitHub Secrets: GEMINI_API_KEY)")
+        print("❌ Gemini API key is not configured. Check GitHub Secrets: GEMINI_API_KEY.")
         return None
 
-    print(f"🤖 shiyongmoxing: {model}")
+    print(f"🤖 Using model: {model}")
 
     try:
         from google import genai
@@ -130,14 +130,14 @@ def review_with_gemini(prompt):
             model=model,
             contents=prompt
         )
-        print(f"✅ Gemini ({model}) shenchachenggong")
+        print(f"✅ Gemini review succeeded with {model}")
         return response.text
     except ImportError as e:
-        print(f"❌ Gemini yilaiweianzhuang: {e}")
-        print("   qingquebaoanzhuangle google-genai: pip install google-genai")
+        print(f"❌ Gemini dependency is not installed: {e}")
+        print("   Install google-genai: pip install google-genai")
         return None
     except Exception as e:
-        print(f"❌ Gemini shenchashibai: {e}")
+        print(f"❌ Gemini review failed: {e}")
         traceback.print_exc()
         return None
 
@@ -149,11 +149,11 @@ def review_with_openai(prompt):
     model = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
 
     if not api_key:
-        print("❌ OpenAI API Key weipeizhi(jiancha GitHub Secrets: OPENAI_API_KEY)")
+        print("❌ OpenAI API key is not configured. Check GitHub Secrets: OPENAI_API_KEY.")
         return None
 
     print(f"🌐 Base URL: {base_url}")
-    print(f"🤖 shiyongmoxing: {model}")
+    print(f"🤖 Using model: {model}")
 
     try:
         from openai import OpenAI
@@ -164,14 +164,14 @@ def review_with_openai(prompt):
             max_tokens=2000,
             temperature=0.3
         )
-        print(f"✅ OpenAI jianrong(chinese removed) ({model}) shenchachenggong")
+        print(f"✅ OpenAI-compatible review succeeded with {model}")
         return response.choices[0].message.content
     except ImportError as e:
-        print(f"❌ OpenAI yilaiweianzhuang: {e}")
-        print("   qingquebaoanzhuangle openai: pip install openai")
+        print(f"❌ OpenAI dependency is not installed: {e}")
+        print("   Install openai: pip install openai")
         return None
     except Exception as e:
-        print(f"❌ OpenAI jianrong(chinese removed)shenchashibai: {e}")
+        print(f"❌ OpenAI-compatible review failed: {e}")
         traceback.print_exc()
         return None
 
@@ -185,7 +185,7 @@ def ai_review(diff_content, files, truncated):
     if result:
         return result
 
-    print("changshishiyong OpenAI jianrong(chinese removed)...")
+    print("Trying OpenAI-compatible fallback...")
     result = review_with_openai(prompt)
     if result:
         return result
@@ -198,16 +198,16 @@ def main():
     files = get_changed_files()
 
     if not diff or not files:
-        print("meiyoukeshenchadedaima/wendang/peizhibiangeng,tiaoguo AI shencha")
+        print("No reviewable code, docs, or config changes. Skipping AI review.")
         summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
         if summary_file:
             with open(summary_file, 'a', encoding='utf-8') as f:
-                f.write("## 🤖 AI daimashencha\n\n✅ meiyoukeshenchabiangeng\n")
+                f.write("## 🤖 AI Code Review\n\n✅ No reviewable changes.\n")
         return
 
-    print(f"shenchawenjian: {files}")
+    print(f"Review files: {files}")
     if truncated:
-        print(f"⚠️ Diff neirongyijieduanzhi {MAX_DIFF_LENGTH} zifu")
+        print(f"⚠️ Diff content was truncated to {MAX_DIFF_LENGTH} characters")
 
     review = ai_review(diff, files, truncated)
 
@@ -218,17 +218,17 @@ def main():
     if review:
         if summary_file:
             with open(summary_file, 'a', encoding='utf-8') as f:
-                f.write(f"## 🤖 AI daimashencha\n\n{review}\n")
+                f.write(f"## 🤖 AI Code Review\n\n{review}\n")
 
         with open('ai_review_result.txt', 'w', encoding='utf-8') as f:
             f.write(review)
 
-        print("AI shenchawancheng")
+        print("AI review completed")
     else:
-        print("⚠️ suoyou AI (chinese removed)doubukeyong")
+        print("⚠️ No AI review provider is available")
         if summary_file:
             with open(summary_file, 'a', encoding='utf-8') as f:
-                f.write("## 🤖 AI daimashencha\n\n⚠️ AI (chinese removed)bukeyong,qingjianchapeizhi\n")
+                f.write("## 🤖 AI Code Review\n\n⚠️ AI review is unavailable. Check provider configuration.\n")
         if strict_mode:
             raise SystemExit("AI_REVIEW_STRICT=true and no AI review result is available")
 

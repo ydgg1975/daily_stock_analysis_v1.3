@@ -34,10 +34,16 @@ SKIP_SUFFIXES = {
 
 SURFACE_PATHS = (
     Path("AGENTS.md"),
+    Path("docs/CHANGELOG.md"),
     Path(".github/copilot-instructions.md"),
     Path(".github/instructions"),
-    Path(".github/workflows/ci.yml"),
+    Path(".github/PULL_REQUEST_TEMPLATE.md"),
+    Path(".github/ISSUE_TEMPLATE"),
+    Path(".github/scripts/ai_review.py"),
+    Path(".github/workflows"),
+    Path("scripts/test.sh"),
     Path("apps/dsa-web/src"),
+    Path("apps/dsa-desktop/main.js"),
 )
 
 SURFACE_EXCLUDE_PARTS = {"__tests__", "tests", "e2e"}
@@ -46,10 +52,16 @@ HAN_OR_MOJIBAKE = re.compile(r"[\u3400-\u9fff]|\u7aca|\u951b|\ufffd|\?\?\?|[\ue0
 
 PINYIN_TERMS = (
     "baocun",
+    "baogao",
     "beixuan",
+    "bianhua",
+    "bianliang",
+    "bukeyong",
     "ceshi",
     "chakan",
+    "chenggong",
     "dakai",
+    "daima",
     "fasong",
     "fenxi",
     "fuzhi",
@@ -57,11 +69,13 @@ PINYIN_TERMS = (
     "guizhoumaotai",
     "gupiao",
     "hangqing",
+    "jiancha",
     "jilu",
     "maotai",
     "mima",
     "moxing",
     "peizhi",
+    "shibai",
     "qingqiushibai",
     "qingshu",
     "queren",
@@ -163,8 +177,8 @@ def main() -> int:
     parser.add_argument(
         "--pinyin-scope",
         choices=("surface", "all", "none"),
-        default="none",
-        help="Where to block romanized legacy terms. Default: none.",
+        default="surface",
+        help="Where to block romanized legacy terms. Default: surface.",
     )
     args = parser.parse_args()
 

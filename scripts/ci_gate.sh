@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+export PYTHONUTF8=1
 
 syntax_check() {
   echo "==> backend-gate: Python syntax check"

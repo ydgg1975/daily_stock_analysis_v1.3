@@ -1,38 +1,34 @@
----
-name: gongnengjianyi / Feature Request
-about: tichuxingongnenghuogaijinjianyi / Suggest a new feature or improvement
-title: '[Feature] '
-labels: enhancement
-assignees: ''
----
-
-<!--
-zhongwenyonghuqingzhijietianxiexiafangbiaodan。
-English users: fill in the English fields below.
--->
-
-## gongnengmiaoshu / Feature Description
-
-jianmingeyaodimiaoshunixiwangzengjiadegongneng。  
-Briefly describe the feature you would like added.
-
-## shiyongchangjing / Use Case
-
-miaoshuzaishenmeqingkuangxiaxuyaozhegegongneng。  
-Describe the situation where this feature would be useful.
-
-## qiwangshixian / Proposed Solution
-
-miaoshuniqiwangzhegegongnengruhegongzuo。  
-Describe how you would expect this feature to work.
-
-## beixuanfangan / Alternatives Considered
-
-miaoshunikaolvguodeqitatidaifangan。  
-Describe any alternative solutions you have considered.
-
-## xiangguanxinxi / Additional Context
-
-- shifouyuanyigongxiandaimashixian / Willing to implement: [Yes / No]
-- cankaolianjie / Reference links:
-- qitashuoming / Other notes:
+---
+name: Feature Request
+about: Suggest a new feature or improvement
+title: '[Feature] '
+labels: enhancement
+assignees: ''
+---
+
+<!--
+Korean contributors: 한국어로 작성해도 됩니다.
+English contributors: please fill in English.
+-->
+
+## Feature Description
+
+Briefly describe the feature you would like added.
+
+## Use Case
+
+Describe the situation where this feature would be useful.
+
+## Proposed Solution
+
+Describe how you would expect this feature to work.
+
+## Alternatives Considered
+
+Describe any alternative solutions you have considered.
+
+## Additional Context
+
+- Willing to implement: [Yes / No]
+- Reference links:
+- Other notes:
