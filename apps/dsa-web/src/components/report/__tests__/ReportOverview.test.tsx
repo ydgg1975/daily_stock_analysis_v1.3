@@ -12,7 +12,7 @@ const baseMeta = {
 
   stockCode: '600519',
 
-  stockName: 'guizhoumaotai',
+  stockName: '구이저우마오타이',
 
   reportType: 'detailed' as const,
 
@@ -26,11 +26,11 @@ const baseMeta = {
 
 const baseSummary = {
 
-  analysisSummary: 'qushiweichiqiangshi',
+  analysisSummary: '추세가 강세를 유지합니다',
 
-  operationAdvice: 'jixuguanchamaidian',
+  operationAdvice: '매수 지점을 계속 관찰합니다',
 
-  trendPrediction: 'duanxianzhendangpianqiang',
+  trendPrediction: '단기 박스권 강세',
 
   sentimentScore: 78,
 
@@ -54,19 +54,19 @@ describe('ReportOverview', () => {
 
           belongBoards: [
 
-            { name: ' baijiu ', type: 'hangye' },
+            { name: ' 백주 ', type: '업종' },
 
-            { name: 'xiaofei', type: 'gainian' },
+            { name: '소비', type: '테마' },
 
-            { name: 'xinnengyuan' },
+            { name: '신에너지' },
 
           ],
 
           sectorRankings: {
 
-            top: [{ name: 'baijiu', changePct: 2.31 }],
+            top: [{ name: '백주', changePct: 2.31 }],
 
-            bottom: [{ name: 'xiaofei', changePct: -1.2 }],
+            bottom: [{ name: '소비', changePct: -1.2 }],
 
           },
 
@@ -80,9 +80,9 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('관련 섹터')).toBeInTheDocument();
 
-    expect(screen.getByText('baijiu')).toBeInTheDocument();
+    expect(screen.getByText('백주')).toBeInTheDocument();
 
-    expect(screen.getByText('hangye')).toBeInTheDocument();
+    expect(screen.getByText('업종')).toBeInTheDocument();
 
     expect(screen.getByText('강세')).toBeInTheDocument();
 
@@ -110,7 +110,7 @@ describe('ReportOverview', () => {
 
         details={{
 
-          belongBoards: [{ name: 'bandaoti', type: 'hangye' }],
+          belongBoards: [{ name: '반도체', type: '업종' }],
 
         }}
 
@@ -122,7 +122,7 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('관련 섹터')).toBeInTheDocument();
 
-    expect(screen.getByText('bandaoti')).toBeInTheDocument();
+    expect(screen.getByText('반도체')).toBeInTheDocument();
 
     expect(screen.queryByText('중립')).not.toBeInTheDocument();
 
@@ -158,13 +158,13 @@ describe('ReportOverview', () => {
 
         details={{
 
-          belongBoards: [{ name: ' baijiu ' }],
+          belongBoards: [{ name: ' 백주 ' }],
 
           sectorRankings: {
 
             top: {} as unknown as never[],
 
-            bottom: [{ name: 'baijiu', changePct: '-2.5%' as unknown as number }],
+            bottom: [{ name: '백주', changePct: '-2.5%' as unknown as number }],
 
           },
 
@@ -178,7 +178,7 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('관련 섹터')).toBeInTheDocument();
 
-    expect(screen.getByText('baijiu')).toBeInTheDocument();
+    expect(screen.getByText('백주')).toBeInTheDocument();
 
     expect(screen.getByText('약세')).toBeInTheDocument();
 

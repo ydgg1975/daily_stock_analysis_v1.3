@@ -61,9 +61,9 @@ const historyItem = {
   id: 1,
   queryId: 'q-1',
   stockCode: '600519',
-  stockName: 'guizhoumaotai',
+  stockName: '구이저우마오타이',
   sentimentScore: 82,
-  operationAdvice: 'mairu',
+  operationAdvice: '매수',
   createdAt: '2026-03-18T08:00:00Z',
 };
 
@@ -72,15 +72,15 @@ const historyReport = {
     id: 1,
     queryId: 'q-1',
     stockCode: '600519',
-    stockName: 'guizhoumaotai',
+    stockName: '구이저우마오타이',
     reportType: 'detailed' as const,
     reportLanguage: 'zh' as const,
     createdAt: '2026-03-18T08:00:00Z',
   },
   summary: {
-    analysisSummary: 'qushiweichiqiangshi',
-    operationAdvice: 'jixuguanchamaidian',
-    trendPrediction: 'duanxianzhendangpianqiang',
+    analysisSummary: '추세가 강세를 유지합니다',
+    operationAdvice: '매수 지점을 계속 관찰합니다',
+    trendPrediction: '단기 박스권 강세',
     sentimentScore: 78,
   },
 };
@@ -106,7 +106,7 @@ const marketReviewHistoryReport = {
   },
   summary: {
     analysisSummary: '\uC2DC\uC7A5 \uB9AC\uBDF0 \uC694\uC57D',
-    operationAdvice: 'chakanfupan',
+    operationAdvice: '리뷰 확인',
     trendPrediction: '\uC2DC\uC7A5 \uB9AC\uBDF0',
     sentimentScore: 50,
   },
@@ -154,7 +154,7 @@ describe('HomePage', () => {
     expect(dashboard.querySelector('.flex-1.flex.min-h-0.overflow-hidden')).toBeTruthy();
     expect(screen.getByTestId('home-dashboard-scroll')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL')).toBeInTheDocument();
-    expect(await screen.findByText('qushiweichiqiangshi')).toBeInTheDocument();
+    expect(await screen.findByText('추세가 강세를 유지합니다')).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
         name: getReportText(normalizeReportLanguage(historyReport.meta.reportLanguage)).fullReport,
@@ -225,7 +225,7 @@ describe('HomePage', () => {
     vi.mocked(analysisApi.getStatus).mockResolvedValue({
       taskId: 'task-1',
       status: 'completed',
-      marketReviewReport: 'shichangfupanbaogaoshiliwenben',
+      marketReviewReport: '시장 리뷰 보고서 예시 본문',
     });
 
     render(
@@ -240,7 +240,7 @@ describe('HomePage', () => {
       expect(analysisApi.triggerMarketReview).toHaveBeenCalledWith({ sendNotification: true });
     });
     expect(await screen.findByText('\uC2DC\uC7A5 \uB9AC\uBDF0 \uC644\uB8CC')).toBeInTheDocument();
-    expect(await screen.findByText('shichangfupanbaogaoshiliwenben')).toBeInTheDocument();
+    expect(await screen.findByText('시장 리뷰 보고서 예시 본문')).toBeInTheDocument();
     expect(analysisApi.getStatus).toHaveBeenCalledWith('task-1');
   });
 
@@ -261,7 +261,7 @@ describe('HomePage', () => {
     vi.mocked(analysisApi.getStatus).mockResolvedValue({
       taskId: 'task-1',
       status: 'completed',
-      marketReviewReport: 'shichangfupanbaogaoshiliwenben',
+      marketReviewReport: '시장 리뷰 보고서 예시 본문',
     });
 
     render(
@@ -270,7 +270,7 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText('qushiweichiqiangshi');
+    await screen.findByText('추세가 강세를 유지합니다');
     const dashboardScroll = screen.getByTestId('home-dashboard-scroll');
     const scrollToMock = vi.fn(function scrollTo(this: HTMLElement, options?: ScrollToOptions) {
       if (typeof options?.top === 'number') {
@@ -308,7 +308,7 @@ describe('HomePage', () => {
     vi.mocked(analysisApi.getStatus).mockResolvedValue({
       taskId: 'task-1',
       status: 'completed',
-      marketReviewReport: Array.from({ length: 30 }, (_, index) => `di ${index + 1} xingfupanneirong`).join('\n'),
+      marketReviewReport: Array.from({ length: 30 }, (_, index) => `제 ${index + 1}행 리뷰 내용`).join('\n'),
     });
 
     render(
@@ -346,7 +346,7 @@ describe('HomePage', () => {
           category: 'ai_model',
           required: true,
           status: 'needs_action',
-          message: 'queshaozhumoxingpeizhi',
+          message: '주 모델 설정이 부족합니다',
         },
         {
           key: 'stock_list',
@@ -390,7 +390,7 @@ describe('HomePage', () => {
     fireEvent.click(followUpButton);
 
     expect(navigateMock).toHaveBeenCalledWith(
-      '/chat?stock=600519&name=guizhoumaotai&recordId=1',
+      '/chat?stock=600519&name=%EA%B5%AC%EC%9D%B4%EC%A0%80%EC%9A%B0%EB%A7%88%EC%98%A4%ED%83%80%EC%9D%B4&recordId=1',
     );
   });
 
@@ -469,10 +469,10 @@ describe('HomePage', () => {
         {
           taskId: 'task-1',
           stockCode: '600519',
-          stockName: 'guizhoumaotai',
+          stockName: '구이저우마오타이',
           status: 'processing',
           progress: 45,
-          message: 'zhengzaizhuaquzuixinhangqing',
+          message: '최신 시세를 가져오는 중입니다',
           reportType: 'detailed',
           createdAt: '2026-03-18T08:00:00Z',
         },
@@ -486,7 +486,7 @@ describe('HomePage', () => {
     );
 
     expect(await screen.findByText('\uBD84\uC11D \uC791\uC5C5')).toBeInTheDocument();
-    expect(screen.getByText('zhengzaizhuaquzuixinhangqing')).toBeInTheDocument();
+    expect(screen.getByText('최신 시세를 가져오는 중입니다')).toBeInTheDocument();
   });
 
   it('triggers reanalyze for the current report even if the search input has other text', async () => {
@@ -509,7 +509,7 @@ describe('HomePage', () => {
     );
 
     // Wait for the report to load
-    await screen.findByText('qushiweichiqiangshi');
+    await screen.findByText('추세가 강세를 유지합니다');
 
     // Type something else in the search box
     const input = screen.getByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL');

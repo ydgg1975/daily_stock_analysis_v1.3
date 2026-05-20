@@ -25,9 +25,9 @@ const historyItem = {
   id: 1,
   queryId: 'q-1',
   stockCode: '600519',
-  stockName: 'guizhoumaotai',
+  stockName: '구이저우마오타이',
   sentimentScore: 82,
-  operationAdvice: 'mairu',
+  operationAdvice: '매수',
   createdAt: '2026-03-18T08:00:00Z',
 };
 
@@ -36,14 +36,14 @@ const historyReport = {
     id: 1,
     queryId: 'q-1',
     stockCode: '600519',
-    stockName: 'guizhoumaotai',
+    stockName: '구이저우마오타이',
     reportType: 'detailed' as const,
     createdAt: '2026-03-18T08:00:00Z',
   },
   summary: {
     analysisSummary: '추세가 강세를 유지합니다',
     operationAdvice: '매수 지점을 계속 관찰합니다',
-    trendPrediction: 'duanxianzhendangpianqiang',
+    trendPrediction: '단기 박스권 강세',
     sentimentScore: 78,
   },
 };
@@ -184,7 +184,7 @@ describe('stockPoolStore', () => {
 
     await useStockPoolStore.getState().submitAnalysis({
       stockCode: '00700.HK',
-      stockName: 'tengxunkonggu',
+      stockName: '텐센트홀딩스',
       originalQuery: '00700',
       selectionSource: 'autocomplete',
     });
@@ -195,7 +195,7 @@ describe('stockPoolStore', () => {
     expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
       stockCode: '00700.HK',
       reportType: 'detailed',
-      stockName: 'tengxunkonggu',
+      stockName: '텐센트홀딩스',
       originalQuery: '00700',
       selectionSource: 'autocomplete',
       notify: true,
@@ -258,7 +258,7 @@ describe('stockPoolStore', () => {
     const pendingTask = {
       taskId: 'task-1',
       stockCode: '600519',
-      stockName: 'guizhoumaotai',
+      stockName: '구이저우마오타이',
       status: 'pending' as const,
       progress: 0,
       reportType: 'detailed',
@@ -308,7 +308,7 @@ describe('stockPoolStore', () => {
     const pendingTask = {
       taskId: 'task-1',
       stockCode: '600519',
-      stockName: 'guizhoumaotai',
+      stockName: '구이저우마오타이',
       status: 'pending' as const,
       progress: 0,
       reportType: 'detailed',
@@ -331,7 +331,7 @@ describe('stockPoolStore', () => {
     const pendingTask = {
       taskId: 'task-1',
       stockCode: '600519',
-      stockName: 'guizhoumaotai',
+      stockName: '구이저우마오타이',
       status: 'pending' as const,
       progress: 0,
       reportType: 'detailed',
