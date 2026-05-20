@@ -1,6 +1,6 @@
-# PR review workflow: static checks, optional AI review, labels, and summary comment.
+# PR 리뷰 워크플로: 정적 검사, 선택적 AI 리뷰, 라벨, 요약 댓글.
 
-name: PR Review
+name: PR 리뷰
 
 on:
   pull_request_target:
@@ -36,23 +36,23 @@ permissions:
 
 jobs:
   security-check:
-    name: Security Check
+    name: 보안 검사
     runs-on: ubuntu-latest
     outputs:
       safe_to_run: ${{ steps.check_sensitive.outputs.safe_to_run }}
       sensitive_files_changed: ${{ steps.check_sensitive.outputs.sensitive_files_changed }}
 
     steps:
-      - name: Checkout
+      - name: 코드 체크아웃
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Fetch base branch
+      - name: 기준 브랜치 가져오기
         run: git fetch origin ${{ github.base_ref || 'main' }}:refs/remotes/origin/${{ github.base_ref || 'main' }}
 
-      - name: Check sensitive workflow changes
+      - name: 민감한 자동화 변경 확인
         id: check_sensitive
         run: |
           BASE_REF="${{ github.base_ref || 'main' }}"
@@ -60,22 +60,22 @@ jobs:
 
           if [ -n "$SENSITIVE_FILES" ]; then
             {
-              echo "⚠️ Sensitive automation files changed. Please review carefully."
+              echo "민감한 자동화 파일이 변경되었습니다. 수동 검토가 필요합니다."
               echo ""
-              echo "Changed sensitive files:"
+              echo "변경된 민감 파일:"
               echo '```'
               echo "$SENSITIVE_FILES"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             echo "sensitive_files_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "✅ No sensitive automation file changes detected." >> "$GITHUB_STEP_SUMMARY"
+            echo "민감한 자동화 파일 변경은 없습니다." >> "$GITHUB_STEP_SUMMARY"
             echo "sensitive_files_changed=false" >> "$GITHUB_OUTPUT"
           fi
           echo "safe_to_run=true" >> "$GITHUB_OUTPUT"
 
   auto-check:
-    name: Static Checks
+    name: 정적 검사
     runs-on: ubuntu-latest
     needs: [security-check]
     if: needs.security-check.outputs.safe_to_run == 'true'
@@ -85,27 +85,27 @@ jobs:
       has_reviewable_changes: ${{ steps.check_files.outputs.has_reviewable_changes }}
 
     steps:
-      - name: Checkout
+      - name: 코드 체크아웃
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Fetch base branch
+      - name: 기준 브랜치 가져오기
         run: git fetch origin ${{ github.base_ref || 'main' }}:refs/remotes/origin/${{ github.base_ref || 'main' }}
 
-      - name: Set up Python
+      - name: Python 설정
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: 의존성 설치
         run: |
           python -m pip install --upgrade pip
           python -m pip install flake8
 
-      - name: Detect changed files
+      - name: 변경 파일 감지
         id: check_files
         run: |
           BASE_REF="${{ github.base_ref || 'main' }}"
@@ -120,7 +120,7 @@ jobs:
 
           if [ -z "$CHANGED_FILES" ]; then
             echo "has_py_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No Python files changed." >> "$GITHUB_STEP_SUMMARY"
+            echo "변경된 Python 파일이 없습니다." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "has_py_changes=true" >> "$GITHUB_OUTPUT"
             {
@@ -130,12 +130,12 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
 
-      - name: Python syntax check
+      - name: Python 문법 검사
         id: syntax
         if: steps.check_files.outputs.has_py_changes == 'true'
         run: |
-          echo "## Python Syntax Check" >> "$GITHUB_STEP_SUMMARY"
-          echo "Changed Python files: $CHANGED_FILES"
+          echo "## Python 문법 검사" >> "$GITHUB_STEP_SUMMARY"
+          echo "변경된 Python 파일: $CHANGED_FILES"
 
           ERRORS=""
           SYNTAX_OK="true"
@@ -154,32 +154,32 @@ jobs:
             echo -e "$ERRORS" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "✅ All changed Python files compile successfully." >> "$GITHUB_STEP_SUMMARY"
+          echo "변경된 모든 Python 파일이 정상적으로 컴파일됩니다." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Flake8 critical checks
+      - name: Flake8 치명 오류 검사
         if: steps.check_files.outputs.has_py_changes == 'true'
         run: |
-          echo "## Flake8 Critical Checks" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Flake8 치명 오류 검사" >> "$GITHUB_STEP_SUMMARY"
           RESULT=$(flake8 $CHANGED_FILES --select=E9,F63,F7,F82 --format='%(path)s:%(row)d: %(code)s %(text)s' 2>/dev/null || true)
           if [ -n "$RESULT" ]; then
             {
-              echo "⚠️ Critical lint issues found:"
+              echo "치명적인 lint 문제가 발견되었습니다:"
               echo '```'
               echo "$RESULT"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "✅ No critical lint issues found." >> "$GITHUB_STEP_SUMMARY"
+          echo "치명적인 lint 문제는 없습니다." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Change summary
+      - name: 변경 요약
         run: |
           BASE_REF="${{ github.base_ref || 'main' }}"
-          echo "## Change Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 변경 요약" >> "$GITHUB_STEP_SUMMARY"
           git diff --stat origin/$BASE_REF...HEAD 2>/dev/null | tail -1 >> "$GITHUB_STEP_SUMMARY"
 
   ai-review:
-    name: AI Code Review
+    name: AI 코드 리뷰
     runs-on: ubuntu-latest
     needs: [security-check, auto-check]
     if: |
@@ -189,7 +189,7 @@ jobs:
       vars.ENABLE_AI_REVIEW != 'false'
 
     steps:
-      - name: Checkout main branch scripts
+      - name: 기본 브랜치 스크립트 체크아웃
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -198,26 +198,26 @@ jobs:
           sparse-checkout-cone-mode: false
           path: main-scripts
 
-      - name: Checkout PR code
+      - name: PR 코드 체크아웃
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           path: pr-code
 
-      - name: Fetch base branch
+      - name: 기준 브랜치 가져오기
         working-directory: pr-code
         run: git fetch origin ${{ github.base_ref || 'main' }}:refs/remotes/origin/${{ github.base_ref || 'main' }}
 
-      - name: Set up Python
+      - name: Python 설정
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
-      - name: Install AI review dependencies
+      - name: AI 리뷰 의존성 설치
         run: python -m pip install google-genai openai httpx
 
-      - name: Run AI review
+      - name: AI 리뷰 실행
         working-directory: pr-code
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -234,7 +234,7 @@ jobs:
           CI_AUTO_CHECK_RESULT: ${{ needs.auto-check.result || '' }}
         run: python ../main-scripts/.github/scripts/ai_review.py
 
-      - name: Upload AI review result
+      - name: AI 리뷰 결과 업로드
         uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -243,14 +243,14 @@ jobs:
           if-no-files-found: ignore
 
   labeler:
-    name: Auto Label
+    name: 자동 라벨
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: 코드 체크아웃
         uses: actions/checkout@v5
 
-      - name: Add labels
+      - name: 라벨 추가
         if: github.event_name == 'pull_request_target'
         uses: actions/github-script@v8
         with:
@@ -290,25 +290,25 @@ jobs:
                   issue_number: context.issue.number,
                   labels: Array.from(labels)
                 });
-                console.log(`Added labels: ${Array.from(labels).join(', ')}`);
+                console.log(`추가된 라벨: ${Array.from(labels).join(', ')}`);
               } catch (error) {
-                console.log(`Failed to add labels: ${error.message}`);
+                console.log(`라벨 추가 실패: ${error.message}`);
               }
             }
 
   comment:
-    name: Review Report
+    name: 리뷰 보고서
     runs-on: ubuntu-latest
     needs: [security-check, auto-check, ai-review]
     if: always() && github.event_name == 'pull_request_target' && needs.security-check.outputs.safe_to_run == 'true'
 
     steps:
-      - name: Checkout
+      - name: 코드 체크아웃
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Download AI review result
+      - name: AI 리뷰 결과 다운로드
         uses: actions/download-artifact@v7
         if: needs.ai-review.result == 'success'
         continue-on-error: true
@@ -316,7 +316,7 @@ jobs:
           name: ai-review-result
           path: .
 
-      - name: Generate review report
+      - name: 리뷰 보고서 생성
         env:
           AUTO_CHECK_RESULT: ${{ needs.auto-check.result }}
           AI_REVIEW_RESULT: ${{ needs.ai-review.result }}
@@ -339,7 +339,7 @@ jobs:
             try {
               aiReview = fs.readFileSync('ai_review_result.txt', 'utf8');
             } catch (error) {
-              console.log('No AI review result found');
+              console.log('AI 리뷰 결과가 없습니다');
             }
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -350,48 +350,48 @@ jobs:
 
             const botComment = comments.find((comment) =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('## AI Review Report')
+              comment.body.includes('## AI 리뷰 보고서')
             );
 
-            const checkStatus = process.env.AUTO_CHECK_RESULT === 'success' ? 'passed' : 'needs attention';
+            const checkStatus = process.env.AUTO_CHECK_RESULT === 'success' ? '통과' : '확인 필요';
             const aiStatus = process.env.AI_REVIEW_RESULT === 'success'
-              ? 'completed'
+              ? '완료'
               : process.env.AI_REVIEW_RESULT === 'skipped'
-                ? 'skipped'
-                : 'unavailable';
+                ? '건너뜀'
+                : '사용 불가';
 
-            let report = `## AI Review Report
+            let report = `## AI 리뷰 보고서
 
-            | Item | Result |
+            | 항목 | 결과 |
             |------|--------|
-            | Changed files | ${changedFiles} |
-            | Added lines | ${additions} |
-            | Deleted lines | ${deletions} |
-            | Static checks | ${checkStatus} |
-            | AI review | ${aiStatus} |
+            | 변경 파일 | ${changedFiles} |
+            | 추가된 줄 | ${additions} |
+            | 삭제된 줄 | ${deletions} |
+            | 정적 검사 | ${checkStatus} |
+            | AI 리뷰 | ${aiStatus} |
 
-            ### Changed Files
+            ### 변경 파일
 
             `;
 
             for (const file of files.slice(0, 20)) {
               const status = file.status === 'added'
-                ? 'added'
+                ? '추가'
                 : file.status === 'removed'
-                  ? 'removed'
-                  : 'modified';
+                  ? '삭제'
+                  : '수정';
               report += `- ${status}: \`${file.filename}\` (+${file.additions}/-${file.deletions})\n`;
             }
 
             if (files.length > 20) {
-              report += `\n... and ${files.length - 20} more files\n`;
+              report += `\n... 그 외 ${files.length - 20}개 파일\n`;
             }
 
             if (aiReview) {
               report += `
             ---
 
-            ### AI Review Notes
+            ### AI 리뷰 의견
 
             ${aiReview}
             `;
@@ -400,7 +400,7 @@ jobs:
             report += `
             ---
 
-            > Please make sure the relevant local tests have been run and the repository guidelines are followed.
+            > 관련 로컬 테스트를 실행했고 저장소 작업 지침을 따랐는지 확인해 주세요.
             `;
 
             if (botComment) {
