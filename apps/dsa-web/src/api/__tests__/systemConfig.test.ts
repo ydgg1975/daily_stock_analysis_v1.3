@@ -129,7 +129,7 @@ describe('systemConfigApi', () => {
             required: true,
             status: 'needs_action',
             message: 'queshaozhumoxingpeizhi',
-            next_step: 'dakaixitongshezhi',
+            next_step: '시스템 설정 열기',
           },
         ],
       },
@@ -140,6 +140,6 @@ describe('systemConfigApi', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/system/config/setup/status');
     expect(result.isComplete).toBe(false);
     expect(result.nextStepKey).toBe('llm_primary');
-    expect(result.checks[0].nextStep).toBe('dakaixitongshezhi');
+    expect(result.checks[0].nextStep).toBe('시스템 설정 열기');
   });
 });

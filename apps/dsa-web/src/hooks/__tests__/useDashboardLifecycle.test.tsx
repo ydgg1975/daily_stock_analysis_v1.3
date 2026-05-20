@@ -142,7 +142,7 @@ describe('useDashboardLifecycle', () => {
       ...createTask(),
       status: 'processing' as const,
       progress: 72,
-      message: 'LLM zhengzaishengchengfenxijieguo',
+      message: 'LLM이 분석 결과를 생성하는 중입니다',
     };
 
     act(() => {
@@ -171,7 +171,7 @@ describe('useDashboardLifecycle', () => {
     const failedTask = {
       ...createTask(),
       status: 'failed' as const,
-      error: 'fenxishibai',
+      error: '분석 실패',
     };
 
     act(() => {

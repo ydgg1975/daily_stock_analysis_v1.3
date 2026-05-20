@@ -41,8 +41,8 @@ const historyReport = {
     createdAt: '2026-03-18T08:00:00Z',
   },
   summary: {
-    analysisSummary: 'qushiweichiqiangshi',
-    operationAdvice: 'jixuguanchamaidian',
+    analysisSummary: '추세가 강세를 유지합니다',
+    operationAdvice: '매수 지점을 계속 관찰합니다',
     trendPrediction: 'duanxianzhendangpianqiang',
     sentimentScore: 78,
   },
@@ -151,7 +151,7 @@ describe('stockPoolStore', () => {
 
   it('surfaces duplicate task errors without replacing the dashboard error state', async () => {
     vi.mocked(analysisApi.analyzeAsync).mockRejectedValue(
-      new DuplicateTaskError('600519', 'task-1', 'gupiao 600519 zhengzaifenxizhong'),
+      new DuplicateTaskError('600519', 'task-1', '600519 분석이 이미 진행 중입니다'),
     );
 
     useStockPoolStore.getState().setQuery('600519');
@@ -359,7 +359,7 @@ describe('stockPoolStore', () => {
       progress: 100,
       reportType: 'detailed',
       createdAt: '2026-03-18T08:00:00Z',
-      error: 'fenxishibai',
+      error: '분석 실패',
     });
 
     const state = useStockPoolStore.getState();

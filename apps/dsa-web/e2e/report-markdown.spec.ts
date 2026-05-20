@@ -1,209 +1,128 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
-
-async function login(page: Page) {
-  test.skip(!smokePassword, 'Set DSA_WEB_SMOKE_PASSWORD to run report markdown tests.');
-
-  // Navigate to login page
-  await page.goto('/login');
-  await page.waitForLoadState('domcontentloaded');
-
-  // Wait for password input to be visible
-  await expect(page.locator('#password')).toBeVisible({ timeout: 10_000 });
-
-  // Fill password and submit
-  await page.locator('#password').fill(smokePassword!);
-
-  // Wait for and click the submit button
-  const submitButton = page.getByRole('button', { name: /shouquanjinrugongzuotai|wanchengshezhibingdenglu/ });
-  await expect(submitButton).toBeVisible();
-
-  await Promise.all([
-    page.waitForResponse(
-      (response) => response.url().includes('/api/v1/auth/login') && response.status() === 200,
-      { timeout: 15_000 }
-    ),
-    submitButton.click(),
-  ]);
-
-  // Wait for navigation to home page after login
-  await page.waitForURL('/', { timeout: 15_000 });
-  await page.waitForLoadState('domcontentloaded');
-  // Wait for page to stabilize by checking for stock input
-  const stockInput = page.getByPlaceholder('shurugupiaodaimahuomingcheng，ru 600519、guizhoumaotai、AAPL');
-  await expect(stockInput).toBeVisible({ timeout: 10_000 });
-}
-
-test.describe('ReportMarkdown component', () => {
-  test('copy markdown source code', async ({ page, context }) => {
-    // Grant clipboard permissions
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-
-    await login(page);
-
-    // Navigate to history page
-    await page.getByRole('link', { name: 'shouye' }).click();
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for history panel to load
-    await expect(page.getByText('lishifenxi')).toBeVisible({ timeout: 10_000 });
-
-    // Click on the first history item to select it
-    const firstHistoryItem = page.locator('.home-history-item').first();
-    await expect(firstHistoryItem).toBeVisible({ timeout: 10_000 });
-    await firstHistoryItem.click();
-    // Wait for detailed report button to be enabled (indicates selection is complete)
-    const detailedReportButton = page.getByRole('button', { name: 'wanzhengfenxibaogao' });
-    await expect(detailedReportButton).toBeEnabled({ timeout: 3000 });
-
-    // Click the "wanzhengfenxibaogao" button to open the markdown drawer
-    await expect(detailedReportButton).toBeVisible({ timeout: 5000 });
-    await detailedReportButton.click();
-
-    // Verify drawer content is visible
-    await expect(page.getByRole('dialog').getByText('wanzhengfenxibaogao')).toBeVisible();
-
-    // Click copy markdown button
-    const copyMarkdownButton = page.getByRole('button', { name: 'fuzhi Markdown yuanma' });
-    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
-    await copyMarkdownButton.click();
-
-    // Verify clipboard contains markdown content
-    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clipboardText).toBeTruthy();
-    expect(clipboardText.length).toBeGreaterThan(0);
-
-    // Verify checkmark icon is shown
-    const checkmarkIcon = page.locator('button[aria-label="fuzhi Markdown yuanma"] svg.text-success');
-    await expect(checkmarkIcon).toBeVisible();
-
-    // Wait for icon to revert (icon disappears after 2 seconds)
-    await expect(checkmarkIcon).not.toBeVisible({ timeout: 3500 });
-  });
-
-  test('copy plain text', async ({ page, context }) => {
-    // Grant clipboard permissions
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-
-    await login(page);
-
-    // Navigate to history page
-    await page.getByRole('link', { name: 'shouye' }).click();
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for history panel to load
-    await expect(page.getByText('lishifenxi')).toBeVisible({ timeout: 10_000 });
-
-    // Click on the first history item to select it
-    const firstHistoryItem = page.locator('.home-history-item').first();
-    await expect(firstHistoryItem).toBeVisible({ timeout: 10_000 });
-    await firstHistoryItem.click();
-    // Wait for detailed report button to be enabled (indicates selection is complete)
-    const detailedReportButton = page.getByRole('button', { name: 'wanzhengfenxibaogao' });
-    await expect(detailedReportButton).toBeEnabled({ timeout: 3000 });
-
-    // Click the "wanzhengfenxibaogao" button to open the markdown drawer
-    await expect(detailedReportButton).toBeVisible({ timeout: 5000 });
-    await detailedReportButton.click();
-
-    // Verify drawer content is visible
-    await expect(page.getByRole('dialog').getByText('wanzhengfenxibaogao')).toBeVisible();
-
-    // Click copy plain text button
-    const copyPlainTextButton = page.getByRole('button', { name: 'fuzhichunwenben' });
-    await expect(copyPlainTextButton).toBeVisible({ timeout: 5000 });
-    await copyPlainTextButton.click();
-
-    // Verify clipboard contains text without markdown symbols
-    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clipboardText).toBeTruthy();
-    expect(clipboardText.length).toBeGreaterThan(0);
-
-    // Verify it's plain text (no markdown symbols like #, **, >, etc.)
-    expect(clipboardText).not.toMatch(/^#{1,6}\s+/m); // No headers
-    expect(clipboardText).not.toMatch(/\*\*[^*]+\*\*/); // No bold
-    // Verify table syntax is removed (no standalone pipe separators)
-    const lines = clipboardText.split('\n');
-    const hasTableSeparators = lines.some(line =>
-      line.match(/^\|[\s|:-]+\|$/) || line.match(/^[\s|:-]+$/)
-    );
-    expect(hasTableSeparators).toBeFalsy();
-
-    // Verify checkmark icon is shown
-    const checkmarkIcon = page.locator('button[aria-label="fuzhichunwenben"] svg.text-success');
-    await expect(checkmarkIcon).toBeVisible();
-
-    // Wait for icon to revert (icon disappears after 2 seconds)
-    await expect(checkmarkIcon).not.toBeVisible({ timeout: 3500 });
-  });
-
-  test('mobile responsive layout', async ({ page }) => {
-    // Set mobile viewport
-    await page.setViewportSize({ width: 390, height: 844 });
-
-    await login(page);
-
-    // On mobile, a report should already be selected (showing in main content)
-    // Wait for main content to load
-    await expect(page.getByPlaceholder('shurugupiaodaimahuomingcheng，ru 600519、guizhoumaotai、AAPL')).toBeVisible({ timeout: 10_000 });
-
-    // Click the "wanzhengfenxibaogao" button to open the markdown drawer
-    const detailedReportButton = page.getByRole('button', { name: 'wanzhengfenxibaogao' });
-    await expect(detailedReportButton).toBeVisible({ timeout: 5000 });
-    await detailedReportButton.click();
-
-    // Verify drawer content is visible (this ensures drawer is fully open)
-    await expect(page.getByRole('dialog').getByText('wanzhengfenxibaogao')).toBeVisible({ timeout: 10000 });
-
-    // Verify toolbar buttons are visible and clickable on mobile
-    const copyMarkdownButton = page.getByRole('button', { name: 'fuzhi Markdown yuanma' });
-    const copyPlainTextButton = page.getByRole('button', { name: 'fuzhichunwenben' });
-
-    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
-    await expect(copyPlainTextButton).toBeVisible();
-
-    // Verify buttons are clickable (not checking icon animation on mobile due to timing issues)
-    await expect(copyMarkdownButton).toBeEnabled();
-    await expect(copyPlainTextButton).toBeEnabled();
-  });
-
-  test('buttons are disabled during loading', async ({ page }) => {
-    await login(page);
-
-    // Navigate to history page
-    await page.getByRole('link', { name: 'shouye' }).click();
-    await page.waitForLoadState('domcontentloaded');
-    // Wait for history panel to load
-    await expect(page.getByText('lishifenxi')).toBeVisible({ timeout: 10_000 });
-
-    // Click on the first history item to select it
-    const firstHistoryItem = page.locator('.home-history-item').first();
-    await expect(firstHistoryItem).toBeVisible({ timeout: 10_000 });
-    await firstHistoryItem.click();
-    // Wait for detailed report button to be enabled (indicates selection is complete)
-    const detailedReportButton = page.getByRole('button', { name: 'wanzhengfenxibaogao' });
-    await expect(detailedReportButton).toBeEnabled({ timeout: 3000 });
-
-    // Click the "wanzhengfenxibaogao" button to open the markdown drawer
-    await expect(detailedReportButton).toBeVisible({ timeout: 5000 });
-    await detailedReportButton.click();
-
-    // Immediately check if buttons are disabled (right after drawer opens)
-    const copyMarkdownButton = page.getByRole('button', { name: 'fuzhi Markdown yuanma' });
-    const copyPlainTextButton = page.getByRole('button', { name: 'fuzhichunwenben' });
-
-    // Wait for drawer to open and buttons to appear
-    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
-    await expect(copyPlainTextButton).toBeVisible();
-
-    // Wait for content to finish loading (buttons become enabled)
-    await expect(copyMarkdownButton).toBeEnabled({ timeout: 5000 });
-
-    // Check buttons are enabled after content loads
-    // Note: Loading may be very fast for cached content
-    const isMarkdownEnabled = await copyMarkdownButton.isEnabled();
-    const isPlainTextEnabled = await copyPlainTextButton.isEnabled();
-
-    // At least one button should be enabled
-    expect(isMarkdownEnabled || isPlainTextEnabled).toBeTruthy();
-  });
-});
+import { expect, test, type Page } from '@playwright/test';
+
+const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
+const stockInputPlaceholder = '종목 코드나 이름을 입력하세요. 예: KR005930, AAPL';
+
+async function login(page: Page) {
+  test.skip(!smokePassword, 'Set DSA_WEB_SMOKE_PASSWORD to run report markdown tests.');
+
+  await page.goto('/login');
+  await page.waitForLoadState('domcontentloaded');
+
+  await expect(page.locator('#password')).toBeVisible({ timeout: 10_000 });
+  await page.locator('#password').fill(smokePassword!);
+
+  const submitButton = page.getByRole('button', { name: /작업대로 이동|설정 완료 후 로그인/ });
+  await expect(submitButton).toBeVisible();
+
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes('/api/v1/auth/login') && response.status() === 200,
+      { timeout: 15_000 },
+    ),
+    submitButton.click(),
+  ]);
+
+  await page.waitForURL('/', { timeout: 15_000 });
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByPlaceholder(stockInputPlaceholder)).toBeVisible({ timeout: 10_000 });
+}
+
+async function openFirstReportDrawer(page: Page) {
+  await page.getByRole('link', { name: '홈' }).click();
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByText('분석 기록')).toBeVisible({ timeout: 10_000 });
+
+  const firstHistoryItem = page.locator('.home-history-item').first();
+  await expect(firstHistoryItem).toBeVisible({ timeout: 10_000 });
+  await firstHistoryItem.click();
+
+  const detailedReportButton = page.getByRole('button', { name: '전체 분석 리포트' });
+  await expect(detailedReportButton).toBeEnabled({ timeout: 3000 });
+  await detailedReportButton.click();
+
+  await expect(page.getByRole('dialog').getByText('전체 분석 리포트')).toBeVisible({ timeout: 10_000 });
+}
+
+test.describe('ReportMarkdown component', () => {
+  test('copy markdown source code', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await login(page);
+    await openFirstReportDrawer(page);
+
+    const copyMarkdownButton = page.getByRole('button', { name: 'Markdown 원문 복사' });
+    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
+    await copyMarkdownButton.click();
+
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toBeTruthy();
+    expect(clipboardText.length).toBeGreaterThan(0);
+
+    const checkmarkIcon = page.locator('button[aria-label="Markdown 원문 복사"] svg.text-success');
+    await expect(checkmarkIcon).toBeVisible();
+    await expect(checkmarkIcon).not.toBeVisible({ timeout: 3500 });
+  });
+
+  test('copy plain text', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await login(page);
+    await openFirstReportDrawer(page);
+
+    const copyPlainTextButton = page.getByRole('button', { name: '일반 텍스트 복사' });
+    await expect(copyPlainTextButton).toBeVisible({ timeout: 5000 });
+    await copyPlainTextButton.click();
+
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toBeTruthy();
+    expect(clipboardText.length).toBeGreaterThan(0);
+    expect(clipboardText).not.toMatch(/^#{1,6}\s+/m);
+    expect(clipboardText).not.toMatch(/\*\*[^*]+\*\*/);
+
+    const lines = clipboardText.split('\n');
+    const hasTableSeparators = lines.some((line) =>
+      line.match(/^\|[\s|:-]+\|$/) || line.match(/^[\s|:-]+$/),
+    );
+    expect(hasTableSeparators).toBeFalsy();
+
+    const checkmarkIcon = page.locator('button[aria-label="일반 텍스트 복사"] svg.text-success');
+    await expect(checkmarkIcon).toBeVisible();
+    await expect(checkmarkIcon).not.toBeVisible({ timeout: 3500 });
+  });
+
+  test('mobile responsive layout', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
+
+    await expect(page.getByPlaceholder(stockInputPlaceholder)).toBeVisible({ timeout: 10_000 });
+
+    const detailedReportButton = page.getByRole('button', { name: '전체 분석 리포트' });
+    await expect(detailedReportButton).toBeVisible({ timeout: 5000 });
+    await detailedReportButton.click();
+
+    await expect(page.getByRole('dialog').getByText('전체 분석 리포트')).toBeVisible({ timeout: 10_000 });
+
+    const copyMarkdownButton = page.getByRole('button', { name: 'Markdown 원문 복사' });
+    const copyPlainTextButton = page.getByRole('button', { name: '일반 텍스트 복사' });
+
+    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
+    await expect(copyPlainTextButton).toBeVisible();
+    await expect(copyMarkdownButton).toBeEnabled();
+    await expect(copyPlainTextButton).toBeEnabled();
+  });
+
+  test('buttons are enabled after report content loads', async ({ page }) => {
+    await login(page);
+    await openFirstReportDrawer(page);
+
+    const copyMarkdownButton = page.getByRole('button', { name: 'Markdown 원문 복사' });
+    const copyPlainTextButton = page.getByRole('button', { name: '일반 텍스트 복사' });
+
+    await expect(copyMarkdownButton).toBeVisible({ timeout: 5000 });
+    await expect(copyPlainTextButton).toBeVisible();
+    await expect(copyMarkdownButton).toBeEnabled({ timeout: 5000 });
+
+    const isMarkdownEnabled = await copyMarkdownButton.isEnabled();
+    const isPlainTextEnabled = await copyPlainTextButton.isEnabled();
+    expect(isMarkdownEnabled || isPlainTextEnabled).toBeTruthy();
+  });
+});
