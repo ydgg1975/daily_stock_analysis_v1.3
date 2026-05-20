@@ -537,7 +537,7 @@ class Config:
     longbridge_app_secret: Optional[str] = None
     longbridge_access_token: Optional[str] = None
 
-    # === AI 分析配置 ===
+    # === AI 분석 설정 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-3.1-pro-preview)
     litellm_model: str = ""  # Primary model; must include provider prefix when set explicitly
     litellm_fallback_models: List[str] = field(default_factory=list)  # Cross-model fallback list
@@ -592,7 +592,7 @@ class Config:
     # VISION_PROVIDER_PRIORITY: comma-separated provider order for Vision fallback.
     vision_provider_priority: str = "gemini,anthropic,openai"
 
-    # === 搜索引擎配置（支持多 Key 负载均衡）===
+    # === 검색 엔진 설정(여러 Key 부하 분산 지원) ===
     anspire_api_keys: List[str] = field(default_factory=list)  # Anspire Search API Keys
     bocha_api_keys: List[str] = field(default_factory=list)  # Bocha API Keys
     minimax_api_keys: List[str] = field(default_factory=list)  # MiniMax API Keys
@@ -696,7 +696,7 @@ class Config:
     notification_alert_channels: List[str] = field(default_factory=list)
     notification_system_error_channels: List[str] = field(default_factory=list)
 
-    # 通知降噪机制（Issue #1200 P4）：默认全部关闭，仅对静态通知渠道生效
+    # 알림 소음 감소 기능(Issue #1200 P4): 기본값은 모두 꺼짐이며 정적 알림 채널에만 적용
     notification_dedup_ttl_seconds: int = 0
     notification_cooldown_seconds: int = 0
     notification_quiet_hours: str = ""
@@ -1188,7 +1188,7 @@ class Config:
             configured_models=set(get_configured_llm_models(llm_model_list)),
         )
 
-        # 解析搜索引擎 API Keys（支持多个 key，逗号分隔）
+        # 검색 엔진 API Key 파싱(여러 key는 쉼표로 구분)
         bocha_keys_str = os.getenv('BOCHA_API_KEYS', '')
         bocha_api_keys = [k.strip() for k in bocha_keys_str.split(',') if k.strip()]
 
@@ -2220,7 +2220,7 @@ class Config:
             env_values = dotenv_values(env_path)
             stock_list_str = (env_values.get('STOCK_LIST') or '').strip()
 
-        # 如果 .env 文件不存在或未配置，才尝试从系统环境变量读取
+        # .env 파일이 없거나 설정되지 않은 경우에만 시스템 환경 변수에서 읽습니다
         if not stock_list_str:
             stock_list_str = os.getenv('STOCK_LIST', '')
 
@@ -2254,7 +2254,7 @@ class Config:
         if not self.stock_list:
             issues.append(ConfigIssue(
                 severity="error",
-                message="未配置自选股列表 (STOCK_LIST)",
+                message="자선 종목 목록이 설정되지 않았습니다 (STOCK_LIST)",
                 field="STOCK_LIST",
             ))
         elif self.stock_email_groups:
@@ -2293,7 +2293,7 @@ class Config:
         if not self.tushare_token:
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置 Tushare Token，将使用其他数据源",
+                message="Tushare Token이 설정되지 않아 다른 데이터 소스를 사용합니다",
                 field="TUSHARE_TOKEN",
             ))
 
@@ -2306,8 +2306,9 @@ class Config:
             issues.append(ConfigIssue(
                 severity="error",
                 message=(
-                    "未配置任何可用的 AI 模型接入（高级模型路由配置 / 渠道 / API Key），"
-                    "AI 分析功能将不可用"
+                    "사용 가능한 AI 모델 연결이 설정되지 않았습니다"
+                    "(고급 모델 라우팅 설정 / 채널 / API Key). "
+                    "AI 분석 기능을 사용할 수 없습니다"
                 ),
                 field="LITELLM_CONFIG",
             ))
@@ -2417,7 +2418,7 @@ class Config:
         if not self.has_search_capability_enabled():
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用",
+                message="검색 엔진 기능이 설정되지 않았습니다(Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG). 뉴스 검색 기능을 사용할 수 없습니다",
                 field="BOCHA_API_KEYS",
             ))
 
@@ -2447,14 +2448,14 @@ class Config:
         if not has_notification:
             issues.append(ConfigIssue(
                 severity="warning",
-                message="未配置通知渠道，将不发送推送通知",
+                message="알림 채널이 설정되지 않아 푸시 알림을 보내지 않습니다",
                 field="WECHAT_WEBHOOK_URL",
             ))
 
         if self.ntfy_url and not _has_ntfy_topic_endpoint(self.ntfy_url):
             issues.append(ConfigIssue(
                 severity="error",
-                message="NTFY_URL 必须包含 topic path，例如 https://ntfy.sh/my-topic",
+                message="NTFY_URL에는 topic path가 포함되어야 합니다. 예: https://ntfy.sh/my-topic",
                 field="NTFY_URL",
             ))
 

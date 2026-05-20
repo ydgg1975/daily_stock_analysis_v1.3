@@ -29,8 +29,8 @@ WORKFLOW_PATH = ROOT_DIR / ".github/workflows/daily_analysis.yml"
 DOCS_PATH = ROOT_DIR / "docs/notifications.md"
 TABLE_START = "<!-- notification-actions-env-table:start -->"
 TABLE_END = "<!-- notification-actions-env-table:end -->"
-ANALYZE_STEP_NAME = "执行股票分析"
-LEGACY_ANALYZE_STEP_NAMES = ("Run stock analysis",)
+ANALYZE_STEP_NAME = "Run stock analysis"
+LEGACY_ANALYZE_STEP_NAMES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

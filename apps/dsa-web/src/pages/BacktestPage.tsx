@@ -337,7 +337,7 @@ const BacktestPage: React.FC = () => {
               value={codeFilter}
               onChange={(e) => setCodeFilter(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown}
-              placeholder="Filter by stock code (leave empty for all)"
+              placeholder="종목 코드 필터 (비우면 전체)"
               disabled={isRunning}
               className={BACKTEST_INPUT_CLASS}
             />
@@ -348,10 +348,10 @@ const BacktestPage: React.FC = () => {
             disabled={isLoadingResults}
             className="btn-secondary flex items-center gap-1.5 whitespace-nowrap"
           >
-            Filter
+            필터
           </button>
           <div className="flex items-center gap-2 whitespace-nowrap lg:w-40 lg:justify-between">
-            <span className="text-xs text-muted-text">Window</span>
+            <span className="text-xs text-muted-text">기간</span>
             <input
               type="number"
               min={1}
@@ -364,10 +364,10 @@ const BacktestPage: React.FC = () => {
             />
           </div>
           <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="text-xs text-muted-text">From</span>
+            <span className="text-xs text-muted-text">시작</span>
             <input
               type="date"
-              aria-label="Analysis date from"
+              aria-label="분석 시작일"
               value={analysisDateFrom}
               onChange={(e) => setAnalysisDateFrom(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -376,10 +376,10 @@ const BacktestPage: React.FC = () => {
             />
           </div>
           <div className="flex items-center gap-2 whitespace-nowrap">
-            <span className="text-xs text-muted-text">To</span>
+            <span className="text-xs text-muted-text">종료</span>
             <input
               type="date"
-              aria-label="Analysis date to"
+              aria-label="분석 종료일"
               value={analysisDateTo}
               onChange={(e) => setAnalysisDateTo(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -394,7 +394,7 @@ const BacktestPage: React.FC = () => {
             className={`backtest-force-btn ${isNextDayValidation ? 'active' : ''}`}
           >
             <span className="dot" />
-            1D Validation
+            1일 검증
           </button>
           <button
             type="button"
@@ -403,7 +403,7 @@ const BacktestPage: React.FC = () => {
             className={`backtest-force-btn ${forceRerun ? 'active' : ''}`}
           >
             <span className="dot" />
-            Force
+            강제 실행
           </button>
           <button
             type="button"
@@ -417,10 +417,10 @@ const BacktestPage: React.FC = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Running...
+                실행 중...
               </>
             ) : (
-              'Run Backtest'
+              '백테스트 실행'
             )}
           </button>
         </div>
@@ -434,8 +434,8 @@ const BacktestPage: React.FC = () => {
         )}
         <p className="mt-2 text-xs text-muted-text">
           {isNextDayValidation
-            ? 'Next-day validation mode compares AI predictions with the next trading day close.'
-            : 'Use window = 1 to review AI predictions against the next trading day close.'}
+            ? '다음 거래일 검증 모드는 AI 예측과 다음 거래일 종가를 비교합니다.'
+            : '기간을 1로 설정하면 AI 예측을 다음 거래일 종가와 비교해 볼 수 있습니다.'}
         </p>
       </header>
 
@@ -448,11 +448,11 @@ const BacktestPage: React.FC = () => {
               <div className="backtest-spinner sm" />
             </div>
           ) : overallPerf ? (
-            <PerformanceCard metrics={overallPerf} title="Overall Performance" />
+            <PerformanceCard metrics={overallPerf} title="전체 성과" />
           ) : (
             <EmptyState
-              title="No Metrics Yet"
-              description="Run a backtest to generate portfolio-level performance metrics."
+              title="아직 성과 지표가 없습니다"
+              description="백테스트를 실행하면 포트폴리오 전체 성과 지표가 생성됩니다."
               className="h-full min-h-[12rem] border-dashed bg-card/45 shadow-none"
             />
           )}
@@ -470,12 +470,12 @@ const BacktestPage: React.FC = () => {
           {isLoadingResults ? (
             <div className="flex flex-col items-center justify-center h-64">
               <div className="backtest-spinner md" />
-              <p className="mt-3 text-secondary-text text-sm">Loading results...</p>
+              <p className="mt-3 text-secondary-text text-sm">결과를 불러오는 중...</p>
             </div>
           ) : results.length === 0 ? (
             <EmptyState
-              title="No Results"
-              description="Run a backtest to evaluate historical analysis accuracy"
+              title="결과가 없습니다"
+              description="백테스트를 실행하면 과거 분석 정확도를 평가할 수 있습니다."
               className="backtest-empty-state border-dashed"
               icon={(
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -487,15 +487,15 @@ const BacktestPage: React.FC = () => {
             <div className="animate-fade-in">
               <div className="backtest-table-toolbar">
                 <div className="backtest-table-toolbar-meta">
-                  <span className="label-uppercase">{isNextDayValidation ? 'Next-Day Validation' : 'Result Set'}</span>
+                  <span className="label-uppercase">{isNextDayValidation ? '다음 거래일 검증' : '결과 목록'}</span>
                   <span className="text-xs text-secondary-text">
-                    {codeFilter.trim() ? `Filtered by ${codeFilter.trim()}` : 'All stocks'}
-                    {evalDays ? ` · ${evalDays} day window` : ''}
-                    {analysisDateFrom ? ` · from ${analysisDateFrom}` : ''}
-                    {analysisDateTo ? ` · to ${analysisDateTo}` : ''}
+                    {codeFilter.trim() ? `${codeFilter.trim()} 필터 적용` : '전체 종목'}
+                    {evalDays ? ` · ${evalDays}일 기간` : ''}
+                    {analysisDateFrom ? ` · 시작 ${analysisDateFrom}` : ''}
+                    {analysisDateTo ? ` · 종료 ${analysisDateTo}` : ''}
                   </span>
                 </div>
-                <span className="backtest-table-scroll-hint">Scroll horizontally on small screens</span>
+                <span className="backtest-table-scroll-hint">작은 화면에서는 가로로 스크롤하세요</span>
               </div>
               <div className="backtest-table-wrapper">
                 <table className="backtest-table min-w-[840px] w-full text-sm">
