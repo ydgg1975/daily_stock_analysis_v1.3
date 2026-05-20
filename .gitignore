@@ -1,87 +1,84 @@
-# huanjingbianliangwenjian（baohanminganxinxi，jinzhitijiao）
-.env
-.env.*
-*.env
-*.env.local
-.env.*.local
-
-# ceshiwenjian（kenengbaohanminganpeizhi）
-# jinhulvecangkugenmuluxiadelinshi test_*.py jiaoben；tests/ muluxiadedanyuanceshixuyaonarubanbenkongzhi。
-/test_*.py
-/test.sh
-
-# bendipingshenyugaojiluyoupeizhi（kenengbaohanminganxinxihuolinshifenxichanwu）
-/.codex
-/review.md
-/litellm_config.yaml
-/litellm_config.*.yaml
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# xunihuanjing
-venv/
-ENV/
-env/
-.venv/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.cursorrules
-
-# shujuherizhi
-/data/
-logs/
-reports/
-*.db
-*.sqlite
-*.sqlite3
-
-# xitongwenjian
-.DS_Store
-Thumbs.db
-
-# ceshi
-.pytest_cache/
-.coverage
-htmlcov/
-
-local/
-
-run.sh
-
-verify_*.py
-
-# ignore Claude workspace artifacts, but keep shared repo skills versioned
-.claude/*
-!.claude/skills/
-!.claude/skills/**
-
-# ignore static files
-static/
-/apps/dsa-desktop/dist/
-/apps/dsa-desktop/node_modules/
-docs/specs/
+# 환경 변수 파일: 민감 정보가 포함될 수 있으므로 커밋하지 않습니다.
+.env
+.env.*
+*.env
+*.env.local
+.env.*.local
+
+# 테스트용 임시 파일: 저장소 루트의 임시 test_*.py 스크립트만 제외합니다.
+/test_*.py
+/test.sh
+
+# 로컬 검토와 고급 실행 설정: 민감 정보나 임시 분석 산출물이 포함될 수 있습니다.
+/.codex
+/review.md
+/litellm_config.yaml
+/litellm_config.*.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 가상 환경
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cursorrules
+
+# 데이터와 로그
+/data/
+logs/
+reports/
+*.db
+*.sqlite
+*.sqlite3
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
+
+# 테스트 산출물
+.pytest_cache/
+.coverage
+htmlcov/
+
+local/
+run.sh
+verify_*.py
+
+# Claude 작업 산출물은 제외하되 공유 저장소 skill은 버전 관리합니다.
+.claude/*
+!.claude/skills/
+!.claude/skills/**
+
+# 정적 빌드 산출물
+static/
+/apps/dsa-desktop/dist/
+/apps/dsa-desktop/node_modules/
+docs/specs/
