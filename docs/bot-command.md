@@ -1,291 +1,207 @@
+# Bot 연동 가이드
 
+이 문서는 Bot 모듈 구조, 지원 명령, Webhook 라우트, 플랫폼 연동 설정을 설명합니다.
 
-## 一、整体设计
+> 여기서 Bot은 Feishu, DingTalk, WeChat Work, Telegram 같은 메시징 플랫폼에서 Webhook으로 명령을 받고 분석 파이프라인을 호출해 답변하는 챗봇을 뜻합니다.
+
+## 1. 구조
 
 ```mermaid
 flowchart TB
-    subgraph Platforms [外部平台]
-        FS[飞书]
-        DT[钉钉]
-        WC[企业微信（开发中）]
-        TG[Telegram（开发中）]
-        More[更多平台...]
+    subgraph Platforms ["메시징 플랫폼"]
+        FS["Feishu"]
+        DT["DingTalk"]
+        WC["WeChat Work"]
+        TG["Telegram"]
+        More["기타 플랫폼"]
     end
 
-    subgraph BotModule [bot/ 模块]
-        WH[Webhook Server]
-        Adapters[平台适配器]
-        Dispatcher[命令分发器]
-        Commands[命令处理器]
+    subgraph BotModule ["bot/ 모듈"]
+        WH["Webhook Server"]
+        Adapters["플랫폼 어댑터"]
+        Dispatcher["명령 디스패처"]
+        Commands["명령 처리기"]
     end
 
-    subgraph Core [现有核心模块]
-        AS[AnalysisService]
-        MA[MarketAnalyzer]
-        NS[NotificationService]
+    subgraph Core ["핵심 모듈"]
+        AS["AnalysisService"]
+        MA["MarketAnalyzer"]
+        NS["NotificationService"]
     end
 
-    FS -->|POST /bot/feishu| WH
-    DT -->|POST /bot/dingtalk| WH
-    WC -->|POST /bot/wecom| WH
-    TG -->|POST /bot/telegram| WH
+    FS -->|"POST /bot/feishu"| WH
+    DT -->|"POST /bot/dingtalk"| WH
+    WC -->|"POST /bot/wecom"| WH
+    TG -->|"POST /bot/telegram"| WH
 
     WH --> Adapters
-    Adapters -->|统一消息格式| Dispatcher
+    Adapters -->|"통합 메시지 형식"| Dispatcher
     Dispatcher --> Commands
     Commands --> AS
     Commands --> MA
     Commands --> NS
 ```
 
+## 2. 디렉터리 구조
 
-
-## 二、目录结构
-
-在项目根目录新建 `bot/` 目录：
-
-```
+```text
 bot/
-├── __init__.py             # 模块入口，导出主要类
-├── models.py               # 统一的消息/响应模型
-├── dispatcher.py           # 命令分发器（核心）
-├── commands/               # 命令处理器
-│   ├── __init__.py
-│   ├── base.py             # 命令抽象基类
-│   ├── analyze.py          # /analyze 股票分析
-│   ├── market.py           # /market 大盘复盘
-│   ├── help.py             # /help 帮助信息
-│   └── status.py           # /status 系统状态
-└── platforms/              # 平台适配器
-    ├── __init__.py
-    ├── base.py             # 平台抽象基类
-    ├── feishu.py           # 飞书机器人
-    ├── dingtalk.py         # 钉钉机器人
-    ├── dingtalk_stream.py  # 钉钉机器人Stream
-    ├── wecom.py            # 企业微信机器人 （开发中）
-    └── telegram.py         # Telegram 机器人 （开发中）
+├── __init__.py             # 모듈 진입점
+├── models.py               # 통합 메시지/응답 모델
+├── dispatcher.py           # 명령 디스패처
+├── handler.py              # 플랫폼별 Webhook 처리 함수
+├── commands/               # 명령 처리기
+│   ├── base.py             # 명령 추상 기반 클래스
+│   ├── analyze.py          # /analyze 종목 분석
+│   ├── ask.py              # /ask 단일 질문
+│   ├── batch.py            # /batch 관심 종목 일괄 분석
+│   ├── chat.py             # /chat 다중 턴 전략 대화
+│   ├── market.py           # /market 시장 복기
+│   ├── help.py             # /help 도움말
+│   └── status.py           # /status 시스템 상태
+└── platforms/              # 플랫폼 어댑터
+    ├── base.py             # 플랫폼 추상 기반 클래스
+    ├── dingtalk.py         # DingTalk Bot
+    ├── dingtalk_stream.py  # DingTalk Stream Bot
+    └── feishu_stream.py    # Feishu/Lark Stream Bot
 ```
 
-## 三、核心抽象设计
+## 3. 핵심 추상화
 
-### 3.1 统一消息模型 (`bot/models.py`)
+### 3.1 통합 메시지 모델
 
 ```python
 @dataclass
 class BotMessage:
-    """统一的机器人消息模型"""
-    platform: str           # 平台标识: feishu/dingtalk/wecom/telegram
-    user_id: str            # 发送者 ID
-    user_name: str          # 发送者名称
-    chat_id: str            # 会话 ID（群聊或私聊）
-    chat_type: str          # 会话类型: group/private
-    content: str            # 消息文本内容
-    raw_data: Dict          # 原始请求数据（平台特定）
-    timestamp: datetime     # 消息时间
-    mentioned: bool = False # 是否@了机器人
+    platform: str       # 플랫폼 ID: feishu / dingtalk / wecom / telegram
+    user_id: str        # 발신자 ID
+    user_name: str      # 발신자 표시 이름
+    chat_id: str        # 대화 ID
+    chat_type: str      # 대화 유형: group / private
+    content: str        # 메시지 본문
+    raw_data: Dict      # 플랫폼 원본 요청 데이터
+    timestamp: datetime
+    mentioned: bool = False  # Bot 멘션 여부
 
 @dataclass
 class BotResponse:
-    """统一的机器人响应模型"""
-    text: str               # 回复文本
-    markdown: bool = False  # 是否为 Markdown
-    at_user: bool = True    # 是否@发送者
+    text: str
+    markdown: bool = False
+    at_user: bool = True
 ```
 
-### 3.2 平台适配器基类 (`bot/platforms/base.py`)
+### 3.2 플랫폼 어댑터 기반 클래스
 
 ```python
 class BotPlatform(ABC):
-    """平台适配器抽象基类"""
-    
     @property
     @abstractmethod
-    def platform_name(self) -> str:
-        """平台标识名称"""
-        pass
-    
+    def platform_name(self) -> str: ...
+
     @abstractmethod
     def verify_request(self, headers: Dict, body: bytes) -> bool:
-        """验证请求签名（安全校验）"""
-        pass
-    
+        """요청 서명을 검증합니다."""
+        ...
+
     @abstractmethod
     def parse_message(self, data: Dict) -> Optional[BotMessage]:
-        """解析平台消息为统一格式"""
-        pass
-    
+        """플랫폼 메시지를 통합 형식으로 변환합니다."""
+        ...
+
     @abstractmethod
-    def format_response(self, response: BotResponse) -> Dict:
-        """将统一响应转换为平台格式"""
-        pass
+    def format_response(self, response: BotResponse, message: BotMessage) -> WebhookResponse:
+        """통합 응답을 플랫폼 응답 형식으로 변환합니다."""
+        ...
 ```
 
-### 3.3 命令基类 (`bot/commands/base.py`)
+### 3.3 명령 기반 클래스
 
 ```python
 class BotCommand(ABC):
-    """命令处理器抽象基类"""
-    
     @property
     @abstractmethod
-    def name(self) -> str:
-        """命令名称 (如 'analyze')"""
-        pass
-    
+    def name(self) -> str: ...
+
     @property
     @abstractmethod
-    def aliases(self) -> List[str]:
-        """命令别名 (如 ['a', '分析'])"""
-        pass
-    
+    def aliases(self) -> List[str]: ...
+
     @property
     @abstractmethod
-    def description(self) -> str:
-        """命令描述"""
-        pass
-    
+    def description(self) -> str: ...
+
     @property
     @abstractmethod
-    def usage(self) -> str:
-        """使用说明"""
-        pass
-    
+    def usage(self) -> str: ...
+
     @abstractmethod
-    async def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
-        """执行命令"""
-        pass
+    def execute(self, message: BotMessage, args: List[str]) -> BotResponse: ...
 ```
 
-### 3.4 命令分发器 (`bot/dispatcher.py`)
+## 4. 지원 명령
+
+| 명령 | 설명 | 예시 |
+| --- | --- | --- |
+| `/analyze` | 특정 종목 분석 | `/analyze AAPL`, `/analyze 600519` |
+| `/ask` | 종목이나 시장에 대한 단일 질문 | `/ask AAPL RSI는?` |
+| `/batch` | 설정된 관심 종목 일괄 분석 | `/batch` |
+| `/chat` | 대화 맥락을 유지하는 전략 대화 | `/chat` |
+| `/market` | 시장 복기 | `/market` |
+| `/help` | 도움말 표시 | `/help` |
+| `/status` | 시스템 상태 표시 | `/status` |
+
+종목 코드 형식은 A주 6자리 코드, 홍콩 주식 `hk` 접두사, 미국 주식 ticker를 사용합니다.
+
+## 5. `/status`와 LLM 설정 진단
+
+`/status`의 AI 사용 가능성 판단은 런타임 우선순위를 따릅니다.
+
+1. `LITELLM_CONFIG`
+2. `LLM_CHANNELS`
+3. legacy provider 키: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`
+
+현재 활성 계층에서 `LITELLM_MODEL` 또는 `AGENT_LITELLM_MODEL`의 provider를 사용할 수 없으면 `/status`는 AI 서비스 미설정 상태와 구체적인 사유를 표시합니다. 이 진단은 `GET /api/v1/system/config/setup/status`와 같은 기준을 사용하며, 모드 전환 시 기존 설정값을 자동 삭제하거나 마이그레이션하지 않습니다.
+
+런타임 의존성 기준은 `requirements.txt`의 `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0` 범위입니다.
+
+## 6. Webhook 라우트
+
+플랫폼별 처리 함수는 `bot/handler.py`에 있습니다. 일부 라우트는 FastAPI 앱에 자동 연결되어 있지 않을 수 있으므로, 필요한 경우 직접 mount해야 합니다.
+
+| 라우트 | 메서드 | 상태 | 설명 |
+| --- | --- | --- | --- |
+| `/bot/dingtalk` | POST | 사용 가능 | `DingtalkPlatform`이 `ALL_PLATFORMS`에 등록됨 |
+| `/bot/feishu` | POST | Stream 중심 | `feishu_stream.py` 사용 |
+| `/bot/wecom` | POST | 미구현 | handler는 있으나 어댑터 없음 |
+| `/bot/telegram` | POST | 미구현 | handler는 있으나 어댑터 없음 |
+
+DingTalk Webhook을 FastAPI에 직접 연결하는 예시는 다음과 같습니다.
 
 ```python
-class CommandDispatcher:
-    """命令分发器 - 单例模式"""
-    
-    def __init__(self):
-        self._commands: Dict[str, BotCommand] = {}
-        self._aliases: Dict[str, str] = {}
-    
-    def register(self, command: BotCommand) -> None:
-        """注册命令"""
-        self._commands[command.name] = command
-        for alias in command.aliases:
-            self._aliases[alias] = command.name
-    
-    def dispatch(self, message: BotMessage) -> BotResponse:
-        """分发消息到对应命令"""
-        # 1. 解析命令和参数
-        # 2. 查找命令处理器
-        # 3. 执行并返回响应
+from bot.handler import handle_dingtalk_webhook
+
+@app.post("/bot/dingtalk")
+async def dingtalk_webhook(request: Request):
+    headers = dict(request.headers)
+    body = await request.body()
+    return handle_dingtalk_webhook(headers, body)
 ```
 
-## 四、已支持的命令
+## 7. 설정
 
-| 命令 | 别名 | 说明 | 示例 |
+Bot 관련 설정은 `.env.example`의 Bot, Feishu, DingTalk, 알림 섹션을 기준으로 추가합니다.
 
-|------|------|------|------|
+```dotenv
+BOT_ENABLED=false
+BOT_COMMAND_PREFIX=/
 
-| /analyze | /a, 分析 | 分析指定股票 | `/analyze 600519` |
+DINGTALK_APP_KEY=
+DINGTALK_APP_SECRET=
+DINGTALK_STREAM_ENABLED=false
 
-| /market | /m, 大盘 | 大盘复盘 | `/market` |
-
-| /batch | /b, 批量 | 批量分析自选股 | `/batch` |
-
-| /help | /h, 帮助 | 显示帮助信息 | `/help` |
-
-| /status | /s, 状态 | 系统状态 | `/status` |
-
-## 五、`/status` 与模型配置诊断说明
-
-### 可配置层级与可用性判断依据
-
-- `/status` 显示的 LLM 可用性遵循系统统一运行时优先级：
-  - `LITELLM_CONFIG`（LiteLLM YAML）
-  - `LLM_CHANNELS`
-  - legacy provider 键（`GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY`）
-- 当主模型（`LITELLM_MODEL` 或 `AGENT_LITELLM_MODEL`）在当前激活层无可用来源时，会展示“AI 服务未配置”，并保留用户可见原因行。
-- 本仓库 `requirements.txt` 的运行时依赖约束为 `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`，该约束内本链路以现有兼容行为为准。
-- 该诊断规则与 `GET /api/v1/system/config/setup/status` 的 LLM 检查保持一致：`LITELLM_CONFIG`/`LLM_CHANNELS` 为高优先级；模式切换时不会做静默迁移，切回旧模式由用户显式恢复历史值或回滚。
-
-### 回退与迁移边界
-
-- `LITELLM_CONFIG` 与 `LLM_CHANNELS` 任一生效时，下层 legacy 配置会被该层忽略（不会继续作为本次调用来源）。
-- 诊断增强不进行 silent migration：不会主动清空/删除 `GEMINI_*`、`OPENAI_*`、`ANTHROPIC_*`、`LITELLM_*` 的历史值，仅在可用性诊断上提示。
-
-### 官方兼容来源（用于排障核对）
-
-- LiteLLM 官网：<https://docs.litellm.ai/>
-- LiteLLM OpenAI Compatible 说明：<https://docs.litellm.ai/docs/providers/openai_compatible>
-- OpenAI Chat API：<https://platform.openai.com/docs/api-reference/chat>
-- DeepSeek API 文档：<https://api-docs.deepseek.com/>
-- Kimi Moonshot 兼容说明：<https://platform.moonshot.ai/docs/guide/compatibility>
-- Gemini OpenAI 兼容说明：<https://ai.google.dev/gemini-api/docs/openai>
-- Ollama API 文档：<https://github.com/ollama/ollama/blob/main/docs/api.md>
-
-## 六、Webhook 路由
-
-在 [api/v1/router.py](../api/v1/router.py) 中注册路由：
-
-```python
-# Webhook 路由
-/bot/feishu      # POST - 飞书事件回调
-/bot/dingtalk    # POST - 钉钉事件回调
-/bot/wecom       # POST - 企业微信事件回调 （开发中）
-/bot/telegram    # POST - Telegram 更新回调 （开发中）
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+FEISHU_STREAM_ENABLED=false
 ```
 
-## 配置
-
-在 [config.py](../config.py) 中新增机器人配置：
-
-```python
-# === 机器人配置 ===
-bot_enabled: bool = False              # 是否启用机器人
-bot_command_prefix: str = "/"          # 命令前缀
-
-# 飞书机器人（事件订阅）
-feishu_app_id: str                     # 已有
-feishu_app_secret: str                 # 已有
-feishu_verification_token: str         # 新增：事件校验 Token
-feishu_encrypt_key: str                # 新增：加密密钥
-
-# 钉钉机器人（应用）
-dingtalk_app_key: str                  # 新增
-dingtalk_app_secret: str               # 新增
-
-# 企业微信机器人（开发中）
-wecom_token: str                       # 新增：回调 Token
-wecom_encoding_aes_key: str            # 新增：EncodingAESKey
-
-# Telegram 机器人（开发中）
-telegram_bot_token: str                # 已有
-telegram_webhook_secret: str           # 新增：Webhook 密钥
-```
-
-## 扩展说明
-### 怎样新增一个通知平台
-
-1. 在 `bot/platforms/` 创建新文件
-2. 继承 `BotPlatform` 基类
-3. 实现 `verify_request`, `parse_message`, `format_response`
-4. 在路由中注册 Webhook 端点
-
-### 怎样新增新增命令
-
-1. 在 `bot/commands/` 创建新文件
-2. 继承 `BotCommand` 基类
-3. 实现 `execute` 方法
-4. 在分发器中注册命令
-
-## 安全相关配置
-
-- 支持命令频率限制（防刷）
-- 敏感操作（如批量分析）可设置权限白名单
-
-在 [config.py](../config.py) 中新增机器人安全配置：
-
-```python
-    bot_rate_limit_requests: int = 10     # 频率限制：窗口内最大请求数
-    bot_rate_limit_window: int = 60       # 频率限制：窗口时间（秒）
-    bot_admin_users: List[str] = field(default_factory=list)  # 管理员用户 ID 列表，限制敏感操作
-```
+외부 플랫폼 토큰과 서명 키는 저장소에 커밋하지 말고 환경 변수나 배포 환경의 secret 저장소에 둡니다.
