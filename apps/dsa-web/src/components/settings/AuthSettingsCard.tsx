@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { authApi } from '../../api/auth';
 import { getParsedApiError, isParsedApiError, type ParsedApiError } from '../../api/error';
 import { useAuth } from '../../hooks';
-import { Badge, Button, Input, Checkbox } from '../common';
+import { Badge, Button, Checkbox, Input } from '../common';
 import { SettingsAlert } from './SettingsAlert';
 import { SettingsSectionCard } from './SettingsSectionCard';
 
@@ -37,9 +37,9 @@ export const AuthSettingsCard: React.FC = () => {
       case 'password_retained':
         return '시스템에 이전 관리자 비밀번호가 보관되어 있습니다. 현재 비밀번호를 입력하면 인증을 다시 켤 수 있습니다.';
       case 'enabled':
-        return !desiredEnabled 
+        return !desiredEnabled
           ? '현재 로그인 세션이 유효하면 인증을 바로 끌 수 있습니다. 세션이 만료되었다면 현재 관리자 비밀번호를 입력하세요.'
-          : '관리자 인증이 활성화되어 있습니다. 비밀번호를 변경하려면 아래의 “비밀번호 변경” 기능을 사용하세요.';
+          : '관리자 인증이 활성화되어 있습니다. 비밀번호를 변경하려면 아래의 비밀번호 변경 기능을 사용하세요.';
       default:
         return '관리자 인증은 Web 설정 페이지와 API를 보호해 무단 접근을 막습니다.';
     }
@@ -60,14 +60,13 @@ export const AuthSettingsCard: React.FC = () => {
     setError(null);
     setSuccessMessage(null);
 
-    // Initial setup validation
     if (setupState === 'no_password' && desiredEnabled) {
       if (!password) {
-        setError('새 비밀번호는 필수입니다');
+        setError('새 비밀번호는 필수입니다.');
         return;
       }
       if (password !== passwordConfirm) {
-        setError('두 번 입력한 새 비밀번호가 일치하지 않습니다');
+        setError('두 번 입력한 비밀번호가 일치하지 않습니다.');
         return;
       }
     }
@@ -81,7 +80,7 @@ export const AuthSettingsCard: React.FC = () => {
         currentPassword.trim() || undefined,
       );
       await refreshStatus();
-      setSuccessMessage(desiredEnabled ? '인증 설정이 업데이트되었습니다' : '인증이 꺼졌습니다');
+      setSuccessMessage(desiredEnabled ? '인증 설정이 업데이트되었습니다.' : '인증을 껐습니다.');
       resetForm();
     } catch (err: unknown) {
       setError(getParsedApiError(err));
@@ -94,7 +93,7 @@ export const AuthSettingsCard: React.FC = () => {
     <SettingsSectionCard
       title="인증 및 로그인 보호"
       description="관리자 비밀번호 인증을 관리해 시스템 설정을 보호합니다."
-      actions={
+      actions={(
         <Badge
           variant={authEnabled ? 'success' : 'default'}
           size="sm"
@@ -102,7 +101,7 @@ export const AuthSettingsCard: React.FC = () => {
         >
           {authEnabled ? '활성화됨' : '비활성화됨'}
         </Badge>
-      }
+      )}
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="rounded-xl border border-[var(--settings-border)] bg-[var(--settings-surface)] p-4 shadow-soft-card transition-[background-color,border-color] duration-200 hover:border-[var(--settings-border-strong)] hover:bg-[var(--settings-surface-hover)]">
@@ -114,19 +113,17 @@ export const AuthSettingsCard: React.FC = () => {
             <Checkbox
               checked={desiredEnabled}
               disabled={isSubmitting}
-              label={desiredEnabled ? '켜기' : '닫기'}
+              label={desiredEnabled ? '켜기' : '끄기'}
               onChange={(event) => setDesiredEnabled(event.target.checked)}
               containerClassName="rounded-full border border-[var(--settings-border)] bg-[var(--settings-surface-hover)] px-4 py-2 shadow-soft-card transition-[background-color,border-color] duration-200 hover:border-[var(--settings-border-strong)] hover:bg-[var(--settings-surface)]"
             />
           </div>
         </div>
 
-        {/* Password input fields logic based on setupState and desiredEnabled */}
         {(desiredEnabled || (authEnabled && !desiredEnabled)) && (
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Show Current Password if we have one and we're either re-enabling or turning off */}
-            {(setupState === 'password_retained' && desiredEnabled) || 
-             (setupState === 'enabled' && !desiredEnabled) ? (
+            {(setupState === 'password_retained' && desiredEnabled)
+            || (setupState === 'enabled' && !desiredEnabled) ? (
               <div className="space-y-3">
                 <Input
                   label="현재 관리자 비밀번호"
@@ -138,12 +135,11 @@ export const AuthSettingsCard: React.FC = () => {
                   autoComplete="current-password"
                   disabled={isSubmitting}
                   placeholder="현재 비밀번호를 입력하세요"
-                  hint={setupState === 'password_retained' ? '인증을 다시 활성화하려면 기존 비밀번호를 입력하세요' : '인증을 끄기 전에 신원 확인이 필요할 수 있습니다'}
+                  hint={setupState === 'password_retained' ? '인증을 다시 활성화하려면 기존 비밀번호를 입력하세요.' : '인증을 끄기 전에 신원 확인이 필요할 수 있습니다.'}
                 />
               </div>
             ) : null}
 
-            {/* Show New Password fields only during initial setup */}
             {setupState === 'no_password' && desiredEnabled ? (
               <>
                 <div className="space-y-3">
@@ -179,11 +175,7 @@ export const AuthSettingsCard: React.FC = () => {
 
         {error ? (
           isParsedApiError(error) ? (
-            <SettingsAlert
-              title="인증 설정 실패"
-              message={error.message}
-              variant="error"
-            />
+            <SettingsAlert title="인증 설정 실패" message={error.message} variant="error" />
           ) : (
             <SettingsAlert title="인증 설정 실패" message={error} variant="error" />
           )

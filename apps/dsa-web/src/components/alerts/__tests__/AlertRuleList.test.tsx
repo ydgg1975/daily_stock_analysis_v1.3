@@ -7,7 +7,7 @@ import type { AlertRuleItem } from '../../../types/alerts';
 const rules: AlertRuleItem[] = [
   {
     id: 1,
-    name: '茅台价格突破',
+    name: '茅台가격 돌파',
     targetScope: 'single_symbol',
     target: '600519',
     alertType: 'price_cross',
@@ -22,7 +22,7 @@ const rules: AlertRuleItem[] = [
   },
   {
     id: 2,
-    name: 'MACD 金叉',
+    name: 'MACD 골든크로스',
     targetScope: 'single_symbol',
     target: '300750',
     alertType: 'macd_cross',
@@ -36,7 +36,7 @@ const rules: AlertRuleItem[] = [
   },
   {
     id: 3,
-    name: 'KDJ 死叉',
+    name: 'KDJ 데드크로스',
     targetScope: 'single_symbol',
     target: '000001',
     alertType: 'kdj_cross',
@@ -85,17 +85,17 @@ describe('AlertRuleList', () => {
   it('renders rules, filters, and pagination', () => {
     renderList();
 
-    expect(screen.getByText('茅台价格突破')).toBeInTheDocument();
+    expect(screen.getByText('茅台가격 돌파')).toBeInTheDocument();
     expect(screen.getByText('600519')).toBeInTheDocument();
-    expect(screen.getAllByText('价格突破').length).toBeGreaterThan(0);
-    expect(screen.getByText('上破 1800')).toBeInTheDocument();
-    expect(screen.getAllByText('MACD 金叉/死叉').length).toBeGreaterThan(0);
-    expect(screen.getByText('MACD(12,26,9) 金叉')).toBeInTheDocument();
-    expect(screen.getByText('KDJ(9,3,3) 死叉')).toBeInTheDocument();
-    expect(screen.getByText('冷却中')).toBeInTheDocument();
+    expect(screen.getAllByText('가격 돌파').length).toBeGreaterThan(0);
+    expect(screen.getByText('이상 1800')).toBeInTheDocument();
+    expect(screen.getAllByText('MACD 교차').length).toBeGreaterThan(0);
+    expect(screen.getByText('골든크로스 12/26/9')).toBeInTheDocument();
+    expect(screen.getByText('데드크로스 9/3/3')).toBeInTheDocument();
+    expect(screen.getByText('쿨다운 중')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('启停状态'), { target: { value: 'enabled' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'price_cross' } });
+    fireEvent.change(screen.getByLabelText('활성 상태'), { target: { value: 'enabled' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'price_cross' } });
     fireEvent.click(screen.getByRole('button', { name: '2' }));
 
     expect(onEnabledFilterChange).toHaveBeenCalledWith('enabled');
@@ -114,14 +114,14 @@ describe('AlertRuleList', () => {
       ],
     });
 
-    expect(screen.getByText('未冷却')).toBeInTheDocument();
+    expect(screen.getByText('대기 중')).toBeInTheDocument();
   });
 
   it('runs test and toggles enabled state', () => {
     renderList();
 
-    fireEvent.click(screen.getAllByRole('button', { name: '测试' })[0]);
-    fireEvent.click(screen.getAllByRole('button', { name: '停用' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: '테스트' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: '비활성화' })[0]);
 
     expect(onTest).toHaveBeenCalledWith(rules[0]);
     expect(onToggleEnabled).toHaveBeenCalledWith(rules[0]);
@@ -130,17 +130,17 @@ describe('AlertRuleList', () => {
   it('shows loading text only for the active rule operation', () => {
     renderList({ busyRule: { id: 1, action: 'toggle' } });
 
-    expect(screen.getAllByRole('button', { name: '测试' })[0]).toBeDisabled();
-    expect(screen.getByRole('button', { name: '停用中' })).toHaveAttribute('aria-busy', 'true');
-    expect(screen.queryByRole('button', { name: '测试中' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '테스트' })[0]).toBeDisabled();
+    expect(screen.getByRole('button', { name: '비활성화 중' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByRole('button', { name: '테스트 중' })).not.toBeInTheDocument();
   });
 
   it('confirms deletion before calling onDelete', async () => {
     renderList();
 
-    fireEvent.click(screen.getByLabelText('删除 茅台价格突破'));
-    expect(await screen.findByRole('heading', { name: '删除告警规则' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    fireEvent.click(screen.getByLabelText('삭제 茅台가격 돌파'));
+    expect(await screen.findByRole('heading', { name: '알림 규칙 삭제' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
 
     expect(onDelete).toHaveBeenCalledWith(rules[0]);
   });
@@ -148,6 +148,6 @@ describe('AlertRuleList', () => {
   it('shows an empty state for no rules', () => {
     renderList({ rules: [], total: 0 });
 
-    expect(screen.getByText('暂无告警规则')).toBeInTheDocument();
+    expect(screen.getByText('알림 규칙 없음')).toBeInTheDocument();
   });
 });

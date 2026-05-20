@@ -17,6 +17,7 @@ interface SettingsPanelErrorBoundaryState {
 }
 
 const MAX_ERROR_SUMMARY_LENGTH = 180;
+const FALLBACK_ERROR_SUMMARY = '알 수 없는 설정 패널 오류';
 
 function sanitizeUrlLikeText(value: string) {
   return value.replace(/https?:\/\/[^\s"'<>]+/gi, (match) => {
@@ -39,8 +40,8 @@ function getSafeErrorSummary(error: unknown) {
     ? error.message
     : typeof error === 'string'
       ? error
-      : '알 수 없는 프런트엔드 런타임 오류';
-  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || '알 수 없는 프런트엔드 런타임 오류';
+      : FALLBACK_ERROR_SUMMARY;
+  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || FALLBACK_ERROR_SUMMARY;
   const sanitized = sanitizeUrlLikeText(normalized)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted]')
     .replace(/\b(sk-[A-Za-z0-9_-]{8,})\b/g, '[redacted-key]')
@@ -90,12 +91,12 @@ export class SettingsPanelErrorBoundary extends Component<
     return (
       <div className={cn('rounded-[1.5rem] border settings-border bg-card/94 p-5 shadow-soft-card-strong backdrop-blur-sm', this.props.className)}>
         <InlineAlert
-          title={`${this.props.title}불러오기 실패`}
+          title={`${this.props.title} 불러오기 실패`}
           variant="danger"
           message={(
             <div className="space-y-2">
               <p>
-                이 설정 영역에서 프런트엔드 런타임 오류가 발생했습니다. 다른 설정은 계속 사용할 수 있습니다.
+                이 설정 영역에서 예상치 못한 오류가 발생했습니다. 다른 설정은 계속 사용할 수 있습니다.
               </p>
               {this.props.diagnosticHint ? (
                 <p>{this.props.diagnosticHint}</p>

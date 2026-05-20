@@ -77,8 +77,8 @@ vi.mock('../../utils/constants', async () => {
 });
 
 vi.mock('../../components/settings', () => ({
-  AuthSettingsCard: () => <div>renzhengyudenglubaohu</div>,
-  ChangePasswordCard: () => <div>xiugaimima</div>,
+  AuthSettingsCard: () => <div>인증 및 로그인 보호</div>,
+  ChangePasswordCard: () => <div>비밀번호 변경</div>,
   IntelligentImport: ({ onMerged }: { onMerged: (value: string) => void }) => (
     <button type="button" onClick={() => onMerged('SZ000001,SZ000002')}>
       merge stock list
@@ -97,7 +97,7 @@ vi.mock('../../components/settings', () => ({
     </button>
   ),
   NotificationTestPanel: ({ items }: { items: Array<{ key: string; value: string }> }) => (
-    <div>tongzhiceshimianban:{items.map((item) => item.key).join(',')}</div>
+    <div>알림 테스트 패널:{items.map((item) => item.key).join(',')}</div>
   ),
   SettingsAlert: ({
     title,
@@ -190,11 +190,11 @@ function createDesktopRuntime(overrides: Record<string, unknown> = {}) {
 }
 
 const baseCategories = [
-  { category: 'system', title: 'System', description: 'xitongshezhi', displayOrder: 1, fields: [] },
-  { category: 'base', title: 'Base', description: 'jichupeizhi', displayOrder: 2, fields: [] },
-  { category: 'ai_model', title: 'AI', description: 'moxingpeizhi', displayOrder: 3, fields: [] },
-  { category: 'notification', title: 'Notification', description: 'tongzhipeizhi', displayOrder: 4, fields: [] },
-  { category: 'agent', title: 'Agent', description: 'Agent peizhi', displayOrder: 5, fields: [] },
+  { category: 'system', title: 'System', description: '시스템 설정', displayOrder: 1, fields: [] },
+  { category: 'base', title: 'Base', description: '기본 설정', displayOrder: 2, fields: [] },
+  { category: 'ai_model', title: 'AI', description: '모델 설정', displayOrder: 3, fields: [] },
+  { category: 'notification', title: 'Notification', description: '알림 설정', displayOrder: 4, fields: [] },
+  { category: 'agent', title: 'Agent', description: 'Agent 설정', displayOrder: 5, fields: [] },
 ];
 
 type ConfigState = {
@@ -391,7 +391,7 @@ describe('SettingsPage', () => {
       status: 'up-to-date',
       currentVersion: '3.12.0',
       latestVersion: '3.12.0',
-      message: 'dangqianzhuomianduanyishizuixinbanben。',
+      message: '현재 데스크톱 앱은 최신 버전입니다.',
     });
     desktopInstallDownloadedUpdate.mockResolvedValue(true);
     desktopOpenReleasePage.mockResolvedValue(true);
@@ -411,16 +411,16 @@ describe('SettingsPage', () => {
   it('renders category navigation and auth settings modules', async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'xitongshezhi' })).toBeInTheDocument();
-    expect(screen.getByText('renzhengyudenglubaohu')).toBeInTheDocument();
-    expect(screen.getByText('xiugaimima')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '시스템 설정' })).toBeInTheDocument();
+    expect(screen.getByText('인증 및 로그인 보호')).toBeInTheDocument();
+    expect(screen.getByText('비밀번호 변경')).toBeInTheDocument();
     expect(load).toHaveBeenCalled();
   });
 
   it('renders web build info in system settings', async () => {
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'banbenxinxi' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '버전 정보' })).toBeInTheDocument();
     expect(screen.getByText('3.11.0')).toBeInTheDocument();
     expect(screen.getByText('build-20260329-021530Z')).toBeInTheDocument();
     expect(screen.getByText('2026-03-29T02:15:30.000Z')).toBeInTheDocument();
@@ -431,8 +431,8 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'banbenxinxi' })).toBeInTheDocument();
-    expect(screen.getByText('zhuomianduanbanben')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '버전 정보' })).toBeInTheDocument();
+    expect(screen.getByText('데스크톱 버전')).toBeInTheDocument();
     expect(screen.getByText('3.12.0')).toBeInTheDocument();
   });
 
@@ -441,10 +441,10 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    const section = (await screen.findByRole('heading', { name: 'banbenxinxi' })).closest('section');
+    const section = (await screen.findByRole('heading', { name: '버전 정보' })).closest('section');
     const versionGrid = section?.querySelector('div.grid.grid-cols-1.gap-3');
 
-    expect(screen.queryByText('zhuomianduanbanben')).not.toBeInTheDocument();
+    expect(screen.queryByText('데스크톱 버전')).not.toBeInTheDocument();
     expect(versionGrid).toHaveClass('md:grid-cols-3');
     expect(versionGrid).not.toHaveClass('md:grid-cols-4');
   });
@@ -454,10 +454,10 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    const section = (await screen.findByRole('heading', { name: 'banbenxinxi' })).closest('section');
+    const section = (await screen.findByRole('heading', { name: '버전 정보' })).closest('section');
     const versionGrid = section?.querySelector('div.grid.grid-cols-1.gap-3');
 
-    expect(screen.queryByText('zhuomianduanbanben')).not.toBeInTheDocument();
+    expect(screen.queryByText('데스크톱 버전')).not.toBeInTheDocument();
     expect(versionGrid).toHaveClass('md:grid-cols-3');
   });
 
@@ -479,9 +479,9 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(desktopGetUpdateState).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByRole('button', { name: 'jianchagengxin' })).toBeInTheDocument();
-    expect(screen.queryByText('jianchagengxinshibai')).not.toBeInTheDocument();
-    expect(screen.queryByText('faxianxinbanben')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '업데이트 확인' })).toBeInTheDocument();
+    expect(screen.queryByText('업데이트 확인 실패')).not.toBeInTheDocument();
+    expect(screen.queryByText('새 버전 발견')).not.toBeInTheDocument();
   });
 
   it('falls back to build identifier when package version is still placeholder', () => {
@@ -508,8 +508,8 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'banbenxinxi' })).toBeInTheDocument();
-    expect(screen.getByText(/dangqian package\.json rengweizhanweibanben 0\.0\.0/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '버전 정보' })).toBeInTheDocument();
+    expect(screen.getByText(/현재 package\.json이 아직 자리표시자 버전 0\.0\.0/)).toBeInTheDocument();
     expect(screen.getAllByText('build-20260329-021530Z')).toHaveLength(2);
   });
 
@@ -521,7 +521,7 @@ describe('SettingsPage', () => {
     // Clear the initial load call from useEffect
     vi.clearAllMocks();
 
-    fireEvent.click(screen.getByRole('button', { name: 'zhongzhi' }));
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
 
     // Reset should call resetDraft and NOT call load
     expect(resetDraft).toHaveBeenCalledTimes(1);
@@ -597,7 +597,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('AGENT_ORCHESTRATOR_TIMEOUT_S')).toBeInTheDocument();
     expect(screen.getByText('AGENT_DEEP_RESEARCH_BUDGET')).toBeInTheDocument();
     expect(screen.getByText('AGENT_EVENT_MONITOR_ENABLED')).toBeInTheDocument();
-    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('Agent shezhi');
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('Agent 설정');
   });
 
   it('reset button semantic: discards local changes without network request', () => {
@@ -615,7 +615,7 @@ describe('SettingsPage', () => {
     vi.clearAllMocks();
 
     // Click reset button
-    fireEvent.click(screen.getByRole('button', { name: 'zhongzhi' }));
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
 
     // Verify semantic: reset should only discard local changes
     // It should NOT trigger a network load
@@ -651,10 +651,10 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getByText('tongzhiceshimianban:WECHAT_WEBHOOK_URL')).toBeInTheDocument();
+    expect(screen.getByText('알림 테스트 패널:WECHAT_WEBHOOK_URL')).toBeInTheDocument();
     expect(screen.getByText('WECHAT_WEBHOOK_URL')).toBeInTheDocument();
-    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('tongzhiceshi');
-    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('tongzhishezhi');
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('알림 테스트');
+    expect(settingsPanelErrorBoundary).toHaveBeenCalledWith('알림 설정');
   });
 
   it('uses browser and backend logs in settings panel diagnostic hints outside desktop runtime', () => {
@@ -662,7 +662,7 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getAllByText(/liulanqikaifazhegongjukongzhitaiyuhouduanrizhi/)).toHaveLength(2);
+    expect(screen.getAllByText(/브라우저 개발자 도구 콘솔과 백엔드 로그/)).toHaveLength(2);
     expect(screen.queryByText('desktop.log')).not.toBeInTheDocument();
   });
 
@@ -673,15 +673,15 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     expect(screen.getAllByText('desktop.log')).toHaveLength(2);
-    expect(screen.queryByText(/liulanqikaifazhegongjukongzhitaiyuhouduanrizhi/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/브라우저 개발자 도구 콘솔과 백엔드 로그/)).not.toBeInTheDocument();
   });
 
   it('renders env backup actions outside desktop runtime', () => {
     render(<SettingsPage />);
 
-    expect(screen.getByRole('heading', { name: 'peizhibeifen' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'daochu .env' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'daoru .env' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '설정 백업' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '.env 내보내기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '.env 가져오기' })).toBeInTheDocument();
   });
 
   it('disables env backup actions when web auth is not enabled', () => {
@@ -693,9 +693,9 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(screen.getByText(/dangqian Web duanweikaiqiguanliyuanjianquan/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'daochu .env' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'daoru .env' })).toBeDisabled();
+    expect(screen.getByText(/현재 Web 관리자 인증이 꺼져 있어/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '.env 내보내기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '.env 가져오기' })).toBeDisabled();
   });
 
   it('uses live auth state for env backup availability instead of loaded config items', () => {
@@ -716,9 +716,9 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expect(screen.queryByText(/dangqian Web duanweikaiqiguanliyuanjianquan/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'daochu .env' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'daoru .env' })).not.toBeDisabled();
+    expect(screen.queryByText(/현재 Web 관리자 인증이 꺼져 있어/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '.env 내보내기' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '.env 가져오기' })).not.toBeDisabled();
   });
 
   it('exports saved env from config backup actions', async () => {
@@ -728,7 +728,7 @@ describe('SettingsPage', () => {
 
     vi.clearAllMocks();
 
-    fireEvent.click(screen.getByRole('button', { name: 'daochu .env' }));
+    fireEvent.click(screen.getByRole('button', { name: '.env 내보내기' }));
 
     await waitFor(() => expect(exportEnv).toHaveBeenCalledTimes(1));
     expect(mockedAnchorClick).toHaveBeenCalledTimes(1);
@@ -743,9 +743,9 @@ describe('SettingsPage', () => {
 
     vi.clearAllMocks();
 
-    fireEvent.click(screen.getByRole('button', { name: 'daoru .env' }));
+    fireEvent.click(screen.getByRole('button', { name: '.env 가져오기' }));
 
-    expect(await screen.findByText('daoruhuifugaidangqiancaogao')).toBeInTheDocument();
+    expect(await screen.findByText('가져오기는 현재 초안을 덮어씁니다')).toBeInTheDocument();
     expect(importEnv).not.toHaveBeenCalled();
   });
 
@@ -789,9 +789,9 @@ describe('SettingsPage', () => {
 
     await waitFor(() => expect(importEnv).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('peizhiyidaorudanshuaxinshibai')).toBeInTheDocument();
-    expect(screen.getByText('beifenyidaoru，danchongxinjiazaipeizhishibai，qingshoudongzhongzaiyemian。')).toBeInTheDocument();
-    expect(screen.queryByText('yidaoru .env beifenbingzhongxinjiazaipeizhi。')).not.toBeInTheDocument();
+    expect(screen.getByText('설정을 가져왔지만 새로고침 실패')).toBeInTheDocument();
+    expect(screen.getByText('백업을 가져왔지만 설정을 다시 불러오지 못했습니다. 페이지를 수동으로 새로고침하세요.')).toBeInTheDocument();
+    expect(screen.queryByText('.env 백업을 가져오고 설정을 다시 불러왔습니다.')).not.toBeInTheDocument();
   });
 
   it('renders desktop update notice when a newer release is available', async () => {
@@ -800,14 +800,14 @@ describe('SettingsPage', () => {
       currentVersion: '3.12.0',
       latestVersion: '3.13.0',
       releaseUrl: 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0',
-      message: 'faxianxinbanben 3.13.0，keqianwang GitHub Releases xiazaigengxin。',
+      message: '새 버전 3.13.0을 찾았습니다. GitHub Releases에서 업데이트를 다운로드할 수 있습니다.',
     });
     (window as { dsaDesktop?: unknown }).dsaDesktop = createDesktopRuntime();
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText(/faxianxinbanben:dangqian 3\.12\.0，zuixin 3\.13\.0/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'qianwangxiazai' })).toBeInTheDocument();
+    expect(await screen.findByText(/새 버전 발견:현재 3\.12\.0, 최신 3\.13\.0/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '다운로드로 이동' })).toBeInTheDocument();
   });
 
   it('checks desktop updates on demand and renders the latest-version state', async () => {
@@ -815,10 +815,10 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'jianchagengxin' }));
+    fireEvent.click(await screen.findByRole('button', { name: '업데이트 확인' }));
 
     await waitFor(() => expect(desktopCheckForUpdates).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('yishizuixinbanben:dangqianzhuomianduanyishizuixinbanben。')).toBeInTheDocument();
+    expect(await screen.findByText('최신 버전입니다:현재 데스크톱 앱은 최신 버전입니다.')).toBeInTheDocument();
   });
 
   it('opens GitHub release page from desktop update notice', async () => {
@@ -827,13 +827,13 @@ describe('SettingsPage', () => {
       currentVersion: '3.12.0',
       latestVersion: '3.13.0',
       releaseUrl: 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0',
-      message: 'faxianxinbanben 3.13.0，keqianwang GitHub Releases xiazaigengxin。',
+      message: '새 버전 3.13.0을 찾았습니다. GitHub Releases에서 업데이트를 다운로드할 수 있습니다.',
     });
     (window as { dsaDesktop?: unknown }).dsaDesktop = createDesktopRuntime();
 
     render(<SettingsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'qianwangxiazai' }));
+    fireEvent.click(await screen.findByRole('button', { name: '다운로드로 이동' }));
 
     await waitFor(() => {
       expect(desktopOpenReleasePage).toHaveBeenCalledWith(
@@ -849,16 +849,16 @@ describe('SettingsPage', () => {
       currentVersion: '3.12.0',
       latestVersion: '3.13.0',
       releaseUrl: 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0',
-      message: 'xinbanben 3.13.0 yixiazai，kechongqiyingyongwanchenganzhuang。',
+      message: '새 버전 3.13.0 다운로드가 완료되었습니다. 앱을 재시작해 설치를 완료하세요.',
       downloadPercent: 100,
     });
     (window as { dsaDesktop?: unknown }).dsaDesktop = createDesktopRuntime();
 
     render(<SettingsPage />);
 
-    expect(await screen.findByText('gengxinyixiazai:xinbanben 3.13.0 yixiazai，kechongqiyingyongwanchenganzhuang。')).toBeInTheDocument();
+    expect(await screen.findByText('업데이트 다운로드 완료:새 버전 3.13.0 다운로드가 완료되었습니다. 앱을 재시작해 설치를 완료하세요.')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'chongqianzhuang' }));
+    fireEvent.click(screen.getByRole('button', { name: '재시작 후 설치' }));
 
     await waitFor(() => expect(desktopInstallDownloadedUpdate).toHaveBeenCalledTimes(1));
   });

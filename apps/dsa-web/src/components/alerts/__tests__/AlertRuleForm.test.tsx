@@ -13,14 +13,14 @@ describe('AlertRuleForm', () => {
   it('submits a price_cross rule payload', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('规则名称'), { target: { value: '茅台价格突破' } });
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '1800' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('규칙 이름'), { target: { value: '茅台가격 돌파' } });
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '1800' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
-        name: '茅台价格突破',
+        name: '茅台가격 돌파',
         targetScope: 'single_symbol',
         target: '600519',
         alertType: 'price_cross',
@@ -34,12 +34,12 @@ describe('AlertRuleForm', () => {
   it('submits a price_change_percent rule payload', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'aapl' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'price_change_percent' } });
-    fireEvent.change(screen.getByLabelText('方向'), { target: { value: 'down' } });
-    fireEvent.change(screen.getByLabelText('涨跌幅阈值（%）'), { target: { value: '3.5' } });
-    fireEvent.change(screen.getByLabelText('严重级别'), { target: { value: 'critical' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'price_change_percent' } });
+    fireEvent.change(screen.getByLabelText('방향'), { target: { value: 'down' } });
+    fireEvent.change(screen.getByLabelText('등락률 임계값(%)'), { target: { value: '3.5' } });
+    fireEvent.change(screen.getByLabelText('심각도'), { target: { value: 'critical' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -54,11 +54,11 @@ describe('AlertRuleForm', () => {
   it('submits a volume_spike rule payload and supports disabled creation', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'msft' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'volume_spike' } });
-    fireEvent.change(screen.getByLabelText('成交量放大倍数'), { target: { value: '2.5' } });
-    fireEvent.click(screen.getByLabelText('创建后立即启用'));
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'msft' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'volume_spike' } });
+    fireEvent.change(screen.getByLabelText('거래량 급증 배수'), { target: { value: '2.5' } });
+    fireEvent.click(screen.getByLabelText('생성 후 바로 활성화'));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -73,13 +73,13 @@ describe('AlertRuleForm', () => {
   it('submits technical indicator rule payloads', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'macd_cross' } });
-    fireEvent.change(screen.getByLabelText('交叉方向'), { target: { value: 'bearish_cross' } });
-    fireEvent.change(screen.getByLabelText('快线周期'), { target: { value: '6' } });
-    fireEvent.change(screen.getByLabelText('慢线周期'), { target: { value: '13' } });
-    fireEvent.change(screen.getByLabelText('信号周期'), { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'macd_cross' } });
+    fireEvent.change(screen.getByLabelText('교차 방향'), { target: { value: 'bearish_cross' } });
+    fireEvent.change(screen.getByLabelText('단기 기간'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('장기 기간'), { target: { value: '13' } });
+    fireEvent.change(screen.getByLabelText('시그널 기간'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -98,65 +98,65 @@ describe('AlertRuleForm', () => {
   it('rejects invalid technical indicator boundaries before submit', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'rsi_threshold' } });
-    fireEvent.change(screen.getByLabelText('RSI 阈值'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'rsi_threshold' } });
+    fireEvent.change(screen.getByLabelText('RSI 임계값'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('RSI 阈值必须在 0 到 100 之间');
+    expect(screen.getByRole('alert')).toHaveTextContent('RSI 임계값은 0에서 100 사이여야 합니다');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('rejects indicator period combinations that exceed fetchable history', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'macd_cross' } });
-    fireEvent.change(screen.getByLabelText('快线周期'), { target: { value: '2' } });
-    fireEvent.change(screen.getByLabelText('慢线周期'), { target: { value: '250' } });
-    fireEvent.change(screen.getByLabelText('信号周期'), { target: { value: '250' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'macd_cross' } });
+    fireEvent.change(screen.getByLabelText('단기 기간'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('장기 기간'), { target: { value: '250' } });
+    fireEvent.change(screen.getByLabelText('시그널 기간'), { target: { value: '250' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('MACD 周期组合需要 501 根日线，最多支持 365 根');
+    expect(screen.getByRole('alert')).toHaveTextContent('MACD 계산에 필요한 501일 데이터가 최대 365일 제한을 초과합니다');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('rejects empty required technical indicator thresholds before submit', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'rsi_threshold' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'rsi_threshold' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('RSI 阈值不能为空');
+    expect(screen.getByRole('alert')).toHaveTextContent('RSI 임계값은 비워둘 수 없습니다');
     expect(onSubmit).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText('规则类型'), { target: { value: 'cci_threshold' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'cci_threshold' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('CCI 阈值不能为空');
+    expect(screen.getByRole('alert')).toHaveTextContent('CCI 임계값은 비워둘 수 없습니다');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('rejects invalid numeric thresholds before submit', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: '600519' } });
-    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '0' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
+    fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('价格阈值必须是大于 0 的数字');
+    expect(screen.getByRole('alert')).toHaveTextContent('가격 임계값은 0보다 큰 숫자여야 합니다');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('rejects invalid stock code format before submit', () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'aapl-2026' } });
-    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl-2026' } });
+    fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('股票代码格式不正确');
+    expect(screen.getByRole('alert')).toHaveTextContent('종목 코드 형식이 올바르지 않습니다.');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -164,12 +164,12 @@ describe('AlertRuleForm', () => {
     onSubmit.mockResolvedValueOnce(false);
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('标的代码'), { target: { value: 'aapl' } });
-    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl' } });
+    fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    expect(screen.getByLabelText('标的代码')).toHaveValue('aapl');
-    expect(screen.getByLabelText('价格阈值')).toHaveValue(200);
+    expect(screen.getByLabelText('종목 코드')).toHaveValue('aapl');
+    expect(screen.getByLabelText('가격 임계값')).toHaveValue(200);
   });
 });

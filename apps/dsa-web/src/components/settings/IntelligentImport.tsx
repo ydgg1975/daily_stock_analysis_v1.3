@@ -141,7 +141,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         const parsed = getParsedApiError(e);
         const err = e && typeof e === 'object' ? (e as { response?: { status?: number }; code?: string }) : null;
         let fallback = '인식에 실패했습니다. 다시 시도하세요';
-        if (err?.response?.status === 429) fallback = '요청이 너무 잦습니다. 잠시 후 다시 시도하세요';
+        if (err?.response?.status === 429) fallback = '요청이 너무 많습니다. 잠시 후 다시 시도하세요';
         else if (err?.code === 'ECONNABORTED') fallback = '요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도하세요';
         setError(parsed.message || fallback);
       } finally {
@@ -277,7 +277,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     } catch (e) {
       if (e instanceof SystemConfigConflictError) {
         await onMerged(value);
-        setError('설정이 업데이트되었습니다. “관심 종목에 병합”을 다시 누르세요');
+        setError('설정이 업데이트되었습니다. 관심 종목에 병합을 다시 누르세요');
       } else {
         setError(e instanceof Error ? e.message : '병합 저장 실패');
       }
@@ -342,7 +342,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <textarea
-            placeholder="또는 CSV/Excel에서 복사한 텍스트 붙여넣기..."
+            placeholder="또는 CSV/Excel에서 복사한 텍스트를 붙여넣기..."
             className="input-surface settings-surface-strong settings-border-strong min-h-[72px] w-full rounded-xl border px-3 py-2 text-sm text-foreground shadow-none transition-colors placeholder:text-muted-text focus:outline-none"
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -373,12 +373,12 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         <div className="space-y-2">
           <InlineAlert
             variant="warning"
-            message="병합 전 항목을 직접 확인하는 것을 권장합니다. 신뢰도 높음은 기본 선택되고, 중간/낮음은 수동 확인이 필요합니다."
+            message="병합할 항목을 직접 확인하는 것을 권장합니다. 신뢰도 높음은 기본 선택되고, 중간/낮음은 수동 확인이 필요합니다."
             className="rounded-xl px-3 py-2 text-xs shadow-none"
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary-text">
-              총 {validCount}개 병합 가능, 선택됨 {checkedCount}개
+              총 {validCount}개 병합 가능 · 선택됨 {checkedCount}개
             </span>
             <div className="flex gap-2">
               <button type="button" className="text-xs text-secondary-text transition-colors hover:text-foreground" onClick={() => toggleAll(true)}>
@@ -425,7 +425,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
                       onClick={() => removeItem(it.id)}
                       disabled={disabled}
                     >
-                      ×
+                      삭제
                     </button>
                   </div>
                 </div>

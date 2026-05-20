@@ -36,7 +36,7 @@ export const AlertTriggerHistory: React.FC<AlertTriggerHistoryProps> = ({ trigge
         <EmptyState
           icon={<Activity className="h-6 w-6" />}
           title="트리거 기록 없음"
-          description="백그라운드 평가는 triggered, skipped, degraded, failed 상태를 기록합니다. 정상적으로 트리거되지 않은 종목은 기록되지 않을 수 있습니다."
+          description="백그라운드 평가 결과는 triggered, skipped, degraded, failed 상태로 기록됩니다. 정상적으로 트리거되지 않은 종목은 기록되지 않을 수 있습니다."
         />
       ) : null}
       {!isLoading && triggers.length > 0 ? (
@@ -68,9 +68,7 @@ export const AlertTriggerHistory: React.FC<AlertTriggerHistoryProps> = ({ trigge
                   <td className="px-3 py-3 text-xs text-secondary-text">
                     {formatDateTime(trigger.dataTimestamp ?? trigger.triggeredAt)}
                   </td>
-                  <td className="px-3 py-3 text-secondary-text">
-                    {trigger.reason || trigger.diagnostics || '--'}
-                  </td>
+                  <td className="px-3 py-3 text-secondary-text">{trigger.reason || trigger.diagnostics || '--'}</td>
                 </tr>
               ))}
             </tbody>

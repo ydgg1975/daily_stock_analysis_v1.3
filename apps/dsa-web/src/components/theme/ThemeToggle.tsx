@@ -12,17 +12,17 @@ const THEME_OPTIONS: Array<{
   label: string;
   icon: typeof Sun;
 }> = [
-  { value: 'light', label: '라이트', icon: Sun },
-  { value: 'dark', label: '다크', icon: Moon },
+  { value: 'light', label: '밝은 테마', icon: Sun },
+  { value: 'dark', label: '어두운 테마', icon: Moon },
   { value: 'system', label: '시스템 설정', icon: Monitor },
 ];
 
 function resolveThemeLabel(theme: string | undefined) {
   switch (theme) {
     case 'light':
-      return '라이트';
+      return '밝은 테마';
     case 'dark':
-      return '다크';
+      return '어두운 테마';
     default:
       return '시스템 설정';
   }
