@@ -50,15 +50,15 @@ describe('agentChatStore.startStream', () => {
   it('appends the user message and final assistant message from the SSE stream', async () => {
     vi.mocked(agentApi.chatStream).mockResolvedValue(
       createStreamResponse([
-        'data: {"type":"thinking","step":1,"message":"fenxizhong"}',
-        'data: {"type":"tool_done","tool":"quote","display_name":"hangqing","success":true,"duration":0.3}',
-        'data: {"type":"done","success":true,"content":"zuizhongfenxijieguo"}',
+        'data: {"type":"thinking","step":1,"message":"분석 중"}',
+        'data: {"type":"tool_done","tool":"quote","display_name":"시세","success":true,"duration":0.3}',
+        'data: {"type":"done","success":true,"content":"최종 분석 결과"}',
       ]),
     );
 
     await useAgentChatStore
       .getState()
-      .startStream({ message: 'fenximaotai', session_id: 'session-test' }, { skillName: 'qushijineng' });
+      .startStream({ message: '마오타이 분석', session_id: 'session-test' }, { skillName: '추세 전략' });
 
     const state = useAgentChatStore.getState();
     expect(state.loading).toBe(false);
@@ -66,13 +66,13 @@ describe('agentChatStore.startStream', () => {
     expect(state.messages).toHaveLength(2);
     expect(state.messages[0]).toMatchObject({
       role: 'user',
-      content: 'fenximaotai',
-      skillName: 'qushijineng',
+      content: '마오타이 분석',
+      skillName: '추세 전략',
     });
     expect(state.messages[1]).toMatchObject({
       role: 'assistant',
-      content: 'zuizhongfenxijieguo',
-      skillName: 'qushijineng',
+      content: '최종 분석 결과',
+      skillName: '추세 전략',
     });
     expect(state.messages[1].thinkingSteps).toHaveLength(2);
     expect(state.progressSteps).toEqual([]);
@@ -81,7 +81,7 @@ describe('agentChatStore.startStream', () => {
   it('preserves multiple selected skills on streamed user and assistant messages', async () => {
     vi.mocked(agentApi.chatStream).mockResolvedValue(
       createStreamResponse([
-        'data: {"type":"done","success":true,"content":"duocelvefenxijieguo"}',
+        'data: {"type":"done","success":true,"content":"다중 전략 분석 결과"}',
       ]),
     );
 
@@ -89,12 +89,12 @@ describe('agentChatStore.startStream', () => {
       .getState()
       .startStream(
         {
-          message: 'fenximaotai',
+          message: '마오타이 분석',
           session_id: 'session-test',
           skills: ['bull_trend', 'ma_golden_cross'],
         },
         {
-          skillNames: ['qushifenxi', 'junxianjincha'],
+          skillNames: ['추세 분석', '이동평균 골든크로스'],
         },
       );
 
@@ -104,16 +104,16 @@ describe('agentChatStore.startStream', () => {
       role: 'user',
       skills: ['bull_trend', 'ma_golden_cross'],
       skill: 'bull_trend',
-      skillNames: ['qushifenxi', 'junxianjincha'],
-      skillName: 'qushifenxi、junxianjincha',
+      skillNames: ['추세 분석', '이동평균 골든크로스'],
+      skillName: '추세 분석、이동평균 골든크로스',
     });
     expect(state.messages[1]).toMatchObject({
       role: 'assistant',
-      content: 'duocelvefenxijieguo',
+      content: '다중 전략 분석 결과',
       skills: ['bull_trend', 'ma_golden_cross'],
       skill: 'bull_trend',
-      skillNames: ['qushifenxi', 'junxianjincha'],
-      skillName: 'qushifenxi、junxianjincha',
+      skillNames: ['추세 분석', '이동평균 골든크로스'],
+      skillName: '추세 분석、이동평균 골든크로스',
     });
   });
 
@@ -126,7 +126,7 @@ describe('agentChatStore.startStream', () => {
 
     await useAgentChatStore
       .getState()
-      .startStream({ message: 'fenximaotai', session_id: 'session-test' }, { skillName: 'qushijineng' });
+      .startStream({ message: '마오타이 분석', session_id: 'session-test' }, { skillName: '추세 전략' });
 
     const state = useAgentChatStore.getState();
     expect(state.loading).toBe(false);
@@ -148,7 +148,7 @@ describe('agentChatStore.startStream', () => {
 
     await useAgentChatStore
       .getState()
-      .startStream({ message: 'fenximaotai', session_id: 'session-test' }, { skillName: 'qushijineng' });
+      .startStream({ message: '마오타이 분석', session_id: 'session-test' }, { skillName: '추세 전략' });
 
     const state = useAgentChatStore.getState();
     expect(state.loading).toBe(false);
@@ -170,7 +170,7 @@ describe('agentChatStore.startStream', () => {
 
     await useAgentChatStore
       .getState()
-      .startStream({ message: 'fenximaotai', session_id: 'session-test' }, { skillName: 'qushijineng' });
+      .startStream({ message: '마오타이 분석', session_id: 'session-test' }, { skillName: '추세 전략' });
 
     const state = useAgentChatStore.getState();
     expect(state.loading).toBe(false);

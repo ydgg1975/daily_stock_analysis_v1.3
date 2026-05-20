@@ -45,7 +45,7 @@ const mockStoreState = {
   sessions: [
     {
       session_id: 'session-1',
-      title: 'qingjianyaofenxi 600519',
+      title: '600519 간단히 분석해 주세요',
       message_count: 2,
       created_at: '2026-03-15T09:00:00Z',
       last_active: '2026-03-15T09:05:00Z',
@@ -133,7 +133,7 @@ beforeEach(() => {
   mockStoreState.sessions = [
     {
       session_id: 'session-1',
-      title: 'qingjianyaofenxi 600519',
+      title: '600519 간단히 분석해 주세요',
       message_count: 2,
       created_at: '2026-03-15T09:00:00Z',
       last_active: '2026-03-15T09:05:00Z',
@@ -141,7 +141,7 @@ beforeEach(() => {
   ];
   mockGetSkills.mockResolvedValue({
     skills: [
-      { id: 'bull_trend', name: 'qushifenxi', description: 'ceshijineng' },
+      { id: 'bull_trend', name: '추세 분석', description: '테스트 전략' },
     ],
     default_skill_id: 'bull_trend',
   });
@@ -174,7 +174,7 @@ describe('ChatPage', () => {
     );
 
     const sessionCard = await screen.findByRole('button', {
-      name: /\uB300\uD654 qingjianyaofenxi 600519\uB85C \uC804\uD658/,
+      name: /\uB300\uD654 600519 간단히 분석해 주세요\uB85C \uC804\uD658/,
     });
 
     fireEvent.click(sessionCard);
@@ -190,7 +190,7 @@ describe('ChatPage', () => {
     );
 
     const deleteButton = await screen.findByRole('button', {
-      name: /\uB300\uD654 qingjianyaofenxi 600519 \uC0AD\uC81C/,
+      name: /\uB300\uD654 600519 간단히 분석해 주세요 \uC0AD\uC81C/,
     });
 
     fireEvent.click(deleteButton);
@@ -214,8 +214,8 @@ describe('ChatPage', () => {
 
   it('exports the current session from the header action', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: 'qingfenxi 600519' },
-      { id: 'assistant-1', role: 'assistant', content: 'qushipianqiang', skillName: 'qushifenxi' },
+      { id: 'user-1', role: 'user', content: '600519 분석해 주세요' },
+      { id: 'assistant-1', role: 'assistant', content: '추세가 강합니다', skillName: '추세 분석' },
     ];
 
     render(
@@ -232,7 +232,7 @@ describe('ChatPage', () => {
 
   it('renders assistant skill labels with shared badge semantics', async () => {
     mockStoreState.messages = [
-      { id: 'assistant-1', role: 'assistant', content: 'qushipianqiang', skillName: 'qushifenxi' },
+      { id: 'assistant-1', role: 'assistant', content: '추세가 강합니다', skillName: '추세 분석' },
     ];
 
     render(
@@ -241,9 +241,9 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 qushifenxi');
+    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 추세 분석');
     expect(skillBadge).toBeInTheDocument();
-    expect(skillBadge).toHaveTextContent('qushifenxi');
+    expect(skillBadge).toHaveTextContent('추세 분석');
   });
 
   it('renders assistant multi-skill labels with shared badge semantics', async () => {
@@ -251,9 +251,9 @@ describe('ChatPage', () => {
       {
         id: 'assistant-1',
         role: 'assistant',
-        content: 'qushipianqiang',
+        content: '추세가 강합니다',
         skills: ['bull_trend', 'ma_golden_cross'],
-        skillNames: ['qushifenxi', 'junxianjincha'],
+        skillNames: ['추세 분석', '이동평균 골든크로스'],
       },
     ];
 
@@ -263,9 +263,9 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 qushifenxi\u3001junxianjincha');
+    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 추세 분석\u3001이동평균 골든크로스');
     expect(skillBadge).toBeInTheDocument();
-    expect(skillBadge).toHaveTextContent('qushifenxi、junxianjincha');
+    expect(skillBadge).toHaveTextContent('추세 분석、이동평균 골든크로스');
   });
 
   it('selects the default skill after loading skills', async () => {
@@ -275,15 +275,15 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('checkbox', { name: 'qushifenxi' })).toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: '추세 분석' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '\uC77C\uBC18 \uBD84\uC11D' })).not.toBeChecked();
   });
 
   it('sends multiple selected skills in order', async () => {
     mockGetSkills.mockResolvedValue({
       skills: [
-        { id: 'bull_trend', name: 'qushifenxi', description: 'morenqushi' },
-        { id: 'ma_golden_cross', name: 'junxianjincha', description: 'junxianjiaocha' },
+        { id: 'bull_trend', name: '추세 분석', description: '기본 추세' },
+        { id: 'ma_golden_cross', name: '이동평균 골든크로스', description: '이동평균 교차' },
       ],
       default_skill_id: 'bull_trend',
     });
@@ -294,21 +294,21 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'junxianjincha' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '이동평균 골든크로스' }));
     fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
-      target: { value: 'fenxi 600519' },
+      target: { value: '600519 분석' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'fenxi 600519',
+          message: '600519 분석',
           skills: ['bull_trend', 'ma_golden_cross'],
         }),
         expect.objectContaining({
-          skillNames: ['qushifenxi', 'junxianjincha'],
-          skillName: 'qushifenxi、junxianjincha',
+          skillNames: ['추세 분석', '이동평균 골든크로스'],
+          skillName: '추세 분석、이동평균 골든크로스',
         }),
       );
     });
@@ -321,11 +321,11 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'qushifenxi' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '추세 분석' }));
     expect(screen.getByRole('checkbox', { name: '\uC77C\uBC18 \uBD84\uC11D' })).toBeChecked();
 
     fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
-      target: { value: 'fenxi AAPL' },
+      target: { value: 'AAPL 분석' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
 
@@ -333,7 +333,7 @@ describe('ChatPage', () => {
       expect(mockStartStream).toHaveBeenCalled();
     });
     const lastCall = mockStartStream.mock.calls[mockStartStream.mock.calls.length - 1];
-    expect(lastCall[0]).toEqual(expect.objectContaining({ message: 'fenxi AAPL' }));
+    expect(lastCall[0]).toEqual(expect.objectContaining({ message: 'AAPL 분석' }));
     expect(lastCall[0]).not.toHaveProperty('skills');
     expect(lastCall[1]).toEqual(expect.objectContaining({
       skillNames: ['\uC77C\uBC18'],
@@ -344,10 +344,10 @@ describe('ChatPage', () => {
   it('caps concrete skill selection at three and re-enables choices after unselecting', async () => {
     mockGetSkills.mockResolvedValue({
       skills: [
-        { id: 'bull_trend', name: 'qushifenxi', description: 'morenqushi' },
-        { id: 'ma_golden_cross', name: 'junxianjincha', description: 'junxianjiaocha' },
-        { id: 'chan_theory', name: 'chanlun', description: 'jiegoufenxi' },
-        { id: 'wave_theory', name: 'bolanglilun', description: 'bolangfenxi' },
+        { id: 'bull_trend', name: '추세 분석', description: '기본 추세' },
+        { id: 'ma_golden_cross', name: '이동평균 골든크로스', description: '이동평균 교차' },
+        { id: 'chan_theory', name: '찬 이론', description: '구조 분석' },
+        { id: 'wave_theory', name: '파동 이론', description: '파동 분석' },
       ],
       default_skill_id: 'bull_trend',
     });
@@ -358,22 +358,22 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'junxianjincha' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'chanlun' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '이동평균 골든크로스' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '찬 이론' }));
 
-    const wave = screen.getByRole('checkbox', { name: 'bolanglilun' });
+    const wave = screen.getByRole('checkbox', { name: '파동 이론' });
     expect(wave).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'junxianjincha' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '이동평균 골든크로스' }));
     expect(wave).not.toBeDisabled();
   });
 
   it('quick questions override the current multi-skill selection', async () => {
     mockGetSkills.mockResolvedValue({
       skills: [
-        { id: 'bull_trend', name: 'qushifenxi', description: 'morenqushi' },
-        { id: 'ma_golden_cross', name: 'junxianjincha', description: 'junxianjiaocha' },
-        { id: 'chan_theory', name: 'chanlun', description: 'jiegoufenxi' },
+        { id: 'bull_trend', name: '추세 분석', description: '기본 추세' },
+        { id: 'ma_golden_cross', name: '이동평균 골든크로스', description: '이동평균 교차' },
+        { id: 'chan_theory', name: '찬 이론', description: '구조 분석' },
       ],
       default_skill_id: 'bull_trend',
     });
@@ -384,7 +384,7 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'junxianjincha' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '이동평균 골든크로스' }));
     fireEvent.click(screen.getByRole('button', { name: '\uCC2C \uC774\uB860\uC73C\uB85C 600519 \uBD84\uC11D' }));
 
     await waitFor(() => {
@@ -394,8 +394,8 @@ describe('ChatPage', () => {
           skills: ['chan_theory'],
         }),
         expect.objectContaining({
-          skillNames: ['chanlun'],
-          skillName: 'chanlun',
+          skillNames: ['찬 이론'],
+          skillName: '찬 이론',
         }),
       );
     });
@@ -403,7 +403,7 @@ describe('ChatPage', () => {
 
   it('keeps assistant message actions directly activatable in the DOM', async () => {
     mockStoreState.messages = [
-      { id: 'assistant-1', role: 'assistant', content: 'qushipianqiang', skillName: 'qushifenxi' },
+      { id: 'assistant-1', role: 'assistant', content: '추세가 강합니다', skillName: '추세 분석' },
     ];
 
     render(
@@ -421,8 +421,8 @@ describe('ChatPage', () => {
 
   it('sends exported markdown to notification channel and shows success feedback', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: 'qingfenxi 600519' },
-      { id: 'assistant-1', role: 'assistant', content: 'qushipianqiang', skillName: 'qushifenxi' },
+      { id: 'user-1', role: 'user', content: '600519 분석해 주세요' },
+      { id: 'assistant-1', role: 'assistant', content: '추세가 강합니다', skillName: '추세 분석' },
     ];
     mockFormatSessionAsMarkdown.mockReturnValue('# exported markdown');
 
@@ -444,12 +444,12 @@ describe('ChatPage', () => {
 
   it('shows parsed error feedback when notification delivery fails', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: 'qingfenxi AAPL' },
-      { id: 'assistant-1', role: 'assistant', content: 'duanxianzhendang', skillName: 'qushifenxi' },
+      { id: 'user-1', role: 'user', content: 'AAPL 분석해 주세요' },
+      { id: 'assistant-1', role: 'assistant', content: '단기 박스권입니다', skillName: '추세 분석' },
     ];
     mockSendChat.mockRejectedValue(
       createParsedApiError({
-        title: 'fasongshibai',
+        title: '전송 실패',
         message: 'tongzhiqudaobukeyong',
         category: 'unknown',
       }),
@@ -468,8 +468,8 @@ describe('ChatPage', () => {
 
   it('prevents duplicate notification sends while the request is in flight', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: 'qingfenxi TSLA' },
-      { id: 'assistant-1', role: 'assistant', content: 'bodongjiaoda', skillName: 'qushifenxi' },
+      { id: 'user-1', role: 'user', content: 'TSLA 분석해 주세요' },
+      { id: 'assistant-1', role: 'assistant', content: '변동성이 큽니다', skillName: '추세 분석' },
     ];
     const deferred = createDeferred<{ success: boolean }>();
     mockSendChat.mockImplementation(() => deferred.promise);
@@ -527,7 +527,7 @@ describe('ChatPage', () => {
           },
         }),
         expect.objectContaining({
-          skillName: 'qushifenxi',
+          skillName: '추세 분석',
         }),
       );
     });
@@ -537,15 +537,15 @@ describe('ChatPage', () => {
         id: 1,
         queryId: 'q-1',
         stockCode: '600519',
-        stockName: 'guizhoumaotai',
+        stockName: '구이저우마오타이',
         reportType: 'detailed',
         createdAt: '2026-03-18T08:00:00Z',
         currentPrice: 1523.6,
         changePct: 1.8,
       },
       summary: {
-        analysisSummary: 'qushiyanxu',
-        operationAdvice: 'jixuguancha',
+        analysisSummary: '추세가 이어집니다',
+        operationAdvice: '계속 관찰',
         trendPrediction: 'gaoweizhendang',
         sentimentScore: 78,
       },
@@ -559,18 +559,18 @@ describe('ChatPage', () => {
     });
 
     fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
-      target: { value: 'jixufenxichengjiaoliang' },
+      target: { value: '거래량을 이어서 분석해 주세요' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          message: 'jixufenxichengjiaoliang',
+          message: '거래량을 이어서 분석해 주세요',
           context: undefined,
         }),
         expect.objectContaining({
-          skillName: 'qushifenxi',
+          skillName: '추세 분석',
         }),
       );
     });
@@ -582,15 +582,15 @@ describe('ChatPage', () => {
         id: 1,
         queryId: 'q-1',
         stockCode: '600519',
-        stockName: 'guizhoumaotai',
+        stockName: '구이저우마오타이',
         reportType: 'detailed',
         createdAt: '2026-03-18T08:00:00Z',
         currentPrice: 1523.6,
         changePct: 1.8,
       },
       summary: {
-        analysisSummary: 'qushiyanxu',
-        operationAdvice: 'jixuguancha',
+        analysisSummary: '추세가 이어집니다',
+        operationAdvice: '계속 관찰',
         trendPrediction: 'gaoweizhendang',
         sentimentScore: 78,
       },
@@ -608,7 +608,7 @@ describe('ChatPage', () => {
     expect(await screen.findByDisplayValue('\uC2EC\uCE35 \uBD84\uC11D\uD574 \uC8FC\uC138\uC694: \u8D35\u5DDE\u8305\u53F0(600519)')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByText('zhengzaijiazailishifenxishangxiawen；xianzaikezhijiefasongzhuiwen。')).not.toBeInTheDocument();
+      expect(screen.queryByText('이전 분석 컨텍스트를 불러오는 중입니다. 지금 바로 이어서 질문할 수 있습니다.')).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
@@ -628,7 +628,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: 'qushifenxi',
+          skillName: '추세 분석',
         }),
       );
     });
@@ -655,7 +655,7 @@ describe('ChatPage', () => {
           },
         }),
         expect.objectContaining({
-          skillName: 'qushifenxi',
+          skillName: '추세 분석',
         }),
       );
     });
@@ -703,15 +703,15 @@ describe('ChatPage', () => {
         id: 1,
         queryId: 'q-1',
         stockCode: '600519',
-        stockName: 'guizhoumaotai',
+        stockName: '구이저우마오타이',
         reportType: 'detailed',
         createdAt: '2026-03-18T08:00:00Z',
         currentPrice: 1523.6,
         changePct: 1.8,
       },
       summary: {
-        analysisSummary: 'qushiyanxu',
-        operationAdvice: 'jixuguancha',
+        analysisSummary: '추세가 이어집니다',
+        operationAdvice: '계속 관찰',
         trendPrediction: 'gaoweizhendang',
         sentimentScore: 78,
       },
@@ -732,9 +732,9 @@ describe('ChatPage', () => {
         changePct: 2.4,
       },
       summary: {
-        analysisSummary: 'qushizouqiang',
-        operationAdvice: 'jixuchiyou',
-        trendPrediction: 'duanxianpianqiang',
+        analysisSummary: '추세 강화',
+        operationAdvice: '계속 보유',
+        trendPrediction: '단기 강세',
         sentimentScore: 81,
       },
       strategy: {
@@ -763,7 +763,7 @@ describe('ChatPage', () => {
           }),
         }),
         expect.objectContaining({
-          skillName: 'qushifenxi',
+          skillName: '추세 분석',
         }),
       );
     });
@@ -771,8 +771,8 @@ describe('ChatPage', () => {
 
   it('shows a jump-to-latest action when new content arrives while the user is away from bottom', async () => {
     mockStoreState.messages = [
-      { id: 'user-1', role: 'user', content: 'qingfenxi 600519' },
-      { id: 'assistant-1', role: 'assistant', content: 'qushipianqiang', skillName: 'qushifenxi' },
+      { id: 'user-1', role: 'user', content: '600519 분석해 주세요' },
+      { id: 'assistant-1', role: 'assistant', content: '추세가 강합니다', skillName: '추세 분석' },
     ];
 
     const { rerender } = render(
@@ -790,7 +790,7 @@ describe('ChatPage', () => {
 
     mockStoreState.messages = [
       ...mockStoreState.messages,
-      { id: 'assistant-2', role: 'assistant', content: 'xindebuchongfenxi', skillName: 'qushifenxi' },
+      { id: 'assistant-2', role: 'assistant', content: '새로운 보충 분석', skillName: '추세 분석' },
     ];
 
     rerender(
