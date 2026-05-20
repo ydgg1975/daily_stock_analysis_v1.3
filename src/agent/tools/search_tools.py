@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Search tools ??wraps SearchService methods as agent-callable tools.
+Search tools — wraps SearchService methods as agent-callable tools.
 
 Tools:
 - search_stock_news: search latest stock news
@@ -123,7 +123,7 @@ search_stock_news_tool = ToolDefinition(
         ToolParameter(
             name="stock_name",
             type="string",
-            description="Stock name in Chinese, e.g., 'Samsung Electronics'",
+            description="Stock name in Chinese, e.g., '贵州茅台'",
         ),
     ],
     handler=_handle_search_stock_news,
@@ -197,7 +197,7 @@ search_comprehensive_intel_tool = ToolDefinition(
         ToolParameter(
             name="stock_name",
             type="string",
-            description="Stock name in Chinese, e.g., 'Samsung Electronics'",
+            description="Stock name in Chinese, e.g., '贵州茅台'",
         ),
     ],
     handler=_handle_search_comprehensive_intel,
@@ -209,4 +209,3 @@ ALL_SEARCH_TOOLS = [
     search_stock_news_tool,
     search_comprehensive_intel_tool,
 ]
-

@@ -180,7 +180,7 @@ class BacktestService:
 
             except Exception as exc:
                 errors += 1
-                logger.error(f"huitestbai: {analysis.code}#{analysis.id}: {exc}")
+                logger.error(f"回测失败: {analysis.code}#{analysis.id}: {exc}")
                 results_to_save.append(
                     BacktestResult(
                         analysis_history_id=analysis.id,
@@ -341,7 +341,7 @@ class BacktestService:
             return parsed
         if getattr(analysis, "created_at", None):
             return analysis.created_at.date()
-        logger.warning(f"wufaquedinganalysisriqi(chinese removed)똳iaoguorecord: {analysis.code}#{getattr(analysis, 'id', '?')}")
+        logger.warning(f"无法确定分析日期，跳过记录: {analysis.code}#{getattr(analysis, 'id', '?')}")
         return None
 
     def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:
@@ -361,7 +361,7 @@ class BacktestService:
                 return
             self.db.save_daily_data(df, code=code, data_source=source)
         except Exception as exc:
-            logger.warning(f"buquanrixianshujushibai({code}): {exc}")
+            logger.warning(f"补全日线数据失败({code}): {exc}")
 
     def _recompute_summaries(self, *, touched_codes: List[str], eval_window_days: int, engine_version: str) -> None:
         with self.db.get_session() as session:
@@ -594,4 +594,3 @@ class BacktestService:
         summary["code"] = None if summary.get("code") == OVERALL_SENTINEL_CODE else summary.get("code")
         summary["computed_at"] = datetime.now().isoformat()
         return summary
-

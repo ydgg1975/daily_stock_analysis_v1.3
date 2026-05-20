@@ -16,16 +16,16 @@ def _result(
 ) -> AnalysisResult:
     return AnalysisResult(
         code="002812",
-        name="enjiegufen",
+        name="恩捷股份",
         sentiment_score=score,
-        trend_prediction="kanduo" if decision_type == "buy" else "kankong",
+        trend_prediction="看多" if decision_type == "buy" else "看空",
         operation_advice=operation_advice,
         decision_type=decision_type,
         report_language="zh",
         current_price=current_price,
         change_pct=change_pct,
         dashboard={
-            "core_conclusion": {"one_sentence": "yuanshijielun"},
+            "core_conclusion": {"one_sentence": "原始结论"},
             "data_perspective": {
                 "price_position": {
                     "current_price": current_price,
@@ -89,7 +89,7 @@ def test_capital_flow_bias_is_neutral_when_main_conflicts_with_windows() -> None
 def test_downgrades_buy_near_resistance_without_fund_confirmation() -> None:
     result = _result(
         decision_type="buy",
-        operation_advice="mairu",
+        operation_advice="买入",
         score=65,
         current_price=33.4,
     )
@@ -102,16 +102,16 @@ def test_downgrades_buy_near_resistance_without_fund_confirmation() -> None:
 
     assert result.decision_type == "hold"
     assert result.sentiment_score <= 59
-    assert result.operation_advice == "zhendangguanwang"
+    assert result.operation_advice == "震荡观望"
     assert result.dashboard["decision_stability"]["applied"] is True
-    assert "buyijinyinduanxianfantanzhuimai" in result.risk_warning
-    assert result.dashboard["core_conclusion"]["signal_type"] == "🟡chiyouguanwang"
+    assert "不宜仅因短线反弹追买" in result.risk_warning
+    assert result.dashboard["core_conclusion"]["signal_type"] == "🟡持有观望"
 
 
 def test_downgrades_buy_mid_range_with_neutral_fund_flow() -> None:
     result = _result(
         decision_type="buy",
-        operation_advice="mairu",
+        operation_advice="买入",
         score=66,
         current_price=32.0,
     )
@@ -124,20 +124,20 @@ def test_downgrades_buy_mid_range_with_neutral_fund_flow() -> None:
 
     assert result.decision_type == "hold"
     assert result.sentiment_score <= 59
-    assert result.operation_advice == "zhendangguanwang"
-    assert "zijinliubumingque" in result.risk_warning
+    assert result.operation_advice == "震荡观望"
+    assert "资金流不明确" in result.risk_warning
 
 
 def test_downgrades_buy_when_capital_flow_is_unavailable() -> None:
     buy_result = _result(
         decision_type="buy",
-        operation_advice="mairu",
+        operation_advice="买入",
         score=66,
         current_price=32.0,
     )
     sell_result = _result(
         decision_type="sell",
-        operation_advice="maichu",
+        operation_advice="卖出",
         score=30,
         current_price=30.4,
         change_pct=-2.1,
@@ -155,22 +155,22 @@ def test_downgrades_buy_when_capital_flow_is_unavailable() -> None:
     )
 
     assert buy_result.decision_type == "hold"
-    assert buy_result.operation_advice == "chiyouguancha"
-    assert buy_result.confidence_level == "di"
+    assert buy_result.operation_advice == "持有观察"
+    assert buy_result.confidence_level == "低"
     assert buy_result.sentiment_score <= 59
     assert buy_result.dashboard["decision_stability"]["applied"] is True
-    assert "mairujielunqueshaozijinmianqueren" in buy_result.dashboard["decision_stability"]["reason"]
-    assert buy_result.dashboard["core_conclusion"]["signal_type"] == "🟡chiyouguanwang"
+    assert "买入结论缺少资金面确认" in buy_result.dashboard["decision_stability"]["reason"]
+    assert buy_result.dashboard["core_conclusion"]["signal_type"] == "🟡持有观望"
     assert sell_result.decision_type == "sell"
-    assert sell_result.operation_advice == "maichu"
+    assert sell_result.operation_advice == "卖出"
     assert sell_result.dashboard["decision_stability"]["applied"] is False
-    assert "weishiyongzijinliujiaozhun" in sell_result.dashboard["decision_stability"]["reason"]
+    assert "未使用资金流校准" in sell_result.dashboard["decision_stability"]["reason"]
 
 
 def test_downgrades_buy_when_capital_flow_values_are_na() -> None:
     result = _result(
         decision_type="buy",
-        operation_advice="mairu",
+        operation_advice="买入",
         score=66,
         current_price=33.0,
     )
@@ -193,15 +193,15 @@ def test_downgrades_buy_when_capital_flow_values_are_na() -> None:
     )
 
     assert result.decision_type == "hold"
-    assert result.operation_advice == "chiyouguancha"
+    assert result.operation_advice == "持有观察"
     assert result.dashboard["decision_stability"]["applied"] is True
-    assert "zijinliushujuqueshi" in result.dashboard["decision_stability"]["capital_flow_status"]
+    assert "资金流数据缺失" in result.dashboard["decision_stability"]["capital_flow_status"]
 
 
 def test_downgrades_buy_advice_when_decision_type_is_hold_and_capital_flow_unavailable() -> None:
     result = _result(
         decision_type="hold",
-        operation_advice="jianyimairu",
+        operation_advice="建议买入",
         score=68,
         current_price=32.0,
     )
@@ -213,16 +213,16 @@ def test_downgrades_buy_advice_when_decision_type_is_hold_and_capital_flow_unava
     )
 
     assert result.decision_type == "hold"
-    assert result.operation_advice == "chiyouguancha"
+    assert result.operation_advice == "持有观察"
     assert result.sentiment_score <= 59
     assert result.dashboard["decision_stability"]["applied"] is True
-    assert "mairujielunqueshaozijinmianqueren" in result.dashboard["decision_stability"]["reason"]
+    assert "买入结论缺少资金面确认" in result.dashboard["decision_stability"]["reason"]
 
 
 def test_downgrades_buy_when_capital_flow_status_is_unavailable_case_insensitive() -> None:
     buy_result = _result(
         decision_type="buy",
-        operation_advice="mairu",
+        operation_advice="买入",
         score=66,
         current_price=32.0,
     )
@@ -234,20 +234,20 @@ def test_downgrades_buy_when_capital_flow_status_is_unavailable_case_insensitive
     )
 
     assert buy_result.decision_type == "hold"
-    assert buy_result.operation_advice == "chiyouguancha"
+    assert buy_result.operation_advice == "持有观察"
     assert buy_result.dashboard["decision_stability"]["applied"] is True
-    assert "zanbuzhichi" in str(buy_result.dashboard["decision_stability"]["capital_flow_status"])
+    assert "暂不支持" in str(buy_result.dashboard["decision_stability"]["capital_flow_status"])
 
 
 def test_skips_downgrade_when_only_generic_risk_warning_and_sell_near_support() -> None:
     result = _result(
         decision_type="sell",
-        operation_advice="maichu",
+        operation_advice="卖出",
         score=30,
         current_price=30.4,
         change_pct=1.0,
     )
-    result.risk_warning = "zhuyichangjianhuichefengxian,jianyiguanzhucangwei。"
+    result.risk_warning = "注意常见回撤风险，建议关注仓位。"
 
     stabilize_decision_with_structure(
         result,
@@ -256,14 +256,14 @@ def test_skips_downgrade_when_only_generic_risk_warning_and_sell_near_support() 
     )
 
     assert result.decision_type == "hold"
-    assert result.operation_advice == "xipanguancha"
-    assert "jiagetiejinzhichengqieweijianzijinchixuliuchu" in result.risk_warning
+    assert result.operation_advice == "洗盘观察"
+    assert "价格贴近支撑且未见资金持续流出" in result.risk_warning
 
 
 def test_stability_can_infer_decision_from_natural_chinese_phrases_in_analyzer_path() -> None:
     result = _result(
-        decision_type="jianyimaichu",
-        operation_advice="jianyimaichu",
+        decision_type="建议卖出",
+        operation_advice="建议卖出",
         score=30,
         current_price=30.4,
         change_pct=1.0,
@@ -276,14 +276,14 @@ def test_stability_can_infer_decision_from_natural_chinese_phrases_in_analyzer_p
     )
 
     assert result.decision_type == "hold"
-    assert result.operation_advice == "xipanguancha"
+    assert result.operation_advice == "洗盘观察"
     assert result.dashboard["decision_stability"]["applied"] is True
 
 
 def test_downgrades_sell_near_support_without_sustained_outflow() -> None:
     result = _result(
         decision_type="sell",
-        operation_advice="maichu",
+        operation_advice="卖出",
         score=30,
         current_price=30.4,
         change_pct=-2.1,
@@ -297,20 +297,20 @@ def test_downgrades_sell_near_support_without_sustained_outflow() -> None:
 
     assert result.decision_type == "hold"
     assert result.sentiment_score >= 45
-    assert result.operation_advice == "xipanguancha"
-    assert "buyijinyindanrixiadiezhijiemaichu" in result.risk_warning
+    assert result.operation_advice == "洗盘观察"
+    assert "不宜仅因单日下跌直接卖出" in result.risk_warning
 
 
 def test_preserves_sell_signal_when_significant_risk_exists_near_support() -> None:
     result = _result(
         decision_type="sell",
-        operation_advice="maichu",
+        operation_advice="卖出",
         score=30,
         current_price=30.4,
         change_pct=-2.1,
     )
-    result.risk_warning = "zhongdalikongxiaoxi:gongsifabuzhongdajianchijihua"
-    result.dashboard["intelligence"] = {"risk_alerts": ["gudonggaoweijianchiyugao"]}
+    result.risk_warning = "重大利空消息：公司发布重大减持计划"
+    result.dashboard["intelligence"] = {"risk_alerts": ["股东高位减持预告"]}
 
     stabilize_decision_with_structure(
         result,
@@ -319,13 +319,13 @@ def test_preserves_sell_signal_when_significant_risk_exists_near_support() -> No
     )
 
     assert result.decision_type == "sell"
-    assert result.operation_advice == "maichu"
+    assert result.operation_advice == "卖出"
 
 
 def test_refines_hold_pullback_near_support_as_shakeout_watch() -> None:
     result = _result(
         decision_type="hold",
-        operation_advice="chiyou",
+        operation_advice="持有",
         score=52,
         current_price=30.5,
         change_pct=-1.6,
@@ -338,5 +338,5 @@ def test_refines_hold_pullback_near_support_as_shakeout_watch() -> None:
     )
 
     assert result.decision_type == "hold"
-    assert result.operation_advice == "xipanguancha"
-    assert "gengshiheanxipanguanchachuli" in result.risk_warning
+    assert result.operation_advice == "洗盘观察"
+    assert "更适合按洗盘观察处理" in result.risk_warning

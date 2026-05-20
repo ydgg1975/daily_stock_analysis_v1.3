@@ -112,7 +112,7 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
         )
         fetcher._api.moneyflow_ind_ths.return_value = pd.DataFrame(
             {
-                "industry": ["AI", "xiaofei"],
+                "industry": ["AI", "消费"],
                 "pct_change": [1.8, -0.6],
             }
         )
@@ -123,7 +123,7 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
             top, bottom = fetcher.get_sector_rankings(n=1)
 
         self.assertEqual(top, [{"name": "AI", "change_pct": 1.8}])
-        self.assertEqual(bottom, [{"name": "xiaofei", "change_pct": -0.6}])
+        self.assertEqual(bottom, [{"name": "消费", "change_pct": -0.6}])
         self.assertEqual(rate_limit_mock.call_count, 2)
 
     def test_get_chip_distribution_rate_limits_all_tushare_calls(self) -> None:
@@ -170,7 +170,7 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
         tushare_module.get_realtime_quotes.return_value = pd.DataFrame(
             [
                 {
-                    "name": "pinganyinhang",
+                    "name": "平安银行",
                     "price": "10.94",
                     "pre_close": "10.88",
                     "volume": "1000",
@@ -186,5 +186,5 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
 
         self.assertIsNotNone(quote)
         self.assertEqual(quote.code, "000001")
-        self.assertEqual(quote.name, "pinganyinhang")
+        self.assertEqual(quote.name, "平安银行")
         tushare_module.get_realtime_quotes.assert_called_once_with("000001")

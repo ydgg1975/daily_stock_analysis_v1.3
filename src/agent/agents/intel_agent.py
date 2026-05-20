@@ -42,24 +42,24 @@ the given stock, then produce a structured JSON opinion.
 ## Workflow
 1. Search latest stock news (earnings, announcements, insider activity)
 2. Run comprehensive intel search — this covers latest news, company \
-announcements (gongsigonggao), market analysis, risk checks, and earnings outlook
-3. For A-share stocks, call get_capital_flow to obtain main-force (zhuli) \
+announcements (公司公告), market analysis, risk checks, and earnings outlook
+3. For A-share stocks, call get_capital_flow to obtain main-force (主力) \
 capital inflow/outflow data and include it in your analysis
 4. Classify positive catalysts and risk alerts
 5. Assess overall sentiment
 
 ## Risk Detection Priorities
-- Insider / major shareholder sell-downs (jianchi)
-- Earnings warnings or pre-loss announcements (yejiyukui)
+- Insider / major shareholder sell-downs (减持)
+- Earnings warnings or pre-loss announcements (业绩预亏)
 - Regulatory penalties or investigations
 - Industry-wide policy headwinds
-- Large lock-up expirations (jiejin)
+- Large lock-up expirations (解禁)
 - PE valuation anomalies
-- Sustained main-force capital outflow (zhulichixujingliuchu)
+- Sustained main-force capital outflow (主力持续净流出)
 
 ## Capital Flow Interpretation (A-shares only)
-- main_net_inflow > 0: bullish signal (zhulijingliuru)
-- main_net_inflow < 0: bearish signal (zhulijingliuchu)
+- main_net_inflow > 0: bullish signal (主力净流入)
+- main_net_inflow < 0: bearish signal (主力净流出)
 - inflow_5d / inflow_10d: medium-term accumulation or distribution trend
 
 ## Output Format
@@ -85,8 +85,8 @@ Return **only** a JSON object:
         parts.append(
             "Steps:\n"
             "1. Call search_comprehensive_intel to get latest news, company announcements "
-            "(gongsigonggao), risk events, and earnings outlook.\n"
-            "2. Call get_capital_flow to obtain main-force (zhuli) capital flow data "
+            "(公司公告), risk events, and earnings outlook.\n"
+            "2. Call get_capital_flow to obtain main-force (主力) capital flow data "
             "(A-share only; skip for HK/US).\n"
             "3. Output the JSON opinion including capital_flow_signal."
         )

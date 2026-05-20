@@ -19,28 +19,28 @@ logger = logging.getLogger(__name__)
 
 _DIVIDEND_KEYWORD_MAP: Dict[str, List[str]] = {
     "per_share": [
-        "meigupaixi",
-        "meiguxianjinhongli",
-        "meigufenhong",
-        "meigupaixian",
-        "paixian(yuan/gu)",
-        "paixi(yuan/gu)",
-        "shuiqianpaixi(yuan/gu)",
-        "xianjinfenhong(shuiqian)",
+        "每股派息",
+        "每股现金红利",
+        "每股分红",
+        "每股派现",
+        "派现(元/股)",
+        "派息(元/股)",
+        "税前派息(元/股)",
+        "现金分红(税前)",
     ],
     "plan_text": [
-        "fenpeifangan",
-        "fenhongfangan",
-        "shishifangan",
-        "paixifangan",
-        "fangan",
-        "yuan",
-        "fanganshuoming",
+        "分配方案",
+        "分红方案",
+        "实施方案",
+        "派息方案",
+        "方案",
+        "预案",
+        "方案说明",
     ],
-    "ex_dividend_date": ["chuquanchuxiri", "chuxiri", "chuquanri", "chuquanchuxi", "chuxiriqi"],
-    "record_date": ["guquandengjiri", "dengjiri"],
-    "announce_date": ["gonggaoriqi", "gonggaori", "shishigonggaori", "yuangonggaori"],
-    "report_date": ["baogaoqi", "baogaoriqi", "jiezhiriqi", "tongjijiezhiriqi"],
+    "ex_dividend_date": ["除权除息日", "除息日", "除权日", "除权除息", "除息日期"],
+    "record_date": ["股权登记日", "登记日"],
+    "announce_date": ["公告日期", "公告日", "实施公告日", "预案公告日"],
+    "report_date": ["报告期", "报告日期", "截止日期", "统计截止日期"],
 }
 
 
@@ -111,8 +111,8 @@ def _parse_dividend_plan_to_per_share(plan_text: str) -> Optional[float]:
         return None
 
     for pattern in (
-        r"(?:mei)?\s*10\s*gu?\s*pai(?:fa)?\s*([0-9]+(?:\.[0-9]+)?)\s*yuan",
-        r"10\s*pai\s*([0-9]+(?:\.[0-9]+)?)\s*yuan",
+        r"(?:每)?\s*10\s*股?\s*派(?:发)?\s*([0-9]+(?:\.[0-9]+)?)\s*元",
+        r"10\s*派\s*([0-9]+(?:\.[0-9]+)?)\s*元",
     ):
         match = re.search(pattern, text)
         if match:
@@ -120,7 +120,7 @@ def _parse_dividend_plan_to_per_share(plan_text: str) -> Optional[float]:
             if parsed is not None and parsed > 0:
                 return parsed / 10.0
 
-    match_per_share = re.search(r"mei\s*gu\s*pai(?:fa)?\s*([0-9]+(?:\.[0-9]+)?)\s*yuan", text)
+    match_per_share = re.search(r"每\s*股\s*派(?:发)?\s*([0-9]+(?:\.[0-9]+)?)\s*元", text)
     if match_per_share:
         parsed = _safe_float(match_per_share.group(1))
         if parsed is not None and parsed > 0:
@@ -132,7 +132,7 @@ def _extract_cash_dividend_per_share(row: pd.Series) -> Optional[float]:
     """Extract pre-tax cash dividend per share from a row."""
     plan_text = _safe_str(_pick_by_keywords(row, _DIVIDEND_KEYWORD_MAP["plan_text"]))
     # Keep pre-tax semantics; skip explicit after-tax plans unless pre-tax marker exists.
-    if "shuihou" in plan_text and "shuiqian" not in plan_text and "hanshui" not in plan_text:
+    if "税后" in plan_text and "税前" not in plan_text and "含税" not in plan_text:
         return None
 
     direct = _safe_float(_pick_by_keywords(row, _DIVIDEND_KEYWORD_MAP["per_share"]))
@@ -144,7 +144,7 @@ def _extract_cash_dividend_per_share(row: pd.Series) -> Optional[float]:
 def _filter_rows_by_code(df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
-    code_cols = [c for c in df.columns if any(k in str(c) for k in ("daima", "gupiaodaima", "zhengquandaima", "symbol", "ts_code"))]
+    code_cols = [c for c in df.columns if any(k in str(c) for k in ("代码", "股票代码", "证券代码", "symbol", "ts_code"))]
     if not code_cols:
         return df
 
@@ -244,7 +244,7 @@ def _extract_latest_row(df: pd.DataFrame, stock_code: str) -> Optional[pd.Series
     if df is None or df.empty:
         return None
 
-    code_cols = [c for c in df.columns if any(k in str(c) for k in ("daima", "gupiaodaima", "zhengquandaima", "ts_code", "symbol"))]
+    code_cols = [c for c in df.columns if any(k in str(c) for k in ("代码", "股票代码", "证券代码", "ts_code", "symbol"))]
     target = _normalize_code(stock_code)
     if code_cols:
         for col in code_cols:
@@ -312,15 +312,15 @@ class AkshareFundamentalAdapter:
         if fin_df is not None:
             row = _extract_latest_row(fin_df, stock_code)
             if row is not None:
-                revenue_yoy = _safe_float(_pick_by_keywords(row, ["yingyeshourutongbi", "yingshoutongbi", "shourutongbi", "tongbizengzhang"]))
-                profit_yoy = _safe_float(_pick_by_keywords(row, ["jingliruntongbi", "jinglitongbi", "guimujingliruntongbi"]))
-                roe = _safe_float(_pick_by_keywords(row, ["jingzichanshouyilv", "ROE", "jingzichanshouyi"]))
-                gross_margin = _safe_float(_pick_by_keywords(row, ["maolilv"]))
+                revenue_yoy = _safe_float(_pick_by_keywords(row, ["营业收入同比", "营收同比", "收入同比", "同比增长"]))
+                profit_yoy = _safe_float(_pick_by_keywords(row, ["净利润同比", "净利同比", "归母净利润同比"]))
+                roe = _safe_float(_pick_by_keywords(row, ["净资产收益率", "ROE", "净资产收益"]))
+                gross_margin = _safe_float(_pick_by_keywords(row, ["毛利率"]))
                 report_date = _normalize_report_date(_pick_by_keywords(row, _DIVIDEND_KEYWORD_MAP["report_date"]))
-                revenue = _safe_float(_pick_by_keywords(row, ["yingyezongshouru", "yingyeshouru", "yingshou"]))
-                net_profit_parent = _safe_float(_pick_by_keywords(row, ["guimujinglirun", "mugongsigudongjinglirun", "jinglirun"]))
+                revenue = _safe_float(_pick_by_keywords(row, ["营业总收入", "营业收入", "营收"]))
+                net_profit_parent = _safe_float(_pick_by_keywords(row, ["归母净利润", "母公司股东净利润", "净利润"]))
                 operating_cash_flow = _safe_float(
-                    _pick_by_keywords(row, ["jingyinghuodongchanshengdexianjinliuliangjinge", "jingyingxianjinliu", "jingyinghuodongxianjinliu"])
+                    _pick_by_keywords(row, ["经营活动产生的现金流量净额", "经营现金流", "经营活动现金流"])
                 )
                 result["growth"] = {
                     "revenue_yoy": revenue_yoy,
@@ -351,7 +351,7 @@ class AkshareFundamentalAdapter:
             row = _extract_latest_row(forecast_df, stock_code)
             if row is not None:
                 result["earnings"]["forecast_summary"] = _safe_str(
-                    _pick_by_keywords(row, ["yugao", "yejibiandong", "neirong", "zhaiyao", "gonggao"])
+                    _pick_by_keywords(row, ["预告", "业绩变动", "内容", "摘要", "公告"])
                 )[:200]
                 result["source_chain"].append(f"earnings_forecast:{forecast_source}")
 
@@ -365,14 +365,14 @@ class AkshareFundamentalAdapter:
             row = _extract_latest_row(quick_df, stock_code)
             if row is not None:
                 result["earnings"]["quick_report_summary"] = _safe_str(
-                    _pick_by_keywords(row, ["kuaibao", "zhaiyao", "gonggao", "shuoming"])
+                    _pick_by_keywords(row, ["快报", "摘要", "公告", "说明"])
                 )[:200]
                 result["source_chain"].append(f"earnings_quick:{quick_source}")
 
         # Dividend details (cash dividend, pre-tax)
         dividend_df, dividend_source, dividend_errors = self._call_df_candidates([
             ("stock_fhps_detail_em", {"symbol": stock_code}),
-            ("stock_history_dividend_detail", {"symbol": stock_code, "indicator": "fenhong", "date": ""}),
+            ("stock_history_dividend_detail", {"symbol": stock_code, "indicator": "分红", "date": ""}),
             ("stock_dividend_cninfo", {"symbol": stock_code}),
         ])
         result["errors"].extend(dividend_errors)
@@ -391,7 +391,7 @@ class AkshareFundamentalAdapter:
         if inst_df is not None:
             row = _extract_latest_row(inst_df, stock_code)
             if row is not None:
-                inst_change = _safe_float(_pick_by_keywords(row, ["zengjian", "bianhua", "biandong", "chigubianhua"]))
+                inst_change = _safe_float(_pick_by_keywords(row, ["增减", "变化", "变动", "持股变化"]))
                 result["institution"]["institution_holding_change"] = inst_change
                 result["source_chain"].append(f"institution:{inst_source}")
 
@@ -405,7 +405,7 @@ class AkshareFundamentalAdapter:
         if top10_df is not None:
             row = _extract_latest_row(top10_df, stock_code)
             if row is not None:
-                holder_change = _safe_float(_pick_by_keywords(row, ["zengjian", "bianhua", "chigubianhua", "biandong"]))
+                holder_change = _safe_float(_pick_by_keywords(row, ["增减", "变化", "持股变化", "变动"]))
                 result["institution"]["top10_holder_change"] = holder_change
                 result["source_chain"].append(f"top10:{top10_source}")
 
@@ -436,9 +436,9 @@ class AkshareFundamentalAdapter:
         if stock_df is not None:
             row = _extract_latest_row(stock_df, stock_code)
             if row is not None:
-                net_inflow = _safe_float(_pick_by_keywords(row, ["zhulijingliuru", "jingliuru", "jinge"]))
-                inflow_5d = _safe_float(_pick_by_keywords(row, ["5ri", "wuri"]))
-                inflow_10d = _safe_float(_pick_by_keywords(row, ["10ri", "shiri"]))
+                net_inflow = _safe_float(_pick_by_keywords(row, ["主力净流入", "净流入", "净额"]))
+                inflow_5d = _safe_float(_pick_by_keywords(row, ["5日", "五日"]))
+                inflow_10d = _safe_float(_pick_by_keywords(row, ["10日", "十日"]))
                 result["stock_flow"] = {
                     "main_net_inflow": net_inflow,
                     "inflow_5d": inflow_5d,
@@ -452,8 +452,8 @@ class AkshareFundamentalAdapter:
         ])
         result["errors"].extend(sector_errors)
         if sector_df is not None:
-            name_col = next((c for c in sector_df.columns if any(k in str(c) for k in ("bankuai", "hangye", "mingcheng", "name"))), None)
-            flow_col = next((c for c in sector_df.columns if any(k in str(c) for k in ("jingliuru", "zhuli", "flow", "jinge"))), None)
+            name_col = next((c for c in sector_df.columns if any(k in str(c) for k in ("板块", "行业", "名称", "name"))), None)
+            flow_col = next((c for c in sector_df.columns if any(k in str(c) for k in ("净流入", "主力", "flow", "净额"))), None)
             if name_col and flow_col:
                 work_df = sector_df[[name_col, flow_col]].copy()
                 work_df[flow_col] = pd.to_numeric(work_df[flow_col], errors="coerce")
@@ -493,7 +493,7 @@ class AkshareFundamentalAdapter:
             return result
 
         # Try code filter
-        code_cols = [c for c in df.columns if any(k in str(c) for k in ("daima", "gupiaodaima", "zhengquandaima"))]
+        code_cols = [c for c in df.columns if any(k in str(c) for k in ("代码", "股票代码", "证券代码"))]
         target = _normalize_code(stock_code)
         matched = pd.DataFrame()
         for col in code_cols:
@@ -510,7 +510,7 @@ class AkshareFundamentalAdapter:
             result["status"] = "ok" if code_cols else "partial"
             return result
 
-        date_col = next((c for c in matched.columns if any(k in str(c) for k in ("riqi", "shangbang", "jiaoyiri", "time"))), None)
+        date_col = next((c for c in matched.columns if any(k in str(c) for k in ("日期", "上榜", "交易日", "time"))), None)
         parsed_dates: List[datetime] = []
         if date_col is not None:
             for val in matched[date_col].astype(str).tolist():

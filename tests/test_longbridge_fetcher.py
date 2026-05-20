@@ -110,7 +110,7 @@ class TestLongbridgeFetcherMocked(unittest.TestCase):
     def _make_mock_static(self, **kwargs):
         s = MagicMock()
         defaults = {
-            "name_cn": "pingguo",
+            "name_cn": "苹果",
             "name_en": "Apple Inc.",
             "circulating_shares": 15000000000,
             "total_shares": 16000000000,
@@ -136,7 +136,7 @@ class TestLongbridgeFetcherMocked(unittest.TestCase):
         self.assertEqual(quote.source, RealtimeSource.LONGBRIDGE)
         self.assertAlmostEqual(quote.price, 253.79, places=2)
         self.assertAlmostEqual(quote.change_pct, 2.90, places=0)
-        self.assertEqual(quote.name, "pingguo")
+        self.assertEqual(quote.name, "苹果")
 
         # turnover_rate = volume / circulating_shares * 100
         expected_turnover = 49549600 / 15000000000 * 100
@@ -240,7 +240,7 @@ class TestLongbridgeFetcherMocked(unittest.TestCase):
         """HK stock should use .HK suffix."""
         fetcher, ctx = self._make_fetcher_with_mock_ctx()
         ctx.quote.return_value = [self._make_mock_quote()]
-        ctx.static_info.return_value = [self._make_mock_static(name_cn="tengxunkonggu")]
+        ctx.static_info.return_value = [self._make_mock_static(name_cn="腾讯控股")]
         ctx.history_candlesticks_by_offset.return_value = []
 
         quote = fetcher.get_realtime_quote("HK00700")
@@ -271,7 +271,7 @@ class TestSupplementFromLongbridge(unittest.TestCase):
 
         lb_quote = UnifiedRealtimeQuote(
             code="AAPL",
-            name="pingguo",
+            name="苹果",
             source=RealtimeSource.LONGBRIDGE,
             price=253.79,
             volume_ratio=1.25,

@@ -103,13 +103,13 @@ def get_stock_name_index_map() -> Dict[str, str]:
             try:
                 _STOCK_INDEX_CACHE = _load_stock_index_file(candidate_path)
                 logger.debug(
-                    "[stockmingcheng] yijiazaiqianduanstocksuoyinyingshe: %s (%d tiao)",
+                    "[股票名称] 已加载前端股票索引映射: %s (%d 条)",
                     candidate_path,
                     len(_STOCK_INDEX_CACHE),
                 )
                 return _STOCK_INDEX_CACHE
             except (OSError, TypeError, ValueError) as exc:
-                logger.debug("[stockmingcheng] duqustocksuoyinshibai %s: %s", candidate_path, exc)
+                logger.debug("[股票名称] 读取股票索引失败 %s: %s", candidate_path, exc)
 
         _STOCK_INDEX_CACHE = {}
         return _STOCK_INDEX_CACHE
@@ -134,4 +134,3 @@ def _clear_stock_index_cache_for_tests() -> None:
     global _STOCK_INDEX_CACHE
     with _STOCK_INDEX_CACHE_LOCK:
         _STOCK_INDEX_CACHE = None
-

@@ -313,7 +313,7 @@ class TestSkillManager(unittest.TestCase):
         instructions = self.manager.get_skill_instructions()
         self.assertIn("Test Skill (demo)", instructions)
         self.assertIn("Instructions for demo", instructions)
-        self.assertIn("jineng 1:", instructions)
+        self.assertIn("技能 1:", instructions)
 
     def test_get_required_tools(self):
         s1 = _make_skill("s1")
@@ -548,7 +548,19 @@ class TestYAMLStrategyLoading(unittest.TestCase):
         from src.agent.skills.base import load_skill_from_yaml, Skill
 
         yaml_content = """
-Daily Stock Analysis - Test Agent Registry
+name: test_yaml_strategy
+display_name: 测试YAML策略
+description: 一个用于测试的策略
+category: trend
+core_rules: [1, 3]
+required_tools:
+  - analyze_trend
+  - get_daily_history
+instructions: |
+  **测试策略**
+
+  这是一个用自然语言编写的测试策略。
+  判断标准：当 MA5 > MA10 时买入。
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
             f.write(yaml_content)
@@ -558,11 +570,11 @@ Daily Stock Analysis - Test Agent Registry
             skill = load_skill_from_yaml(tmp_path)
             self.assertIsInstance(skill, Skill)
             self.assertEqual(skill.name, "test_yaml_strategy")
-            self.assertEqual(skill.display_name, "ceshiYAMLcelve")
+            self.assertEqual(skill.display_name, "测试YAML策略")
             self.assertEqual(skill.category, "trend")
             self.assertEqual(skill.core_rules, [1, 3])
             self.assertEqual(skill.required_tools, ["analyze_trend", "get_daily_history"])
-            self.assertIn("ziranyuyan", skill.instructions)
+            self.assertIn("自然语言", skill.instructions)
             self.assertFalse(skill.enabled)
         finally:
             os.unlink(tmp_path)
@@ -573,7 +585,10 @@ Daily Stock Analysis - Test Agent Registry
         from src.agent.skills.base import load_skill_from_yaml
 
         yaml_content = """
-Daily Stock Analysis - Test Agent Registry
+name: minimal
+display_name: 最简策略
+description: 最简描述
+instructions: 用自然语言描述的策略内容
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
             f.write(yaml_content)
@@ -594,7 +609,16 @@ Daily Stock Analysis - Test Agent Registry
         from src.agent.skills.base import load_skill_from_yaml
 
         yaml_content = """
-Daily Stock Analysis - Test Agent Registry
+name: metadata_skill
+display_name: 元数据技能
+description: 带有默认元数据的技能
+aliases: [别名一, 别名二]
+default_active: true
+default_router: true
+default_priority: 15
+market_regimes: [trending_up, volatile]
+instructions: |
+  这是一个测试技能。
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
             f.write(yaml_content)
@@ -602,7 +626,7 @@ Daily Stock Analysis - Test Agent Registry
 
         try:
             skill = load_skill_from_yaml(tmp_path)
-            self.assertEqual(skill.aliases, ["biemingyi", "bieminger"])
+            self.assertEqual(skill.aliases, ["别名一", "别名二"])
             self.assertTrue(skill.default_active)
             self.assertTrue(skill.default_router)
             self.assertEqual(skill.default_priority, 15)
@@ -617,7 +641,7 @@ Daily Stock Analysis - Test Agent Registry
 
         yaml_content = """
 name: incomplete
-display_name: buwanzheng
+display_name: 不完整
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
             f.write(yaml_content)
@@ -646,7 +670,10 @@ display_name: buwanzheng
             for i, name in enumerate(["strategy_a", "strategy_b"]):
                 with open(os.path.join(tmpdir, f"{name}.yaml"), 'w', encoding='utf-8') as f:
                     f.write(f"""
-Daily Stock Analysis - Test Agent Registry
+name: {name}
+display_name: 策略{chr(65 + i)}
+description: 描述{chr(65 + i)}
+instructions: 自然语言策略描述 {name}
 """)
 
             # Create an invalid YAML file (should be skipped)
@@ -716,7 +743,7 @@ When explaining code, always include an ASCII diagram.
                 """---
 name: rotation-scout
 description: Track sector rotation leaders
-aliases: [lundong, longtouzhencha]
+aliases: [轮动, 龙头侦察]
 default-active: true
 default-router: true
 default-priority: 12
@@ -727,7 +754,7 @@ Track hot sectors and leading stocks.
                 encoding="utf-8",
             )
             skill = load_skill_from_markdown(skill_dir / "SKILL.md")
-            self.assertEqual(skill.aliases, ["lundong", "longtouzhencha"])
+            self.assertEqual(skill.aliases, ["轮动", "龙头侦察"])
             self.assertTrue(skill.default_active)
             self.assertTrue(skill.default_router)
             self.assertEqual(skill.default_priority, 12)
@@ -781,12 +808,15 @@ Use RESTful naming and consistent validation.
         try:
             with open(os.path.join(tmpdir, "dragon_head.yaml"), 'w', encoding='utf-8') as f:
                 f.write("""
-Daily Stock Analysis - Test Agent Registry
+name: dragon_head
+display_name: 自定义龙头策略
+description: 我自己的龙头策略
+instructions: 按照我的规则分析龙头股
 """)
             manager.load_custom_strategies(tmpdir)
 
             overridden = manager.get("dragon_head")
-            self.assertEqual(overridden.display_name, "zidingyilongtoucelve")
+            self.assertEqual(overridden.display_name, "自定义龙头策略")
             self.assertIn(tmpdir, overridden.source)
         finally:
             import shutil

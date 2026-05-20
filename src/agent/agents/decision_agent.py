@@ -51,7 +51,7 @@ Requirements:
 """
             if report_language == "en":
                 return prompt + "\nAlways answer in English.\n"
-            return prompt + "\nmorenshiyongzhongwenhuida。\n"
+            return prompt + "\n默认使用中文回答。\n"
 
         skills = ""
         if self.skill_instructions:
@@ -117,7 +117,11 @@ new decision_type values.
 - Write all human-readable JSON values in English.
 """
         return prompt + """
-Daily Stock Analysis - Decision Agent
+
+## 输出语言
+- 所有 JSON 键名保持不变。
+- `decision_type` 必须保持为 `buy|hold|sell`。
+- 所有面向用户的人类可读文本值必须使用中文。
 """
 
     def build_user_message(self, ctx: AgentContext) -> str:

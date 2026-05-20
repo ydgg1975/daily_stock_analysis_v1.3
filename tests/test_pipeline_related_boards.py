@@ -11,7 +11,7 @@ class PipelineRelatedBoardsTestCase(unittest.TestCase):
     def test_attach_belong_boards_shallow_copies_context_before_injecting(self) -> None:
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
         pipeline.fetcher_manager = MagicMock()
-        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "baijiu", "type": "hangye"}]
+        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "白酒", "type": "行业"}]
 
         cached_context = {
             "market": "cn",
@@ -24,13 +24,13 @@ class PipelineRelatedBoardsTestCase(unittest.TestCase):
 
         self.assertIsNot(enriched, cached_context)
         self.assertNotIn("belong_boards", cached_context)
-        self.assertEqual(enriched["belong_boards"], [{"name": "baijiu", "type": "hangye"}])
+        self.assertEqual(enriched["belong_boards"], [{"name": "白酒", "type": "行业"}])
 
     def test_attach_belong_boards_copies_existing_board_list(self) -> None:
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
         pipeline.fetcher_manager = MagicMock()
 
-        existing_boards = [{"name": "baijiu", "type": "hangye"}]
+        existing_boards = [{"name": "白酒", "type": "行业"}]
         context = {
             "market": "cn",
             "status": "ok",
@@ -93,7 +93,7 @@ class PipelineRelatedBoardsTestCase(unittest.TestCase):
     def test_attach_belong_boards_uses_normalized_a_share_code_when_market_missing(self) -> None:
         pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
         pipeline.fetcher_manager = MagicMock()
-        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "baijiu"}]
+        pipeline.fetcher_manager.get_belong_boards.return_value = [{"name": "白酒"}]
 
         context = {
             "status": "ok",
@@ -103,7 +103,7 @@ class PipelineRelatedBoardsTestCase(unittest.TestCase):
 
         enriched = pipeline._attach_belong_boards_to_fundamental_context("SH600519", context)
 
-        self.assertEqual(enriched["belong_boards"], [{"name": "baijiu"}])
+        self.assertEqual(enriched["belong_boards"], [{"name": "白酒"}])
         pipeline.fetcher_manager.get_belong_boards.assert_called_once_with("SH600519")
 
 if __name__ == "__main__":

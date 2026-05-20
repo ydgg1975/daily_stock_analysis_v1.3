@@ -40,7 +40,7 @@ class _DummyFetcher:
         return self._result
 
 
-def _make_quote(code: str = "600519", name: str = "guizhoumaotai") -> UnifiedRealtimeQuote:
+def _make_quote(code: str = "600519", name: str = "贵州茅台") -> UnifiedRealtimeQuote:
     return UnifiedRealtimeQuote(
         code=code,
         name=name,
@@ -61,7 +61,7 @@ def _make_pipeline(enable_realtime_quote: bool, realtime_quote=None) -> StockAna
         report_language="zh",
     )
     pipeline.fetcher_manager = MagicMock()
-    pipeline.fetcher_manager.get_stock_name.return_value = "guizhoumaotai"
+    pipeline.fetcher_manager.get_stock_name.return_value = "贵州茅台"
     pipeline.fetcher_manager.get_realtime_quote.return_value = realtime_quote
     pipeline.fetcher_manager.get_chip_distribution.return_value = None
     pipeline.fetcher_manager.get_fundamental_context.return_value = {
@@ -104,9 +104,9 @@ def test_manager_does_not_warn_when_fallback_source_succeeds(mock_get_config, ca
         quote = manager.get_realtime_quote("600519")
 
     assert quote is not None
-    assert quote.name == "guizhoumaotai"
+    assert quote.name == "贵州茅台"
     assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
-    assert "suoyoushujuyuanjunbukeyong" not in caplog.text
+    assert "所有数据源均不可用" not in caplog.text
 
 
 def test_pipeline_warns_once_when_all_realtime_sources_fail(caplog):
@@ -121,9 +121,9 @@ def test_pipeline_warns_once_when_all_realtime_sources_fail(caplog):
     downgrade_logs = [
         record.message
         for record in caplog.records
-        if "lishishoupanjiajixufenxi" in record.message
+        if "历史收盘价继续分析" in record.message
     ]
-    assert downgrade_logs == ["guizhoumaotai(600519) suoyoushishixingqingshujuyuanjunbukeyong,yijiangjiweilishishoupanjiajixufenxi"]
+    assert downgrade_logs == ["贵州茅台(600519) 所有实时行情数据源均不可用，已降级为历史收盘价继续分析"]
 
 
 @patch("src.config.get_config")
@@ -151,7 +151,7 @@ def test_event_monitor_keeps_manager_failure_summary_for_direct_quote_call(mock_
         result = asyncio.run(monitor._check_price(rule))
 
     assert result is None
-    assert "[shishixingqing] 600519 suoyoushujuyuanjunshibai: [efinance] shibai: efinance timeout" in caplog.text
+    assert "[实时行情] 600519 所有数据源均失败: [efinance] 失败: efinance timeout" in caplog.text
 
 
 def test_pipeline_logs_disabled_realtime_once_without_fetching_quote(caplog):
@@ -166,6 +166,6 @@ def test_pipeline_logs_disabled_realtime_once_without_fetching_quote(caplog):
     downgrade_logs = [
         record.message
         for record in caplog.records
-        if "lishishoupanjiajixufenxi" in record.message
+        if "历史收盘价继续分析" in record.message
     ]
-    assert downgrade_logs == ["guizhoumaotai(600519) shishixingqingyijinyong,shiyonglishishoupanjiajixufenxi"]
+    assert downgrade_logs == ["贵州茅台(600519) 实时行情已禁用，使用历史收盘价继续分析"]

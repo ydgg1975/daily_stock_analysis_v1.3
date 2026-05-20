@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Shared runner ??extracted LLM + tool execution loop.
+Shared runner — extracted LLM + tool execution loop.
 
 Provides ``run_agent_loop``, the single authoritative implementation of the
 ReAct execute-loop that was previously inlined inside ``AgentExecutor._run_loop``.
@@ -10,7 +10,7 @@ re-implementing the loop themselves.
 Design goals:
 - Keep the same observable behaviour as the original ``_run_loop``
 - Accept pluggable callbacks for progress, message history, and result handling
-- Remain stateless ??all mutable state lives in the caller
+- Remain stateless — all mutable state lives in the caller
 """
 
 from __future__ import annotations
@@ -30,29 +30,29 @@ from src.storage import persist_llm_usage as _persist_usage
 
 logger = logging.getLogger(__name__)
 
-# Tool name ??friendly label for progress messages
+# Tool name → friendly label for progress messages
 _THINKING_TOOL_LABELS: Dict[str, str] = {
-    "get_realtime_quote": "quotehuoqu",
-    "get_daily_history": "Kxianshujuhuoqu",
-    "analyze_trend": "jishuzhibiaoanalysis",
-    "get_chip_distribution": "choumafenbuanalysis",
-    "search_stock_news": "xinwensousuo",
-    "search_comprehensive_intel": "zongheqingbaosousuo",
-    "get_market_indices": "marketgailanhuoqu",
-    "get_sector_rankings": "hangyebankuaianalysis",
-    "get_analysis_context": "lishianalysisshangxiawen",
-    "get_stock_info": "jibenxinxihuoqu",
-    "analyze_pattern": "Kxianxingtaishibie",
-    "get_volume_analysis": "liangnenganalysis",
-    "calculate_ma": "junxianjisuan",
-    "get_skill_backtest_summary": "jinenghuicegailan",
-    "get_strategy_backtest_summary": "celvehuicegailan",
-    "get_stock_backtest_summary": "geguhuiceshuju",
+    "get_realtime_quote": "行情获取",
+    "get_daily_history": "K线数据获取",
+    "analyze_trend": "技术指标分析",
+    "get_chip_distribution": "筹码分布分析",
+    "search_stock_news": "新闻搜索",
+    "search_comprehensive_intel": "综合情报搜索",
+    "get_market_indices": "市场概览获取",
+    "get_sector_rankings": "行业板块分析",
+    "get_analysis_context": "历史分析上下文",
+    "get_stock_info": "基本信息获取",
+    "analyze_pattern": "K线形态识别",
+    "get_volume_analysis": "量能分析",
+    "calculate_ma": "均线计算",
+    "get_skill_backtest_summary": "技能回测概览",
+    "get_strategy_backtest_summary": "策略回测概览",
+    "get_stock_backtest_summary": "个股回测数据",
 }
 
 
 # ============================================================
-# RunLoopResult ??the output of one run_agent_loop invocation
+# RunLoopResult — the output of one run_agent_loop invocation
 # ============================================================
 
 @dataclass
@@ -72,7 +72,7 @@ class RunLoopResult:
 
     @property
     def model(self) -> str:
-        """Comma-separated (pinyin removed)-duplicated model names used during the run."""
+        """Comma-separated de-duplicated model names used during the run."""
         return ", ".join(dict.fromkeys(m for m in self.models_used if m))
 
 
@@ -369,7 +369,7 @@ def run_agent_loop(
     max_wall_clock_seconds: Optional[float] = None,
     tool_call_timeout_seconds: Optional[float] = None,
 ) -> RunLoopResult:
-    """Execute the ReAct LLM ??tool loop.
+    """Execute the ReAct LLM ↔ tool loop.
 
     This is the *single shared implementation* of the agent execution loop.
     Both the legacy ``AgentExecutor`` and any future multi-agent runner
@@ -377,12 +377,12 @@ def run_agent_loop(
 
     Args:
         messages: The initial message list (system + user + optional history).
-                  **Mutated in-place** ??tool results are appended.
+                  **Mutated in-place** — tool results are appended.
         tool_registry: Registry of callable tools.
         llm_adapter: LLM backend (handles multi-provider fallback).
         max_steps: Maximum number of LLM round-trips.
         progress_callback: Optional callback receiving progress dicts.
-        thinking_labels: Override map of tool_name ??friendly label.
+        thinking_labels: Override map of tool_name → friendly label.
         max_wall_clock_seconds: Optional overall timeout budget for the loop.
         tool_call_timeout_seconds: Optional timeout for one parallel tool batch.
 
@@ -454,11 +454,11 @@ def run_agent_loop(
         # --- progress: thinking ---
         if progress_callback:
             if not tool_calls_log:
-                thinking_msg = "분석 경로를 정하는 중..."
+                thinking_msg = "正在制定分析路径..."
             else:
                 last_tool = tool_calls_log[-1].get("tool", "")
                 label = labels.get(last_tool, last_tool)
-                thinking_msg = f"{label} 완료, 추가 분석을 진행합니다..."
+                thinking_msg = f"「{label}」已完成，继续深入分析..."
             progress_callback({"type": "thinking", "step": step + 1, "message": thinking_msg})
 
         # --- LLM call ---
@@ -569,7 +569,7 @@ def run_agent_loop(
                 total_tokens,
             )
             if progress_callback:
-                progress_callback({"type": "generating", "step": step + 1, "message": "in_progressshengchengzuizhonganalysis..."})
+                progress_callback({"type": "generating", "step": step + 1, "message": "正在生成最终分析..."})
 
             final_content = response.content or ""
             is_error = response.provider == "error"
@@ -752,4 +752,3 @@ def _execute_tools(
             pool.shutdown(wait=not timeout_triggered, cancel_futures=timeout_triggered)
 
     return results
-

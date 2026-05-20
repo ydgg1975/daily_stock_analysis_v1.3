@@ -29,31 +29,31 @@ class TestAnalysisReportSchema(unittest.TestCase):
     def test_valid_dashboard_parses(self) -> None:
         """Valid LLM-like JSON parses successfully."""
         data = {
-            "stock_name": "guizhoumaotai",
+            "stock_name": "贵州茅台",
             "sentiment_score": 75,
-            "trend_prediction": "kanduo",
-            "operation_advice": "chiyou",
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
             "decision_type": "hold",
-            "confidence_level": "zhong",
+            "confidence_level": "中",
             "dashboard": {
-                "core_conclusion": {"one_sentence": "chiyouguanwang"},
+                "core_conclusion": {"one_sentence": "持有观望"},
                 "intelligence": {"risk_alerts": []},
-                "battle_plan": {"sniper_points": {"stop_loss": "110yuan"}},
+                "battle_plan": {"sniper_points": {"stop_loss": "110元"}},
             },
-            "analysis_summary": "jibenmianwenjian",
+            "analysis_summary": "基本面稳健",
         }
         schema = AnalysisReportSchema.model_validate(data)
-        self.assertEqual(schema.stock_name, "guizhoumaotai")
+        self.assertEqual(schema.stock_name, "贵州茅台")
         self.assertEqual(schema.sentiment_score, 75)
         self.assertIsNotNone(schema.dashboard)
 
     def test_schema_allows_optional_fields_missing(self) -> None:
         """Schema accepts minimal valid structure."""
         data = {
-            "stock_name": "ceshi",
+            "stock_name": "测试",
             "sentiment_score": 50,
-            "trend_prediction": "zhendang",
-            "operation_advice": "guanwang",
+            "trend_prediction": "震荡",
+            "operation_advice": "观望",
         }
         schema = AnalysisReportSchema.model_validate(data)
         self.assertIsNone(schema.dashboard)
@@ -62,10 +62,10 @@ class TestAnalysisReportSchema(unittest.TestCase):
     def test_schema_allows_numeric_strings(self) -> None:
         """Schema accepts string values for numeric fields (LLM may return N/A)."""
         data = {
-            "stock_name": "ceshi",
+            "stock_name": "测试",
             "sentiment_score": 60,
-            "trend_prediction": "kanduo",
-            "operation_advice": "mairu",
+            "trend_prediction": "看多",
+            "operation_advice": "买入",
             "dashboard": {
                 "data_perspective": {
                     "price_position": {
@@ -86,10 +86,10 @@ class TestAnalysisReportSchema(unittest.TestCase):
     def test_schema_fails_on_invalid_sentiment_score(self) -> None:
         """Schema validation fails when sentiment_score out of range."""
         data = {
-            "stock_name": "ceshi",
+            "stock_name": "测试",
             "sentiment_score": 150,  # out of 0-100
-            "trend_prediction": "kanduo",
-            "operation_advice": "mairu",
+            "trend_prediction": "看多",
+            "operation_advice": "买入",
         }
         with self.assertRaises(Exception):
             AnalysisReportSchema.model_validate(data)
@@ -102,13 +102,13 @@ class TestAnalyzerSchemaFallback(unittest.TestCase):
         """When schema validation fails, analyzer continues with raw dict."""
         analyzer = GeminiAnalyzer()
         response = json.dumps({
-            "stock_name": "guizhoumaotai",
+            "stock_name": "贵州茅台",
             "sentiment_score": 150,  # invalid for schema
-            "trend_prediction": "kanduo",
-            "operation_advice": "chiyou",
-            "analysis_summary": "ceshizhaiyao",
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
+            "analysis_summary": "测试摘要",
         })
-        result = analyzer._parse_response(response, "600519", "guizhoumaotai")
+        result = analyzer._parse_response(response, "600519", "贵州茅台")
         self.assertIsInstance(result, AnalysisResult)
         self.assertEqual(result.code, "600519")
         self.assertEqual(result.sentiment_score, 150)  # from raw dict
@@ -118,43 +118,43 @@ class TestAnalyzerSchemaFallback(unittest.TestCase):
         """Valid JSON produces correct AnalysisResult."""
         analyzer = GeminiAnalyzer()
         response = json.dumps({
-            "stock_name": "guizhoumaotai",
+            "stock_name": "贵州茅台",
             "sentiment_score": 72,
-            "trend_prediction": "kanduo",
-            "operation_advice": "chiyou",
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
             "decision_type": "hold",
-            "confidence_level": "gao",
-            "analysis_summary": "jishumianxianghao",
+            "confidence_level": "高",
+            "analysis_summary": "技术面向好",
         })
-        result = analyzer._parse_response(response, "600519", "gupiao600519")
+        result = analyzer._parse_response(response, "600519", "股票600519")
         self.assertIsInstance(result, AnalysisResult)
-        self.assertEqual(result.name, "guizhoumaotai")
+        self.assertEqual(result.name, "贵州茅台")
         self.assertEqual(result.sentiment_score, 72)
-        self.assertEqual(result.analysis_summary, "jishumianxianghao")
+        self.assertEqual(result.analysis_summary, "技术面向好")
 
     def test_parse_response_keeps_unknown_dashboard_fields(self) -> None:
         analyzer = GeminiAnalyzer()
         response = json.dumps({
-            "stock_name": "guizhoumaotai",
+            "stock_name": "贵州茅台",
             "sentiment_score": 72,
-            "trend_prediction": "kanduo",
-            "operation_advice": "chiyou",
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
             "decision_type": "hold",
-            "analysis_summary": "jishumianxianghao",
+            "analysis_summary": "技术面向好",
             "dashboard": {
                 "core_conclusion": {
-                    "one_sentence": "xianguancha",
-                    "signal_type": "🟡chiyouguanwang",
+                    "one_sentence": "先观察",
+                    "signal_type": "🟡持有观望",
                 },
                 "decision_stability": {
                     "applied": True,
-                    "reason": "huiceyanzheng",
+                    "reason": "回测验证",
                 },
             },
         })
-        result = analyzer._parse_response(response, "600519", "gupiao600519")
+        result = analyzer._parse_response(response, "600519", "股票600519")
         self.assertEqual(result.dashboard["decision_stability"]["applied"], True)
-        self.assertEqual(result.dashboard["decision_stability"]["reason"], "huiceyanzheng")
+        self.assertEqual(result.dashboard["decision_stability"]["reason"], "回测验证")
 
     def test_parse_text_response_honors_injected_runtime_report_language(self) -> None:
         """Fallback text parsing should use the analyzer's injected config, not the global singleton."""

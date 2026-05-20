@@ -50,7 +50,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
 
     def test_provider_skips_body_fetch_when_snippet_is_sufficient(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
-        long_snippet = "zheshiyiduanyijingzugouzhangdezhaiyao。 " * 12
+        long_snippet = "这是一段已经足够长的摘要。 " * 12
 
         with self._patch_serpapi(
             {
@@ -65,7 +65,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -101,7 +101,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -137,7 +137,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -174,7 +174,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -192,7 +192,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "Malformed detected extensions result",
                         "link": "https://example.com/malformed-detected-extensions",
-                        "snippet": "zhaiyaoguoduan",
+                        "snippet": "摘要过短",
                         "source": "Example",
                         "rich_snippet": {
                             "top": {
@@ -204,9 +204,9 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -215,11 +215,11 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
         self.assertNotIn("True", resp.results[0].snippet)
-        self.assertIn("[wangyexiangqing]", resp.results[0].snippet)
+        self.assertIn("【网页详情】", resp.results[0].snippet)
 
     def test_provider_ignores_malformed_rich_snippet_sections(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
-        long_enough_snippet = "yiyouzhaiyao,zugoubimianbuzhua。 " * 16
+        long_enough_snippet = "已有摘要，足够避免补抓。 " * 16
 
         with self._patch_serpapi(
             {
@@ -237,7 +237,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -269,7 +269,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                 ]
             }
         ), patch("src.search_service.fetch_url_content") as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 1)
@@ -297,7 +297,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
 
     def test_merge_organic_snippet_uses_normalized_length_for_ellipsis(self) -> None:
         merged = SerpAPISearchProvider._merge_organic_snippet_with_content(
-            "yuanshizhaiyao",
+            "原始摘要",
             "A" + ("\n" * (SerpAPISearchProvider._ORGANIC_FETCHED_PREVIEW_LENGTH + 20)),
         )
 
@@ -312,28 +312,28 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "Need extra context",
                         "link": "https://example.com/need-extra-context",
-                        "snippet": "zhaiyaoguoduan",
+                        "snippet": "摘要过短",
                         "source": "Example",
                     },
                     {
                         "title": "Second short result",
                         "link": "https://example.com/second-short",
-                        "snippet": "yehenduan",
+                        "snippet": "也很短",
                         "source": "Example",
                     },
                     {
                         "title": "Third short result",
                         "link": "https://example.com/third-short",
-                        "snippet": "haishihenduan",
+                        "snippet": "还是很短",
                         "source": "Example",
                     },
                 ]
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 3)
@@ -341,9 +341,9 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/need-extra-context",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertIn("[wangyexiangqing]", resp.results[0].snippet)
-        self.assertEqual(resp.results[1].snippet, "yehenduan")
-        self.assertEqual(resp.results[2].snippet, "haishihenduan")
+        self.assertIn("【网页详情】", resp.results[0].snippet)
+        self.assertEqual(resp.results[1].snippet, "也很短")
+        self.assertEqual(resp.results[2].snippet, "还是很短")
 
     def test_provider_skips_asset_link_and_fetches_next_eligible_result(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
@@ -354,28 +354,28 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "PDF attachment",
                         "link": "https://example.com/report.PDF?download=1",
-                        "snippet": "fujianzhaiyaohenduan",
+                        "snippet": "附件摘要很短",
                         "source": "Example",
                     },
                     {
                         "title": "HTML article",
                         "link": "https://example.com/article",
-                        "snippet": "zhengwenzhaiyaoyeduan",
+                        "snippet": "正文摘要也短",
                         "source": "Example",
                     },
                     {
                         "title": "Third short result",
                         "link": "https://example.com/third-short",
-                        "snippet": "haishihenduan",
+                        "snippet": "还是很短",
                         "source": "Example",
                     },
                 ]
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 3)
@@ -383,9 +383,9 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/article",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertEqual(resp.results[0].snippet, "fujianzhaiyaohenduan")
-        self.assertIn("[wangyexiangqing]", resp.results[1].snippet)
-        self.assertEqual(resp.results[2].snippet, "haishihenduan")
+        self.assertEqual(resp.results[0].snippet, "附件摘要很短")
+        self.assertIn("【网页详情】", resp.results[1].snippet)
+        self.assertEqual(resp.results[2].snippet, "还是很短")
 
     def test_provider_skips_query_encoded_attachment_and_fetches_next_result(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
@@ -396,28 +396,28 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "Attachment behind download endpoint",
                         "link": "https://example.com/download?file=report.pdf",
-                        "snippet": "fujianzhaiyaohenduan",
+                        "snippet": "附件摘要很短",
                         "source": "Example",
                     },
                     {
                         "title": "HTML article",
                         "link": "https://example.com/article",
-                        "snippet": "zhengwenzhaiyaoyeduan",
+                        "snippet": "正文摘要也短",
                         "source": "Example",
                     },
                     {
                         "title": "Third short result",
                         "link": "https://example.com/third-short",
-                        "snippet": "haishihenduan",
+                        "snippet": "还是很短",
                         "source": "Example",
                     },
                 ]
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=3)
+            resp = provider.search("阿里巴巴 财报", max_results=3)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 3)
@@ -425,9 +425,9 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/article",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertEqual(resp.results[0].snippet, "fujianzhaiyaohenduan")
-        self.assertIn("[wangyexiangqing]", resp.results[1].snippet)
-        self.assertEqual(resp.results[2].snippet, "haishihenduan")
+        self.assertEqual(resp.results[0].snippet, "附件摘要很短")
+        self.assertIn("【网页详情】", resp.results[1].snippet)
+        self.assertEqual(resp.results[2].snippet, "还是很短")
 
     def test_provider_keeps_html_fetch_for_asset_like_query_param(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
@@ -438,22 +438,22 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "HTML article with media param",
                         "link": "https://example.com/article?thumbnail=cover.jpg",
-                        "snippet": "zhaiyaoguoduan",
+                        "snippet": "摘要过短",
                         "source": "Example",
                     },
                     {
                         "title": "Second short result",
                         "link": "https://example.com/second-short",
-                        "snippet": "yehenduan",
+                        "snippet": "也很短",
                         "source": "Example",
                     },
                 ]
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=2)
+            resp = provider.search("阿里巴巴 财报", max_results=2)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 2)
@@ -461,8 +461,8 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/article?thumbnail=cover.jpg",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertIn("[wangyexiangqing]", resp.results[0].snippet)
-        self.assertEqual(resp.results[1].snippet, "yehenduan")
+        self.assertIn("【网页详情】", resp.results[0].snippet)
+        self.assertEqual(resp.results[1].snippet, "也很短")
 
     def test_provider_skips_non_string_link_and_keeps_fetch_budget(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
@@ -473,22 +473,22 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "Malformed link result",
                         "link": {"href": "https://example.com/broken"},
-                        "snippet": "zhaiyaoguoduan",
+                        "snippet": "摘要过短",
                         "source": "Example",
                     },
                     {
                         "title": "HTML article",
                         "link": "https://example.com/article",
-                        "snippet": "zhengwenzhaiyaoyeduan",
+                        "snippet": "正文摘要也短",
                         "source": "Example",
                     },
                 ]
             }
         ), patch(
             "src.search_service.fetch_url_content",
-            return_value="wangyezhengwenbuchongxinxi " * 40,
+            return_value="网页正文补充信息 " * 40,
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=2)
+            resp = provider.search("阿里巴巴 财报", max_results=2)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 2)
@@ -496,8 +496,8 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/article",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertEqual(resp.results[0].snippet, "zhaiyaoguoduan")
-        self.assertIn("[wangyexiangqing]", resp.results[1].snippet)
+        self.assertEqual(resp.results[0].snippet, "摘要过短")
+        self.assertIn("【网页详情】", resp.results[1].snippet)
 
     def test_provider_fetch_failure_stays_fail_open_and_stops_after_budget(self) -> None:
         provider = SerpAPISearchProvider(["dummy_key"])
@@ -508,13 +508,13 @@ class TestSerpAPISearchProvider(unittest.TestCase):
                     {
                         "title": "Slow result",
                         "link": "https://example.com/slow",
-                        "snippet": "zhaiyaoguoduan",
+                        "snippet": "摘要过短",
                         "source": "Example",
                     },
                     {
                         "title": "Another short result",
                         "link": "https://example.com/another-short",
-                        "snippet": "rengranhenduan",
+                        "snippet": "仍然很短",
                         "source": "Example",
                     },
                 ]
@@ -523,7 +523,7 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "src.search_service.fetch_url_content",
             side_effect=TimeoutError("slow site"),
         ) as mock_fetch:
-            resp = provider.search("alibaba caibao", max_results=2)
+            resp = provider.search("阿里巴巴 财报", max_results=2)
 
         self.assertTrue(resp.success)
         self.assertEqual(len(resp.results), 2)
@@ -531,8 +531,8 @@ class TestSerpAPISearchProvider(unittest.TestCase):
             "https://example.com/slow",
             timeout=SerpAPISearchProvider._ORGANIC_CONTENT_FETCH_TIMEOUT,
         )
-        self.assertEqual(resp.results[0].snippet, "zhaiyaoguoduan")
-        self.assertEqual(resp.results[1].snippet, "rengranhenduan")
+        self.assertEqual(resp.results[0].snippet, "摘要过短")
+        self.assertEqual(resp.results[1].snippet, "仍然很短")
 
 
 if __name__ == "__main__":

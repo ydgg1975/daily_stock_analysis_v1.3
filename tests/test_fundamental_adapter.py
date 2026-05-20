@@ -23,33 +23,33 @@ from data_provider.fundamental_adapter import (
 
 class TestFundamentalAdapter(unittest.TestCase):
     def test_parse_dividend_plan_to_per_share_supports_cn_patterns(self) -> None:
-        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("10pai3yuan(hanshui)"), 0.3, places=6)
-        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("mei10gupaifa2.5yuan"), 0.25, places=6)
-        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("meigupai0.8yuan"), 0.8, places=6)
-        self.assertIsNone(_parse_dividend_plan_to_per_share("jinsonggu,buxianjinfenhong"))
+        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("10派3元(含税)"), 0.3, places=6)
+        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("每10股派发2.5元"), 0.25, places=6)
+        self.assertAlmostEqual(_parse_dividend_plan_to_per_share("每股派0.8元"), 0.8, places=6)
+        self.assertIsNone(_parse_dividend_plan_to_per_share("仅送股，不现金分红"))
 
     def test_extract_latest_row_returns_none_when_code_mismatch(self) -> None:
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["600000", "000001"],
-                "zhi": [1, 2],
+                "股票代码": ["600000", "000001"],
+                "值": [1, 2],
             }
         )
         row = _extract_latest_row(df, "600519")
         self.assertIsNone(row)
 
     def test_extract_latest_row_fallback_when_no_code_column(self) -> None:
-        df = pd.DataFrame({"zhi": [1, 2]})
+        df = pd.DataFrame({"值": [1, 2]})
         row = _extract_latest_row(df, "600519")
         self.assertIsNotNone(row)
-        self.assertEqual(row["zhi"], 1)
+        self.assertEqual(row["值"], 1)
 
     def test_dragon_tiger_no_match_with_code_column_is_ok(self) -> None:
         adapter = AkshareFundamentalAdapter()
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["600000"],
-                "riqi": ["2026-01-01"],
+                "股票代码": ["600000"],
+                "日期": ["2026-01-01"],
             }
         )
         with patch.object(adapter, "_call_df_candidates", return_value=(df, "stock_lhb_stock_statistic_em", [])):
@@ -63,8 +63,8 @@ class TestFundamentalAdapter(unittest.TestCase):
         today = pd.Timestamp.now().strftime("%Y-%m-%d")
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["600519"],
-                "riqi": [today],
+                "股票代码": ["600519"],
+                "日期": [today],
             }
         )
         with patch.object(adapter, "_call_df_candidates", return_value=(df, "stock_lhb_stock_statistic_em", [])):
@@ -81,23 +81,23 @@ class TestFundamentalAdapter(unittest.TestCase):
         old_day = (now - timedelta(days=500)).strftime("%Y-%m-%d")
         fin_df = pd.DataFrame(
             {
-                "gupiaodaima": ["600519"],
-                "baogaoqi": [within_ttm],
-                "yingyezongshouru": [1000.0],
-                "guimujinglirun": [300.0],
-                "jingyinghuodongchanshengdexianjinliuliangjinge": [500.0],
-                "jingzichanshouyilv": [18.2],
-                "yingyeshourutongbi": [12.0],
-                "jingliruntongbi": [9.5],
+                "股票代码": ["600519"],
+                "报告期": [within_ttm],
+                "营业总收入": [1000.0],
+                "归母净利润": [300.0],
+                "经营活动产生的现金流量净额": [500.0],
+                "净资产收益率": [18.2],
+                "营业收入同比": [12.0],
+                "净利润同比": [9.5],
             }
         )
-        forecast_df = pd.DataFrame({"gupiaodaima": ["600519"], "yugao": ["yuzeng"]})
-        quick_df = pd.DataFrame({"gupiaodaima": ["600519"], "kuaibao": ["kuaibaozhaiyao"]})
+        forecast_df = pd.DataFrame({"股票代码": ["600519"], "预告": ["预增"]})
+        quick_df = pd.DataFrame({"股票代码": ["600519"], "快报": ["快报摘要"]})
         dividend_df = pd.DataFrame(
             {
-                "gupiaodaima": ["600519", "600519", "600519", "600519"],
-                "chuxiri": [within_ttm, within_ttm, future_day, old_day],
-                "fenpeifangan": ["10pai3yuan(hanshui)", "10pai3yuan(hanshui)", "10pai5yuan", "10pai1yuan"],
+                "股票代码": ["600519", "600519", "600519", "600519"],
+                "除息日": [within_ttm, within_ttm, future_day, old_day],
+                "分配方案": ["10派3元(含税)", "10派3元(含税)", "10派5元", "10派1元"],
             }
         )
 
@@ -132,9 +132,9 @@ class TestFundamentalAdapter(unittest.TestCase):
         now = datetime.now().strftime("%Y-%m-%d")
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["000001"],
-                "chuxiri": [now],
-                "fenpeifangan": ["10pai3yuan(hanshui)"],
+                "股票代码": ["000001"],
+                "除息日": [now],
+                "分配方案": ["10派3元(含税)"],
             }
         )
 
@@ -145,9 +145,9 @@ class TestFundamentalAdapter(unittest.TestCase):
         now = datetime.now().strftime("%Y-%m-%d")
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["600519"],
-                "chuxiri": [now],
-                "fenpeifangan": ["10pai3yuan(shuihou)"],
+                "股票代码": ["600519"],
+                "除息日": [now],
+                "分配方案": ["10派3元(税后)"],
             }
         )
 
@@ -160,9 +160,9 @@ class TestFundamentalAdapter(unittest.TestCase):
         day_366 = (now - timedelta(days=366)).strftime("%Y-%m-%d")
         df = pd.DataFrame(
             {
-                "gupiaodaima": ["600519", "600519"],
-                "chuxiri": [day_365, day_366],
-                "fenpeifangan": ["10pai3yuan(hanshui)", "10pai5yuan(hanshui)"],
+                "股票代码": ["600519", "600519"],
+                "除息日": [day_365, day_366],
+                "分配方案": ["10派3元(含税)", "10派5元(含税)"],
             }
         )
 

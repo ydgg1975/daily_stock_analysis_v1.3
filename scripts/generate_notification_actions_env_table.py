@@ -29,7 +29,8 @@ WORKFLOW_PATH = ROOT_DIR / ".github/workflows/daily_analysis.yml"
 DOCS_PATH = ROOT_DIR / "docs/notifications.md"
 TABLE_START = "<!-- notification-actions-env-table:start -->"
 TABLE_END = "<!-- notification-actions-env-table:end -->"
-ANALYZE_STEP_NAME = "zhixinggupiaofenxi"
+ANALYZE_STEP_NAME = "执行股票分析"
+LEGACY_ANALYZE_STEP_NAMES = ("Run stock analysis",)
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,14 @@ def load_daily_analysis_env(workflow_path: Path = WORKFLOW_PATH) -> dict[str, st
 
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["analyze"]["steps"]
-    analyze_step = next((step for step in steps if step.get("name") == ANALYZE_STEP_NAME), None)
+    analyze_step = next(
+        (
+            step
+            for step in steps
+            if step.get("name") in (ANALYZE_STEP_NAME, *LEGACY_ANALYZE_STEP_NAMES)
+        ),
+        None,
+    )
     available_step_names = [step.get("name", "<unnamed>") for step in steps]
     if analyze_step is None:
         raise ValueError(

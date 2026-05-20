@@ -20,55 +20,55 @@ from src.storage import DatabaseManager, StockDaily
 class TestStorage(unittest.TestCase):
     
     def test_parse_sniper_value(self):
-        """
-Daily Stock Analysis - Test Storage
-"""
+        """测试解析狙击点位数值"""
         
-        # 1. zhengchangshuzhi
+        # 1. 正常数值
         self.assertEqual(DatabaseManager._parse_sniper_value(100), 100.0)
         self.assertEqual(DatabaseManager._parse_sniper_value(100.5), 100.5)
         self.assertEqual(DatabaseManager._parse_sniper_value("100"), 100.0)
         self.assertEqual(DatabaseManager._parse_sniper_value("100.5"), 100.5)
         
-        # 2. baohanzhongwenmiaoshuhe"yuan"
-        self.assertEqual(DatabaseManager._parse_sniper_value("jianyizai 100 yuanfujinmairu"), 100.0)
-        self.assertEqual(DatabaseManager._parse_sniper_value("jiage:100.5yuan"), 100.5)
+        # 2. 包含中文描述和"元"
+        self.assertEqual(DatabaseManager._parse_sniper_value("建议在 100 元附近买入"), 100.0)
+        self.assertEqual(DatabaseManager._parse_sniper_value("价格：100.5元"), 100.5)
         
-        # 3. baohanganraoshuzi(xiufudeBugchangjing)
-        # zhiqian "MA5" huibeicuowutiquwei 5.0,xianzaiyinggaitiqu "yuan" qianmiande 100
-        text_bug = "wufageichu。xudengdaiMA5shujuhuifu,zaigujiahuicaiMA5qieguaililv<2%shikaolv100yuan"
+        # 3. 包含干扰数字（修复的Bug场景）
+        # 之前 "MA5" 会被错误提取为 5.0，现在应该提取 "元" 前面的 100
+        text_bug = "无法给出。需等待MA5数据恢复，在股价回踩MA5且乖离率<2%时考虑100元"
         self.assertEqual(DatabaseManager._parse_sniper_value(text_bug), 100.0)
         
-        # 4. gengduoganraochangjing
-        text_complex = "MA10wei20.5,jianyizai30yuanmairu"
+        # 4. 更多干扰场景
+        text_complex = "MA10为20.5，建议在30元买入"
         self.assertEqual(DatabaseManager._parse_sniper_value(text_complex), 30.0)
         
-        text_multiple = "zhichengwei10yuan,zuliwei20yuan" # yinggaitiquzuihouyige"yuan"qianmiandeshuzi,ji20,huozhegengfuzadeluoji?
-        # dangqianluojishizhaozuihouyigemaohao,ranhouzhaozhihoudediyige"yuan",tiquzhongjiandeshuzi。
-        self.assertEqual(DatabaseManager._parse_sniper_value("30yuan"), 30.0)
+        text_multiple = "支撑位10元，阻力位20元" # 应该提取最后一个"元"前面的数字，即20，或者更复杂的逻辑？
+        # 当前逻辑是找最后一个冒号，然后找之后的第一个"元"，提取中间的数字。
+        # 测试没有冒号的情况
+        self.assertEqual(DatabaseManager._parse_sniper_value("30元"), 30.0)
         
-        self.assertEqual(DatabaseManager._parse_sniper_value("MA5 10 20yuan"), 20.0)
+        # 测试多个数字在"元"之前
+        self.assertEqual(DatabaseManager._parse_sniper_value("MA5 10 20元"), 20.0)
         
-        # 5. Fallback: no "yuan" character — extracts last non-MA number
-        self.assertEqual(DatabaseManager._parse_sniper_value("102.10-103.00(MA5fujin)"), 103.0)
-        self.assertEqual(DatabaseManager._parse_sniper_value("97.62-98.50(MA10fujin)"), 98.5)
-        self.assertEqual(DatabaseManager._parse_sniper_value("93.40xiafang(MA20zhicheng)"), 93.4)
-        self.assertEqual(DatabaseManager._parse_sniper_value("108.00-110.00(qianqigaodianzuli)"), 110.0)
+        # 5. Fallback: no "元" character — extracts last non-MA number
+        self.assertEqual(DatabaseManager._parse_sniper_value("102.10-103.00（MA5附近）"), 103.0)
+        self.assertEqual(DatabaseManager._parse_sniper_value("97.62-98.50（MA10附近）"), 98.5)
+        self.assertEqual(DatabaseManager._parse_sniper_value("93.40下方（MA20支撑）"), 93.4)
+        self.assertEqual(DatabaseManager._parse_sniper_value("108.00-110.00（前期高点阻力）"), 110.0)
 
-        # 6. wuxiaoshuru
+        # 6. 无效输入
         self.assertIsNone(DatabaseManager._parse_sniper_value(None))
         self.assertIsNone(DatabaseManager._parse_sniper_value(""))
-        self.assertIsNone(DatabaseManager._parse_sniper_value("meiyoushuzi"))
-        self.assertIsNone(DatabaseManager._parse_sniper_value("MA5danmeiyouyuan"))
+        self.assertIsNone(DatabaseManager._parse_sniper_value("没有数字"))
+        self.assertIsNone(DatabaseManager._parse_sniper_value("MA5但没有元"))
 
-        # 7. huigui:kuohaoneijishuzhibiaoshuzibuyingbeitiqu
-        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.52-1.53 (huicaiMA5/10fujin)"), 10.0)
-        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.55-1.56(MA5/M20zhicheng)"), 20.0)
-        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.49-1.50(MA60fujinqiwen)"), 60.0)
-        # yanzhengzhengquezhizaiqujiannei
-        self.assertIn(DatabaseManager._parse_sniper_value("1.52-1.53 (huicaiMA5/10fujin)"), [1.52, 1.53])
-        self.assertIn(DatabaseManager._parse_sniper_value("1.55-1.56(MA5/M20zhicheng)"), [1.55, 1.56])
-        self.assertIn(DatabaseManager._parse_sniper_value("1.49-1.50(MA60fujinqiwen)"), [1.49, 1.50])
+        # 7. 回归：括号内技术指标数字不应被提取
+        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.52-1.53 (回踩MA5/10附近)"), 10.0)
+        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.55-1.56(MA5/M20支撑)"), 20.0)
+        self.assertNotEqual(DatabaseManager._parse_sniper_value("1.49-1.50(MA60附近企稳)"), 60.0)
+        # 验证正确值在区间内
+        self.assertIn(DatabaseManager._parse_sniper_value("1.52-1.53 (回踩MA5/10附近)"), [1.52, 1.53])
+        self.assertIn(DatabaseManager._parse_sniper_value("1.55-1.56(MA5/M20支撑)"), [1.55, 1.56])
+        self.assertIn(DatabaseManager._parse_sniper_value("1.49-1.50(MA60附近企稳)"), [1.49, 1.50])
 
     def test_get_chat_sessions_prefix_is_scoped_by_colon_boundary(self):
         DatabaseManager.reset_instance()

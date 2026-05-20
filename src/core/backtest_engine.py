@@ -53,37 +53,37 @@ class BacktestEngine:
 
     # Operation advice keywords (Chinese + English)
     _BULLISH_KEYWORDS = (
-        "mairu",
-        "jiacang",
-        "qiangliemairu",
-        "zengchi",
-        "jiancang",
+        "买入",
+        "加仓",
+        "强烈买入",
+        "增持",
+        "建仓",
         "strong buy",
         "buy",
         "add",
     )
     _BEARISH_KEYWORDS = (
-        "maichu",
-        "jiancang",
-        "qiangliemaichu",
-        "qingcang",
+        "卖出",
+        "减仓",
+        "强烈卖出",
+        "清仓",
         "strong sell",
         "sell",
         "reduce",
     )
     _HOLD_KEYWORDS = (
-        "chiyou",
-        "zhendangguanwang",
-        "xipanguancha",
-        "chiyouguancha",
+        "持有",
+        "震荡观望",
+        "洗盘观察",
+        "持有观察",
         "hold",
         "range-bound watch",
         "shakeout watch",
         "hold and watch",
     )
     _WAIT_KEYWORDS = (
-        "guanwang",
-        "dengdai",
+        "观望",
+        "等待",
         "wait",
     )
 
@@ -92,20 +92,20 @@ class BacktestEngine:
     # applied during matching so "do not" matches prefix "do not " or "do not".
     _NEGATION_PATTERNS = (
         "not", "don't", "do not", "no", "never", "avoid",  # English
-        "buyao", "bu", "bie", "wu", "meiyou",  # Chinese
+        "不要", "不", "别", "勿", "没有",  # Chinese
     )
 
     _NEGATION_CONNECTOR_WORDS = (
-        "jianyi",
-        "ying",
-        "yingdang",
-        "yi",
-        "xian",
-        "zai",
-        "zan",
-        "bubi",
-        "bixu",
-        "wuxu",
+        "建议",
+        "应",
+        "应当",
+        "宜",
+        "先",
+        "再",
+        "暂",
+        "不必",
+        "必须",
+        "无需",
     )
 
     @classmethod
@@ -394,7 +394,7 @@ class BacktestEngine:
     def _matches_intent(cls, text: str, keywords: Sequence[str]) -> bool:
         """Check if text expresses the intent of any keyword, accounting for negation.
 
-        Tier 1: exact match (covers clean labels like "mairu", "hold").
+        Tier 1: exact match (covers clean labels like "买入", "hold").
         Tier 2: substring match with negation guard.
         Keywords are assumed to be lowercase (matching _normalize_text output).
         """
@@ -433,7 +433,7 @@ class BacktestEngine:
                     continue
 
             # For non-ASCII terms (Chinese), use substring matching to keep
-            # natural language phrasings like "jianyimairu" effective.
+            # natural language phrasings like "建议买入" effective.
             if re.search(r"[\u4e00-\u9fff]", keyword):
                 start = 0
                 while True:
@@ -460,7 +460,7 @@ class BacktestEngine:
         if any(stripped.endswith(neg) for neg in cls._NEGATION_PATTERNS):
             return True
 
-        # xianding“fouding + dongzuodongci”pipei,bimianjiang“tiaojianweifouding”wushanghexinjianyiyitu。
+        # 限定“否定 + 动作动词”匹配，避免将“条件位否定”误伤核心建议意图。
         lookback = stripped[-12:]
         for neg in cls._NEGATION_PATTERNS:
             if not neg:
@@ -472,7 +472,7 @@ class BacktestEngine:
             suffix_gap = lookback[neg_idx + len(neg):].strip()
             if not suffix_gap:
                 return True
-            if any(ch in suffix_gap for ch in ",,。;;:!?！?"):
+            if any(ch in suffix_gap for ch in "，,。；;:!?！？"):
                 continue
 
             if cls._contains_keyword(suffix_gap, target):
@@ -502,7 +502,7 @@ class BacktestEngine:
     @classmethod
     def _is_negation_connector_gap(cls, gap: str) -> bool:
         """Whether a short Chinese negation gap is still a valid negation bridge."""
-        compact = re.sub(r"[\s,,。;;:!?！?]", "", gap).strip()
+        compact = re.sub(r"[\s,，。；;:!?！？]", "", gap).strip()
         if not compact:
             return True
         return compact in cls._NEGATION_CONNECTOR_WORDS

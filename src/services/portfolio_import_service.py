@@ -37,40 +37,40 @@ DEFAULT_PARSER_SPECS: Tuple[CsvParserSpec, ...] = (
     CsvParserSpec(
         broker="huatai",
         aliases=(),
-        display_name="huatai",
+        display_name="华泰",
         column_hints={
-            "trade_date": ("chengjiaoriqi", "chengjiaoshijian", "fashengriqi", "riqi"),
-            "symbol": ("zhengquandaima", "stockdaima", "daima"),
-            "side": ("maimaibiaozhi", "maimaifangxiang", "caozuo"),
-            "quantity": ("chengjiaoshuliang", "shuliang", "chengjiaogushu"),
-            "price": ("chengjiaojunjia", "chengjiaojiage", "jiage", "chengjiaojia", "junjia"),
-            "trade_uid": ("chengjiaobianhao", "chengjiaoxuhao", "liushuihao"),
+            "trade_date": ("成交日期", "成交时间", "发生日期", "日期"),
+            "symbol": ("证券代码", "股票代码", "代码"),
+            "side": ("买卖标志", "买卖方向", "操作"),
+            "quantity": ("成交数量", "数量", "成交股数"),
+            "price": ("成交均价", "成交价格", "价格", "成交价", "均价"),
+            "trade_uid": ("成交编号", "成交序号", "流水号"),
         },
     ),
     CsvParserSpec(
         broker="citic",
-        aliases=("citic",),
-        display_name="citic",
+        aliases=("zhongxin",),
+        display_name="中信",
         column_hints={
-            "trade_date": ("fashengriqi", "chengjiaoriqi", "riqi"),
-            "symbol": ("zhengquandaima", "stockdaima", "daima"),
-            "side": ("maimaifangxiang", "maimaibiaozhi", "yewumingcheng"),
-            "quantity": ("chengjiaoshuliang", "shuliang", "chengjiaogushu"),
-            "price": ("chengjiaojiage", "chengjiaojunjia", "jiage", "chengjiaojia"),
-            "trade_uid": ("hetongbianhao", "chengjiaobianhao", "weituobianhao"),
+            "trade_date": ("发生日期", "成交日期", "日期"),
+            "symbol": ("证券代码", "股票代码", "代码"),
+            "side": ("买卖方向", "买卖标志", "业务名称"),
+            "quantity": ("成交数量", "数量", "成交股数"),
+            "price": ("成交价格", "成交均价", "价格", "成交价"),
+            "trade_uid": ("合同编号", "成交编号", "委托编号"),
         },
     ),
     CsvParserSpec(
         broker="cmb",
         aliases=("zhaoshang", "cmbchina"),
-        display_name="zhaoshang",
+        display_name="招商",
         column_hints={
-            "trade_date": ("riqi", "chengjiaoriqi", "fashengriqi"),
-            "symbol": ("zhengquandaima", "stockdaima", "daima"),
-            "side": ("jiaoyifangxiang", "maimaifangxiang", "maimaibiaozhi"),
-            "quantity": ("chengjiaogushu", "chengjiaoshuliang", "shuliang"),
-            "price": ("chengjiaojia", "chengjiaojiage", "chengjiaojunjia", "junjia"),
-            "trade_uid": ("liushuihao", "chengjiaobianhao", "chengjiaoxuhao"),
+            "trade_date": ("日期", "成交日期", "发生日期"),
+            "symbol": ("证券代码", "股票代码", "代码"),
+            "side": ("交易方向", "买卖方向", "买卖标志"),
+            "quantity": ("成交股数", "成交数量", "数量"),
+            "price": ("成交价", "成交价格", "成交均价", "均价"),
+            "trade_uid": ("流水号", "成交编号", "成交序号"),
         },
     ),
 )
@@ -302,10 +302,10 @@ class PortfolioImportService:
         trade_date_raw = self._pick(
             row,
             *(broker_hints.get("trade_date") or ()),
-            "chengjiaoriqi",
-            "fashengriqi",
-            "riqi",
-            "chengjiaoshijian",
+            "成交日期",
+            "发生日期",
+            "日期",
+            "成交时间",
         )
         trade_date_obj = self._parse_date(trade_date_raw)
         if trade_date_obj is None:
@@ -314,9 +314,9 @@ class PortfolioImportService:
         symbol_raw = self._pick(
             row,
             *(broker_hints.get("symbol") or ()),
-            "zhengquandaima",
-            "stockdaima",
-            "daima",
+            "证券代码",
+            "股票代码",
+            "代码",
         )
         symbol = canonical_stock_code(str(symbol_raw or "").strip())
         if not symbol:
@@ -325,33 +325,33 @@ class PortfolioImportService:
         side_raw = self._pick(
             row,
             *(broker_hints.get("side") or ()),
-            "maimaibiaozhi",
-            "maimaifangxiang",
-            "jiaoyifangxiang",
-            "yewumingcheng",
-            "caozuo",
+            "买卖标志",
+            "买卖方向",
+            "交易方向",
+            "业务名称",
+            "操作",
         )
         side = self._normalize_side(side_raw)
         if side is None:
             return None
 
         quantity = self._parse_float(
-            self._pick(row, *(broker_hints.get("quantity") or ()), "chengjiaoshuliang", "shuliang", "chengjiaogushu")
+            self._pick(row, *(broker_hints.get("quantity") or ()), "成交数量", "数量", "成交股数")
         )
         price = self._parse_float(
-            self._pick(row, *(broker_hints.get("price") or ()), "chengjiaojunjia", "chengjiaojiage", "jiage", "chengjiaojia", "junjia")
+            self._pick(row, *(broker_hints.get("price") or ()), "成交均价", "成交价格", "价格", "成交价", "均价")
         )
         if quantity is None or quantity <= 0 or price is None or price <= 0:
             return None
 
         fee = 0.0
-        for col in ("shouxufei", "yongjin", "jiaoyifei", "guifei", "guohufei"):
+        for col in ("手续费", "佣金", "交易费", "规费", "过户费"):
             value = self._parse_float(self._pick(row, col))
             if value is not None:
                 fee += value
 
         tax = 0.0
-        for col in ("yinhuashui", "shuifei", "qitashuifei"):
+        for col in ("印花税", "税费", "其他税费"):
             value = self._parse_float(self._pick(row, col))
             if value is not None:
                 tax += value
@@ -359,13 +359,13 @@ class PortfolioImportService:
         trade_uid = self._pick(
             row,
             *(broker_hints.get("trade_uid") or ()),
-            "chengjiaobianhao",
-            "chengjiaoxuhao",
-            "hetongbianhao",
-            "weituobianhao",
-            "liushuihao",
+            "成交编号",
+            "成交序号",
+            "合同编号",
+            "委托编号",
+            "流水号",
         )
-        currency = self._pick(row, "bizhong", "huobi")
+        currency = self._pick(row, "币种", "货币")
 
         return {
             "trade_date": trade_date_obj,
@@ -418,15 +418,15 @@ class PortfolioImportService:
         if not text:
             return None
         compact = text.replace(" ", "")
-        buy_exact = {"buy", "b", "mai", "mairu", "zhengquanmairu", "putongmairu"}
-        sell_exact = {"sell", "s", "mai", "maichu", "zhengquanmaichu", "putongmaichu"}
+        buy_exact = {"buy", "b", "买", "买入", "证券买入", "普通买入"}
+        sell_exact = {"sell", "s", "卖", "卖出", "证券卖出", "普通卖出"}
         if compact in buy_exact:
             return "buy"
         if compact in sell_exact:
             return "sell"
-        if "mairu" in compact or compact.startswith("mai"):
+        if "买入" in compact or compact.startswith("买"):
             return "buy"
-        if "maichu" in compact or compact.startswith("mai"):
+        if "卖出" in compact or compact.startswith("卖"):
             return "sell"
         return None
 
@@ -446,4 +446,3 @@ class PortfolioImportService:
             ]
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-

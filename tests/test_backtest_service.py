@@ -37,11 +37,11 @@ class BacktestServiceTestCase(unittest.TestCase):
                 AnalysisHistory(
                     query_id="q1",
                     code="600519",
-                    name="guizhoumaotai",
+                    name="贵州茅台",
                     report_type="simple",
                     sentiment_score=80,
-                    operation_advice="mairu",
-                    trend_prediction="kanduo",
+                    operation_advice="买入",
+                    trend_prediction="看多",
                     analysis_summary="test",
                     stop_loss=95.0,
                     take_profit=110.0,
@@ -88,7 +88,7 @@ class BacktestServiceTestCase(unittest.TestCase):
                 AnalysisHistory(
                     query_id=query_id,
                     code="600519",
-                    name="guizhoumaotai",
+                    name="贵州茅台",
                     report_type="simple",
                     sentiment_score=60,
                     operation_advice=operation_advice,
@@ -152,7 +152,7 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(result.eval_status, "completed")
         self.assertEqual(result.code, "600519")
         self.assertEqual(result.analysis_date, date(2024, 1, 1))
-        self.assertEqual(result.operation_advice, "mairu")
+        self.assertEqual(result.operation_advice, "买入")
         self.assertEqual(result.position_recommendation, "long")
         self.assertEqual(result.direction_expected, "up")
 
@@ -261,8 +261,8 @@ class BacktestServiceTestCase(unittest.TestCase):
             query_id="q2",
             analysis_date=date(2024, 1, 10),
             created_at=datetime(2024, 1, 10, 0, 0, 0),
-            operation_advice="mairu",
-            trend_prediction="kanduo",
+            operation_advice="买入",
+            trend_prediction="看多",
             start_close=100.0,
             forward_bars=[
                 StockDaily(code="600519", date=date(2024, 1, 11), high=101.0, low=95.0, close=96.0),
@@ -282,8 +282,8 @@ class BacktestServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(data["total"], 1)
         item = data["items"][0]
-        self.assertEqual(item["stock_name"], "guizhoumaotai")
-        self.assertEqual(item["trend_prediction"], "kanduo")
+        self.assertEqual(item["stock_name"], "贵州茅台")
+        self.assertEqual(item["trend_prediction"], "看多")
         self.assertEqual(item["actual_movement"], "down")
         self.assertAlmostEqual(item["actual_return_pct"], -4.0)
         self.assertFalse(item["direction_correct"])
@@ -293,8 +293,8 @@ class BacktestServiceTestCase(unittest.TestCase):
             query_id="q2",
             analysis_date=date(2024, 1, 10),
             created_at=datetime(2024, 1, 10, 0, 0, 0),
-            operation_advice="mairu",
-            trend_prediction="kanduo",
+            operation_advice="买入",
+            trend_prediction="看多",
             start_close=100.0,
             forward_bars=[
                 StockDaily(code="600519", date=date(2024, 1, 11), high=101.0, low=95.0, close=96.0),
@@ -338,7 +338,7 @@ class BacktestServiceTestCase(unittest.TestCase):
                     engine_version="v1",
                     eval_status="completed",
                     evaluated_at=datetime(2024, 1, 5, 0, 0, 0),
-                    operation_advice="mairu",
+                    operation_advice="买入",
                     position_recommendation="long",
                     start_price=100.0,
                     end_close=96.0,
@@ -356,7 +356,7 @@ class BacktestServiceTestCase(unittest.TestCase):
                     engine_version="v2",
                     eval_status="completed",
                     evaluated_at=datetime(2024, 1, 6, 0, 0, 0),
-                    operation_advice="mairu",
+                    operation_advice="买入",
                     position_recommendation="long",
                     start_price=100.0,
                     end_close=96.0,
@@ -450,11 +450,11 @@ class BacktestServiceTestCase(unittest.TestCase):
                 AnalysisHistory(
                     query_id="q2",
                     code="000001",
-                    name="pinganyinhang",
+                    name="平安银行",
                     report_type="simple",
                     sentiment_score=30,
-                    operation_advice="maichu",
-                    trend_prediction="kankong",
+                    operation_advice="卖出",
+                    trend_prediction="看空",
                     analysis_summary="test2",
                     stop_loss=None,
                     take_profit=None,
@@ -506,11 +506,11 @@ class BacktestServiceTestCase(unittest.TestCase):
                 AnalysisHistory(
                     query_id="q-market-review",
                     code="MARKET",
-                    name="dapanfupan",
+                    name="大盘复盘",
                     report_type="market_review",
                     sentiment_score=50,
-                    operation_advice="chakanfupan",
-                    trend_prediction="dapanfupan",
+                    operation_advice="查看复盘",
+                    trend_prediction="大盘复盘",
                     analysis_summary="market review summary",
                     stop_loss=None,
                     take_profit=None,
@@ -538,11 +538,11 @@ class BacktestServiceTestCase(unittest.TestCase):
                 AnalysisHistory(
                     query_id="q-null-report-type",
                     code="000858",
-                    name="wuliangye",
+                    name="五粮液",
                     report_type=None,
                     sentiment_score=60,
-                    operation_advice="chiyou",
-                    trend_prediction="zhendang",
+                    operation_advice="持有",
+                    trend_prediction="震荡",
                     analysis_summary="legacy null report_type row",
                     stop_loss=None,
                     take_profit=None,

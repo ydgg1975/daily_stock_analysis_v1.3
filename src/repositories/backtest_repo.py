@@ -97,7 +97,7 @@ class BacktestRepository:
                 return len(results)
             except Exception as exc:
                 session.rollback()
-                logger.error(f"piliangsavehuicejieguoshibai: {exc}")
+                logger.error(f"批量保存回测结果失败: {exc}")
                 raise
 
     def get_results_paginated(
@@ -353,4 +353,3 @@ class BacktestRepository:
             cutoff = datetime.now() - timedelta(days=int(days))
             conditions.append(BacktestResult.evaluated_at >= cutoff)
         return conditions
-

@@ -84,7 +84,7 @@ def _is_windows_process_alive(pid: int) -> bool:
         finally:
             kernel32.CloseHandle(handle)
     except Exception as exc:
-        logger.warning("Windows jinchengcunhuotantestbai(chinese removed)똟aoshoushiweirengzaiyunxing: %s", exc)
+        logger.warning("Windows 进程存活探测失败，保守视为仍在运行: %s", exc)
         return True
 
 
@@ -183,11 +183,11 @@ def try_acquire_market_review_lock(
                     if not _is_stale_lock(lock_path):
                         return None
 
-                    logger.warning("만료된 market_review.lock을 감지했습니다. 정리 후 재시도합니다.")
+                    logger.warning("检测到过期的 market_review.lock，尝试清理后重试。")
                     try:
                         lock_path.unlink()
                     except OSError as exc:
-                        logger.warning("qingliguoqi market_review.lock shibai: %s", exc)
+                        logger.warning("清理过期 market_review.lock 失败: %s", exc)
                         return None
 
             if fd is None:
@@ -225,4 +225,3 @@ def release_market_review_lock(
                 lock_token.path.unlink()
             except FileNotFoundError:
                 pass
-

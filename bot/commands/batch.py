@@ -1,235 +1,126 @@
 # -*- coding: utf-8 -*-
-
 """
-
+===================================
+批量分析命令
 ===================================
 
-일괄 분석mingling
-
-===================================
-
-
-
-일괄 분석관심 종목 목록zhongde모든 종목??
+批量分析自选股列表中的所有股票。
 """
-
-
 
 import logging
-
 import threading
-
 import uuid
-
 from typing import List
 
-
-
 from bot.commands.base import BotCommand
-
 from bot.models import BotMessage, BotResponse
-
-
 
 logger = logging.getLogger(__name__)
 
 
-
-
-
 class BatchCommand(BotCommand):
-
     """
-Daily Stock Analysis - Batch
-"""
-
+    批量分析命令
     
-
+    批量分析配置中的自选股列表，生成汇总报告。
+    
+    用法：
+        /batch      - 分析所有自选股
+        /batch 3    - 只分析前3只
+    """
+    
     @property
-
     def name(self) -> str:
-
         return "batch"
-
     
-
     @property
-
     def aliases(self) -> List[str]:
-
-        return ["b", "piliang", "quanbu"]
-
+        return ["b", "批量", "全部"]
     
-
     @property
-
     def description(self) -> str:
-
-        return "관심 종목을 일괄 분석합니다"
-
+        return "批量分析自选股"
     
-
     @property
-
     def usage(self) -> str:
-
-        return "/batch [수량]"
-
+        return "/batch [数量]"
     
-
     @property
-
     def admin_only(self) -> bool:
-
-        """Batch analysis requires admin permissions to prevent abuse."""
-
-        return False  # keyigenjuxuyaoshewei True
-
+        """批量分析需要管理员权限（防止滥用）"""
+        return False  # 可以根据需要设为 True
     
-
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
-
-        """일괄 분석 명령 실행"""
-
+        """执行批量分析命令"""
         from src.config import get_config
-
         
-
         config = get_config()
-
         config.refresh_stock_list()
-
         
-
         stock_list = config.stock_list
-
         
-
         if not stock_list:
-
             return BotResponse.error_response(
-
-                "관심 종목 목록이 비어 있습니다. 먼저 STOCK_LIST를 설정하세요."
-
+                "自选股列表为空，请先配置 STOCK_LIST"
             )
-
         
-
-
+        # 解析数量参数
         limit = None
-
         if args:
-
             try:
-
                 limit = int(args[0])
-
                 if limit <= 0:
-
-                    return BotResponse.error_response("분석 수량은 0보다 커야 합니다.")
-
+                    return BotResponse.error_response("数量必须大于0")
             except ValueError:
-
-                return BotResponse.error_response(f"유효하지 않은 수량입니다: {args[0]}")
-
+                return BotResponse.error_response(f"无效的数量: {args[0]}")
         
-
-        # 분석 수량 제한
-
+        # 限制分析数量
         if limit:
-
             stock_list = stock_list[:limit]
-
         
-
-        logger.info(f"[BatchCommand] 일괄 분석 시작 {len(stock_list)} 종목")
-
+        logger.info(f"[BatchCommand] 开始批量分析 {len(stock_list)} 只股票")
         
-
-        # 백그라운드 스레드에서 분석 실행
-
+        # 在后台线程中执行分析
         thread = threading.Thread(
-
             target=self._run_batch_analysis,
-
             args=(stock_list, message),
-
             daemon=True
-
         )
-
         thread.start()
-
         
-
         return BotResponse.markdown_response(
-
-            f"**일괄 분석 작업이 시작되었습니다**\n\n"
-
-            f"분석 수량: {len(stock_list)}개\n"
-
-            f"종목 목록: {', '.join(stock_list[:5])}"
-
+            f"✅ **批量分析任务已启动**\n\n"
+            f"• 分析数量: {len(stock_list)} 只\n"
+            f"• 股票列表: {', '.join(stock_list[:5])}"
             f"{'...' if len(stock_list) > 5 else ''}\n\n"
-
-            f"분석이 완료되면 요약 보고서를 자동으로 보냅니다."
-
+            f"分析完成后将自动推送汇总报告。"
         )
-
     
-
     def _run_batch_analysis(self, stock_list: List[str], message: BotMessage) -> None:
-
-        """백그라운드 실행 일괄 분석"""
-
+        """后台执行批量分析"""
         try:
-
             from src.config import get_config
-
             from main import StockAnalysisPipeline
-
             
-
             config = get_config()
-
             
-
-            # chuangjiananalysisguandao
-
+            # 创建分析管道
             pipeline = StockAnalysisPipeline(
-
                 config=config,
-
                 source_message=message,
-
                 query_id=uuid.uuid4().hex,
-
                 query_source="bot"
-
             )
-
             
-
+            # 执行分析（会自动推送汇总报告）
             results = pipeline.run(
-
                 stock_codes=stock_list,
-
                 dry_run=False,
-
                 send_notification=True
-
             )
-
             
-
-            logger.info(f"[BatchCommand] 일괄 분석wancheng(chinese removed)똠henggong {len(results)} zhi")
-
+            logger.info(f"[BatchCommand] 批量分析完成，成功 {len(results)} 只")
             
-
         except Exception as e:
-
-            logger.error(f"[BatchCommand] 일괄 분석shibai: {e}")
-
+            logger.error(f"[BatchCommand] 批量分析失败: {e}")
             logger.exception(e)
-
-

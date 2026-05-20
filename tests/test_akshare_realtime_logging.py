@@ -37,7 +37,7 @@ class _DummyResponse:
 
 def _make_sina_payload() -> str:
     fields = [
-        "daqintielu", "5.100", "5.000", "5.190", "5.200", "5.050", "5.180", "5.190",
+        "大秦铁路", "5.100", "5.000", "5.190", "5.200", "5.050", "5.180", "5.190",
         "123456", "789012"
     ]
     fields.extend(["0"] * 20)
@@ -47,7 +47,7 @@ def _make_sina_payload() -> str:
 
 def _make_tencent_payload() -> str:
     fields = ["0"] * 50
-    fields[1] = "daqintielu"
+    fields[1] = "大秦铁路"
     fields[2] = "601006"
     fields[3] = "5.19"
     fields[4] = "5.00"
@@ -86,11 +86,11 @@ def test_sina_realtime_success_logs_endpoint(caplog, monkeypatch, akshare_fetche
         quote = akshare_fetcher._get_stock_realtime_quote_sina("601006")
 
     assert quote is not None
-    assert quote.name == "daqintielu"
+    assert quote.name == "大秦铁路"
     assert quote.price == 5.19
     assert breaker.successes == ["akshare_sina"]
     assert f"endpoint={SINA_REALTIME_ENDPOINT}" in caplog.text
-    assert "[shishixingqing-xinlang] 601006 daqintielu:" in caplog.text
+    assert "[实时行情-新浪] 601006 大秦铁路:" in caplog.text
 
 
 def test_sina_realtime_remote_disconnect_logs_category(caplog, monkeypatch, akshare_fetcher):
@@ -111,7 +111,7 @@ def test_sina_realtime_remote_disconnect_logs_category(caplog, monkeypatch, aksh
     assert source_key == "akshare_sina"
     assert "category=remote_disconnect" in message
     assert f"endpoint={SINA_REALTIME_ENDPOINT}" in caplog.text
-    assert "xinlang shishixingqing(chinese removed)shibai:" in caplog.text
+    assert "新浪 实时行情接口失败:" in caplog.text
 
 
 def test_tencent_realtime_http_status_logs_endpoint(caplog, monkeypatch, akshare_fetcher):
@@ -146,11 +146,11 @@ def test_tencent_realtime_success_logs_endpoint(caplog, monkeypatch, akshare_fet
         quote = akshare_fetcher._get_stock_realtime_quote_tencent("601006")
 
     assert quote is not None
-    assert quote.name == "daqintielu"
+    assert quote.name == "大秦铁路"
     assert quote.price == 5.19
     assert breaker.successes == ["akshare_tencent"]
     assert f"endpoint={TENCENT_REALTIME_ENDPOINT}" in caplog.text
-    assert "[shishixingqing-tengxun] 601006 daqintielu:" in caplog.text
+    assert "[实时行情-腾讯] 601006 大秦铁路:" in caplog.text
 
 
 def test_hot_stocks_uses_eastmoney_hot_ranking_when_available(monkeypatch, akshare_fetcher):
@@ -163,18 +163,18 @@ def test_hot_stocks_uses_eastmoney_hot_ranking_when_available(monkeypatch, aksha
             {
                 "rank": 1,
                 "code": "SZ000066",
-                "name": "zhongguochangcheng",
+                "name": "中国长城",
                 "price": 21.8,
                 "change_pct": 9.99,
-                "source": "dongfangcaifurenqibang",
+                "source": "东方财富人气榜",
             }
         ],
     )
 
     result = akshare_fetcher.get_hot_stocks(5)
 
-    assert result[0]["source"] == "dongfangcaifurenqibang"
-    assert result[0]["name"] == "zhongguochangcheng"
+    assert result[0]["source"] == "东方财富人气榜"
+    assert result[0]["name"] == "中国长城"
 
 
 def test_hot_stocks_falls_back_to_xueqiu_when_primary_sources_empty(monkeypatch, akshare_fetcher):
@@ -194,10 +194,10 @@ def test_hot_stocks_falls_back_to_xueqiu_when_primary_sources_empty(monkeypatch,
             {
                 "rank": 1,
                 "code": "SH600004",
-                "name": "huaxiayinhang",
+                "name": "华夏银行",
                 "price": 7.21,
                 "change_pct": None,
-                "source": "xueqiuguanzhubang",
+                "source": "雪球关注榜",
             }
         ]
 
@@ -212,10 +212,10 @@ def test_hot_stocks_falls_back_to_xueqiu_when_primary_sources_empty(monkeypatch,
         {
             "rank": 1,
             "code": "SH600004",
-            "name": "huaxiayinhang",
+            "name": "华夏银行",
             "price": 7.21,
             "change_pct": None,
-            "source": "xueqiuguanzhubang",
+            "source": "雪球关注榜",
         }
     ]
 
@@ -224,49 +224,49 @@ def test_limit_up_pool_zero_pads_first_seal_times_before_sorting(monkeypatch, ak
     df = pd.DataFrame(
         [
             {
-                "daima": "000002",
-                "mingcheng": "wuhougu",
-                "zhangdiefu": 10.0,
-                "zuixinjia": 12.3,
-                "chengjiaoe": 1,
-                "huanshoulv": 2,
-                "fengbanzijin": 3,
-                "shoucifengbanshijian": 141354,
-                "zuihoufengbanshijian": 141500,
-                "zhabancishu": 0,
-                "zhangtingtongji": "1/1",
-                "lianbanshu": 1,
-                "suoshuhangye": "dichan",
+                "代码": "000002",
+                "名称": "午后股",
+                "涨跌幅": 10.0,
+                "最新价": 12.3,
+                "成交额": 1,
+                "换手率": 2,
+                "封板资金": 3,
+                "首次封板时间": 141354,
+                "最后封板时间": 141500,
+                "炸板次数": 0,
+                "涨停统计": "1/1",
+                "连板数": 1,
+                "所属行业": "地产",
             },
             {
-                "daima": "000001",
-                "mingcheng": "jingjiagu",
-                "zhangdiefu": 10.0,
-                "zuixinjia": 10.0,
-                "chengjiaoe": 1,
-                "huanshoulv": 2,
-                "fengbanzijin": 3,
-                "shoucifengbanshijian": 92500,
-                "zuihoufengbanshijian": 93000,
-                "zhabancishu": 0,
-                "zhangtingtongji": "1/1",
-                "lianbanshu": 1,
-                "suoshuhangye": "jisuanji",
+                "代码": "000001",
+                "名称": "竞价股",
+                "涨跌幅": 10.0,
+                "最新价": 10.0,
+                "成交额": 1,
+                "换手率": 2,
+                "封板资金": 3,
+                "首次封板时间": 92500,
+                "最后封板时间": 93000,
+                "炸板次数": 0,
+                "涨停统计": "1/1",
+                "连板数": 1,
+                "所属行业": "计算机",
             },
             {
-                "daima": "000003",
-                "mingcheng": "zaopangu",
-                "zhangdiefu": 10.0,
-                "zuixinjia": 11.0,
-                "chengjiaoe": 1,
-                "huanshoulv": 2,
-                "fengbanzijin": 3,
-                "shoucifengbanshijian": 101500,
-                "zuihoufengbanshijian": 102000,
-                "zhabancishu": 0,
-                "zhangtingtongji": "1/1",
-                "lianbanshu": 1,
-                "suoshuhangye": "dianzi",
+                "代码": "000003",
+                "名称": "早盘股",
+                "涨跌幅": 10.0,
+                "最新价": 11.0,
+                "成交额": 1,
+                "换手率": 2,
+                "封板资金": 3,
+                "首次封板时间": 101500,
+                "最后封板时间": 102000,
+                "炸板次数": 0,
+                "涨停统计": "1/1",
+                "连板数": 1,
+                "所属行业": "电子",
             },
         ]
     )

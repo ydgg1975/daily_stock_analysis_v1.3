@@ -59,16 +59,16 @@ def _make_mock_adapter():
 
 
 SAMPLE_DASHBOARD = {
-    "stock_name": "guizhoumaotai",
+    "stock_name": "贵州茅台",
     "sentiment_score": 75,
-    "trend_prediction": "kanduo",
-    "operation_advice": "chiyou",
+    "trend_prediction": "看多",
+    "operation_advice": "持有",
     "decision_type": "hold",
-    "confidence_level": "zhong",
+    "confidence_level": "中",
     "dashboard": {
         "core_conclusion": {
-            "one_sentence": "maotaijinqizhendangzouqiang",
-            "signal_type": "🟡chiyouguanwang",
+            "one_sentence": "茅台近期震荡走强",
+            "signal_type": "🟡持有观望",
         },
     },
     "analysis_summary": "Overall bullish trend",
@@ -101,7 +101,7 @@ class TestAgentExecutor(unittest.TestCase):
         executor = AgentExecutor(
             registry,
             adapter,
-            skill_instructions="### jineng 1: chanlun\n- guanzhuzhongshuyubeichi",
+            skill_instructions="### 技能 1: 缠论\n- 关注中枢与背驰",
             default_skill_policy="",
             max_steps=2,
         )
@@ -109,9 +109,9 @@ class TestAgentExecutor(unittest.TestCase):
 
         self.assertTrue(result.success)
         prompt = adapter.call_with_tools.call_args.args[0][0]["content"]
-        self.assertIn("### jineng 1: chanlun", prompt)
-        self.assertNotIn("zhuanzhuyuqushijiaoyi", prompt)
-        self.assertNotIn("duotoupailie:MA5 > MA10 > MA20", prompt)
+        self.assertIn("### 技能 1: 缠论", prompt)
+        self.assertNotIn("专注于趋势交易", prompt)
+        self.assertNotIn("多头排列：MA5 > MA10 > MA20", prompt)
 
     def test_prompt_keeps_injected_default_policy_for_implicit_default_run(self):
         """Implicit default runs can still inject the default bull-trend baseline explicitly."""
@@ -127,8 +127,8 @@ class TestAgentExecutor(unittest.TestCase):
         executor = AgentExecutor(
             registry,
             adapter,
-            skill_instructions="### jineng 1: morenduotouqushi",
-            default_skill_policy="## morenjinengjixian(bixuyangezunshou)\n- **duotoupailiebixutiaojian**:MA5 > MA10 > MA20",
+            skill_instructions="### 技能 1: 默认多头趋势",
+            default_skill_policy="## 默认技能基线（必须严格遵守）\n- **多头排列必须条件**：MA5 > MA10 > MA20",
             use_legacy_default_prompt=True,
             max_steps=2,
         )
@@ -136,10 +136,10 @@ class TestAgentExecutor(unittest.TestCase):
 
         self.assertTrue(result.success)
         prompt = adapter.call_with_tools.call_args.args[0][0]["content"]
-        self.assertIn("### jineng 1: morenduotouqushi", prompt)
-        self.assertIn("zhuanzhuyuqushijiaoyi", prompt)
-        self.assertIn("duotoupailiebixutiaojian", prompt)
-        self.assertIn("duotoupailie:MA5 > MA10 > MA20", prompt)
+        self.assertIn("### 技能 1: 默认多头趋势", prompt)
+        self.assertIn("专注于趋势交易", prompt)
+        self.assertIn("多头排列必须条件", prompt)
+        self.assertIn("多头排列：MA5 > MA10 > MA20", prompt)
 
     def test_simple_text_response(self):
         """Agent returns text immediately (no tool calls) with JSON dashboard."""
@@ -722,15 +722,15 @@ class TestBuildUserMessage(unittest.TestCase):
     def test_basic_message(self):
         msg = self.executor._build_user_message("Analyze 600519")
         self.assertIn("Analyze 600519", msg)
-        self.assertIn("jueceyibiaopan", msg)
+        self.assertIn("决策仪表盘", msg)
 
     def test_message_with_context(self):
         msg = self.executor._build_user_message(
             "Analyze",
             context={"stock_code": "600519", "report_type": "daily"},
         )
-        self.assertIn("gupiaodaima: 600519", msg)
-        self.assertIn("baogaoleixing: daily", msg)
+        self.assertIn("股票代码: 600519", msg)
+        self.assertIn("报告类型: daily", msg)
 
 
 # ============================================================

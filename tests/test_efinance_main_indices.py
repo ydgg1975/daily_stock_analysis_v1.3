@@ -16,17 +16,17 @@ class TestEfinanceMainIndices(unittest.TestCase):
         fetcher = EfinanceFetcher()
         fake_df = pd.DataFrame(
             {
-                "gupiaodaima": ["000001"],
-                "zuixinjia": [3200.0],
-                "zhangdiefu": [0.63],
-                "zhangdiee": [20.0],
-                "jinkai": [3188.0],
-                "kaipan": [0.0],
-                "zuigao": [3215.0],
-                "zuidi": [3170.0],
-                "chengjiaoliang": [123456789],
-                "chengjiaoe": [9876543210.0],
-                "zhenfu": [1.2],
+                "股票代码": ["000001"],
+                "最新价": [3200.0],
+                "涨跌幅": [0.63],
+                "涨跌额": [20.0],
+                "今开": [3188.0],
+                "开盘": [0.0],
+                "最高": [3215.0],
+                "最低": [3170.0],
+                "成交量": [123456789],
+                "成交额": [9876543210.0],
+                "振幅": [1.2],
             }
         )
         fake_efinance = types.SimpleNamespace(
@@ -42,7 +42,7 @@ class TestEfinanceMainIndices(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["code"], "sh000001")
-        self.assertEqual(data[0]["name"], "shangzhengzhishu")
+        self.assertEqual(data[0]["name"], "上证指数")
         self.assertAlmostEqual(data[0]["open"], 3188.0)
         self.assertAlmostEqual(data[0]["current"], 3200.0)
 
@@ -50,17 +50,17 @@ class TestEfinanceMainIndices(unittest.TestCase):
         fetcher = EfinanceFetcher()
         fake_df = pd.DataFrame(
             {
-                "gupiaodaima": ["000001"],
-                "zuixinjia": [3200.0],
-                "zhangdiefu": [0.63],
-                "zhangdiee": [20.0],
-                "jinkai": [""],
-                "kaipan": [3186.0],
-                "zuigao": [3215.0],
-                "zuidi": [3170.0],
-                "chengjiaoliang": [123456789],
-                "chengjiaoe": [9876543210.0],
-                "zhenfu": [1.2],
+                "股票代码": ["000001"],
+                "最新价": [3200.0],
+                "涨跌幅": [0.63],
+                "涨跌额": [20.0],
+                "今开": [""],
+                "开盘": [3186.0],
+                "最高": [3215.0],
+                "最低": [3170.0],
+                "成交量": [123456789],
+                "成交额": [9876543210.0],
+                "振幅": [1.2],
             }
         )
         fake_efinance = types.SimpleNamespace(

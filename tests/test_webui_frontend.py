@@ -34,10 +34,10 @@ def test_prepare_webui_frontend_assets_reuses_prebuilt_static_without_source(tmp
     with caplog.at_level(logging.INFO):
         assert webui_frontend.prepare_webui_frontend_assets() is True
 
-    assert "jiancedaokezhijiefuyongdeqianduanjingtaichanwu" in caplog.text
-    assert "weizhaodaoqianduanxiangmu,wufazidonggoujian" not in caplog.text
-    assert "weijiancedao npm,wufazidonggoujianqianduan" not in caplog.text
-    assert "assets/ mulubucunzaihuowu CSS/JS wenjian" not in caplog.text
+    assert "检测到可直接复用的前端静态产物" in caplog.text
+    assert "未找到前端项目，无法自动构建" not in caplog.text
+    assert "未检测到 npm，无法自动构建前端" not in caplog.text
+    assert "assets/ 目录不存在或无 CSS/JS 文件" not in caplog.text
 
 
 def test_prepare_webui_frontend_assets_fails_without_static_or_source(tmp_path, monkeypatch, caplog):
@@ -49,13 +49,11 @@ def test_prepare_webui_frontend_assets_fails_without_static_or_source(tmp_path, 
     with caplog.at_level(logging.WARNING):
         assert webui_frontend.prepare_webui_frontend_assets() is False
 
-    assert "weizhaodaoqianduanxiangmu,wufazidonggoujian" in caplog.text
+    assert "未找到前端项目，无法自动构建" in caplog.text
 
 
 def test_prepare_webui_frontend_assets_warns_when_assets_missing(tmp_path, monkeypatch, caplog):
-    """
-Daily Stock Analysis - Test Webui Frontend
-"""
+    """index.html 存在但 static/assets/ 缺失时应发出 WebUI 显示异常警告（Issue #944）。"""
     repo_root = _prepare_fake_repo(tmp_path, monkeypatch)
     static_index = repo_root / "static" / "index.html"
     static_index.parent.mkdir(parents=True)
@@ -70,12 +68,12 @@ Daily Stock Analysis - Test Webui Frontend
         result = webui_frontend.prepare_webui_frontend_assets()
 
     assert result is True  # function still returns True (index.html present)
-    assert "mulubucunzaihuowu CSS/JS wenjian" in caplog.text
-    assert "WebUI jiangyinqueshaoyangshiyujiaobenerxianshiyichang" in caplog.text
+    assert "目录不存在或无 CSS/JS 文件" in caplog.text
+    assert "WebUI 将因缺少样式与脚本而显示异常" in caplog.text
 
 
 def test_prepare_webui_frontend_assets_auto_build_disabled_warns_when_assets_missing(tmp_path, monkeypatch, caplog):
-    """WEBUI_AUTO_BUILD=false qie assets queshishiyeyingfachujinggao。"""
+    """WEBUI_AUTO_BUILD=false 且 assets 缺失时也应发出警告。"""
     repo_root = _prepare_fake_repo(tmp_path, monkeypatch)
     static_index = repo_root / "static" / "index.html"
     static_index.parent.mkdir(parents=True)
@@ -89,7 +87,7 @@ def test_prepare_webui_frontend_assets_auto_build_disabled_warns_when_assets_mis
         result = webui_frontend.prepare_webui_frontend_assets()
 
     assert result is True  # index.html present, still returns True
-    assert "mulubucunzaihuowu CSS/JS wenjian" in caplog.text
+    assert "目录不存在或无 CSS/JS 文件" in caplog.text
 
 
 def test_has_static_assets_returns_false_for_missing_dir(tmp_path):

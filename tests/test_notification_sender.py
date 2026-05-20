@@ -186,7 +186,7 @@ class TestFeishuSender(unittest.TestCase):
         cfg = _config(
             feishu_webhook_url="https://feishu.example/hook",
             feishu_webhook_secret="secret-token",
-            feishu_webhook_keyword="gupiaoribao",
+            feishu_webhook_keyword="股票日报",
         )
         sender = FeishuSender(cfg)
 
@@ -205,7 +205,7 @@ class TestFeishuSender(unittest.TestCase):
         self.assertEqual(payload["sign"], expected_sign)
         self.assertEqual(
             payload["card"]["elements"][0]["text"]["content"],
-            "gupiaoribao\nhello",
+            "股票日报\nhello",
         )
 
     @mock.patch("src.notification_sender.feishu_sender.requests.post")
@@ -303,11 +303,11 @@ class TestEmailSender(unittest.TestCase):
             email_sender="a@qq.com",
             email_password="p",
             email_receivers=["b@qq.com"],
-            email_sender_name="daily_stock_analysisgupiaofenxizhushou",
+            email_sender_name="daily_stock_analysis股票分析助手",
         )
         sender = EmailSender(cfg)
 
-        result = sender.send_to_email("body", subject="ceshizhuti")
+        result = sender.send_to_email("body", subject="测试主题")
 
         self.assertTrue(result)
         server = mock_smtp_ssl.return_value
@@ -317,7 +317,7 @@ class TestEmailSender(unittest.TestCase):
         self.assertEqual(addr, "a@qq.com")
         self.assertEqual(
             str(make_header(decode_header(realname))),
-            "daily_stock_analysisgupiaofenxizhushou",
+            "daily_stock_analysis股票分析助手",
         )
         server.quit.assert_called_once()
 
@@ -327,7 +327,7 @@ class TestEmailSender(unittest.TestCase):
             email_sender="a@qq.com",
             email_password="p",
             email_receivers=["b@qq.com"],
-            email_sender_name="daily_stock_analysisgupiaofenxizhushou",
+            email_sender_name="daily_stock_analysis股票分析助手",
         )
         sender = EmailSender(cfg)
 
@@ -341,7 +341,7 @@ class TestEmailSender(unittest.TestCase):
         self.assertEqual(addr, "a@qq.com")
         self.assertEqual(
             str(make_header(decode_header(realname))),
-            "daily_stock_analysisgupiaofenxizhushou",
+            "daily_stock_analysis股票分析助手",
         )
         server.quit.assert_called_once()
 
@@ -367,7 +367,7 @@ class TestNtfySender(unittest.TestCase):
         )
         sender = NtfySender(cfg)
 
-        result = sender.send_to_ntfy("zhengwen **Markdown**", title="zhongwenbiaoti", timeout_seconds=5)
+        result = sender.send_to_ntfy("正文 **Markdown**", title="中文标题", timeout_seconds=5)
 
         self.assertTrue(result)
         mock_post.assert_called_once()
@@ -377,8 +377,8 @@ class TestNtfySender(unittest.TestCase):
             call_kw["json"],
             {
                 "topic": "dsa-topic",
-                "title": "zhongwenbiaoti",
-                "message": "zhengwen **Markdown**",
+                "title": "中文标题",
+                "message": "正文 **Markdown**",
                 "markdown": True,
             },
         )
@@ -470,7 +470,7 @@ class TestGotifySender(unittest.TestCase):
         )
         sender = GotifySender(cfg)
 
-        result = sender.send_to_gotify("zhengwen **Markdown**", title="zhongwenbiaoti", timeout_seconds=5)
+        result = sender.send_to_gotify("正文 **Markdown**", title="中文标题", timeout_seconds=5)
 
         self.assertTrue(result)
         mock_post.assert_called_once()
@@ -479,8 +479,8 @@ class TestGotifySender(unittest.TestCase):
         self.assertEqual(
             call_kw["json"],
             {
-                "title": "zhongwenbiaoti",
-                "message": "zhengwen **Markdown**",
+                "title": "中文标题",
+                "message": "正文 **Markdown**",
                 "extras": {
                     "client::display": {
                         "contentType": "text/markdown",
@@ -608,7 +608,7 @@ class TestCustomWebhookSender(unittest.TestCase):
         self.assertEqual(
             payload,
             {
-                "title": "gupiaofenxibaogao",
+                "title": "股票分析报告",
                 "body": "hello",
                 "group": "stock",
             },
@@ -635,7 +635,7 @@ class TestCustomWebhookSender(unittest.TestCase):
         self.assertEqual(
             payload,
             {
-                "title": "gupiaofenxibaogao",
+                "title": "股票分析报告",
                 "body": "hello",
                 "sound": "bell",
             },
@@ -658,7 +658,7 @@ class TestCustomWebhookSender(unittest.TestCase):
         self.assertEqual(
             payload,
             {
-                "title": "gupiaofenxibaogao",
+                "title": "股票分析报告",
                 "content": 'line 1\nline "2"',
             },
         )
@@ -985,7 +985,7 @@ class TestTelegramSender(unittest.TestCase):
 
         cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
         sender = TelegramSender(cfg)
-        result = sender.send_to_telegram("*STbaoshi")
+        result = sender.send_to_telegram("*ST宝实")
 
         self.assertTrue(result)
         self.assertEqual(mock_post.call_count, 2)
@@ -993,7 +993,7 @@ class TestTelegramSender(unittest.TestCase):
         second_payload = mock_post.call_args_list[1][1]["json"]
         self.assertEqual(first_payload["parse_mode"], "Markdown")
         self.assertNotIn("parse_mode", second_payload)
-        self.assertEqual(second_payload["text"], "*STbaoshi")
+        self.assertEqual(second_payload["text"], "*ST宝实")
 
     @mock.patch("src.notification_sender.telegram_sender.requests.post")
     def test_send_plain_text_fallback_handles_non_json_200(self, mock_post):
@@ -1008,7 +1008,7 @@ class TestTelegramSender(unittest.TestCase):
 
         cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
         sender = TelegramSender(cfg)
-        result = sender.send_to_telegram("*STbaoshi")
+        result = sender.send_to_telegram("*ST宝实")
 
         self.assertFalse(result)
         self.assertEqual(mock_post.call_count, 2)

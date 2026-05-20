@@ -67,7 +67,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_max_age_days=3,
             news_strategy_profile="medium",  # 7
         )
-        service.search_stock_news("600519", "CN Stock", max_results=5)
+        service.search_stock_news("600519", "贵州茅台", max_results=5)
         kwargs = mock_search.call_args[1]
         self.assertEqual(kwargs["days"], 3)
 
@@ -77,7 +77,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_max_age_days=30,
             news_strategy_profile="invalid_profile",
         )
-        service.search_stock_news("600519", "CN Stock", max_results=5)
+        service.search_stock_news("600519", "贵州茅台", max_results=5)
         kwargs = mock_search.call_args[1]
         self.assertEqual(kwargs["days"], 3)
 
@@ -103,7 +103,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             ),
         )
 
-        resp = service.search_stock_news("600519", "CN Stock", max_results=5)
+        resp = service.search_stock_news("600519", "贵州茅台", max_results=5)
         titles = [r.title for r in resp.results]
         self.assertEqual(titles, ["future_1", "fresh"])
         for item in resp.results:
@@ -115,7 +115,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_max_age_days=3,
             news_strategy_profile="short",
         )
-        service.search_stock_news("600519", "CN Stock", max_results=4)
+        service.search_stock_news("600519", "贵州茅台", max_results=4)
         args, kwargs = mock_search.call_args
         requested = kwargs.get("max_results")
         if requested is None:
@@ -147,13 +147,13 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         )
         service._providers = [p1, p2]
 
-        resp = service.search_stock_news("600519", "CN Stock", max_results=3)
+        resp = service.search_stock_news("600519", "贵州茅台", max_results=3)
         self.assertEqual([r.title for r in resp.results], ["fresh"])
         p1.search.assert_called_once()
         p2.search.assert_called_once()
 
-    def test_search_stock_news_uses_korean_query_for_kr_stock(self) -> None:
-        """Korean stocks should use Korean market/news keywords."""
+    def test_search_stock_news_tries_next_provider_when_chinese_context_is_english_only(self) -> None:
+        """Chinese-preferred queries should not stop on English-only provider results."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
             bocha_keys=["dummy_key"],
@@ -162,22 +162,32 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_strategy_profile="short",
         )
 
-        provider = SimpleNamespace(
+        p1 = SimpleNamespace(
             is_available=True,
-            name="KRProvider",
-            search=MagicMock(return_value=_response([_result("Samsung Electronics news", fresh)])),
+            name="P1",
+            search=MagicMock(
+                return_value=_response(
+                    [
+                        _result("English headline", fresh),
+                        _result("Another English story", fresh),
+                    ]
+                )
+            ),
         )
-        service._providers = [provider]
+        p2 = SimpleNamespace(
+            is_available=True,
+            name="P2",
+            search=MagicMock(return_value=_response([_result("中文资讯", fresh)])),
+        )
+        service._providers = [p1, p2]
 
-        resp = service.search_stock_news("KR005930", "Samsung Electronics", max_results=3)
-        self.assertEqual([r.title for r in resp.results], ["Samsung Electronics news"])
-        query = provider.search.call_args.args[0]
-        self.assertIn("최신 뉴스", query)
-        self.assertIn("목표주가", query)
-        self.assertIn("기관 수급", query)
+        resp = service.search_stock_news("600519", "贵州茅台", max_results=3)
+        self.assertEqual([r.title for r in resp.results], ["中文资讯"])
+        p1.search.assert_called_once()
+        p2.search.assert_called_once()
 
-    def test_search_comprehensive_intel_includes_korean_research_report(self) -> None:
-        """Korean comprehensive search should include broker report keywords."""
+    def test_search_stock_news_prioritizes_chinese_items_within_mixed_results(self) -> None:
+        """Chinese items should be ordered ahead of English items in mixed batches."""
         fresh = datetime.now().date().isoformat()
         service = SearchService(
             bocha_keys=["dummy_key"],
@@ -186,27 +196,30 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_strategy_profile="short",
         )
 
-        provider = SimpleNamespace(
+        mixed_provider = SimpleNamespace(
             is_available=True,
-            name="KRProvider",
-            search=MagicMock(return_value=_response([_result("report", fresh)])),
+            name="Mixed",
+            search=MagicMock(
+                return_value=_response(
+                    [
+                        _result("English headline", fresh),
+                        _result("中文快讯", fresh),
+                        _result("Second English headline", fresh),
+                    ]
+                )
+            ),
         )
-        service._providers = [provider]
+        service._providers = [mixed_provider]
 
-        with patch("src.search_service.time.sleep"):
-            intel = service.search_comprehensive_intel(
-                stock_code="KR005930",
-                stock_name="Samsung Electronics",
-                max_searches=2,
-            )
+        resp = service.search_stock_news("600519", "贵州茅台", max_results=3)
+        self.assertEqual(
+            [r.title for r in resp.results],
+            ["中文快讯", "English headline", "Second English headline"],
+        )
 
-        self.assertIn("research_report", intel)
-        queries = [call.args[0] for call in provider.search.call_args_list]
-        self.assertTrue(any("증권사 리포트" in query for query in queries))
-        self.assertTrue(any("투자의견" in query for query in queries))
-
-    def test_korean_stock_does_not_use_chinese_preference(self) -> None:
-        """Korean stock codes should not be handled as six-digit China symbols."""
+    def test_search_stock_news_prioritizes_chinese_before_truncating_results(self) -> None:
+        """Chinese candidates beyond the first raw slot should still win after reprioritization."""
+        fresh = datetime.now().date().isoformat()
         service = SearchService(
             bocha_keys=["dummy_key"],
             searxng_public_instances_enabled=False,
@@ -214,8 +227,29 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
             news_strategy_profile="short",
         )
 
-        self.assertFalse(service._should_prefer_chinese_news("KR005930", "Samsung Electronics"))
-        self.assertFalse(service._should_prefer_chinese_news("005930.KS", "Samsung Electronics"))
+        p1 = SimpleNamespace(
+            is_available=True,
+            name="P1",
+            search=MagicMock(
+                return_value=_response(
+                    [
+                        _result("English headline", fresh),
+                        _result("中文快讯", fresh),
+                    ]
+                )
+            ),
+        )
+        p2 = SimpleNamespace(
+            is_available=True,
+            name="P2",
+            search=MagicMock(return_value=_response([_result("后续中文资讯", fresh)])),
+        )
+        service._providers = [p1, p2]
+
+        resp = service.search_stock_news("600519", "贵州茅台", max_results=1)
+        self.assertEqual([r.title for r in resp.results], ["中文快讯"])
+        p1.search.assert_called_once()
+        p2.search.assert_not_called()
 
     def test_search_stock_news_keeps_english_provider_order_for_us_stock(self) -> None:
         """English stock searches should keep the first successful provider result."""
@@ -235,7 +269,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         p2 = SimpleNamespace(
             is_available=True,
             name="P2",
-            search=MagicMock(return_value=_response([_result("CN Stock", fresh)])),
+            search=MagicMock(return_value=_response([_result("苹果资讯", fresh)])),
         )
         service._providers = [p1, p2]
 
@@ -250,8 +284,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         fresh_iso = fresh_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for stock_code, stock_name, expected_lang, expected_country, title, description in (
-            ("600519", "CN Stock", "zh-hans", "CN", "CN market news", "CN market summary"),
-            ("KR005930", "Samsung Electronics", "ko", "KR", "Samsung Electronics news", "Korean market summary"),
+            ("600519", "贵州茅台", "zh-hans", "CN", "中文资讯", "中文摘要"),
             ("AAPL", "Apple", "en", "US", "Apple earnings beat", "English summary"),
         ):
             with self.subTest(stock_code=stock_code):
@@ -304,7 +337,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="600519",
-                stock_name="CN Stock",
+                stock_name="贵州茅台",
                 max_searches=2,
             )
 
@@ -341,7 +374,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="510300",
-                stock_name="CN 300 ETF",
+                stock_name="沪深300ETF",
                 max_searches=3,
             )
 
@@ -370,7 +403,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="600519",
-                stock_name="CN Stock",
+                stock_name="贵州茅台",
                 max_searches=3,
             )
 
@@ -398,7 +431,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="600519",
-                stock_name="CN Stock",
+                stock_name="贵州茅台",
                 max_searches=4,
             )
 
@@ -428,7 +461,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="600519",
-                stock_name="CN Stock",
+                stock_name="贵州茅台",
                 max_searches=4,
             )
 
@@ -457,7 +490,7 @@ class SearchNewsFreshnessTestCase(unittest.TestCase):
         with patch("src.search_service.time.sleep"):
             intel = service.search_comprehensive_intel(
                 stock_code="510300",
-                stock_name="CN 300 ETF",
+                stock_name="沪深300ETF",
                 max_searches=4,
             )
 

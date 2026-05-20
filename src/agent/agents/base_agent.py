@@ -35,20 +35,9 @@ class BaseAgent(ABC):
 
     Subclasses **may** override:
     - :pyattr:`tool_names` — restrict which tools the agent can access
-    - :pyattr:`max_steps` — per-agent (pinyin removed) limit  (default 6)
+    - :pyattr:`max_steps` — per-agent step limit  (default 6)
     - :meth:`post_process` — transform the raw LLM text into an :class:`AgentOpinion`
     """
-
-
-
-
-
-
-
-
-
-
-
 
     # Subclass overrides
     agent_name: str = "base"

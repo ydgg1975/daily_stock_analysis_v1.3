@@ -13,12 +13,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-try:
-    import litellm
-    from litellm import Router
-except ModuleNotFoundError:
-    litellm = None
-    Router = None
+import litellm
+from litellm import Router
 
 from src.config import (
     extra_litellm_params,
@@ -172,8 +168,6 @@ class LLMToolAdapter:
 
         This prevents cost calculation errors for MiniMax-M2.7 and similar models.
         """
-        if litellm is None:
-            return
         for model_name, pricing in _CUSTOM_MODEL_PRICING.items():
             try:
                 litellm.register_model(
@@ -195,9 +189,6 @@ class LLMToolAdapter:
         """Initialize litellm Router from channels / YAML / legacy keys."""
         config = self._config
         self._legacy_router_model_list = []
-        if litellm is None:
-            logger.warning("Agent LLM: litellm package is not installed")
-            return
         litellm_model = get_effective_agent_primary_model(config)
         if not litellm_model:
             logger.warning("Agent LLM: no effective primary model configured")

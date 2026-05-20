@@ -19,7 +19,7 @@ def test_alerts_doc_exists_and_links_p0_scope() -> None:
     assert "AGENT_EVENT_ALERT_RULES_JSON" in doc
     assert "EventMonitor" in doc
     assert "P1 Alert API MVP" in doc
-    assert "P0 buzuo" in doc
+    assert "P0 不做" in doc
 
 
 def test_alerts_doc_covers_legacy_runtime_rules() -> None:
@@ -64,13 +64,13 @@ def test_alerts_doc_covers_storage_evaluation_and_rollback() -> None:
     assert (PROJECT_ROOT / "src" / "storage.py").is_file()
 
     for token in (
-        "## cunchufanganpinggu",
+        "## 存储方案评估",
         "src/storage.py",
         "src/repositories/",
         "src/services/",
         "data/stock_analysis.db",
-        "midengchushihua",
-        "huigunshuoming",
+        "幂等初始化",
+        "回滚说明",
     ):
         assert token in doc
 
@@ -79,12 +79,12 @@ def test_alerts_doc_keeps_p0_non_goals_explicit() -> None:
     doc = _read_doc()
 
     for token in (
-        "P0 jieduanbuxinzeng `api/v1/schemas/alerts.py`",
-        "P0 jieduanbuxinzeng Web gaojingzhongxinyemian",
-        "P0 jieduanbuxinzeng(chinese removed)biao",
-        "P0 jieduanbushixianchufalishi",
-        "P0 jieduanbuzidongqianyi,shanchuhuofugai `AGENT_EVENT_ALERT_RULES_JSON`",
-        "P0 jieduanbuzhongxie `NotificationService`",
+        "P0 阶段不新增 `api/v1/schemas/alerts.py`",
+        "P0 阶段不新增 Web 告警中心页面",
+        "P0 阶段不新增数据库表",
+        "P0 阶段不实现触发历史",
+        "P0 阶段不自动迁移、删除或覆盖 `AGENT_EVENT_ALERT_RULES_JSON`",
+        "P0 阶段不重写 `NotificationService`",
     ):
         assert token in doc
 
@@ -109,9 +109,9 @@ def test_alerts_doc_defines_p1_api_mvp_scope() -> None:
         "price_change_percent",
         "volume_spike",
         "unsupported",
-        "tuomin",
-        "baoliuziduan",
-        "buzhixinglengquehuozidingyitongzhiyuyi",
+        "脱敏",
+        "保留字段",
+        "不执行冷却或自定义通知语义",
     ):
         assert token in doc
 
@@ -120,12 +120,12 @@ def test_alerts_doc_keeps_p1_non_goals_explicit() -> None:
     doc = _read_doc()
 
     for token in (
-        "buxinzeng Web gaojingzhongxinyemian",
-        "burang schedule worker jiazaichijiuhua active rules",
-        "bushixianzhenshi `alert_trigger` / `alert_notification` xieru",
-        "bushixian `alert_cooldown` zhixingyuyi",
-        "bushixian MACD,KDJ,CCI,RSI",
-        "buzidongqianyi,shanchu,fugaihuogaixie legacy peizhi",
+        "不新增 Web 告警中心页面",
+        "不让 schedule worker 加载持久化 active rules",
+        "不实现真实 `alert_trigger` / `alert_notification` 写入",
+        "不实现 `alert_cooldown` 执行语义",
+        "不实现 MACD、KDJ、CCI、RSI",
+        "不自动迁移、删除、覆盖或改写 legacy 配置",
     ):
         assert token in doc
 
@@ -134,14 +134,14 @@ def test_alerts_doc_defines_p2_worker_scope() -> None:
     doc = _read_doc()
 
     for token in (
-        "## P2 gaojingpinggu Worker",
+        "## P2 告警评估 Worker",
         "src/services/alert_worker.py",
         "agent_event_monitor",
-        "chijiuhua active rules",
+        "持久化 active rules",
         "legacy JSON",
-        "`triggered`,`skipped`,`degraded`,`failed`",
-        "buxie `alert_notifications`",
-        "buzhixing `cooldown_policy`",
+        "`triggered`、`skipped`、`degraded`、`failed`",
+        "不写 `alert_notifications`",
+        "不执行 `cooldown_policy`",
     ):
         assert token in doc
 
@@ -150,11 +150,11 @@ def test_alerts_doc_describes_p1_rollback_for_created_tables() -> None:
     doc = _read_doc()
 
     for token in (
-        "P1 xinzeng Alert API daima",
-        "`alert_rules` / `alert_triggers` / `alert_notifications` SQLite biao",
+        "P1 新增 Alert API 代码",
+        "`alert_rules` / `alert_triggers` / `alert_notifications` SQLite 表",
         "Base.metadata.create_all()",
-        "SQLite biaoyushujubuhuizidongshanchu",
-        "shoudongshanchuxiangguanbiao",
+        "SQLite 表与数据不会自动删除",
+        "手动删除相关表",
     ):
         assert token in doc
 
@@ -163,17 +163,17 @@ def test_alerts_doc_defines_p4_notification_and_cooldown_scope() -> None:
     doc = _read_doc()
 
     for token in (
-        "## P4 tongzhijieguoyuchijiuhualengque",
+        "## P4 通知结果与持久化冷却",
         "`alert_cooldowns`",
         "`alert_notifications`",
         "`__cooldown__`",
         "`__cooldown_read_failed__`",
         "`__noise_suppressed__`",
         "notification_noise.py",
-        "DB chijiuhuaguizezhengchanglujingshiyong `alert_cooldowns`",
-        "duquchijiuhualengquezhuangtaishibai",
-        "legacy `AGENT_EVENT_ALERT_RULES_JSON` guizejixushiyong worker jinchengnei fingerprint",
-        "buhuixieruhuoyanchang `alert_cooldowns`",
-        "zuixiaohuigunfangshishi revert P4 PR",
+        "DB 持久化规则正常路径使用 `alert_cooldowns`",
+        "读取持久化冷却状态失败",
+        "legacy `AGENT_EVENT_ALERT_RULES_JSON` 规则继续使用 worker 进程内 fingerprint",
+        "不会写入或延长 `alert_cooldowns`",
+        "最小回滚方式是 revert P4 PR",
     ):
         assert token in doc

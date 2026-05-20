@@ -26,8 +26,8 @@ class _DummyManagerOk:
                     "inflow_10d": 15000000.0,
                 },
                 "sector_rankings": {
-                    "top": [{"name": "baijiu", "inflow": 5e8}, {"name": "bandaoti", "inflow": 3e8}],
-                    "bottom": [{"name": "meitan", "inflow": -2e8}],
+                    "top": [{"name": "白酒", "inflow": 5e8}, {"name": "半导体", "inflow": 3e8}],
+                    "bottom": [{"name": "煤炭", "inflow": -2e8}],
                 },
             },
             "errors": [],

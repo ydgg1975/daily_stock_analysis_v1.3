@@ -41,48 +41,46 @@ class _DummyCircuitBreaker:
 def _make_spot_em_df():
     """Simulate stock_hk_spot_em() return value."""
     return pd.DataFrame([{
-        'daima': '00700',
-        'mingcheng': 'tengxunkonggu',
-        'zuixinjia': 370.0,
-        'zhangdiefu': 1.5,
-        'zhangdiee': 5.5,
-        'chengjiaoliang': 10000,
-        'chengjiaoe': 3700000.0,
-        'liangbi': 1.2,
-        'huanshoulv': 0.3,
-        'zhenfu': 2.0,
-        'shiyinglv': 20.0,
-        'shijinglv': 3.5,
-        'zongshizhi': 3.5e12,
-        'liutongshizhi': 3.5e12,
-        '52zhouzuigao': 400.0,
-        '52zhouzuidi': 280.0,
+        '代码': '00700',
+        '名称': '腾讯控股',
+        '最新价': 370.0,
+        '涨跌幅': 1.5,
+        '涨跌额': 5.5,
+        '成交量': 10000,
+        '成交额': 3700000.0,
+        '量比': 1.2,
+        '换手率': 0.3,
+        '振幅': 2.0,
+        '市盈率': 20.0,
+        '市净率': 3.5,
+        '总市值': 3.5e12,
+        '流通市值': 3.5e12,
+        '52周最高': 400.0,
+        '52周最低': 280.0,
     }])
 
 
 def _make_spot_df():
     """Simulate stock_hk_spot() return value (sina source)."""
     return pd.DataFrame([{
-        'daima': '00700',
-        'mingcheng': 'tengxunkonggu',
-        'zuixinjia': 368.0,
-        'zhangdiee': 3.5,
-        'zhangdiefu': 0.96,
-        'mairu': 367.8,
-        'maichu': 368.2,
-        'zuoshou': 364.5,
-        'jinkai': 365.0,
-        'zuigao': 370.0,
-        'zuidi': 364.0,
-        'chengjiaoliang': 9800,
-        'chengjiaoe': 3606400.0,
+        '代码': '00700',
+        '名称': '腾讯控股',
+        '最新价': 368.0,
+        '涨跌额': 3.5,
+        '涨跌幅': 0.96,
+        '买入': 367.8,
+        '卖出': 368.2,
+        '昨收': 364.5,
+        '今开': 365.0,
+        '最高': 370.0,
+        '最低': 364.0,
+        '成交量': 9800,
+        '成交额': 3606400.0,
     }])
 
 
 class TestHKRealtimeFallback(unittest.TestCase):
-    """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+    """stock_hk_spot_em 失败时应 fallback 到 stock_hk_spot。"""
 
     def setUp(self):
         self.fetcher = AkshareFetcher()
@@ -92,9 +90,7 @@ Daily Stock Analysis - Test Hk Stock Name Fallback
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_em_success_returns_quote_with_name(self, mock_cb):
-        """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+        """stock_hk_spot_em 成功时直接返回含名称的 quote。"""
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
         ak_mock.stock_hk_spot_em.return_value = _make_spot_em_df()
@@ -103,36 +99,32 @@ Daily Stock Analysis - Test Hk Stock Name Fallback
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)
-        self.assertEqual(quote.name, "tengxunkonggu")
+        self.assertEqual(quote.name, "腾讯控股")
         self.assertAlmostEqual(quote.price, 370.0)
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_em_failure_falls_back_to_spot(self, mock_cb):
-        """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+        """stock_hk_spot_em 抛异常时应 fallback 到 stock_hk_spot 并返回名称。"""
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot_em.side_effect = Exception("(chinese removed)yichang:shujuyuanbukeyong")
+        ak_mock.stock_hk_spot_em.side_effect = Exception("接口异常：数据源不可用")
         ak_mock.stock_hk_spot.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)
-        self.assertEqual(quote.name, "tengxunkonggu")
+        self.assertEqual(quote.name, "腾讯控股")
         self.assertAlmostEqual(quote.price, 368.0)
         ak_mock.stock_hk_spot.assert_called_once()
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_both_fail_returns_none(self, mock_cb):
-        """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+        """stock_hk_spot_em 和 stock_hk_spot 都失败时返回 None，不抛异常。"""
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot_em.side_effect = Exception("dongfangcaifu(chinese removed)chaoshi")
-        ak_mock.stock_hk_spot.side_effect = Exception("xinlang(chinese removed)chaoshi")
+        ak_mock.stock_hk_spot_em.side_effect = Exception("东方财富接口超时")
+        ak_mock.stock_hk_spot.side_effect = Exception("新浪接口超时")
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
@@ -141,25 +133,21 @@ Daily Stock Analysis - Test Hk Stock Name Fallback
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_em_returns_empty_df_falls_back_to_spot(self, mock_cb):
-        """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+        """stock_hk_spot_em 返回空 DataFrame 时应 fallback 到 stock_hk_spot。"""
         mock_cb.return_value = _DummyCircuitBreaker()
         ak_mock = MagicMock()
-        ak_mock.stock_hk_spot_em.return_value = pd.DataFrame(columns=['daima', 'mingcheng', 'zuixinjia'])
+        ak_mock.stock_hk_spot_em.return_value = pd.DataFrame(columns=['代码', '名称', '最新价'])
         ak_mock.stock_hk_spot.return_value = _make_spot_df()
 
         with patch.dict(sys.modules, {"akshare": ak_mock}):
             quote = self.fetcher._get_hk_realtime_quote("HK00700")
 
         self.assertIsNotNone(quote)
-        self.assertEqual(quote.name, "tengxunkonggu")
+        self.assertEqual(quote.name, "腾讯控股")
 
     @patch("data_provider.akshare_fetcher.get_realtime_circuit_breaker")
     def test_circuit_breaker_open_returns_none(self, mock_cb):
-        """
-Daily Stock Analysis - Test Hk Stock Name Fallback
-"""
+        """熔断状态下直接返回 None。"""
         cb = _DummyCircuitBreaker()
         cb.is_available = lambda source: False
         mock_cb.return_value = cb
