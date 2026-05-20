@@ -103,8 +103,8 @@ class TestTushareFetcherFollowUps(unittest.TestCase):
 
         # Data not ready, should fall back to Thursday (19th)
         self.assertEqual(result, "20260319")
-        
-          
+
+
     def test_get_sector_rankings_rate_limits_calendar_and_rankings_api(self) -> None:
         fetcher = self._make_fetcher()
         fetcher._api.trade_cal.return_value = pd.DataFrame(

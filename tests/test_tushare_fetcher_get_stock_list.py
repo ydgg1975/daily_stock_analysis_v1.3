@@ -186,7 +186,7 @@ class TestTushareFetcherFetchRawData(unittest.TestCase):
     def test_convert_stock_code_normalizes(self) -> None:
         fetcher = self._make_fetcher()
         self.assertEqual(fetcher._convert_stock_code("HK00700"), "HK00700")
-    
+
 
     def test_convert_stock_code_for_tushare_normalizes_hk(self) -> None:
         fetcher = self._make_fetcher()

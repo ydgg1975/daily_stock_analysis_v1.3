@@ -9,7 +9,7 @@ A股自选股智能分析系统 - 通知服务单元测试
 2. 验证通知服务的渠道检测逻辑
 3. 验证通知服务的消息发送逻辑
 
-TODO: 
+TODO:
 1. 添加发送渠道以外的测试，如：
     - 生成日报
 2. 添加 send_to_context 的测试
@@ -384,7 +384,7 @@ class TestNotificationServiceSendToMethods(unittest.TestCase):
 
         self.assertTrue(ok)
         mock_post.assert_called_once()
-        
+
     @mock.patch("src.notification.get_config")
     @mock.patch("requests.post")
     def test_send_to_discord_via_notification_service_with_bot_requires_chunking(self, mock_post: mock.MagicMock, mock_get_config: mock.MagicMock):
@@ -701,7 +701,7 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         self.assertTrue(ok)
         mock_post.assert_called_once()
-        
+
     @mock.patch("src.notification.get_config")
     @mock.patch("requests.post")
     def test_send_to_feishu_via_notification_service_requires_chunking(self, mock_post: mock.MagicMock, mock_get_config: mock.MagicMock):

@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-===================================
-API v1 Schemas 模块初始化
-===================================
-
-职责：
-1. 导出所有 Pydantic 模型
-"""
+"""API v1 schema exports."""
 
 from api.v1.schemas.common import (
     RootResponse,

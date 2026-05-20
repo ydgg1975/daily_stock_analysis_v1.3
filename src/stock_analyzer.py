@@ -83,29 +83,29 @@ class RSIStatus(Enum):
 class TrendAnalysisResult:
     """趋势分析结果"""
     code: str
-    
+
     # 趋势判断
     trend_status: TrendStatus = TrendStatus.CONSOLIDATION
     ma_alignment: str = ""           # 均线排列描述
     trend_strength: float = 0.0      # 趋势强度 0-100
-    
+
     # 均线数据
     ma5: float = 0.0
     ma10: float = 0.0
     ma20: float = 0.0
     ma60: float = 0.0
     current_price: float = 0.0
-    
+
     # 乖离率（与 MA5 的偏离度）
     bias_ma5: float = 0.0            # (Close - MA5) / MA5 * 100
     bias_ma10: float = 0.0
     bias_ma20: float = 0.0
-    
+
     # 量能分析
     volume_status: VolumeStatus = VolumeStatus.NORMAL
     volume_ratio_5d: float = 0.0     # 当日成交量/5日均量
     volume_trend: str = ""           # 量能趋势描述
-    
+
     # 支撑压力
     support_ma5: bool = False        # MA5 是否构成支撑
     support_ma10: bool = False       # MA10 是否构成支撑
@@ -131,7 +131,7 @@ class TrendAnalysisResult:
     signal_score: int = 0            # 综合评分 0-100
     signal_reasons: List[str] = field(default_factory=list)
     risk_factors: List[str] = field(default_factory=list)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'code': self.code,
@@ -180,7 +180,7 @@ class StockTrendAnalyzer:
     5. MACD 指标 - 趋势确认和金叉死叉信号
     6. RSI 指标 - 超买超卖判断
     """
-    
+
     # 交易参数配置（BIAS_THRESHOLD 从 Config 读取，见 _generate_signal）
     VOLUME_SHRINK_RATIO = 0.7   # 缩量判断阈值（当日量/5日均量）
     VOLUME_HEAVY_RATIO = 1.5    # 放量判断阈值
@@ -197,32 +197,32 @@ class StockTrendAnalyzer:
     RSI_LONG = 24              # 长期RSI周期
     RSI_OVERBOUGHT = 70        # 超买阈值
     RSI_OVERSOLD = 30          # 超卖阈值
-    
+
     def __init__(self):
         """初始化分析器"""
         pass
-    
+
     def analyze(self, df: pd.DataFrame, code: str) -> TrendAnalysisResult:
         """
         分析股票趋势
-        
+
         Args:
             df: 包含 OHLCV 数据的 DataFrame
             code: 股票代码
-            
+
         Returns:
             TrendAnalysisResult 分析结果
         """
         result = TrendAnalysisResult(code=code)
-        
+
         if df is None or df.empty or len(df) < 20:
             logger.warning(f"{code} 数据不足，无法进行趋势分析")
             result.risk_factors.append("数据不足，无法完成分析")
             return result
-        
+
         # 确保数据按日期排序
         df = df.sort_values('date').reset_index(drop=True)
-        
+
         # 计算均线
         df = self._calculate_mas(df)
 
@@ -260,7 +260,7 @@ class StockTrendAnalyzer:
         self._generate_signal(result)
 
         return result
-    
+
     def _calculate_mas(self, df: pd.DataFrame) -> pd.DataFrame:
         """计算均线"""
         df = df.copy()
@@ -336,22 +336,22 @@ class StockTrendAnalyzer:
             df[col_name] = rsi
 
         return df
-    
+
     def _analyze_trend(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
         """
         分析趋势状态
-        
+
         核心逻辑：判断均线排列和趋势强度
         """
         ma5, ma10, ma20 = result.ma5, result.ma10, result.ma20
-        
+
         # 判断均线排列
         if ma5 > ma10 > ma20:
             # 检查间距是否在扩大（强势）
             prev = df.iloc[-5] if len(df) >= 5 else df.iloc[-1]
             prev_spread = (prev['MA5'] - prev['MA20']) / prev['MA20'] * 100 if prev['MA20'] > 0 else 0
             curr_spread = (ma5 - ma20) / ma20 * 100 if ma20 > 0 else 0
-            
+
             if curr_spread > prev_spread and curr_spread > 5:
                 result.trend_status = TrendStatus.STRONG_BULL
                 result.ma_alignment = "强势多头排列，均线发散上行"
@@ -360,17 +360,17 @@ class StockTrendAnalyzer:
                 result.trend_status = TrendStatus.BULL
                 result.ma_alignment = "多头排列 MA5>MA10>MA20"
                 result.trend_strength = 75
-                
+
         elif ma5 > ma10 and ma10 <= ma20:
             result.trend_status = TrendStatus.WEAK_BULL
             result.ma_alignment = "弱势多头，MA5>MA10 但 MA10≤MA20"
             result.trend_strength = 55
-            
+
         elif ma5 < ma10 < ma20:
             prev = df.iloc[-5] if len(df) >= 5 else df.iloc[-1]
             prev_spread = (prev['MA20'] - prev['MA5']) / prev['MA5'] * 100 if prev['MA5'] > 0 else 0
             curr_spread = (ma20 - ma5) / ma5 * 100 if ma5 > 0 else 0
-            
+
             if curr_spread > prev_spread and curr_spread > 5:
                 result.trend_status = TrendStatus.STRONG_BEAR
                 result.ma_alignment = "强势空头排列，均线发散下行"
@@ -379,53 +379,53 @@ class StockTrendAnalyzer:
                 result.trend_status = TrendStatus.BEAR
                 result.ma_alignment = "空头排列 MA5<MA10<MA20"
                 result.trend_strength = 25
-                
+
         elif ma5 < ma10 and ma10 >= ma20:
             result.trend_status = TrendStatus.WEAK_BEAR
             result.ma_alignment = "弱势空头，MA5<MA10 但 MA10≥MA20"
             result.trend_strength = 40
-            
+
         else:
             result.trend_status = TrendStatus.CONSOLIDATION
             result.ma_alignment = "均线缠绕，趋势不明"
             result.trend_strength = 50
-    
+
     def _calculate_bias(self, result: TrendAnalysisResult) -> None:
         """
         计算乖离率
-        
+
         乖离率 = (现价 - 均线) / 均线 * 100%
-        
+
         严进策略：乖离率超过 5% 不追高
         """
         price = result.current_price
-        
+
         if result.ma5 > 0:
             result.bias_ma5 = (price - result.ma5) / result.ma5 * 100
         if result.ma10 > 0:
             result.bias_ma10 = (price - result.ma10) / result.ma10 * 100
         if result.ma20 > 0:
             result.bias_ma20 = (price - result.ma20) / result.ma20 * 100
-    
+
     def _analyze_volume(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
         """
         分析量能
-        
+
         偏好：缩量回调 > 放量上涨 > 缩量上涨 > 放量下跌
         """
         if len(df) < 5:
             return
-        
+
         latest = df.iloc[-1]
         vol_5d_avg = df['volume'].iloc[-6:-1].mean()
-        
+
         if vol_5d_avg > 0:
             result.volume_ratio_5d = float(latest['volume']) / vol_5d_avg
-        
+
         # 判断价格变化
         prev_close = df.iloc[-2]['close']
         price_change = (latest['close'] - prev_close) / prev_close * 100
-        
+
         # 量能状态判断
         if result.volume_ratio_5d >= self.VOLUME_HEAVY_RATIO:
             if price_change > 0:
@@ -444,22 +444,22 @@ class StockTrendAnalyzer:
         else:
             result.volume_status = VolumeStatus.NORMAL
             result.volume_trend = "量能正常"
-    
+
     def _analyze_support_resistance(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
         """
         分析支撑压力位
-        
+
         买点偏好：回踩 MA5/MA10 获得支撑
         """
         price = result.current_price
-        
+
         # 检查是否在 MA5 附近获得支撑
         if result.ma5 > 0:
             ma5_distance = abs(price - result.ma5) / result.ma5
             if ma5_distance <= self.MA_SUPPORT_TOLERANCE and price >= result.ma5:
                 result.support_ma5 = True
                 result.support_levels.append(result.ma5)
-        
+
         # 检查是否在 MA10 附近获得支撑
         if result.ma10 > 0:
             ma10_distance = abs(price - result.ma10) / result.ma10
@@ -467,11 +467,11 @@ class StockTrendAnalyzer:
                 result.support_ma10 = True
                 if result.ma10 not in result.support_levels:
                     result.support_levels.append(result.ma10)
-        
+
         # MA20 作为重要支撑
         if result.ma20 > 0 and price >= result.ma20:
             result.support_levels.append(result.ma20)
-        
+
         # 近期高点作为压力
         if len(df) >= 20:
             recent_high = df['high'].iloc[-20:].max()
@@ -743,7 +743,7 @@ class StockTrendAnalyzer:
             result.buy_signal = BuySignal.STRONG_SELL
         else:
             result.buy_signal = BuySignal.SELL
-    
+
     def format_analysis(self, result: TrendAnalysisResult) -> str:
         """
         格式化分析结果为文本
@@ -805,11 +805,11 @@ class StockTrendAnalyzer:
 def analyze_stock(df: pd.DataFrame, code: str) -> TrendAnalysisResult:
     """
     便捷函数：分析单只股票
-    
+
     Args:
         df: 包含 OHLCV 数据的 DataFrame
         code: 股票代码
-        
+
     Returns:
         TrendAnalysisResult 分析结果
     """
@@ -820,20 +820,20 @@ def analyze_stock(df: pd.DataFrame, code: str) -> TrendAnalysisResult:
 if __name__ == "__main__":
     # 测试代码
     logging.basicConfig(level=logging.INFO)
-    
+
     # 模拟数据测试
     import numpy as np
-    
+
     dates = pd.date_range(start='2025-01-01', periods=60, freq='D')
     np.random.seed(42)
-    
+
     # 模拟多头排列的数据
     base_price = 10.0
     prices = [base_price]
     for i in range(59):
         change = np.random.randn() * 0.02 + 0.003  # 轻微上涨趋势
         prices.append(prices[-1] * (1 + change))
-    
+
     df = pd.DataFrame({
         'date': dates,
         'open': prices,
@@ -842,7 +842,7 @@ if __name__ == "__main__":
         'close': prices,
         'volume': [np.random.randint(1000000, 5000000) for _ in prices],
     })
-    
+
     analyzer = StockTrendAnalyzer()
     result = analyzer.analyze(df, '000001')
     print(analyzer.format_analysis(result))

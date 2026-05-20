@@ -253,24 +253,24 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
 def get_stock_quote(stock_code: str) -> StockQuote:
     """
     获取股票实时行情
-    
+
     获取指定股票的最新行情数据
-    
+
     Args:
         stock_code: 股票代码（如 600519、00700、AAPL）
-        
+
     Returns:
         StockQuote: 实时行情数据
-        
+
     Raises:
         HTTPException: 404 - 股票不存在
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_realtime_quote(stock_code)
-        
+
         if result is None:
             raise HTTPException(
                 status_code=404,
@@ -279,7 +279,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
                     "message": f"未找到股票 {stock_code} 的行情数据"
                 }
             )
-        
+
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
@@ -294,7 +294,7 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             amount=result.get("amount"),
             update_time=result.get("update_time")
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -326,27 +326,27 @@ def get_stock_history(
 ) -> StockHistoryResponse:
     """
     获取股票历史行情
-    
+
     获取指定股票的历史 K 线数据
-    
+
     Args:
         stock_code: 股票代码
         period: K 线周期 (daily/weekly/monthly)
         days: 获取天数
-        
+
     Returns:
         StockHistoryResponse: 历史行情数据
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_data(
             stock_code=stock_code,
             period=period,
             days=days
         )
-        
+
         # 转换为响应模型
         data = [
             KLineData(
@@ -361,14 +361,14 @@ def get_stock_history(
             )
             for item in result.get("data", [])
         ]
-        
+
         return StockHistoryResponse(
             stock_code=stock_code,
             stock_name=result.get("stock_name"),
             period=period,
             data=data
         )
-    
+
     except ValueError as e:
         # period 参数不支持的错误（如 weekly/monthly）
         raise HTTPException(

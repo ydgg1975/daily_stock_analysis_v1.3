@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class PushplusSender:
-    
+
     def __init__(self, config: Config):
         """
         初始化 PushPlus 配置
@@ -30,7 +30,7 @@ class PushplusSender:
         self._pushplus_token = getattr(config, 'pushplus_token', None)
         self._pushplus_topic = getattr(config, 'pushplus_topic', None)
         self._pushplus_max_bytes = getattr(config, 'pushplus_max_bytes', 20000)
-        
+
     def send_to_pushplus(
         self,
         content: str,

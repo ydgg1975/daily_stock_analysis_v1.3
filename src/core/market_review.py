@@ -121,7 +121,7 @@ def run_market_review(
                 region=region,
             )
             review_report = market_analyzer.run_daily_review()
-        
+
         if review_report:
             # 保存报告到文件
             date_str = datetime.now().strftime('%Y%m%d')
@@ -139,7 +139,7 @@ def run_market_review(
                 config=config,
                 query_id=query_id,
             )
-            
+
             # 推送通知（合并模式下跳过，由 main 层统一发送）
             if merge_notification and send_notification:
                 logger.info("合并推送模式：跳过大盘复盘单独推送，将在个股+大盘复盘后统一发送")
@@ -154,12 +154,12 @@ def run_market_review(
                     logger.warning("大盘复盘推送失败")
             elif not send_notification:
                 logger.info("已跳过推送通知 (--no-notify)")
-            
+
             return review_report
-        
+
     except Exception as e:
         logger.error(f"大盘复盘分析失败: {e}")
-    
+
     return None
 
 

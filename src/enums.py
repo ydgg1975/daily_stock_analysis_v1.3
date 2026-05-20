@@ -25,10 +25,10 @@ class ReportType(str, Enum):
     def from_str(cls, value: str) -> "ReportType":
         """
         从字符串安全地转换为枚举值
-        
+
         Args:
             value: 字符串值
-            
+
         Returns:
             对应的枚举值，无效输入返回默认值 SIMPLE
         """
@@ -39,7 +39,7 @@ class ReportType(str, Enum):
             return cls(normalized)
         except (ValueError, AttributeError):
             return cls.SIMPLE
-    
+
     @property
     def display_name(self) -> str:
         """获取用于显示的名称"""

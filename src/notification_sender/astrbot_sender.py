@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class AstrbotSender:
-    
+
     def __init__(self, config: Config):
         """
         初始化 AstrBot 配置
@@ -34,7 +34,7 @@ class AstrbotSender:
             'astrbot_token': getattr(config, 'astrbot_token', None),
         }
         self._webhook_verify_ssl = getattr(config, 'webhook_verify_ssl', True)
-        
+
     def _is_astrbot_configured(self) -> bool:
         """检查 AstrBot 配置是否完整（支持 Bot 或 Webhook）"""
         # 只要配置了 URL，即视为可用

@@ -58,7 +58,7 @@ OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 # 填入平台的接口地址 (非常重要：结尾通常必须带有 /v1)
 OPENAI_BASE_URL=https://api.siliconflow.cn/v1
 # 填入该平台上具体的模型名称（非常重要：注意前面必须加上 openai/ 前缀帮系统识别）
-LITELLM_MODEL=openai/deepseek-ai/DeepSeek-V3 
+LITELLM_MODEL=openai/deepseek-ai/DeepSeek-V3
 ```
 
 ### 示例 2：使用 DeepSeek 官方接口

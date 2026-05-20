@@ -10,7 +10,7 @@ on:
 
     - cron: '0 10 * * 1-5'     # zhouyidaozhouwu，UTC 10:00 = beijingshijian 18:00
 
-  
+
 
   # shoudongchufa
 
@@ -68,7 +68,7 @@ jobs:
 
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
 
-    
+
 
     steps:
 
@@ -76,13 +76,13 @@ jobs:
 
         run: sleep $((RANDOM % 60))  # delay startup by 0-60 seconds
 
-      
+
 
       - name: Check out code
 
         uses: actions/checkout@v5
 
-      
+
 
       - name: Set up Python
 
@@ -94,7 +94,7 @@ jobs:
 
           cache: 'pip'
 
-      
+
 
       - name: Install dependencies
 
@@ -104,7 +104,7 @@ jobs:
 
           pip install -r requirements.txt
 
-      
+
 
       - name: Create required directories
 
@@ -112,7 +112,7 @@ jobs:
 
           mkdir -p data logs reports
 
-      
+
 
       - name: Run stock analysis
 
@@ -162,7 +162,7 @@ jobs:
 
           GEMINI_REQUEST_DELAY: '3.0'
 
-          
+
 
           # Configuration
 
@@ -188,7 +188,7 @@ jobs:
 
           DEEPSEEK_API_KEYS: ${{ secrets.DEEPSEEK_API_KEYS }}
 
-          
+
 
           # Anthropic / Claude
 
@@ -506,7 +506,7 @@ jobs:
 
           LONGBRIDGE_PRINT_QUOTE_PACKAGES: ${{ vars.LONGBRIDGE_PRINT_QUOTE_PACKAGES || secrets.LONGBRIDGE_PRINT_QUOTE_PACKAGES }}
 
-          
+
 
           # ==========================================
 
@@ -514,7 +514,7 @@ jobs:
 
           # ==========================================
 
-          ANSPIRE_API_KEYS: ${{ secrets.ANSPIRE_API_KEYS }} 
+          ANSPIRE_API_KEYS: ${{ secrets.ANSPIRE_API_KEYS }}
 
           ANSPIRE_LLM_MODEL: ${{ vars.ANSPIRE_LLM_MODEL || secrets.ANSPIRE_LLM_MODEL }}
 
@@ -536,7 +536,7 @@ jobs:
 
           SEARXNG_PUBLIC_INSTANCES_ENABLED: ${{ vars.SEARXNG_PUBLIC_INSTANCES_ENABLED || secrets.SEARXNG_PUBLIC_INSTANCES_ENABLED }}
 
-          
+
 
           # ==========================================
 
@@ -544,7 +544,7 @@ jobs:
 
           # ==========================================
 
-          
+
 
           # fangshiyi：WeCom Webhook
 
@@ -552,7 +552,7 @@ jobs:
 
           WECHAT_MSG_TYPE: ${{ vars.WECHAT_MSG_TYPE || secrets.WECHAT_MSG_TYPE || 'markdown' }}
 
-          
+
 
           # fangshier：feishu Webhook
 
@@ -562,7 +562,7 @@ jobs:
 
           FEISHU_WEBHOOK_KEYWORD: ${{ vars.FEISHU_WEBHOOK_KEYWORD || secrets.FEISHU_WEBHOOK_KEYWORD }}
 
-          
+
 
           # fangshisan：Telegram
 
@@ -572,7 +572,7 @@ jobs:
 
           TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
 
-          
+
 
           # fangshisi：youjian
 
@@ -584,7 +584,7 @@ jobs:
 
           EMAIL_SENDER_NAME: ${{ vars.EMAIL_SENDER_NAME || secrets.EMAIL_SENDER_NAME || 'Daily Stock Analysis Assistant' }}
 
-          
+
 
           # fangshiwu：Pushover
 
@@ -608,7 +608,7 @@ jobs:
 
           GOTIFY_TOKEN: ${{ secrets.GOTIFY_TOKEN }}
 
-          
+
 
           # fangshiliu：PushPlus ⬅️ xinzeng！
 
@@ -616,7 +616,7 @@ jobs:
 
           PUSHPLUS_TOPIC: ${{ vars.PUSHPLUS_TOPIC || secrets.PUSHPLUS_TOPIC }}
 
-          
+
 
           # fangshiqi：zidingyi Webhook（dingding、Bark、zijianfuwudeng）
 
@@ -628,7 +628,7 @@ jobs:
 
           WEBHOOK_VERIFY_SSL: ${{ vars.WEBHOOK_VERIFY_SSL || secrets.WEBHOOK_VERIFY_SSL || 'true' }}
 
-          
+
 
           # fangshiba：Discord
 
@@ -638,7 +638,7 @@ jobs:
 
           DISCORD_MAIN_CHANNEL_ID: ${{ secrets.DISCORD_MAIN_CHANNEL_ID }}
 
-          
+
 
           # fangshijiu：feishuyunwendang
 
@@ -708,7 +708,7 @@ jobs:
 
           MARKET_REVIEW_COLOR_SCHEME: ${{ vars.MARKET_REVIEW_COLOR_SCHEME || secrets.MARKET_REVIEW_COLOR_SCHEME || 'green_up' }}
 
-          
+
 
           # ==========================================
 
@@ -730,7 +730,7 @@ jobs:
 
           TRADING_DAY_CHECK_ENABLED: ${{ vars.TRADING_DAY_CHECK_ENABLED || secrets.TRADING_DAY_CHECK_ENABLED || 'true' }}
 
-          
+
 
           # ==========================================
 
@@ -754,7 +754,7 @@ jobs:
 
           REALTIME_SOURCE_PRIORITY: ${{ vars.REALTIME_SOURCE_PRIORITY || 'tencent,akshare_sina,efinance,akshare_em' }}
 
-          
+
 
         run: |
 
@@ -782,7 +782,7 @@ jobs:
 
           MODE="${{ github.event.inputs.mode || 'full' }}"
 
-          
+
 
           echo "=========================================="
 
@@ -902,7 +902,7 @@ jobs:
 
           echo ""
 
-          
+
 
           # goujianminglingxingcanshu
 
@@ -934,7 +934,7 @@ jobs:
 
           fi
 
-      
+
 
       - name: Upload analysis reports
 
@@ -954,7 +954,7 @@ jobs:
 
           retention-days: 30
 
-      
+
 
       - name: Show run result
 
@@ -991,4 +991,3 @@ jobs:
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "wurizhi"
 
           fi
-

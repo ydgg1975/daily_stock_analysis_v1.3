@@ -1,10 +1,10 @@
-"""Daily Stock Analysis source package."""
+"""Core orchestration package."""
 
 from importlib import import_module
 
 
 def __getattr__(name: str):
-    """Lazily expose top-level modules for test patch paths."""
+    """Lazily expose core modules for test patch paths."""
     try:
         module = import_module(f"{__name__}.{name}")
     except ModuleNotFoundError as exc:

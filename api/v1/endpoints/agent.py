@@ -151,12 +151,12 @@ async def agent_chat(request: ChatRequest):
     Chat with the AI Agent.
     """
     config = get_config()
-    
+
     if not config.is_agent_available():
         raise HTTPException(status_code=400, detail="Agent mode is not enabled")
-        
+
     session_id = request.session_id or str(uuid.uuid4())
-    
+
     try:
         skills = request.effective_skills
         executor = _build_executor(config, skills or None)
@@ -182,7 +182,7 @@ async def agent_chat(request: ChatRequest):
             session_id=session_id,
             error=result.error
         )
-            
+
     except Exception as e:
         logger.error(f"Agent chat API failed: {e}")
         logger.exception("Agent chat error details:")

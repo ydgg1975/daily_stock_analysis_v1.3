@@ -29,15 +29,15 @@ logger = logging.getLogger(__name__)
 class AnalysisService:
     """
     分析服务
-    
+
     封装股票分析相关的业务逻辑
     """
-    
+
     def __init__(self):
         """初始化分析服务"""
         self.repo = AnalysisRepository()
         self.last_error: Optional[str] = None
-    
+
     def analyze_stock(
         self,
         stock_code: str,
@@ -50,14 +50,14 @@ class AnalysisService:
     ) -> Optional[Dict[str, Any]]:
         """
         执行股票分析
-        
+
         Args:
             stock_code: 股票代码
             report_type: 报告类型 (simple/detailed)
             force_refresh: 是否强制刷新
             query_id: 查询 ID（可选）
             send_notification: 是否发送通知（API 触发默认发送）
-            
+
         Returns:
             分析结果字典，包含:
             - stock_code: 股票代码
@@ -70,14 +70,14 @@ class AnalysisService:
             from src.config import get_config
             from src.core.pipeline import StockAnalysisPipeline
             from src.enums import ReportType
-            
+
             # 生成 query_id
             if query_id is None:
                 query_id = uuid.uuid4().hex
-            
+
             # 获取配置
             config = get_config()
-            
+
             # 创建分析流水线
             pipeline = StockAnalysisPipeline(
                 config=config,
@@ -86,10 +86,10 @@ class AnalysisService:
                 progress_callback=progress_callback,
                 analysis_skills=skills,
             )
-            
+
             # 确定报告类型 (API: simple/detailed/full/brief -> ReportType)
             rt = ReportType.from_str(report_type)
-            
+
             # 执行分析
             result = pipeline.process_single_stock(
                 code=stock_code,
@@ -97,7 +97,7 @@ class AnalysisService:
                 single_stock_notify=send_notification,
                 report_type=rt,
             )
-            
+
             if result is None:
                 logger.warning(f"分析股票 {stock_code} 返回空结果")
                 self.last_error = self.last_error or f"分析股票 {stock_code} 返回空结果"
@@ -107,29 +107,29 @@ class AnalysisService:
                 self.last_error = getattr(result, "error_message", None) or f"分析股票 {stock_code} 失败"
                 logger.warning(f"分析股票 {stock_code} 未成功完成: {self.last_error}")
                 return None
-            
+
             # 构建响应
             return self._build_analysis_response(result, query_id, report_type=rt.value)
-            
+
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"分析股票 {stock_code} 失败: {e}", exc_info=True)
             return None
-    
+
     def _build_analysis_response(
-        self, 
-        result: Any, 
+        self,
+        result: Any,
         query_id: str,
         report_type: str = "detailed",
     ) -> Dict[str, Any]:
         """
         构建分析响应
-        
+
         Args:
             result: AnalysisResult 对象
             query_id: 查询 ID
             report_type: 归一化后的报告类型
-            
+
         Returns:
             格式化的响应字典
         """
@@ -137,12 +137,12 @@ class AnalysisService:
         sniper_points = {}
         if hasattr(result, 'get_sniper_points'):
             sniper_points = result.get_sniper_points() or {}
-        
+
         # 计算情绪标签
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
         sentiment_label = get_sentiment_label(result.sentiment_score, report_language)
         stock_name = get_localized_stock_name(getattr(result, "name", None), result.code, report_language)
-        
+
         # 构建报告结构
         report = {
             "meta": {
@@ -175,7 +175,7 @@ class AnalysisService:
                 "risk_warning": result.risk_warning,
             }
         }
-        
+
         return {
             "stock_code": result.code,
             "stock_name": stock_name,
