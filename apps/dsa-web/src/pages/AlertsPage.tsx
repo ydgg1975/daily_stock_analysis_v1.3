@@ -41,12 +41,12 @@ function testVariant(result: AlertRuleTestResponse): 'success' | 'warning' | 'da
 }
 
 const notificationChannelLabel: Record<string, string> = {
-  __cooldown__: '업무 쿨다운',
-  __cooldown_read_failed__: '쿨다운 읽기 실패',
-  __noise_suppressed__: '알림 노이즈 억제',
-  __no_channel__: '사용 가능한 채널 없음',
-  __dispatch__: '알림 디스패치',
-  __context__: '세션 채널',
+  __cooldown__: '业务冷却',
+  __cooldown_read_failed__: '冷却读取失败',
+  __noise_suppressed__: '通知降噪',
+  __no_channel__: '无可用渠道',
+  __dispatch__: '通知调度',
+  __context__: '会话渠道',
 };
 
 function formatNotificationChannel(channel: string): string {
@@ -54,17 +54,17 @@ function formatNotificationChannel(channel: string): string {
 }
 
 function formatNotificationStatus(notification: AlertNotificationItem): string {
-  if (notification.success) return '성공';
-  if (notification.errorCode === 'cooldown_active') return '쿨다운 억제';
-  if (notification.errorCode === 'cooldown_read_failed') return '쿨다운 읽기 실패';
-  if (notification.errorCode === 'noise_suppressed') return '노이즈 억제';
-  if (notification.errorCode === 'no_channel') return '채널 없음';
-  return '실패';
+  if (notification.success) return '成功';
+  if (notification.errorCode === 'cooldown_active') return '冷却抑制';
+  if (notification.errorCode === 'cooldown_read_failed') return '冷却读取失败';
+  if (notification.errorCode === 'noise_suppressed') return '降噪抑制';
+  if (notification.errorCode === 'no_channel') return '无渠道';
+  return '失败';
 }
 
 const AlertsPage: React.FC = () => {
   useEffect(() => {
-    document.title = '알림 필터 - DSA';
+    document.title = '告警中心 - DSA';
   }, []);
 
   const [rules, setRules] = useState<AlertRuleItem[]>([]);
@@ -171,7 +171,7 @@ const AlertsPage: React.FC = () => {
     setCreateSuccess(null);
     try {
       const created = await alertsApi.createRule(payload);
-      setCreateSuccess(`알림 규칙을 만들었습니다: ${created.name}`);
+      setCreateSuccess(`已创建告警规则「${created.name}」`);
       await loadRules(1);
       return true;
     } catch (error) {
@@ -227,19 +227,19 @@ const AlertsPage: React.FC = () => {
     <AppPage className="space-y-5">
       <PageHeader
         eyebrow="Alert Center"
-        title="알림 필터"
-        description="여러 이벤트 알림 규칙을 관리하고 조회합니다. 테스트를 실행하며 백그라운드 평가 작업의 트리거 기록을 확인합니다."
+        title="告警中心"
+        description="管理事件告警与日线技术指标规则，执行一次性测试，并查看后台评估任务记录的触发历史。"
       />
 
       {createError ? <ApiErrorAlert error={createError} onDismiss={() => setCreateError(null)} /> : null}
       {createSuccess ? (
         <InlineAlert
-          title="생성 성공"
+          title="创建成功"
           message={createSuccess}
           variant="success"
           action={(
             <button type="button" className="text-sm underline" onClick={() => setCreateSuccess(null)}>
-              닫기
+              关闭
             </button>
           )}
         />
@@ -274,16 +274,16 @@ const AlertsPage: React.FC = () => {
           />
           {testResult ? (
             <InlineAlert
-              title="테스트 결과"
+              title="测试结果"
               variant={testVariant(testResult)}
               message={(
                 <span>
                   {testResult.message}
-                  {' · 상태: '}
+                  {' · 状态：'}
                   {testResult.status}
-                  {' · 트리거: '}
-                  {testResult.triggered ? '예' : '아니오'}
-                  {' · 관측값: '}
+                  {' · 触发：'}
+                  {testResult.triggered ? '是' : '否'}
+                  {' · 观察值：'}
                   {testResult.observedValue == null ? '--' : String(testResult.observedValue)}
                 </span>
               )}
@@ -296,13 +296,13 @@ const AlertsPage: React.FC = () => {
       <AlertTriggerHistory triggers={triggers} isLoading={triggersLoading} />
 
       {notificationsError ? <ApiErrorAlert error={notificationsError} onDismiss={() => setNotificationsError(null)} /> : null}
-      <Card title="알림 시도 기록" subtitle="알림 결과" variant="bordered" padding="md">
-        {notificationsLoading ? <Loading label="알림 시도 기록을 불러오는 중" /> : null}
+      <Card title="通知尝试记录" subtitle="通知结果" variant="bordered" padding="md">
+        {notificationsLoading ? <Loading label="正在加载通知尝试记录" /> : null}
         {!notificationsLoading && notifications.length === 0 ? (
           <EmptyState
             icon={<BellRing className="h-6 w-6" />}
-            title="알림 시도 기록 없음"
-            description="현재 표시할 알림 시도 상세가 없습니다. 알림이 트리거되면 설정된 알림 채널로 전송합니다."
+            title="暂无通知尝试记录"
+            description="当前没有可展示的通知尝试明细；告警触发仍会按已配置通知渠道发送。"
           />
         ) : null}
         {!notificationsLoading && notifications.length > 0 ? (
@@ -310,12 +310,12 @@ const AlertsPage: React.FC = () => {
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-border/60 text-xs uppercase text-muted-text">
                 <tr>
-                  <th className="px-3 py-2 font-medium">채널</th>
-                  <th className="px-3 py-2 font-medium">상태</th>
-                  <th className="px-3 py-2 font-medium">오류 코드</th>
-                  <th className="px-3 py-2 font-medium">소요 시간</th>
-                  <th className="px-3 py-2 font-medium">시간</th>
-                  <th className="px-3 py-2 font-medium">진단</th>
+                  <th className="px-3 py-2 font-medium">渠道</th>
+                  <th className="px-3 py-2 font-medium">状态</th>
+                  <th className="px-3 py-2 font-medium">错误码</th>
+                  <th className="px-3 py-2 font-medium">耗时</th>
+                  <th className="px-3 py-2 font-medium">时间</th>
+                  <th className="px-3 py-2 font-medium">诊断</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">

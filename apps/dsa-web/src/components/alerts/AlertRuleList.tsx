@@ -15,38 +15,64 @@ export interface AlertRuleBusyState {
 }
 
 const ENABLED_FILTER_OPTIONS = [
-  { value: 'all', label: '모든 상태' },
-  { value: 'enabled', label: '활성화됨' },
-  { value: 'disabled', label: '비활성화됨' },
+  { value: 'all', label: '全部状态' },
+  { value: 'enabled', label: '已启用' },
+  { value: 'disabled', label: '已停用' },
 ];
 
 const ALERT_TYPE_FILTER_OPTIONS = [
-  { value: 'all', label: '모든 유형' },
-  { value: 'price_cross', label: '가격 돌파' },
-  { value: 'price_change_percent', label: '등락률' },
-  { value: 'volume_spike', label: '거래량 급증' },
+  { value: 'all', label: '全部类型' },
+  { value: 'price_cross', label: '价格突破' },
+  { value: 'price_change_percent', label: '涨跌幅' },
+  { value: 'volume_spike', label: '成交量放大' },
+  { value: 'ma_price_cross', label: '价格均线穿越' },
+  { value: 'rsi_threshold', label: 'RSI 阈值' },
+  { value: 'macd_cross', label: 'MACD 金叉/死叉' },
+  { value: 'kdj_cross', label: 'KDJ 金叉/死叉' },
+  { value: 'cci_threshold', label: 'CCI 阈值' },
 ];
 
 const typeLabel: Record<AlertType, string> = {
-  price_cross: '가격 돌파',
-  price_change_percent: '등락률',
-  volume_spike: '거래량 급증',
+  price_cross: '价格突破',
+  price_change_percent: '涨跌幅',
+  volume_spike: '成交量放大',
+  ma_price_cross: '价格均线穿越',
+  rsi_threshold: 'RSI 阈值',
+  macd_cross: 'MACD 金叉/死叉',
+  kdj_cross: 'KDJ 金叉/死叉',
+  cci_threshold: 'CCI 阈值',
 };
 
 const severityLabel: Record<string, string> = {
-  info: '안내',
-  warning: '경고',
-  critical: '심각',
+  info: '提示',
+  warning: '警告',
+  critical: '严重',
 };
 
 function formatParameters(rule: AlertRuleItem): string {
   if (rule.alertType === 'price_cross') {
-    return `${rule.parameters.direction === 'below' ? '하향 돌파' : '상향 돌파'} ${rule.parameters.price ?? '--'}`;
+    return `${rule.parameters.direction === 'below' ? '下破' : '上破'} ${rule.parameters.price ?? '--'}`;
   }
   if (rule.alertType === 'price_change_percent') {
-    return `${rule.parameters.direction === 'down' ? '하락' : '상승'} ${rule.parameters.changePct ?? '--'}%`;
+    return `${rule.parameters.direction === 'down' ? '下跌' : '上涨'} ${rule.parameters.changePct ?? '--'}%`;
   }
-  return `${rule.parameters.multiplier ?? '--'}x`;
+  if (rule.alertType === 'volume_spike') {
+    return `${rule.parameters.multiplier ?? '--'}x`;
+  }
+  if (rule.alertType === 'ma_price_cross') {
+    return `${rule.parameters.direction === 'below' ? '下穿' : '上穿'} MA${rule.parameters.window ?? '--'}`;
+  }
+  if (rule.alertType === 'rsi_threshold') {
+    return `RSI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? '下穿' : '上穿'} ${rule.parameters.threshold ?? '--'}`;
+  }
+  if (rule.alertType === 'macd_cross' || rule.alertType === 'kdj_cross') {
+    const direction = rule.parameters.direction === 'bearish_cross' ? '死叉' : '金叉';
+    if (rule.alertType === 'macd_cross') {
+      return `MACD(${rule.parameters.fastPeriod ?? '--'},${rule.parameters.slowPeriod ?? '--'},${rule.parameters.signalPeriod ?? '--'}) ${direction}`;
+    }
+    return `KDJ(${rule.parameters.period ?? '--'},${rule.parameters.kPeriod ?? '--'},${rule.parameters.dPeriod ?? '--'}) ${direction}`;
+  }
+  return `CCI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? '下穿' : '上穿'} ${rule.parameters.threshold ?? '--'}`;
 }
 
 function isCoolingDown(rule: AlertRuleItem): boolean {
@@ -96,19 +122,23 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
   );
 
   return (
-    <Card title="알림 규칙" subtitle={`${total}개 규칙`} variant="bordered" padding="md" className={className}>
+    <Card title="告警规则" subtitle={`${total} 条规则`} variant="bordered" padding="md" className={className}>
       <div className="mb-4 grid gap-3 md:grid-cols-2">
         <Select
-          label="활성 상태"
+          label="启停状态"
           value={enabledFilter}
           options={ENABLED_FILTER_OPTIONS}
-          onChange={(value) => onEnabledFilterChange(value as AlertRuleEnabledFilter)}
+          onChange={(value) => {
+            onEnabledFilterChange(value as AlertRuleEnabledFilter);
+          }}
         />
         <Select
-          label="규칙 유형"
+          label="规则类型"
           value={alertTypeFilter}
           options={ALERT_TYPE_FILTER_OPTIONS}
-          onChange={(value) => onAlertTypeFilterChange(value as AlertTypeFilter)}
+          onChange={(value) => {
+            onAlertTypeFilterChange(value as AlertTypeFilter);
+          }}
         />
       </div>
 
@@ -116,8 +146,8 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
         <div className="flex min-h-[220px] flex-1 items-center justify-center">
           <EmptyState
             icon={<Bell className="h-6 w-6" />}
-            title={isLoading ? '규칙을 불러오는 중' : '알림 규칙 없음'}
-            description="규칙을 만들면 백그라운드 평가 작업이 주기적으로 활성 알림을 처리합니다."
+            title={isLoading ? '正在加载规则' : '暂无告警规则'}
+            description="创建规则后，后台评估任务会按轮询周期处理已启用的告警。"
           />
         </div>
       ) : (
@@ -125,14 +155,14 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="border-b border-border/60 text-xs uppercase text-muted-text">
               <tr>
-                <th className="px-3 py-2 font-medium">규칙</th>
-                <th className="px-3 py-2 font-medium">종목</th>
-                <th className="px-3 py-2 font-medium">유형</th>
-                <th className="px-3 py-2 font-medium">매개변수</th>
-                <th className="px-3 py-2 font-medium">상태</th>
-                <th className="px-3 py-2 font-medium">쿨다운</th>
-                <th className="px-3 py-2 font-medium">업데이트 시간</th>
-                <th className="px-3 py-2 text-right font-medium">작업</th>
+                <th className="px-3 py-2 font-medium">规则</th>
+                <th className="px-3 py-2 font-medium">目标</th>
+                <th className="px-3 py-2 font-medium">类型</th>
+                <th className="px-3 py-2 font-medium">参数</th>
+                <th className="px-3 py-2 font-medium">状态</th>
+                <th className="px-3 py-2 font-medium">冷却</th>
+                <th className="px-3 py-2 font-medium">更新时间</th>
+                <th className="px-3 py-2 text-right font-medium">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
@@ -140,7 +170,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                 <tr key={rule.id} className="align-top">
                   <td className="px-3 py-3">
                     <div className="font-medium text-foreground">{rule.name}</div>
-                    <div className="mt-1 text-xs text-muted-text">출처: {rule.source}</div>
+                    <div className="mt-1 text-xs text-muted-text">来源：{rule.source}</div>
                   </td>
                   <td className="px-3 py-3 font-mono text-secondary-text">{rule.target}</td>
                   <td className="px-3 py-3">
@@ -154,11 +184,11 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                   <td className="px-3 py-3 text-secondary-text">{formatParameters(rule)}</td>
                   <td className="px-3 py-3">
                     <Badge variant={rule.enabled ? 'success' : 'default'}>
-                      {rule.enabled ? '활성화됨' : '비활성화됨'}
+                      {rule.enabled ? '已启用' : '已停用'}
                     </Badge>
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">
-                    <div>{isCoolingDown(rule) ? '쿨다운 중' : '쿨다운 없음'}</div>
+                    <div>{isCoolingDown(rule) ? '冷却中' : '未冷却'}</div>
                     <div className="mt-1">{formatDateTime(rule.cooldownUntil)}</div>
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">{formatDateTime(rule.updatedAt ?? rule.createdAt)}</td>
@@ -169,30 +199,30 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                         variant="outline"
                         onClick={() => onTest(rule)}
                         isLoading={isRuleActionBusy(rule, 'test')}
-                        loadingText="테스트 중"
+                        loadingText="测试中"
                         disabled={isRuleBusy(rule) && !isRuleActionBusy(rule, 'test')}
                       >
-                        테스트
+                        测试
                       </Button>
                       <Button
                         size="xsm"
                         variant={rule.enabled ? 'secondary' : 'primary'}
                         onClick={() => onToggleEnabled(rule)}
                         isLoading={isRuleActionBusy(rule, 'toggle')}
-                        loadingText={rule.enabled ? '비활성화 중' : '활성화 중'}
+                        loadingText={rule.enabled ? '停用中' : '启用中'}
                         disabled={isRuleBusy(rule) && !isRuleActionBusy(rule, 'toggle')}
                       >
-                        {rule.enabled ? '비활성화' : '활성화'}
+                        {rule.enabled ? '停用' : '启用'}
                       </Button>
                       <Button
                         size="xsm"
                         variant="danger-subtle"
-                        aria-label={`삭제 ${rule.name}`}
+                        aria-label={`删除 ${rule.name}`}
                         onClick={() => setPendingDelete(rule)}
                         disabled={isRuleBusy(rule)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        삭제
+                        删除
                       </Button>
                     </div>
                   </td>
@@ -212,10 +242,10 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
 
       <ConfirmDialog
         isOpen={pendingDelete != null}
-        title="알림 규칙 삭제"
-        message={pendingDelete ? `${pendingDelete.name}을 삭제할까요? 이 작업은 기존 트리거 기록을 삭제하지 않습니다.` : ''}
-        confirmText="삭제"
-        cancelText="취소"
+        title="删除告警规则"
+        message={pendingDelete ? `确认删除「${pendingDelete.name}」吗？该操作不会删除已有触发历史。` : ''}
+        confirmText="删除"
+        cancelText="取消"
         isDanger
         onConfirm={() => {
           if (pendingDelete) {
