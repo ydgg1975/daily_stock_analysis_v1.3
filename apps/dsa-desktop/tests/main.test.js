@@ -167,7 +167,7 @@ test('evaluateReleaseUpdate reports update-available when release is newer', (t)
   assert.equal(state.releaseUrl, 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0');
   assert.equal(state.checkedAt, '2026-04-25T01:02:00Z');
   assert.equal(state.publishedAt, '2026-04-25T01:00:00Z');
-  assert.match(state.message, /faxianxinbanben 3\.13\.0/);
+  assert.match(state.message, /3\.13\.0/);
 });
 
 test('evaluateReleaseUpdate reports up-to-date when version is current', (t) => {
@@ -200,7 +200,7 @@ test('evaluateReleaseUpdate reports error when current version is invalid', (t) 
   });
 
   assert.equal(state.status, mainModule.UPDATE_STATUS.ERROR);
-  assert.match(state.message, /bushiyouxiaodeyuyihuabanben/);
+  assert.match(state.message, /semantic version/);
 });
 
 test('checkForDesktopUpdates delegates to release fetcher', async (t) => {
@@ -294,7 +294,7 @@ test('auto download prompt falls back to error when install path fails', async (
       }
     },
     quitAndInstall: () => {
-      throw new Error('anzhuangjinchengqidongshibai');
+      throw new Error('installer process failed');
     },
   };
 
@@ -337,7 +337,7 @@ test('auto download prompt falls back to error when install path fails', async (
   }
 
   assert.equal(state.status, mainModule.UPDATE_STATUS.ERROR);
-  assert.match(state.message, /gengxinanzhuangshibai/);
+  assert.match(state.message, /installer process failed/);
   assert.equal(state.updateMode, mainModule.UPDATE_MODE.AUTO);
   assert.equal(fs.existsSync(backupRoot), false);
   assert.equal(fs.existsSync(path.join(backupRoot, 'runtime-state.json')), false);
@@ -689,7 +689,7 @@ test('createWindow startup path does not throw ReferenceError after restore resu
 });
 
 test('stopBackend waits for backend process exit', async (t) => {
-  const mainModule = loadMainModule(t);
+  const mainModule = loadMainModule(t, { platform: 'linux' });
   const killSignals = [];
   const fakeBackend = new EventEmitter();
 

@@ -210,7 +210,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       status: UPDATE_STATUS.ERROR,
       currentVersion: normalizedCurrentVersion,
       checkedAt,
-      message: 'dangqianzhuomianduanbanbenbushiyouxiaodeyuyihuabanben竊똷ufajianchagengxin??,
+      message: '현재 데스크톱 버전이 유효한 semantic version이 아니어서 업데이트를 확인할 수 없습니다.',
     });
   }
 
@@ -220,7 +220,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       status: UPDATE_STATUS.ERROR,
       currentVersion: normalizedCurrentVersion,
       checkedAt,
-      message: 'GitHub Release weifanhuikeshibiedeyuyihuabanbenbiaoqian??,
+      message: 'GitHub Release에서 인식 가능한 semantic version 태그를 찾을 수 없습니다.',
     });
   }
 
@@ -234,7 +234,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       checkedAt,
       releaseName: releaseMetadata.releaseName,
       tagName: releaseMetadata.tagName,
-      message: 'banbenbijiaoshibai竊똷ufapanduanshifoucunzaikeyonggengxin??,
+      message: '버전 비교에 실패해서 사용 가능한 업데이트가 있는지 판단할 수 없습니다.',
     });
   }
 
@@ -248,7 +248,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       publishedAt: releaseMetadata.publishedAt,
       releaseName: releaseMetadata.releaseName,
       tagName: releaseMetadata.tagName,
-      message: `faxianxinbanben ${releaseMetadata.version}竊똩eqianwang GitHub Releases xiazaigengxin??,
+      message: `새 버전 ${releaseMetadata.version}을 찾았습니다. GitHub Releases에서 업데이트를 다운로드하세요.`,
     });
   }
 
@@ -261,7 +261,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
     publishedAt: releaseMetadata.publishedAt,
     releaseName: releaseMetadata.releaseName,
     tagName: releaseMetadata.tagName,
-    message: 'dangqianzhuomianduanyishizuixinbanben??,
+    message: '현재 데스크톱 앱이 최신 버전입니다.',
   });
 }
 
@@ -595,7 +595,7 @@ function initLogging() {
   const appDir = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getPath('userData');
   logFilePath = path.join(appDir, 'logs', 'desktop.log');
   
-  // quebaorizhimulucunzai
+  // Ensure the log directory exists before writing the first line.
   const logDir = path.dirname(logFilePath);
   ensureDirectory(logDir);
   
@@ -625,7 +625,7 @@ function decodeBackendOutput(data, decoder) {
 
   let decoded = decoder.decode(data, { stream: true });
 
-  // Windows kongzhitai / zijinchengyoushirenghuituchubendidaimayezijie竊똹ouxianzaimingxianluanmashihuituidao GBK??
+  // Some Windows console subprocesses still emit bytes in the local code page.
   if (isWindows && decoded.includes('\uFFFD')) {
     try {
       decoded = new TextDecoder('gbk', { fatal: false }).decode(data, { stream: true });
@@ -1112,15 +1112,15 @@ async function maybePromptDesktopUpdate(state) {
   }
 
   lastNotifiedUpdateVersion = state.latestVersion;
-  const currentVersion = state.currentVersion || resolveDesktopVersion() || 'dangqianbanben';
+  const currentVersion = state.currentVersion || resolveDesktopVersion() || '현재 버전';
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'info',
-    buttons: ['later', 'qianwangxiazai'],
+    buttons: ['나중에', '다운로드 페이지 열기'],
     defaultId: 1,
     cancelId: 0,
-    title: 'faxianxinbanben',
-    message: `jiancedaozhuomianduanxinbanben ${state.latestVersion}`,
-    detail: `dangqianbanben ${currentVersion}?굕inbanbenjiangtiaozhuandao GitHub Releases xiazaiye竊똟uhuijingmoxiazaihuozidonganzhuang??,
+    title: '새 버전 발견',
+    message: `데스크톱 새 버전 ${state.latestVersion}을 찾았습니다.`,
+    detail: `현재 버전: ${currentVersion}. 새 버전은 GitHub Releases 다운로드 페이지에서 받을 수 있습니다.`,
     noLink: true,
   });
 
@@ -1132,10 +1132,10 @@ async function maybePromptDesktopUpdate(state) {
 async function installDownloadedUpdate() {
   const updater = getElectronAutoUpdater();
   if (!updater) {
-    throw new Error('dangqianyunxingmoshibuzhichizidonganzhuanggengxin??);
+    throw new Error('현재 실행 모드에서는 자동 업데이트 설치를 지원하지 않습니다.');
   }
   if (desktopUpdateState?.status !== UPDATE_STATUS.UPDATE_DOWNLOADED) {
-    throw new Error('gengxinshangweixiazaiwancheng竊똷ufazidonganzhuang??);
+    throw new Error('업데이트 다운로드가 아직 완료되지 않아 자동 설치할 수 없습니다.');
   }
 
   setDesktopUpdateState({
@@ -1143,7 +1143,7 @@ async function installDownloadedUpdate() {
     updateMode: UPDATE_MODE.AUTO,
     latestVersion: desktopUpdateState?.latestVersion || '',
     releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
-    message: 'in_progresschongqibinganzhuanggengxin...',
+    message: 'in_progress 업데이트 설치를 위해 앱을 다시 시작하는 중...',
   });
   let backupRoot = null;
   try {
@@ -1165,7 +1165,7 @@ async function installDownloadedUpdate() {
             latestVersion: desktopUpdateState?.latestVersion || '',
             releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
             checkedAt: new Date().toISOString(),
-            message: `gengxinanzhuangzhunbeishibai竊?{error instanceof Error ? error.message : String(error)}`,
+            message: `업데이트 설치 준비 실패: ${error instanceof Error ? error.message : String(error)}`,
           });
           throw error;
         }
@@ -1200,12 +1200,12 @@ async function maybePromptInstallDownloadedUpdate(state) {
   lastPromptedInstallVersion = state.latestVersion;
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'info',
-    buttons: ['later', 'lijichongqianzhuang'],
+    buttons: ['나중에', '지금 다시 시작'],
     defaultId: 1,
     cancelId: 0,
-    title: 'gengxinyixiazai',
-    message: `zhuomianduanxinbanben ${state.latestVersion} yixiazai`,
-    detail: 'chongqiyingyonghouhuizidongwanchenganzhuang?굓eisavedeshezhicaogaoqingxiansave??,
+    title: '업데이트 다운로드 완료',
+    message: `데스크톱 새 버전 ${state.latestVersion} 다운로드가 완료되었습니다.`,
+    detail: '앱을 다시 시작하면 설치가 자동으로 완료됩니다. 저장하지 않은 설정이나 초안은 먼저 저장하세요.',
     noLink: true,
   });
 
@@ -1222,7 +1222,7 @@ async function maybePromptInstallDownloadedUpdate(state) {
         latestVersion: state.latestVersion || desktopUpdateState?.latestVersion || '',
         releaseUrl: state.releaseUrl || desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
         checkedAt: new Date().toISOString(),
-        message: `gengxinanzhuangshibai竊?{message}?굂exiansavecaogaobingqianwangxiazaiye竊똦uolaterretry??,
+        message: `업데이트 설치 실패: ${message}. 저장하지 않은 초안을 저장한 뒤 다운로드 페이지에서 다시 시도하세요.`,
       });
     }
   }
@@ -1242,14 +1242,14 @@ function configureElectronAutoUpdater() {
       status: UPDATE_STATUS.CHECKING,
       updateMode: UPDATE_MODE.AUTO,
       currentVersion: resolveDesktopVersion(),
-      message: 'in_progressjianchazhuomianduangengxin...',
+      message: 'in_progress 데스크톱 업데이트를 확인하는 중...',
     });
   });
 
   updater.on('update-available', (info = {}) => {
-    const latestVersion = resolveUpdaterLatestVersion(info) || 'zuixinbanben';
+    const latestVersion = resolveUpdaterLatestVersion(info) || '최신 버전';
     const nextState = buildElectronUpdaterState(UPDATE_STATUS.UPDATE_AVAILABLE, info, {
-      message: `faxianxinbanben ${latestVersion}竊똺hengzaihoutaixiazaigengxin...`,
+      message: `새 버전 ${latestVersion}을 찾았습니다. 백그라운드에서 업데이트를 다운로드하는 중...`,
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] auto update available latest=${nextState.latestVersion || 'unknown'}`);
@@ -1257,7 +1257,7 @@ function configureElectronAutoUpdater() {
 
   updater.on('update-not-available', (info = {}) => {
     const nextState = buildElectronUpdaterState(UPDATE_STATUS.UP_TO_DATE, info, {
-      message: 'dangqianzhuomianduanyishizuixinbanben??,
+      message: '현재 데스크톱 앱이 최신 버전입니다.',
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] auto update not available current=${nextState.currentVersion || 'unknown'}`);
@@ -1275,8 +1275,8 @@ function configureElectronAutoUpdater() {
       totalBytes: progress.total,
       message:
         percent === null
-          ? 'in_progressxiazaizhuomianduangengxin...'
-          : `in_progressxiazaizhuomianduangengxin竊?{percent.toFixed(percent % 1 === 0 ? 0 : 1)}%竊?..`,
+          ? 'in_progress 데스크톱 업데이트를 다운로드하는 중...'
+          : `in_progress 데스크톱 업데이트를 다운로드하는 중... ${percent.toFixed(percent % 1 === 0 ? 0 : 1)}%`,
     });
     logLine(`[update] download progress percent=${nextState.downloadPercent ?? 'unknown'}`);
   });
@@ -1287,8 +1287,8 @@ function configureElectronAutoUpdater() {
       latestVersion,
       downloadPercent: 100,
       message: latestVersion
-        ? `xinbanben ${latestVersion} yixiazai竊똩echongqiyingyongwanchenganzhuang??
-        : 'xinbanbenyixiazai竊똩echongqiyingyongwanchenganzhuang??,
+        ? `새 버전 ${latestVersion} 다운로드가 완료되었습니다. 앱을 다시 시작하면 설치가 완료됩니다.`
+        : '새 버전 다운로드가 완료되었습니다. 앱을 다시 시작하면 설치가 완료됩니다.',
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] downloaded latest=${nextState.latestVersion || 'unknown'}`);
@@ -1305,7 +1305,7 @@ function configureElectronAutoUpdater() {
       latestVersion: desktopUpdateState?.latestVersion || '',
       releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
       checkedAt: new Date().toISOString(),
-      message: `zidonggengxinshibai竊?{message}`,
+      message: `자동 업데이트 실패: ${message}`,
     });
   });
 
@@ -1316,7 +1316,7 @@ function configureElectronAutoUpdater() {
 async function performElectronUpdaterCheck({ manual = false } = {}) {
   const updater = configureElectronAutoUpdater();
   if (!updater) {
-    throw new Error('dangqianpingtaibuzhichizidonganzhuanggengxin??);
+    throw new Error('현재 플랫폼에서는 자동 업데이트 설치를 지원하지 않습니다.');
   }
   if (electronUpdateCheckInFlight) {
     return desktopUpdateState;
@@ -1327,7 +1327,7 @@ async function performElectronUpdaterCheck({ manual = false } = {}) {
     status: UPDATE_STATUS.CHECKING,
     updateMode: UPDATE_MODE.AUTO,
     currentVersion: resolveDesktopVersion(),
-    message: manual ? 'in_progressjianchazhuomianduangengxin...' : 'in_progresshoutaijianchazhuomianduangengxin...',
+    message: manual ? 'in_progress 데스크톱 업데이트를 확인하는 중...' : 'in_progress 백그라운드에서 데스크톱 업데이트를 확인하는 중...',
   });
 
   try {
@@ -1341,7 +1341,7 @@ async function performElectronUpdaterCheck({ manual = false } = {}) {
       updateMode: UPDATE_MODE.AUTO,
       currentVersion: resolveDesktopVersion(),
       checkedAt: new Date().toISOString(),
-      message: manual ? `jianchagengxinshibai竊?{message}` : '',
+      message: manual ? `업데이트 확인 실패: ${message}` : '',
     });
     return nextState;
   } finally {
@@ -1358,7 +1358,7 @@ async function performDesktopUpdateCheck({ manual = false, notify = false } = {}
   setDesktopUpdateState({
     status: UPDATE_STATUS.CHECKING,
     currentVersion,
-    message: manual ? 'in_progressjianchazhuomianduangengxin...' : 'in_progresshoutaijianchazhuomianduangengxin...',
+    message: manual ? 'in_progress 데스크톱 업데이트를 확인하는 중...' : 'in_progress 백그라운드에서 데스크톱 업데이트를 확인하는 중...',
   });
 
   try {
@@ -1380,7 +1380,7 @@ async function performDesktopUpdateCheck({ manual = false, notify = false } = {}
         status: UPDATE_STATUS.ERROR,
         currentVersion,
         checkedAt: new Date().toISOString(),
-        message: `jianchagengxinshibai竊?{message}`,
+        message: `업데이트 확인 실패: ${message}`,
       });
     }
 
@@ -1406,10 +1406,10 @@ async function createWindow() {
   initLogging();
   const restoreFailed = Boolean(restoreResult && restoreResult.failed.length);
   const restoreIssueDetails = restoreResult
-    ? restoreResult.failed.join('竊?)
+    ? restoreResult.failed.join(', ')
     : '';
   const restoreErrorMessage = restoreFailed
-    ? `shangcigengxinanzhuangweiwanchenghuohuifuyunxingshiwenjianshibai竊똹ibaoliubeifenmulu ${restoreResult.backupRoot}竊똰ingconfirmhoushoudonghuifubingzhongqiyingyong?굆ingxi竊?{restoreIssueDetails}`
+    ? `지난 업데이트 설치가 완료되지 않았거나 런타임 파일 복구에 실패했습니다. 백업 폴더를 보관했습니다: ${restoreResult.backupRoot}. 확인 후 수동으로 복구하고 앱을 다시 시작하세요. 상세: ${restoreIssueDetails}`
     : '';
   setDesktopUpdateState({
     status: restoreFailed ? UPDATE_STATUS.ERROR : UPDATE_STATUS.IDLE,
