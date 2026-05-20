@@ -905,7 +905,13 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
     def test_generate_single_stock_report_uses_currency_for_hk(
         self, mock_get_config: mock.MagicMock
     ):
-        """HKD currency yields 亿港元 suffix; CNY (BABA HK financialCurrency) yields 亿元."""
+        """HK ADRs have financialCurrency=CNY but trade/pay dividends in HKD.
+
+        The financial summary must render in 元 (CNY income statement) while
+        dividends must render in 港元 — they are NOT the same currency on
+        yfinance HK payloads, so the renderer must read each block's own
+        ``currency`` field rather than assuming a single global currency.
+        """
         mock_get_config.return_value = _make_config(report_renderer_enabled=False)
         service = NotificationService()
         result = AnalysisResult(
@@ -937,7 +943,8 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
                         }],
                         "ttm_event_count": 1,
                         "ttm_cash_dividend_per_share": 1.95812,
-                        "ttm_dividend_yield_pct": 0.77,
+                        "ttm_dividend_yield_pct": 1.75,
+                        "currency": "HKD",
                     },
                 },
             },
@@ -950,9 +957,46 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
 
         out = service.generate_single_stock_report(result)
 
+        # Income statement still rendered in CNY (financialCurrency).
         self.assertIn("10200.00 亿元", out)
-        self.assertIn("1.9581 元", out)
+        # Dividend per share follows the dividend currency, NOT the financial currency.
+        self.assertIn("1.9581 港元", out)
+        self.assertNotIn("1.9581 元 ", out)
         self.assertIn("Consumer Cyclical", out)
+
+    @mock.patch("src.notification.get_config")
+    def test_dividend_currency_falls_back_to_financial_when_missing(
+        self, mock_get_config: mock.MagicMock
+    ):
+        """A-share AkShare payload has no dividend.currency — fall back to financial_report.currency."""
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False)
+        service = NotificationService()
+        result = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            sentiment_score=72,
+            trend_prediction="看多",
+            operation_advice="持有",
+            analysis_summary="稳健",
+        )
+        result.fundamental_context = {
+            "earnings": {
+                "status": "ok",
+                "data": {
+                    "financial_report": {"report_date": "2026-03-31", "revenue": 4.5e10},
+                    "dividend": {
+                        "events": [{"event_date": "2025-06-20", "ex_dividend_date": "2025-06-20"}],
+                        "ttm_event_count": 1,
+                        "ttm_cash_dividend_per_share": 27.6,
+                    },
+                },
+            },
+        }
+
+        out = service.generate_single_stock_report(result)
+
+        # Without explicit dividend currency, default to 元 (matches AkShare A-share semantics).
+        self.assertIn("27.6000 元", out)
 
     @mock.patch("src.notification.get_config")
     def test_generate_dashboard_report_appends_fundamental_blocks(

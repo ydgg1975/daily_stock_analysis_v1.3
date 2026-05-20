@@ -56,6 +56,7 @@ class TestYfinanceFundamentalAdapter(unittest.TestCase):
         info = {
             "financialCurrency": "USD",
             "currency": "USD",
+            "currentPrice": 210.0,
             "sector": "Technology",
             "industry": "Consumer Electronics",
             "totalRevenue": 451442016256,
@@ -121,7 +122,10 @@ class TestYfinanceFundamentalAdapter(unittest.TestCase):
         div = bundle["earnings"]["dividend"]
         self.assertEqual(div["ttm_event_count"], 4)
         self.assertAlmostEqual(div["ttm_cash_dividend_per_share"], 1.05, places=2)
-        self.assertEqual(div["ttm_dividend_yield_pct"], 0.36)
+        # Yield is recomputed: ttm_cash (1.05) / currentPrice (210) * 100 = 0.5%.
+        # info.dividendYield (0.36) is intentionally ignored when TTM cash exists.
+        self.assertAlmostEqual(div["ttm_dividend_yield_pct"], 0.5, places=2)
+        self.assertEqual(div["currency"], "USD")
         self.assertEqual(div["events"][0]["ex_dividend_date"], "2026-05-11")
 
         self.assertEqual(
@@ -163,6 +167,79 @@ class TestYfinanceFundamentalAdapter(unittest.TestCase):
         growth = bundle["growth"]
         self.assertAlmostEqual(growth["revenue_yoy"], 16.6, places=1)
         self.assertAlmostEqual(growth["net_profit_yoy"], 19.3, places=1)
+
+    def test_hk_stock_splits_financial_vs_dividend_currency(self) -> None:
+        """HK ADRs typically report financialCurrency=CNY but pay dividends in HKD."""
+        info = {
+            "financialCurrency": "CNY",
+            "currency": "HKD",
+            "currentPrice": 100.0,
+            "sector": "Technology",
+            "industry": "Internet Retail",
+            "totalRevenue": 9.5e11,
+            "operatingCashflow": 1.8e11,
+            "returnOnEquity": 0.12,
+            "revenueGrowth": 0.05,
+            "earningsGrowth": 0.08,
+            "grossMargins": 0.38,
+        }
+        dividends = pd.Series(
+            [2.0],
+            index=pd.DatetimeIndex(["2026-01-15"], tz="Asia/Hong_Kong"),
+            name="Dividends",
+        )
+        ticker = _build_mock_ticker(info, dividends=dividends)
+
+        with patch("yfinance.Ticker", return_value=ticker):
+            bundle = YfinanceFundamentalAdapter().get_fundamental_bundle("HK09988")
+
+        fr = bundle["earnings"]["financial_report"]
+        self.assertEqual(fr["currency"], "CNY", "financial report must remain in financialCurrency")
+
+        div = bundle["earnings"]["dividend"]
+        self.assertEqual(div["currency"], "HKD", "dividends must use trading currency, not financialCurrency")
+        # TTM yield computed in HKD: 2.0 / 100.0 * 100 = 2.0%; must NOT be cross-currency mix.
+        self.assertAlmostEqual(div["ttm_dividend_yield_pct"], 2.0, places=4)
+        self.assertAlmostEqual(div["ttm_cash_dividend_per_share"], 2.0, places=4)
+
+    def test_ttm_yield_falls_back_to_info_when_ttm_cash_absent(self) -> None:
+        """If no dividend events and no trailing rate, the only source is
+        info.dividendYield — pass through as percent (do NOT multiply by 100)."""
+        info = {
+            "financialCurrency": "USD",
+            "currency": "USD",
+            "totalRevenue": 1e10,
+            "dividendYield": 1.85,  # Already in % units in current yfinance.
+            "trailingAnnualDividendRate": 0.5,  # Drives ttm_cash fallback.
+        }
+        ticker = _build_mock_ticker(info)
+
+        with patch("yfinance.Ticker", return_value=ticker):
+            bundle = YfinanceFundamentalAdapter().get_fundamental_bundle("AAPL")
+
+        div = bundle["earnings"]["dividend"]
+        # No latest_price means we cannot recompute, so we fall through.
+        # trailingAnnualDividendYield is absent → final fallback is dividendYield as-is.
+        self.assertAlmostEqual(div["ttm_dividend_yield_pct"], 1.85, places=4)
+        self.assertAlmostEqual(div["ttm_cash_dividend_per_share"], 0.5, places=4)
+
+    def test_ttm_yield_prefers_trailing_annual_dividend_yield_over_info_yield(self) -> None:
+        """When no TTM cash + price pair, trailingAnnualDividendYield (decimal)
+        beats info.dividendYield (percent) — they aren't redundant copies."""
+        info = {
+            "currency": "USD",
+            "totalRevenue": 1e10,
+            "trailingAnnualDividendYield": 0.0123,  # ratio, expect 1.23%
+            "dividendYield": 5.0,
+            "trailingAnnualDividendRate": 1.0,
+        }
+        ticker = _build_mock_ticker(info)
+
+        with patch("yfinance.Ticker", return_value=ticker):
+            bundle = YfinanceFundamentalAdapter().get_fundamental_bundle("AAPL")
+
+        div = bundle["earnings"]["dividend"]
+        self.assertAlmostEqual(div["ttm_dividend_yield_pct"], 1.23, places=2)
 
     def test_returns_not_supported_when_yfinance_import_fails(self) -> None:
         adapter = YfinanceFundamentalAdapter()

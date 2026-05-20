@@ -4,11 +4,20 @@ Yfinance fundamental adapter for HK/US markets (fail-open).
 
 Mirrors the bundle shape of `AkshareFundamentalAdapter.get_fundamental_bundle`
 so it can be plugged into `data_provider.base.get_fundamental_context()`
-without changing downstream consumers. Adds two HK/US-specific fields:
+without changing downstream consumers. Adds HK/US-specific fields:
 
 - ``earnings.financial_report.currency`` — financial statement currency
-  (``USD`` / ``HKD`` / ``CNY``) so the renderer can suffix 美元/港元/元 instead
-  of defaulting to 元.
+  (``USD`` / ``HKD`` / ``CNY``) from ``info.financialCurrency``. For HK ADRs
+  yfinance commonly reports ``financialCurrency=CNY`` while trades settle in
+  HKD, so this differs from the dividend currency below.
+- ``earnings.dividend.currency`` — trading / dividend currency from
+  ``info.currency`` (e.g. HKD for 0700.HK). Used to suffix 港元/美元/元 for
+  per-share cash dividends and to scope the TTM yield denominator.
+- ``earnings.dividend.ttm_dividend_yield_pct`` — computed as
+  ``ttm_cash_dividend_per_share / latest_price * 100``, both sides in the
+  trading currency (info.currentPrice/regularMarketPrice/previousClose).
+  ``info.dividendYield`` is only used as a last-resort fallback and is
+  passed through as-is (current yfinance reports it in percent units).
 - ``belong_boards`` — derived from ``info.sector`` + ``info.industry``; the CN
   pipeline derives it from AkShare 板块名单, this is the HK/US analogue.
 
@@ -167,7 +176,12 @@ class YfinanceFundamentalAdapter:
             result["errors"].append(f"info:{type(exc).__name__}:{exc}")
             info = {}
 
-        currency = str(info.get("financialCurrency") or info.get("currency") or "").upper() or None
+        # Financial statements (income/cashflow) are reported in `financialCurrency`;
+        # for HK ADRs that is often CNY even when the stock trades in HKD. Dividends
+        # and live price are paid/quoted in `currency` — keep them separate so the
+        # renderer can suffix per-block currency tags correctly.
+        financial_currency = str(info.get("financialCurrency") or info.get("currency") or "").upper() or None
+        dividend_currency = str(info.get("currency") or info.get("financialCurrency") or "").upper() or None
 
         # ---------------- growth block ----------------
         growth_payload: Dict[str, Any] = {
@@ -246,7 +260,7 @@ class YfinanceFundamentalAdapter:
             "net_profit_parent": net_profit_latest,
             "operating_cash_flow": operating_cash_flow_latest,
             "roe": growth_payload.get("roe"),
-            "currency": currency,
+            "currency": financial_currency,
         }
         if any(v is not None and v != "" for v in financial_report.values()):
             result.setdefault("earnings", {})["financial_report"] = financial_report
@@ -304,14 +318,30 @@ class YfinanceFundamentalAdapter:
                 "ttm_event_count": len(ttm_events),
                 "ttm_cash_dividend_per_share": round(ttm_cash, 6) if ttm_cash is not None else None,
                 "coverage": "cash_dividend_pre_tax",
+                "currency": dividend_currency,
                 "as_of": datetime.now(timezone.utc).date().isoformat(),
             }
-            # Some yfinance fields expose dividend yield directly when events are
-            # absent (e.g. ADRs). `dividendYield` is already in % units there,
-            # `trailingAnnualDividendYield` is a decimal — pick whichever exists.
-            yield_pct = _safe_float(info.get("dividendYield"))
-            if yield_pct is None:
+
+            # Yield: prefer recomputing from TTM cash / latest price so the
+            # numerator and denominator are consistent (and both in the trading
+            # currency). yfinance's `info.dividendYield` is now reported in
+            # percent units, but past versions returned a ratio and some ADR
+            # payloads still drift — keep it as a last-resort passthrough only.
+            latest_price = (
+                _safe_float(info.get("currentPrice"))
+                or _safe_float(info.get("regularMarketPrice"))
+                or _safe_float(info.get("previousClose"))
+            )
+            yield_pct: Optional[float] = None
+            if ttm_cash is not None and latest_price not in (None, 0):
+                yield_pct = round(float(ttm_cash) / float(latest_price) * 100.0, 4)
+            elif _safe_float(info.get("trailingAnnualDividendYield")) is not None:
                 yield_pct = _ratio_to_pct(info.get("trailingAnnualDividendYield"))
+            else:
+                raw_yield = _safe_float(info.get("dividendYield"))
+                if raw_yield is not None:
+                    # Pass through as-is; current yfinance already returns percent.
+                    yield_pct = round(raw_yield, 4)
             if yield_pct is not None:
                 dividend_payload["ttm_dividend_yield_pct"] = yield_pct
             result.setdefault("earnings", {})["dividend"] = dividend_payload
