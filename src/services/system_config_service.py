@@ -338,8 +338,8 @@ class SystemConfigService:
         channel: str,
         items: Sequence[Dict[str, str]],
         mask_token: str = "******",
-        title: str = "DSA 通知测试",
-        content: str = "这是一条来自 DSA Web 设置页的通知测试消息。",
+        title: str = "DSA 알림 테스트",
+        content: str = "DSA Web 설정 화면에서 보낸 알림 테스트 메시지입니다.",
         timeout_seconds: float = 20.0,
     ) -> Dict[str, Any]:
         """Send one real notification test without persisting submitted values."""
@@ -355,7 +355,7 @@ class SystemConfigService:
         if missing:
             return self._build_notification_test_result(
                 success=False,
-                message=f"通知渠道配置不完整，缺少: {', '.join(missing)}",
+                message=f"알림 채널 설정이 완료되지 않았습니다. 누락 항목: {', '.join(missing)}",
                 error_code="config_missing",
                 stage="config_validation",
                 retryable=False,
@@ -392,7 +392,7 @@ class SystemConfigService:
             error_code, retryable = self._classify_notification_exception(exc)
             return self._build_notification_test_result(
                 success=False,
-                message=f"通知测试异常: {exc}",
+                message=f"알림 테스트 중 오류가 발생했습니다: {exc}",
                 error_code=error_code,
                 stage="notification_send",
                 retryable=retryable,
@@ -2415,12 +2415,12 @@ class SystemConfigService:
                 return explicit_model, "explicit"
             has_direct_source = self._has_setup_runtime_source_for_model(explicit_model, effective_map)
             if yaml_models and explicit_model not in set(yaml_models):
-                return "", "主模型未出现在当前 LiteLLM YAML model_list 中"
+                return "", "기본 모델이 현재 LiteLLM YAML model_list에 없습니다."
             if channel_models and explicit_model not in set(channel_models):
-                return "", "主模型未出现在当前启用渠道模型列表中"
+                return "", "기본 모델이 현재 활성화된 채널 모델 목록에 없습니다."
             if yaml_models or channel_models or has_direct_source:
                 return explicit_model, "explicit"
-            return "", "主模型缺少可用渠道或匹配的 API Key"
+            return "", "기본 모델에 사용할 수 있는 채널 또는 일치하는 API 키가 없습니다."
 
         if yaml_models:
             return yaml_models[0], "yaml"
@@ -2431,33 +2431,33 @@ class SystemConfigService:
         if legacy_model:
             return legacy_model, "legacy"
 
-        return "", "尚未检测到主模型配置"
+        return "", "기본 모델 설정이 아직 감지되지 않았습니다."
 
     def _build_setup_primary_llm_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
         model, source = self._resolve_setup_primary_model(effective_map)
         if model:
             source_label = {
-                "explicit": "显式主模型",
+                "explicit": "명시된 기본 모델",
                 "yaml": "LiteLLM YAML",
-                "channel": "LLM 渠道",
+                "channel": "LLM 채널",
                 "legacy": "legacy provider",
             }.get(source, source)
             return self._setup_check(
                 "llm_primary",
-                "LLM 主渠道",
+                "LLM 기본 채널",
                 "ai_model",
                 True,
                 "configured",
-                f"已检测到 {source_label}: {model}",
+                f"{source_label}이 감지되었습니다: {model}",
             )
         return self._setup_check(
             "llm_primary",
-            "LLM 主渠道",
+            "LLM 기본 채널",
             "ai_model",
             True,
             "needs_action",
             source,
-            "请配置 LITELLM_MODEL、LLM_CHANNELS、LITELLM_CONFIG 或 legacy provider API Key。",
+            "LITELLM_MODEL, LLM_CHANNELS, LITELLM_CONFIG 또는 기존 provider API 키를 설정하세요.",
         )
 
     def _build_setup_agent_llm_check(
@@ -2470,20 +2470,20 @@ class SystemConfigService:
             if primary_check["status"] == "configured":
                 return self._setup_check(
                     "llm_agent",
-                    "Agent 渠道",
+                    "Agent 채널",
                     "agent",
                     True,
                     "inherited",
-                    "未单独配置 Agent 主模型，将继承 LLM 主渠道。",
+                    "Agent 기본 모델이 따로 설정되지 않아 LLM 기본 채널을 사용합니다.",
                 )
             return self._setup_check(
                 "llm_agent",
-                "Agent 渠道",
+                "Agent 채널",
                 "agent",
                 True,
                 "needs_action",
-                "Agent 未配置独立模型，且 LLM 主渠道尚不可用。",
-                "请先补齐 LLM 主渠道配置。",
+                "Agent 독립 모델이 설정되지 않았고 LLM 기본 채널도 아직 사용할 수 없습니다.",
+                "먼저 LLM 기본 채널 설정을 완료하세요.",
             )
 
         configured_models = set(
@@ -2494,11 +2494,11 @@ class SystemConfigService:
         if _uses_direct_env_provider(agent_model):
             return self._setup_check(
                 "llm_agent",
-                "Agent 渠道",
+                "Agent 채널",
                 "agent",
                 True,
                 "configured",
-                f"已配置 Agent 主模型: {agent_model}",
+                f"Agent 기본 모델이 설정되었습니다: {agent_model}",
             )
         if (
             not configured_models
@@ -2506,21 +2506,21 @@ class SystemConfigService:
         ) or agent_model in configured_models:
             return self._setup_check(
                 "llm_agent",
-                "Agent 渠道",
+                "Agent 채널",
                 "agent",
                 True,
                 "configured",
-                f"已配置 Agent 主模型: {agent_model}",
+                f"Agent 기본 모델이 설정되었습니다: {agent_model}",
             )
 
         return self._setup_check(
             "llm_agent",
-            "Agent 渠道",
+            "Agent 채널",
             "agent",
             True,
             "needs_action",
-            f"Agent 主模型 {agent_model} 缺少可用渠道或匹配的 API Key。",
-            "请调整 AGENT_LITELLM_MODEL 或补齐对应渠道配置。",
+            f"Agent 기본 모델 {agent_model}에 사용할 수 있는 채널 또는 일치하는 API 키가 없습니다.",
+            "AGENT_LITELLM_MODEL를 조정하거나 해당 채널 설정을 완료하세요.",
         )
 
     def _build_setup_stock_list_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
@@ -2528,20 +2528,20 @@ class SystemConfigService:
         if stocks:
             return self._setup_check(
                 "stock_list",
-                "自选股",
+                "관심 종목",
                 "base",
                 True,
                 "configured",
-                f"已配置 {len(stocks)} 只股票。",
+                f"{len(stocks)}개 종목이 설정되었습니다.",
             )
         return self._setup_check(
             "stock_list",
-            "自选股",
+            "관심 종목",
             "base",
             True,
             "needs_action",
-            "当前 STOCK_LIST 为空。",
-            "请至少添加 1 只股票用于首次试跑。",
+            "현재 STOCK_LIST가 비어 있습니다.",
+            "첫 실행을 위해 최소 1개 종목을 추가하세요.",
         )
 
     def _build_setup_notification_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
@@ -2593,20 +2593,20 @@ class SystemConfigService:
         if configured:
             return self._setup_check(
                 "notification",
-                "通知渠道",
+                "알림 채널",
                 "notification",
                 False,
                 "configured",
-                "已检测到至少一个通知渠道配置。",
+                "최소 1개의 알림 채널 설정이 감지되었습니다.",
             )
         return self._setup_check(
             "notification",
-            "通知渠道",
+            "알림 채널",
             "notification",
             False,
             "optional",
-            "通知为可选项，未配置也不影响首次跑通。",
-            "需要推送时可稍后配置飞书、Telegram、邮件或其他通知渠道。",
+            "알림은 선택 항목이며, 설정하지 않아도 첫 실행에는 영향을 주지 않습니다.",
+            "푸시가 필요하면 나중에 Feishu, Telegram, 이메일 또는 다른 알림 채널을 설정하세요.",
         )
 
     def _build_setup_storage_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
@@ -2619,21 +2619,21 @@ class SystemConfigService:
         if not probe.exists() or not probe.is_dir():
             return self._setup_check(
                 "storage",
-                "数据库 / 本地存储",
+                "데이터베이스 / 로컬 저장소",
                 "system",
                 True,
                 "needs_action",
-                f"数据库路径父目录不可用: {parent}",
-                "请检查 DATABASE_PATH 或上级目录权限。",
+                f"데이터베이스 경로의 상위 디렉터리를 사용할 수 없습니다: {parent}",
+                "DATABASE_PATH 또는 상위 디렉터리 권한을 확인하세요.",
             )
 
         if os.access(probe, os.W_OK):
-            detail = f"数据库路径可用: {db_path}"
+            detail = f"데이터베이스 경로를 사용할 수 있습니다: {db_path}"
             if not parent.exists():
-                detail = f"数据库上级目录可创建: {parent}"
+                detail = f"데이터베이스 상위 디렉터리를 생성할 수 있습니다: {parent}"
             return self._setup_check(
                 "storage",
-                "数据库 / 本地存储",
+                "데이터베이스 / 로컬 저장소",
                 "system",
                 True,
                 "configured",
@@ -2642,12 +2642,12 @@ class SystemConfigService:
 
         return self._setup_check(
             "storage",
-            "数据库 / 本地存储",
+            "데이터베이스 / 로컬 저장소",
             "system",
             True,
             "needs_action",
-            f"数据库路径上级目录不可写: {probe}",
-            "请调整 DATABASE_PATH 或目录权限。",
+            f"데이터베이스 경로의 상위 디렉터리에 쓸 수 없습니다: {probe}",
+            "DATABASE_PATH 또는 디렉터리 권한을 조정하세요.",
         )
 
     @staticmethod
