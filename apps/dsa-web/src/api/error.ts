@@ -460,7 +460,7 @@ export function parseApiError(error: unknown): ParsedApiError {
   if (payloadText || status) {
     return createParsedApiError({
       title: '요청 실패',
-      message: payloadText ?? `요청이 완료되지 않았습니다（HTTP ${status}）。`,
+      message: payloadText ?? `\uC694\uCCAD\uC774 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. HTTP ${status}`,
       rawMessage,
       status,
       category: 'http_error',

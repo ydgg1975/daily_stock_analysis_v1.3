@@ -1051,7 +1051,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ANTHROPIC_MODEL": {
         "title": "Anthropic Model",
-        "description": "Claude 模型名称（如 claude-sonnet-4-6）。",
+        "description": "Claude 모델 이름입니다. 예: claude-sonnet-4-6.",
         "category": "ai_model",
         "data_type": "string",
         "ui_control": "text",
@@ -1065,7 +1065,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ANTHROPIC_TEMPERATURE": {
         "title": "Anthropic Temperature",
-        "description": "温度参数，范围 [0.0, 1.0]。",
+        "description": "응답 창의성 조절값입니다. 범위는 0.0부터 1.0까지입니다.",
         "category": "ai_model",
         "data_type": "number",
         "ui_control": "number",
@@ -1079,7 +1079,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ANTHROPIC_MAX_TOKENS": {
         "title": "Anthropic Max Tokens",
-        "description": "Anthropic API 响应最大 token 数（默认 8192）。",
+        "description": "Anthropic API 응답의 최대 토큰 수입니다. 기본값은 8192입니다.",
         "category": "ai_model",
         "data_type": "number",
         "ui_control": "number",

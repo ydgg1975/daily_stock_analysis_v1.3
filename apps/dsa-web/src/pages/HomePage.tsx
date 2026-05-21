@@ -281,7 +281,7 @@ const HomePage: React.FC = () => {
     const requiredNeedsAction = setupStatus.checks
       .filter((check) => check.required && check.status === 'needs_action')
       .map((check) => check.title);
-    return requiredNeedsAction.slice(0, 3).join('、');
+    return requiredNeedsAction.slice(0, 3).join(', ');
   }, [setupStatus]);
 
   useDashboardLifecycle({

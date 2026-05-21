@@ -105,7 +105,7 @@ describe('agentChatStore.startStream', () => {
       skills: ['bull_trend', 'ma_golden_cross'],
       skill: 'bull_trend',
       skillNames: ['추세 분석', '이동평균 골든크로스'],
-      skillName: '추세 분석、이동평균 골든크로스',
+      skillName: '추세 분석, 이동평균 골든크로스',
     });
     expect(state.messages[1]).toMatchObject({
       role: 'assistant',
@@ -113,7 +113,7 @@ describe('agentChatStore.startStream', () => {
       skills: ['bull_trend', 'ma_golden_cross'],
       skill: 'bull_trend',
       skillNames: ['추세 분석', '이동평균 골든크로스'],
-      skillName: '추세 분석、이동평균 골든크로스',
+      skillName: '추세 분석, 이동평균 골든크로스',
     });
   });
 

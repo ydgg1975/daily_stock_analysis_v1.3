@@ -52,21 +52,16 @@ export interface ReportMeta {
 
 /** Sentiment label */
 export type SentimentLabel =
-  | 'ZH_VERY_BEARISH'
-  | 'ZH_BEARISH'
-  | 'ZH_NEUTRAL'
-  | 'ZH_BULLISH'
-  | 'ZH_VERY_BULLISH'
+  | '매우 약세'
+  | '약세'
+  | '중립'
+  | '강세'
+  | '매우 강세'
   | 'Very Bearish'
   | 'Bearish'
   | 'Neutral'
   | 'Bullish'
-  | 'Very Bullish'
-  | '매우 비관'
-  | '비관'
-  | '중립'
-  | '낙관'
-  | '매우 낙관';
+  | 'Very Bullish';
 
 /** Report summary section */
 export interface ReportSummary {
@@ -267,7 +262,7 @@ export interface ApiError {
 // ============ Helper Functions ============
 
 /** Get sentiment label by score */
-export const getSentimentLabel = (score: number, language: ReportLanguage = 'zh'): SentimentLabel => {
+export const getSentimentLabel = (score: number, language: ReportLanguage = 'ko'): SentimentLabel => {
   if (language === 'en') {
     if (score <= 20) return 'Very Bearish';
     if (score <= 40) return 'Bearish';
@@ -275,18 +270,12 @@ export const getSentimentLabel = (score: number, language: ReportLanguage = 'zh'
     if (score <= 80) return 'Bullish';
     return 'Very Bullish';
   }
-  if (language === 'ko') {
-    if (score <= 20) return '매우 비관';
-    if (score <= 40) return '비관';
-    if (score <= 60) return '중립';
-    if (score <= 80) return '낙관';
-    return '매우 낙관';
-  }
-  if (score <= 20) return 'ZH_VERY_BEARISH';
-  if (score <= 40) return 'ZH_BEARISH';
-  if (score <= 60) return 'ZH_NEUTRAL';
-  if (score <= 80) return 'ZH_BULLISH';
-  return 'ZH_VERY_BULLISH';
+
+  if (score <= 20) return '매우 약세';
+  if (score <= 40) return '약세';
+  if (score <= 60) return '중립';
+  if (score <= 80) return '강세';
+  return '매우 강세';
 };
 
 /** Get sentiment color by score */

@@ -366,7 +366,7 @@ describe('HomePage', () => {
     );
 
     expect(await screen.findByText('\uAE30\uBCF8 \uC124\uC815 \uBBF8\uC644\uB8CC')).toBeInTheDocument();
-    expect(screen.getByText(/LLM \uC8FC\uCC44\uB110\u3001\uAD00\uC2EC \uC885\uBAA9/)).toBeInTheDocument();
+    expect(screen.getByText(/LLM \uC8FC\uCC44\uB110, \uAD00\uC2EC \uC885\uBAA9/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '\uC124\uC815\uC73C\uB85C \uC774\uB3D9' }));
     expect(navigateMock).toHaveBeenCalledWith('/settings');
   });

@@ -51,9 +51,9 @@ const KNOWN_MODEL_PREFIXES = new Set([
 const FALSEY_VALUES = new Set(['0', 'false', 'no', 'off']);
 
 const RUNTIME_CAPABILITY_OPTIONS: Array<{ value: LLMCapabilityCheck; label: string; hint: string }> = [
-  { value: 'json', label: 'JSON', hint: 'response_format JSON 출력이 사용 가능한지 확인합니다.' },
+  { value: 'json', label: 'JSON', hint: 'response_format JSON 출력을 사용할 수 있는지 확인합니다.' },
   { value: 'tools', label: 'Tools', hint: 'function/tool calling 사용 가능 여부를 확인합니다.' },
-  { value: 'stream', label: 'Stream', hint: '스트리밍 출력이 유효한 chunk를 반환하는지 확인합니다.' },
+  { value: 'stream', label: 'Stream', hint: '스트리밍 출력에서 유효한 chunk를 반환하는지 확인합니다.' },
   { value: 'vision', label: 'Vision', hint: '현재 모델이 image_url 입력을 받는지 확인합니다.' },
 ];
 
@@ -891,7 +891,7 @@ function buildLlmTestHint(result: {
   const reason = typeof result.details?.reason === 'string' ? result.details.reason : '';
   const detailsModel = typeof result.details?.model === 'string' ? result.details.model : '';
   const testedModel = result.resolvedModel || detailsModel;
-  const modelHint = testedModel ? `이번 테스트 모델: ${testedModel}。` : '';
+  const modelHint = testedModel ? `이번 테스트 모델: ${testedModel}.` : '';
   const scopeInfo = '기본 연결 테스트는 모델 목록의 첫 번째 모델만 테스트합니다.';
   const shouldSuggestModelListChange = reason === 'model_access_denied'
     || reason === 'model_not_found'
@@ -1679,6 +1679,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
           <p className="text-xs text-muted-text">
             제공업체 채널을 추가하면 모델 목록을 자동으로 가져와 복수 선택할 수 있고, 직접 입력도 가능합니다. 설정은 .env 파일에 자동 동기화됩니다.
           </p>
+          <p className="mt-1 text-xs text-muted-text">
+            API Key는 민감 정보로 마스킹되며, 저장 시 로컬 .env에 기록됩니다. 저장 전 연결 테스트는 .env를 변경하지 않습니다.
+          </p>
         </div>
         <span className="text-xs text-muted-text">{isCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
       </button>
@@ -1723,6 +1726,9 @@ export const LLMChannelEditor: React.FC<LLMChannelEditorProps> = ({
               <div className="settings-surface-overlay-muted rounded-[1.35rem] border border-dashed settings-border-strong px-4 py-10 text-center">
                 <p className="text-sm font-medium text-secondary-text">아직 채널이 없습니다</p>
                 <p className="mt-1 text-xs text-muted-text">제공업체 프리셋을 선택한 뒤 “채널 추가”를 누르면 설정을 시작할 수 있습니다.</p>
+                <p className="mt-2 text-xs text-muted-text">
+                  연결 테스트는 채널을 추가하고 Base URL, API Key, 모델을 입력한 뒤 사용할 수 있습니다. 테스트만으로는 설정이 저장되지 않습니다.
+                </p>
               </div>
             ) : channels.map((channel, index) => (
               <ChannelRow

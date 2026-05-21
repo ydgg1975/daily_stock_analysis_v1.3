@@ -84,7 +84,7 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('업종')).toBeInTheDocument();
 
-    expect(screen.getByText('강세')).toBeInTheDocument();
+    expect(screen.getAllByText('강세').length).toBeGreaterThan(0);
 
     expect(screen.getByText('+2.31%')).toBeInTheDocument();
 
@@ -125,10 +125,6 @@ describe('ReportOverview', () => {
     expect(screen.getByText('반도체')).toBeInTheDocument();
 
     expect(screen.queryByText('중립')).not.toBeInTheDocument();
-
-    expect(screen.queryByText('강세')).not.toBeInTheDocument();
-
-    expect(screen.queryByText('약세')).not.toBeInTheDocument();
 
   });
 

@@ -263,9 +263,9 @@ describe('ChatPage', () => {
       </MemoryRouter>
     );
 
-    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 추세 분석\u3001이동평균 골든크로스');
+    const skillBadge = await screen.findByLabelText('\uC804\uB7B5 추세 분석, 이동평균 골든크로스');
     expect(skillBadge).toBeInTheDocument();
-    expect(skillBadge).toHaveTextContent('추세 분석、이동평균 골든크로스');
+    expect(skillBadge).toHaveTextContent('추세 분석, 이동평균 골든크로스');
   });
 
   it('selects the default skill after loading skills', async () => {
@@ -308,7 +308,7 @@ describe('ChatPage', () => {
         }),
         expect.objectContaining({
           skillNames: ['추세 분석', '이동평균 골든크로스'],
-          skillName: '추세 분석、이동평균 골든크로스',
+          skillName: '추세 분석, 이동평균 골든크로스',
         }),
       );
     });

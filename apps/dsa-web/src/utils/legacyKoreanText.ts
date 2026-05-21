@@ -1,7 +1,8 @@
 const LEGACY_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/dapanfupan/g, '시장 리뷰'],
   [/Agudapanfupan/g, 'A주 시장 리뷰'],
   [/Agushichangfupan/g, 'A주 시장 리뷰'],
+  [/dapanfupan/g, '시장 리뷰'],
+  [/viewfupan/g, '리뷰 보기'],
   [/Agu/g, 'A주'],
   [/meigu/g, '미국 주식'],
   [/ganggu/g, '홍콩 주식'],
@@ -10,8 +11,11 @@ const LEGACY_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/xiaofuxiadie/g, '소폭 하락'],
   [/mingxianxiadie/g, '뚜렷한 하락'],
   [/zhendangzhengli/g, '박스권 정리'],
-  [/viewfupan/g, '리뷰 보기'],
+  [/ZH_VERY_BEARISH/g, '매우 약세'],
+  [/ZH_BEARISH/g, '약세'],
   [/ZH_NEUTRAL/g, '중립'],
+  [/ZH_BULLISH/g, '강세'],
+  [/ZH_VERY_BULLISH/g, '매우 강세'],
   [/zuixin/g, '현재가'],
   [/zhangdiefu/g, '등락률'],
   [/kaipan/g, '시가'],
@@ -23,7 +27,7 @@ const LEGACY_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/shangzhengzhishu/g, '상하이종합지수'],
   [/shenzhengchengzhi/g, '선전성분지수'],
   [/chuangyebanzhi/g, '창업판지수'],
-  [/kechuang50/g, '커촹50'],
+  [/kechuang50/g, '커창50'],
   [/shangzheng50/g, '상하이50'],
   [/hushen300/g, 'CSI300'],
   [/shangzheng/g, '상하이'],
@@ -33,10 +37,27 @@ const LEGACY_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\u6050\u60e7/g, '공포'],
   [/\u8d2a\u5a6a/g, '탐욕'],
   [/\u5e02\u573a\u5fc3\u7406/g, '시장 심리'],
+  [/\?렞/g, '시장'],
+  [/\?윟/g, '▲'],
+  [/시장 시장 리뷰/g, '시장 리뷰'],
 ];
 
+
+function repairUtf8Mojibake(value: string): string {
+  if (!/[\u00c0-\u00ff\u0080-\u009f]/.test(value)) {
+    return value;
+  }
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value), (char) => char.charCodeAt(0) & 0xff);
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
 export function localizeLegacyText(value?: string | null): string {
-  let text = value ?? '';
+  let text = repairUtf8Mojibake(value ?? '');
   for (const [pattern, replacement] of LEGACY_TEXT_REPLACEMENTS) {
     text = text.replace(pattern, replacement);
   }
