@@ -1,337 +1,162 @@
-# Zeabur 部署指南
+# Zeabur 배포 가이드
 
-本指南详细介绍如何在 Zeabur 上部署 A股自选股智能分析系统，包括 WebUI 和 Discord 机器人功能。
+이 문서는 daily stock analysis 프로젝트를 Zeabur에 배포해 FastAPI Web UI, 예약 분석, Discord 알림을 운영하는 방법을 설명합니다.
 
-## 目录
+## 사전 준비
 
-- [1. 部署前准备](#1-部署前准备)
-- [2. 在 Zeabur 上部署](#2-在-zeabur-上部署)
-- [3. 配置启动命令](#3-配置启动命令)
-- [4. Discord 机器人部署](#4-discord-机器人部署)
-- [5. 环境变量配置](#5-环境变量配置)
-- [6. 挂载配置](#6-挂载配置)
-- [7. 健康检查](#7-健康检查)
-- [8. 常见问题](#8-常见问题)
+- Zeabur 계정
+- GitHub 저장소 접근 권한
+- 사용할 LLM provider API 키
+- 선택 사항: Discord bot token 또는 webhook URL
+- 선택 사항: 검색 provider API 키
 
-## 1. 部署前准备
+배포 전 로컬에서 최소한 다음 명령이 통과하는지 확인하는 것을 권장합니다.
 
-### 1.1 必要条件
+```bash
+python -m pytest -m "not network"
+cd apps/dsa-web && npm run build
+```
 
-- Zeabur 账号
-- GitHub 账号（用于连接仓库）
-- Discord 开发者账号（如需部署机器人）
-- 相关 API 密钥（如 Gemini API Key、搜索服务 API Key 等）
+## 저장소 연결
 
-### 1.2 仓库准备
+1. Zeabur 대시보드에서 새 프로젝트를 만듭니다.
+2. GitHub 저장소를 연결합니다.
+3. 배포할 branch를 선택합니다. 운영 배포는 보통 `main`을 사용합니다.
+4. Dockerfile 경로가 필요하면 `docker/Dockerfile`을 지정합니다.
+5. 빌드와 배포를 시작합니다.
 
-确保你的仓库包含以下文件：
+GitHub Actions에서 이미 Docker 이미지를 만들고 있다면 Zeabur에서 해당 이미지를 사용하는 방식도 가능합니다. 단일 서비스로 단순하게 운영하려면 Zeabur가 저장소의 Dockerfile을 직접 빌드하도록 두는 편이 관리하기 쉽습니다.
 
-- `.github/workflows/docker-publish.yml`（已自动创建）
-- `docker/Dockerfile`（已存在）
-- 完整的项目代码
+## 실행 모드
 
-## 2. 在 Zeabur 上部署
+Zeabur 서비스의 Start Command는 운영 목적에 맞게 선택합니다.
 
-### 2.1 连接 GitHub 仓库
+| 목적 | Start Command |
+| --- | --- |
+| Web UI와 API만 실행 | `python main.py --serve-only` |
+| API와 스케줄러 함께 실행 | `python main.py --serve` |
+| 예약 분석만 실행 | `python main.py --schedule` |
+| 시장 리뷰 1회 실행 | `python main.py --market-review` |
 
-1. 登录 Zeabur 控制台
-2. 点击「新建项目」
-3. 选择「从 GitHub 导入」
-4. 选择你的仓库和分支（推荐使用 `main` ）
-5. 点击「导入」
+웹 서비스로 공개하려면 `--serve-only` 또는 `--serve`를 우선 사용합니다. host와 port는 환경 변수에서 제어하는 방식을 권장합니다.
 
-### 2.2 配置构建规则
+## 필수 환경 변수
 
-Zeabur 会自动检测 `.github/workflows/docker-publish.yml` 文件，并使用 GitHub Actions 构建镜像。
+| 변수 | 예시 | 설명 |
+| --- | --- | --- |
+| `PYTHONUNBUFFERED` | `1` | 컨테이너 로그를 즉시 출력합니다. |
+| `LOG_DIR` | `/app/logs` | 로그 저장 경로입니다. |
+| `DATABASE_PATH` | `/app/data/stock_analysis.db` | SQLite DB 경로입니다. |
+| `WEBUI_HOST` | `0.0.0.0` | 외부 접속을 위한 bind 주소입니다. |
+| `WEBUI_PORT` | `8000` | Zeabur가 노출할 애플리케이션 포트입니다. |
 
-如果没有自动检测到，可以手动配置：
+일부 기존 설정이나 스크립트가 `API_HOST`, `API_PORT`를 읽는 경우가 있으므로, 운영 환경에서는 필요에 따라 `WEBUI_*`와 `API_*` 값을 함께 맞춥니다.
 
-1. 在项目页面，点击「构建规则」
-2. 选择「Dockerfile」
-3. Dockerfile 路径填写：`docker/Dockerfile`
-4. 点击「保存」
+## LLM과 검색 API 설정
 
-### 2.3 启动服务
+LLM 설정은 `docs/LLM_CONFIG_GUIDE.md`와 `docs/llm-providers.md`를 기준으로 합니다.
 
-1. 等待镜像构建完成
-2. 点击「启动服务」
-3. 服务启动后，你可以在「访问」标签页获取访问地址
+자주 쓰는 변수는 다음과 같습니다.
 
-### 2.4 前端构建与静态资源
+| 변수 | 설명 |
+| --- | --- |
+| `LLM_CHANNELS` | 사용할 LLM channel 목록 |
+| `LLM_<CHANNEL>_PROTOCOL` | provider protocol |
+| `LLM_<CHANNEL>_BASE_URL` | provider endpoint |
+| `LLM_<CHANNEL>_API_KEY` | channel 단일 API 키 |
+| `LITELLM_MODEL` | 기본 분석 모델 |
+| `AGENT_LITELLM_MODEL` | Agent 모델 |
+| `GEMINI_API_KEY` | Gemini API 키 |
+| `OPENAI_API_KEY` | OpenAI API 키 |
+| `ANSPIRE_API_KEYS` | Anspire API 키 목록 |
+| `AIHUBMIX_KEY` | AIHubMix API 키 |
+| `SERPAPI_API_KEYS` | SerpAPI 키 목록 |
+| `TAVILY_API_KEYS` | Tavily 키 목록 |
+| `BRAVE_API_KEYS` | Brave Search 키 목록 |
+| `SEARXNG_BASE_URLS` | SearXNG endpoint 목록 |
 
-FastAPI 会自动托管 `static/` 目录下的前端资源。前端打包输出位置由
-`apps/dsa-web/vite.config.ts` 决定，默认输出到项目根目录 `static/`。
+API 키는 Zeabur의 Secret 또는 환경 변수 관리 화면에서 등록합니다. 공개 로그에 출력되지 않도록 값 자체를 문서나 workflow에 직접 쓰지 않습니다.
 
-Dockerfile 已采用多阶段构建，前端会在镜像构建时自动打包。
-如需覆盖默认静态资源，可在宿主机手动构建并挂载到容器内 `/app/static`。
+## Discord 알림
 
-## 3. 配置启动命令
+Discord 알림을 사용하려면 다음 중 필요한 값을 설정합니다.
 
-### 3.1 支持的启动模式
+| 변수 | 설명 |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Discord bot token |
+| `DISCORD_MAIN_CHANNEL_ID` | 기본 알림 채널 ID |
+| `DISCORD_WEBHOOK_URL` | webhook 방식 알림 URL |
 
-系统支持多种启动模式，你可以根据需要配置不同的启动命令：
+Bot 방식은 Discord Developer Portal에서 애플리케이션을 만들고, bot 권한과 Message Content Intent를 확인해야 합니다. Webhook 방식은 채널별 webhook URL만 있으면 단순하게 운영할 수 있습니다.
 
-| 模式 | 启动命令 | 描述 |
-|------|----------|------|
-| 定时任务模式（默认） | `python main.py --schedule` | 按计划执行股票分析 |
-| FastAPI 模式 | `python main.py --serve` | 启动 FastAPI 并执行分析 |
-| 仅 FastAPI 模式 | `python main.py --serve-only` | 仅启动 FastAPI，不执行分析 |
-| 仅大盘复盘 | `python main.py --market-review` | 仅执行大盘复盘分析 |
+## 볼륨 설정
 
-### 3.2 配置启动命令
+컨테이너가 재배포되어도 데이터가 유지되도록 다음 경로를 persistent volume에 연결합니다.
 
-1. 在 Zeabur 控制台，进入服务页面
-2. 点击「设置」
-3. 找到「启动命令」配置项
-4. 输入你需要的启动命令，例如：
-    - 启动 FastAPI：`python main.py --serve`
-    - 仅启动 FastAPI：`python main.py --serve-only --host 0.0.0.0 --port 8000`
-    - 启动定时任务：`python main.py --schedule`
-5. 点击「保存」
-6. 重启服务
+| 경로 | 용도 |
+| --- | --- |
+| `/app/data` | SQLite DB와 상태 파일 |
+| `/app/logs` | 실행 로그 |
+| `/app/reports` | 분석 보고서 |
 
-## 4. Discord 机器人部署
+볼륨을 설정하지 않으면 재배포나 컨테이너 재생성 시 DB와 보고서가 사라질 수 있습니다.
 
-### 4.1 准备工作
+## Healthcheck
 
-1. 创建 Discord 应用和机器人
-   - 访问 [Discord 开发者平台](https://discord.com/developers/applications)
-   - 点击「New Application」创建新应用
-   - 在「Bot」标签页，点击「Add Bot」创建机器人
-   - 复制机器人 Token
+Zeabur의 healthcheck는 다음 endpoint 중 하나를 사용합니다.
 
-2. 配置机器人权限
-   - 在「Bot」标签页，向下滚动到「Privileged Gateway Intents」
-   - 启用「Server Members Intent」和「Message Content Intent」
-   - 在「OAuth2」→「URL Generator」中，选择「bot」范围
-   - 选择所需权限（如「Send Messages」、「Read Messages/View Channels」等）
-   - 复制生成的邀请链接，将机器人添加到你的服务器
+- `GET /api/health`
+- `GET /health`
 
-### 4.2 配置环境变量
-
-在 Zeabur 控制台的「环境变量」配置中，添加以下变量：
-
-| 变量名 | 说明 | 示例值 |
-|--------|------|--------|
-| `DISCORD_BOT_TOKEN` | Discord 机器人 Token | `MTAxMjM0NTY3ODkwMTEyMzQ1Ng.GhIjKl.MnOpQrStUvWxYz1234567890` |
-| `DISCORD_MAIN_CHANNEL_ID` | 主频道 ID | `123456789012345678` |
-| `DISCORD_WEBHOOK_URL` | Discord Webhook URL（可选） | `https://discord.com/api/webhooks/...` |
-
-### 4.3 启动机器人
-
-机器人功能默认通过配置启用，无需特殊启动命令。确保你的配置文件中包含机器人相关配置，或通过环境变量设置。
-
-## 5. 环境变量配置
-
-### 5.1 基本环境变量
-
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `PYTHONUNBUFFERED` | 启用 Python 无缓冲输出 | `1` |
-| `LOG_DIR` | 日志目录 | `/app/logs` |
-| `DATABASE_PATH` | 数据库路径 | `/app/data/stock_analysis.db` |
-
-### 5.2 API 服务配置
-
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `API_HOST` | API 服务监听地址 | `0.0.0.0` |
-| `API_PORT` | API 服务端口 | `8000` |
-
-> 旧版 `WEBUI_HOST`/`WEBUI_PORT`/`WEBUI_ENABLED` 环境变量仍兼容，会自动转发到 API 服务。
-
-### 5.3 分析相关配置
-
-| 变量名 | 说明 |
-|--------|------|
-| `ANSPIRE_API_KEYS` | Anspire Open API 密钥（大模型与搜索共用，推荐） |
-| `AIHUBMIX_KEY` | AIHubMix API 密钥（一 Key 多模型，推荐） |
-| `GEMINI_API_KEY` | Gemini API 密钥 |
-| `OPENAI_API_KEY` | OpenAI 兼容 API 密钥 |
-| `SERPAPI_API_KEYS` | SerpAPI 密钥（推荐） |
-| `TAVILY_API_KEYS` | Tavily API 密钥（用逗号分隔） |
-| `BOCHA_API_KEYS` | Bocha API 密钥（用逗号分隔） |
-| `BRAVE_API_KEYS` | Brave Search API 密钥（用逗号分隔） |
-| `MINIMAX_API_KEYS` | MiniMax API 密钥（用逗号分隔） |
-| `SEARXNG_BASE_URLS` | SearXNG 实例地址（逗号分隔，无配额兜底，需在 settings.yml 启用 format: json）；留空时默认自动发现公共实例 |
-| `SEARXNG_PUBLIC_INSTANCES_ENABLED` | 是否在 `SEARXNG_BASE_URLS` 为空时自动从 `searx.space` 获取公共实例（默认 `true`） |
-
-### 5.4 配置方法
-
-在 Zeabur 控制台：
-
-1. 进入服务页面
-2. 点击「环境变量」
-3. 点击「添加环境变量」
-4. 输入变量名和值
-5. 点击「保存」
-6. 重启服务
-
-## 6. 挂载配置
-
-### 6.1 支持的挂载目录
-
-| 目录 | 说明 |
-|------|------|
-| `/app/data` | 数据库和数据文件 |
-| `/app/logs` | 日志文件 |
-| `/app/reports` | 分析报告 |
-
-### 6.2 配置挂载
-
-1. 在 Zeabur 控制台，进入服务页面
-2. 点击「存储」
-3. 点击「添加存储卷」
-4. 选择「持久化存储」
-5. 配置挂载路径：
-   - 存储卷路径：`/app/data`
-   - 容器内路径：`/app/data`
-6. 点击「保存」
-7. 对其他需要挂载的目录重复上述步骤
-
-### 6.3 注意事项
-
-- 挂载后，数据会持久化保存，不会因容器重启而丢失
-- 建议至少挂载 `/app/data` 目录，以保存数据库
-
-## 7. 健康检查
-
-系统内置了健康检查机制，默认检查：
-
-- WebUI 模式：检查 `http://localhost:8000/health` 端点
-- FastAPI 模式：检查 `http://localhost:8000/api/health` 端点
-- 非服务模式：始终返回健康状态
-
-健康检查配置如下：
+Dockerfile healthcheck 예시는 다음과 같습니다.
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || curl -f http://localhost:8000/health \
-    || python -c "import sys; sys.exit(0)"
+    CMD curl -f http://localhost:8000/api/health || curl -f http://localhost:8000/health || exit 1
 ```
 
-## 8. 常见问题
+서비스가 예약 분석만 실행하는 모드라면 HTTP healthcheck가 맞지 않을 수 있습니다. 이 경우 Zeabur 서비스 유형을 분리하거나 healthcheck 정책을 조정합니다.
 
-### 8.1 API 服务无法访问
+## 도메인과 HTTPS
 
-- 检查启动命令是否包含 `--serve` 或 `--serve-only` 参数
-- 检查「访问」标签页是否已配置域名
-- 检查防火墙设置
+Zeabur 대시보드에서 커스텀 도메인을 연결할 수 있습니다.
 
-### 8.2 机器人不响应
+1. 서비스의 Domains 메뉴를 엽니다.
+2. 사용할 도메인을 추가합니다.
+3. 안내된 DNS 레코드를 도메인 관리 화면에 등록합니다.
+4. HTTPS 인증서 발급이 완료될 때까지 기다립니다.
 
-- 检查 Discord 机器人 Token 是否正确
-- 检查机器人是否已添加到服务器
-- 检查机器人权限是否足够
-- 检查日志文件，查看是否有错误信息
+관리자 설정 화면을 외부에 공개하는 경우 인증 설정과 접근 제어를 반드시 확인합니다.
 
-### 8.3 分析任务不执行
+## 운영 점검
 
-- 检查定时任务配置是否正确
-- 检查 API 密钥是否有效
-- 检查日志文件，查看是否有错误信息
+배포 후 다음을 확인합니다.
 
-### 8.4 数据丢失
+- `/api/health` 또는 `/health` 응답
+- Web UI 접속
+- 설정 화면에서 LLM 연결 테스트
+- 간단한 종목 분석 실행
+- Discord 알림 전송 여부
+- `/app/data` 볼륨에 DB가 생성되는지
+- 재배포 후 DB와 설정이 유지되는지
 
-- 确保已挂载 `/app/data` 目录
-- 检查存储卷配置是否正确
+로그 확인은 Zeabur 대시보드의 Logs 화면을 우선 사용합니다. 컨테이너 내부 경로를 확인할 수 있으면 `/app/logs`도 함께 확인합니다.
 
-## 9. 高级配置
+## 문제 해결
 
-### 9.1 多实例部署
+| 증상 | 확인할 항목 |
+| --- | --- |
+| Web UI에 접속되지 않음 | Start Command, `WEBUI_HOST=0.0.0.0`, port 노출 설정을 확인합니다. |
+| Healthcheck 실패 | 실행 모드가 HTTP 서버를 띄우는지, `/api/health`가 응답하는지 확인합니다. |
+| 분석이 실행되지 않음 | LLM API 키, 분석 대상 종목, 스케줄 설정, 로그의 예외 메시지를 확인합니다. |
+| Discord 알림이 오지 않음 | token 또는 webhook URL, 채널 ID, bot 권한을 확인합니다. |
+| 재배포 후 데이터가 사라짐 | `/app/data` volume 연결 여부를 확인합니다. |
+| 외부 API 요청 실패 | provider 키, 네트워크 정책, timeout, rate limit을 확인합니다. |
 
-你可以在 Zeabur 上部署多个实例，用于不同的功能：
+## 권장 운영 방식
 
-1. 一个实例用于 API 服务（`python main.py --serve-only`）
-2. 一个实例用于定时任务（`python main.py --schedule`）
-3. 一个实例用于机器人（`python main.py --discord-bot`）
-
-确保它们共享同一个 `/app/data` 存储卷，以共享数据库。
-
-### 9.2 自定义域名
-
-在 Zeabur 控制台的「访问」标签页，你可以：
-
-1. 使用自动生成的域名
-2. 绑定自定义域名
-3. 配置 HTTPS
-
-## 10. 更新部署
-
-### 10.1 自动更新
-
-当你向仓库推送新代码时：
-
-1. GitHub Actions 会自动构建新镜像
-2. Zeabur 会检测到新镜像
-3. 你可以选择「自动部署」或手动触发部署
-
-### 10.2 手动更新
-
-1. 在 Zeabur 控制台，进入服务页面
-2. 点击「部署历史」
-3. 选择「重新部署」
-4. 或点击「更新镜像」
-
-## 11. 监控和日志
-
-### 11.1 查看日志
-
-在 Zeabur 控制台，进入服务页面，点击「日志」标签页，可以查看实时日志和历史日志。
-
-### 11.2 监控指标
-
-Zeabur 提供了基础的监控指标：
-
-- CPU 使用率
-- 内存使用率
-- 网络流量
-- 磁盘使用率
-
-在「监控」标签页查看详细指标。
-
-## 12. 故障排查
-
-### 12.1 查看详细日志
-
-```bash
-# 进入容器
-zeabur exec <服务名> bash
-
-# 查看日志文件
-cat /app/logs/stock_analysis_20260125.log
-```
-
-### 12.2 检查配置
-
-```bash
-# 进入容器
-zeabur exec <服务名> bash
-
-# 检查环境变量
-printenv | grep -i discord
-printenv | grep -i webui
-```
-
-### 12.3 测试连接
-
-```bash
-# 测试网络连接
-zeabur exec <服务名> curl -I https://api.discord.com
-
-# 测试 API 连接
-zeabur exec <服务名> python -c "import requests; print(requests.get('https://api.discord.com').status_code)"
-```
-
-## 13. 最佳实践
-
-1. **使用持久化存储**：始终挂载 `/app/data` 目录，以保存数据库
-2. **配置合理的健康检查**：根据实际情况调整健康检查参数
-3. **使用环境变量管理敏感信息**：不要将 API 密钥硬编码到代码中
-4. **定期备份数据**：定期下载 `/app/data` 目录的内容进行备份
-5. **使用合适的启动模式**：根据需求选择合适的启动命令
-6. **监控服务状态**：定期检查服务状态和日志
-
-## 14. 联系方式
-
-如有问题，欢迎联系项目维护者或在 GitHub Issues 中提问。
+- Web UI/API 서비스와 예약 분석 worker를 분리하면 장애 범위를 줄일 수 있습니다.
+- LLM provider는 최소 두 개 channel을 준비해 fallback을 구성합니다.
+- API 키와 webhook URL은 Secret으로 관리합니다.
+- 운영 전에는 작은 종목 목록으로 dry run을 수행합니다.
+- 변경 배포 후에는 healthcheck, LLM 연결 테스트, 실제 분석 1회를 확인합니다.

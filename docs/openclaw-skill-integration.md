@@ -1,28 +1,35 @@
-# openclaw Skill 集成指南
+# OpenClaw Skill 연동 가이드
 
-本文档说明如何通过 [openclaw](https://github.com/openclaw/openclaw) Skill 调用 daily_stock_analysis 的 REST API，实现在 openclaw 对话中触发股票分析的能力。
+이 문서는 [OpenClaw](https://github.com/openclaw/openclaw) Skill에서 daily_stock_analysis REST API를 호출해 주식 분석을 실행하는 방법을 설명합니다.
 
-## 概述
+## 개요
 
-- **集成方式**：openclaw Skill 通过 HTTP 调用 daily_stock_analysis（DSA）REST API
-- **适用场景**：已部署 DSA API 服务，希望在 openclaw 对话中触发分析（如「帮我分析茅台」「analyze AAPL」）
+- 연동 방식: OpenClaw Skill이 HTTP로 daily_stock_analysis API를 호출합니다.
+- 사용 상황: DSA API가 실행 중이고, OpenClaw 대화에서 종목 분석을 트리거하고 싶을 때 사용합니다.
+- 예시 요청: `analyze AAPL`, `600519 분석해줘`, `hk00700 리포트 보여줘`
 
-## 前置条件
+## 전제 조건
 
-1. **daily_stock_analysis 必须已运行**：执行 `python main.py --serve-only` 或通过 Docker 部署，使 API 长期可用
-2. **openclaw 需具备 HTTP 调用能力**：如 `system.run` 执行 curl，或内置 HTTP 工具（如 api-tester 等）
-3. **说明**：GitHub Actions 仅做定时任务，不长期暴露 API，需本地或 Docker 运行 DSA
+1. daily_stock_analysis API가 실행 중이어야 합니다.
+2. OpenClaw 쪽에서 HTTP 요청을 보낼 수 있어야 합니다.
+3. GitHub Actions 예약 작업만으로는 API가 상시 노출되지 않으므로, 로컬 실행이나 서버 배포가 필요합니다.
 
-## 核心 API 参考
+API 실행 예시는 다음과 같습니다.
 
-| 接口 | 方法 | 用途 |
-|------|------|------|
-| `/api/v1/analysis/analyze` | POST | 触发分析（主入口） |
-| `/api/v1/analysis/status/{task_id}` | GET | 异步任务状态 |
-| `/api/v1/agent/chat` | POST | Agent 策略问股（需 `AGENT_MODE=true`） |
-| `/api/health` | GET | 健康检查 |
+```bash
+python main.py --serve-only
+```
 
-### 触发分析请求体
+## 핵심 API
+
+| Endpoint | Method | 용도 |
+| --- | --- | --- |
+| `/api/v1/analysis/analyze` | POST | 종목 분석 실행 |
+| `/api/v1/analysis/status/{task_id}` | GET | 비동기 분석 상태 조회 |
+| `/api/v1/agent/chat` | POST | Agent 전략 상담 |
+| `/api/health` | GET | 상태 확인 |
+
+## 분석 요청 예시
 
 ```json
 {
@@ -33,25 +40,29 @@
 }
 ```
 
-- `stock_code`：股票代码（必填）
-- `report_type`：`simple` | `detailed` | `brief`
-- `force_refresh`：布尔值，是否强制刷新（忽略缓存）
-- `async_mode`：布尔值，`false` 时同步返回，`true` 时返回 202 + `task_id` 需轮询
+필드 설명은 다음과 같습니다.
 
-**注意**：`force_refresh`、`async_mode` 为布尔类型，非字符串。
+| 필드 | 설명 |
+| --- | --- |
+| `stock_code` | 분석할 종목 코드입니다. |
+| `report_type` | `simple`, `detailed`, `brief` 중 하나입니다. |
+| `force_refresh` | 캐시를 무시하고 새로 분석할지 결정합니다. |
+| `async_mode` | `true`면 `task_id`를 받은 뒤 상태 조회 endpoint를 polling합니다. |
 
-### 响应示例（同步模式）
+`force_refresh`와 `async_mode`는 문자열이 아니라 boolean 값으로 전달합니다.
+
+## 응답 예시
 
 ```json
 {
   "query_id": "abc123def456",
   "stock_code": "600519",
-  "stock_name": "贵州茅台",
+  "stock_name": "Kweichow Moutai",
   "report": {
     "summary": {
       "analysis_summary": "...",
-      "operation_advice": "持有",
-      "trend_prediction": "看多",
+      "operation_advice": "hold",
+      "trend_prediction": "bullish",
       "sentiment_score": 75
     },
     "strategy": {
@@ -64,25 +75,21 @@
 }
 ```
 
-## 重要限制与说明
+## 종목 코드 형식
 
-- **仅支持股票代码**：API 不接受中文名称（如「茅台」），需在 Skill 侧解析或提示用户提供代码（如 600519、AAPL）
-- **同步模式耗时**：`async_mode: false` 时，单次分析约 2–5 分钟，需确保 openclaw 或 HTTP 客户端超时足够
-- **异步模式**：`async_mode: true` 返回 202 + `task_id`，需轮询 `GET /api/v1/analysis/status/{task_id}` 直至 `status: completed`
+| 시장 | 형식 | 예시 |
+| --- | --- | --- |
+| A주 | 6자리 숫자 | `600519`, `000001`, `300750` |
+| 베이징거래소 | 8, 4, 92로 시작하는 6자리 코드 또는 `BJ` prefix | `920748`, `BJ920493`, `920493.BJ` |
+| 홍콩 | `hk` + 5자리 숫자 | `hk00700`, `hk09988` |
+| 미국 | 1-5자리 ticker, 필요 시 점 포함 | `AAPL`, `TSLA`, `BRK.B` |
+| 미국 지수 | 지수 ticker | `SPX`, `DJI`, `NASDAQ`, `VIX` |
 
-## 股票代码格式
+API는 기본적으로 종목명을 직접 받지 않고 종목 코드를 받습니다. Skill 쪽에서 종목명 입력을 허용하려면 별도 매핑을 두거나 사용자에게 코드를 다시 요청합니다.
 
-| 类型 | 格式 | 示例 |
-|------|------|------|
-| A股 | 6位数字 | `600519`、`000001`、`300750` |
-| 北交所 | 8/4/92 开头 6 位，支持 `BJ` 前缀或 `.BJ` 后缀 | `920748`、`BJ920493`、`920493.BJ` |
-| 港股 | hk + 5位数字 | `hk00700`、`hk09988` |
-| 美股 | 1-5 字母（可选 .X 后缀） | `AAPL`、`TSLA`、`BRK.B` |
-| 美股指数 | SPX/DJI/IXIC 等 | `SPX`、`DJI`、`NASDAQ`、`VIX` |
+## OpenClaw 설정 예시
 
-## 配置方式
-
-在 `~/.openclaw/openclaw.json` 中配置：
+`~/.openclaw/openclaw.json`에 API 주소를 등록합니다.
 
 ```json
 {
@@ -99,82 +106,60 @@
 }
 ```
 
-- 本地部署：`http://localhost:8000` 或 `http://127.0.0.1:8000`
-- 远程部署：替换为实际 URL
-- **建议**：`DSA_BASE_URL` 勿以 `/` 结尾
+`DSA_BASE_URL`은 마지막에 `/`를 붙이지 않는 것을 권장합니다.
 
-## 错误响应格式
+## SKILL.md 예시
 
-| 状态码 | error 字段 | 说明 |
-|--------|-------------|------|
-| 400 | `validation_error` | 参数错误（如缺少 stock_code） |
-| 409 | `duplicate_task` | 该股票正在分析中，拒绝重复提交 |
-| 500 | `internal_error` / `analysis_failed` | 分析过程发生错误 |
+다음 내용을 `~/.openclaw/skills/daily-stock-analysis/SKILL.md`에 둘 수 있습니다.
 
-## 完整 SKILL.md 示例
-
-将以下内容保存到 `~/.openclaw/skills/daily-stock-analysis/SKILL.md`：
-
-```markdown
+````markdown
 ---
 name: daily-stock-analysis
-description: 调用 daily_stock_analysis API 进行股票智能分析。当用户询问「分析茅台」「analyze AAPL」「帮我看看 600519」等时使用。仅支持股票代码，不支持中文名称。
+description: Call the daily_stock_analysis API to analyze stocks. Use when the user asks to analyze a stock such as AAPL, 600519, or hk00700. Prefer stock codes over company names.
 metadata:
   {"openclaw": {"requires": {"env": ["DSA_BASE_URL"]}, "primaryEnv": "DSA_BASE_URL"}}
 ---
 
-## 触发条件
+## Trigger
 
-当用户请求分析某只股票时（如「分析茅台」「analyze AAPL」「帮我看看 600519」），使用本 Skill。
+Use this skill when the user asks for stock analysis.
 
-## 工作流程
+## Workflow
 
-1. **提取股票代码**：从用户消息中识别股票代码（如 600519、AAPL、hk00700）。若用户仅提供中文名称（如「茅台」），需提示用户提供股票代码，或使用常见映射（茅台→600519）。
-2. **调用 API**：向 `{DSA_BASE_URL}/api/v1/analysis/analyze` 发送 POST 请求，请求体：
-   ```json
-   {"stock_code": "<提取的代码>", "report_type": "detailed", "force_refresh": true, "async_mode": false, "skills": ["bull_trend"]}
-   ```
-   > `skills` 为可选策略 ID 数组；历史字段 `strategies` 仍保留兼容，建议优先使用 `skills`。
-3. **等待响应**：同步模式下分析约需 2–5 分钟，请确保 HTTP 客户端超时足够（建议 ≥300 秒）。
-4. **解析结果**：从响应的 `report.summary` 中提取 `operation_advice`、`trend_prediction`、`analysis_summary`，从 `report.strategy` 中提取 `ideal_buy`、`stop_loss`、`take_profit`，以简洁格式呈现给用户。
-5. **错误处理**：
-   - 连接失败：提示检查 DSA 是否运行、DSA_BASE_URL 是否正确
-   - 400：检查 stock_code 格式
-   - 409：该股票正在分析中，可稍后重试或查询任务状态
-   - 500：提示查看 DSA 日志排查
+1. Extract a stock code from the user message.
+2. POST to `{DSA_BASE_URL}/api/v1/analysis/analyze`.
+3. Use this request body:
 
-## 股票代码格式
-
-- A股：6位数字（600519、000001）
-- 北交所：8/4/92 开头 6 位，支持 BJ 前缀或 .BJ 后缀（920748、BJ920493、920493.BJ）
-- 港股：hk + 5位数字（hk00700）
-- 美股：1–5 字母（AAPL、TSLA、BRK.B）
-- 美股指数：SPX、DJI、IXIC 等
+```json
+{"stock_code": "<code>", "report_type": "detailed", "force_refresh": true, "async_mode": false}
 ```
 
-## Agent 策略问股（可选）
+4. If the request times out, retry with `async_mode: true` and poll `/api/v1/analysis/status/{task_id}`.
+5. Summarize `report.summary` and `report.strategy` for the user.
+````
 
-若 daily_stock_analysis 已启用 `AGENT_MODE=true`，可调用 Agent 策略问股接口，支持多轮对话与多种策略（缠论、均线金叉等）：
+## Agent 상담
+
+`AGENT_MODE=true`가 설정되어 있으면 Agent 상담 endpoint를 사용할 수 있습니다.
 
 ```bash
-# 将 {DSA_BASE_URL} 替换为实际配置的 API 地址（如 http://localhost:8000）
 curl -X POST {DSA_BASE_URL}/api/v1/agent/chat \
   -H 'Content-Type: application/json' \
-  -d '{"message": "用缠论分析 600519", "session_id": "optional-session-id"}'
+  -d '{"message": "Analyze 600519 with the configured strategy", "session_id": "optional-session-id"}'
 ```
 
-响应包含 `content`（分析结论）和 `session_id`（用于多轮对话）。
+응답에는 대화 내용인 `content`와 이어지는 대화에 사용할 수 있는 `session_id`가 포함됩니다.
 
-## 故障排查
+## 오류 처리
 
-| 现象 | 可能原因 | 处理建议 |
-|------|----------|----------|
-| 连接失败 | DSA 未运行、端口错误、防火墙 | 确认 `python main.py --serve-only` 已启动，检查 `DSA_BASE_URL` |
-| 400 错误 | stock_code 格式错误或缺失 | 检查代码格式（见上文表格），确保请求体包含 `stock_code` |
-| 500 错误 | AI 配置、数据源、网络问题 | 查看 DSA 日志，确认 GEMINI_API_KEY 等已配置 |
-| Agent 400 | Agent 模式未启用 | 在 DSA 的 `.env` 中设置 `AGENT_MODE=true` |
-| 分析超时 | 同步模式等待时间过长 | 增加 HTTP 客户端超时，或改用 `async_mode: true` 轮询状态 |
+| 상태 | 원인 | 대응 |
+| --- | --- | --- |
+| 연결 실패 | API 미실행, 포트 오류, 방화벽 | `python main.py --serve-only` 실행 상태와 `DSA_BASE_URL`을 확인합니다. |
+| 400 | 종목 코드 형식 오류 | 코드 형식과 요청 본문을 확인합니다. |
+| 409 | 같은 종목 분석이 이미 진행 중 | 잠시 뒤 재시도하거나 상태 조회 endpoint를 사용합니다. |
+| 500 | 분석 중 오류 | DSA 로그, LLM 키, 데이터 소스 설정을 확인합니다. |
+| timeout | 동기 분석 시간이 길어짐 | HTTP timeout을 늘리거나 비동기 모드를 사용합니다. |
 
-## 认证说明
+## 인증
 
-默认情况下 DSA API 无需认证。若在 `.env` 中启用了 `ADMIN_AUTH_ENABLED=true`，则需在 Skill 调用时携带登录后获得的 Cookie，具体方式取决于 openclaw 的 HTTP 工具能力（当前 API 仅支持 Cookie 认证，不支持 Bearer Token）。
+기본 API는 인증 없이 사용할 수 있습니다. `.env`에서 `ADMIN_AUTH_ENABLED=true`를 켠 경우에는 로그인 후 발급되는 Cookie를 Skill 요청에 포함해야 합니다. 현재 API는 Bearer token 방식보다 Cookie 기반 인증을 우선합니다.
