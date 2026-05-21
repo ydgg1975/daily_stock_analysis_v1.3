@@ -1979,20 +1979,26 @@ class NotificationService(
         lines.append(f"### 🧩 {labels['related_boards_heading']}")
         lines.append("")
         if has_sector_signal:
+            # 互换了表头：类型在前，板块在后
             lines.append(
-                f"| {labels['board_name_label']} | {labels['board_type_label']} | "
+                f"| {labels['board_type_label']} | {labels['board_name_label']} | "
                 f"{labels['board_status_label']} | {labels['board_change_pct_label']} |"
             )
-            lines.append("|:-----|:----:|:------:|------:|")
+            # 互换了 Markdown 表格对齐方式
+            lines.append("|:----:|:-----|:------:|------:|")
             for name, board_type, status_text, change_pct in prepared:
                 status = status_text if status_text is not None else "--"
                 change = "--" if change_pct is None else f"{change_pct:+.2f}%"
-                lines.append(f"| {name} | {board_type} | {status} | {change} |")
+                # 互换了数据注入顺序：board_type 在前，name 在后
+                lines.append(f"| {board_type} | {name} | {status} | {change} |")
         else:
-            lines.append(f"| {labels['board_name_label']} | {labels['board_type_label']} |")
-            lines.append("|:-----|:----:|")
+            # 互换了简易版表头：类型在前，板块在后
+            lines.append(f"| {labels['board_type_label']} | {labels['board_name_label']} |")
+            # 互换了 Markdown 表格对齐方式
+            lines.append("|:----:|:-----|")
             for name, board_type, _, _ in prepared:
-                lines.append(f"| {name} | {board_type} |")
+                # 互换了简易版数据注入顺序：board_type 在前，name 在后
+                lines.append(f"| {board_type} | {name} |")
         lines.append("")
 
     def _should_use_image_for_channel(
