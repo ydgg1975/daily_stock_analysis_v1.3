@@ -625,6 +625,71 @@ class TestOrchestratorExecution(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertIn("Analysis Summary", result.content)
 
+    def test_execute_pipeline_adds_analysis_map_to_dashboard(self):
+        orch = self._make_orchestrator()
+        ctx = AgentContext(query="test", stock_code="600519", stock_name="Moutai")
+        ctx.set_data("realtime_quote", {"price": 100.0})
+
+        technical = MagicMock(agent_name="technical")
+
+        def _run_technical(run_ctx, progress_callback=None):
+            run_ctx.add_opinion(AgentOpinion(
+                agent_name="technical",
+                signal="buy",
+                confidence=0.8,
+                reasoning="Trend is improving with price above support.",
+                key_levels={"support": 95.0, "resistance": 110.0},
+                raw_data={"ma_alignment": "bullish", "trend_score": 80},
+            ))
+            result = self._stage_result("technical")
+            result.meta["tool_calls_log"] = [
+                {
+                    "step": 1,
+                    "tool": "get_realtime_quote",
+                    "arguments": {"stock_code": "600519"},
+                    "success": True,
+                    "duration": 0.01,
+                    "cached": False,
+                }
+            ]
+            return result
+
+        decision = MagicMock(agent_name="decision")
+
+        def _run_decision(run_ctx, progress_callback=None):
+            run_ctx.add_opinion(AgentOpinion(
+                agent_name="decision",
+                signal="buy",
+                confidence=0.86,
+                reasoning="Technical strength supports a cautious buy.",
+            ))
+            return self._stage_result("decision")
+
+        technical.run.side_effect = _run_technical
+        decision.run.side_effect = _run_decision
+
+        with patch.object(orch, "_build_agent_chain", return_value=[technical, decision]):
+            result = orch._execute_pipeline(ctx, parse_dashboard=True)
+
+        self.assertTrue(result.success)
+        analysis_map = result.dashboard["analysis_map"]
+        self.assertEqual(analysis_map["version"], 1)
+        self.assertIn("nodes", analysis_map)
+        self.assertIn("edges", analysis_map)
+        self.assertEqual(analysis_map["coverage"]["total_nodes"], 5)
+        self.assertGreaterEqual(analysis_map["coverage"]["completed_nodes"], 3)
+        self.assertEqual(analysis_map["data_sources"][0]["id"], "realtime_quote")
+        self.assertIn("latest quote", analysis_map["tool_trace"][0]["reason"])
+        self.assertEqual(analysis_map["tool_trace"][0]["node"], "technical")
+        self.assertEqual(analysis_map["stage_summary"][-1]["stage"], "decision")
+        analysis_confidence = result.dashboard["analysis_confidence"]
+        self.assertEqual(analysis_confidence["version"], 1)
+        self.assertGreaterEqual(analysis_confidence["score"], 0.6)
+        self.assertEqual(analysis_confidence["label"], "medium")
+        self.assertEqual(analysis_confidence["data_quality"]["tool_success_ratio"], 1.0)
+        self.assertIn("coverage", [factor["id"] for factor in analysis_confidence["factors"]])
+        self.assertIn("Risk review", " ".join(analysis_confidence["warnings"]))
+
     def test_execute_pipeline_degrades_on_skill_agent_failure_and_continues_to_decision(self):
         orch = self._make_orchestrator()
         orch.mode = "specialist"

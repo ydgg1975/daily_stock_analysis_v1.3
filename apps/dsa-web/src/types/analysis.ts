@@ -107,12 +107,99 @@ export interface ReportDetails {
   sectorRankings?: SectorRankings;
 }
 
+export interface AnalysisMapNode {
+  id: string;
+  label: string;
+  role: string;
+  status: 'available' | 'completed' | 'missing' | string;
+  reason?: string;
+}
+
+export interface AnalysisMapEdge {
+  from: string;
+  to: string;
+  reason?: string;
+}
+
+export interface AnalysisMapDataSource {
+  id: string;
+  label: string;
+  available: boolean;
+  kind?: string;
+  reason?: string;
+}
+
+export interface AnalysisMapToolTrace {
+  step?: number | string | null;
+  tool: string;
+  node?: string;
+  reason?: string;
+  arguments?: Record<string, unknown>;
+  success?: boolean;
+  cached?: boolean;
+  timeout?: boolean;
+  duration?: number | null;
+}
+
+export interface AnalysisMapStageSummary {
+  stage: string;
+  signal?: string;
+  confidence?: number;
+  reason?: string;
+}
+
+export interface AnalysisMapCoverage {
+  completedNodes: number;
+  totalNodes: number;
+  ratio: number;
+  missingNodes: string[];
+}
+
+export interface AnalysisMap {
+  version: number;
+  nodes: AnalysisMapNode[];
+  edges: AnalysisMapEdge[];
+  dataSources: AnalysisMapDataSource[];
+  toolTrace: AnalysisMapToolTrace[];
+  stageSummary: AnalysisMapStageSummary[];
+  coverage: AnalysisMapCoverage;
+  reasoningGaps: string[];
+}
+
+export interface AnalysisConfidenceFactor {
+  id: string;
+  label: string;
+  impact: number;
+  weight: number;
+  reason?: string;
+}
+
+export interface AnalysisConfidenceDataQuality {
+  coverageRatio: number;
+  toolSuccessRatio: number;
+  dataSourceScore: number;
+  missingNodes: string[];
+  reasoningGapCount: number;
+  riskFlagCount: number;
+}
+
+export interface AnalysisConfidence {
+  version: number;
+  score: number;
+  label: 'high' | 'medium' | 'low' | string;
+  factors: AnalysisConfidenceFactor[];
+  warnings: string[];
+  dataQuality: AnalysisConfidenceDataQuality;
+}
+
 /** Full analysis report */
 export interface AnalysisReport {
   meta: ReportMeta;
   summary: ReportSummary;
   strategy?: ReportStrategy;
   details?: ReportDetails;
+  analysisMap?: AnalysisMap;
+  analysisConfidence?: AnalysisConfidence;
 }
 
 // ============ Analysis Result Types ============

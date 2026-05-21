@@ -131,6 +131,7 @@ class AgentOrchestrator:
         dashboard = None
         content = ""
         if ctx is not None:
+            ctx.set_data("tool_calls_log", all_tool_calls)
             dashboard, content = self._resolve_final_output(ctx, parse_dashboard=parse_dashboard)
             if parse_dashboard and dashboard is not None:
                 dashboard = self._mark_partial_dashboard(
@@ -172,6 +173,7 @@ class AgentOrchestrator:
         dashboard = None
         content = ""
         if ctx is not None:
+            ctx.set_data("tool_calls_log", all_tool_calls)
             dashboard, content = self._resolve_final_output(ctx, parse_dashboard=parse_dashboard)
             if parse_dashboard and dashboard is not None:
                 dashboard = self._mark_partial_dashboard(
@@ -545,6 +547,7 @@ class AgentOrchestrator:
         total_duration = round(time.time() - t0, 2)
         stats.total_duration_s = total_duration
         stats.models_used = list(dict.fromkeys(models_used))
+        ctx.set_data("tool_calls_log", all_tool_calls)
 
         dashboard, content = self._resolve_final_output(ctx, parse_dashboard=parse_dashboard)
 
@@ -1019,7 +1022,340 @@ class AgentOrchestrator:
         payload["key_points"] = key_points
         payload["risk_warning"] = risk_warning
         payload["dashboard"] = dashboard_block
+        analysis_map = self._build_analysis_map(ctx, dashboard_block, payload)
+        payload["analysis_map"] = analysis_map
+        payload["analysis_confidence"] = self._build_analysis_confidence(ctx, confidence, analysis_map)
         return payload
+
+    def _build_analysis_map(
+        self,
+        ctx: AgentContext,
+        dashboard_block: Dict[str, Any],
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build a compact map of the analysis flow for UI/audit surfaces."""
+        present_agents = {op.agent_name for op in ctx.opinions}
+
+        def _has_nested(section: str) -> bool:
+            value = dashboard_block.get(section)
+            return isinstance(value, dict) and bool(value)
+
+        data_sources = []
+        source_checks = (
+            ("realtime_quote", "price"),
+            ("daily_history", "history"),
+            ("trend_result", "technical_indicators"),
+            ("chip_distribution", "chip_distribution"),
+            ("news_context", "news"),
+            ("fundamental_context", "fundamentals"),
+        )
+        for key, label in source_checks:
+            value = ctx.get_data(key)
+            if value is not None:
+                data_sources.append({
+                    "id": key,
+                    "label": label,
+                    "available": True,
+                    "kind": "input",
+                    "reason": self._data_source_reason(key),
+                })
+
+        tool_trace = self._build_tool_trace(ctx)
+
+        nodes = [
+            {
+                "id": "data",
+                "label": "Data Collection",
+                "role": "input",
+                "status": "available" if data_sources else "missing",
+                "reason": "Collected market, technical, news, or fundamental inputs.",
+            },
+            {
+                "id": "technical",
+                "label": "Technical Analysis",
+                "role": "analysis",
+                "status": "completed" if "technical" in present_agents or _has_nested("data_perspective") else "missing",
+                "reason": "Uses price, trend, volume, support, and resistance context.",
+            },
+            {
+                "id": "intel",
+                "label": "News and Fundamentals",
+                "role": "analysis",
+                "status": "completed" if "intel" in present_agents or _has_nested("intelligence") else "missing",
+                "reason": "Checks news, sentiment, earnings, catalysts, and headline risk.",
+            },
+            {
+                "id": "risk",
+                "label": "Risk Review",
+                "role": "guardrail",
+                "status": "completed" if "risk" in present_agents or ctx.risk_flags else "missing",
+                "reason": "Looks for veto, downgrade, and high-severity risk conditions.",
+            },
+            {
+                "id": "decision",
+                "label": "Decision",
+                "role": "output",
+                "status": "completed" if "decision" in present_agents or payload.get("decision_type") else "missing",
+                "reason": "Combines available signals into decision type, confidence, and action plan.",
+            },
+        ]
+
+        edges = [
+            {"from": "data", "to": "technical", "reason": "Market data feeds technical signals."},
+            {"from": "data", "to": "intel", "reason": "Context guides news and fundamentals checks."},
+            {"from": "technical", "to": "risk", "reason": "Weak levels or volatility can raise risk."},
+            {"from": "intel", "to": "risk", "reason": "News and fundamentals can raise risk."},
+            {"from": "technical", "to": "decision", "reason": "Trend and levels inform the final action."},
+            {"from": "intel", "to": "decision", "reason": "Catalysts and sentiment inform the final action."},
+            {"from": "risk", "to": "decision", "reason": "Risk can downgrade or veto bullish decisions."},
+        ]
+
+        stage_summary = []
+        for op in ctx.opinions:
+            stage_summary.append({
+                "stage": op.agent_name,
+                "signal": op.signal,
+                "confidence": round(float(op.confidence), 4),
+                "reason": _truncate_text(op.reasoning, 180),
+            })
+
+        missing_nodes = [node["id"] for node in nodes if node["status"] == "missing"]
+        reasoning_gaps = []
+        if not data_sources:
+            reasoning_gaps.append("No structured input data was recorded in the agent context.")
+        if "intel" in missing_nodes:
+            reasoning_gaps.append("News, sentiment, or fundamentals were not confirmed by a completed intel stage.")
+        if "risk" in missing_nodes:
+            reasoning_gaps.append("Risk review was not confirmed by a completed risk stage.")
+
+        completed_count = sum(1 for node in nodes if node["status"] == "completed")
+        coverage = {
+            "completed_nodes": completed_count,
+            "total_nodes": len(nodes),
+            "ratio": round(completed_count / len(nodes), 4),
+            "missing_nodes": missing_nodes,
+        }
+
+        return {
+            "version": 1,
+            "nodes": nodes,
+            "edges": edges,
+            "data_sources": data_sources,
+            "tool_trace": tool_trace,
+            "stage_summary": stage_summary,
+            "coverage": coverage,
+            "reasoning_gaps": reasoning_gaps,
+        }
+
+    def _build_analysis_confidence(
+        self,
+        ctx: AgentContext,
+        base_confidence: float,
+        analysis_map: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Estimate confidence from agent conviction, coverage, tool health, and gaps."""
+        opinions = [float(op.confidence) for op in ctx.opinions]
+        agent_confidence = sum(opinions) / len(opinions) if opinions else float(base_confidence or 0.0)
+
+        coverage = analysis_map.get("coverage") if isinstance(analysis_map, dict) else {}
+        coverage_ratio = float(coverage.get("ratio") or 0.0) if isinstance(coverage, dict) else 0.0
+        missing_nodes = coverage.get("missing_nodes") if isinstance(coverage, dict) else []
+        if not isinstance(missing_nodes, list):
+            missing_nodes = []
+
+        tool_trace = analysis_map.get("tool_trace") if isinstance(analysis_map, dict) else []
+        if not isinstance(tool_trace, list):
+            tool_trace = []
+        if tool_trace:
+            successful_tools = sum(1 for item in tool_trace if isinstance(item, dict) and item.get("success"))
+            tool_success_ratio = successful_tools / len(tool_trace)
+        else:
+            tool_success_ratio = 0.75
+
+        data_sources = analysis_map.get("data_sources") if isinstance(analysis_map, dict) else []
+        if not isinstance(data_sources, list):
+            data_sources = []
+        data_source_score = min(1.0, len(data_sources) / 3.0)
+
+        reasoning_gaps = analysis_map.get("reasoning_gaps") if isinstance(analysis_map, dict) else []
+        if not isinstance(reasoning_gaps, list):
+            reasoning_gaps = []
+        gap_penalty = min(0.25, 0.07 * len(reasoning_gaps))
+
+        high_risk = any(str(flag.get("severity", "")).lower() == "high" for flag in ctx.risk_flags)
+        risk_penalty = 0.15 if high_risk else (0.08 if ctx.risk_flags else 0.0)
+
+        raw_score = (
+            agent_confidence * 0.45
+            + coverage_ratio * 0.30
+            + tool_success_ratio * 0.20
+            + data_source_score * 0.05
+            - gap_penalty
+            - risk_penalty
+        )
+        score = max(0.0, min(1.0, raw_score))
+
+        warnings = []
+        warnings.extend(str(gap) for gap in reasoning_gaps if gap)
+        failed_tools = [
+            str(item.get("tool"))
+            for item in tool_trace
+            if isinstance(item, dict) and item.get("tool") and not item.get("success")
+        ]
+        if failed_tools:
+            warnings.append("Some tools failed: " + ", ".join(failed_tools[:5]))
+        if high_risk:
+            warnings.append("High-severity risk flags lowered confidence.")
+        elif ctx.risk_flags:
+            warnings.append("Risk flags lowered confidence.")
+
+        factors = [
+            {
+                "id": "agent_confidence",
+                "label": "Agent confidence",
+                "impact": round(agent_confidence, 4),
+                "weight": 0.45,
+                "reason": "Average confidence reported by participating agents.",
+            },
+            {
+                "id": "coverage",
+                "label": "Analysis coverage",
+                "impact": round(coverage_ratio, 4),
+                "weight": 0.30,
+                "reason": "Share of required analysis nodes that were completed.",
+            },
+            {
+                "id": "tool_success",
+                "label": "Tool success",
+                "impact": round(tool_success_ratio, 4),
+                "weight": 0.20,
+                "reason": "Ratio of successful tool calls in the recorded trace.",
+            },
+            {
+                "id": "data_sources",
+                "label": "Data sources",
+                "impact": round(data_source_score, 4),
+                "weight": 0.05,
+                "reason": "Breadth of structured inputs recorded in the context.",
+            },
+        ]
+
+        if gap_penalty:
+            factors.append({
+                "id": "reasoning_gaps",
+                "label": "Reasoning gaps",
+                "impact": round(-gap_penalty, 4),
+                "weight": 1.0,
+                "reason": "Missing analysis areas reduce confidence.",
+            })
+        if risk_penalty:
+            factors.append({
+                "id": "risk_penalty",
+                "label": "Risk penalty",
+                "impact": round(-risk_penalty, 4),
+                "weight": 1.0,
+                "reason": "Recorded risk flags reduce confidence.",
+            })
+
+        return {
+            "version": 1,
+            "score": round(score, 4),
+            "label": self._confidence_band(score),
+            "factors": factors,
+            "warnings": warnings,
+            "data_quality": {
+                "coverage_ratio": round(coverage_ratio, 4),
+                "tool_success_ratio": round(tool_success_ratio, 4),
+                "data_source_score": round(data_source_score, 4),
+                "missing_nodes": missing_nodes,
+                "reasoning_gap_count": len(reasoning_gaps),
+                "risk_flag_count": len(ctx.risk_flags),
+            },
+        }
+
+    @staticmethod
+    def _confidence_band(score: float) -> str:
+        if score >= 0.75:
+            return "high"
+        if score >= 0.45:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _data_source_reason(key: str) -> str:
+        """Explain why a structured data source matters to the analysis."""
+        reasons = {
+            "realtime_quote": "Used to anchor the analysis to the latest price, volume, and intraday move.",
+            "daily_history": "Used to evaluate trend, support, resistance, and recent price behavior.",
+            "trend_result": "Used to summarize technical indicators and trend strength.",
+            "chip_distribution": "Used to inspect holder profit, cost concentration, and positioning risk.",
+            "news_context": "Used to check catalysts, sentiment, and headline risk.",
+            "fundamental_context": "Used to check earnings, valuation, quality, and business risk.",
+        }
+        return reasons.get(key, "Used as supporting context for the final decision.")
+
+    def _build_tool_trace(self, ctx: AgentContext) -> List[Dict[str, Any]]:
+        """Summarize executed tools with human-readable reasons."""
+        raw_calls = ctx.get_data("tool_calls_log") or []
+        if not isinstance(raw_calls, list):
+            return []
+
+        trace: List[Dict[str, Any]] = []
+        for call in raw_calls:
+            if not isinstance(call, dict):
+                continue
+            tool_name = str(call.get("tool") or "").strip()
+            if not tool_name:
+                continue
+            trace.append({
+                "step": call.get("step"),
+                "tool": tool_name,
+                "node": self._tool_analysis_node(tool_name),
+                "reason": self._tool_reason(tool_name, call.get("arguments")),
+                "arguments": call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+                "success": bool(call.get("success")),
+                "cached": bool(call.get("cached")),
+                "timeout": bool(call.get("timeout")),
+                "duration": call.get("duration"),
+            })
+        return trace
+
+    @staticmethod
+    def _tool_analysis_node(tool_name: str) -> str:
+        lowered = tool_name.lower()
+        if any(token in lowered for token in ("news", "intel", "search", "fundamental", "stock_info")):
+            return "intel"
+        if any(token in lowered for token in ("risk", "backtest")):
+            return "risk"
+        if any(token in lowered for token in ("quote", "history", "trend", "chip", "volume", "ma", "pattern")):
+            return "technical"
+        if any(token in lowered for token in ("market", "sector", "indices")):
+            return "data"
+        return "data"
+
+    @staticmethod
+    def _tool_reason(tool_name: str, arguments: Any) -> str:
+        """Explain why a tool was likely used based on its name and arguments."""
+        args = arguments if isinstance(arguments, dict) else {}
+        stock_code = args.get("stock_code") or args.get("code") or args.get("symbol")
+        suffix = f" for {stock_code}" if stock_code else ""
+
+        lowered = tool_name.lower()
+        if "realtime_quote" in lowered:
+            return f"Checked the latest quote{suffix} to anchor price, volume, and intraday movement."
+        if "daily_history" in lowered:
+            return f"Loaded daily history{suffix} to inspect trend, support, resistance, and volatility."
+        if "trend" in lowered or "ma" in lowered or "pattern" in lowered:
+            return f"Ran technical analysis{suffix} to evaluate trend strength and key levels."
+        if "chip" in lowered:
+            return f"Checked chip distribution{suffix} to estimate positioning pressure and holder profit."
+        if "news" in lowered or "search" in lowered or "intel" in lowered:
+            return f"Searched news and intelligence{suffix} to confirm catalysts, sentiment, and headline risk."
+        if "market" in lowered or "indices" in lowered or "sector" in lowered:
+            return "Checked market context to compare the stock against broader market conditions."
+        if "backtest" in lowered:
+            return f"Checked backtest context{suffix} to compare this signal with historical outcomes."
+        return f"Used {tool_name} as supporting evidence for the analysis."
 
     def _collect_key_levels(
         self,

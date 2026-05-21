@@ -838,6 +838,8 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     stop_loss=_stringify_report_strategy_value(getattr(record, 'stop_loss', None)),
                     take_profit=_stringify_report_strategy_value(getattr(record, 'take_profit', None)),
                 ),
+                analysis_map=(raw_result or {}).get("analysis_map") if isinstance(raw_result, dict) else None,
+                analysis_confidence=(raw_result or {}).get("analysis_confidence") if isinstance(raw_result, dict) else None,
             ).model_dump()
             return TaskStatus(
                 task_id=task_id,
@@ -1008,5 +1010,7 @@ def _build_analysis_report(
         meta=meta,
         summary=summary,
         strategy=strategy,
-        details=details
+        details=details,
+        analysis_map=report_data.get("analysis_map"),
+        analysis_confidence=report_data.get("analysis_confidence"),
     )

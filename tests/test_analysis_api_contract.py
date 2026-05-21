@@ -713,6 +713,41 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(report.strategy.stop_loss, "9.5")
         self.assertEqual(report.strategy.take_profit, "11.6")
 
+    def test_build_analysis_report_preserves_agent_trace_fields(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        analysis_map = {
+            "version": 1,
+            "coverage": {"completed_nodes": 3, "total_nodes": 5, "ratio": 0.6, "missing_nodes": ["risk"]},
+            "tool_trace": [{"tool": "get_realtime_quote", "success": True}],
+        }
+        analysis_confidence = {
+            "version": 1,
+            "score": 0.68,
+            "label": "medium",
+            "warnings": ["Risk review was not confirmed."],
+        }
+
+        report = _build_analysis_report(
+            report_data={
+                "meta": {},
+                "summary": {},
+                "strategy": {},
+                "details": {},
+                "analysis_map": analysis_map,
+                "analysis_confidence": analysis_confidence,
+            },
+            query_id="q1",
+            stock_code="600519",
+            stock_name="Moutai",
+            context_snapshot=None,
+            fallback_fundamental_payload=None,
+        )
+
+        self.assertEqual(report.analysis_map, analysis_map)
+        self.assertEqual(report.analysis_confidence, analysis_confidence)
+
     def test_build_analysis_report_extracts_related_board_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

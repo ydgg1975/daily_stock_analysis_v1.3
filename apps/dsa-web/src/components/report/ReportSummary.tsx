@@ -4,6 +4,7 @@ import { ReportOverview } from './ReportOverview';
 import { ReportStrategy } from './ReportStrategy';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
+import { ReportAgentTrace } from './ReportAgentTrace';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
 interface ReportSummaryProps {
@@ -35,6 +36,11 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
         summary={summary}
         details={details}
         isHistory={isHistory}
+      />
+
+      <ReportAgentTrace
+        analysisMap={report.analysisMap}
+        analysisConfidence={report.analysisConfidence}
       />
 
       <ReportStrategy strategy={strategy} language={reportLanguage} />

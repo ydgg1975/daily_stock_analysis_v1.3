@@ -152,6 +152,9 @@ class AnalysisReport(BaseModel):
     strategy: Optional[ReportStrategy] = Field(None, description="전략 가격 섹션")
     details: Optional[ReportDetails] = Field(None, description="상세 섹션")
 
+    analysis_map: Optional[Any] = Field(None, description="Agent analysis flow map and trace data")
+    analysis_confidence: Optional[Any] = Field(None, description="Agent confidence score and quality factors")
+
     class Config:
         json_schema_extra = {
             "example": {

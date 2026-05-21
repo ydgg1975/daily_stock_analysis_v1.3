@@ -328,7 +328,9 @@ def get_history_detail(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details
+            details=details,
+            analysis_map=raw_result.get("analysis_map"),
+            analysis_confidence=raw_result.get("analysis_confidence"),
         )
 
     except HTTPException:
