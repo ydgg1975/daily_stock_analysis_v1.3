@@ -74,7 +74,7 @@ docker-compose -f ./docker/docker-compose.yml up -d
 docker-compose -f ./docker/docker-compose.yml exec -u dsa stock-analyzer bash
 
 # 수동 분석 실행
-docker-compose -f ./docker/docker-compose.yml exec -u dsa stock-analyzer python main.py --dry-run
+docker-compose -f ./docker/docker-compose.yml exec -u dsa stock-analyzer python main.py --no-notify
 ```
 
 ### 5. 데이터 보존
