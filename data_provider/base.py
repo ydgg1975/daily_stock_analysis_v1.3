@@ -72,6 +72,8 @@ def normalize_stock_code(stock_code: str) -> str:
     - 'SH600519'    -> '600519'   (strip SH prefix)
     - 'SZ000001'    -> '000001'   (strip SZ prefix)
     - 'BJ920748'    -> '920748'   (strip BJ prefix, BSE)
+    - 'TW2330'      -> '2330'     (strip TW prefix, Taiwan)
+    - '2330.TW'     -> '2330'     (strip .TW suffix, Taiwan)
     - 'sh600519'    -> '600519'   (case-insensitive)
     - '600519.SH'   -> '600519'   (strip .SH suffix)
     - '000001.SZ'   -> '000001'   (strip .SZ suffix)
@@ -81,7 +83,7 @@ def normalize_stock_code(stock_code: str) -> str:
     - 'AAPL'        -> 'AAPL'     (keep US stock ticker as-is)
 
     This function is applied at the DataProviderManager layer so that
-    all individual fetchers receive a clean 6-digit code (for A-shares/ETFs).
+    all individual fetchers receive a clean code.
     """
     code = stock_code.strip()
     upper = code.upper()
@@ -91,6 +93,12 @@ def normalize_stock_code(stock_code: str) -> str:
         candidate = upper[2:]
         if candidate.isdigit() and 1 <= len(candidate) <= 5:
             return f"HK{candidate.zfill(5)}"
+
+    # Strip TW prefix (e.g. TW2330 -> 2330)
+    if upper.startswith('TW') and not upper.startswith('TW.'):
+        candidate = code[2:]
+        if candidate.isdigit() and len(candidate) == 4:
+            return candidate
 
     # Strip SH/SZ prefix (e.g. SH600519 -> 600519)
     if upper.startswith(('SH', 'SZ')) and not upper.startswith('SH.') and not upper.startswith('SZ.'):
@@ -105,9 +113,11 @@ def normalize_stock_code(stock_code: str) -> str:
         if candidate.isdigit() and len(candidate) == 6:
             return candidate
 
-    # Strip .SH/.SZ/.BJ suffix (e.g. 600519.SH -> 600519, 920748.BJ -> 920748)
+    # Strip .TW/.SH/.SZ/.BJ suffix (e.g. 2330.TW -> 2330)
     if '.' in code:
         base, suffix = code.rsplit('.', 1)
+        if suffix.upper() == 'TW' and base.isdigit() and len(base) == 4:
+            return base
         if suffix.upper() == 'HK' and base.isdigit() and 1 <= len(base) <= 5:
             return f"HK{base.zfill(5)}"
         if suffix.upper() in ('SH', 'SZ', 'SS', 'BJ') and base.isdigit():
@@ -184,12 +194,24 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
     )
 
 
+def _is_tw_market(code: str) -> bool:
+    """判定是否为台股代码（4位数字，如 2330, 0050）。"""
+    normalized = (code or "").strip()
+    # 台股：4位数字（上市/上柜/ETF）
+    # 排除纯A股代码（A股6位数字）和已知港股前缀
+    if normalized.isdigit() and len(normalized) == 4:
+        return True
+    return False
+
+
 def _market_tag(code: str) -> str:
-    """返回市场标签: cn/us/hk."""
+    """返回市场标签: cn/us/hk/tw."""
     if _is_us_market(code):
         return "us"
     if _is_hk_market(code):
         return "hk"
+    if _is_tw_market(code):
+        return "tw"
     return "cn"
 
 
@@ -554,6 +576,7 @@ class DataFetcherManager:
         "LongbridgeFetcher": {"hk", "us"},
         "FinnhubFetcher": {"us"},
         "AlphaVantageFetcher": {"us"},
+        "TWSEFetcher": {"tw"},
     }
     
     def __init__(self, fetchers: Optional[List[BaseFetcher]] = None):
@@ -1077,10 +1100,15 @@ class DataFetcherManager:
         else:
             logger.debug("[数据源初始化] 跳过未配置的 AlphaVantageFetcher")
 
+        # 台股数据源（MCP casual-market bridge）— 始终启用，优先级最高
+        from .twse_fetcher import TWSEFetcher
+        twse = TWSEFetcher()
+
         # 初始化数据源列表
         self._ensure_concurrency_guards()
         with self._fetchers_lock:
             self._fetchers = [
+                twse,         # 台股：MCP 桥接（Priority 0）
                 efinance,
                 akshare,
                 pytdx,
