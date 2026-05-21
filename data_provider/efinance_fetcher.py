@@ -1105,65 +1105,44 @@ class EfinanceFetcher(BaseFetcher):
             return None
     
     def get_belong_board(self, stock_code: str) -> Optional[pd.DataFrame]:
-        """
-        获取股票所属板块
-        
-        数据来源：ef.stock.get_belong_board()
-        
-        Args:
-            stock_code: 股票代码
-            
-        Returns:
-            所属板块 DataFrame，获取失败返回 None
-        """
+        """获取股票所属板块"""
         import efinance as ef
         
-        # --- 修复N/A Bug: 新增板块分类规则函数 ---
+        # --- 补回被 Sync 抹除的分类逻辑 ---
         def classify_board_type(board_name: str) -> str:
             name_str = str(board_name)
-            if "概念" in name_str:
-                return "概念板块"
-            # 常见地域名称匹配
-            elif any(region in name_str for region in ["广东", "江苏", "浙江", "北京", "上海", "深圳", "四川", "山东", "福建", "湖北", "湖南", "安徽", "河南", "河北", "陕西", "江西", "重庆", "辽宁", "吉林", "黑龙江", "山西", "内蒙古", "广西", "海南", "贵州", "云南", "西藏", "甘肃", "青海", "宁夏", "新疆", "台湾", "香港", "澳门"]) or "板块" in name_str:
-                return "地域板块"
-            elif "ST" in name_str or "退市" in name_str:
-                return "风险警示"
-            elif any(idx in name_str for idx in ["指数", "300", "500", "50"]):
-                return "宽基指数"
-            else:
-                # 兜底：如果都没有匹配上，通常就是行业
-                return "行业板块"
-        # ------------------------------------------
-
+            if "概念" in name_str: return "概念板块"
+            elif any(r in name_str for r in ["广东","江苏","浙江","北京","上海","深圳","四川","山东","福建","湖北"]): return "地域板块"
+            elif "ST" in name_str or "退市" in name_str: return "风险警示"
+            elif any(idx in name_str for idx in ["指数","300","500","50"]): return "宽基指数"
+            else: return "行业板块"
+        
         try:
-            # 防封禁策略
             self._set_random_user_agent()
             self._enforce_rate_limit()
             
             logger.info(f"[API调用] ef.stock.get_belong_board(stock_code={stock_code}) 获取所属板块...")
             import time as _time
             api_start = _time.time()
-            
             df = _ef_call_with_timeout(ef.stock.get_belong_board, stock_code)
-            
             api_elapsed = _time.time() - api_start
             
             if df is not None and not df.empty:
-                # --- 修复N/A Bug: 为 DataFrame 注入类型数据 ---
-                # efinance 返回的列名通常是 '板块名称'
+                # 注入类型
                 name_col = '板块名称' if '板块名称' in df.columns else 'board_name'
                 if name_col in df.columns:
-                    # 运用上面的规则进行推断
                     df['类型'] = df[name_col].apply(classify_board_type)
-                    # 同时赋值一个英文字段，防止下游使用英文键值解析
                     df['type'] = df['类型'] 
-                # ----------------------------------------------
-                
                 logger.info(f"[API返回] ef.stock.get_belong_board 成功: 返回 {len(df)} 个板块, 耗时 {api_elapsed:.2f}s")
                 return df
             else:
                 logger.warning(f"[API返回] 未获取到 {stock_code} 的板块信息")
                 return None
+            
+        except FuturesTimeoutError:
+            return None
+        except Exception as e:
+            return None
             
         except FuturesTimeoutError:
             logger.warning(f"[超时] ef.stock.get_belong_board({stock_code}) 超过 {_EF_CALL_TIMEOUT}s，跳过")
