@@ -45,6 +45,9 @@ def _build_lookup_keys(canonical_code: str, display_code: str) -> Iterable[str]:
         base, suffix = canonical_upper.rsplit(".", 1)
         if suffix in {"SH", "SZ", "SS", "BJ"} and base.isdigit():
             _add_lookup_key(keys, base)
+        elif suffix == "TW" and base.isdigit() and len(base) == 4:
+            # 台股代码（如 2330.TW）
+            _add_lookup_key(keys, base)
         elif suffix == "HK" and base.isdigit() and 1 <= len(base) <= 5:
             digits = base.zfill(5)
             _add_lookup_key(keys, digits)
