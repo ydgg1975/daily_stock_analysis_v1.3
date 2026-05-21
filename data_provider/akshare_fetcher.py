@@ -1600,20 +1600,32 @@ class AkshareFetcher(BaseFetcher):
                         if prev_close > 0:
                             amplitude = (high - low) / prev_close * 100
 
-                        results.append({
-                            'code': code,
-                            'name': name,
-                            'current': current,
-                            'change': safe_float(row.get('涨跌额', 0)),
-                            'change_pct': safe_float(row.get('涨跌幅', 0)),
-                            'open': safe_float(row.get('今开', 0)),
-                            'high': high,
-                            'low': low,
-                            'prev_close': prev_close,
-                            'volume': safe_float(row.get('成交量', 0)),
-                            'amount': safe_float(row.get('成交额', 0)),
-                            'amplitude': amplitude,
-                        })
+                # 提前提取需要用来计算的字段
+                high_price = safe_float(item.get(high_col, 0))
+                low_price = safe_float(item.get(low_col, 0))
+                prev_close = current - change_amount if current or change_amount else 0
+                
+                # --- 🚀 修复大盘振幅 N/A 开始 ---
+                raw_amp = safe_float(item.get(amp_col, 0))
+                # 如果 API 没有提供振幅(为空或0)，我们利用 (最高-最低)/昨收*100 手动计算
+                if (not raw_amp or raw_amp == 0) and prev_close and prev_close > 0 and high_price and low_price:
+                    raw_amp = round((high_price - low_price) / prev_close * 100, 2)
+                # --- 🚀 修复大盘振幅 N/A 结束 ---
+
+                results.append({
+                    'code': full_code,
+                    'name': name,
+                    'current': current,
+                    'change': change_amount,
+                    'change_pct': safe_float(item.get(pct_col, 0)),
+                    'open': open_price,
+                    'high': high_price,
+                    'low': low_price,
+                    'prev_close': prev_close,
+                    'volume': safe_float(item.get(vol_col, 0)),
+                    'amount': safe_float(item.get(amt_col, 0)),
+                    'amplitude': raw_amp, # 使用修补后的振幅变量
+                })
             return results
 
         except Exception as e:
