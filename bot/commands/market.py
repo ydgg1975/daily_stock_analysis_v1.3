@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-===================================
-시장 리뷰 명령
-===================================
-
-시장 리뷰 분석을 실행하고 시장 개요 보고서를 생성합니다.
+Market review bot command.
 """
 
 import logging
@@ -18,18 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class MarketCommand(BotCommand):
-    """
-    시장 리뷰 명령
-
-    시장 리뷰 분석을 실행합니다:
-    - 主要指数表现
-    - 板块热点
-    - 市场情绪
-    - 后市展望
-
-    用法：
-        /market - 시장 리뷰 실행
-    """
+    """Run a market review in the background."""
 
     @property
     def name(self) -> str:
@@ -37,22 +22,22 @@ class MarketCommand(BotCommand):
 
     @property
     def aliases(self) -> List[str]:
-        return ["m", "大盘", "复盘", "行情"]
+        return ["m", "시장", "리뷰", "시황"]
 
     @property
     def description(self) -> str:
-        return "시장 리뷰 분석"
+        return "시장 리뷰를 실행합니다"
 
     @property
     def usage(self) -> str:
         return "/market"
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
-        """시장 리뷰 명령을 실행합니다."""
+        """Execute the market review command."""
         config = self._get_config()
         lock_token = self._try_acquire_market_review_lock(config)
         if lock_token is None:
-            return BotResponse.markdown_response("⚠️ 시장 리뷰가 실행 중입니다. 잠시 후 다시 시도하세요.")
+            return BotResponse.markdown_response("⚠️ 시장 리뷰가 이미 실행 중입니다. 잠시 후 다시 시도하세요.")
 
         thread = threading.Thread(
             target=self._run_market_review,
@@ -62,23 +47,20 @@ class MarketCommand(BotCommand):
         try:
             thread.start()
         except Exception as exc:
-            logger.error(
-                "[MarketCommand] 시장 리뷰 백그라운드 스레드 시작 실패: %s",
-                exc,
-            )
+            logger.error("[MarketCommand] 시장 리뷰 백그라운드 스레드 시작 실패: %s", exc)
             self._release_market_review_lock(lock_token)
             return BotResponse.error_response(
                 "시장 리뷰 시작에 실패했습니다. 실행 잠금을 해제했으니 잠시 후 다시 시도하세요."
             )
 
         return BotResponse.markdown_response(
-            "✅ **시장 리뷰 작업이 시작되었습니다**\n\n"
-            "正在分析：\n"
-            "• 主要指数表现\n"
-            "• 板块热点分析\n"
-            "• 市场情绪判断\n"
-            "• 后市展望\n\n"
-            "分析完成后将自动推送结果。"
+            "✅ **시장 리뷰 작업을 시작했습니다**\n\n"
+            "분석 항목:\n"
+            "• 주요 지수 흐름\n"
+            "• 섹터/테마 동향\n"
+            "• 시장 심리 판단\n"
+            "• 향후 전망\n\n"
+            "분석이 완료되면 결과를 자동으로 전송합니다."
         )
 
     def _get_config(self):
@@ -99,8 +81,8 @@ class MarketCommand(BotCommand):
 
         try:
             from src.core.trading_calendar import (
-                get_open_markets_today,
                 compute_effective_region,
+                get_open_markets_today,
             )
 
             open_markets = get_open_markets_today()
@@ -109,7 +91,7 @@ class MarketCommand(BotCommand):
                 open_markets,
             )
         except Exception as exc:
-            logger.warning("거래일 필터링에 실패해 설정대로 시장 리뷰를 계속 실행합니다: %s", exc)
+            logger.warning("거래일 필터링에 실패해 기본 설정대로 시장 리뷰를 계속 실행합니다: %s", exc)
             return None
 
     def _run_market_review(
@@ -118,23 +100,24 @@ class MarketCommand(BotCommand):
         config,
         lock_token: Optional[Any],
     ) -> None:
-        """백그라운드에서 시장 리뷰를 실행합니다."""
+        """Run market review in the background."""
         try:
             override_region = self._compute_market_review_override_region(config)
             if override_region == "":
                 from src.notification import NotificationService
+
                 notifier = NotificationService(source_message=message)
-                logger.info("[MarketCommand] 오늘 관련 시장이 휴장이라 시장 리뷰를 건너뜁니다.")
+                logger.info("[MarketCommand] 오늘 관련 시장이 휴장이라 시장 리뷰를 건너뜁니다")
                 if notifier.is_available():
                     notifier.send(
-                        "🎯 시장 리뷰\n\n오늘 관련 시장이 휴장이라 시장 리뷰를 건너뛰었습니다.",
+                        "📊 시장 리뷰\n\n오늘 관련 시장이 휴장이라 시장 리뷰를 건너뛰었습니다.",
                         email_send_to_all=True,
                         route_type="report",
                     )
                 return
 
-            from src.core.market_review_runtime import build_market_review_runtime
             from src.core.market_review import run_market_review
+            from src.core.market_review_runtime import build_market_review_runtime
 
             notifier, analyzer, search_service = build_market_review_runtime(
                 config,
@@ -148,9 +131,9 @@ class MarketCommand(BotCommand):
                 override_region=override_region,
             )
             if review_report:
-                logger.info("[MarketCommand] 시장 리뷰 완료 및 전송됨")
+                logger.info("[MarketCommand] 시장 리뷰 완료 및 전송 완료")
             else:
-                logger.warning("[MarketCommand] 시장 리뷰가 빈 결과를 반환했습니다.")
+                logger.warning("[MarketCommand] 시장 리뷰가 빈 결과를 반환했습니다")
         except Exception as e:
             logger.error("[MarketCommand] 시장 리뷰 실패: %s", e)
             logger.exception(e)

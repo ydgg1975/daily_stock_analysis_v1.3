@@ -34,10 +34,10 @@ def test_prepare_webui_frontend_assets_reuses_prebuilt_static_without_source(tmp
     with caplog.at_level(logging.INFO):
         assert webui_frontend.prepare_webui_frontend_assets() is True
 
-    assert "检测到可直接复用的前端静态产物" in caplog.text
-    assert "未找到前端项目，无法自动构建" not in caplog.text
-    assert "未检测到 npm，无法自动构建前端" not in caplog.text
-    assert "assets/ 目录不存在或无 CSS/JS 文件" not in caplog.text
+    assert "재사용 가능한 프런트엔드 산출물을 감지했습니다" in caplog.text
+    assert "프런트엔드 프로젝트를 찾을 수 없어 자동 빌드할 수 없습니다" not in caplog.text
+    assert "npm을 찾을 수 없어 프런트엔드를 자동 빌드할 수 없습니다" not in caplog.text
+    assert "CSS/JS 파일이 없습니다" not in caplog.text
 
 
 def test_prepare_webui_frontend_assets_fails_without_static_or_source(tmp_path, monkeypatch, caplog):
@@ -49,16 +49,15 @@ def test_prepare_webui_frontend_assets_fails_without_static_or_source(tmp_path, 
     with caplog.at_level(logging.WARNING):
         assert webui_frontend.prepare_webui_frontend_assets() is False
 
-    assert "未找到前端项目，无法自动构建" in caplog.text
+    assert "프런트엔드 프로젝트를 찾을 수 없어 자동 빌드할 수 없습니다" in caplog.text
 
 
 def test_prepare_webui_frontend_assets_warns_when_assets_missing(tmp_path, monkeypatch, caplog):
-    """index.html 存在但 static/assets/ 缺失时应发出 WebUI 显示异常警告（Issue #944）。"""
+    """index.html은 있지만 static/assets/가 없으면 WebUI 표시 오류를 경고합니다."""
     repo_root = _prepare_fake_repo(tmp_path, monkeypatch)
     static_index = repo_root / "static" / "index.html"
     static_index.parent.mkdir(parents=True)
     static_index.write_text("<!doctype html>", encoding="utf-8")
-    # No assets directory created — simulates incomplete/broken build
 
     monkeypatch.delenv("WEBUI_AUTO_BUILD", raising=False)
     monkeypatch.delenv("WEBUI_FORCE_BUILD", raising=False)
@@ -67,18 +66,17 @@ def test_prepare_webui_frontend_assets_warns_when_assets_missing(tmp_path, monke
     with caplog.at_level(logging.WARNING):
         result = webui_frontend.prepare_webui_frontend_assets()
 
-    assert result is True  # function still returns True (index.html present)
-    assert "目录不存在或无 CSS/JS 文件" in caplog.text
-    assert "WebUI 将因缺少样式与脚本而显示异常" in caplog.text
+    assert result is True
+    assert "CSS/JS 파일이 없습니다" in caplog.text
+    assert "WebUI가 스타일이나 스크립트 없이 비정상 표시될 수 있습니다" in caplog.text
 
 
 def test_prepare_webui_frontend_assets_auto_build_disabled_warns_when_assets_missing(tmp_path, monkeypatch, caplog):
-    """WEBUI_AUTO_BUILD=false 且 assets 缺失时也应发出警告。"""
+    """WEBUI_AUTO_BUILD=false이고 assets가 없을 때도 경고합니다."""
     repo_root = _prepare_fake_repo(tmp_path, monkeypatch)
     static_index = repo_root / "static" / "index.html"
     static_index.parent.mkdir(parents=True)
     static_index.write_text("<!doctype html>", encoding="utf-8")
-    # No assets directory — simulates state where only index.html exists
 
     monkeypatch.setenv("WEBUI_AUTO_BUILD", "false")
     monkeypatch.delenv("WEBUI_FORCE_BUILD", raising=False)
@@ -86,8 +84,8 @@ def test_prepare_webui_frontend_assets_auto_build_disabled_warns_when_assets_mis
     with caplog.at_level(logging.WARNING):
         result = webui_frontend.prepare_webui_frontend_assets()
 
-    assert result is True  # index.html present, still returns True
-    assert "目录不存在或无 CSS/JS 文件" in caplog.text
+    assert result is True
+    assert "CSS/JS 파일이 없습니다" in caplog.text
 
 
 def test_has_static_assets_returns_false_for_missing_dir(tmp_path):

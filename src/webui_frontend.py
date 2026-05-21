@@ -34,7 +34,7 @@ _BUILD_INPUT_DIRS = ("src", "public")
 
 
 def _is_truthy_env(var_name: str, default: str = "true") -> bool:
-    """解析常见的环境变量真值/假值表达（大小写不敏感）。"""
+    """환경 변수 값을 일반적인 true/false 규칙으로 해석합니다."""
     value = os.getenv(var_name, default).strip().lower()
     return value not in _FALSEY_ENV_VALUES
 
@@ -55,7 +55,6 @@ def _tree_latest_mtime(root: Path) -> float:
             if p.is_file():
                 latest = max(latest, _safe_mtime(p))
     except OSError:
-        # Fallback to root mtime when recursive traversal fails on restricted envs.
         latest = max(latest, _safe_mtime(root))
     return latest
 
@@ -68,7 +67,7 @@ def _max_mtime(paths: Iterable[Path]) -> float:
 
 
 def _resolve_artifact_index(frontend_dir: Path) -> Path:
-    # Prefer static/index.html because it is the configured output path in this repo.
+    # 이 저장소의 기본 WebUI 산출물 위치는 static/index.html입니다.
     static_index = (frontend_dir / ".." / ".." / "static" / "index.html").resolve()
     dist_index = frontend_dir / "dist" / "index.html"
     build_index = frontend_dir / "build" / "index.html"
@@ -107,14 +106,14 @@ def _needs_frontend_build(frontend_dir: Path, force_build: bool) -> tuple[bool, 
 def _run_frontend_commands(commands: Sequence[Sequence[str]], frontend_dir: Path) -> bool:
     try:
         for command in commands:
-            logger.info("执行前端命令: %s", " ".join(command))
+            logger.info("프런트엔드 명령 실행: %s", " ".join(command))
             subprocess.run(command, cwd=frontend_dir, check=True)
-        logger.info("前端静态资源构建完成")
+        logger.info("프런트엔드 산출물 준비가 완료되었습니다")
         return True
     except subprocess.CalledProcessError as exc:
         cmd_display = " ".join(exc.cmd) if isinstance(exc.cmd, (list, tuple)) else str(exc.cmd)
         logger.error(
-            "前端命令执行失败（exit_code=%s）: %s",
+            "프런트엔드 명령 실행 실패(exit_code=%s): %s",
             getattr(exc, "returncode", "N/A"),
             cmd_display,
         )
@@ -128,11 +127,7 @@ def _manual_build_command(frontend_dir: Path) -> str:
 
 
 def _has_static_assets(static_dir: Path) -> bool:
-    """检查 static/assets/ 是否存在且包含 CSS/JS 文件。
-
-    index.html 存在但 assets/ 为空或缺失时，浏览器无法加载样式与脚本，
-    会导致页面元素异常放大、布局错乱（纯裸 HTML 渲染）。
-    """
+    """static/assets/ 안에 CSS 또는 JS 산출물이 있는지 확인합니다."""
     assets_dir = static_dir / "assets"
     if not assets_dir.is_dir():
         return False
@@ -146,36 +141,32 @@ def _has_static_assets(static_dir: Path) -> bool:
 
 
 def _warn_if_assets_missing(artifact_index: Path, frontend_dir: Path) -> None:
-    """当 index.html 存在但 assets/ 缺失时，发出页面显示异常警告。"""
+    """index.html만 있고 assets 산출물이 없으면 WebUI 표시 오류를 경고합니다."""
     static_dir = artifact_index.parent
     assets_dir = static_dir / "assets"
     if not _has_static_assets(static_dir):
         logger.warning(
-            "检测到 %s 但 %s 目录不存在或无 CSS/JS 文件，"
-            "WebUI 将因缺少样式与脚本而显示异常（元素过大、布局错乱）",
+            "감지된 WebUI 산출물 %s에 필요한 %s CSS/JS 파일이 없습니다. "
+            "WebUI가 스타일이나 스크립트 없이 비정상 표시될 수 있습니다.",
             artifact_index,
             assets_dir,
         )
+        logger.warning("수동 빌드 명령: %s", _manual_build_command(frontend_dir))
         logger.warning(
-            "请重新构建前端以修复此问题: %s",
-            _manual_build_command(frontend_dir),
-        )
-        logger.warning(
-            "Docker 用户请执行: docker-compose -f ./docker/docker-compose.yml build --no-cache"
+            "Docker 배포에서는 docker-compose -f ./docker/docker-compose.yml build --no-cache 명령으로 이미지를 다시 빌드하세요."
         )
 
 
 def prepare_webui_frontend_assets() -> bool:
     """
-    Prepare frontend assets for WebUI startup.
+    WebUI 시작 전에 프런트엔드 산출물을 준비합니다.
 
-    Default mode (WEBUI_AUTO_BUILD=true):
-    - Run npm install/build when dependencies or sources changed,
-      or artifacts are missing.
+    기본 모드(WEBUI_AUTO_BUILD=true):
+    - 의존성이나 소스가 바뀌었거나 산출물이 없으면 npm install/build를 실행합니다.
 
-    Manual mode (WEBUI_AUTO_BUILD=false):
-    - Do not compile frontend during backend startup.
-    - Only check whether existing artifacts are available.
+    수동 모드(WEBUI_AUTO_BUILD=false):
+    - 백엔드 시작 중 프런트엔드를 컴파일하지 않습니다.
+    - 기존 산출물 사용 가능 여부만 확인합니다.
     """
     frontend_dir = Path(__file__).resolve().parent.parent / "apps" / "dsa-web"
     auto_build_enabled = _is_truthy_env("WEBUI_AUTO_BUILD", "true")
@@ -183,33 +174,33 @@ def prepare_webui_frontend_assets() -> bool:
 
     if not auto_build_enabled:
         if artifact_index.exists():
-            logger.info("WEBUI_AUTO_BUILD=false，检测到前端静态产物: %s", artifact_index)
+            logger.info("WEBUI_AUTO_BUILD=false이며 기존 프런트엔드 산출물을 사용합니다: %s", artifact_index)
             _warn_if_assets_missing(artifact_index, frontend_dir)
             return True
-        logger.warning("未检测到 WebUI 前端静态产物: %s", artifact_index)
-        logger.warning("当前配置 WEBUI_AUTO_BUILD=false，不会在后端启动时自动编译前端")
-        logger.warning("请先手动构建前端: %s", _manual_build_command(frontend_dir))
-        logger.warning("如需启动时自动构建，可设置 WEBUI_AUTO_BUILD=true")
+        logger.warning("기존 WebUI 산출물을 찾을 수 없습니다: %s", artifact_index)
+        logger.warning("현재 WEBUI_AUTO_BUILD=false라서 자동 빌드를 실행하지 않습니다.")
+        logger.warning("수동 프런트엔드 빌드 명령: %s", _manual_build_command(frontend_dir))
+        logger.warning("자동 빌드를 원하면 WEBUI_AUTO_BUILD=true로 설정하세요.")
         return False
 
     force_build = _is_truthy_env("WEBUI_FORCE_BUILD", "false")
     needs_build, artifact_index = _needs_frontend_build(frontend_dir=frontend_dir, force_build=force_build)
 
     if not needs_build:
-        logger.info("检测到可直接复用的前端静态产物，跳过运行时自动构建: %s", artifact_index)
+        logger.info("재사용 가능한 프런트엔드 산출물을 감지했습니다: %s", artifact_index)
         _warn_if_assets_missing(artifact_index, frontend_dir)
         return True
 
     package_json = frontend_dir / "package.json"
     if not package_json.exists():
-        logger.warning("未找到前端项目，无法自动构建: %s", package_json)
-        logger.warning("可先手动检查前端目录或关闭 WEBUI_AUTO_BUILD")
+        logger.warning("프런트엔드 프로젝트를 찾을 수 없어 자동 빌드할 수 없습니다: %s", package_json)
+        logger.warning("기존 산출물이 없으면 WEBUI_AUTO_BUILD 설정을 확인하세요.")
         return False
 
     npm_path = shutil.which("npm")
     if not npm_path:
-        logger.warning("未检测到 npm，无法自动构建前端")
-        logger.warning("请先手动构建前端静态资源: %s", _manual_build_command(frontend_dir))
+        logger.warning("npm을 찾을 수 없어 프런트엔드를 자동 빌드할 수 없습니다.")
+        logger.warning("수동 프런트엔드 빌드 명령: %s", _manual_build_command(frontend_dir))
         return False
 
     lock_file = frontend_dir / "package-lock.json"
@@ -228,7 +219,7 @@ def prepare_webui_frontend_assets() -> bool:
         commands.append([npm_path, "run", "build"])
 
     logger.info(
-        "前端构建检查结果: needs_install=%s, needs_build=%s, artifact=%s",
+        "프런트엔드 준비 상태: needs_install=%s, needs_build=%s, artifact=%s",
         needs_install,
         needs_build,
         artifact_index,

@@ -1710,7 +1710,7 @@ class TestResearchCommandTimeout(unittest.TestCase):
              )):
             response = cmd.execute(msg, ["600519"])
 
-        self.assertIn("超时", response.text)
+        self.assertIn("0.01s", response.text)
 
     def test_research_recognizes_five_letter_us_ticker(self):
         from bot.commands.research import ResearchCommand
@@ -1750,9 +1750,10 @@ class TestResearchCommandTimeout(unittest.TestCase):
              patch("src.agent.factory.get_tool_registry", return_value=MagicMock()), \
              patch("src.agent.llm_adapter.LLMToolAdapter", return_value=MagicMock()), \
              patch("src.agent.research.ResearchAgent.research", side_effect=_capture_research):
-            response = cmd.execute(msg, ["googl", "风险"])
+            response = cmd.execute(msg, ["googl", "risk"])
 
         self.assertIn("Deep Research Report", response.text)
+
         self.assertEqual(captured["context"], {"stock_code": "GOOGL", "stock_name": ""})
         self.assertEqual(captured["timeout_seconds"], 1)
         self.assertTrue(captured["query"].startswith("[Stock: GOOGL]"))

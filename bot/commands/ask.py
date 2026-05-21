@@ -434,7 +434,7 @@ class AskCommand(BotCommand):
             pass
 
         level = str(dashboard.get("confidence_level") or "").strip()
-        return {"높음": 0.85, "중간": 0.65, "낮음": 0.45, "高": 0.85, "中": 0.65, "低": 0.45}.get(level)
+        return {"높음": 0.85, "중간": 0.65, "낮음": 0.45, "high": 0.85, "medium": 0.65, "low": 0.45}.get(level.lower())
 
     @staticmethod
     def _extract_summary(stock_code: str, dashboard: Optional[Dict[str, Any]], raw_content: str) -> str:

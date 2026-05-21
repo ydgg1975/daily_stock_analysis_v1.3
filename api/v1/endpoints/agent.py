@@ -16,24 +16,24 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from src.config import get_config
 from src.services.agent_model_service import list_agent_model_deployments
 
-# Tool name -> Chinese display name mapping
+# Tool name -> Korean display name mapping
 TOOL_DISPLAY_NAMES: Dict[str, str] = {
-    "get_realtime_quote":         "获取实时行情",
-    "get_daily_history":          "获取历史K线",
-    "get_chip_distribution":      "分析筹码分布",
-    "get_analysis_context":       "获取分析上下文",
-    "get_stock_info":             "获取股票基本面",
-    "search_stock_news":          "搜索股票新闻",
-    "search_comprehensive_intel": "搜索综合情报",
-    "analyze_trend":              "分析技术趋势",
-    "calculate_ma":               "计算均线系统",
-    "get_volume_analysis":        "分析量能变化",
-    "analyze_pattern":            "识别K线形态",
-    "get_market_indices":         "获取市场指数",
-    "get_sector_rankings":        "分析行业板块",
-    "get_skill_backtest_summary": "获取技能回测概览",
-    "get_strategy_backtest_summary": "获取策略回测概览",
-    "get_stock_backtest_summary": "获取个股回测数据",
+    "get_realtime_quote": "실시간 시세 조회",
+    "get_daily_history": "일봉 이력 조회",
+    "get_chip_distribution": "매물대 분포 분석",
+    "get_analysis_context": "분석 컨텍스트 조회",
+    "get_stock_info": "종목 기본 정보 조회",
+    "search_stock_news": "종목 뉴스 검색",
+    "search_comprehensive_intel": "종합 정보 검색",
+    "analyze_trend": "기술 추세 분석",
+    "calculate_ma": "이동평균 계산",
+    "get_volume_analysis": "거래량 분석",
+    "analyze_pattern": "캔들 패턴 식별",
+    "get_market_indices": "시장 지수 조회",
+    "get_sector_rankings": "섹터 순위 분석",
+    "get_skill_backtest_summary": "스킬 백테스트 요약 조회",
+    "get_strategy_backtest_summary": "전략 백테스트 요약 조회",
+    "get_stock_backtest_summary": "개별 종목 백테스트 조회",
 }
 
 logger = logging.getLogger(__name__)
@@ -206,7 +206,7 @@ class SessionMessagesResponse(BaseModel):
 
 @router.get("/chat/sessions", response_model=SessionsResponse)
 async def list_chat_sessions(limit: int = 50, user_id: Optional[str] = None):
-    """获取聊天会话列表
+    """채팅 세션 목록을 조회합니다.
 
     Args:
         limit: Maximum number of sessions to return.
@@ -227,7 +227,7 @@ async def list_chat_sessions(limit: int = 50, user_id: Optional[str] = None):
 
 @router.get("/chat/sessions/{session_id}", response_model=SessionMessagesResponse)
 async def get_chat_session_messages(session_id: str, limit: int = 100):
-    """获取单个会话的完整消息"""
+    """단일 채팅 세션의 메시지를 조회합니다."""
     from src.storage import get_db
     messages = get_db().get_conversation_messages(session_id, limit=limit)
     return SessionMessagesResponse(session_id=session_id, messages=messages)
@@ -235,7 +235,7 @@ async def get_chat_session_messages(session_id: str, limit: int = 100):
 
 @router.delete("/chat/sessions/{session_id}")
 async def delete_chat_session(session_id: str):
-    """删除指定会话"""
+    """지정한 채팅 세션을 삭제합니다."""
     from src.storage import get_db
     count = get_db().delete_conversation_session(session_id)
     return {"deleted": count}
@@ -265,7 +265,7 @@ async def send_chat_to_notification(request: SendChatRequest):
         return {
             "success": False,
             "error": "no_channels",
-            "message": "未配置通知渠道，请先在设置中配置",
+            "message": "설정된 알림 채널이 없습니다. 설정에서 알림 채널을 먼저 구성하세요.",
         }
     return {"success": True}
 
@@ -439,7 +439,7 @@ async def agent_chat_stream(request: ChatRequest):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=300.0)
                 except asyncio.TimeoutError:
-                    yield "data: " + json.dumps({"type": "error", "message": "分析超时"}, ensure_ascii=False) + "\n\n"
+                    yield "data: " + json.dumps({"type": "error", "message": "분석 시간이 초과되었습니다"}, ensure_ascii=False) + "\n\n"
                     break
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 if event.get("type") in ("done", "error"):

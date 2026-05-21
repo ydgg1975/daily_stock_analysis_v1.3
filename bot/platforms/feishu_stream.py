@@ -9,7 +9,7 @@
 
 优势：
 - 不需要公网 IP 或域名
-- 不需要配置 Webhook URL
+- 不requires configuration Webhook URL
 - 通过 WebSocket 长连接接收消息
 - 更简单的接入方式
 - 内置自动重连和心跳保活
@@ -47,8 +47,8 @@ try:
     FEISHU_SDK_AVAILABLE = True
 except ImportError:
     FEISHU_SDK_AVAILABLE = False
-    logger.warning("[Feishu Stream] lark-oapi SDK 未安装，Stream 模式不可用")
-    logger.warning("[Feishu Stream] 请运行: pip install lark-oapi")
+    logger.warning("[Feishu Stream] lark-oapi SDK is not installed，Stream mode is unavailable")
+    logger.warning("[Feishu Stream] Please run: pip install lark-oapi")
 
 from bot.models import BotMessage, BotResponse, ChatType
 from src.formatters import format_feishu_markdown, chunk_content_by_max_bytes
@@ -69,7 +69,7 @@ class FeishuReplyClient:
             app_secret: 飞书应用密钥
         """
         if not FEISHU_SDK_AVAILABLE:
-            raise ImportError("lark-oapi SDK 未安装")
+            raise ImportError("lark-oapi SDK is not installed")
 
         self._client = lark.Client.builder() \
             .app_id(app_id) \
@@ -97,7 +97,7 @@ class FeishuReplyClient:
             user_id: 用户 open_id（at_user=True 时需要）
 
         Returns:
-            是否发送成功
+            是否Send succeeded
         """
         try:
             # 如果需要 @用户，在内容前添加 @ 标记
@@ -173,7 +173,7 @@ class FeishuReplyClient:
             user_id: 用户 open_id（at_user=True 时需要）
 
         Returns:
-            是否发送成功
+            是否Send succeeded
         """
         # 将文本转换为飞书 Markdown 格式
         formatted_text = format_feishu_markdown(text)
@@ -210,7 +210,7 @@ class FeishuReplyClient:
             receive_id_type: 接收者 ID 类型，默认 chat_id
 
         Returns:
-            是否发送成功
+            是否Send succeeded
         """
         # 将文本转换为飞书 Markdown 格式
         formatted_text = format_feishu_markdown(text)
@@ -239,10 +239,10 @@ class FeishuReplyClient:
 
         Args:
             content: 消息文本
-            send_func: 发送单个分片的函数，返回是否发送成功
+            send_func: 发送单个分片的函数，返回是否Send succeeded
 
         Returns:
-            是否全部发送成功
+            是否全部Send succeeded
         """
         chunks = chunk_content_by_max_bytes(content, self._max_bytes, add_page_marker=True)
         success_count = 0
@@ -250,7 +250,7 @@ class FeishuReplyClient:
             if send_func(chunk):
                 success_count += 1
             else:
-                logger.error(f"[Feishu Stream] 发送消息失败: {chunk}")
+                logger.error(f"[Feishu Stream] Failed to send message: {chunk}")
             if i < len(chunks) - 1:
                 time.sleep(1)
         return success_count == len(chunks)
@@ -412,7 +412,7 @@ class FeishuStreamHandler:
             # 只处理文本消息
             message_type = message_data.message_type or ""
             if message_type != "text":
-                self._logger.debug(f"[Feishu Stream] 忽略非文本消息: {message_type}")
+                self._logger.debug(f"[Feishu Stream] Ignoring non-text message: {message_type}")
                 return None
 
             # 解析消息内容
@@ -547,8 +547,8 @@ class FeishuStreamClient:
         """
         if not FEISHU_SDK_AVAILABLE:
             raise ImportError(
-                "lark-oapi SDK 未安装。\n"
-                "请运行: pip install lark-oapi"
+                "lark-oapi SDK is not installed。\n"
+                "Please run: pip install lark-oapi"
             )
 
         from src.config import get_config
@@ -559,7 +559,7 @@ class FeishuStreamClient:
 
         if not self._app_id or not self._app_secret:
             raise ValueError(
-                "飞书 Stream 模式需要配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET"
+                "飞书 Stream 模式requires configuration FEISHU_APP_ID 和 FEISHU_APP_SECRET"
             )
 
         self._ws_client: Optional[ws.Client] = None
@@ -615,7 +615,7 @@ class FeishuStreamClient:
 
         此方法会阻塞当前线程，直到客户端停止。
         """
-        logger.info("[Feishu Stream] 正在启动...")
+        logger.info("[Feishu Stream] Starting...")
 
         # 创建事件处理器
         event_handler = self._create_event_handler()
@@ -630,7 +630,7 @@ class FeishuStreamClient:
         )
 
         self._running = True
-        logger.info("[Feishu Stream] 客户端已启动，等待消息...")
+        logger.info("[Feishu Stream] Client started; waiting for messages...")
 
         # 启动（阻塞）
         self._ws_client.start()
@@ -642,7 +642,7 @@ class FeishuStreamClient:
         适用于与其他服务（如 WebUI）同时运行的场景。
         """
         if self._background_thread and self._background_thread.is_alive():
-            logger.warning("[Feishu Stream] 客户端已在运行")
+            logger.warning("[Feishu Stream] Client is already running")
             return
 
         self._running = True
@@ -652,7 +652,7 @@ class FeishuStreamClient:
             name="FeishuStreamClient"
         )
         self._background_thread.start()
-        logger.info("[Feishu Stream] 后台客户端已启动")
+        logger.info("[Feishu Stream] Background client started")
 
     def _run_in_background(self) -> None:
         """后台运行（处理异常和重连）"""
@@ -662,9 +662,9 @@ class FeishuStreamClient:
             try:
                 self.start()
             except Exception as e:
-                logger.error(f"[Feishu Stream] 运行异常: {e}")
+                logger.error(f"[Feishu Stream] Runtime error: {e}")
                 if self._running:
-                    logger.info("[Feishu Stream] 5 秒后重连...")
+                    logger.info("[Feishu Stream] Reconnect after 5 seconds...")
                     time.sleep(5)
 
     def stop(self) -> None:
@@ -672,7 +672,7 @@ class FeishuStreamClient:
         self._running = False
         if self._message_handler is not None:
             self._message_handler.shutdown(wait=False)
-        logger.info("[Feishu Stream] 客户端已停止")
+        logger.info("[Feishu Stream] Client stopped")
 
     @property
     def is_running(self) -> bool:
@@ -692,7 +692,7 @@ def get_feishu_stream_client() -> Optional[FeishuStreamClient]:
         try:
             _stream_client = FeishuStreamClient()
         except (ImportError, ValueError) as e:
-            logger.warning(f"[Feishu Stream] 无法创建客户端: {e}")
+            logger.warning(f"[Feishu Stream] Failed to create client: {e}")
             return None
 
     return _stream_client

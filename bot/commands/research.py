@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Research command — deep research on a stock or market topic.
-
-Usage:
-    /research 600519                        -> Deep research on Kweichow Moutai
-    /research 600519 近期业绩风险            -> Focused research with specific question
-    /research 新能源板块前景分析              -> Topic-based research
+Deep research bot command for a stock or market topic.
 """
 
 import logging
@@ -25,14 +20,7 @@ _RESEARCH_STOCK_CODE_RE = re.compile(
 
 
 class ResearchCommand(BotCommand):
-    """
-    Research command handler — invoke the deep research agent.
-
-    Usage:
-        /research 600519                    -> Deep research on a stock
-        /research 600519 业绩风险分析        -> Focused question
-        /research 新能源板块 发展前景         -> Sector research
-    """
+    """Invoke the deep research agent."""
 
     @property
     def name(self) -> str:
@@ -40,42 +28,39 @@ class ResearchCommand(BotCommand):
 
     @property
     def aliases(self) -> List[str]:
-        return ["深研", "deepsearch"]
+        return ["심층", "deepsearch"]
 
     @property
     def description(self) -> str:
-        return "Deep research on a stock or market topic"
+        return "종목 또는 시장 주제에 대한 심층 조사를 실행합니다"
 
     @property
     def usage(self) -> str:
-        return "/research <stock_code|topic> [specific question]"
+        return "/research <종목코드|주제> [구체적인 질문]"
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         if not args:
             return BotResponse.text_response(
-                f"Usage: {self.usage}\n"
-                "Example: /research 600519 近期有哪些风险\n"
-                "Example: /research 新能源板块前景分析"
+                f"사용법: {self.usage}\n"
+                "예시: /research AAPL 최근 실적 리스크\n"
+                "예시: /research 반도체 업종 전망"
             )
 
         config = get_config()
-
         if not config.agent_mode:
             return BotResponse.text_response(
-                "⚠️ Agent 模式未开启，无法使用深度研究功能。\n请在配置中设置 `AGENT_MODE=true`。"
+                "⚠️ Agent 모드가 꺼져 있어 심층 조사 기능을 사용할 수 없습니다.\n"
+                "설정에서 `AGENT_MODE=true`를 지정하세요."
             )
 
-        # Parse arguments — first arg may be stock code, rest is the question
         query_parts = list(args)
         stock_code: Optional[str] = None
 
-        # Try to detect a stock code in the first argument
         first = query_parts[0].upper().replace("，", ",")
         if _RESEARCH_STOCK_CODE_RE.match(first):
             stock_code = first
             query_parts = query_parts[1:]
 
-        # Build the research query
         if query_parts:
             question = " ".join(query_parts)
         elif stock_code:
@@ -86,11 +71,10 @@ class ResearchCommand(BotCommand):
         if stock_code:
             question = f"[Stock: {stock_code}] {question}"
 
-        # Run the research agent
         try:
-            from src.agent.research import ResearchAgent
             from src.agent.factory import get_tool_registry
             from src.agent.llm_adapter import LLMToolAdapter
+            from src.agent.research import ResearchAgent
 
             registry = get_tool_registry()
             llm_adapter = LLMToolAdapter(config)
@@ -104,44 +88,42 @@ class ResearchCommand(BotCommand):
 
             research_timeout = getattr(config, "agent_deep_research_timeout", 180)
             logger.info("[ResearchCommand] Starting deep research (timeout=%ds): %s", research_timeout, question[:100])
-            t0 = time.time()
+            started_at = time.time()
             result = agent.research(
                 question,
                 {"stock_code": stock_code, "stock_name": ""} if stock_code else None,
                 timeout_seconds=research_timeout,
             )
-            duration = result.duration_s or round(time.time() - t0, 1)
+            duration = result.duration_s or round(time.time() - started_at, 1)
 
             if getattr(result, "timed_out", False):
                 logger.warning("[ResearchCommand] Deep research timed out after %ss", duration)
                 return BotResponse.text_response(
-                    f"⏳ 深度研究超时（{duration}s / {research_timeout}s），请稍后重试或缩小研究范围。"
+                    f"⏳ 심층 조사 시간이 초과되었습니다({duration}s / {research_timeout}s). "
+                    "잠시 후 다시 시도하거나 조사 범위를 줄여 주세요."
                 )
 
             if result.success:
-                # Build rich response
-                header = f"🔬 **Deep Research Report**\n"
+                header = "🔎 **Deep Research Report / 심층 조사 보고서**\n"
                 if stock_code:
-                    header += f"Stock: {stock_code}\n"
-                header += f"Sub-questions: {len(result.sub_questions)} | Sources: {result.findings_count}\n"
-                header += f"Time: {duration}s | Tokens: {result.total_tokens:,}\n"
-                header += "─" * 40 + "\n\n"
+                    header += f"종목: {stock_code}\n"
+                header += f"하위 질문: {len(result.sub_questions)}개 | 출처: {result.findings_count}개\n"
+                header += f"소요 시간: {duration}s | 토큰: {result.total_tokens:,}\n"
+                header += "-" * 40 + "\n\n"
 
                 report = header + result.report
-
-                # Truncate if too long for bot message
                 max_len = 4000
                 if len(report) > max_len:
-                    report = report[:max_len] + "\n\n... (report truncated, full report available via API)"
+                    report = report[:max_len] + "\n\n... (보고서가 길어 일부만 표시했습니다. 전체 보고서는 API에서 확인하세요.)"
 
                 return BotResponse.markdown_response(report)
-            else:
-                return BotResponse.text_response(
-                    f"⚠️ Research did not complete successfully.\n"
-                    f"Partial results: {result.findings_count} findings collected.\n"
-                    f"Time: {duration}s"
-                )
+
+            return BotResponse.text_response(
+                "⚠️ 심층 조사가 정상 완료되지 않았습니다.\n"
+                f"수집된 결과: {result.findings_count}개\n"
+                f"소요 시간: {duration}s"
+            )
 
         except Exception as exc:
             logger.error("[ResearchCommand] Error: %s", exc, exc_info=True)
-            return BotResponse.text_response(f"❌ Research failed: {exc}")
+            return BotResponse.text_response(f"⚠️ 심층 조사 실패: {exc}")

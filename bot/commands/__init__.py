@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-===================================
-命令处理器模块
-===================================
-
-包含所有机器人命令的实现。
+Bot command handlers.
 """
 
 from bot.commands.base import BotCommand
@@ -34,16 +30,16 @@ ALL_COMMANDS = [
 ]
 
 __all__ = [
-    'BotCommand',
-    'HelpCommand',
-    'StatusCommand',
-    'AnalyzeCommand',
-    'MarketCommand',
-    'BatchCommand',
-    'AskCommand',
-    'ChatCommand',
-    'ResearchCommand',
-    'StrategiesCommand',
-    'HistoryCommand',
-    'ALL_COMMANDS',
+    "BotCommand",
+    "HelpCommand",
+    "StatusCommand",
+    "AnalyzeCommand",
+    "MarketCommand",
+    "BatchCommand",
+    "AskCommand",
+    "ChatCommand",
+    "ResearchCommand",
+    "StrategiesCommand",
+    "HistoryCommand",
+    "ALL_COMMANDS",
 ]

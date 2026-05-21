@@ -60,25 +60,25 @@ class DingtalkPlatform(BotPlatform):
         3. 比对签名
         """
         if not self._app_secret:
-            logger.warning("[DingTalk] 未配置 app_secret，跳过签名验证")
+            logger.warning("[DingTalk] app_secret is not configured; skipping signature validation")
             return True
 
         timestamp = headers.get('timestamp', '')
         sign = headers.get('sign', '')
 
         if not timestamp or not sign:
-            logger.warning("[DingTalk] 缺少签名参数")
-            return True  # 可能是不需要签名的请求
+            logger.warning("[DingTalk] Missing signature parameters")
+            return True  # May be a request that does not require signing
 
         # 验证时间戳（1小时内有效）
         try:
             request_time = int(timestamp)
             current_time = int(time.time() * 1000)
             if abs(current_time - request_time) > 3600 * 1000:
-                logger.warning("[DingTalk] 时间戳过期")
+                logger.warning("[DingTalk] Timestamp expired")
                 return False
         except ValueError:
-            logger.warning("[DingTalk] 无效的时间戳")
+            logger.warning("[DingTalk] Invalid timestamp")
             return False
 
         # 计算签名
@@ -91,13 +91,13 @@ class DingtalkPlatform(BotPlatform):
         expected_sign = base64.b64encode(hmac_code).decode('utf-8')
 
         if sign != expected_sign:
-            logger.warning(f"[DingTalk] 签名验证失败")
+            logger.warning(f"[DingTalk] Signature validation failed")
             return False
 
         return True
 
     def handle_challenge(self, data: Dict[str, Any]) -> Optional[WebhookResponse]:
-        """钉钉不需要 URL 验证"""
+        """钉钉does not require URL verification"""
         return None
 
     def parse_message(self, data: Dict[str, Any]) -> Optional[BotMessage]:
@@ -129,7 +129,7 @@ class DingtalkPlatform(BotPlatform):
         # 检查消息类型
         msg_type = data.get('msgtype', '')
         if msg_type != 'text':
-            logger.debug(f"[DingTalk] 忽略非文本消息: {msg_type}")
+            logger.debug(f"[DingTalk] Ignoring non-text message: {msg_type}")
             return None
 
         # 获取消息内容
@@ -219,7 +219,7 @@ class DingtalkPlatform(BotPlatform):
             body = {
                 "msgtype": "markdown",
                 "markdown": {
-                    "title": "股票分析助手",
+                    "title": "Stock Analysis Assistant",
                     "text": response.text,
                 }
             }
@@ -254,10 +254,10 @@ class DingtalkPlatform(BotPlatform):
         Args:
             session_webhook: 钉钉提供的会话 Webhook URL
             response: 响应对象
-            message: 原始消息对象
+            message: Original message object.
 
         Returns:
-            是否发送成功
+            是否Send succeeded
         """
         if not session_webhook:
             logger.warning("[DingTalk] 没有可用的 sessionWebhook")
@@ -271,7 +271,7 @@ class DingtalkPlatform(BotPlatform):
                 payload = {
                     "msgtype": "markdown",
                     "markdown": {
-                        "title": "股票分析助手",
+                        "title": "Stock Analysis Assistant",
                         "text": response.text,
                     }
                 }
@@ -300,10 +300,10 @@ class DingtalkPlatform(BotPlatform):
             if resp.status_code == 200:
                 result = resp.json()
                 if result.get('errcode') == 0:
-                    logger.info("[DingTalk] sessionWebhook 发送成功")
+                    logger.info("[DingTalk] sessionWebhook Send succeeded")
                     return True
                 else:
-                    logger.error(f"[DingTalk] sessionWebhook 发送失败: {result}")
+                    logger.error(f"[DingTalk] sessionWebhook Send failed: {result}")
                     return False
             else:
                 logger.error(f"[DingTalk] sessionWebhook 请求失败: {resp.status_code}")
