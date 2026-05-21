@@ -1092,7 +1092,7 @@ class EfinanceFetcher(BaseFetcher):
             logger.error(f"[API错误] 获取 {stock_code} 基本信息失败: {e}")
             return None
     
-def get_belong_board(self, stock_code: str) -> Optional[pd.DataFrame]:
+    def get_belong_board(self, stock_code: str) -> Optional[pd.DataFrame]:
         """
         获取股票所属板块
         
