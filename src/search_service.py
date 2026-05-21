@@ -335,7 +335,7 @@ class TavilySearchProvider(BaseSearchProvider):
             for item in response.get('results', []):
                 results.append(SearchResult(
                     title=item.get('title', ''),
-                    snippet=item.get('content', '')[:500],  # 截取前500字
+                    snippet=item.get('content', '')[:500],  # Keep the first 500 characters.
                     url=item.get('url', ''),
                     source=self._extract_domain(item.get('url', '')),
                     published_date=item.get('published_date') or item.get('publishedDate'),
@@ -994,7 +994,7 @@ class BochaSearchProvider(BaseSearchProvider):
                 # 优先使用summary（AI摘要），fallback到snippet
                 snippet = item.get('summary') or item.get('snippet', '')
 
-                # 截取摘要长度
+                # Limit summary length.
                 if snippet:
                     snippet = snippet[:500]
 
@@ -1591,7 +1591,7 @@ class BraveSearchProvider(BaseSearchProvider):
 
                 results.append(SearchResult(
                     title=item.get('title', ''),
-                    snippet=item.get('description', '')[:500],  # 截取到500字符
+                    snippet=item.get('description', '')[:500],  # Keep up to 500 characters.
                     url=item.get('url', ''),
                     source=self._extract_domain(item.get('url', '')),
                     published_date=published_date
@@ -3327,7 +3327,7 @@ class SearchService:
 
         # 汇总结果
         if all_results:
-            # 截取前 max_results 条
+            # Keep the first max_results entries.
             final_results = all_results[:max_results]
             provider_str = ", ".join(successful_providers) if successful_providers else "None"
 

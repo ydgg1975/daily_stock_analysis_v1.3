@@ -2055,7 +2055,7 @@ class StockAnalysisPipeline:
                         _send_wechat_report,
                     )
 
-                # 其他渠道：发完整报告（避免自定义 Webhook 被 wechat 截断逻辑污染）
+                # Other channels send the full report so custom webhook truncation does not affect them.
                 non_wechat_success = False
                 stock_email_groups = getattr(self.config, 'stock_email_groups', []) or []
                 for channel in channels:

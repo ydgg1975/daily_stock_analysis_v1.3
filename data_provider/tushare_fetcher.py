@@ -142,7 +142,7 @@ class TushareFetcher(BaseFetcher):
         self._minute_start: Optional[float] = None  # 当前计数周期开始时间
         self._api: Optional[object] = None  # Tushare API 实例
         self.date_list: Optional[List[str]] = None  # 交易日列表缓存（倒序，最新日期在前）
-        self._date_list_end: Optional[str] = None  # 缓存对应的截止日期，用于跨日刷新
+        self._date_list_end: Optional[str] = None  # Cached end date for daily refresh.
 
         # 尝试初始化 API
         self._init_api()

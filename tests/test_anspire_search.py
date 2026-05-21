@@ -326,7 +326,7 @@ class TestAnspireSearchProvider(unittest.TestCase):
 
     @patch('src.search_service.requests')
     def test_search_content_truncation(self, mock_requests):
-        """测试长内容截断功能"""
+        """Test long content truncation."""
         try:
             import requests as real_requests
             mock_requests.exceptions = real_requests.exceptions
@@ -354,7 +354,7 @@ class TestAnspireSearchProvider(unittest.TestCase):
 
         self.assertTrue(response.success)
         self.assertEqual(len(response.results), 1)
-        # 验证内容被截断到 500 字符以内
+        # Verify content is truncated to 500 characters or fewer.
         if response.results[0].snippet:
             self.assertLessEqual(len(response.results[0].snippet), 503)  # 500 + "..."
             self.assertTrue(response.results[0].snippet.endswith("..."))

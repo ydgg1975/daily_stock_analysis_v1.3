@@ -3388,7 +3388,7 @@ class GeminiAnalyzer:
         else:
             decision_type = 'hold'
 
-        # 截取前500字符作为摘要
+        # Use the first 500 characters as the summary.
         summary = response_text[:500] if response_text else ('No analysis result' if report_language == "en" else '无分析结果')
 
         return AnalysisResult(

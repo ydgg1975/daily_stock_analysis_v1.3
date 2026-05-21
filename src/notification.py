@@ -1431,7 +1431,7 @@ class NotificationService(
                 f"{localize_trend_prediction(result.trend_prediction, report_language)}"
             )
 
-            # 操作理由（截断）
+            # Truncated action rationale.
             if hasattr(result, 'buy_reason') and result.buy_reason:
                 reason = result.buy_reason[:80] + "..." if len(result.buy_reason) > 80 else result.buy_reason
                 lines.append(f"💡 {reason}")
@@ -1441,7 +1441,7 @@ class NotificationService(
                 points = result.key_points[:60] + "..." if len(result.key_points) > 60 else result.key_points
                 lines.append(f"🎯 {points}")
 
-            # 风险提示（截断）
+            # Truncated risk warning.
             if hasattr(result, 'risk_warning') and result.risk_warning:
                 risk = result.risk_warning[:50] + "..." if len(result.risk_warning) > 50 else result.risk_warning
                 lines.append(f"⚠️ {risk}")

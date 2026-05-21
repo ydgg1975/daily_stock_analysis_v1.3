@@ -370,7 +370,7 @@ class CustomWebhookSender:
                 },
             }
 
-            # 如果仍超限（极端情况下），再按字节硬截断一次
+            # If still over the limit, hard-truncate by bytes as a last resort.
             body_bytes = len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
             if body_bytes > max_bytes:
                 hard_budget = max(200, budget - (body_bytes - max_bytes) - 200)

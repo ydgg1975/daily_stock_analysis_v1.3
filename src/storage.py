@@ -1841,7 +1841,7 @@ class DatabaseManager:
         except ValueError:
             pass
 
-        # 优先截取 "：" 到 "元" 之间的价格，避免误提取 MA5/MA10 等技术指标数字
+        # Prefer the price between the colon and currency marker to avoid MA5/MA10 values.
         colon_pos = max(text.rfind("："), text.rfind(":"))
         yuan_pos = text.find("元", colon_pos + 1 if colon_pos != -1 else 0)
         if yuan_pos != -1:
@@ -1866,7 +1866,7 @@ class DatabaseManager:
                 except ValueError:
                     pass
 
-        # 兜底：无"元"字时，先截去第一个括号后的内容，避免误提取括号内技术指标数字
+        # Fallback: drop text after the first parenthesis to avoid technical indicator values.
         # 例如 "1.52-1.53 (回踩MA5/10附近)" → 仅在 "1.52-1.53 " 中搜索
         paren_pos = len(text)
         for paren_char in ('(', '（'):
