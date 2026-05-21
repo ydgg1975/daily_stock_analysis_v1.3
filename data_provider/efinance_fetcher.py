@@ -889,7 +889,8 @@ class EfinanceFetcher(BaseFetcher):
                     'prev_close': prev_close,
                     'volume': safe_float(item.get(vol_col, 0)),
                     'amount': safe_float(item.get(amt_col, 0)),
-                    'amplitude': raw_amp, # 使用修补后的振幅变量
+                    'amplitude': raw_amp,
+                })
 
             if results:
                 logger.info(f"[efinance] 获取到 {len(results)} 个指数行情")
