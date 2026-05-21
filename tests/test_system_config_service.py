@@ -1116,7 +1116,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             )
 
         self.assertTrue(payload["success"])
-        self.assertIn("部分成功", payload["message"])
+        self.assertIn("일부 성공", payload["message"])
         self.assertIn("1/2", payload["message"])
         self.assertEqual(len(payload["attempts"]), 2)
         self.assertFalse(payload["attempts"][0]["success"])
@@ -1153,7 +1153,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(payload["success"])
         self.assertEqual(payload["error_code"], "send_failed")
         self.assertTrue(payload["retryable"])
-        self.assertIn("失败", payload["message"])
+        self.assertIn("실패", payload["message"])
         self.assertIn("0/2", payload["message"])
         self.assertEqual(len(payload["attempts"]), 2)
         self.assertTrue(all(attempt["retryable"] for attempt in payload["attempts"]))
@@ -2134,7 +2134,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         run_warning = next(
             warning
             for warning in response["warnings"]
-            if "RUN_IMMEDIATELY 已写入 .env" in warning
+            if "RUN_IMMEDIATELY 값이 .env에 저장되었습니다" in warning
         )
         schedule_warning = next(
             warning
@@ -2142,12 +2142,12 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             if "SCHEDULE_ENABLED" in warning
         )
 
-        self.assertIn("非 schedule 模式", run_warning)
-        self.assertNotIn("以 schedule 模式", run_warning)
+        self.assertIn("비 schedule 모드", run_warning)
+        self.assertNotIn("schedule 모드로 다시 시작", run_warning)
         self.assertIn("SCHEDULE_RUN_IMMEDIATELY", schedule_warning)
-        self.assertIn("不会因为本次保存启动、停止或重建 scheduler", schedule_warning)
-        self.assertIn("以 schedule 模式重新启动后生效", schedule_warning)
-        self.assertNotIn("它属于启动期单次运行配置", schedule_warning)
+        self.assertIn("이번 저장만으로 scheduler를 시작, 중지 또는 재생성하지 않습니다", schedule_warning)
+        self.assertIn("schedule 모드로 다시 시작해야 적용됩니다", schedule_warning)
+        self.assertNotIn("단회 실행 설정", schedule_warning)
 
     def test_update_appends_schedule_time_runtime_rebind_warning(self) -> None:
         response = self.service.update(
@@ -2160,14 +2160,14 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         schedule_time_warning = next(
             warning
             for warning in response["warnings"]
-            if "SCHEDULE_TIME=09:30 已写入 .env" in warning
+            if "SCHEDULE_TIME=09:30 값이 .env에 저장되었습니다" in warning
         )
 
-        self.assertIn("已经以 schedule 模式运行", schedule_time_warning)
-        self.assertIn("自动重建 daily job", schedule_time_warning)
-        self.assertIn("不会启动 scheduler", schedule_time_warning)
-        self.assertNotIn("重启当前进程", schedule_time_warning)
-        self.assertNotIn("不会因为本次保存启动、停止或重建 scheduler", schedule_time_warning)
+        self.assertIn("schedule 모드로 실행 중", schedule_time_warning)
+        self.assertIn("daily job을 자동 재생성", schedule_time_warning)
+        self.assertIn("scheduler를 시작하지 않습니다", schedule_time_warning)
+        self.assertNotIn("재시작", schedule_time_warning)
+        self.assertNotIn("scheduler를 시작, 중지 또는 재생성하지 않습니다", schedule_time_warning)
 
     def test_update_schedule_time_blank_warning_reports_effective_default(self) -> None:
         response = self.service.update(
@@ -2178,7 +2178,7 @@ class SystemConfigServiceTestCase(unittest.TestCase):
 
         self.assertTrue(response["success"])
         self.assertTrue(
-            any("SCHEDULE_TIME=18:00 已写入 .env" in warning for warning in response["warnings"]),
+            any("SCHEDULE_TIME=18:00 값이 .env에 저장되었습니다" in warning for warning in response["warnings"]),
             response["warnings"],
         )
 
@@ -2199,9 +2199,9 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             if "WEBUI_HOST" in warning and "WEBUI_PORT" in warning
         )
 
-        self.assertIn("启动期监听配置", bind_warning)
-        self.assertIn("不会因为本次保存重新绑定监听地址或端口", bind_warning)
-        self.assertIn("重启当前进程、Docker 容器或服务管理器后生效", bind_warning)
+        self.assertIn("시작 시점의 바인딩 설정", bind_warning)
+        self.assertIn("이번 저장만으로 호스트나 포트를 다시 바인딩하지 않습니다", bind_warning)
+        self.assertIn("현재 프로세스, Docker 컨테이너 또는 서비스 관리자를 재시작해야 적용됩니다", bind_warning)
 
     def test_update_warns_when_runtime_model_references_are_cleared(self) -> None:
         self._rewrite_env(
@@ -2233,10 +2233,10 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         warning = next(
             warning
             for warning in response["warnings"]
-            if "已同步清理失效的运行时模型引用" in warning
+            if "유효하지 않은 런타임 모델 참조를 정리했습니다" in warning
         )
-        self.assertIn("主模型 / Agent 主模型 / Vision 模型 / 备选模型中的失效项", warning)
-        self.assertIn("桌面端导出备份", warning)
+        self.assertIn("기본 모델 / Agent 기본 모델 / Vision 모델 / 대체 모델의 유효하지 않은 항목", warning)
+        self.assertIn("데스크톱 백업 내보내기", warning)
 
     def test_import_desktop_env_restores_runtime_models_after_cleanup(self) -> None:
         self._rewrite_env(

@@ -197,7 +197,7 @@ export const SettingsHelpButton: React.FC<SettingsHelpButtonProps> = ({
               <button
                 type="button"
                 className="absolute inset-0 cursor-default"
-                aria-label="닫기설정 설명"
+                aria-label="설정 설명 닫기"
                 tabIndex={-1}
                 onClick={() => setOpen(false)}
               />
@@ -230,7 +230,7 @@ export const SettingsHelpButton: React.FC<SettingsHelpButtonProps> = ({
                     type="button"
                     onClick={() => setOpen(false)}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card/80 text-secondary-text transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan/15"
-                    aria-label="닫기설정 설명"
+                    aria-label="설정 설명 닫기"
                   >
                     <X aria-hidden="true" className="h-4 w-4" />
                   </button>

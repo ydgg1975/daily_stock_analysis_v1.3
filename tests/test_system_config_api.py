@@ -236,7 +236,7 @@ class SystemConfigApiTestCase(unittest.TestCase):
         run_warning = next(
             warning
             for warning in payload["warnings"]
-            if "RUN_IMMEDIATELY 已写入 .env" in warning
+            if "RUN_IMMEDIATELY 값이 .env에 저장되었습니다" in warning
         )
         schedule_warning = next(
             warning
@@ -244,11 +244,11 @@ class SystemConfigApiTestCase(unittest.TestCase):
             if "SCHEDULE_RUN_IMMEDIATELY" in warning
         )
 
-        self.assertIn("非 schedule 模式", run_warning)
-        self.assertNotIn("以 schedule 模式", run_warning)
-        self.assertIn("不会因为本次保存启动、停止或重建 scheduler", schedule_warning)
-        self.assertIn("以 schedule 模式重新启动后生效", schedule_warning)
-        self.assertNotIn("它属于启动期单次运行配置", schedule_warning)
+        self.assertIn("비 schedule 모드", run_warning)
+        self.assertNotIn("schedule 모드로 다시 시작", run_warning)
+        self.assertIn("이번 저장만으로 scheduler를 시작, 중지 또는 재생성하지 않습니다", schedule_warning)
+        self.assertIn("schedule 모드로 다시 시작해야 적용됩니다", schedule_warning)
+        self.assertNotIn("단회 실행 설정", schedule_warning)
 
     def test_put_config_returns_schedule_time_runtime_rebind_warning(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()
@@ -267,13 +267,13 @@ class SystemConfigApiTestCase(unittest.TestCase):
         schedule_time_warning = next(
             warning
             for warning in payload["warnings"]
-            if "SCHEDULE_TIME=09:30 已写入 .env" in warning
+            if "SCHEDULE_TIME=09:30 값이 .env에 저장되었습니다" in warning
         )
 
-        self.assertIn("已经以 schedule 模式运行", schedule_time_warning)
-        self.assertIn("自动重建 daily job", schedule_time_warning)
-        self.assertIn("不会启动 scheduler", schedule_time_warning)
-        self.assertNotIn("重启当前进程", schedule_time_warning)
+        self.assertIn("schedule 모드로 실행 중", schedule_time_warning)
+        self.assertIn("daily job을 자동 재생성", schedule_time_warning)
+        self.assertIn("scheduler를 시작하지 않습니다", schedule_time_warning)
+        self.assertNotIn("재시작", schedule_time_warning)
 
     def test_export_system_config_returns_raw_env_content(self) -> None:
         self.env_path.write_text(

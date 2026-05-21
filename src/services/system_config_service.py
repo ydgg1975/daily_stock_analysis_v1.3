@@ -1400,15 +1400,15 @@ class SystemConfigService:
             if reload_now:
                 warnings.append(
                     (
-                        f"MAX_WORKERS={max_workers} 已保存。任务队列空闲时会自动应用；"
-                        "若当前存在运行中任务，将在队列空闲后生效。"
+                        f"MAX_WORKERS={max_workers} 값이 저장되었습니다. 작업 큐가 비어 있으면 자동 적용됩니다. "
+                        "현재 실행 중인 작업이 있으면 큐가 비워진 뒤 적용됩니다."
                     )
                 )
             else:
                 warnings.append(
                     (
-                        f"MAX_WORKERS={max_workers} 已写入 .env，但本次未触发运行时重载"
-                        "（reload_now=false）；重载后才会应用。"
+                        f"MAX_WORKERS={max_workers} 값이 .env에 저장되었지만 이번 요청에서는 런타임 재로드를 실행하지 않았습니다 "
+                        "(reload_now=false). 재로드 후 적용됩니다."
                     )
                 )
 
@@ -1416,34 +1416,34 @@ class SystemConfigService:
             "RUN_IMMEDIATELY",
         }
         if startup_only_run_keys:
-            warnings.append(
-                (
-                    f"{', '.join(sorted(startup_only_run_keys))} 已写入 .env。"
-                    "它属于启动期单次运行配置：当前已运行的 WebUI/API 进程不会因为本次保存立即触发分析；"
-                    "请重启当前进程后，在非 schedule 模式下按新值生效。"
+                warnings.append(
+                    (
+                        f"{', '.join(sorted(startup_only_run_keys))} 값이 .env에 저장되었습니다. "
+                        "이 항목은 시작 시점의 단회 실행 설정입니다. 현재 실행 중인 WebUI/API 프로세스는 이번 저장만으로 즉시 분석을 시작하지 않습니다. "
+                        "현재 프로세스를 재시작한 뒤 비 schedule 모드에서 새 값이 적용됩니다."
+                    )
                 )
-            )
 
         startup_only_schedule_keys = submitted_keys & {
             "SCHEDULE_ENABLED",
             "SCHEDULE_RUN_IMMEDIATELY",
         }
         if startup_only_schedule_keys:
-            warnings.append(
-                (
-                    f"{', '.join(sorted(startup_only_schedule_keys))} 已写入 .env。"
-                    "这些属于启动期调度模式配置：当前已运行的 WebUI/API 进程不会因为本次保存启动、"
-                    "停止或重建 scheduler；请重启当前进程，并以 schedule 模式重新启动后生效。"
+                warnings.append(
+                    (
+                        f"{', '.join(sorted(startup_only_schedule_keys))} 값이 .env에 저장되었습니다. "
+                        "이 항목은 시작 시점의 스케줄 모드 설정입니다. 현재 실행 중인 WebUI/API 프로세스는 이번 저장만으로 scheduler를 시작, 중지 또는 재생성하지 않습니다. "
+                        "현재 프로세스를 재시작하고 schedule 모드로 다시 시작해야 적용됩니다."
+                    )
                 )
-            )
 
         if "SCHEDULE_TIME" in submitted_keys:
             schedule_time = (current_map.get("SCHEDULE_TIME", "") or "").strip() or "18:00"
             warnings.append(
                 (
-                    f"SCHEDULE_TIME={schedule_time} 已写入 .env。"
-                    "如果当前进程已经以 schedule 模式运行，scheduler 会在下一轮检查中自动重建 daily job；"
-                    "如果当前进程未以 schedule 模式运行，本次保存不会启动 scheduler。"
+                    f"SCHEDULE_TIME={schedule_time} 값이 .env에 저장되었습니다. "
+                    "현재 프로세스가 schedule 모드로 실행 중이면 scheduler가 다음 확인 주기에 daily job을 자동 재생성합니다. "
+                    "현재 프로세스가 schedule 모드가 아니면 이번 저장만으로 scheduler를 시작하지 않습니다."
                 )
             )
 
@@ -1452,13 +1452,13 @@ class SystemConfigService:
             "WEBUI_PORT",
         }
         if startup_only_bind_keys:
-            warnings.append(
-                (
-                    f"{', '.join(sorted(startup_only_bind_keys))} 已写入 .env。"
-                    "这些属于启动期监听配置：当前已运行的 WebUI/API 进程不会因为本次保存重新绑定监听地址或端口；"
-                    "请重启当前进程、Docker 容器或服务管理器后生效。"
+                warnings.append(
+                    (
+                        f"{', '.join(sorted(startup_only_bind_keys))} 값이 .env에 저장되었습니다. "
+                        "이 항목은 시작 시점의 바인딩 설정입니다. 현재 실행 중인 WebUI/API 프로세스는 이번 저장만으로 호스트나 포트를 다시 바인딩하지 않습니다. "
+                        "현재 프로세스, Docker 컨테이너 또는 서비스 관리자를 재시작해야 적용됩니다."
+                    )
                 )
-            )
 
         return warnings
 
@@ -1470,9 +1470,9 @@ class SystemConfigService:
     ) -> List[str]:
         """Explain when save payload clears stale runtime model references."""
         runtime_labels = {
-            "LITELLM_MODEL": "主模型",
-            "AGENT_LITELLM_MODEL": "Agent 主模型",
-            "VISION_MODEL": "Vision 模型",
+            "LITELLM_MODEL": "기본 모델",
+            "AGENT_LITELLM_MODEL": "Agent 기본 모델",
+            "VISION_MODEL": "Vision 모델",
         }
         cleared_labels: List[str] = []
         for key, label in runtime_labels.items():
@@ -1498,14 +1498,14 @@ class SystemConfigService:
 
         cleaned_targets = list(cleared_labels)
         if removed_fallbacks:
-            cleaned_targets.append("备选模型中的失效项")
+            cleaned_targets.append("대체 모델의 유효하지 않은 항목")
 
         cleaned_text = " / ".join(cleaned_targets)
         warning = (
-            f"检测到已同步清理失效的运行时模型引用：{cleaned_text}。"
-            "如需恢复，请先补回对应渠道模型列表后重新选择；"
-            "也可用桌面端导出备份或手动 .env 还原之前的 LLM_* / "
-            "LITELLM_MODEL / AGENT_LITELLM_MODEL / VISION_MODEL / LLM_TEMPERATURE。"
+            f"유효하지 않은 런타임 모델 참조를 정리했습니다: {cleaned_text}."
+            " 복구하려면 먼저 해당 채널 모델 목록을 다시 채운 뒤 선택하세요. "
+            "또는 데스크톱 백업 내보내기나 수동 .env 편집으로 이전 LLM_* / "
+            "LITELLM_MODEL / AGENT_LITELLM_MODEL / VISION_MODEL / LLM_TEMPERATURE 값을 복원할 수 있습니다."
         )
         return [warning]
 
@@ -1526,7 +1526,7 @@ class SystemConfigService:
         """Parse raw `.env` text into update items using current dotenv semantics."""
         normalized_content = content.replace("\ufeff", "")
         if not normalized_content.strip():
-            raise ConfigImportError("未识别到有效 .env 配置")
+            raise ConfigImportError("유효한 .env 설정을 찾지 못했습니다.")
 
         from dotenv import dotenv_values
 
@@ -1543,7 +1543,7 @@ class SystemConfigService:
             )
 
         if not updates:
-            raise ConfigImportError("未识别到有效 .env 配置")
+            raise ConfigImportError("유효한 .env 설정을 찾지 못했습니다.")
 
         return updates
 
@@ -2002,11 +2002,11 @@ class SystemConfigService:
             total_count = len(attempts)
             success = success_count > 0
             if success_count == total_count and total_count > 0:
-                message = f"自定义 Webhook 通知测试成功（{success_count}/{total_count}）"
+                message = f"사용자 지정 Webhook 알림 테스트 성공({success_count}/{total_count})"
             elif success_count > 0:
-                message = f"自定义 Webhook 通知测试部分成功（{success_count}/{total_count}）"
+                message = f"사용자 지정 Webhook 알림 테스트 일부 성공({success_count}/{total_count})"
             else:
-                message = f"自定义 Webhook 通知测试失败（{success_count}/{total_count}）"
+                message = f"사용자 지정 Webhook 알림 테스트 실패({success_count}/{total_count})"
             return self._build_notification_test_result(
                 success=success,
                 message=message,
@@ -2037,7 +2037,7 @@ class SystemConfigService:
         attempt = {
             "channel": channel,
             "success": ok,
-            "message": "通知测试发送成功" if ok else "通知测试发送失败",
+            "message": "알림 테스트 전송 성공" if ok else "알림 테스트 전송 실패",
             "target": target,
             "error_code": None if ok else "send_failed",
             "stage": "notification_send",
@@ -2046,7 +2046,7 @@ class SystemConfigService:
         }
         return self._build_notification_test_result(
             success=ok,
-            message=f"{channel} 通知测试成功" if ok else f"{channel} 通知测试失败",
+            message=f"{channel} 알림 테스트 성공" if ok else f"{channel} 알림 테스트 실패",
             error_code=None if ok else "send_failed",
             stage="notification_send",
             retryable=False,
@@ -3181,9 +3181,9 @@ class SystemConfigService:
                     "key": "FEISHU_WEBHOOK_URL",
                     "code": "feishu_mode_mismatch",
                     "message": (
-                        "仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书群 Webhook 推送；"
-                        "如需通知推送请填写 FEISHU_WEBHOOK_URL，若要使用应用机器人请同时开启 "
-                        "FEISHU_STREAM_ENABLED 并完成应用发布与权限配置。"
+                        "FEISHU_APP_ID / FEISHU_APP_SECRET만 설정하면 Feishu 그룹 Webhook 푸시가 켜지지 않습니다. "
+                        "알림 푸시가 필요하면 FEISHU_WEBHOOK_URL을 입력하세요. 앱 봇을 사용하려면 "
+                        "FEISHU_STREAM_ENABLED도 함께 켜고 앱 배포와 권한 설정을 완료하세요."
                     ),
                     "severity": "warning",
                     "expected": "FEISHU_WEBHOOK_URL or FEISHU_STREAM_ENABLED=true",

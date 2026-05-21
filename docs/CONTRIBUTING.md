@@ -1,117 +1,103 @@
-# 贡献指南
+# 기여 가이드
 
-感谢你对本项目的关注！欢迎任何形式的贡献。
+daily_stock_analysis에 관심을 가져주셔서 감사합니다. 버그 제보, 기능 제안, 문서 개선, 코드 기여를 모두 환영합니다.
 
-## 🐛 报告 Bug
+## 버그 제보
 
-1. 先搜索 [Issues](https://github.com/ZhuLinsen/daily_stock_analysis/issues) 确认问题未被报告
-2. 使用 Bug Report 模板创建新 Issue
-3. 提供详细的复现步骤和环境信息
+1. 먼저 [Issues](https://github.com/robot0971-art/daily_stock_analysis/issues)에서 같은 문제가 이미 등록되어 있는지 확인합니다.
+2. Bug Report 템플릿을 사용해 새 Issue를 작성합니다.
+3. 재현 절차, 실행 환경, 로그, 기대 결과와 실제 결과를 함께 적습니다.
 
-## 💡 功能建议
+## 기능 제안
 
-1. 先搜索 Issues 确认建议未被提出
-2. 使用 Feature Request 模板创建新 Issue
-3. 详细描述你的使用场景和期望功能
+1. 기존 Issues와 Discussions에서 같은 제안이 있는지 확인합니다.
+2. Feature Request 템플릿을 사용해 새 Issue를 작성합니다.
+3. 사용 시나리오, 기대 동작, 우선순위, 대안이 있으면 함께 설명합니다.
 
-## 🔧 提交代码
-
-### 开发环境
+## 개발 환경
 
 ```bash
-# 克隆仓库
-git clone https://github.com/ZhuLinsen/daily_stock_analysis.git
+git clone https://github.com/robot0971-art/daily_stock_analysis.git
 cd daily_stock_analysis
 
-# 创建虚拟环境
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
+source venv/bin/activate  # Linux/macOS
 # venv\Scripts\activate   # Windows
 
-# 安装依赖
 pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
 ```
 
-### 提交流程
+## 작업 흐름
 
-1. Fork 本仓库
-2. 创建特性分支：`git checkout -b feature/your-feature`
-3. 提交改动：`git commit -m 'feat: add some feature'`
-4. 推送分支：`git push origin feature/your-feature`
-5. 创建 Pull Request
+1. 저장소를 fork합니다.
+2. 작업 브랜치를 만듭니다: `git checkout -b feature/your-feature`
+3. 변경 사항을 커밋합니다: `git commit -m "feat: add some feature"`
+4. 브랜치를 push합니다: `git push origin feature/your-feature`
+5. Pull Request를 생성합니다.
 
-### Commit 规范
+## 커밋 규칙
 
-使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
+[Conventional Commits](https://www.conventionalcommits.org/) 형식을 권장합니다.
 
-```
-feat: 新功能
-fix: Bug 修复
-docs: 文档更新
-style: 代码格式（不影响功能）
-refactor: 重构
-perf: 性能优化
-test: 测试相关
-chore: 构建/工具相关
-```
-
-示例：
-```
-feat: 添加钉钉机器人支持
-fix: 修复 429 限流重试逻辑
-docs: 更新 README 部署说明
+```text
+feat: 새 기능
+fix: 버그 수정
+docs: 문서 변경
+style: 동작에 영향이 없는 코드 스타일 변경
+refactor: 리팩터링
+perf: 성능 개선
+test: 테스트 변경
+chore: 빌드, 도구, 관리 작업
 ```
 
-### 代码规范
+예시:
 
-- Python 代码遵循 PEP 8
-- 函数和类需要添加 docstring
-- 重要逻辑添加注释
-- 新功能需要更新相关文档
+```text
+feat: add Telegram notification channel
+fix: handle 429 retry backoff
+docs: update WebUI deployment guide
+```
 
-### CI 自动检查
+## 코드 기준
 
-提交 PR 后，CI 会自动运行以下检查：
+- Python 코드는 PEP 8을 따릅니다.
+- 새 기능은 가능한 범위에서 테스트와 문서를 함께 갱신합니다.
+- 설정, API, 보고서 구조, 알림 동작을 바꾸면 호환성 영향을 PR 설명에 적습니다.
+- 비밀키, 계정, 로컬 경로, 환경별 값은 하드코딩하지 않습니다.
 
-| 检查项 | 说明 | 必须通过 |
-|--------|------|:--------:|
-| backend-gate | `scripts/ci_gate.sh`（py_compile + flake8 严重错误 + 本地核心脚本 + offline pytest） | ✅ |
-| docker-build | Docker 镜像构建与关键模块导入 smoke | ✅ |
-| web-gate | 前端变更时执行 `npm run lint` + `npm run build` | ✅（触发时） |
-| network-smoke | 定时/手动执行 `pytest -m network` + `scripts/test.sh quick`（非阻断） | ❌（观测项） |
+## CI 확인
 
-**本地运行检查：**
+PR에는 주요 검사가 자동으로 실행됩니다.
+
+| 검사 | 설명 | 차단 여부 |
+| --- | --- | --- |
+| backend-gate | `scripts/ci_gate.sh` 실행 | 예 |
+| docker-build | Docker 이미지 빌드와 핵심 모듈 import smoke | 예 |
+| web-gate | 프런트엔드 변경 시 `npm run lint`와 `npm run build` 실행 | 예 |
+| network-smoke | 네트워크 의존 smoke 테스트 | 아니오 |
+
+로컬에서 가능한 기본 검증:
 
 ```bash
-# backend gate（推荐）
 pip install -r requirements.txt
 pip install flake8 pytest
 ./scripts/ci_gate.sh
 
-# 前端 gate（如修改了 apps/dsa-web）
 cd apps/dsa-web
 npm ci
 npm run lint
 npm run build
 ```
 
-## 📋 优先贡献方向
+## 우선 기여 영역
 
-查看 [Roadmap](README.md#-roadmap) 了解当前需要的功能：
+- 알림 채널과 전송 안정성 개선
+- LLM provider 설정과 fallback 품질 개선
+- 데이터 소스 fallback과 필드 표준화 개선
+- WebUI와 데스크톱 UX 개선
+- 문서 현지화와 문제 해결 가이드 보강
 
-- 🔔 新通知渠道（钉钉、飞书、Telegram）
-- 🤖 新 AI 模型支持（GPT-4、Claude）
-- 📊 新数据源接入
-- 🐛 Bug 修复和性能优化
-- 📖 文档完善和翻译
+## 질문
 
-## ❓ 问题解答
-
-如有任何问题，欢迎：
-- 创建 Issue 讨论
-- 查看已有 Issue 和 Discussion
-
-再次感谢你的贡献！ 🎉
+궁금한 점은 Issue 또는 Discussion으로 남겨주세요. 작은 문서 수정부터 큰 기능 제안까지 모두 도움이 됩니다.

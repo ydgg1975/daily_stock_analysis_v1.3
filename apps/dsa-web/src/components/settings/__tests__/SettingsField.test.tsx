@@ -200,7 +200,7 @@ describe('SettingsField', () => {
     const docLink = screen.getByRole('link', { name: /전체 가이드/ });
     expect(docLink).toHaveAttribute('href', 'https://example.com/full-guide');
 
-    const closeButtons = screen.getAllByRole('button', { name: '닫기설정 설명' });
+    const closeButtons = screen.getAllByRole('button', { name: '설정 설명 닫기' });
     expect(closeButtons[0].tabIndex).toBe(-1);
     const closeButton = closeButtons.find((button) => button.tabIndex !== -1);
     expect(closeButton).toBeDefined();

@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_docker_entrypoint_has_valid_shell_syntax() -> None:
+    if shutil.which("sh") is None:
+        import pytest
+
+        pytest.skip("sh is not available in this environment")
     subprocess.run(
         ["sh", "-n", str(REPO_ROOT / "docker" / "entrypoint.sh")],
         check=True,
@@ -101,6 +106,10 @@ def _run_entrypoint_with_fake_tools(
     gosu_write_exit: int,
     chown_exit: int,
 ) -> subprocess.CompletedProcess[str]:
+    if shutil.which("sh") is None:
+        import pytest
+
+        pytest.skip("sh is not available in this environment")
     env = os.environ.copy()
     env["PATH"] = f"{fakebin}:{env['PATH']}"
     env["FAKE_LOG_DIR"] = str(log_dir)
