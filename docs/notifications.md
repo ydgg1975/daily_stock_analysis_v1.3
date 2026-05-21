@@ -1,6 +1,6 @@
 # 알림 설정
 
-분석 결과는 여러 채널로 전송할 수 있습니다. 한 채널이 실패하더라도 전체 분석 작업은 계속 진행되는 구조를 권장합니다.
+Daily Stock Analysis는 분석 보고서, 이벤트 알림, 시스템 오류를 여러 채널로 전송할 수 있습니다. 한 채널이 실패하더라도 전체 분석 작업이 중단되지 않도록 구성하는 것을 권장합니다.
 
 ## 지원 채널
 
@@ -8,9 +8,13 @@
 | --- | --- |
 | 이메일 | `EMAIL_SENDER`, `EMAIL_PASSWORD`, `EMAIL_RECEIVERS` |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
-| Discord | `DISCORD_WEBHOOK_URL` |
-| Slack | `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID` |
-| Webhook | 채널별 Webhook URL |
+| Discord | `DISCORD_WEBHOOK_URL`, `DISCORD_BOT_TOKEN`, `DISCORD_MAIN_CHANNEL_ID` |
+| Slack | `SLACK_WEBHOOK_URL`, `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID` |
+| Feishu | `FEISHU_WEBHOOK_URL`, `FEISHU_WEBHOOK_SECRET`, `FEISHU_WEBHOOK_KEYWORD` |
+| WeChat Work | `WECHAT_WEBHOOK_URL`, `WECHAT_MSG_TYPE` |
+| ntfy | `NTFY_URL`, `NTFY_TOKEN` |
+| Gotify | `GOTIFY_URL`, `GOTIFY_TOKEN` |
+| 사용자 지정 Webhook | `CUSTOM_WEBHOOK_URLS`, `CUSTOM_WEBHOOK_BEARER_TOKEN`, `CUSTOM_WEBHOOK_BODY_TEMPLATE` |
 
 ## Telegram
 
@@ -19,24 +23,41 @@ TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_CHAT_ID=your_chat_id
 ```
 
-BotFather에서 Bot Token을 만들고, 수신할 채팅 ID를 확인한 뒤 설정합니다.
+BotFather에서 Bot Token을 만들고, 대상 채팅의 ID를 확인해 설정합니다. Topic을 사용하는 그룹이라면 `TELEGRAM_MESSAGE_THREAD_ID`도 설정할 수 있습니다.
 
 ## Discord
+
+Webhook만 사용할 때:
 
 ```env
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 ```
 
-채널 설정에서 Webhook을 생성한 뒤 URL을 등록합니다.
+Bot API와 Slash Command를 사용할 때:
+
+```env
+DISCORD_BOT_TOKEN=your-discord-bot-token
+DISCORD_MAIN_CHANNEL_ID=your-channel-id
+```
+
+자세한 내용은 [Discord Bot 설정 가이드](bot/discord-bot-config.md)를 참고하세요.
 
 ## Slack
+
+Webhook 방식:
+
+```env
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
+Bot Token 방식:
 
 ```env
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_CHANNEL_ID=C...
 ```
 
-Bot 권한과 채널 초대 상태를 함께 확인하세요.
+Bot이 대상 채널에 초대되어 있고 메시지 전송 권한이 있는지 확인합니다.
 
 ## 이메일
 
@@ -48,21 +69,51 @@ EMAIL_RECEIVERS=user1@example.com,user2@example.com
 
 Gmail 같은 서비스는 일반 비밀번호 대신 앱 비밀번호가 필요할 수 있습니다.
 
-## 점검 방법
+## Feishu
 
-알림 설정 후 다음을 확인합니다.
+```env
+FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token
+FEISHU_WEBHOOK_SECRET=your_sign_secret
+FEISHU_WEBHOOK_KEYWORD=주식일보
+```
 
-- 채널별 인증 정보가 맞는지
-- 수신 대상 ID가 올바른지
-- 메시지 길이 제한에 걸리지 않는지
-- Markdown 렌더링이 깨지지 않는지
-- 실패한 채널이 전체 분석을 중단시키지 않는지
+키워드나 서명 검증을 켰다면 Feishu 콘솔의 값과 `.env` 값을 맞춰야 합니다. 자세한 내용은 [Feishu 알림 설정 가이드](bot/feishu-bot-config.md)를 참고하세요.
 
-## 운영 원칙
+## 전송 라우팅
 
-- 알림 문구는 한국어를 기본으로 유지합니다.
-- 깨진 문자나 중국어 원문이 알림에 포함되지 않아야 합니다.
-- 민감한 API 키와 Webhook URL은 코드에 직접 쓰지 않습니다.
+보고서, 이벤트 알림, 시스템 오류를 서로 다른 채널로 나눌 수 있습니다.
+
+```env
+NOTIFICATION_REPORT_CHANNELS=telegram,discord
+NOTIFICATION_ALERT_CHANNELS=telegram
+NOTIFICATION_SYSTEM_ERROR_CHANNELS=email
+```
+
+비워두면 기본 알림 채널 설정을 사용합니다.
+
+## 중복과 소음 제어
+
+반복 알림을 줄이려면 다음 값을 설정합니다.
+
+```env
+NOTIFICATION_DEDUP_TTL_SECONDS=300
+NOTIFICATION_COOLDOWN_SECONDS=600
+NOTIFICATION_QUIET_HOURS=23:00-07:00
+NOTIFICATION_TIMEZONE=Asia/Seoul
+NOTIFICATION_MIN_SEVERITY=warning
+NOTIFICATION_DAILY_DIGEST_ENABLED=false
+```
+
+## 점검 항목
+
+- 채널별 인증 정보가 올바른지 확인합니다.
+- 대상 채팅, 채널, 이메일 주소가 정확한지 확인합니다.
+- 메시지 길이 제한에 걸리지 않는지 확인합니다.
+- Markdown 또는 카드 렌더링이 깨지지 않는지 확인합니다.
+- 한 채널 실패가 전체 분석을 중단시키지 않는지 확인합니다.
+- API Key와 Webhook URL을 코드나 공개 로그에 노출하지 않습니다.
+
+## GitHub Actions 환경 변수 기준
 
 <!-- notification-actions-env-table:start -->
 

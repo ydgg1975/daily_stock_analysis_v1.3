@@ -1,394 +1,277 @@
-# ❓ 常见问题解答 (FAQ)
+# 자주 묻는 질문
 
-本文档整理了用户在使用过程中遇到的常见问题及解决方案。
+이 문서는 Daily Stock Analysis를 설치, 실행, 배포하면서 자주 만나는 문제와 해결 방법을 정리합니다.
 
----
+## 데이터와 종목
 
-## 📊 数据相关
+### Q1. 미국 주식 코드가 A주처럼 처리됩니다.
 
-### Q1: 美股代码（如 AMD, AAPL）分析时价格显示不正确？
+증상: `AMD`, `AAPL` 같은 미국 주식 코드가 잘못된 시장으로 인식되거나 가격이 이상하게 표시됩니다.
 
-**现象**：输入美股代码后，显示的价格明显不对（如 AMD 显示 7.33 元），或被误识别为 A 股。
+해결:
 
-**原因**：早期版本代码匹配逻辑优先尝试国内 A 股规则，导致代码冲突。
+1. 최신 버전으로 업데이트합니다.
+2. Yahoo Finance 우선순위를 낮추거나 데이터 소스 우선순위를 조정합니다.
 
-**解决方案**：
-1. 已在 v2.3.0 修复，系统现在支持美股代码自动识别
-2. 如仍有问题，可在 `.env` 中设置：
-   ```bash
-   YFINANCE_PRIORITY=0
-   ```
-   这将优先使用 Yahoo Finance 数据源获取美股数据
+```env
+YFINANCE_PRIORITY=0
+REALTIME_SOURCE_PRIORITY=tencent,akshare_sina,efinance,akshare_em
+```
 
-> 📌 相关 Issue: [#153](https://github.com/ZhuLinsen/daily_stock_analysis/issues/153)
+### Q2. 보고서에 가격이 `N/A`로 표시됩니다.
 
----
+가능한 원인:
 
-### Q2: 报告中"量比"字段显示为空或 N/A？
+- 실시간 데이터 소스가 일시적으로 실패했습니다.
+- 해당 시장이 휴장 중입니다.
+- 종목 코드 형식이 잘못되었습니다.
 
-**现象**：分析报告中量比数据缺失，影响 AI 对缩放量的判断。
+해결:
 
-**原因**：默认的某些实时行情源（如新浪接口）不提供量比字段。
+1. 종목 코드 형식을 확인합니다.
+2. 잠시 후 다시 실행합니다.
+3. 여러 데이터 소스 fallback이 켜져 있는지 확인합니다.
 
-**解决方案**：
-1. 已在 v2.3.0 修复，腾讯接口现已支持量比解析
-2. 推荐配置实时行情源优先级：
-   ```bash
-   REALTIME_SOURCE_PRIORITY=tencent,akshare_sina,efinance,akshare_em
-   ```
-3. 系统已内置 5 日均量计算作为兜底逻辑
+### Q3. Tushare Token 오류가 납니다.
 
-> 📌 相关 Issue: [#155](https://github.com/ZhuLinsen/daily_stock_analysis/issues/155)
+Tushare를 사용하지 않는다면 `TUSHARE_TOKEN`은 필수가 아닙니다. 시스템은 다른 데이터 소스로 fallback할 수 있습니다.
 
----
+Tushare를 사용하려면 `.env`에 Token을 넣습니다.
 
-### Q3: Tushare 获取数据失败，提示 Token 不对？
+```env
+TUSHARE_TOKEN=your_tushare_token
+```
 
-**现象**：日志显示 `Tushare 获取数据失败: 您的token不对，请确认`
+Token 발급과 종목 목록 수집은 [Tushare 종목 목록 가져오기 가이드](TUSHARE_STOCK_LIST_GUIDE.md)를 참고하세요.
 
-**解决方案**：
-1. **无 Tushare 账号**：无需配置 `TUSHARE_TOKEN`，系统会自动使用免费数据源（AkShare、Efinance）
-2. **有 Tushare 账号**：确认 Token 是否正确，可在 [Tushare Pro](https://tushare.pro/weborder/#/login?reg=834638 ) 个人中心查看
-3. 本项目所有核心功能均可在无 Tushare 的情况下正常运行
+### Q4. Eastmoney 또는 외부 데이터 소스가 끊깁니다.
 
----
+외부 데이터 소스는 네트워크, rate limit, 원천 사이트 변경의 영향을 받을 수 있습니다.
 
-### Q4: 数据获取被限流或返回为空？
+대응:
 
-**现象**：日志显示 `熔断器触发` 或数据返回 `None`，或出现 `RemoteDisconnected`、`push2his.eastmoney.com` 连接被关闭等
+1. 잠시 후 재시도합니다.
+2. 병렬 분석 수를 낮춥니다.
+3. 다른 데이터 소스 fallback을 사용합니다.
+4. 필요하면 `MAX_WORKERS=1`로 줄여 단일 작업부터 확인합니다.
 
-**原因**：免费数据源（东方财富、新浪等）有反爬机制，短时间大量请求会被限流。
+```env
+MAX_WORKERS=1
+```
 
-**解决方案**：
-1. 系统已内置多数据源自动切换和熔断保护
-2. 减少自选股数量，或增加请求间隔
-3. 避免频繁手动触发分析
-4. 若东财接口频繁失败，可设置 `ENABLE_EASTMONEY_PATCH=true` 启用东财补丁（注入 NID 令牌与随机 User-Agent，降低被限流概率）
-5. 将 `MAX_WORKERS=1` 改为串行获取，减少对东财的并发压力
+## 설정과 실행
 
----
+### Q5. GitHub Actions에서 환경 변수를 못 읽습니다.
 
-## ⚙️ 配置相关
+민감한 값은 GitHub `Secrets`, 일반 설정은 `Variables`에 넣습니다.
 
-### Q5: GitHub Actions 运行失败，提示找不到环境变量？
+권장:
 
-**现象**：Actions 日志显示 `GEMINI_API_KEY` 或 `STOCK_LIST` 未定义
+- Secrets: API Key, Token, Webhook URL, 이메일 비밀번호
+- Variables: `STOCK_LIST`, 모델명, 실행 모드 같은 비밀이 아닌 값
 
-**原因**：GitHub 区分 `Secrets`（加密）和 `Variables`（普通变量），配置位置不对会导致读取失败。
+경로:
 
-**解决方案**：
-1. 进入仓库 `Settings` → `Secrets and variables` → `Actions`
-2. **Secrets**（点击 `New repository secret`）：存放敏感信息
-   - `GEMINI_API_KEY`
-   - `OPENAI_API_KEY`
-   - `TELEGRAM_BOT_TOKEN`
-   - 各类 Webhook URL
-3. **Variables**（点击 `Variables` 标签）：存放非敏感配置
-   - `STOCK_LIST`
-   - `GEMINI_MODEL`
-   - `REPORT_TYPE`
+```text
+Settings -> Secrets and variables -> Actions
+```
 
----
+### Q6. `.env`를 수정했는데 반영되지 않습니다.
 
-### Q6: 修改 .env 文件后配置没有生效？
+직접 실행 또는 Docker 환경에서는 프로세스를 재시작해야 합니다.
 
-**解决方案**：
-1. 确保 `.env` 文件位于项目根目录
-2. **Docker 部署 / WebUI 系统设置**：
-   - WebUI 保存后的 `STOCK_LIST`、`SCHEDULE_ENABLED`、`SCHEDULE_TIME`、`SCHEDULE_RUN_IMMEDIATELY`、`RUN_IMMEDIATELY` 会写回容器内的 `.env`
-   - WebUI 保存后会触发当前进程的配置重载；运行中的读取路径会同步使用最新写回的 `.env`，例如定时任务会继续热读取保存后的 `STOCK_LIST`
-   - 如果容器启动命令里显式传入了这些同名环境变量（如 `docker run -e ...` 或 Compose `environment:`），后续重启时仍以显式进程环境变量为准；要让 WebUI 保存值接管，请同步更新或移除这些显式 override
-   - 其中 `SCHEDULE_*` 与 `RUN_IMMEDIATELY` 属于**启动期调度配置**，保存后不会立即触发一次分析，也不会热重建当前进程里的 scheduler
-   - 如需让调度开关立刻接管当前容器，请重启容器，并确保以 schedule 模式启动
-3. **Docker 手工改 `.env` 后**：修改后仍建议重启容器
-   ```bash
-   docker-compose down && docker-compose up -d
-   ```
-4. **GitHub Actions**：`.env` 文件不生效，必须在 Secrets/Variables 中配置
-5. 检查是否有多个 `.env` 文件（如 `.env.local`）导致覆盖
-
----
-
-### Q7: 如何配置代理访问 Gemini/OpenAI API？
-
-**解决方案**：
-
-在 `.env` 中配置：
 ```bash
+docker-compose -f ./docker/docker-compose.yml down
+docker-compose -f ./docker/docker-compose.yml up -d
+```
+
+Docker Compose의 `environment:` 또는 `docker run -e`로 값을 넘기고 있다면, 컨테이너 환경 변수가 `.env`보다 우선할 수 있습니다.
+
+WebUI 설정 화면에서 저장한 값도 실제 저장 후 재로드되어야 적용됩니다. 저장 성공 메시지를 확인하세요.
+
+### Q7. 프록시는 어떻게 설정하나요?
+
+서버 네트워크에서 특정 provider API에 접근할 수 없다면 프록시를 설정합니다.
+
+```env
 USE_PROXY=true
 PROXY_HOST=127.0.0.1
 PROXY_PORT=10809
 ```
 
-> ⚠️ 注意：代理配置仅对本地运行生效，GitHub Actions 环境无需配置代理。
+Docker나 systemd 환경에서는 배포 설정에서 `http_proxy`, `https_proxy` 환경 변수를 지정하는 방식도 사용할 수 있습니다. 비밀값이나 환경별 값을 코드에 하드코딩하지 마세요.
 
----
+## LLM 설정
 
-### LLM 配置常见问题
+자세한 내용은 [LLM 설정 가이드](LLM_CONFIG_GUIDE.md)를 참고하세요.
 
-> 完整说明见 [LLM 配置指南](LLM_CONFIG_GUIDE.md)。
+### Q8. `GEMINI_API_KEY`와 `LLM_CHANNELS`를 같이 쓰면 어떻게 되나요?
 
-**Q: 配置了 GEMINI_API_KEY 和 LLM_CHANNELS，为什么只用渠道？**
+설정 우선순위는 다음과 같습니다.
 
-系统按优先级只取一种：高级模型路由 YAML（`LITELLM_CONFIG`）> `LLM_CHANNELS` > legacy keys。但 YAML 仅在文件可正常解析且产出了有效 `model_list` 时才生效；如果 YAML 路径无效或内容为空，系统会自动回退到 `LLM_CHANNELS` 或 legacy keys。一旦某一层级实际生效，更低优先级的配置不参与解析。
-
-**Q: check_env 输出“未配置可用 AI 模型”怎么办？**
-
-默认先选一种服务商并填写对应 API Key；如果需要固定主模型，再补 `LITELLM_MODEL=provider/model`；如果要多模型切换，再配置 `LLM_CHANNELS` 或高级模型路由 YAML。运行 `python scripts/check_env.py --config` 校验配置，`python scripts/check_env.py --llm` 实际调用 API 测试。
-
-**Q: 如何同时使用多个模型（如 AIHubmix + DeepSeek + Gemini）？**
-
-使用渠道模式：设置 `LLM_CHANNELS=aihubmix,deepseek,gemini`，并配置各渠道的 `LLM_{NAME}_BASE_URL`、`LLM_{NAME}_API_KEY`、`LLM_{NAME}_MODELS`。也可在 Web 设置页 → AI 模型 → AI 模型接入 中可视化配置。
-
-**Q: 问股/Agent 提示未配置可用 LLM，但我只有旧的 `GEMINI_*` / `OPENAI_*` / `ANTHROPIC_*` 配置，怎么办？**
-
-先确认当前是否启用了 `LITELLM_CONFIG` 或 `LLM_CHANNELS`；如果启用了，上层配置会覆盖 legacy keys。若你没有启用这两层，且 `AGENT_LITELLM_MODEL` 为空，问股 Agent 仍会自动继承 legacy provider 模型：`GEMINI_MODEL`、`OPENAI_MODEL`、`ANTHROPIC_MODEL` 分别映射到对应 provider 前缀的 LiteLLM 模型名。此次修复不会静默迁移或清空旧配置，只是把“真实缺失原因”直接返回到前端，便于你判断到底是缺 key、缺模型名，还是被上层配置覆盖。完整兼容语义见 [LLM 配置指南](LLM_CONFIG_GUIDE.md) 中“问股 Agent / LiteLLM 配置兼容说明”。
-
----
-
-## 📱 推送相关
-
-### Q8: 机器人推送失败，提示消息过长？
-
-**现象**：分析成功但未收到推送，日志显示 400 错误或 `Message too long`
-
-**原因**：不同平台消息长度限制不同：
-- 企业微信：4KB
-- 飞书：20KB
-- 钉钉：20KB
-
-**解决方案**：
-1. **自动分块**：最新版本已实现长消息自动切割
-2. **单股推送模式**：设置 `SINGLE_STOCK_NOTIFY=true`，每分析完一只股票立即推送
-3. **精简报告**：设置 `REPORT_TYPE=simple` 使用精简格式
-
----
-
-### Q9: Telegram 推送收不到消息？
-
-**解决方案**：
-1. 确认 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID` 都已配置
-2. 获取 Chat ID 方法：
-   - 给 Bot 发送任意消息
-   - 访问 `https://api.telegram.org/bot<TOKEN>/getUpdates`
-   - 在返回的 JSON 中找到 `chat.id`
-3. 确保 Bot 已被添加到目标群组（如果是群聊）
-4. 本地运行时需要能访问 Telegram API（可能需要代理）
-
----
-
-### Q10: 企业微信 Markdown 格式显示不正常？
-
-**解决方案**：
-1. 企业微信对 Markdown 支持有限，可尝试设置：
-   ```bash
-   WECHAT_MSG_TYPE=text
-   ```
-2. 这将发送纯文本格式的消息
-
----
-
-## 🤖 AI 模型相关
-
-### Q11: Gemini API 返回 429 错误（请求过多）？
-
-**现象**：日志显示 `Resource has been exhausted` 或 `429 Too Many Requests`
-
-**解决方案**：
-1. Gemini 免费版有速率限制（约 15 RPM）
-2. 减少同时分析的股票数量
-3. 增加请求延迟：
-   ```bash
-   GEMINI_REQUEST_DELAY=5
-   ANALYSIS_DELAY=10
-   ```
-4. 或切换到 OpenAI 兼容 API 作为备选
-
----
-
-### Q12: 如何使用 DeepSeek 等国产模型？
-
-**配置方法**：
-
-```bash
-# 不需要配置 GEMINI_API_KEY
-OPENAI_API_KEY=sk-xxxxxxxx
-OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-v4-flash
-# deepseek-chat / deepseek-reasoner 仍兼容，但官方已标记为 2026/07/24 后废弃
+```text
+LITELLM_CONFIG > LLM_CHANNELS > legacy provider keys
 ```
 
-支持的模型服务：
-- DeepSeek: `https://api.deepseek.com`
-- 通义千问: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- Moonshot: `https://api.moonshot.cn/v1`
+`LLM_CHANNELS`가 유효하면 `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` 같은 legacy provider key는 이번 요청에서 사용되지 않을 수 있습니다. 혼란을 줄이려면 한 가지 방식으로 정리하는 것을 권장합니다.
 
----
+### Q9. 설정은 했는데 “주 모델 미설정”이라고 나옵니다.
 
-### Q12b: 如何使用 Ollama 本地模型？
+다음을 확인합니다.
 
-**配置方法**：使用 `OLLAMA_API_BASE` + `LITELLM_MODEL`，或渠道模式（`LLM_CHANNELS=ollama` + `LLM_OLLAMA_BASE_URL` + `LLM_OLLAMA_MODELS`）。
+1. `LITELLM_MODEL`에 `provider/model` 형식이 들어 있는지 확인합니다.
+2. 채널 모드라면 `LLM_CHANNELS`와 `LLM_<NAME>_MODELS`가 함께 설정되어 있는지 확인합니다.
+3. `python scripts/check_env.py --config`로 로컬 설정을 검사합니다.
+4. 실제 연결은 `python scripts/check_env.py --llm`으로 확인합니다.
 
-**避坑**：不要使用 `OPENAI_BASE_URL` 配置 Ollama，否则系统会错误拼接 URL（如 404、`api/generate/api/show`）。详见 [LLM 配置指南](LLM_CONFIG_GUIDE.md) 示例 4 与渠道示例。
+### Q10. 여러 provider를 동시에 쓰고 싶습니다.
 
----
+채널 모드를 사용합니다.
 
-### Q12c: 运行时报 `OllamaException / APIConnectionError`（All LLM models failed）怎么办？
+```env
+LLM_CHANNELS=aihubmix,deepseek,gemini
+LLM_AIHUBMIX_PROTOCOL=openai
+LLM_AIHUBMIX_BASE_URL=https://aihubmix.com/v1
+LLM_AIHUBMIX_API_KEY=sk-xxx
+LLM_AIHUBMIX_MODELS=gpt-5.5,claude-sonnet-4-6
 
-**症状**：日志出现 `litellm.APIConnectionError: OllamaException` 或 `Analysis failed: All LLM models failed (tried 1 model(s))`。
+LLM_DEEPSEEK_PROTOCOL=deepseek
+LLM_DEEPSEEK_API_KEY=sk-xxx
+LLM_DEEPSEEK_MODELS=deepseek-v4-flash
 
-逐项排查以下 5 个检查点：
+LLM_GEMINI_PROTOCOL=gemini
+LLM_GEMINI_API_KEY=xxx
+LLM_GEMINI_MODELS=gemini-3.1-pro-preview
 
-1. **Ollama 服务是否已启动**
-   ```bash
-   # 查看进程
-   pgrep -a ollama
-   # 若无输出则先启动
-   ollama serve
-   ```
-   确认服务正在监听：`curl http://localhost:11434`，应返回 `Ollama is running`。
-
-2. **`OLLAMA_API_BASE` 是否配置正确**
-   - ✅ 正确：`OLLAMA_API_BASE=http://localhost:11434`
-   - ❌ 错误：把 Ollama 地址填到 `OPENAI_BASE_URL`，会导致 URL 路径拼错（如 `…/api/generate/api/show`）。
-
-3. **模型名称是否加了 `ollama/` 前缀**
-   - ✅ 正确：`LITELLM_MODEL=ollama/qwen3:8b`
-   - ❌ 错误：`LITELLM_MODEL=qwen3:8b`（缺少前缀，litellm 无法路由到 Ollama）
-
-4. **模型是否已下载到本地**
-   ```bash
-   ollama list          # 查看已有模型
-   ollama pull qwen3:8b # 如无则先拉取
-   ```
-
-5. **远程部署 / Docker 时的网络与防火墙**
-   - 若 Ollama 和程序不在同一主机，需将 `OLLAMA_API_BASE` 改为实际 IP，如 `http://192.168.1.100:11434`。
-   - 确认防火墙已放行 11434 端口，且 Ollama 启动时绑定了正确地址（`OLLAMA_HOST=0.0.0.0:11434`）。
-
-> 完整配置示例见 [LLM 配置指南 → 示例 4（Ollama）](LLM_CONFIG_GUIDE.md#example-4-ollama)。
-
----
-
-## 🐳 Docker 相关
-
-### Q13: Docker 容器启动后立即退出？
-
-**解决方案**：
-1. 查看容器日志：
-   ```bash
-   docker logs <container_id>
-   ```
-2. 常见原因：
-   - 环境变量未正确配置
-   - `.env` 文件格式错误（如有多余空格）
-   - 依赖包版本冲突
-
----
-
-### Q14: Docker 中 API 服务无法访问？
-
-**解决方案**：
-1. 确保启动命令包含 `--host 0.0.0.0`（不能是 127.0.0.1）
-2. 检查端口映射是否正确：
-   ```yaml
-   ports:
-     - "8000:8000"
-   ```
-
----
-
-### Q14.1: Docker 中网络/DNS 解析失败（如 api.tushare.pro、searchapi.eastmoney.com 无法解析）？
-
-**现象**：日志显示 `Temporary failure in name resolution` 或 `NameResolutionError`，股票数据 API 和大模型 API 均无法访问。
-
-**原因**：自定义 bridge 网络下，容器使用 Docker 内置 DNS，在旁路由、特定网络环境时可能解析失败。
-
-**解决方案**（按优先级尝试）：
-
-1. **显式配置 DNS**：在 `docker/docker-compose.yml` 的 `x-common` 下添加：
-   ```yaml
-   dns:
-     - 223.5.5.5
-     - 119.29.29.29
-     - 8.8.8.8
-   ```
-   然后执行 `docker-compose down` 和 `docker-compose up -d --force-recreate` 重新创建容器。
-
-2. **改用 host 网络模式**：若上述仍无效，可在 `server` 服务下添加 `network_mode: host`，并移除 `ports` 映射。使用 host 模式时，`ports` 无效，**端口由 `command` 中的 `--port` 指定**。若宿主机默认端口已占用，可修改为其他端口（如 `.env` 中设置 `API_PORT=8080`），访问对应 `http://localhost:8080`。
-
-> 📌 相关 Issue: [#372](https://github.com/ZhuLinsen/daily_stock_analysis/issues/372)
-
----
-
-### Q14.2: Docker 安装时，软件版本号写在哪个文件里？
-
-**结论**：对 Docker 用户来说，**最权威的版本不是某个 Python 源文件常量，而是你实际使用的镜像 tag**。
-
-**为什么**：
-1. 仓库的 Docker 发布由 `.github/workflows/docker-publish.yml` 触发，只有推送 `v*.*.*` 形式的 Git tag（例如 `v3.12.0`）时才会生成对应发布镜像。
-2. 这意味着 Docker 镜像版本本质上跟随 **GitHub Release / Git tag**，而不是写死在 `main.py`、`server.py` 或其他后端源码里。
-3. `apps/dsa-web/package.json` 里的 `version` 当前是占位值 `0.0.0`，WebUI “版本信息”卡片更适合用来确认静态资源是否已重建，不应当作 Docker 发布版本。
-4. 桌面端版本是单独维护的，写在 `apps/dsa-desktop/package.json` 的 `version` 字段；它只代表 Electron 桌面端，不代表 Docker 镜像版本。
-
-**怎么查当前 Docker 版本**：
-1. **先看部署命令或 Compose 文件里的镜像 tag**：例如 `ghcr.io/zhulinsen/daily_stock_analysis:v3.12.0`，其中 `v3.12.0` 就是当前部署版本。
-2. **如果你拉的是 `latest`**：请回看当时的 `docker pull` / `docker-compose.yml` / 部署脚本，或对照 [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) 确认对应发布记录。
-3. **如果只是想确认前端是否更新到新构建**：可以打开 WebUI 的“系统设置”页查看 `构建标识` / `构建时间`；这能帮助确认静态资源是否刷新，但不等同于 Docker 镜像发布版本。
-
-**建议**：如果你想避免重复更新，部署时尽量固定使用明确的版本 tag（如 `v3.12.0`），不要长期依赖 `latest`。
-
----
-
-## 🔧 其他问题
-
-### Q15: 如何只运行大盘复盘，不分析个股？
-
-**方法**：
-```bash
-# 本地运行
-python main.py --market-only
-
-# GitHub Actions
-# 手动触发时选择 mode: market-only
+LITELLM_MODEL=openai/gpt-5.5
+LITELLM_FALLBACK_MODELS=deepseek/deepseek-v4-flash,gemini/gemini-3.1-pro-preview
 ```
 
----
+## 알림
 
-### Q16: 分析结果中买入/观望/卖出数量统计不对？
+### Q11. 알림 메시지가 너무 길어서 실패합니다.
 
-**原因**：早期版本使用正则匹配统计，可能与实际建议不一致。
+일부 알림 플랫폼은 메시지 길이에 제한이 있습니다.
 
-**解决方案**：已在最新版本中修复，AI 模型现在会直接输出 `decision_type` 字段用于准确统计。
+대응:
 
----
+1. 간단 보고서 형식을 사용합니다.
+2. 종목별 개별 알림을 사용합니다.
+3. 긴 전문은 WebUI 또는 보고서 파일에서 확인합니다.
 
-### Q17: 为什么周末在 GitHub Actions 手动触发仍显示“非交易日跳过”？
+```env
+REPORT_TYPE=simple
+SINGLE_STOCK_NOTIFY=true
+```
 
-**现象**：已经配置了 `TRADING_DAY_CHECK_ENABLED` 或希望手动运行，但日志仍提示“今日所有相关市场均为非交易日，跳过执行”。
+### Q12. Telegram 메시지가 오지 않습니다.
 
-**解决方案**：
-1. 打开 `Actions → 每日股票分析 → Run workflow`
-2. 手动触发时将 `force_run` 设为 `true`（单次强制运行）
-3. 如果希望长期关闭交易日检查，在 `Settings → Secrets and variables → Actions` 中设置：
-   ```bash
-   TRADING_DAY_CHECK_ENABLED=false
-   ```
+확인:
 
-**规则说明**：
-- `TRADING_DAY_CHECK_ENABLED=true` 且 `force_run=false`：非交易日跳过（默认）
-- `force_run=true`：本次即使非交易日也执行
-- `TRADING_DAY_CHECK_ENABLED=false`：定时和手动都不做交易日检查
+1. `TELEGRAM_BOT_TOKEN`이 정확한지 확인합니다.
+2. `TELEGRAM_CHAT_ID`가 맞는지 확인합니다.
+3. Bot이 대상 그룹에 추가되어 있는지 확인합니다.
+4. 서버에서 Telegram API에 접근 가능한지 확인합니다.
 
----
+Chat ID 확인 예시:
 
-## 💬 还有问题？
+```text
+https://api.telegram.org/bot<TOKEN>/getUpdates
+```
 
-如果以上内容没有解决你的问题，欢迎：
-1. 查看 [完整配置指南](full-guide.md)
-2. 搜索或提交 [GitHub Issue](https://github.com/ZhuLinsen/daily_stock_analysis/issues)
-3. 查看 [更新日志](CHANGELOG.md) 了解最新修复
+### Q13. WeChat Work Markdown이 깨집니다.
 
----
+텍스트 모드로 바꿔 테스트합니다.
 
-*最后更新：2026-04-20*
+```env
+WECHAT_MSG_TYPE=text
+```
+
+자세한 알림 설정은 [알림 설정](notifications.md)을 참고하세요.
+
+## Docker
+
+### Q14. Docker 컨테이너가 시작 직후 종료됩니다.
+
+확인:
+
+```bash
+docker-compose -f ./docker/docker-compose.yml logs -f --tail=100
+```
+
+자주 발생하는 원인:
+
+- `.env` 형식 오류
+- 필수 API Key 누락
+- 포트 충돌
+- 데이터 디렉터리 권한 문제
+
+### Q15. Docker 내부에서 API 또는 외부 사이트 DNS 해석이 실패합니다.
+
+`Temporary failure in name resolution` 또는 `NameResolutionError`가 보이면 DNS 문제일 수 있습니다.
+
+Compose 설정에 DNS를 지정할 수 있습니다.
+
+```yaml
+dns:
+  - 223.5.5.5
+  - 119.29.29.29
+  - 8.8.8.8
+```
+
+설정 후 컨테이너를 다시 만듭니다.
+
+```bash
+docker-compose -f ./docker/docker-compose.yml down
+docker-compose -f ./docker/docker-compose.yml up -d --force-recreate
+```
+
+### Q16. Docker 버전과 WebUI 버전이 달라 보입니다.
+
+Docker 이미지 버전은 GitHub Release 또는 이미지 tag를 기준으로 확인합니다. WebUI의 빌드 정보는 현재 브라우저가 받은 정적 파일의 빌드 시점을 보여주며, Docker 이미지 tag와 항상 같은 의미는 아닙니다.
+
+정확한 배포 버전은 다음을 확인하세요.
+
+- `docker-compose.yml` 또는 배포 스크립트의 이미지 tag
+- GitHub Releases의 tag
+- 실제 pull한 이미지 이름
+
+## GitHub Actions
+
+### Q17. 수동 실행이 휴장일 체크 때문에 건너뜁니다.
+
+수동 실행에서 강제 실행 옵션을 사용하거나, 필요한 경우 휴장일 체크를 끕니다.
+
+```env
+TRADING_DAY_CHECK_ENABLED=false
+```
+
+권장 의미:
+
+- `TRADING_DAY_CHECK_ENABLED=true`: 거래일이 아니면 기본적으로 건너뜁니다.
+- `force_run=true`: 수동 실행에서 거래일 체크를 무시합니다.
+- `TRADING_DAY_CHECK_ENABLED=false`: 거래일 체크를 사용하지 않습니다.
+
+### Q18. 시장 리뷰만 실행하고 싶습니다.
+
+로컬:
+
+```bash
+python main.py --market-review
+```
+
+GitHub Actions:
+
+```text
+Run workflow -> mode: market-only
+```
+
+## 더 보기
+
+- [전체 가이드](full-guide.md)
+- [배포 가이드](DEPLOY.md)
+- [알림 설정](notifications.md)
+- [LLM 설정 가이드](LLM_CONFIG_GUIDE.md)
+- [변경 로그](CHANGELOG.md)
+
+마지막 정리일: 2026-05-21

@@ -1,129 +1,137 @@
-# 小白客户端安装与配置指南
+# 초보자용 데스크톱 클라이언트 설치와 설정 가이드
 
-这份文档写给不会代码、只想下载客户端直接用的用户。目标很简单：下载客户端，填一个模型服务密钥（Key），填股票代码，然后生成第一份分析报告。
+이 문서는 코드를 잘 모르는 사용자가 데스크톱 앱을 내려받아 첫 분석 보고서를 만드는 흐름을 설명합니다. 목표는 간단합니다. 클라이언트를 설치하고, LLM API Key를 넣고, 종목 코드를 입력한 뒤 분석을 실행합니다.
 
-> 本项目生成的是辅助分析报告，不构成投资建议。真实交易请自行判断风险。
+> 이 프로젝트가 생성하는 내용은 보조 분석 보고서이며 투자 조언이 아닙니다. 실제 거래 판단과 위험 관리는 사용자 본인이 책임져야 합니다.
 
-## 先准备
+## 준비물
 
-1. Windows 或 macOS 电脑。
-2. 一个模型服务密钥（Key），推荐从下面任选一个：
-   - [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)：支持全球主流模型，一个 Key 可同时用于模型和新闻搜索，第一次配置最省事。
-   - [AIHubMix](https://aihubmix.com/?aff=CfMq)：支持全球主流模型，适合想在一个平台切换多种模型的用户。
-3. 想分析的股票代码，例如 `600519,hk00700,AAPL`。
+1. Windows 또는 macOS 컴퓨터
+2. LLM API Key
+   - [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC): 여러 모델과 뉴스 검색을 한 Key로 쓰고 싶을 때 편합니다.
+   - [AIHubMix](https://aihubmix.com/?aff=CfMq): 여러 모델을 한 플랫폼에서 바꿔 쓰고 싶을 때 적합합니다.
+   - OpenAI, Anthropic, Gemini 등 다른 provider도 설정 페이지에서 직접 구성할 수 있습니다.
+3. 분석할 종목 코드
+   - 예: `600519,hk00700,AAPL`
 
-## 1. 下载客户端
+## 1. 클라이언트 다운로드
 
-打开发布页：
+릴리스 페이지를 엽니다.
 
-<https://github.com/ZhuLinsen/daily_stock_analysis/releases/latest>
+<https://github.com/robot0971-art/daily_stock_analysis/releases/latest>
 
-在页面下方 `Assets`（附件）里下载：
+페이지 하단의 `Assets`에서 운영체제에 맞는 파일을 받습니다.
 
-| 电脑 | 下载哪个 |
+| 환경 | 다운로드 파일 |
 | --- | --- |
-| Windows | `daily-stock-analysis-windows-installer-<版本号>.exe` |
-| Windows 不想安装 | `daily-stock-analysis-windows-noinstall-<版本号>.zip` |
-| macOS Apple 芯片 | `daily-stock-analysis-macos-arm64-<版本号>.dmg` |
-| macOS Intel 芯片 | `daily-stock-analysis-macos-x64-<版本号>.dmg` |
+| Windows 설치형 | `daily-stock-analysis-windows-installer-<version>.exe` |
+| Windows 무설치 | `daily-stock-analysis-windows-noinstall-<version>.zip` |
+| macOS Apple Silicon | `daily-stock-analysis-macos-arm64-<version>.dmg` |
+| macOS Intel | `daily-stock-analysis-macos-x64-<version>.dmg` |
 
-不用下载 `latest.yml`、`*.blockmap`，它们不是客户端安装包。
+`latest.yml`이나 `*.blockmap` 파일은 자동 업데이트용 메타데이터이므로 사용자가 직접 실행하는 설치 파일이 아닙니다.
 
-不知道 Mac 是哪种芯片：点击左上角苹果图标 -> 关于本机，看到 M1/M2/M3/M4 就选 `arm64`，看到 Intel 就选 `x64`。
+Mac 칩 종류를 모르면 왼쪽 위 Apple 메뉴에서 `이 Mac에 관하여`를 확인합니다. M1/M2/M3/M4는 `arm64`, Intel은 `x64`를 선택합니다.
 
-## 2. 安装并打开
+## 2. 설치와 실행
 
-- Windows 安装包：双击 `.exe`，按提示安装，安装目录用默认位置即可。
-- Windows 免安装包：解压 `.zip`，双击 `Daily Stock Analysis.exe`。
-- macOS：双击 `.dmg`，把应用拖到 `Applications`。如果提示来自未验证开发者，在系统设置的隐私与安全性里允许打开。
+- Windows 설치형: `.exe` 파일을 실행하고 기본 안내에 따라 설치합니다.
+- Windows 무설치: `.zip` 파일을 압축 해제한 뒤 `Daily Stock Analysis.exe`를 실행합니다.
+- macOS: `.dmg` 파일을 열고 앱을 `Applications`로 드래그합니다. 미확인 개발자 경고가 나오면 시스템 설정의 개인정보 보호 및 보안에서 실행을 허용합니다.
 
-macOS 用户升级前建议先在客户端设置里导出一次配置备份。
+macOS에서 기존 버전을 업그레이드하기 전에는 설정 화면에서 구성 백업을 한 번 내보내는 것을 권장합니다.
 
-## 3. 配置 AI 模型
+## 3. AI 모델 설정
 
-打开客户端，进入：
+앱을 열고 다음 위치로 이동합니다.
 
-`系统设置 -> AI 模型`
+```text
+설정 -> AI 모델
+```
 
-只选下面一个方案即可。
+처음에는 provider 하나만 설정해도 됩니다. 설정을 바꾼 뒤에는 반드시 저장 버튼을 누르고, 저장 성공 메시지를 확인한 뒤 연결 테스트를 실행합니다.
 
-> 重要：每次改完设置后，都要点击页面上的保存按钮；看到保存成功提示后，再切换页面或回到首页。
+### Anspire Open
 
-### 方案 A：Anspire Open
+1. [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)에 가입하거나 로그인합니다.
+2. API Key를 생성합니다.
+3. 앱의 빠른 추가 또는 LLM 채널 설정에서 `Anspire Open`을 선택합니다.
+4. API Key를 붙여넣고 사용할 모델명을 선택합니다.
+5. 저장 후 연결 테스트를 실행합니다.
 
-1. 打开 [Anspire Open](https://open.anspire.cn/?share_code=QFBC0FYC)，注册 / 登录后创建 API Key。
-2. 回到客户端，在快速添加渠道里选择 `Anspire Open`。
-3. 粘贴 API Key。
-4. 模型名选择控制台里已开通的模型；不确定就先选控制台推荐或轻量模型。
-5. 点击保存；看到保存成功后，再点击测试连接。
+### AIHubMix
 
-### 方案 B：AIHubMix
+1. [AIHubMix](https://aihubmix.com/?aff=CfMq)에 가입하거나 로그인합니다.
+2. API Key를 생성합니다.
+3. 앱의 빠른 추가 또는 LLM 채널 설정에서 `AIHubMix`를 선택합니다.
+4. API Key를 붙여넣고 사용할 모델명을 선택합니다.
+5. 저장 후 연결 테스트를 실행합니다.
 
-1. 打开 [AIHubMix](https://aihubmix.com/?aff=CfMq)，注册 / 登录后创建 API Key。
-2. 回到客户端，在快速添加渠道里选择 `AIHubmix（聚合平台）`。
-3. 粘贴 API Key。
-4. 模型名选择控制台里已开通的模型；不确定就先选控制台推荐模型。
-5. 点击保存；看到保存成功后，再点击测试连接。
+연결 테스트가 성공하면 다음 단계로 넘어갑니다.
 
-看到测试成功，就继续下一步。
+## 4. 자주 보는 종목 입력
 
-## 4. 填写自选股
+다음 위치로 이동합니다.
 
-进入：
+```text
+설정 -> 기본 설정
+```
 
-`系统设置 -> 基础设置`
+`자주 보는 종목` 또는 `STOCK_LIST` 항목에 종목 코드를 입력합니다.
 
-找到 `自选股列表`，填写：
+```text
+600519,hk00700,AAPL
+```
 
-`600519,hk00700,AAPL`
+여러 종목은 영문 쉼표로 구분합니다.
 
-多个股票用英文逗号隔开。常见写法：
+| 시장 | 예시 |
+| --- | --- |
+| A주 | `600519`, `300750`, `000001` |
+| 홍콩 주식 | `hk00700`, `hk09988` |
+| 미국 주식 | `AAPL`, `TSLA`, `NVDA` |
 
-- A 股：`600519`、`300750`、`000001`
-- 港股：`hk00700`、`hk09988`
-- 美股：`AAPL`、`TSLA`、`NVDA`
+입력 후 저장하고 저장 성공 메시지를 확인합니다.
 
-填完点击保存，看到保存成功后再回首页。
+## 5. 뉴스 소스 설정
 
-## 5. 建议配置新闻源
+뉴스 소스는 필수는 아니지만 권장합니다. 최근 뉴스, 공시, 이벤트, 섹터 이슈, 리스크 경고 품질에 영향을 줍니다.
 
-新闻源不是必填，但建议配置。它会影响近期新闻、公告、事件驱动、热点题材和风险提示。
+다음 위치로 이동합니다.
 
-进入：
+```text
+설정 -> 데이터 소스
+```
 
-`系统设置 -> 数据源`
+- Anspire Open을 사용한다면 `Anspire API Keys`에 같은 Key를 넣을 수 있습니다.
+- AIHubMix만 사용하는 경우 [SerpAPI](https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis) 또는 [Tavily](https://tavily.com/) Key를 추가로 설정하는 것을 권장합니다.
 
-按你的模型服务选择：
+뉴스 소스를 건너뛰어도 기본 분석은 실행할 수 있습니다.
 
-1. 用 Anspire Open：找到 `Anspire API Keys`，填入同一个 Anspire Key，保存成功后即可。
-2. 用 AIHubMix：建议再申请 [SerpAPI](https://serpapi.com/baidu-search-api?utm_source=github_daily_stock_analysis) 或 [Tavily](https://tavily.com/) 的 Key，填到 `SerpAPI API Keys` 或 `Tavily API Keys`，保存成功后即可。
+## 6. 첫 분석 실행
 
-想先试用也可以跳过新闻源，客户端仍然能生成基础分析。
+홈 화면으로 돌아갑니다.
 
-## 6. 开始分析
+1. 종목 코드를 입력합니다. 예: `600519`
+2. `분석` 버튼을 누릅니다.
+3. 작업 상태가 대기, 분석 중, 완료 순서로 바뀌는지 확인합니다.
+4. 분석 기록에서 보고서를 확인합니다.
 
-回到首页：
+## 자주 묻는 질문
 
-1. 输入股票代码，例如 `600519`。
-2. 点击分析。
-3. 等任务从排队、分析中变成分析完成。
-4. 在历史记录里查看报告。
+### 다운로드 파일이 많은데 무엇을 받아야 하나요?
 
-## 常见问题
+Windows 일반 사용자는 `.exe` 설치 파일을 받으면 됩니다. `latest.yml`과 `*.blockmap`은 직접 내려받아 실행하는 파일이 아닙니다.
 
-### 下载页面里文件很多，该下哪个？
+### API Key를 넣었는데 연결 테스트가 실패합니다.
 
-普通 Windows 用户下载 `.exe` 安装包。不要下载 `latest.yml` 或 `*.blockmap`。
+다음을 확인합니다.
 
-### API Key 填了还是不能用？
+1. Key 앞뒤에 공백이 없는지 확인합니다.
+2. provider 계정에 잔액 또는 사용 한도가 남아 있는지 확인합니다.
+3. 선택한 모델이 계정에서 사용 가능한지 확인합니다.
+4. 연결 테스트 오류에 인증 실패, 모델 없음, 권한 부족, 잔액 부족이 표시되는지 확인합니다.
 
-检查这几项：
+### 설정이 꼬인 것 같습니다.
 
-1. Key 是否复制完整，没有多余空格。
-2. 平台账号是否有余额或额度。
-3. 当前模型是否已开通。
-4. 测试连接里是否提示模型不存在、权限不足或余额不足。
-
-### 配置乱了怎么办？
-
-在客户端设置里导出配置备份。出问题时可以导入之前的备份，或者只保留这三项重新配置：AI 模型、自选股、新闻源。
+설정 화면에서 구성 백업을 내보낼 수 있습니다. 문제가 계속되면 기존 백업을 가져오거나, AI 모델, 자주 보는 종목, 뉴스 소스만 남기고 다시 설정합니다.
