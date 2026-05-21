@@ -88,12 +88,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
             {
-                "label": "Tushare 股票列表指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
+                "label": "Tushare 종목 목록 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
             },
         ],
         "warning_codes": [],
@@ -122,12 +122,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "完整指南：AI 模型配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+                "label": "전체 가이드: AI 모델 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#ai-모델-설정",
             },
         ],
         "warning_codes": ["provider_prefix_required"],
@@ -152,12 +152,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "完整指南：AI 模型配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+                "label": "전체 가이드: AI 모델 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#ai-모델-설정",
             },
         ],
         "warning_codes": ["inherits_primary_when_empty"],
@@ -182,12 +182,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "完整指南：AI 模型配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+                "label": "전체 가이드: AI 모델 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#ai-모델-설정",
             },
         ],
         "warning_codes": ["fallback_models_must_be_available"],
@@ -214,8 +214,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南：YAML 模式",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#方式三litellm-原生-yaml-配置适合专家或复杂路由",
+                "label": "LLM 설정 가이드: YAML 모드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#방식-3-litellm-native-yaml-설정",
             },
         ],
         "warning_codes": ["yaml_config_overrides_channel_editor"],
@@ -242,12 +242,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南：渠道模式",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#方式二渠道channels模式配置适合进阶多模型",
+                "label": "LLM 설정 가이드: 채널 모드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#방식-2-채널channels-모드",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["channels_override_legacy_keys"],
@@ -272,8 +272,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：AI 模型配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
+                "label": "전체 가이드: AI 모델 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#ai-모델-설정",
             },
         ],
         "warning_codes": [],
@@ -297,12 +297,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -372,12 +372,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -415,12 +415,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "Tushare 股票列表指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
+                "label": "Tushare 종목 목록 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/TUSHARE_STOCK_LIST_GUIDE.md",
             },
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -458,8 +458,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：数据源配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+                "label": "전체 가이드: 데이터 소스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#데이터-소스-설정",
             },
         ],
         "warning_codes": ["provider_priority_order"],
@@ -484,8 +484,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：数据源配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+                "label": "전체 가이드: 데이터 소스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#데이터-소스-설정",
             },
         ],
         "warning_codes": [],
@@ -509,8 +509,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：搜索服务配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+                "label": "전체 가이드: 검색 서비스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#검색-서비스-설정",
             },
         ],
         "warning_codes": ["secret_value", "comma_separated_keys"],
@@ -535,8 +535,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：搜索服务配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+                "label": "전체 가이드: 검색 서비스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#검색-서비스-설정",
             },
         ],
         "warning_codes": ["secret_value", "comma_separated_keys"],
@@ -622,8 +622,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：搜索服务配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#搜索服务配置",
+                "label": "전체 가이드: 검색 서비스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#검색-서비스-설정",
             },
         ],
         "warning_codes": ["requires_json_format"],
@@ -662,8 +662,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：数据源配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+                "label": "전체 가이드: 데이터 소스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#데이터-소스-설정",
             },
         ],
         "warning_codes": [],
@@ -688,8 +688,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：数据源配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#数据源配置",
+                "label": "전체 가이드: 데이터 소스 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#데이터-소스-설정",
             },
         ],
         "warning_codes": ["cloud_deployments_may_disable"],
@@ -714,8 +714,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": [],
@@ -740,8 +740,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": [],
@@ -822,12 +822,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -909,12 +909,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -953,12 +953,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["base_url_must_match_provider"],
@@ -1025,12 +1025,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "LLM 配置指南",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
+                "label": "LLM 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md",
             },
             {
-                "label": "LLM 服务商配置速查",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+                "label": "LLM 제공업체 설정 빠른 참고",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/llm-providers.md",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -1110,8 +1110,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：通知渠道配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#通知渠道详细配置",
+                "label": "전체 가이드: 알림 채널 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#알림-채널-상세-설정",
             },
         ],
         "warning_codes": ["webhook_secret_value"],
@@ -1183,8 +1183,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：自定义 Webhook",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#自定义-webhook",
+                "label": "전체 가이드: 사용자 정의 Webhook",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md",
             },
         ],
         "warning_codes": ["json_template_must_render_object"],
@@ -1242,8 +1242,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：自定义 Webhook",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#自定义-webhook",
+                "label": "전체 가이드: 사용자 정의 Webhook",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md",
             },
         ],
         "warning_codes": ["disabling_ssl_verify_is_risky"],
@@ -1299,16 +1299,16 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "examples": [
             "FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token",
             "FEISHU_WEBHOOK_SECRET=your_feishu_webhook_secret",
-            "FEISHU_WEBHOOK_KEYWORD=股票日报",
+            "FEISHU_WEBHOOK_KEYWORD=주식 일보",
         ],
         "docs": [
             {
-                "label": "完整指南：飞书通知配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#飞书",
+                "label": "전체 가이드: Feishu 알림 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#feishu",
             },
             {
-                "label": "飞书机器人配置专题",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/bot/feishu-bot-config.md",
+                "label": "Feishu Bot 설정 가이드",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/bot/feishu-bot-config.md",
             },
         ],
         "warning_codes": ["feishu_webhook_not_app_secret"],
@@ -1392,8 +1392,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：Telegram",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
+                "label": "전체 가이드: Telegram",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -1418,8 +1418,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：Telegram",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
+                "label": "전체 가이드: Telegram",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#telegram",
             },
         ],
         "warning_codes": [],
@@ -1462,8 +1462,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：邮件",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+                "label": "전체 가이드: 이메일",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#이메일",
             },
         ],
         "warning_codes": [],
@@ -1487,8 +1487,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：邮件",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+                "label": "전체 가이드: 이메일",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#이메일",
             },
         ],
         "warning_codes": ["secret_value", "smtp_authorization_code"],
@@ -1514,8 +1514,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：邮件",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#邮件",
+                "label": "전체 가이드: 이메일",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#이메일",
             },
         ],
         "warning_codes": ["comma_separated_values"],
@@ -1542,8 +1542,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：Discord",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
+                "label": "전체 가이드: Discord",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
             },
         ],
         "warning_codes": ["webhook_secret_value"],
@@ -1568,8 +1568,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：Discord",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
+                "label": "전체 가이드: Discord",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#discord",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -1625,8 +1625,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：通知渠道配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#通知渠道详细配置",
+                "label": "전체 가이드: 알림 채널 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#알림-채널-상세-설정",
             },
         ],
         "warning_codes": ["secret_value"],
@@ -1767,11 +1767,11 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "display_order": 41,
     },
     # ------------------------------------------------------------------
-    # Notification – Server酱 / misc
+    # Notification – ServerChan / misc
     # ------------------------------------------------------------------
     "SERVERCHAN3_SENDKEY": {
         "title": "ServerChan3 SendKey",
-        "description": "Server酱3 SendKey for push notifications.",
+        "description": "ServerChan3 SendKey for push notifications.",
         "category": "notification",
         "data_type": "string",
         "ui_control": "password",
@@ -1849,8 +1849,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": [],
@@ -1878,8 +1878,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": [],
@@ -2118,8 +2118,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
         ],
         "warning_codes": ["local_timezone"],
@@ -2144,8 +2144,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：环境变量完整列表",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+                "label": "전체 가이드: 환경 변수 전체 목록",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#환경-변수-전체-목록",
             },
         ],
         "warning_codes": ["network_scope"],
@@ -2184,12 +2184,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "云服务器访问 WebUI",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+                "label": "클라우드 서버 WebUI 접속",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
             {
-                "label": "完整指南：WebUI 与 API",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-与-api-服务",
+                "label": "전체 가이드: WebUI와 API",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#webui와-api-서비스",
             },
         ],
         "warning_codes": ["public_bind_requires_auth", "restart_required"],
@@ -2214,12 +2214,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "云服务器访问 WebUI",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+                "label": "클라우드 서버 WebUI 접속",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
             {
-                "label": "完整指南：WebUI 与 API",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#webui-与-api-服务",
+                "label": "전체 가이드: WebUI와 API",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#webui와-api-서비스",
             },
         ],
         "warning_codes": ["port_mapping_required", "restart_required"],
@@ -2244,8 +2244,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
         ],
         "warning_codes": ["restart_required"],
@@ -2271,8 +2271,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
         ],
         "warning_codes": ["restart_required"],
@@ -2297,12 +2297,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
             {
-                "label": "云服务器访问 WebUI",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+                "label": "클라우드 서버 WebUI 접속",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
         ],
         "warning_codes": ["public_webui_requires_auth", "auth_settings_endpoint_required"],
@@ -2327,12 +2327,12 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
             {
-                "label": "云服务器访问 WebUI",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
+                "label": "클라우드 서버 WebUI 접속",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
         ],
         "warning_codes": ["trusted_proxy_only"],
@@ -2357,8 +2357,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
         ],
         "warning_codes": ["restart_required"],
@@ -2383,8 +2383,8 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
-                "label": "完整指南：其他配置",
-                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#其他配置",
+                "label": "전체 가이드: 기타 설정",
+                "href": "https://github.com/robot0971-art/daily_stock_analysis/blob/main/docs/full-guide.md#기타-설정",
             },
         ],
         "warning_codes": ["force_run_override"],
