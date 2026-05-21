@@ -56,45 +56,86 @@ class TWSEFetcher(BaseFetcher):
         """
         通过 MCP 获取台股日K线数据
         
+        MCP get_stock_history 返回格式：
+        {
+            "success": true,
+            "data": {
+                "symbol": "2330",
+                "month": "202605",
+                "daily_prices": [
+                    {"date": "2026-05-04", "open": 2200.0, "high": 2285.0,
+                     "low": 2195.0, "close": 2275.0, "volume": 44458732,
+                     "trade_value": 99944198300.0, "transactions": 129173,
+                     "change": "+140.00"}
+                ],
+                "count": 13
+            }
+        }
+        
         Args:
             stock_code: 台股代码，如 '2330'
             start_date: 开始日期 YYYY-MM-DD
             end_date: 结束日期 YYYY-MM-DD
         """
         try:
-            data = self._call_mcp("get_stock_history", {
-                "symbol": stock_code,
-                "date": start_date.replace("-", "")
-            })
+            # 需要拉取 start_date 所在月份的数据
+            # MCP get_stock_history 一次回一个月
+            # 先取起始月，如果跨月则需要多次拉取
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             
-            if not data or not data.get("success"):
-                logger.warning(f"TWSEFetcher: get_stock_history failed for {stock_code}")
-                return pd.DataFrame()
-
-            rows = data.get("data", {}).get("rows", [])
-            if not rows:
-                return pd.DataFrame()
-
-            # 转换为 DataFrame
-            records = []
-            for row in rows:
-                if len(row) >= 7:
+            all_records = []
+            current = start_dt.replace(day=1)
+            
+            while current <= end_dt:
+                date_param = current.strftime("%Y%m") + "01"  # YYYYMMDD format
+                
+                data = self._call_mcp("get_stock_history", {
+                    "symbol": stock_code,
+                    "date": date_param
+                })
+                
+                if not data or not data.get("success"):
+                    logger.debug(f"TWSEFetcher: no data for {stock_code} month {date_param}")
+                    # Move to next month
+                    if current.month == 12:
+                        current = current.replace(year=current.year + 1, month=1)
+                    else:
+                        current = current.replace(month=current.month + 1)
+                    continue
+                
+                daily_prices = data.get("data", {}).get("daily_prices", [])
+                for entry in daily_prices:
                     try:
-                        records.append({
-                            "date": row[0],       # 日期
-                            "open": float(row[1].replace(",", "")),
-                            "high": float(row[2].replace(",", "")),
-                            "low": float(row[3].replace(",", "")),
-                            "close": float(row[4].replace(",", "")),
-                            "volume": float(row[5].replace(",", "")),
-                            "amount": float(row[6].replace(",", "")) if len(row) > 6 else 0,
-                            "pct_chg": float(row[7].replace(",", "").replace("%", "")) if len(row) > 7 else None,
+                        change_str = str(entry.get("change", "0")).replace(",", "").strip()
+                        # Calculate pct_chg from change and close
+                        close_val = float(entry.get("close", 0))
+                        change_val = float(change_str) if change_str else 0.0
+                        # Previous close = close - change
+                        prev_close = close_val - change_val if close_val else None
+                        pct_chg = (change_val / prev_close * 100) if prev_close and prev_close > 0 else None
+                        
+                        all_records.append({
+                            "date": entry.get("date", ""),
+                            "open": float(entry.get("open", 0)),
+                            "high": float(entry.get("high", 0)),
+                            "low": float(entry.get("low", 0)),
+                            "close": float(entry.get("close", 0)),
+                            "volume": float(entry.get("volume", 0)),
+                            "amount": float(entry.get("trade_value", 0)),
+                            "pct_chg": pct_chg,
                         })
-                    except (ValueError, IndexError) as e:
-                        logger.debug(f"TWSEFetcher: skipping row {row}: {e}")
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"TWSEFetcher: skipping entry {entry}: {e}")
                         continue
+                
+                # Move to next month
+                if current.month == 12:
+                    current = current.replace(year=current.year + 1, month=1)
+                else:
+                    current = current.replace(month=current.month + 1)
 
-            df = pd.DataFrame(records)
+            df = pd.DataFrame(all_records)
             if df.empty:
                 return df
 
