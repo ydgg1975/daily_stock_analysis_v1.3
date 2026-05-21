@@ -812,20 +812,25 @@ class TushareFetcher(BaseFetcher):
                         current = safe_float(row['close'])
                         prev_close = safe_float(row['pre_close'])
 
-                        results.append({
-                            'code': ts_code.split('.')[0], # 兼容 sh000001 格式需转换，这里保持纯数字
-                            'name': name,
-                            'current': current,
-                            'change': safe_float(row['change']),
-                            'change_pct': safe_float(row['pct_chg']),
-                            'open': safe_float(row['open']),
-                            'high': safe_float(row['high']),
-                            'low': safe_float(row['low']),
-                            'prev_close': prev_close,
-                            'volume': safe_float(row['vol']),
-                            'amount': safe_float(row['amount']) * 1000, # 千元转元
-                            'amplitude': 0.0 # Tushare index_daily 不直接返回振幅
-                        })
+                # 修复振幅计算，处理 Tushare 不返回振幅的问题
+                amp_val = 0.0
+                if prev_close > 0 and high > 0 and low > 0:
+                    amp_val = round((high - low) / prev_close * 100, 2)
+
+                results.append({
+                    'code': ts_code.split('.')[0], # 兼容 sh000001 格式需转换，这里保持纯数字
+                    'name': name,
+                    'current': current,
+                    'change': safe_float(row['change']),
+                    'change_pct': safe_float(row['pct_chg']),
+                    'open': safe_float(row['open']),
+                    'high': high,
+                    'low': low,
+                    'prev_close': prev_close,
+                    'volume': safe_float(row['vol']),
+                    'amount': safe_float(row['amount']) * 1000, # 千元转元
+                    'amplitude': amp_val, # 使用我们手动计算出的 amp_val
+                })
                 except Exception as e:
                     logger.debug(f"Tushare 获取指数 {name} 失败: {e}")
                     continue
