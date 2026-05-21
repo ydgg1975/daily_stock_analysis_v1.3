@@ -1625,10 +1625,10 @@ class AkshareFetcher(BaseFetcher):
                     'amplitude': amplitude,
                 })
             
-        return results
-
+            return results
+            
         except Exception as e:
-            logger.error(f"[Akshare] 获取指数行情失败: {e}")
+            logger.error(f"[akshare] 获取指数行情失败: {e}")
             return None
 
     def get_market_stats(self) -> Optional[Dict[str, Any]]:
