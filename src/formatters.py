@@ -1,21 +1,15 @@
 # -*- coding: utf-8 -*-
-"""
-===================================
-格式化工具模块
-===================================
-
-提供各种内容格式化工具函数，用于将通用格式转换为平台特定格式。
-"""
+"""Formatting helpers for Markdown, notification text, and message chunks."""
 
 import re
 from typing import List
 
 import markdown2
 
-TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
-PAGE_MARKER_PREFIX = f"\n\n📄"
-PAGE_MARKER_SAFE_BYTES = 16 # "\n\n📄 9999/9999"
-PAGE_MARKER_SAFE_LEN = 13   # "\n\n📄 9999/9999"
+TRUNCATION_SUFFIX = "\n\n...(내용이 길어 일부만 표시합니다)"
+PAGE_MARKER_PREFIX = "\n\n페이지"
+PAGE_MARKER_SAFE_BYTES = 18  # "\n\n페이지 9999/9999"
+PAGE_MARKER_SAFE_LEN = 16    # "\n\n페이지 9999/9999"
 MIN_MAX_WORDS = 10
 MIN_MAX_BYTES = 40
 
@@ -245,10 +239,10 @@ def markdown_to_plain_text(markdown_text: str) -> str:
     text = re.sub(r'^>\s+', '', text, flags=re.MULTILINE)
 
     # 移除列表标记 - item -> item
-    text = re.sub(r'^[-*]\s+', '• ', text, flags=re.MULTILINE)
+    text = re.sub(r'^[-*]\s+', '- ', text, flags=re.MULTILINE)
 
     # 移除分隔线 ---
-    text = re.sub(r'^---+$', '────────', text, flags=re.MULTILINE)
+    text = re.sub(r'^---+$', '--------', text, flags=re.MULTILINE)
 
     # 移除表格语法 |---|---|
     text = re.sub(r'\|[-:]+\|[-:|\s]+\|', '', text)
@@ -268,7 +262,7 @@ def _chunk_by_max_bytes(content: str, max_bytes: int) -> List[str]:
     if _bytes(content) <= max_bytes:
         return [content]
     if max_bytes < MIN_MAX_BYTES:
-        raise ValueError(f"max_bytes={max_bytes} < {MIN_MAX_BYTES}, 可能陷入无限递归。")
+        raise ValueError(f"max_bytes={max_bytes} < {MIN_MAX_BYTES}, chunking may loop indefinitely.")
 
     sections: List[str] = []
     suffix = TRUNCATION_SUFFIX
@@ -303,7 +297,7 @@ def chunk_content_by_max_bytes(content: str, max_bytes: int, add_page_marker: bo
     def _chunk(content: str, max_bytes: int) -> List[str]:
         # 优先按分隔线/标题分割，保证分页自然
         if max_bytes < MIN_MAX_BYTES:
-            raise ValueError(f"max_bytes={max_bytes} < {MIN_MAX_BYTES}, 可能陷入无限递归。")
+            raise ValueError(f"max_bytes={max_bytes} < {MIN_MAX_BYTES}, chunking may loop indefinitely.")
 
         if _bytes(content) <= max_bytes:
             return [content]
@@ -449,9 +443,9 @@ def format_feishu_markdown(content: str) -> str:
         for row in data_rows:
             pairs = []
             for idx, cell in enumerate(row):
-                key = header[idx] if idx < len(header) else f"列{idx + 1}"
-                pairs.append(f"{key}：{cell}")
-            output.append(f"• {' | '.join(pairs)}")
+                key = header[idx] if idx < len(header) else f"Column {idx + 1}"
+                pairs.append(f"{key}: {cell}")
+            output.append(f"- {' | '.join(pairs)}")
 
     lines = []
     table_buffer: List[str] = []
@@ -476,13 +470,13 @@ def format_feishu_markdown(content: str) -> str:
         # 转换引用块
         elif line.startswith('> '):
             quote = line[2:].strip()
-            line = f"💬 {quote}" if quote else ""
+            line = f"> {quote}" if quote else ""
         # 转换分隔线
         elif line.strip() == '---':
-            line = '────────'
+            line = '--------'
         # 转换列表项
         elif line.startswith('- '):
-            line = f"• {line[2:].strip()}"
+            line = f"- {line[2:].strip()}"
 
         lines.append(line)
 
@@ -554,7 +548,7 @@ def _chunk_by_max_words(content: str, max_words: int, special_char_len: int = 2)
         return [content]
     if max_words < MIN_MAX_WORDS:
         raise ValueError(
-            f"max_words={max_words} < {MIN_MAX_WORDS}, 可能陷入无限递归。"
+            f"max_words={max_words} < {MIN_MAX_WORDS}, chunking may loop indefinitely."
         )
 
     sections = []
@@ -598,7 +592,7 @@ def chunk_content_by_max_words(
             # Safe guard，避免无限递归
             # 理论上，max_words在每次递归中可以减小到无限小，但实际中不太可能发生，
             # 除非每次_chunk_by_separators都能成功返回分隔符，且max_words初始值太小。
-            raise ValueError(f"max_words={max_words} < {MIN_MAX_WORDS}, 可能陷入无限递归。")
+            raise ValueError(f"max_words={max_words} < {MIN_MAX_WORDS}, chunking may loop indefinitely.")
 
         if _effective_len(content, special_char_len) <= max_words:
             return [content]

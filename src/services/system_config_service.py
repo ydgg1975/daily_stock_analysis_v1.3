@@ -1384,7 +1384,7 @@ class SystemConfigService:
             )
             warnings.append(
                 (
-                    "新闻窗口已按策略计算："
+                    "뉴스 수집 기간이 전략에 따라 계산되었습니다: "
                     f"NEWS_STRATEGY_PROFILE={profile}, "
                     f"NEWS_MAX_AGE_DAYS={max_age}, "
                     f"effective_days={effective_days} "
@@ -1925,14 +1925,14 @@ class SystemConfigService:
             ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(ntfy_url)
             if ntfy_server_url and ntfy_topic:
                 return None
-            return "NTFY_URL 必须包含 topic path，例如 https://ntfy.sh/my-topic。"
+            return "NTFY_URL에는 topic path가 포함되어야 합니다. 예: https://ntfy.sh/my-topic"
         if channel == "gotify":
             gotify_url = (effective_map.get("GOTIFY_URL") or "").strip()
             if not gotify_url:
                 return None
             if resolve_gotify_message_endpoint(gotify_url):
                 return None
-            return "GOTIFY_URL 必须是 Gotify server base URL，不包含 /message。"
+            return "GOTIFY_URL은 /message를 제외한 Gotify server base URL이어야 합니다."
         return None
 
     def _build_notification_test_config(self, effective_map: Dict[str, str]) -> Config:
@@ -2919,7 +2919,7 @@ class SystemConfigService:
             "blocked due to policy",
             "moderation_blocked",
             "policy_blocked",
-            "请求被拦截",
+            "요청이 차단되었습니다",
         )
         return any(token in lowered for token in blocked_tokens)
 
