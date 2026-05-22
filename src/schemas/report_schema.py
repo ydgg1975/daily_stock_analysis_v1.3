@@ -143,6 +143,11 @@ class AnalysisReportSchema(BaseModel):
     key_points: Optional[str] = None
     risk_warning: Optional[str] = None
     buy_reason: Optional[str] = None
+    evidence_points: Optional[List[str]] = None
+    counter_evidence: Optional[List[str]] = None
+    data_limitations: Optional[List[str]] = None
+    confidence_reason: Optional[str] = None
+    analysis_confidence: Optional[Dict[str, Any]] = None
 
     trend_analysis: Optional[str] = None
     short_term_outlook: Optional[str] = None

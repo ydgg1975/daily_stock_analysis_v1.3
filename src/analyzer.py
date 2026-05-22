@@ -77,6 +77,32 @@ def _normalize_risk_warning_values(value: Any) -> List[str]:
     return [text] if text else []
 
 
+def _normalize_text_list(value: Any) -> List[str]:
+    """Normalize arbitrary LLM output into a compact list of text values."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        lines = [line.strip(" -•\t") for line in text.splitlines()]
+        return [line for line in lines if line]
+    if isinstance(value, (list, tuple, set)):
+        normalized: List[str] = []
+        for item in value:
+            normalized.extend(_normalize_text_list(item))
+        return normalized
+    if isinstance(value, dict):
+        normalized = []
+        for key, item_value in value.items():
+            children = _normalize_text_list(item_value)
+            if children:
+                normalized.extend(f"{key}: {child}" for child in children)
+        return normalized
+    text = str(value).strip()
+    return [text] if text else []
+
+
 class _LiteLLMStreamError(RuntimeError):
     """Internal error wrapper that records whether any text was streamed."""
 
@@ -1337,6 +1363,14 @@ class AnalysisResult:
     key_points: str = ""  # 核心看点（3-5个要点）
     risk_warning: str = ""  # 风险提示
     buy_reason: str = ""  # 买入/卖出理由
+    evidence_points: Optional[List[str]] = None  # 支撑结论的关键依据
+    counter_evidence: Optional[List[str]] = None  # 与结论相反或削弱结论的依据
+    data_limitations: Optional[List[str]] = None  # 数据缺口、时效性或推断边界
+    confidence_reason: str = ""  # 置信度理由
+    analysis_confidence: Optional[Dict[str, Any]] = None  # 结构化置信度
+    thesis_tracking: Optional[Dict[str, Any]] = None  # 与上一份同股分析的投资假设对比
+    evidence_graph: Optional[Dict[str, Any]] = None  # 结论、依据、风险和数据来源关系图
+    stock_risk_report: Optional[Dict[str, Any]] = None  # 单股风险指标与仓位注意事项
 
     # ========== 元数据 ==========
     market_snapshot: Optional[Dict[str, Any]] = None  # 当日行情快照（展示用）
@@ -1385,8 +1419,17 @@ class AnalysisResult:
             'key_points': self.key_points,
             'risk_warning': self.risk_warning,
             'buy_reason': self.buy_reason,
+            'evidence_points': self.evidence_points or [],
+            'counter_evidence': self.counter_evidence or [],
+            'data_limitations': self.data_limitations or [],
+            'confidence_reason': self.confidence_reason,
+            'analysis_confidence': self.analysis_confidence,
+            'thesis_tracking': self.thesis_tracking,
+            'evidence_graph': self.evidence_graph,
+            'stock_risk_report': self.stock_risk_report,
             'market_snapshot': self.market_snapshot,
             'search_performed': self.search_performed,
+            'data_sources': self.data_sources,
             'success': self.success,
             'error_message': self.error_message,
             'current_price': self.current_price,
@@ -1565,6 +1608,15 @@ class GeminiAnalyzer:
     "key_points": "3-5个核心看点，逗号分隔",
     "risk_warning": "风险提示",
     "buy_reason": "操作理由，引用交易理念",
+    "evidence_points": ["支持当前结论的关键数据或事实依据1", "依据2"],
+    "counter_evidence": ["削弱或反驳当前结论的因素1", "因素2"],
+    "data_limitations": ["数据缺口、时效性不足或推断边界1", "限制2"],
+    "confidence_reason": "说明置信度高/中/低的原因",
+    "analysis_confidence": {
+        "score": 0.0-1.0,
+        "label": "high/medium/low",
+        "warnings": ["影响置信度的警告"]
+    },
 
     "trend_analysis": "走势形态分析",
     "short_term_outlook": "短期1-3日展望",
@@ -1723,6 +1775,15 @@ class GeminiAnalyzer:
     "key_points": "3-5个核心看点，逗号分隔",
     "risk_warning": "风险提示",
     "buy_reason": "操作理由，引用激活技能或风险框架",
+    "evidence_points": ["支持当前结论的关键数据或事实依据1", "依据2"],
+    "counter_evidence": ["削弱或反驳当前结论的因素1", "因素2"],
+    "data_limitations": ["数据缺口、时效性不足或推断边界1", "限制2"],
+    "confidence_reason": "说明置信度高/中/低的原因",
+    "analysis_confidence": {
+        "score": 0.0-1.0,
+        "label": "high/medium/low",
+        "warnings": ["影响置信度的警告"]
+    },
 
     "trend_analysis": "走势形态分析",
     "short_term_outlook": "短期1-3日展望",
@@ -3289,6 +3350,12 @@ class GeminiAnalyzer:
                     key_points=data.get('key_points', ''),
                     risk_warning=data.get('risk_warning', ''),
                     buy_reason=data.get('buy_reason', ''),
+                    evidence_points=_normalize_text_list(data.get('evidence_points')),
+                    counter_evidence=_normalize_text_list(data.get('counter_evidence')),
+                    data_limitations=_normalize_text_list(data.get('data_limitations')),
+                    confidence_reason=str(data.get('confidence_reason', '') or ''),
+                    analysis_confidence=data.get('analysis_confidence') if isinstance(data.get('analysis_confidence'), dict) else None,
+                    evidence_graph=data.get('evidence_graph') if isinstance(data.get('evidence_graph'), dict) else None,
                     # 元数据
                     search_performed=data.get('search_performed', False),
                     data_sources=data.get('data_sources', 'Technical data' if report_language == "en" else '技术面数据'),

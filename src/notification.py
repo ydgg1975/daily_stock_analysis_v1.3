@@ -1543,6 +1543,99 @@ class NotificationService(
                 "",
             ])
 
+        evidence_points = getattr(result, "evidence_points", None) or []
+        counter_evidence = getattr(result, "counter_evidence", None) or []
+        data_limitations = getattr(result, "data_limitations", None) or []
+        analysis_confidence = getattr(result, "analysis_confidence", None) or {}
+        confidence_reason = getattr(result, "confidence_reason", "") or ""
+        if evidence_points or counter_evidence or data_limitations or confidence_reason or analysis_confidence:
+            lines.extend([
+                f"### 🧭 {labels['evidence_heading']}",
+                "",
+            ])
+            if confidence_reason or analysis_confidence:
+                confidence_label = analysis_confidence.get("label", result.confidence_level)
+                confidence_score = analysis_confidence.get("score")
+                if isinstance(confidence_score, (int, float)):
+                    confidence_label = f"{confidence_label} ({confidence_score * 100:.0f}%)"
+                lines.append(f"**{labels['confidence_heading']}**: {confidence_label}")
+                if confidence_reason:
+                    lines.append(f"**{labels['confidence_reason_label']}**: {confidence_reason}")
+                lines.append("")
+            if evidence_points:
+                lines.append(f"**{labels['evidence_heading']}**:")
+                for item in evidence_points[:5]:
+                    lines.append(f"- {str(item)[:120]}")
+                lines.append("")
+            if counter_evidence:
+                lines.append(f"**{labels['counter_evidence_heading']}**:")
+                for item in counter_evidence[:5]:
+                    lines.append(f"- {str(item)[:120]}")
+                lines.append("")
+            if data_limitations:
+                lines.append(f"**{labels['data_limitations_heading']}**:")
+                for item in data_limitations[:5]:
+                    lines.append(f"- {str(item)[:120]}")
+                lines.append("")
+
+        thesis = getattr(result, "thesis_tracking", None) or {}
+        if thesis:
+            lines.extend([
+                f"### 🔁 {labels['thesis_tracking_heading']}",
+                "",
+                f"**{labels['thesis_status_label']}**: {thesis.get('status', 'N/A')}",
+            ])
+            if thesis.get("current_thesis"):
+                lines.append(f"**{labels['current_thesis_label']}**: {thesis['current_thesis']}")
+            if thesis.get("previous_thesis"):
+                lines.append(f"**{labels['previous_thesis_label']}**: {thesis['previous_thesis']}")
+            key_changes = thesis.get("key_changes") or []
+            if key_changes:
+                lines.append("")
+                lines.append(f"**{labels['key_changes_label']}**:")
+                for item in key_changes[:5]:
+                    lines.append(f"- {str(item)[:120]}")
+            lines.append("")
+
+        evidence_graph = getattr(result, "evidence_graph", None) or {}
+        if evidence_graph:
+            summary = evidence_graph.get("summary") or {}
+            lines.extend([
+                f"### 🕸️ {labels['evidence_graph_heading']}",
+                "",
+                (
+                    f"**{labels['evidence_graph_summary_label']}**: "
+                    f"{summary.get('supporting_evidence', 0)} supporting / "
+                    f"{summary.get('counter_evidence', 0)} counter / "
+                    f"{summary.get('risks', 0)} risks"
+                ),
+            ])
+            if summary.get("stale_nodes"):
+                lines.append(f"**{labels['stale_evidence_label']}**: {summary['stale_nodes']}")
+            lines.append("")
+
+        stock_risk = getattr(result, "stock_risk_report", None) or {}
+        if stock_risk:
+            lines.extend([
+                f"### 🛡️ {labels['risk_engine_heading']}",
+                "",
+                (
+                    f"**{labels['risk_level_label']}**: {stock_risk.get('risk_level', 'N/A')} | "
+                    f"**{labels['risk_score_label']}**: {stock_risk.get('risk_score', 'N/A')}/100"
+                ),
+            ])
+            if stock_risk.get("volatility_pct") is not None or stock_risk.get("max_drawdown_pct") is not None:
+                lines.append(
+                    f"**{labels['volatility_label']}**: {stock_risk.get('volatility_pct', 'N/A')}% | "
+                    f"**{labels['max_drawdown_label']}**: {stock_risk.get('max_drawdown_pct', 'N/A')}%"
+                )
+            if stock_risk.get("position_caution"):
+                lines.append(f"**{labels['position_caution_label']}**: {stock_risk['position_caution']}")
+            flags = stock_risk.get("flags") or []
+            for flag in flags[:5]:
+                lines.append(f"- {flag.get('severity', 'medium')}: {flag.get('reason')}")
+            lines.append("")
+
         # Key information: sentiment + fundamentals.
         info_added = False
         if intel:

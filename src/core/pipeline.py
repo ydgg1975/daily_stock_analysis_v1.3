@@ -46,6 +46,9 @@ from src.report_language import (
 )
 from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
+from src.services.evidence_graph_service import attach_evidence_graph
+from src.services.stock_risk_service import attach_stock_risk_report
+from src.services.thesis_tracking_service import attach_thesis_tracking
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import (
@@ -362,6 +365,7 @@ class StockAnalysisPipeline:
 
             # Step 3: 趋势分析（基于交易理念）— 在 Agent 分支之前执行，供两条路径共用
             trend_result: Optional[TrendAnalysisResult] = None
+            history_df: Optional[pd.DataFrame] = None
             try:
                 from src.services.history_loader import get_frozen_target_date
                 _mkt = get_market_for_stock(normalize_stock_code(code))
@@ -374,6 +378,7 @@ class StockAnalysisPipeline:
                     # Issue #234: Augment with realtime for intraday MA calculation
                     if self.config.enable_realtime_quote and realtime_quote:
                         df = self._augment_historical_with_realtime(df, realtime_quote, code)
+                    history_df = df
                     trend_result = self.trend_analyzer.analyze(df, code)
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
                               f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
@@ -392,6 +397,7 @@ class StockAnalysisPipeline:
                     chip_data,
                     fundamental_context,
                     trend_result,
+                    history_df,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
@@ -517,6 +523,9 @@ class StockAnalysisPipeline:
             if result and result.success:
                 try:
                     self._emit_progress(97, f"{stock_name}：正在保存分析报告")
+                    attach_thesis_tracking(result, self.db)
+                    attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
+                    attach_evidence_graph(result)
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
                         news_content=news_context,
@@ -788,6 +797,7 @@ class StockAnalysisPipeline:
         chip_data: Optional[ChipDistribution],
         fundamental_context: Optional[Dict[str, Any]] = None,
         trend_result: Optional[TrendAnalysisResult] = None,
+        history_df: Optional[pd.DataFrame] = None,
     ) -> Optional[AnalysisResult]:
         """
         使用 Agent 模式分析单只股票。
@@ -912,6 +922,9 @@ class StockAnalysisPipeline:
             if result and result.success:
                 try:
                     initial_context["stock_name"] = resolved_stock_name
+                    attach_thesis_tracking(result, self.db)
+                    attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
+                    attach_evidence_graph(result)
                     self.db.save_analysis_history(
                         result=result,
                         query_id=query_id,

@@ -17,7 +17,15 @@
 {% set intel = dashboard.get('intelligence') or {} %}
 {% set core = dashboard.get('core_conclusion') or {} %}
 {% set battle = dashboard.get('battle_plan') or {} %}
-{% set data_persp = dashboard.get('data_perspective') or {} %}
+{% set data_persp = dashboard.get('data_perspective') or {} %}
+
+{% set analysis_confidence = result.analysis_confidence if result.analysis_confidence else {} %}
+
+{% set thesis = result.thesis_tracking if result.thesis_tracking else {} %}
+
+{% set evidence_graph = result.evidence_graph if result.evidence_graph else {} %}
+
+{% set stock_risk = result.stock_risk_report if result.stock_risk_report else {} %}
 
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
 
@@ -59,7 +67,59 @@
 
 ⏰ **{{ labels.time_sensitivity_label }}**: {{ core.get('time_sensitivity', labels.default_time_sensitivity) }}
 
-{% set pos_advice = core.get('position_advice', {}) %}
+{% if result.confidence_reason or analysis_confidence or result.evidence_points or result.counter_evidence or result.data_limitations %}
+
+### 🧭 {{ labels.evidence_heading }}
+
+{% if result.confidence_reason or analysis_confidence %}
+
+**{{ labels.confidence_heading }}**: {{ analysis_confidence.get('label', result.confidence_level) }}{% if analysis_confidence.get('score') is not none %} ({{ (analysis_confidence.get('score') * 100)|round|int }}%){% endif %}
+
+{% if result.confidence_reason %}
+
+**{{ labels.confidence_reason_label }}**: {{ result.confidence_reason }}
+
+{% endif %}
+{% endif %}
+
+{% if result.evidence_points %}
+
+**{{ labels.evidence_heading }}**:
+
+{% for item in result.evidence_points %}
+
+- {{ item }}
+
+{% endfor %}
+{% endif %}
+
+{% if result.counter_evidence %}
+
+**{{ labels.counter_evidence_heading }}**:
+
+{% for item in result.counter_evidence %}
+
+- {{ item }}
+
+{% endfor %}
+{% endif %}
+
+{% if result.data_limitations %}
+
+**{{ labels.data_limitations_heading }}**:
+
+{% for item in result.data_limitations %}
+
+- {{ item }}
+
+{% endfor %}
+{% endif %}
+
+{% endif %}
+
+
+
+{% set pos_advice = core.get('position_advice', {}) %}
 {% if pos_advice %}
 | {{ labels.position_status_label }} | {{ labels.action_advice_label }} |
 |---------|---------|
@@ -67,7 +127,91 @@
 | 💼 **{{ labels.has_position_label }}** | {{ pos_advice.get('has_position', labels.continue_holding) }} |
 {% endif %}
 
-{{ market_snapshot(result) }}
+{% if thesis %}
+
+### 🔁 {{ labels.thesis_tracking_heading }}
+
+**{{ labels.thesis_status_label }}**: {{ thesis.get('status', 'N/A') }}
+
+{% if thesis.get('current_thesis') %}
+
+**{{ labels.current_thesis_label }}**: {{ thesis.get('current_thesis') }}
+
+{% endif %}
+
+{% if thesis.get('previous_thesis') %}
+
+**{{ labels.previous_thesis_label }}**: {{ thesis.get('previous_thesis') }}
+
+{% endif %}
+
+{% if thesis.get('key_changes') %}
+
+**{{ labels.key_changes_label }}**:
+
+{% for item in thesis.get('key_changes') %}
+
+- {{ item }}
+
+{% endfor %}
+
+{% endif %}
+
+{% endif %}
+
+
+
+{% if evidence_graph %}
+
+### 🕸️ {{ labels.evidence_graph_heading }}
+
+{% set graph_summary = evidence_graph.get('summary') or {} %}
+
+**{{ labels.evidence_graph_summary_label }}**: {{ graph_summary.get('supporting_evidence', 0) }} supporting / {{ graph_summary.get('counter_evidence', 0) }} counter / {{ graph_summary.get('risks', 0) }} risks
+
+{% if graph_summary.get('stale_nodes') %}
+
+**{{ labels.stale_evidence_label }}**: {{ graph_summary.get('stale_nodes') }}
+
+{% endif %}
+
+{% endif %}
+
+
+
+{% if stock_risk %}
+
+### 🛡️ {{ labels.risk_engine_heading }}
+
+**{{ labels.risk_level_label }}**: {{ stock_risk.get('risk_level', 'N/A') }} | **{{ labels.risk_score_label }}**: {{ stock_risk.get('risk_score', 'N/A') }}/100
+
+{% if stock_risk.get('volatility_pct') is not none or stock_risk.get('max_drawdown_pct') is not none %}
+
+**{{ labels.volatility_label }}**: {{ stock_risk.get('volatility_pct', 'N/A') }}% | **{{ labels.max_drawdown_label }}**: {{ stock_risk.get('max_drawdown_pct', 'N/A') }}%
+
+{% endif %}
+
+{% if stock_risk.get('position_caution') %}
+
+**{{ labels.position_caution_label }}**: {{ stock_risk.get('position_caution') }}
+
+{% endif %}
+
+{% if stock_risk.get('flags') %}
+
+{% for flag in stock_risk.get('flags')[:5] %}
+
+- {{ flag.get('severity', 'medium') }}: {{ flag.get('reason') }}
+
+{% endfor %}
+
+{% endif %}
+
+{% endif %}
+
+
+
+{{ market_snapshot(result) }}
 
 {% if data_persp %}
 ### 📊 {{ labels.data_perspective_heading }}

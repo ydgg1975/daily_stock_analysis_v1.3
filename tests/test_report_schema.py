@@ -41,11 +41,21 @@ class TestAnalysisReportSchema(unittest.TestCase):
                 "battle_plan": {"sniper_points": {"stop_loss": "110元"}},
             },
             "analysis_summary": "基本面稳健",
+            "evidence_points": ["MA5 remains above MA20", "News flow is supportive"],
+            "counter_evidence": ["Valuation is not cheap"],
+            "data_limitations": ["Fundamental data may lag"],
+            "confidence_reason": "Multiple signals agree, but valuation risk remains.",
+            "analysis_confidence": {"score": 0.72, "label": "medium"},
         }
         schema = AnalysisReportSchema.model_validate(data)
         self.assertEqual(schema.stock_name, "贵州茅台")
         self.assertEqual(schema.sentiment_score, 75)
         self.assertIsNotNone(schema.dashboard)
+        self.assertEqual(schema.evidence_points, ["MA5 remains above MA20", "News flow is supportive"])
+        self.assertEqual(schema.counter_evidence, ["Valuation is not cheap"])
+        self.assertEqual(schema.data_limitations, ["Fundamental data may lag"])
+        self.assertEqual(schema.confidence_reason, "Multiple signals agree, but valuation risk remains.")
+        self.assertEqual(schema.analysis_confidence, {"score": 0.72, "label": "medium"})
 
     def test_schema_allows_optional_fields_missing(self) -> None:
         """Schema accepts minimal valid structure."""
@@ -125,12 +135,22 @@ class TestAnalyzerSchemaFallback(unittest.TestCase):
             "decision_type": "hold",
             "confidence_level": "高",
             "analysis_summary": "技术面向好",
+            "evidence_points": ["均线多头排列"],
+            "counter_evidence": ["短线接近压力位"],
+            "data_limitations": ["新闻数据未联网确认"],
+            "confidence_reason": "技术面清晰，但消息面覆盖不足。",
+            "analysis_confidence": {"score": 0.68, "label": "medium"},
         })
         result = analyzer._parse_response(response, "600519", "股票600519")
         self.assertIsInstance(result, AnalysisResult)
         self.assertEqual(result.name, "贵州茅台")
         self.assertEqual(result.sentiment_score, 72)
         self.assertEqual(result.analysis_summary, "技术面向好")
+        self.assertEqual(result.evidence_points, ["均线多头排列"])
+        self.assertEqual(result.counter_evidence, ["短线接近压力位"])
+        self.assertEqual(result.data_limitations, ["新闻数据未联网确认"])
+        self.assertEqual(result.confidence_reason, "技术面清晰，但消息面覆盖不足。")
+        self.assertEqual(result.analysis_confidence, {"score": 0.68, "label": "medium"})
 
     def test_parse_response_keeps_unknown_dashboard_fields(self) -> None:
         analyzer = GeminiAnalyzer()

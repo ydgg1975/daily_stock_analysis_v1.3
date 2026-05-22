@@ -616,6 +616,116 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("Hold", out)
 
     @mock.patch("src.notification.get_config")
+    def test_generate_single_stock_report_shows_evidence_metadata(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
+        service = NotificationService()
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=65,
+            trend_prediction="Sideways",
+            operation_advice="Hold",
+            analysis_summary="Wait for a cleaner breakout.",
+            report_language="en",
+            evidence_points=["Price remains above MA20."],
+            counter_evidence=["Volume confirmation is weak."],
+            data_limitations=["News data was not refreshed."],
+            confidence_reason="Signals are mixed.",
+            analysis_confidence={"score": 0.61, "label": "medium"},
+        )
+
+        out = service.generate_single_stock_report(result)
+
+        self.assertIn("Evidence", out)
+        self.assertIn("Price remains above MA20.", out)
+        self.assertIn("Volume confirmation is weak.", out)
+        self.assertIn("News data was not refreshed.", out)
+        self.assertIn("61%", out)
+
+    @mock.patch("src.notification.get_config")
+    def test_generate_single_stock_report_shows_thesis_tracking(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
+        service = NotificationService()
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=52,
+            trend_prediction="Sideways",
+            operation_advice="Hold",
+            analysis_summary="Momentum weakened.",
+            report_language="en",
+            thesis_tracking={
+                "status": "weakened",
+                "current_thesis": "Momentum weakened.",
+                "previous_thesis": "Buy the pullback.",
+                "key_changes": ["Sentiment score changed by -20 points."],
+            },
+        )
+
+        out = service.generate_single_stock_report(result)
+
+        self.assertIn("Changes Since Previous Analysis", out)
+        self.assertIn("Momentum weakened.", out)
+        self.assertIn("Buy the pullback.", out)
+        self.assertIn("Sentiment score changed by -20 points.", out)
+
+    @mock.patch("src.notification.get_config")
+    def test_generate_single_stock_report_shows_evidence_graph(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
+        service = NotificationService()
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=65,
+            trend_prediction="Sideways",
+            operation_advice="Hold",
+            analysis_summary="Wait for a cleaner breakout.",
+            report_language="en",
+            evidence_graph={
+                "summary": {
+                    "supporting_evidence": 2,
+                    "counter_evidence": 1,
+                    "risks": 1,
+                    "stale_nodes": 1,
+                }
+            },
+        )
+
+        out = service.generate_single_stock_report(result)
+
+        self.assertIn("Evidence Graph", out)
+        self.assertIn("2 supporting / 1 counter / 1 risks", out)
+        self.assertIn("Stale/Limited Nodes", out)
+
+    @mock.patch("src.notification.get_config")
+    def test_generate_single_stock_report_shows_stock_risk_report(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
+        service = NotificationService()
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=65,
+            trend_prediction="Sideways",
+            operation_advice="Hold",
+            analysis_summary="Wait for a cleaner breakout.",
+            report_language="en",
+            stock_risk_report={
+                "risk_level": "medium",
+                "risk_score": 50,
+                "volatility_pct": 32.5,
+                "max_drawdown_pct": 18.2,
+                "position_caution": "Keep position size controlled.",
+                "flags": [{"severity": "medium", "reason": "Price is extended."}],
+            },
+        )
+
+        out = service.generate_single_stock_report(result)
+
+        self.assertIn("Risk Engine", out)
+        self.assertIn("32.5%", out)
+        self.assertIn("Keep position size controlled.", out)
+
+    @mock.patch("src.notification.get_config")
     def test_history_compare_context_uses_cache(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_history_compare_n=3)
         service = NotificationService()

@@ -79,6 +79,77 @@ class TestReportRenderer(unittest.TestCase):
         self.assertIn("核心结论", out)
         self.assertIn("作战计划", out)
 
+    def test_render_markdown_full_shows_evidence_and_limitations(self) -> None:
+        """Markdown platform renders evidence, confidence, and data limitations."""
+        r = _make_result()
+        r.evidence_points = ["MA5 remains above MA20"]
+        r.counter_evidence = ["Price is near resistance"]
+        r.data_limitations = ["News data was not refreshed"]
+        r.confidence_reason = "Technical evidence is clear, but news coverage is incomplete."
+        r.analysis_confidence = {"score": 0.74, "label": "medium"}
+
+        out = render("markdown", [r], summary_only=False)
+
+        self.assertIsNotNone(out)
+        self.assertIn("分析依据", out)
+        self.assertIn("MA5 remains above MA20", out)
+        self.assertIn("Price is near resistance", out)
+        self.assertIn("News data was not refreshed", out)
+        self.assertIn("74%", out)
+
+    def test_render_markdown_full_shows_thesis_tracking(self) -> None:
+        """Markdown platform renders previous-analysis thesis tracking."""
+        r = _make_result()
+        r.thesis_tracking = {
+            "status": "weakened",
+            "current_thesis": "Momentum weakened.",
+            "previous_thesis": "Buy the pullback.",
+            "key_changes": ["Sentiment score changed by -20 points."],
+        }
+
+        out = render("markdown", [r], summary_only=False)
+
+        self.assertIsNotNone(out)
+        self.assertIn("上次分析以来的变化", out)
+        self.assertIn("Momentum weakened.", out)
+        self.assertIn("Buy the pullback.", out)
+        self.assertIn("Sentiment score changed by -20 points.", out)
+
+    def test_render_markdown_full_shows_evidence_graph_summary(self) -> None:
+        r = _make_result()
+        r.evidence_graph = {
+            "summary": {
+                "supporting_evidence": 2,
+                "counter_evidence": 1,
+                "risks": 1,
+                "stale_nodes": 1,
+            }
+        }
+
+        out = render("markdown", [r], summary_only=False)
+
+        self.assertIsNotNone(out)
+        self.assertIn("依据关系图", out)
+        self.assertIn("2 supporting / 1 counter / 1 risks", out)
+
+    def test_render_markdown_full_shows_stock_risk_report(self) -> None:
+        r = _make_result()
+        r.stock_risk_report = {
+            "risk_level": "medium",
+            "risk_score": 50,
+            "volatility_pct": 32.5,
+            "max_drawdown_pct": 18.2,
+            "position_caution": "Keep position size controlled.",
+            "flags": [{"severity": "medium", "reason": "Price is extended."}],
+        }
+
+        out = render("markdown", [r], summary_only=False)
+
+        self.assertIsNotNone(out)
+        self.assertIn("风险引擎", out)
+        self.assertIn("32.5%", out)
+        self.assertIn("Keep position size controlled.", out)
+
     def test_render_wechat(self) -> None:
         """Wechat platform renders."""
         r = _make_result()
