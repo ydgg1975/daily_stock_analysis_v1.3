@@ -24,7 +24,6 @@ x-common: &common
     - ../data:/app/data
     - ../logs:/app/logs
     - ../reports:/app/reports
-    - ../.env:/app/.env
     - ../strategies:/app/strategies:ro
     # 如需覆盖前端静态资源，可挂载本地 static 目录
     # - ../static:/app/static:ro
