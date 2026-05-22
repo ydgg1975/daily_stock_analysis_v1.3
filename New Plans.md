@@ -5,6 +5,5 @@ daily_stock_analysis 주식분석 에이전트 고도화 작업의 남은 계획
 
 ## 1. 운영 안정화와 평가
 
-- 대표 종목 A-share, HK, US에 대한 smoke test를 추가한다.
 - 사용자 노출 문구와 깨진 문자열을 점검한다.
 - 2차 작업 완료 후 전체 CI gate를 실행한다.

@@ -8,8 +8,8 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
 ## [Unreleased]
 
+- [테스트] 대표 A-share, HK, US 종목의 agent history와 chart analysis smoke test를 추가했습니다.
 - [테스트] 차트 분석, paper trading, portfolio analysis용 eval fixture와 회귀 검증을 추가했습니다.
-
 - [개선] Agent analysis map에 도구별 호출 수, 성공률, 실패율, timeout, cached count, 평균 실행 시간을 집계하는 tool metrics를 추가하고 Web 리포트에서 확인할 수 있게 했습니다.
 - [개선] Vision provider가 없거나 Vision 분석이 실패해도 차트 분석 도구가 기존 수치 기반 분석을 유지하고 fallback 사용 여부와 사유를 명시하도록 했습니다.
 - [개선] Vision 차트 해석에 evidence 블록을 추가해 VLM 근거, confidence, 불확실성, 수치 분석과의 충돌 여부를 구조화해 표시할 수 있게 했습니다.
