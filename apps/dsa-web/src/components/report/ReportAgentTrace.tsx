@@ -1,11 +1,12 @@
 import type React from 'react';
-import { AlertTriangle, CheckCircle2, GitBranch, SearchCheck } from 'lucide-react';
-import type { AnalysisConfidence, AnalysisMap } from '../../types/analysis';
+import { AlertTriangle, BarChart3, BriefcaseBusiness, CheckCircle2, GitBranch, Radar, SearchCheck, ShieldAlert } from 'lucide-react';
+import type { AnalysisConfidence, AnalysisMap, ReportDetails } from '../../types/analysis';
 import { Badge, Card } from '../common';
 
 interface ReportAgentTraceProps {
   analysisMap?: AnalysisMap;
   analysisConfidence?: AnalysisConfidence;
+  details?: ReportDetails;
 }
 
 const percent = (value: number | undefined): string => {
@@ -38,18 +39,81 @@ const statusLabel = (status: string): string => {
 export const ReportAgentTrace: React.FC<ReportAgentTraceProps> = ({
   analysisMap,
   analysisConfidence,
+  details,
 }) => {
-  if (!analysisMap && !analysisConfidence) {
+  if (!analysisMap && !analysisConfidence && !details?.chartAnalysisReport && !details?.eventMonitoringReport) {
     return null;
   }
 
   const nodes = Array.isArray(analysisMap?.nodes) ? analysisMap.nodes : [];
   const dataSources = Array.isArray(analysisMap?.dataSources) ? analysisMap.dataSources : [];
   const toolTrace = Array.isArray(analysisMap?.toolTrace) ? analysisMap.toolTrace : [];
+  const toolMetrics = analysisMap?.toolMetrics;
+  const toolMetricRows = Array.isArray(toolMetrics?.tools) ? toolMetrics.tools : [];
   const warnings = Array.isArray(analysisConfidence?.warnings) ? analysisConfidence.warnings : [];
   const coverageRatio = analysisConfidence?.dataQuality?.coverageRatio ?? analysisMap?.coverage?.ratio;
   const toolSuccessRatio = analysisConfidence?.dataQuality?.toolSuccessRatio;
   const score = analysisConfidence?.score;
+  const findNodeStatus = (nodeId: string): string => nodes.find((node) => node.id === nodeId)?.status ?? 'optional';
+  const evidenceStatus = nodes.length > 0 ? 'available' : 'missing';
+  const riskStatus = findNodeStatus('risk');
+  const chartStatus = details?.chartAnalysisReport
+    ? details.chartAnalysisReport.status === 'ok' ? 'available' : 'missing'
+    : findNodeStatus('chart');
+  const eventStatus = details?.eventMonitoringReport
+    ? details.eventMonitoringReport.status === 'ok' ? 'available' : 'missing'
+    : 'optional';
+  const portfolioStatus = findNodeStatus('portfolio');
+  const signalTiles = [
+    {
+      id: 'confidence',
+      label: 'Confidence',
+      value: percent(score),
+      detail: confidenceLabel(analysisConfidence?.label),
+      status: analysisConfidence ? 'available' : 'missing',
+      icon: CheckCircle2,
+    },
+    {
+      id: 'evidence',
+      label: 'Evidence',
+      value: `${analysisMap?.coverage?.completedNodes ?? 0}/${analysisMap?.coverage?.totalNodes ?? nodes.length}`,
+      detail: 'analysis map',
+      status: evidenceStatus,
+      icon: GitBranch,
+    },
+    {
+      id: 'risk',
+      label: 'Risk',
+      value: statusLabel(riskStatus),
+      detail: `${analysisConfidence?.dataQuality?.riskFlagCount ?? 0} flags`,
+      status: riskStatus,
+      icon: ShieldAlert,
+    },
+    {
+      id: 'chart',
+      label: 'Chart',
+      value: details?.chartAnalysisReport?.patternLabel ?? statusLabel(chartStatus),
+      detail: details?.chartAnalysisReport?.visualSignalLabel ?? details?.chartAnalysisReport?.indicatorSignalLabel ?? 'signal',
+      status: chartStatus,
+      icon: BarChart3,
+    },
+    {
+      id: 'event',
+      label: 'Event',
+      value: details?.eventMonitoringReport?.monitoringPriority ?? statusLabel(eventStatus),
+      detail: details?.eventMonitoringReport?.thesisBreakRisk ? 'thesis break risk' : 'monitoring',
+      status: eventStatus,
+      icon: Radar,
+    },
+    {
+      id: 'portfolio',
+      label: 'Portfolio',
+      value: statusLabel(portfolioStatus),
+      detail: 'exposure context',
+      status: portfolioStatus,
+      icon: BriefcaseBusiness,
+    },
+  ];
 
   return (
     <Card variant="bordered" padding="md" className="home-panel-card text-left">
@@ -71,6 +135,30 @@ export const ReportAgentTrace: React.FC<ReportAgentTraceProps> = ({
         )}
       </div>
 
+      <div className="mb-4">
+        <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-text">통합 리포트 보드</div>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+          {signalTiles.map((tile) => {
+            const Icon = tile.icon;
+            return (
+              <div key={tile.id} className="rounded-lg border border-border/60 bg-surface/30 p-2.5">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-text">{tile.label}</span>
+                  <Icon className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="truncate text-sm font-semibold text-foreground">{tile.value}</div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="truncate text-[11px] text-muted-text">{tile.detail}</span>
+                  <Badge variant={statusVariant(tile.status)} className="px-1.5 py-0 text-[10px] shadow-none">
+                    {statusLabel(tile.status)}
+                  </Badge>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="rounded-lg border border-border/60 p-3">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
@@ -88,9 +176,9 @@ export const ReportAgentTrace: React.FC<ReportAgentTraceProps> = ({
             <SearchCheck className="h-4 w-4 text-primary" />
             도구 성공률
           </div>
-          <div className="text-2xl font-semibold text-foreground">{percent(toolSuccessRatio)}</div>
+          <div className="text-2xl font-semibold text-foreground">{percent(toolMetrics?.successRate ?? toolSuccessRatio)}</div>
           <p className="mt-1 text-xs leading-5 text-muted-text">
-            {toolTrace.length > 0 ? `${toolTrace.length}개 호출 기록` : '호출 기록 없음'}
+            {toolMetrics?.totalCalls ? `${toolMetrics.totalCalls}개 호출 · 평균 ${toolMetrics.avgDuration}s` : toolTrace.length > 0 ? `${toolTrace.length}개 호출 기록` : '호출 기록 없음'}
           </p>
         </div>
 
@@ -133,6 +221,27 @@ export const ReportAgentTrace: React.FC<ReportAgentTraceProps> = ({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {toolMetricRows.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-text">도구 운영 지표</div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {toolMetricRows.slice(0, 4).map((item) => (
+              <div key={item.tool} className="rounded-lg border border-border/50 px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{item.tool}</span>
+                  <Badge variant={item.failure ? 'warning' : 'success'} className="shadow-none">
+                    {percent(item.successRate)}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-muted-text">
+                  {item.calls} calls · {item.failure} fail · avg {item.avgDuration}s
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

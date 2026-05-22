@@ -576,9 +576,14 @@ def _handle_get_portfolio_snapshot(
                         cost_method=method,
                     ),
                 }
+                result["analysis_summary"] = analysis_service.build_report_summary(result["analysis"])
             except Exception as analysis_exc:
                 logger.warning("get_portfolio_snapshot analysis block failed: %s", analysis_exc)
                 result["analysis"] = {"status": "failed", "error": str(analysis_exc)}
+                result["analysis_summary"] = {
+                    "status": "failed",
+                    "error": str(analysis_exc),
+                }
         return result
     except Exception as exc:
         logger.warning("get_portfolio_snapshot failed: %s", exc)
@@ -589,7 +594,8 @@ get_portfolio_snapshot_tool = ToolDefinition(
     name="get_portfolio_snapshot",
     description="Get portfolio snapshot summary and optional risk blocks. "
                 "Default returns compact summary for lower token usage; "
-                "set include_positions=true to include full position details.",
+                "set include_positions=true to include full position details. "
+                "When include_analysis=true, returns analysis_summary for report-ready portfolio context.",
     parameters=[
         ToolParameter(
             name="account_id",

@@ -96,6 +96,34 @@ export interface SectorRankings {
   bottom?: SectorRankingItem[];
 }
 
+export interface ChartAnalysisReport {
+  version?: number;
+  status?: string;
+  reason?: string;
+  latestClose?: number;
+  support?: number;
+  resistance?: number;
+  pattern?: Record<string, unknown>;
+  patternLabel?: string;
+  visualSignal?: string;
+  visualSignalLabel?: string;
+  indicatorSignal?: string;
+  indicatorSignalLabel?: string;
+  conflicts?: Array<Record<string, unknown>>;
+}
+
+export interface EventMonitoringReport {
+  version?: number;
+  status?: string;
+  reason?: string;
+  monitoringPriority?: string;
+  priorityScore?: number;
+  thesisBreakRisk?: boolean;
+  topEvents?: Array<Record<string, unknown>>;
+  watchItems?: string[];
+  monitoringGaps?: string[];
+}
+
 /** Details section */
 export interface ReportDetails {
   newsContent?: string;
@@ -105,6 +133,8 @@ export interface ReportDetails {
   dividendMetrics?: Record<string, unknown>;
   belongBoards?: RelatedBoard[];
   sectorRankings?: SectorRankings;
+  chartAnalysisReport?: ChartAnalysisReport;
+  eventMonitoringReport?: EventMonitoringReport;
 }
 
 export interface AnalysisMapNode {
@@ -141,6 +171,28 @@ export interface AnalysisMapToolTrace {
   duration?: number | null;
 }
 
+export interface AnalysisMapToolMetric {
+  tool: string;
+  calls: number;
+  success: number;
+  failure: number;
+  timeouts?: number;
+  cached?: number;
+  successRate?: number;
+  failureRate?: number;
+  avgDuration?: number;
+}
+
+export interface AnalysisMapToolMetrics {
+  version: number;
+  totalCalls: number;
+  success: number;
+  failure: number;
+  successRate: number;
+  avgDuration: number;
+  tools: AnalysisMapToolMetric[];
+}
+
 export interface AnalysisMapStageSummary {
   stage: string;
   signal?: string;
@@ -161,6 +213,7 @@ export interface AnalysisMap {
   edges: AnalysisMapEdge[];
   dataSources: AnalysisMapDataSource[];
   toolTrace: AnalysisMapToolTrace[];
+  toolMetrics?: AnalysisMapToolMetrics;
   stageSummary: AnalysisMapStageSummary[];
   coverage: AnalysisMapCoverage;
   reasoningGaps: string[];

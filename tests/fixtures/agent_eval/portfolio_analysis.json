@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "as_of": "2026-03-15",
+  "snapshot": {
+    "as_of": "2026-03-15",
+    "cost_method": "fifo",
+    "currency": "CNY",
+    "total_market_value": 100000.0,
+    "accounts": [
+      {
+        "account_id": 1,
+        "market": "cn",
+        "base_currency": "CNY",
+        "positions": [
+          {
+            "symbol": "600519",
+            "market": "cn",
+            "valuation_currency": "CNY",
+            "market_value_base": 42000.0
+          },
+          {
+            "symbol": "AAPL",
+            "market": "us",
+            "valuation_currency": "USD",
+            "market_value_base": 28000.0
+          },
+          {
+            "symbol": "00700",
+            "market": "hk",
+            "valuation_currency": "HKD",
+            "market_value_base": 30000.0
+          }
+        ]
+      }
+    ]
+  },
+  "risk_report": {
+    "concentration": {
+      "alert": true,
+      "top_weight_pct": 42.0,
+      "top_positions": [{"symbol": "600519", "weight_pct": 42.0}]
+    },
+    "sector_concentration": {
+      "alert": true,
+      "top_weight_pct": 58.0,
+      "top_sectors": [{"sector": "Consumer", "weight_pct": 58.0}]
+    },
+    "stop_loss": {"near_alert": true}
+  },
+  "expected": {
+    "total_market_value": 100000.0,
+    "position_count": 3,
+    "diversification_level": "concentrated",
+    "top_market": "cn",
+    "top_currency": "CNY"
+  }
+}

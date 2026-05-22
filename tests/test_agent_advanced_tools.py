@@ -54,6 +54,33 @@ def test_generate_chart_analysis_tool_can_include_svg():
     assert result["svg"].startswith("<svg")
 
 
+def test_generate_chart_analysis_tool_can_include_vision():
+    with patch("src.services.history_loader.load_history_df", return_value=(_sample_history(), "test")), patch(
+        "src.services.chart_vision_service.ChartVisionAnalysisService.analyze_chart_image",
+        return_value={"status": "ok", "analysis": {"trend": "bullish"}},
+    ) as vision_mock:
+        result = _handle_generate_chart_analysis("AAPL", days=30, include_vision=True)
+
+    assert result["status"] == "ok"
+    assert result["vision_analysis"]["analysis"]["trend"] == "bullish"
+    assert result["svg_omitted"] is True
+    vision_mock.assert_called_once()
+
+
+def test_generate_chart_analysis_tool_marks_vision_fallback():
+    with patch("src.services.history_loader.load_history_df", return_value=(_sample_history(), "test")), patch(
+        "src.services.chart_vision_service.ChartVisionAnalysisService.analyze_chart_image",
+        return_value={"status": "not_configured", "reason": "Vision model is not configured."},
+    ):
+        result = _handle_generate_chart_analysis("AAPL", days=30, include_vision=True)
+
+    assert result["status"] == "ok"
+    assert result["metadata"]["pattern"]["name"] == "five_bar_breakout"
+    assert result["vision_analysis"]["status"] == "not_configured"
+    assert result["vision_fallback_used"] is True
+    assert result["vision_fallback_reason"] == "Vision model is not configured."
+
+
 class _FakePaperTradingService:
     def prepare_order(self, **kwargs):
         return {
@@ -167,4 +194,12 @@ def test_analysis_map_summarizes_new_agent_tools():
     assert "support/resistance" in trace["generate_chart_analysis"]["reason"]
     assert trace["get_portfolio_snapshot"]["node"] == "portfolio"
     assert trace["prepare_paper_order"]["node"] == "paper_trading"
+    assert analysis_map["tool_metrics"]["total_calls"] == 3
+    assert analysis_map["tool_metrics"]["success_rate"] == 1.0
+    chart_metrics = {
+        item["tool"]: item
+        for item in analysis_map["tool_metrics"]["tools"]
+    }["generate_chart_analysis"]
+    assert chart_metrics["calls"] == 1
+    assert chart_metrics["avg_duration"] == 0.2
     assert analysis_map["coverage"]["required_ratio"] == 1.0

@@ -47,6 +47,8 @@ from src.report_language import (
 from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
 from src.services.evidence_graph_service import attach_evidence_graph
+from src.services.chart_analysis_service import attach_chart_analysis_report
+from src.services.event_monitoring_service import EventMonitoringService
 from src.services.stock_risk_service import attach_stock_risk_report
 from src.services.thesis_tracking_service import attach_thesis_tracking
 from src.enums import ReportType
@@ -525,6 +527,8 @@ class StockAnalysisPipeline:
                     self._emit_progress(97, f"{stock_name}：正在保存分析报告")
                     attach_thesis_tracking(result, self.db)
                     attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
+                    attach_chart_analysis_report(result, history_df)
+                    EventMonitoringService().attach_report_summary(result)
                     attach_evidence_graph(result)
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
@@ -924,6 +928,8 @@ class StockAnalysisPipeline:
                     initial_context["stock_name"] = resolved_stock_name
                     attach_thesis_tracking(result, self.db)
                     attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
+                    attach_chart_analysis_report(result, history_df)
+                    EventMonitoringService().attach_report_summary(result)
                     attach_evidence_graph(result)
                     self.db.save_analysis_history(
                         result=result,

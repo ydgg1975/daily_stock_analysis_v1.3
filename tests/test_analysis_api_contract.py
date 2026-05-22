@@ -748,6 +748,68 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(report.analysis_map, analysis_map)
         self.assertEqual(report.analysis_confidence, analysis_confidence)
 
+    def test_build_analysis_report_exposes_chart_analysis_detail(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        chart = {
+            "version": 1,
+            "status": "ok",
+            "support": 100.0,
+            "resistance": 120.0,
+            "pattern_label": "5-bar breakout",
+            "visual_signal_label": "bullish",
+        }
+
+        report = _build_analysis_report(
+            report_data={
+                "meta": {},
+                "summary": {},
+                "strategy": {},
+                "details": {},
+                "chart_analysis_report": chart,
+            },
+            query_id="q1",
+            stock_code="AAPL",
+            stock_name="Apple",
+            context_snapshot=None,
+            fallback_fundamental_payload=None,
+        )
+
+        self.assertIsNotNone(report.details)
+        self.assertEqual(report.details.chart_analysis_report, chart)
+
+    def test_build_analysis_report_exposes_event_monitoring_detail(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        event_report = {
+            "version": 1,
+            "status": "ok",
+            "monitoring_priority": "critical",
+            "priority_score": 90,
+            "thesis_break_risk": True,
+            "watch_items": ["Re-check thesis."],
+        }
+
+        report = _build_analysis_report(
+            report_data={
+                "meta": {},
+                "summary": {},
+                "strategy": {},
+                "details": {},
+                "event_monitoring_report": event_report,
+            },
+            query_id="q1",
+            stock_code="AAPL",
+            stock_name="Apple",
+            context_snapshot=None,
+            fallback_fundamental_payload=None,
+        )
+
+        self.assertIsNotNone(report.details)
+        self.assertEqual(report.details.event_monitoring_report, event_report)
+
     def test_build_analysis_report_extracts_related_board_fields_from_snapshot(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

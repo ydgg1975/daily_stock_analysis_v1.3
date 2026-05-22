@@ -1061,6 +1061,7 @@ class AgentOrchestrator:
                 })
 
         tool_trace = self._build_tool_trace(ctx)
+        tool_metrics = self._build_tool_metrics(tool_trace)
 
         nodes = [
             {
@@ -1174,6 +1175,7 @@ class AgentOrchestrator:
             "edges": edges,
             "data_sources": data_sources,
             "tool_trace": tool_trace,
+            "tool_metrics": tool_metrics,
             "stage_summary": stage_summary,
             "coverage": coverage,
             "reasoning_gaps": reasoning_gaps,
@@ -1351,6 +1353,68 @@ class AgentOrchestrator:
                 "duration": call.get("duration"),
             })
         return trace
+
+    @staticmethod
+    def _build_tool_metrics(tool_trace: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate per-tool success, failure, timeout and duration metrics."""
+        by_tool: Dict[str, Dict[str, Any]] = {}
+        for item in tool_trace:
+            if not isinstance(item, dict):
+                continue
+            tool_name = str(item.get("tool") or "").strip()
+            if not tool_name:
+                continue
+            bucket = by_tool.setdefault(
+                tool_name,
+                {
+                    "tool": tool_name,
+                    "calls": 0,
+                    "success": 0,
+                    "failure": 0,
+                    "timeouts": 0,
+                    "cached": 0,
+                    "_duration_total": 0.0,
+                },
+            )
+            bucket["calls"] += 1
+            if item.get("success"):
+                bucket["success"] += 1
+            else:
+                bucket["failure"] += 1
+            if item.get("timeout"):
+                bucket["timeouts"] += 1
+            if item.get("cached"):
+                bucket["cached"] += 1
+            try:
+                bucket["_duration_total"] += float(item.get("duration") or 0.0)
+            except (TypeError, ValueError):
+                pass
+
+        tools = []
+        total_calls = 0
+        total_success = 0
+        total_duration = 0.0
+        for bucket in by_tool.values():
+            calls = int(bucket["calls"])
+            duration_total = float(bucket.pop("_duration_total", 0.0))
+            total_calls += calls
+            total_success += int(bucket["success"])
+            total_duration += duration_total
+            bucket["success_rate"] = round(bucket["success"] / max(calls, 1), 4)
+            bucket["failure_rate"] = round(bucket["failure"] / max(calls, 1), 4)
+            bucket["avg_duration"] = round(duration_total / max(calls, 1), 4)
+            tools.append(bucket)
+
+        tools.sort(key=lambda row: (-int(row["calls"]), str(row["tool"])))
+        return {
+            "version": 1,
+            "total_calls": total_calls,
+            "success": total_success,
+            "failure": total_calls - total_success,
+            "success_rate": round(total_success / max(total_calls, 1), 4) if total_calls else 0.0,
+            "avg_duration": round(total_duration / max(total_calls, 1), 4) if total_calls else 0.0,
+            "tools": tools,
+        }
 
     @staticmethod
     def _tool_analysis_node(tool_name: str) -> str:

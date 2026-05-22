@@ -512,7 +512,12 @@ analyze_pattern_tool = ToolDefinition(
 )
 
 
-def _handle_generate_chart_analysis(stock_code: str, days: int = 90, include_svg: bool = False) -> dict:
+def _handle_generate_chart_analysis(
+    stock_code: str,
+    days: int = 90,
+    include_svg: bool = False,
+    include_vision: bool = False,
+) -> dict:
     """Generate compact chart-analysis metadata and optional SVG for agent use."""
     from src.services.chart_analysis_service import ChartAnalysisService
     from src.services.history_loader import load_history_df
@@ -525,14 +530,27 @@ def _handle_generate_chart_analysis(stock_code: str, days: int = 90, include_svg
         return {"error": f"No historical data available for chart analysis on {stock_code}"}
 
     result = ChartAnalysisService().analyze(stock_code, df.tail(effective_days))
+    metadata = result.get("metadata", {})
     payload = {
         "stock_code": stock_code,
         "source": source,
         "requested_days": effective_days,
         "status": result.get("status"),
         "image_format": result.get("image_format"),
-        "metadata": result.get("metadata", {}),
+        "metadata": metadata,
     }
+    if include_vision and result.get("status") == "ok":
+        from src.services.chart_vision_service import ChartVisionAnalysisService
+
+        payload["vision_analysis"] = ChartVisionAnalysisService().analyze_chart_image(
+            stock_code=stock_code,
+            image_content=result.get("svg", ""),
+            image_format=result.get("image_format") or "svg",
+            numeric_metadata=metadata,
+        )
+        payload["vision_fallback_used"] = payload["vision_analysis"].get("status") != "ok"
+        if payload["vision_fallback_used"]:
+            payload["vision_fallback_reason"] = payload["vision_analysis"].get("reason")
     if include_svg:
         payload["svg"] = result.get("svg", "")
     else:
@@ -548,7 +566,8 @@ generate_chart_analysis_tool = ToolDefinition(
     description="Generate candlestick chart analysis metadata and optional SVG. "
                 "Returns support/resistance, simple pattern detection, visual signal, "
                 "numeric indicator signal, and conflicts between chart and indicators. "
-                "SVG is omitted by default to keep tool responses compact.",
+                "SVG is omitted by default to keep tool responses compact. "
+                "Set include_vision=true to send the generated chart image to a configured Vision model.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -566,6 +585,13 @@ generate_chart_analysis_tool = ToolDefinition(
             name="include_svg",
             type="boolean",
             description="Whether to include the full SVG image string (default: false).",
+            required=False,
+            default=False,
+        ),
+        ToolParameter(
+            name="include_vision",
+            type="boolean",
+            description="Whether to run configured Vision/VLM analysis on the generated chart image.",
             required=False,
             default=False,
         ),

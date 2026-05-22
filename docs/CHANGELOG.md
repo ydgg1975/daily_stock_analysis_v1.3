@@ -8,6 +8,17 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
 ## [Unreleased]
 
+- [테스트] 차트 분석, paper trading, portfolio analysis용 eval fixture와 회귀 검증을 추가했습니다.
+
+- [개선] Agent analysis map에 도구별 호출 수, 성공률, 실패율, timeout, cached count, 평균 실행 시간을 집계하는 tool metrics를 추가하고 Web 리포트에서 확인할 수 있게 했습니다.
+- [개선] Vision provider가 없거나 Vision 분석이 실패해도 차트 분석 도구가 기존 수치 기반 분석을 유지하고 fallback 사용 여부와 사유를 명시하도록 했습니다.
+- [개선] Vision 차트 해석에 evidence 블록을 추가해 VLM 근거, confidence, 불확실성, 수치 분석과의 충돌 여부를 구조화해 표시할 수 있게 했습니다.
+- [개선] Vision 차트 해석 결과와 수치 기반 차트 신호를 비교하는 comparison 블록을 추가해 방향성 일치, 패턴 일치, 신호 충돌을 구분할 수 있게 했습니다.
+- [신기능] 차트 분석 도구에 선택적 Vision/VLM 분석을 연결해 생성된 SVG 차트를 설정된 Vision 모델 입력으로 전달할 수 있게 했습니다.
+- [개선] Web 리포트의 에이전트 판단 상태에 통합 리포트 보드를 추가해 confidence, evidence, risk, chart, event, portfolio 상태를 한 화면에서 확인할 수 있게 했습니다.
+- [신기능] Agent 포트폴리오 스냅샷 도구가 포트폴리오 분석 결과를 report-ready 요약으로 반환해 분산도, 주요 노출, 리밸런싱 제안을 응답에 바로 활용할 수 있게 했습니다.
+- [신기능] 종목 분석 리포트에 이벤트 모니터링 우선순위와 thesis 훼손 위험 요약을 추가해 thesis 변화, 위험도, 차트 충돌 기반 감시 항목을 확인할 수 있게 했습니다.
+- [신기능] 종목 분석 리포트에 차트 분석 요약을 연결해 지지/저항, 패턴, 시각/지표 신호와 충돌 여부를 API, Web 상세, Markdown 보고서에서 확인할 수 있게 했습니다.
 - [신기능] Paper trading 성과 API와 Web 요약표를 추가해 paper 거래별 수익률, 보유 기간, 승패, 백테스트 summary 비교를 확인할 수 있게 했습니다.
 - [신기능] Web 포트폴리오 화면에서 paper 주문을 준비하고 risk check, 승인 토큰, 승인 후 거래 기록 결과를 확인할 수 있게 했습니다.
 - [테스트] 한국어 기준 API, Bot, 로그 메시지와 배포 문서 명령 예시에 맞춰 회귀 테스트 기대값을 정리했습니다.

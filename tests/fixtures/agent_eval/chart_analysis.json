@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "stock_code": "AAPL",
+  "ohlcv": [
+    {"date": "2026-03-01", "open": 9.5, "high": 11.0, "low": 9.0, "close": 10.0, "volume": 1100},
+    {"date": "2026-03-02", "open": 10.5, "high": 12.0, "low": 10.0, "close": 11.0, "volume": 1200},
+    {"date": "2026-03-03", "open": 11.5, "high": 13.0, "low": 11.0, "close": 12.0, "volume": 1300},
+    {"date": "2026-03-04", "open": 10.5, "high": 12.0, "low": 10.0, "close": 11.0, "volume": 1400},
+    {"date": "2026-03-05", "open": 12.5, "high": 14.0, "low": 12.0, "close": 13.0, "volume": 1500},
+    {"date": "2026-03-06", "open": 13.5, "high": 15.0, "low": 13.0, "close": 14.0, "volume": 1600},
+    {"date": "2026-03-07", "open": 14.5, "high": 16.0, "low": 14.0, "close": 15.0, "volume": 1700},
+    {"date": "2026-03-08", "open": 15.5, "high": 17.0, "low": 15.0, "close": 16.0, "volume": 1800}
+  ],
+  "expected": {
+    "status": "ok",
+    "pattern_name": "five_bar_breakout",
+    "visual_signal": "bullish",
+    "support": 9.0,
+    "report_omits_svg": true
+  }
+}

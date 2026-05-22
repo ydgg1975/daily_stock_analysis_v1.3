@@ -103,3 +103,19 @@ def test_portfolio_analysis_reports_candidate_impact():
     assert impact["projected_total_market_value"] == 125000.0
     assert impact["projected_weight_pct"] == 20.0
     assert impact["concentration_alert"] is True
+
+
+def test_portfolio_analysis_builds_report_summary():
+    service = PortfolioAnalysisService(
+        portfolio_service=_FakePortfolioService(),
+        risk_service=_FakeRiskService(),
+    )
+
+    analysis = service.analyze(as_of=date(2026, 3, 15))
+    summary = service.build_report_summary(analysis)
+
+    assert summary["status"] == "ok"
+    assert summary["diversification_level"] == "concentrated"
+    assert summary["top_market"]["market"] == "cn"
+    assert summary["top_currency"]["currency"] == "CNY"
+    assert summary["rebalance_suggestions"]

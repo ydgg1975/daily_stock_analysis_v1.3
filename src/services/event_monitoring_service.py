@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.analyzer import AnalysisResult
 
 
 class EventMonitoringService:
@@ -56,6 +59,39 @@ class EventMonitoringService:
             "top_events": triggered[:10],
             "monitoring_gaps": self._monitoring_gaps(),
         }
+
+    def build_report_summary(self, result: "AnalysisResult") -> Dict[str, Any]:
+        """Build report-facing monitoring priority from analysis metadata."""
+        thesis = getattr(result, "thesis_tracking", None) or {}
+        stock_risk = getattr(result, "stock_risk_report", None) or {}
+        chart = getattr(result, "chart_analysis_report", None) or {}
+        events = self._derive_report_events(thesis=thesis, stock_risk=stock_risk, chart=chart)
+        ordered = sorted(events, key=lambda item: int(item.get("priority_score") or 0), reverse=True)
+        priority_score = max([int(item.get("priority_score") or 0) for item in ordered] or [0])
+        return {
+            "version": 1,
+            "status": "ok",
+            "monitoring_priority": self._priority_label(priority_score),
+            "priority_score": priority_score,
+            "thesis_break_risk": any(bool(item.get("thesis_break_risk")) for item in ordered),
+            "top_events": ordered[:5],
+            "watch_items": self._build_watch_items(thesis=thesis, stock_risk=stock_risk, chart=chart),
+            "monitoring_gaps": self._monitoring_gaps(),
+        }
+
+    def attach_report_summary(self, result: "AnalysisResult") -> None:
+        """Attach report-facing event monitoring metadata to an AnalysisResult."""
+        try:
+            result.event_monitoring_report = self.build_report_summary(result)
+        except Exception as exc:
+            result.event_monitoring_report = {
+                "version": 1,
+                "status": "degraded",
+                "monitoring_priority": "info",
+                "priority_score": 0,
+                "thesis_break_risk": False,
+                "reason": f"Event monitoring summary failed: {exc}",
+            }
 
     @staticmethod
     def _alert_type(rule: Any) -> str:
@@ -155,6 +191,76 @@ class EventMonitoringService:
             "Earnings calendar ingestion is not linked yet.",
             "Disclosure and news change streams are not linked yet.",
         ]
+
+    def _derive_report_events(
+        self,
+        *,
+        thesis: Dict[str, Any],
+        stock_risk: Dict[str, Any],
+        chart: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        thesis_status = str(thesis.get("status") or "").lower()
+        if thesis_status in {"broken", "weakened"}:
+            score = 90 if thesis_status == "broken" else 65
+            events.append({
+                "event_type": "thesis_change",
+                "category": "thesis",
+                "triggered": True,
+                "priority": self._priority_label(score),
+                "priority_score": score,
+                "thesis_break_risk": thesis_status == "broken",
+                "reason": "; ".join(str(item) for item in (thesis.get("key_changes") or [])[:2]),
+            })
+
+        risk_level = str(stock_risk.get("risk_level") or "").lower()
+        risk_score = self._optional_float(stock_risk.get("risk_score")) or 0.0
+        if risk_level in {"high", "critical"} or risk_score >= 70:
+            score = 85 if risk_level == "critical" or risk_score >= 85 else 70
+            events.append({
+                "event_type": "stock_risk",
+                "category": "risk",
+                "triggered": True,
+                "priority": self._priority_label(score),
+                "priority_score": score,
+                "thesis_break_risk": score >= 85,
+                "reason": stock_risk.get("position_caution") or f"Risk score is {risk_score:g}.",
+            })
+
+        conflicts = chart.get("conflicts") or []
+        if conflicts:
+            score = 60
+            first_conflict = conflicts[0] if isinstance(conflicts[0], dict) else {}
+            events.append({
+                "event_type": "chart_signal_conflict",
+                "category": "technical",
+                "triggered": True,
+                "priority": self._priority_label(score),
+                "priority_score": score,
+                "thesis_break_risk": False,
+                "reason": first_conflict.get("message") or first_conflict.get("type") or "Chart signals are conflicting.",
+            })
+        return events
+
+    @staticmethod
+    def _build_watch_items(
+        *,
+        thesis: Dict[str, Any],
+        stock_risk: Dict[str, Any],
+        chart: Dict[str, Any],
+    ) -> List[str]:
+        items: List[str] = []
+        if thesis.get("status") in {"broken", "weakened"}:
+            items.append("Re-check the investment thesis before adding exposure.")
+        if stock_risk.get("position_caution"):
+            items.append(str(stock_risk["position_caution"]))
+        if chart.get("support") is not None:
+            items.append(f"Watch support near {chart['support']}.")
+        if chart.get("resistance") is not None:
+            items.append(f"Watch resistance near {chart['resistance']}.")
+        if not items:
+            items.append("No high-priority thesis break monitor was derived from the current report.")
+        return items[:5]
 
     @staticmethod
     def _optional_float(value: Any) -> Optional[float]:

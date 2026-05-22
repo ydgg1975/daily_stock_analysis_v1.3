@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "chart_analysis",
+      "path": "chart_analysis.json",
+      "purpose": "Validate deterministic chart pattern metadata without external market data."
+    },
+    {
+      "name": "paper_trading",
+      "path": "paper_trading.json",
+      "purpose": "Validate guarded paper-order preparation and approval-risk checks."
+    },
+    {
+      "name": "portfolio_analysis",
+      "path": "portfolio_analysis.json",
+      "purpose": "Validate portfolio exposure, diversification, and report summary output."
+    }
+  ]
+}

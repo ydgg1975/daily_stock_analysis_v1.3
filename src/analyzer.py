@@ -1371,6 +1371,8 @@ class AnalysisResult:
     thesis_tracking: Optional[Dict[str, Any]] = None  # 与上一份同股分析的投资假设对比
     evidence_graph: Optional[Dict[str, Any]] = None  # 结论、依据、风险和数据来源关系图
     stock_risk_report: Optional[Dict[str, Any]] = None  # 单股风险指标与仓位注意事项
+    chart_analysis_report: Optional[Dict[str, Any]] = None  # K线结构、支撑阻力和指标冲突摘要
+    event_monitoring_report: Optional[Dict[str, Any]] = None  # 事件监控优先级与投资假设破坏风险
 
     # ========== 元数据 ==========
     market_snapshot: Optional[Dict[str, Any]] = None  # 当日行情快照（展示用）
@@ -1427,6 +1429,8 @@ class AnalysisResult:
             'thesis_tracking': self.thesis_tracking,
             'evidence_graph': self.evidence_graph,
             'stock_risk_report': self.stock_risk_report,
+            'chart_analysis_report': self.chart_analysis_report,
+            'event_monitoring_report': self.event_monitoring_report,
             'market_snapshot': self.market_snapshot,
             'search_performed': self.search_performed,
             'data_sources': self.data_sources,

@@ -142,6 +142,8 @@ class ReportDetails(BaseModel):
     dividend_metrics: Optional[Any] = Field(None, description="구조화된 배당 지표(TTM 기준 포함)")
     belong_boards: Optional[Any] = Field(None, description="관련 섹터 목록")
     sector_rankings: Optional[Any] = Field(None, description="섹터 등락 순위 구조({top, bottom})")
+    chart_analysis_report: Optional[Any] = Field(None, description="차트 구조, 지지/저항, 신호 충돌 요약")
+    event_monitoring_report: Optional[Any] = Field(None, description="이벤트 모니터링 우선순위와 thesis 훼손 위험 요약")
 
 
 class AnalysisReport(BaseModel):

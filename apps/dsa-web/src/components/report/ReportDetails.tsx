@@ -39,7 +39,20 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
     };
   }, []);
 
-  if (!details?.rawResult && !details?.contextSnapshot && !recordId) {
+  const chart = details?.chartAnalysisReport;
+  const eventReport = details?.eventMonitoringReport;
+  const chartHeading = reportLanguage === 'en' ? 'Chart Analysis' : '图表分析';
+  const chartSupportLabel = reportLanguage === 'en' ? 'Support' : '支撑';
+  const chartResistanceLabel = reportLanguage === 'en' ? 'Resistance' : '压力';
+  const chartPatternLabel = reportLanguage === 'en' ? 'Pattern' : '形态';
+  const chartSignalLabel = reportLanguage === 'en' ? 'Signal' : '信号';
+  const chartConflictLabel = reportLanguage === 'en' ? 'Conflicts' : '冲突';
+  const eventHeading = reportLanguage === 'en' ? 'Event Monitoring' : '事件监控';
+  const eventPriorityLabel = reportLanguage === 'en' ? 'Priority' : '优先级';
+  const eventThesisBreakLabel = reportLanguage === 'en' ? 'Thesis break risk' : '投资假设破坏风险';
+  const eventWatchLabel = reportLanguage === 'en' ? 'Watch items' : '监控事项';
+
+  if (!details?.rawResult && !details?.contextSnapshot && !recordId && !chart && !eventReport) {
     return null;
   }
 
@@ -102,6 +115,71 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
           <code className="home-accent-chip px-1.5 py-0.5 font-mono text-xs">
             {recordId}
           </code>
+        </div>
+      )}
+
+      {eventReport && (
+        <div className="home-divider mb-3 border-b pb-3">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">{eventHeading}</h3>
+          {eventReport.status === 'degraded' ? (
+            <p className="text-xs text-muted-text">{eventReport.reason || 'Event monitoring is unavailable.'}</p>
+          ) : (
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-muted-text">{eventPriorityLabel}</div>
+                  <div className="font-semibold text-foreground">{eventReport.monitoringPriority ?? '--'}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-muted-text">{eventThesisBreakLabel}</div>
+                  <div className="font-semibold text-foreground">{eventReport.thesisBreakRisk ? 'true' : 'false'}</div>
+                </div>
+              </div>
+              {eventReport.watchItems?.length ? (
+                <div>
+                  <div className="mb-1 text-muted-text">{eventWatchLabel}</div>
+                  <ul className="space-y-1 text-foreground">
+                    {eventReport.watchItems.slice(0, 3).map((item, index) => (
+                      <li key={`${item}-${index}`}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+
+      {chart && (
+        <div className="home-divider mb-3 border-b pb-3">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">{chartHeading}</h3>
+          {chart.status === 'ok' ? (
+            <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-muted-text">{chartSupportLabel}</div>
+                <div className="font-semibold text-foreground">{chart.support ?? '--'}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-muted-text">{chartResistanceLabel}</div>
+                <div className="font-semibold text-foreground">{chart.resistance ?? '--'}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-muted-text">{chartPatternLabel}</div>
+                <div className="font-semibold text-foreground">{chart.patternLabel ?? '--'}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-muted-text">{chartSignalLabel}</div>
+                <div className="font-semibold text-foreground">{chart.visualSignalLabel ?? chart.indicatorSignalLabel ?? '--'}</div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-text">{chart.reason || 'Chart analysis is unavailable.'}</p>
+          )}
+          {chart.conflicts?.length ? (
+            <p className="mt-2 text-xs text-warning">
+              {chartConflictLabel}: {chart.conflicts.length}
+            </p>
+          ) : null}
         </div>
       )}
 

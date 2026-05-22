@@ -3,7 +3,16 @@
 
 import pandas as pd
 
-from src.services.chart_analysis_service import ChartAnalysisService
+from tests.litellm_stub import ensure_litellm_stub
+
+ensure_litellm_stub()
+
+from src.analyzer import AnalysisResult
+from src.services.chart_analysis_service import (
+    ChartAnalysisService,
+    attach_chart_analysis_report,
+    build_chart_analysis_report,
+)
 
 
 def _sample_ohlcv(closes):
@@ -69,3 +78,27 @@ def test_chart_analysis_degrades_without_data():
 
     assert result["status"] == "degraded"
     assert result["svg"] == ""
+
+
+def test_build_chart_analysis_report_omits_svg_for_report_payload():
+    report = build_chart_analysis_report("AAPL", _sample_ohlcv([10, 11, 12, 11, 13, 14, 15, 16]))
+
+    assert report["status"] == "ok"
+    assert report["pattern_label"] == "5-bar breakout"
+    assert report["support"] == 9.0
+    assert "svg" not in report
+
+
+def test_attach_chart_analysis_report_to_analysis_result():
+    result = AnalysisResult(
+        code="AAPL",
+        name="Apple",
+        sentiment_score=70,
+        trend_prediction="bullish",
+        operation_advice="hold",
+    )
+
+    attach_chart_analysis_report(result, _sample_ohlcv([10, 11, 12, 11, 13, 14, 15, 16]))
+
+    assert result.chart_analysis_report
+    assert result.to_dict()["chart_analysis_report"]["status"] == "ok"

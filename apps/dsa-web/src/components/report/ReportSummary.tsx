@@ -41,6 +41,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
       <ReportAgentTrace
         analysisMap={report.analysisMap}
         analysisConfidence={report.analysisConfidence}
+        details={details}
       />
 
       <ReportStrategy strategy={strategy} language={reportLanguage} />

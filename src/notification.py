@@ -1636,6 +1636,48 @@ class NotificationService(
                 lines.append(f"- {flag.get('severity', 'medium')}: {flag.get('reason')}")
             lines.append("")
 
+        event_report = getattr(result, "event_monitoring_report", None) or {}
+        if event_report:
+            event_heading = "Event Monitoring" if report_language == "en" else "事件监控"
+            priority_label = "Priority" if report_language == "en" else "优先级"
+            thesis_break_label = "Thesis break risk" if report_language == "en" else "投资假设破坏风险"
+            lines.extend([f"### 🚨 {event_heading}", ""])
+            lines.append(
+                f"**{priority_label}**: {event_report.get('monitoring_priority', 'N/A')} | "
+                f"**{thesis_break_label}**: {event_report.get('thesis_break_risk', False)}"
+            )
+            for item in (event_report.get("watch_items") or [])[:5]:
+                lines.append(f"- {item}")
+            for event in (event_report.get("top_events") or [])[:3]:
+                reason = event.get("reason") or event.get("event_type")
+                lines.append(f"- {event.get('priority', 'info')}: {reason}")
+            lines.append("")
+
+        chart_report = getattr(result, "chart_analysis_report", None) or {}
+        if chart_report:
+            chart_heading = "Chart Analysis" if report_language == "en" else "图表分析"
+            support_label = "Support" if report_language == "en" else "支撑"
+            resistance_label = "Resistance" if report_language == "en" else "压力"
+            pattern_label = "Pattern" if report_language == "en" else "形态"
+            signal_label = "Signal" if report_language == "en" else "信号"
+            lines.extend([f"### 📈 {chart_heading}", ""])
+            if chart_report.get("status") == "ok":
+                lines.append(
+                    f"**{support_label}**: {chart_report.get('support', 'N/A')} | "
+                    f"**{resistance_label}**: {chart_report.get('resistance', 'N/A')}"
+                )
+                lines.append(
+                    f"**{pattern_label}**: {chart_report.get('pattern_label', 'N/A')} | "
+                    f"**{signal_label}**: "
+                    f"{chart_report.get('visual_signal_label') or chart_report.get('indicator_signal_label') or 'N/A'}"
+                )
+                conflicts = chart_report.get("conflicts") or []
+                for conflict in conflicts[:3]:
+                    lines.append(f"- {conflict.get('message') or conflict.get('type')}")
+            else:
+                lines.append(str(chart_report.get("reason") or "Chart analysis is unavailable."))
+            lines.append("")
+
         # Key information: sentiment + fundamentals.
         info_added = False
         if intel:

@@ -2,6 +2,7 @@
 """Tests for event monitoring priority metadata."""
 
 from src.agent.events import PriceChangeAlert, VolumeAlert
+from src.analyzer import AnalysisResult
 from src.services.event_monitoring_service import EventMonitoringService
 
 
@@ -53,3 +54,26 @@ def test_cycle_summary_orders_triggered_events_by_priority():
     assert summary["triggered"] == 1
     assert summary["top_events"][0]["stock_code"] == "600519"
     assert summary["monitoring_gaps"]
+
+
+def test_report_summary_marks_broken_thesis_as_critical():
+    result = AnalysisResult(
+        code="AAPL",
+        name="Apple",
+        sentiment_score=50,
+        trend_prediction="weak",
+        operation_advice="hold",
+        thesis_tracking={
+            "status": "broken",
+            "key_changes": ["Advice changed from Buy to Hold."],
+        },
+        stock_risk_report={"risk_level": "medium", "risk_score": 50},
+        chart_analysis_report={"support": 100.0, "resistance": 120.0, "conflicts": []},
+    )
+
+    summary = EventMonitoringService().build_report_summary(result)
+
+    assert summary["monitoring_priority"] == "critical"
+    assert summary["thesis_break_risk"] is True
+    assert summary["top_events"][0]["event_type"] == "thesis_change"
+    assert summary["watch_items"]

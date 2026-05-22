@@ -101,9 +101,24 @@ class _FakeAnalysisService:
     def analyze(self, **_kwargs):
         return {
             "as_of": "2026-03-15",
+            "currency": "CNY",
             "total_market_value": 50000.0,
-            "diversification": {"score": 72.5, "level": "watch"},
+            "position_count": 2,
+            "exposure": {
+                "markets": [{"market": "cn", "market_value_base": 50000.0, "weight_pct": 100.0}],
+                "currencies": [{"currency": "CNY", "market_value_base": 50000.0, "weight_pct": 100.0}],
+            },
+            "diversification": {"score": 72.5, "level": "watch", "warnings": ["Market exposure is concentrated."]},
             "rebalance_suggestions": ["Review trimming 600519."],
+        }
+
+    def build_report_summary(self, analysis):
+        return {
+            "version": 1,
+            "status": "ok",
+            "diversification_level": analysis["diversification"]["level"],
+            "top_market": analysis["exposure"]["markets"][0],
+            "rebalance_suggestions": analysis["rebalance_suggestions"],
         }
 
 
@@ -132,6 +147,9 @@ class TestGetPortfolioSnapshotTool(unittest.TestCase):
         self.assertEqual(result["analysis"]["status"], "ok")
         self.assertEqual(result["analysis"]["diversification"]["level"], "watch")
         self.assertIn("rebalance_suggestions", result["analysis"])
+        self.assertEqual(result["analysis_summary"]["status"], "ok")
+        self.assertEqual(result["analysis_summary"]["diversification_level"], "watch")
+        self.assertIn("rebalance_suggestions", result["analysis_summary"])
 
     @patch("src.services.portfolio_service.PortfolioService", _FakePortfolioService)
     @patch("src.services.portfolio_risk_service.PortfolioRiskService", _FakeRiskService)

@@ -148,6 +148,8 @@ class AnalysisReportSchema(BaseModel):
     data_limitations: Optional[List[str]] = None
     confidence_reason: Optional[str] = None
     analysis_confidence: Optional[Dict[str, Any]] = None
+    chart_analysis_report: Optional[Dict[str, Any]] = None
+    event_monitoring_report: Optional[Dict[str, Any]] = None
 
     trend_analysis: Optional[str] = None
     short_term_outlook: Optional[str] = None

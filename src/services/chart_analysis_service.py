@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from src.services.alert_indicators import _calculate_rsi, normalize_ohlcv
+
+if TYPE_CHECKING:
+    from src.analyzer import AnalysisResult
 
 
 @dataclass
@@ -432,3 +435,43 @@ class ChartAnalysisService:
             "bearish_oversold": "bearish but oversold",
         }
         return labels.get(value, value or "unknown")
+
+
+def build_chart_analysis_report(stock_code: str, df: Any) -> Dict[str, Any]:
+    """Build compact chart analysis metadata for reports without embedding SVG."""
+    result = ChartAnalysisService().analyze(stock_code, df)
+    metadata = dict(result.get("metadata") or {})
+    if result.get("status") != "ok":
+        return {
+            "version": 1,
+            "status": result.get("status", "degraded"),
+            "reason": result.get("reason") or "Chart analysis is unavailable.",
+        }
+    pattern = metadata.get("pattern") or {}
+    display_labels = metadata.get("display_labels") or {}
+    return {
+        "version": 1,
+        "status": "ok",
+        "latest_close": metadata.get("latest_close"),
+        "support": metadata.get("support"),
+        "resistance": metadata.get("resistance"),
+        "pattern": pattern,
+        "pattern_label": display_labels.get("pattern") or pattern.get("name"),
+        "visual_signal": metadata.get("visual_signal"),
+        "visual_signal_label": display_labels.get("visual_signal") or metadata.get("visual_signal"),
+        "indicator_signal": metadata.get("indicator_signal"),
+        "indicator_signal_label": display_labels.get("indicator_signal") or metadata.get("indicator_signal"),
+        "conflicts": metadata.get("conflicts") or [],
+    }
+
+
+def attach_chart_analysis_report(result: "AnalysisResult", history_df: Any) -> None:
+    """Attach compact chart metadata to an AnalysisResult for API and markdown reports."""
+    try:
+        result.chart_analysis_report = build_chart_analysis_report(result.code, history_df)
+    except Exception as exc:
+        result.chart_analysis_report = {
+            "version": 1,
+            "status": "degraded",
+            "reason": f"Chart analysis failed: {exc}",
+        }

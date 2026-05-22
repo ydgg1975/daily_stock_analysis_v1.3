@@ -580,6 +580,8 @@ class HistoryService:
                 thesis_tracking=raw_result.get("thesis_tracking"),
                 evidence_graph=raw_result.get("evidence_graph"),
                 stock_risk_report=raw_result.get("stock_risk_report"),
+                chart_analysis_report=raw_result.get("chart_analysis_report"),
+                event_monitoring_report=raw_result.get("event_monitoring_report"),
                 market_snapshot=raw_result.get("market_snapshot"),
                 search_performed=raw_result.get("search_performed", False),
                 data_sources=raw_result.get("data_sources", ""),
@@ -844,6 +846,49 @@ class HistoryService:
                     f"{result.news_summary}",
                     "",
                 ])
+
+        chart_report = getattr(result, "chart_analysis_report", None) or {}
+        event_report = getattr(result, "event_monitoring_report", None) or {}
+        if event_report:
+            event_heading = "Event Monitoring" if report_language == "en" else "事件监控"
+            priority_label = "Priority" if report_language == "en" else "优先级"
+            thesis_break_label = "Thesis break risk" if report_language == "en" else "投资假设破坏风险"
+            watch_label = "Watch items" if report_language == "en" else "监控事项"
+            report_lines.extend([f"### 🚨 {event_heading}", ""])
+            report_lines.append(
+                f"**{priority_label}**: {event_report.get('monitoring_priority', 'N/A')} | "
+                f"**{thesis_break_label}**: {event_report.get('thesis_break_risk', False)}"
+            )
+            for item in (event_report.get("watch_items") or [])[:5]:
+                report_lines.append(f"- {item}")
+            top_events = event_report.get("top_events") or []
+            for event in top_events[:3]:
+                reason = event.get("reason") or event.get("event_type")
+                report_lines.append(f"- {event.get('priority', 'info')}: {reason}")
+            report_lines.append("")
+
+        if chart_report:
+            chart_heading = "Chart Analysis" if report_language == "en" else "图表分析"
+            support_label = "Support" if report_language == "en" else "支撑"
+            resistance_label = "Resistance" if report_language == "en" else "压力"
+            pattern_label = "Pattern" if report_language == "en" else "形态"
+            signal_label = "Signal" if report_language == "en" else "信号"
+            report_lines.extend([f"### 📈 {chart_heading}", ""])
+            if chart_report.get("status") == "ok":
+                report_lines.append(
+                    f"**{support_label}**: {chart_report.get('support', 'N/A')} | "
+                    f"**{resistance_label}**: {chart_report.get('resistance', 'N/A')}"
+                )
+                report_lines.append(
+                    f"**{pattern_label}**: {chart_report.get('pattern_label', 'N/A')} | "
+                    f"**{signal_label}**: "
+                    f"{chart_report.get('visual_signal_label') or chart_report.get('indicator_signal_label') or 'N/A'}"
+                )
+                for conflict in (chart_report.get("conflicts") or [])[:3]:
+                    report_lines.append(f"- {conflict.get('message') or conflict.get('type')}")
+            else:
+                report_lines.append(str(chart_report.get("reason") or "Chart analysis is unavailable."))
+            report_lines.append("")
 
         # ========== 底部 ==========
         report_lines.extend([

@@ -70,6 +70,36 @@ class PortfolioAnalysisService:
             )
         return result
 
+    def build_report_summary(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Build compact portfolio-analysis metadata for reports and agent replies."""
+        diversification = analysis.get("diversification") or {}
+        exposure = analysis.get("exposure") or {}
+        candidate_impact = analysis.get("candidate_impact")
+        top_market = self._first_exposure(exposure.get("markets") or [], "market")
+        top_currency = self._first_exposure(exposure.get("currencies") or [], "currency")
+        suggestions = list(analysis.get("rebalance_suggestions") or [])
+        summary: Dict[str, Any] = {
+            "version": 1,
+            "status": "ok",
+            "as_of": analysis.get("as_of"),
+            "currency": analysis.get("currency"),
+            "total_market_value": analysis.get("total_market_value"),
+            "position_count": analysis.get("position_count"),
+            "diversification_level": diversification.get("level"),
+            "diversification_score": diversification.get("score"),
+            "top_market": top_market,
+            "top_currency": top_currency,
+            "warnings": list(diversification.get("warnings") or [])[:5],
+            "rebalance_suggestions": suggestions[:5],
+        }
+        if candidate_impact:
+            summary["candidate_impact"] = {
+                "symbol": candidate_impact.get("symbol"),
+                "projected_weight_pct": candidate_impact.get("projected_weight_pct"),
+                "concentration_alert": candidate_impact.get("concentration_alert"),
+            }
+        return summary
+
     def _collect_positions(self, snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
         positions: List[Dict[str, Any]] = []
         for account in snapshot.get("accounts", []) or []:
@@ -156,6 +186,17 @@ class PortfolioAnalysisService:
         if not rows:
             return 0.0
         return float(rows[0].get("weight_pct") or 0.0)
+
+    @staticmethod
+    def _first_exposure(rows: List[Dict[str, Any]], key_name: str) -> Optional[Dict[str, Any]]:
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            key_name: row.get(key_name),
+            "weight_pct": row.get("weight_pct"),
+            "market_value_base": row.get("market_value_base"),
+        }
 
     @staticmethod
     def _score_level(score: float) -> str:
