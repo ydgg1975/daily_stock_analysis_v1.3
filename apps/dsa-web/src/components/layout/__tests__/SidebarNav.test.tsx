@@ -69,9 +69,21 @@ describe('SidebarNav', () => {
       </MemoryRouter>,
     );
 
-    const alertsLink = screen.getByRole('link', { name: '알림' });
+    const alertsLink = screen.getByRole('link', { name: '\uC54C\uB9BC' });
     expect(alertsLink).toHaveAttribute('href', '/alerts');
     expect(alertsLink).toHaveClass('font-medium');
+  });
+
+  it('renders the chart analysis navigation item', () => {
+    render(
+      <MemoryRouter initialEntries={['/charts']}>
+        <SidebarNav />
+      </MemoryRouter>,
+    );
+
+    const chartsLink = screen.getByRole('link', { name: '\uCC28\uD2B8 \uBD84\uC11D' });
+    expect(chartsLink).toHaveAttribute('href', '/charts');
+    expect(chartsLink).toHaveClass('font-medium');
   });
 
   it('opens the logout confirmation and confirms logout', async () => {

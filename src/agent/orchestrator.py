@@ -1078,6 +1078,13 @@ class AgentOrchestrator:
                 "reason": "Uses price, trend, volume, support, and resistance context.",
             },
             {
+                "id": "chart",
+                "label": "Chart Structure",
+                "role": "analysis",
+                "status": "completed" if self._tool_was_used(tool_trace, "generate_chart_analysis") else "optional",
+                "reason": "Checks visual structure, support/resistance, patterns, and RSI/MACD conflicts.",
+            },
+            {
                 "id": "intel",
                 "label": "News and Fundamentals",
                 "role": "analysis",
@@ -1098,16 +1105,35 @@ class AgentOrchestrator:
                 "status": "completed" if "decision" in present_agents or payload.get("decision_type") else "missing",
                 "reason": "Combines available signals into decision type, confidence, and action plan.",
             },
+            {
+                "id": "portfolio",
+                "label": "Portfolio Context",
+                "role": "context",
+                "status": "completed" if self._tool_was_used(tool_trace, "get_portfolio_snapshot") else "optional",
+                "reason": "Adds account exposure, diversification, risk, and rebalance context when portfolio questions are asked.",
+            },
+            {
+                "id": "paper_trading",
+                "label": "Paper Trading Guardrail",
+                "role": "action_guardrail",
+                "status": "completed" if self._tool_was_used(tool_trace, "prepare_paper_order") else "optional",
+                "reason": "Prepares simulated orders for approval with risk checks while real broker execution remains disabled.",
+            },
         ]
 
         edges = [
             {"from": "data", "to": "technical", "reason": "Market data feeds technical signals."},
+            {"from": "data", "to": "chart", "reason": "Daily bars feed chart structure and indicator conflict checks."},
             {"from": "data", "to": "intel", "reason": "Context guides news and fundamentals checks."},
+            {"from": "chart", "to": "technical", "reason": "Chart structure complements numeric technical indicators."},
             {"from": "technical", "to": "risk", "reason": "Weak levels or volatility can raise risk."},
             {"from": "intel", "to": "risk", "reason": "News and fundamentals can raise risk."},
             {"from": "technical", "to": "decision", "reason": "Trend and levels inform the final action."},
+            {"from": "chart", "to": "decision", "reason": "Support, resistance, and chart conflicts inform the final action."},
             {"from": "intel", "to": "decision", "reason": "Catalysts and sentiment inform the final action."},
             {"from": "risk", "to": "decision", "reason": "Risk can downgrade or veto bullish decisions."},
+            {"from": "portfolio", "to": "decision", "reason": "Portfolio exposure can change position sizing and urgency."},
+            {"from": "decision", "to": "paper_trading", "reason": "Only approved simulated actions should become paper-order preparation."},
         ]
 
         stage_summary = []
@@ -1128,11 +1154,17 @@ class AgentOrchestrator:
         if "risk" in missing_nodes:
             reasoning_gaps.append("Risk review was not confirmed by a completed risk stage.")
 
-        completed_count = sum(1 for node in nodes if node["status"] == "completed")
+        completed_statuses = {"available", "completed"}
+        completed_count = sum(1 for node in nodes if node["status"] in completed_statuses)
+        required_nodes = [node for node in nodes if node["status"] != "optional"]
+        required_completed_count = sum(1 for node in required_nodes if node["status"] in completed_statuses)
         coverage = {
             "completed_nodes": completed_count,
             "total_nodes": len(nodes),
             "ratio": round(completed_count / len(nodes), 4),
+            "required_completed_nodes": required_completed_count,
+            "required_total_nodes": len(required_nodes),
+            "required_ratio": round(required_completed_count / max(len(required_nodes), 1), 4),
             "missing_nodes": missing_nodes,
         }
 
@@ -1158,7 +1190,7 @@ class AgentOrchestrator:
         agent_confidence = sum(opinions) / len(opinions) if opinions else float(base_confidence or 0.0)
 
         coverage = analysis_map.get("coverage") if isinstance(analysis_map, dict) else {}
-        coverage_ratio = float(coverage.get("ratio") or 0.0) if isinstance(coverage, dict) else 0.0
+        coverage_ratio = float(coverage.get("required_ratio") or coverage.get("ratio") or 0.0) if isinstance(coverage, dict) else 0.0
         missing_nodes = coverage.get("missing_nodes") if isinstance(coverage, dict) else []
         if not isinstance(missing_nodes, list):
             missing_nodes = []
@@ -1323,6 +1355,12 @@ class AgentOrchestrator:
     @staticmethod
     def _tool_analysis_node(tool_name: str) -> str:
         lowered = tool_name.lower()
+        if "chart" in lowered:
+            return "chart"
+        if "portfolio" in lowered:
+            return "portfolio"
+        if "paper_order" in lowered or "paper" in lowered:
+            return "paper_trading"
         if any(token in lowered for token in ("news", "intel", "search", "fundamental", "stock_info")):
             return "intel"
         if any(token in lowered for token in ("risk", "backtest")):
@@ -1345,6 +1383,8 @@ class AgentOrchestrator:
             return f"Checked the latest quote{suffix} to anchor price, volume, and intraday movement."
         if "daily_history" in lowered:
             return f"Loaded daily history{suffix} to inspect trend, support, resistance, and volatility."
+        if "generate_chart_analysis" in lowered or "chart" in lowered:
+            return f"Generated chart analysis{suffix} to confirm visual trend, support/resistance, RSI/MACD state, and signal conflicts."
         if "trend" in lowered or "ma" in lowered or "pattern" in lowered:
             return f"Ran technical analysis{suffix} to evaluate trend strength and key levels."
         if "chip" in lowered:
@@ -1355,7 +1395,24 @@ class AgentOrchestrator:
             return "Checked market context to compare the stock against broader market conditions."
         if "backtest" in lowered:
             return f"Checked backtest context{suffix} to compare this signal with historical outcomes."
+        if "portfolio" in lowered:
+            account_id = args.get("account_id")
+            account_text = f" for account {account_id}" if account_id is not None else ""
+            return f"Checked portfolio snapshot{account_text} to align the answer with exposure, diversification, and risk limits."
+        if "prepare_paper_order" in lowered or "paper" in lowered:
+            side = args.get("side")
+            side_text = f" {side}" if side else ""
+            return f"Prepared a guarded paper{side_text} order{suffix} for approval, including risk checks and disabled broker execution."
         return f"Used {tool_name} as supporting evidence for the analysis."
+
+    @staticmethod
+    def _tool_was_used(tool_trace: List[Dict[str, Any]], tool_name: str) -> bool:
+        return any(
+            isinstance(item, dict)
+            and str(item.get("tool") or "").lower() == tool_name.lower()
+            and bool(item.get("success"))
+            for item in tool_trace
+        )
 
     def _collect_key_levels(
         self,

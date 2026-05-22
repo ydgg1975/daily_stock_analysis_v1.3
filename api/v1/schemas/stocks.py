@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Stock data API schemas."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -101,3 +101,18 @@ class StockHistoryResponse(BaseModel):
                 "data": [],
             }
         }
+
+
+class StockChartAnalysisResponse(BaseModel):
+    """Stock chart analysis preview response."""
+
+    stock_code: str
+    source: Optional[str] = None
+    requested_days: int
+    status: str
+    image_format: str = "svg"
+    svg: Optional[str] = None
+    svg_omitted: bool = False
+    svg_length: int = 0
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    reason: Optional[str] = None

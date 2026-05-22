@@ -28,6 +28,7 @@ from api.v1.schemas.portfolio import (
     PortfolioImportTradeItem,
     PaperTradeExecuteRequest,
     PaperTradeExecuteResponse,
+    PaperTradePerformanceResponse,
     PaperTradePrepareRequest,
     PaperTradePrepareResponse,
     PortfolioRiskResponse,
@@ -625,3 +626,30 @@ def execute_paper_order(request: PaperTradeExecuteRequest) -> PaperTradeExecuteR
         raise _bad_request(exc)
     except Exception as exc:
         raise _internal_error("Execute paper order failed", exc)
+
+
+@router.get(
+    "/paper/performance",
+    response_model=PaperTradePerformanceResponse,
+    responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    summary="Get paper trading performance summary",
+)
+def get_paper_performance(
+    account_id: Optional[int] = Query(None, description="Optional account id"),
+    as_of: Optional[date] = Query(None, description="Mark open paper trades at this date"),
+    cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
+    eval_window_days: Optional[int] = Query(None, ge=1, description="Optional backtest comparison window"),
+) -> PaperTradePerformanceResponse:
+    service = PaperTradingService()
+    try:
+        data = service.get_performance(
+            account_id=account_id,
+            as_of=as_of,
+            cost_method=cost_method,
+            eval_window_days=eval_window_days,
+        )
+        return PaperTradePerformanceResponse(**data)
+    except ValueError as exc:
+        raise _bad_request(exc)
+    except Exception as exc:
+        raise _internal_error("Get paper performance failed", exc)

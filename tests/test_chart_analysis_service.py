@@ -33,8 +33,22 @@ def test_chart_analysis_generates_svg_and_metadata():
     assert result["metadata"]["version"] == 1
     assert result["metadata"]["pattern"]["name"] == "five_bar_breakout"
     assert result["metadata"]["visual_signal"] == "bullish"
+    assert result["metadata"]["display_labels"]["pattern"] == "5-bar breakout"
     assert "support" in result["metadata"]
     assert "resistance" in result["metadata"]
+
+
+def test_chart_analysis_svg_includes_axes_labels_and_macd_histogram():
+    service = ChartAnalysisService()
+    result = service.analyze("AAPL", _sample_ohlcv([10, 11, 12, 11, 13, 14, 15, 16]))
+
+    svg = result["svg"]
+    assert "Support" in svg
+    assert "Resistance" in svg
+    assert "RSI 70" in svg
+    assert "RSI 30" in svg
+    assert "03-01" in svg
+    assert 'opacity="0.42"' in svg
 
 
 def test_chart_analysis_reports_conflict_between_visual_and_indicator_signal():

@@ -7,6 +7,9 @@ import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert, Card, Badge, ConfirmDialog, EmptyState, InlineAlert } from '../components/common';
 import { toDateInputValue } from '../utils/format';
 import type {
+  PaperTradeExecuteResponse,
+  PaperTradePerformanceResponse,
+  PaperTradePrepareResponse,
   PortfolioAccountItem,
   PortfolioCashDirection,
   PortfolioCashLedgerListItem,
@@ -182,6 +185,38 @@ function getCsvCommitVariant(result: PortfolioImportCommitResponse, isDryRun: bo
   return result.failedCount > 0 || result.duplicateCount > 0 ? 'warning' : 'success';
 }
 
+function getPaperRiskTone(item: Record<string, unknown>): PortfolioAlertVariant {
+  const status = String(item.status ?? item.result ?? '').toLowerCase();
+  if (item.passed === false || ['blocked', 'danger', 'failed', 'fail', 'error'].includes(status)) return 'danger';
+  if (['warning', 'warn', 'caution'].includes(status)) return 'warning';
+  return 'success';
+}
+
+function formatPaperRiskCheck(item: Record<string, unknown>): string {
+  const name = item.name ?? item.type ?? item.check ?? 'risk_check';
+  const status = item.status ?? item.result ?? (item.passed === false ? 'failed' : 'passed');
+  const message = item.message ?? item.reason ?? item.detail;
+  return message ? `${String(name)} · ${String(status)} · ${String(message)}` : `${String(name)} · ${String(status)}`;
+}
+
+function formatPaperOrderValue(order: Record<string, unknown> | undefined | null, key: string): string {
+  const value = order?.[key];
+  if (value == null || value === '') return '--';
+  return String(value);
+}
+
+function formatPaperSideLabel(value: string): string {
+  if (value === 'buy' || value === 'sell') return formatSideLabel(value);
+  return value || '--';
+}
+
+function formatPaperOutcomeLabel(value: string): string {
+  if (value === 'win') return '승';
+  if (value === 'loss') return '패';
+  if (value === 'flat') return '무';
+  return value || '--';
+}
+
 const PortfolioPage: React.FC = () => {
   // Set page title
   useEffect(() => {
@@ -261,6 +296,23 @@ const PortfolioPage: React.FC = () => {
     cashDividendPerShare: '',
     splitRatio: '',
     note: '',
+  });
+  const [paperPreparing, setPaperPreparing] = useState(false);
+  const [paperExecuting, setPaperExecuting] = useState(false);
+  const [paperPrepareResult, setPaperPrepareResult] = useState<PaperTradePrepareResponse | null>(null);
+  const [paperExecuteResult, setPaperExecuteResult] = useState<PaperTradeExecuteResponse | null>(null);
+  const [paperPerformance, setPaperPerformance] = useState<PaperTradePerformanceResponse | null>(null);
+  const [paperPerformanceLoading, setPaperPerformanceLoading] = useState(false);
+  const [paperPerformanceWarning, setPaperPerformanceWarning] = useState<string | null>(null);
+  const [paperForm, setPaperForm] = useState({
+    symbol: '',
+    tradeDate: getTodayIso(),
+    side: 'buy' as PortfolioSide,
+    quantity: '',
+    price: '',
+    market: 'us' as 'cn' | 'hk' | 'us',
+    currency: 'USD',
+    reason: '',
   });
 
   const queryAccountId = selectedAccount === 'all' ? undefined : selectedAccount;
@@ -420,6 +472,24 @@ const PortfolioPage: React.FC = () => {
     await Promise.all([loadSnapshotAndRisk(), loadEventsPage(page)]);
   }, [eventPage, loadEventsPage, loadSnapshotAndRisk]);
 
+  const loadPaperPerformance = useCallback(async () => {
+    setPaperPerformanceLoading(true);
+    setPaperPerformanceWarning(null);
+    try {
+      const data = await portfolioApi.getPaperPerformance({
+        accountId: queryAccountId,
+        costMethod,
+      });
+      setPaperPerformance(data);
+    } catch (err) {
+      setPaperPerformance(null);
+      const parsed = getParsedApiError(err);
+      setPaperPerformanceWarning(parsed.message || 'Paper trading 성과를 가져오지 못했습니다.');
+    } finally {
+      setPaperPerformanceLoading(false);
+    }
+  }, [costMethod, queryAccountId]);
+
   useEffect(() => {
     void loadAccounts();
     void loadBrokers();
@@ -432,6 +502,10 @@ const PortfolioPage: React.FC = () => {
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  useEffect(() => {
+    void loadPaperPerformance();
+  }, [loadPaperPerformance]);
 
   useEffect(() => {
     refreshContextRef.current = {
@@ -519,6 +593,62 @@ const PortfolioPage: React.FC = () => {
       setTradeForm((prev) => ({ ...prev, symbol: '', tradeUid: '', note: '' }));
     } catch (err) {
       setError(getParsedApiError(err));
+    }
+  };
+
+  const handlePaperPrepare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!writableAccountId) {
+      setWriteWarning('Paper 주문을 준비하려면 특정 계좌를 선택하세요.');
+      return;
+    }
+
+    try {
+      setPaperPreparing(true);
+      setWriteWarning(null);
+      setPaperExecuteResult(null);
+      const prepared = await portfolioApi.preparePaperOrder({
+        accountId: writableAccountId,
+        symbol: paperForm.symbol,
+        tradeDate: paperForm.tradeDate,
+        side: paperForm.side,
+        quantity: Number(paperForm.quantity),
+        price: Number(paperForm.price),
+        market: paperForm.market,
+        currency: paperForm.currency || undefined,
+        reason: paperForm.reason || undefined,
+        costMethod,
+      });
+      setPaperPrepareResult(prepared);
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setPaperPreparing(false);
+    }
+  };
+
+  const handlePaperExecute = async (approved: boolean) => {
+    if (!paperPrepareResult || paperExecuting) return;
+
+    try {
+      setPaperExecuting(true);
+      setWriteWarning(null);
+      const executed = await portfolioApi.executePaperOrder({
+        preparedOrder: paperPrepareResult.order,
+        approvalToken: paperPrepareResult.approvalToken,
+        approved,
+      });
+      setPaperExecuteResult(executed);
+      if (approved && executed.tradeId) {
+        setEventType('trade');
+        setEventPage(1);
+        await refreshPortfolioData(1);
+        await loadPaperPerformance();
+      }
+    } catch (err) {
+      setError(getParsedApiError(err));
+    } finally {
+      setPaperExecuting(false);
     }
   };
 
@@ -1114,6 +1244,242 @@ const PortfolioPage: React.FC = () => {
           </div>
         </Card>
       </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <Card padding="md">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Paper 주문 준비</h3>
+            <Badge variant="info">approval required</Badge>
+          </div>
+          <form className="space-y-2" onSubmit={handlePaperPrepare}>
+            <input className={PORTFOLIO_INPUT_CLASS} placeholder="Paper 종목 코드, 예: AAPL" value={paperForm.symbol}
+              onChange={(e) => setPaperForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
+            <div className="grid grid-cols-2 gap-2">
+              <input className={PORTFOLIO_INPUT_CLASS} type="date" value={paperForm.tradeDate}
+                onChange={(e) => setPaperForm((prev) => ({ ...prev, tradeDate: e.target.value }))} required />
+              <select className={PORTFOLIO_SELECT_CLASS} value={paperForm.side}
+                onChange={(e) => setPaperForm((prev) => ({ ...prev, side: e.target.value as PortfolioSide }))}>
+                <option value="buy">매수</option>
+                <option value="sell">매도</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="Paper 수량"
+                value={paperForm.quantity} onChange={(e) => setPaperForm((prev) => ({ ...prev, quantity: e.target.value }))} required />
+              <input className={PORTFOLIO_INPUT_CLASS} type="number" min="0" step="0.0001" placeholder="Paper 가격"
+                value={paperForm.price} onChange={(e) => setPaperForm((prev) => ({ ...prev, price: e.target.value }))} required />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select className={PORTFOLIO_SELECT_CLASS} value={paperForm.market}
+                onChange={(e) => setPaperForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' }))}>
+                <option value="us">US</option>
+                <option value="hk">HK</option>
+                <option value="cn">CN</option>
+              </select>
+              <input className={PORTFOLIO_INPUT_CLASS} placeholder="통화, 예: USD" value={paperForm.currency}
+                onChange={(e) => setPaperForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} />
+            </div>
+            <textarea className={`${PORTFOLIO_INPUT_CLASS} min-h-24 py-3`} placeholder="주문 사유 또는 thesis"
+              value={paperForm.reason} onChange={(e) => setPaperForm((prev) => ({ ...prev, reason: e.target.value }))} />
+            <button type="submit" className="btn-secondary w-full" disabled={!writableAccountId || paperPreparing}>
+              {paperPreparing ? '검토 중...' : 'Paper 주문 검토'}
+            </button>
+          </form>
+        </Card>
+
+        <Card padding="md">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Paper 주문 검토 결과</h3>
+            {paperPrepareResult ? <Badge variant={paperPrepareResult.canExecuteAfterApproval ? 'success' : 'warning'}>{paperPrepareResult.status}</Badge> : null}
+          </div>
+          {paperPrepareResult ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-tertiary">종목</div>
+                  <div className="font-semibold text-foreground">{formatPaperOrderValue(paperPrepareResult.order, 'symbol')}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-tertiary">방향</div>
+                  <div className="font-semibold text-foreground">{formatPaperSideLabel(formatPaperOrderValue(paperPrepareResult.order, 'side'))}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-tertiary">수량</div>
+                  <div className="font-semibold text-foreground">{formatPaperOrderValue(paperPrepareResult.order, 'quantity')}</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface/40 p-2">
+                  <div className="text-tertiary">가격</div>
+                  <div className="font-semibold text-foreground">{formatPaperOrderValue(paperPrepareResult.order, 'price')}</div>
+                </div>
+              </div>
+              <div className="text-xs text-secondary space-y-1">
+                <div>실행 모드: {paperPrepareResult.mode}</div>
+                <div>브로커 실행: {paperPrepareResult.brokerExecution}</div>
+                <div>승인 토큰: {paperPrepareResult.approvalToken}</div>
+              </div>
+              <div className="space-y-2">
+                {(paperPrepareResult.riskChecks || []).length > 0 ? (
+                  paperPrepareResult.riskChecks.map((item, index) => (
+                    <InlineAlert
+                      key={`${String(item.name ?? item.type ?? 'risk')}-${index}`}
+                      variant={getPaperRiskTone(item)}
+                      className="rounded-lg px-3 py-2 text-xs shadow-none"
+                      message={formatPaperRiskCheck(item)}
+                    />
+                  ))
+                ) : (
+                  <InlineAlert
+                    variant="info"
+                    className="rounded-lg px-3 py-2 text-xs shadow-none"
+                    message="리스크 체크 결과가 비어 있습니다."
+                  />
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={!paperPrepareResult.canExecuteAfterApproval || paperExecuting}
+                  onClick={() => void handlePaperExecute(true)}
+                >
+                  {paperExecuting ? '처리 중...' : '승인 후 기록'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={paperExecuting}
+                  onClick={() => void handlePaperExecute(false)}
+                >
+                  거절 기록
+                </button>
+              </div>
+              {paperExecuteResult ? (
+                <InlineAlert
+                  variant={paperExecuteResult.status === 'recorded' ? 'success' : 'info'}
+                  title={paperExecuteResult.status === 'recorded' ? 'Paper 거래 기록 완료' : 'Paper 주문 처리 결과'}
+                  message={
+                    paperExecuteResult.tradeId
+                      ? `거래 ID ${paperExecuteResult.tradeId}로 저장되었습니다.`
+                      : (paperExecuteResult.reason || paperExecuteResult.status)
+                  }
+                  className="rounded-lg px-3 py-2 text-xs shadow-none"
+                />
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState
+              title="검토 대기"
+              description="Paper 주문을 준비하면 risk check와 승인 가능 여부가 여기에 표시됩니다."
+              className="border-none bg-transparent px-4 py-10 shadow-none"
+            />
+          )}
+        </Card>
+      </section>
+
+      <Card padding="md">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Paper Trading 성과</h3>
+            <p className="text-xs text-secondary mt-1">paper 거래의 수익률, 보유 기간, 승패를 현재 스냅샷 기준으로 추적합니다.</p>
+          </div>
+          <button type="button" className="btn-secondary text-sm" onClick={() => void loadPaperPerformance()} disabled={paperPerformanceLoading}>
+            {paperPerformanceLoading ? '계산 중...' : '성과 새로고침'}
+          </button>
+        </div>
+        {paperPerformanceWarning ? (
+          <InlineAlert
+            variant="warning"
+            className="rounded-lg px-3 py-2 text-xs shadow-none mb-3"
+            message={paperPerformanceWarning}
+          />
+        ) : null}
+        {paperPerformance ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-tertiary">총 paper 거래</div>
+                <div className="font-semibold text-foreground">{paperPerformance.totalTrades}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-tertiary">열림/닫힘</div>
+                <div className="font-semibold text-foreground">{paperPerformance.openTrades}/{paperPerformance.closedTrades}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-tertiary">승패</div>
+                <div className="font-semibold text-foreground">{paperPerformance.winCount}/{paperPerformance.lossCount}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-tertiary">승률</div>
+                <div className="font-semibold text-foreground">{formatPct(paperPerformance.winRatePct)}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface/40 p-2">
+                <div className="text-tertiary">평균 수익률</div>
+                <div className="font-semibold text-foreground">{formatSignedPct(paperPerformance.avgReturnPct)}</div>
+              </div>
+            </div>
+            {paperPerformance.backtestComparison ? (
+              <InlineAlert
+                variant="info"
+                className="rounded-lg px-3 py-2 text-xs shadow-none"
+                title="백테스트 비교"
+                message={`백테스트 평균 수익률 ${formatSignedPct(paperPerformance.backtestComparison.avgReturnPct)}, 승률 ${formatPct(paperPerformance.backtestComparison.winRatePct)}, 평가 ${paperPerformance.backtestComparison.totalEvaluations ?? 0}건`}
+              />
+            ) : (
+              <InlineAlert
+                variant="info"
+                className="rounded-lg px-3 py-2 text-xs shadow-none"
+                message="비교 가능한 백테스트 summary가 아직 없습니다."
+              />
+            )}
+            {paperPerformance.items.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="min-w-[820px] w-full text-xs">
+                  <thead className="bg-surface/70 text-secondary">
+                    <tr>
+                      <th className="px-3 py-2 text-left">종목</th>
+                      <th className="px-3 py-2 text-left">상태</th>
+                      <th className="px-3 py-2 text-right">수익률</th>
+                      <th className="px-3 py-2 text-right">손익</th>
+                      <th className="px-3 py-2 text-right">보유일</th>
+                      <th className="px-3 py-2 text-right">진입/평가</th>
+                      <th className="px-3 py-2 text-right">잔여</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paperPerformance.items.map((item) => (
+                      <tr key={`${item.tradeId}-${item.tradeUid || item.symbol}`} className="border-t border-border/70">
+                        <td className="px-3 py-2 font-semibold text-foreground">{item.symbol}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant={item.outcome === 'win' ? 'success' : item.outcome === 'loss' ? 'danger' : 'default'}>
+                            {item.status === 'closed' ? '종료' : '진행'} · {formatPaperOutcomeLabel(item.outcome)}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatSignedPct(item.returnPct)}</td>
+                        <td className="px-3 py-2 text-right">{item.pnl.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right">{item.holdingDays}일</td>
+                        <td className="px-3 py-2 text-right">{item.entryPrice.toFixed(2)} / {item.markPrice.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right">{item.remainingQuantity.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
+                title="paper 거래 없음"
+                description="승인된 paper 주문이 기록되면 성과 추적표가 표시됩니다."
+                className="border-none bg-transparent px-4 py-10 shadow-none"
+              />
+            )}
+          </div>
+        ) : (
+          <EmptyState
+            title="성과 데이터 없음"
+            description="Paper trading 성과를 불러오면 요약과 거래별 결과가 표시됩니다."
+            className="border-none bg-transparent px-4 py-10 shadow-none"
+          />
+        )}
+      </Card>
 
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         <Card padding="md">

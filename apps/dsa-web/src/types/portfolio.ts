@@ -159,6 +159,86 @@ export interface PortfolioTradeCreateRequest {
   note?: string;
 }
 
+export interface PaperTradePrepareRequest {
+  accountId: number;
+  symbol: string;
+  side: PortfolioSide;
+  quantity: number;
+  price: number;
+  tradeDate?: string;
+  market?: 'cn' | 'hk' | 'us' | 'kr';
+  currency?: string;
+  reason?: string;
+  costMethod?: PortfolioCostMethod;
+}
+
+export interface PaperTradePrepareResponse {
+  status: string;
+  mode: string;
+  brokerExecution: string;
+  approvalToken: string;
+  order: Record<string, unknown>;
+  riskChecks: Array<Record<string, unknown>>;
+  canExecuteAfterApproval: boolean;
+}
+
+export interface PaperTradeExecuteRequest {
+  preparedOrder: Record<string, unknown>;
+  approvalToken: string;
+  approved: boolean;
+}
+
+export interface PaperTradeExecuteResponse {
+  status: string;
+  mode: string;
+  brokerExecution?: string | null;
+  tradeId?: number | null;
+  reason?: string | null;
+  order?: Record<string, unknown> | null;
+  riskChecks: Array<Record<string, unknown>>;
+}
+
+export interface PaperTradePerformanceItem {
+  tradeId: number;
+  tradeUid?: string | null;
+  symbol: string;
+  entryDate: string;
+  exitDate?: string | null;
+  status: 'open' | 'closed' | string;
+  outcome: 'win' | 'loss' | 'flat' | string;
+  quantity: number;
+  remainingQuantity: number;
+  entryPrice: number;
+  markPrice: number;
+  exitPrice?: number | null;
+  pnl: number;
+  returnPct: number;
+  holdingDays: number;
+  note?: string | null;
+}
+
+export interface PaperTradePerformanceResponse {
+  asOf: string;
+  mode: string;
+  accountId?: number | null;
+  costMethod: PortfolioCostMethod;
+  totalTrades: number;
+  openTrades: number;
+  closedTrades: number;
+  winCount: number;
+  lossCount: number;
+  winRatePct?: number | null;
+  avgReturnPct: number;
+  items: PaperTradePerformanceItem[];
+  backtestComparison?: {
+    scope?: string | null;
+    evalWindowDays?: number | null;
+    winRatePct?: number | null;
+    avgReturnPct?: number | null;
+    totalEvaluations?: number | null;
+  } | null;
+}
+
 export interface PortfolioCashLedgerCreateRequest {
   accountId: number;
   eventDate: string;

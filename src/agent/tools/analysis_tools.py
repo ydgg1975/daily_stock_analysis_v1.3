@@ -512,9 +512,73 @@ analyze_pattern_tool = ToolDefinition(
 )
 
 
+def _handle_generate_chart_analysis(stock_code: str, days: int = 90, include_svg: bool = False) -> dict:
+    """Generate compact chart-analysis metadata and optional SVG for agent use."""
+    from src.services.chart_analysis_service import ChartAnalysisService
+    from src.services.history_loader import load_history_df
+
+    if not (stock_code and str(stock_code).strip()):
+        return {"error": "stock_code is required"}
+    effective_days = max(30, min(int(days or 90), 240))
+    df, source = load_history_df(stock_code, days=effective_days)
+    if df is None or df.empty:
+        return {"error": f"No historical data available for chart analysis on {stock_code}"}
+
+    result = ChartAnalysisService().analyze(stock_code, df.tail(effective_days))
+    payload = {
+        "stock_code": stock_code,
+        "source": source,
+        "requested_days": effective_days,
+        "status": result.get("status"),
+        "image_format": result.get("image_format"),
+        "metadata": result.get("metadata", {}),
+    }
+    if include_svg:
+        payload["svg"] = result.get("svg", "")
+    else:
+        payload["svg_omitted"] = True
+        payload["svg_length"] = len(result.get("svg", "") or "")
+    if result.get("reason"):
+        payload["reason"] = result.get("reason")
+    return payload
+
+
+generate_chart_analysis_tool = ToolDefinition(
+    name="generate_chart_analysis",
+    description="Generate candlestick chart analysis metadata and optional SVG. "
+                "Returns support/resistance, simple pattern detection, visual signal, "
+                "numeric indicator signal, and conflicts between chart and indicators. "
+                "SVG is omitted by default to keep tool responses compact.",
+    parameters=[
+        ToolParameter(
+            name="stock_code",
+            type="string",
+            description="Stock code, e.g., '600519' or 'AAPL'",
+        ),
+        ToolParameter(
+            name="days",
+            type="integer",
+            description="Number of recent trading days to analyze (30-240, default: 90).",
+            required=False,
+            default=90,
+        ),
+        ToolParameter(
+            name="include_svg",
+            type="boolean",
+            description="Whether to include the full SVG image string (default: false).",
+            required=False,
+            default=False,
+        ),
+    ],
+    handler=_handle_generate_chart_analysis,
+    category="analysis",
+)
+
+
 ALL_ANALYSIS_TOOLS = [
     analyze_trend_tool,
     calculate_ma_tool,
     get_volume_analysis_tool,
     analyze_pattern_tool,
+    generate_chart_analysis_tool,
 ]

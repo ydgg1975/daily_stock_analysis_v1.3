@@ -30,6 +30,7 @@ class TechnicalAgent(BaseAgent):
         "calculate_ma",
         "get_volume_analysis",
         "analyze_pattern",
+        "generate_chart_analysis",
         "get_chip_distribution",
         "get_analysis_context",
     ]
@@ -52,11 +53,16 @@ output a structured JSON opinion.
 ## Workflow (execute stages in order)
 1. Fetch realtime quote + daily history (if not already provided)
 2. Run trend analysis (MA alignment, MACD, RSI)
-3. Analyse volume and chip distribution
-4. Identify chart patterns
+3. Generate compact chart analysis when support/resistance, pattern, RSI/MACD conflict, or a chart preview would improve the answer
+4. Analyse volume and chip distribution
+5. Identify chart patterns
 
 {baseline}
 {skills}
+## Tool Selection Guidance
+- Prefer `generate_chart_analysis` after daily history is available when the user asks about chart structure, entry/exit levels, short-term trend, RSI/MACD, support/resistance, or visual confirmation.
+- If `generate_chart_analysis` reports insufficient data or a degraded status, continue with trend/MA/volume tools and mention the data gap.
+
 ## Output Format
 Return **only** a JSON object (no markdown fences):
 {{

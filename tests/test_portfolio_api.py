@@ -211,6 +211,18 @@ class PortfolioApiTestCase(unittest.TestCase):
         trades = self.client.get("/api/v1/portfolio/trades", params={"account_id": account_id})
         self.assertEqual(trades.json()["items"][0]["trade_uid"][:6], "paper:")
 
+        self._save_close("AAPL", date(2026, 3, 16), 120.0)
+        performance = self.client.get(
+            "/api/v1/portfolio/paper/performance",
+            params={"account_id": account_id, "as_of": "2026-03-16"},
+        )
+        self.assertEqual(performance.status_code, 200)
+        perf_payload = performance.json()
+        self.assertEqual(perf_payload["total_trades"], 1)
+        self.assertEqual(perf_payload["open_trades"], 1)
+        self.assertEqual(perf_payload["items"][0]["symbol"], "AAPL")
+        self.assertGreater(perf_payload["items"][0]["return_pct"], 0)
+
     def test_duplicate_trade_uid_returns_409(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",

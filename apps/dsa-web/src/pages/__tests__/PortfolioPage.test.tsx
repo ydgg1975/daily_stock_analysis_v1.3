@@ -21,7 +21,13 @@ const {
   deleteCorporateAction,
   parseCsvImport,
   commitCsvImport,
-  createAccount,
+  preparePaperOrder,
+
+  executePaperOrder,
+
+  getPaperPerformance,
+
+  createAccount,
 } = vi.hoisted(() => ({
   getAccounts: vi.fn(),
   getSnapshot: vi.fn(),
@@ -39,7 +45,13 @@ const {
   deleteCorporateAction: vi.fn(),
   parseCsvImport: vi.fn(),
   commitCsvImport: vi.fn(),
-  createAccount: vi.fn(),
+  preparePaperOrder: vi.fn(),
+
+  executePaperOrder: vi.fn(),
+
+  getPaperPerformance: vi.fn(),
+
+  createAccount: vi.fn(),
 }));
 
 vi.mock('../../api/portfolio', () => ({
@@ -60,7 +72,13 @@ vi.mock('../../api/portfolio', () => ({
     deleteCorporateAction,
     parseCsvImport,
     commitCsvImport,
-    createAccount,
+    preparePaperOrder,
+
+    executePaperOrder,
+
+    getPaperPerformance,
+
+    createAccount,
   },
 }));
 
@@ -233,7 +251,97 @@ describe('PortfolioPage FX refresh', () => {
       dryRun: true,
       errors: [],
     });
-    createAccount.mockResolvedValue({ id: 1 });
+    preparePaperOrder.mockResolvedValue({
+
+      status: 'approval_required',
+
+      mode: 'paper',
+
+      brokerExecution: 'disabled',
+
+      approvalToken: 'paper-token',
+
+      order: {
+
+        accountId: 1,
+
+        symbol: 'AAPL',
+
+        side: 'buy',
+
+        quantity: 2,
+
+        price: 100,
+
+        tradeDate: '2026-03-19',
+
+      },
+
+      riskChecks: [{ name: 'cash_limit', status: 'passed', message: 'cash ok' }],
+
+      canExecuteAfterApproval: true,
+
+    });
+
+    executePaperOrder.mockResolvedValue({
+
+      status: 'recorded',
+
+      mode: 'paper',
+
+      brokerExecution: 'disabled',
+
+      tradeId: 77,
+
+      order: { symbol: 'AAPL' },
+
+      riskChecks: [],
+
+    });
+
+    getPaperPerformance.mockResolvedValue({
+
+      asOf: '2026-03-19',
+
+      mode: 'paper',
+
+      accountId: null,
+
+      costMethod: 'fifo',
+
+      totalTrades: 0,
+
+      openTrades: 0,
+
+      closedTrades: 0,
+
+      winCount: 0,
+
+      lossCount: 0,
+
+      winRatePct: null,
+
+      avgReturnPct: 0,
+
+      items: [],
+
+      backtestComparison: {
+
+        scope: 'overall',
+
+        evalWindowDays: 10,
+
+        winRatePct: 55,
+
+        avgReturnPct: 3.5,
+
+        totalEvaluations: 20,
+
+      },
+
+    });
+
+    createAccount.mockResolvedValue({ id: 1 });
   });
 
   it('renders stale FX status with a manual refresh button', async () => {
@@ -561,7 +669,85 @@ describe('PortfolioPage FX refresh', () => {
     expect(getRisk).toHaveBeenCalledTimes(riskCallsAfterSwitch);
     expect(screen.queryByText('환율 새로고침 완료, 1개 업데이트됨')).not.toBeInTheDocument();
   });
-});
+  it('prepares and approves a paper order from the portfolio page', async () => {
+
+    render(<PortfolioPage />);
+
+
+
+    await waitForInitialLoad();
+
+
+
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } });
+
+    await waitFor(() => expect(getSnapshot).toHaveBeenLastCalledWith({ accountId: 1, costMethod: 'fifo' }));
+
+
+
+    fireEvent.change(screen.getByPlaceholderText('Paper 종목 코드, 예: AAPL'), { target: { value: 'AAPL' } });
+
+    fireEvent.change(screen.getByPlaceholderText('Paper 수량'), { target: { value: '2' } });
+
+    fireEvent.change(screen.getByPlaceholderText('Paper 가격'), { target: { value: '100' } });
+
+    fireEvent.change(screen.getByPlaceholderText('주문 사유 또는 thesis'), { target: { value: 'breakout test' } });
+
+
+
+    fireEvent.click(screen.getByRole('button', { name: 'Paper 주문 검토' }));
+
+
+
+    await waitFor(() => expect(preparePaperOrder).toHaveBeenCalledWith({
+
+      accountId: 1,
+
+      symbol: 'AAPL',
+
+      tradeDate: expect.any(String),
+
+      side: 'buy',
+
+      quantity: 2,
+
+      price: 100,
+
+      market: 'us',
+
+      currency: 'USD',
+
+      reason: 'breakout test',
+
+      costMethod: 'fifo',
+
+    }));
+
+    expect(await screen.findByText('cash_limit · passed · cash ok')).toBeInTheDocument();
+
+
+
+    fireEvent.click(screen.getByRole('button', { name: '승인 후 기록' }));
+
+
+
+    await waitFor(() => expect(executePaperOrder).toHaveBeenCalledWith({
+
+      preparedOrder: expect.objectContaining({ symbol: 'AAPL' }),
+
+      approvalToken: 'paper-token',
+
+      approved: true,
+
+    }));
+
+    expect(await screen.findByText('Paper 거래 기록 완료')).toBeInTheDocument();
+
+    expect(screen.getByText('거래 ID 77로 저장되었습니다.')).toBeInTheDocument();
+
+  });
+
+});
 
 
 

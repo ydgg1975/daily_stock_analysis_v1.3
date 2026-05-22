@@ -11,6 +11,7 @@ from api.v1.schemas.stocks import (
     ExtractFromImageResponse,
     ExtractItem,
     KLineData,
+    StockChartAnalysisResponse,
     StockHistoryResponse,
     StockQuote,
 )
@@ -250,6 +251,63 @@ def get_stock_quote(stock_code: str) -> StockQuote:
         raise HTTPException(
             status_code=500,
             detail={"error": "internal_error", "message": f"실시간 시세 조회에 실패했습니다: {str(e)}"},
+        )
+
+
+@router.get(
+    "/{stock_code}/chart-analysis",
+    response_model=StockChartAnalysisResponse,
+    responses={
+        200: {"description": "Chart analysis preview"},
+        500: {"description": "Server error", "model": ErrorResponse},
+    },
+    summary="Get stock chart analysis preview",
+    description="Return candlestick SVG and chart-analysis metadata for a stock.",
+)
+def get_stock_chart_analysis(
+    stock_code: str,
+    days: int = Query(90, ge=30, le=240, description="Recent trading days to analyze"),
+    include_svg: bool = Query(True, description="Whether to include the SVG image"),
+) -> StockChartAnalysisResponse:
+    """Return chart SVG and metadata for Web preview."""
+    try:
+        from src.agent.tools.analysis_tools import _handle_generate_chart_analysis
+
+        result = _handle_generate_chart_analysis(
+            stock_code=stock_code,
+            days=days,
+            include_svg=include_svg,
+        )
+        if result.get("error"):
+            return StockChartAnalysisResponse(
+                stock_code=stock_code,
+                source=result.get("source"),
+                requested_days=days,
+                status="degraded",
+                image_format="svg",
+                svg=None,
+                svg_omitted=not include_svg,
+                svg_length=0,
+                metadata={},
+                reason=result.get("error"),
+            )
+        return StockChartAnalysisResponse(
+            stock_code=result.get("stock_code") or stock_code,
+            source=result.get("source"),
+            requested_days=int(result.get("requested_days") or days),
+            status=result.get("status") or "ok",
+            image_format=result.get("image_format") or "svg",
+            svg=result.get("svg"),
+            svg_omitted=bool(result.get("svg_omitted", not include_svg)),
+            svg_length=int(result.get("svg_length") or len(result.get("svg") or "")),
+            metadata=result.get("metadata") or {},
+            reason=result.get("reason"),
+        )
+    except Exception as e:
+        logger.error("failed to generate chart analysis: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "internal_error", "message": f"Chart analysis failed: {str(e)}"},
         )
 
 

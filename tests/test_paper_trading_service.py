@@ -11,6 +11,7 @@ from src.services.paper_trading_service import PaperTradingLimits, PaperTradingS
 class _FakePortfolioService:
     def __init__(self):
         self.recorded = []
+        self.trade_events = []
 
     def get_portfolio_snapshot(self, **_kwargs):
         return {
@@ -25,6 +26,8 @@ class _FakePortfolioService:
                             "symbol": "AAPL",
                             "market_value_base": 20000.0,
                             "total_cost": 21000.0,
+                            "last_price": 110.0,
+                            "price_available": True,
                         }
                     ],
                 }
@@ -32,7 +35,7 @@ class _FakePortfolioService:
         }
 
     def list_trade_events(self, **_kwargs):
-        return {"items": [], "total": 2, "page": 1, "page_size": 100}
+        return {"items": list(self.trade_events), "total": len(self.trade_events), "page": 1, "page_size": 100}
 
     def record_trade(self, **kwargs):
         self.recorded.append(kwargs)
@@ -136,3 +139,67 @@ def test_execute_rejects_token_mismatch():
             approval_token="bad-token",
             approved=True,
         )
+
+
+def test_get_performance_tracks_open_and_closed_paper_trades(monkeypatch):
+    fake = _FakePortfolioService()
+    fake.trade_events = [
+        {
+            "id": 1,
+            "account_id": 1,
+            "trade_uid": "paper:buy-aapl",
+            "symbol": "AAPL",
+            "trade_date": "2026-03-01",
+            "side": "buy",
+            "quantity": 10,
+            "price": 100,
+            "note": "paper_trade; reason=breakout",
+        },
+        {
+            "id": 2,
+            "account_id": 1,
+            "trade_uid": "paper:sell-aapl",
+            "symbol": "AAPL",
+            "trade_date": "2026-03-06",
+            "side": "sell",
+            "quantity": 4,
+            "price": 120,
+            "note": "paper_trade; reason=trim",
+        },
+        {
+            "id": 3,
+            "account_id": 1,
+            "trade_uid": "manual",
+            "symbol": "MSFT",
+            "trade_date": "2026-03-02",
+            "side": "buy",
+            "quantity": 1,
+            "price": 10,
+            "note": "manual",
+        },
+    ]
+
+    class _Backtest:
+        def get_global_summary(self, eval_window_days=None):
+            return {
+                "scope": "overall",
+                "eval_window_days": eval_window_days,
+                "win_rate_pct": 55.0,
+                "avg_simulated_return_pct": 3.5,
+                "total_evaluations": 20,
+            }
+
+    monkeypatch.setattr("src.services.backtest_service.BacktestService", lambda: _Backtest())
+    service = PaperTradingService(portfolio_service=fake)
+
+    result = service.get_performance(account_id=1, as_of=date(2026, 3, 10), eval_window_days=10)
+
+    assert result["total_trades"] == 1
+    assert result["open_trades"] == 1
+    assert result["win_count"] == 1
+    item = result["items"][0]
+    assert item["symbol"] == "AAPL"
+    assert item["remaining_quantity"] == 6
+    assert item["holding_days"] == 9
+    assert item["return_pct"] == 14.0
+    assert result["backtest_comparison"]["avg_return_pct"] == 3.5

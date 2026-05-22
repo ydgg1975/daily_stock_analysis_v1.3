@@ -15,6 +15,11 @@ import type {
   PortfolioImportBrokerListResponse,
   PortfolioImportCommitResponse,
   PortfolioImportParseResponse,
+  PaperTradeExecuteRequest,
+  PaperTradeExecuteResponse,
+  PaperTradePerformanceResponse,
+  PaperTradePrepareRequest,
+  PaperTradePrepareResponse,
   PortfolioRiskResponse,
   PortfolioSnapshotResponse,
   PortfolioTradeCreateRequest,
@@ -155,6 +160,48 @@ export const portfolioApi = {
       note: payload.note,
     });
     return toCamelCase<PortfolioEventCreatedResponse>(response.data);
+  },
+
+  async preparePaperOrder(payload: PaperTradePrepareRequest): Promise<PaperTradePrepareResponse> {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/paper/orders/prepare', {
+      account_id: payload.accountId,
+      symbol: payload.symbol,
+      side: payload.side,
+      quantity: payload.quantity,
+      price: payload.price,
+      trade_date: payload.tradeDate,
+      market: payload.market,
+      currency: payload.currency,
+      reason: payload.reason,
+      cost_method: payload.costMethod ?? 'fifo',
+    });
+    return toCamelCase<PaperTradePrepareResponse>(response.data);
+  },
+
+  async executePaperOrder(payload: PaperTradeExecuteRequest): Promise<PaperTradeExecuteResponse> {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/portfolio/paper/orders/execute', {
+      prepared_order: payload.preparedOrder,
+      approval_token: payload.approvalToken,
+      approved: payload.approved,
+    });
+    return toCamelCase<PaperTradeExecuteResponse>(response.data);
+  },
+
+  async getPaperPerformance(params: {
+    accountId?: number;
+    asOf?: string;
+    costMethod?: 'fifo' | 'avg';
+    evalWindowDays?: number;
+  } = {}): Promise<PaperTradePerformanceResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/portfolio/paper/performance', {
+      params: {
+        account_id: params.accountId,
+        as_of: params.asOf,
+        cost_method: params.costMethod,
+        eval_window_days: params.evalWindowDays,
+      },
+    });
+    return toCamelCase<PaperTradePerformanceResponse>(response.data);
   },
 
   async deleteTrade(tradeId: number): Promise<PortfolioDeleteResponse> {

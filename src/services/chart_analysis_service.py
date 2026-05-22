@@ -144,6 +144,11 @@ class ChartAnalysisService:
             "visual_signal": visual_signal,
             "indicator_signal": indicator_signal,
             "conflicts": conflicts,
+            "display_labels": {
+                "pattern": self._pattern_label(str(pattern.get("name", ""))),
+                "visual_signal": self._signal_label(visual_signal),
+                "indicator_signal": self._signal_label(indicator_signal),
+            },
         }
 
     @staticmethod
@@ -214,8 +219,12 @@ class ChartAnalysisService:
         candle_step = plot_width / max(count, 1)
         candle_width = max(3.0, min(12.0, candle_step * 0.55))
 
-        price_min = float(df["low"].min())
-        price_max = float(df["high"].max())
+        raw_price_min = float(df["low"].min())
+        raw_price_max = float(df["high"].max())
+        price_range = raw_price_max - raw_price_min
+        price_padding = max(price_range * 0.08, raw_price_max * 0.002, 0.01)
+        price_min = raw_price_min - price_padding
+        price_max = raw_price_max + price_padding
         volume_max = max(float(df["volume"].max()), 1.0)
         macd_values = [
             float(value)
@@ -238,6 +247,9 @@ class ChartAnalysisService:
             self._panel(left, rsi_top, plot_width, rsi_bottom - rsi_top, "RSI"),
             self._panel(left, macd_top, plot_width, macd_bottom - macd_top, "MACD"),
         ]
+        parts.extend(self._price_axis(left, right, price_top, price_bottom, price_min, price_max))
+        parts.extend(self._date_axis(left, right, price_bottom, candle_step, df))
+        parts.extend(self._rsi_reference_lines(left, right, rsi_top, rsi_bottom))
 
         for idx, row in df.iterrows():
             x = left + candle_step * idx + candle_step / 2
@@ -254,6 +266,17 @@ class ChartAnalysisService:
             vol_y = self._scale(float(row["volume"]), 0.0, volume_max, volume_bottom, volume_top)
             parts.append(f'<rect x="{x - candle_width / 2:.2f}" y="{vol_y:.2f}" width="{candle_width:.2f}" height="{volume_bottom - vol_y:.2f}" fill="#6b7280" opacity="0.35"/>')
 
+            hist_value = indicators["macd"]["histogram"][idx] if idx < len(indicators["macd"]["histogram"]) else None
+            if hist_value is not None:
+                zero_y = self._scale(0.0, macd_min, macd_max, macd_bottom, macd_top)
+                hist_y = self._scale(float(hist_value), macd_min, macd_max, macd_bottom, macd_top)
+                hist_color = "#247a50" if float(hist_value) >= 0 else "#b42318"
+                parts.append(
+                    f'<rect x="{x - candle_width / 2:.2f}" y="{min(zero_y, hist_y):.2f}" '
+                    f'width="{candle_width:.2f}" height="{max(1.0, abs(zero_y - hist_y)):.2f}" '
+                    f'fill="{hist_color}" opacity="0.42"/>'
+                )
+
         colors = ["#2563eb", "#f59e0b", "#7c3aed"]
         for color, values in zip(colors, indicators["ma"].values()):
             parts.append(self._polyline(values, left, candle_step, price_min, price_max, price_bottom, price_top, color))
@@ -265,7 +288,21 @@ class ChartAnalysisService:
         resistance_y = self._scale(float(metadata["resistance"]), price_min, price_max, price_bottom, price_top)
         parts.append(f'<line x1="{left}" y1="{support_y:.2f}" x2="{right}" y2="{support_y:.2f}" stroke="#16a34a" stroke-dasharray="5 4"/>')
         parts.append(f'<line x1="{left}" y1="{resistance_y:.2f}" x2="{right}" y2="{resistance_y:.2f}" stroke="#dc2626" stroke-dasharray="5 4"/>')
-        parts.append(f'<text x="{left}" y="{height - 10}" fill="#4b5563" font-size="12" font-family="Arial">pattern={self._escape(metadata["pattern"]["name"])} visual={metadata["visual_signal"]} indicator={metadata["indicator_signal"]}</text>')
+        parts.append(
+            f'<text x="{left + 6}" y="{support_y - 5:.2f}" fill="#15803d" font-size="11" font-family="Arial">'
+            f'Support {self._format_price(float(metadata["support"]))}</text>'
+        )
+        parts.append(
+            f'<text x="{left + 6}" y="{resistance_y + 14:.2f}" fill="#b91c1c" font-size="11" font-family="Arial">'
+            f'Resistance {self._format_price(float(metadata["resistance"]))}</text>'
+        )
+        labels = metadata.get("display_labels", {})
+        parts.append(
+            f'<text x="{left}" y="{height - 10}" fill="#4b5563" font-size="12" font-family="Arial">'
+            f'pattern={self._escape(labels.get("pattern", metadata["pattern"]["name"]))} '
+            f'visual={self._escape(labels.get("visual_signal", metadata["visual_signal"]))} '
+            f'indicator={self._escape(labels.get("indicator_signal", metadata["indicator_signal"]))}</text>'
+        )
         parts.append("</svg>")
         return "".join(parts)
 
@@ -282,6 +319,55 @@ class ChartAnalysisService:
             return (target_min + target_max) / 2.0
         ratio = (value - source_min) / (source_max - source_min)
         return target_min + (target_max - target_min) * ratio
+
+    def _price_axis(
+        self,
+        left: int,
+        right: int,
+        top: int,
+        bottom: int,
+        price_min: float,
+        price_max: float,
+    ) -> List[str]:
+        parts = []
+        for ratio in (0.0, 0.25, 0.5, 0.75, 1.0):
+            value = price_max - (price_max - price_min) * ratio
+            y = top + (bottom - top) * ratio
+            parts.append(f'<line x1="{left}" y1="{y:.2f}" x2="{right}" y2="{y:.2f}" stroke="#e5e7eb" stroke-width="1"/>')
+            parts.append(
+                f'<text x="{right + 6}" y="{y + 4:.2f}" fill="#667085" font-size="11" font-family="Arial">'
+                f'{self._format_price(value)}</text>'
+            )
+        return parts
+
+    def _date_axis(
+        self,
+        left: int,
+        right: int,
+        price_bottom: int,
+        candle_step: float,
+        df: pd.DataFrame,
+    ) -> List[str]:
+        if df.empty:
+            return []
+        indexes = sorted({0, max(0, len(df) // 2), len(df) - 1})
+        parts = []
+        for idx in indexes:
+            x = left + candle_step * idx + candle_step / 2
+            parts.append(f'<line x1="{x:.2f}" y1="{price_bottom}" x2="{x:.2f}" y2="{price_bottom + 5}" stroke="#98a2b3"/>')
+            parts.append(
+                f'<text x="{min(max(left, x - 28), right - 56):.2f}" y="{price_bottom + 18}" '
+                f'fill="#667085" font-size="11" font-family="Arial">{self._escape(self._date_label(df["date"].iloc[idx]))}</text>'
+            )
+        return parts
+
+    def _rsi_reference_lines(self, left: int, right: int, top: int, bottom: int) -> List[str]:
+        parts = []
+        for value, label in ((70.0, "RSI 70"), (30.0, "RSI 30")):
+            y = self._scale(value, 0.0, 100.0, bottom, top)
+            parts.append(f'<line x1="{left}" y1="{y:.2f}" x2="{right}" y2="{y:.2f}" stroke="#94a3b8" stroke-dasharray="4 4" opacity="0.72"/>')
+            parts.append(f'<text x="{right + 6}" y="{y + 4:.2f}" fill="#667085" font-size="11" font-family="Arial">{label}</text>')
+        return parts
 
     def _polyline(
         self,
@@ -308,3 +394,41 @@ class ChartAnalysisService:
     @staticmethod
     def _escape(value: Any) -> str:
         return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    @staticmethod
+    def _format_price(value: float) -> str:
+        if abs(value) >= 100:
+            return f"{value:.2f}"
+        if abs(value) >= 10:
+            return f"{value:.3f}"
+        return f"{value:.4f}"
+
+    @staticmethod
+    def _date_label(value: Any) -> str:
+        parsed = pd.to_datetime(value, errors="coerce")
+        if pd.isna(parsed):
+            return ""
+        return parsed.strftime("%m-%d")
+
+    @staticmethod
+    def _pattern_label(value: str) -> str:
+        labels = {
+            "five_bar_breakout": "5-bar breakout",
+            "five_bar_breakdown": "5-bar breakdown",
+            "short_uptrend": "short uptrend",
+            "short_downtrend": "short downtrend",
+            "range_bound": "range bound",
+            "insufficient_data": "insufficient data",
+        }
+        return labels.get(value, value or "unknown")
+
+    @staticmethod
+    def _signal_label(value: str) -> str:
+        labels = {
+            "bullish": "bullish",
+            "bearish": "bearish",
+            "neutral": "neutral",
+            "bullish_overextended": "bullish but overextended",
+            "bearish_oversold": "bearish but oversold",
+        }
+        return labels.get(value, value or "unknown")

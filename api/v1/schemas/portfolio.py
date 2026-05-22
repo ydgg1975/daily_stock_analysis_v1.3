@@ -306,3 +306,38 @@ class PaperTradeExecuteResponse(BaseModel):
     reason: Optional[str] = None
     order: Optional[Dict[str, Any]] = None
     risk_checks: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PaperTradePerformanceItem(BaseModel):
+    trade_id: int
+    trade_uid: Optional[str] = None
+    symbol: str
+    entry_date: str
+    exit_date: Optional[str] = None
+    status: str
+    outcome: str
+    quantity: float
+    remaining_quantity: float
+    entry_price: float
+    mark_price: float
+    exit_price: Optional[float] = None
+    pnl: float
+    return_pct: float
+    holding_days: int
+    note: Optional[str] = None
+
+
+class PaperTradePerformanceResponse(BaseModel):
+    as_of: str
+    mode: str
+    account_id: Optional[int] = None
+    cost_method: str
+    total_trades: int
+    open_trades: int
+    closed_trades: int
+    win_count: int
+    loss_count: int
+    win_rate_pct: Optional[float] = None
+    avg_return_pct: float
+    items: List[PaperTradePerformanceItem] = Field(default_factory=list)
+    backtest_comparison: Optional[Dict[str, Any]] = None
