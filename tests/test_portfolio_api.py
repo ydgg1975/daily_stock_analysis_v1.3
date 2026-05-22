@@ -150,6 +150,67 @@ class PortfolioApiTestCase(unittest.TestCase):
         detail = resp.json()
         self.assertEqual(detail.get("error"), "validation_error")
 
+    def test_paper_order_prepare_and_execute_requires_approval(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Paper", "broker": "Paper", "market": "us", "base_currency": "USD"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-03-14",
+                "direction": "in",
+                "amount": 100000,
+                "currency": "USD",
+            },
+        )
+        prepare_resp = self.client.post(
+            "/api/v1/portfolio/paper/orders/prepare",
+            json={
+                "account_id": account_id,
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "trade_date": "2026-03-15",
+                "market": "us",
+                "currency": "USD",
+                "reason": "paper test",
+            },
+        )
+        self.assertEqual(prepare_resp.status_code, 200)
+        prepared = prepare_resp.json()
+        self.assertEqual(prepared["status"], "approval_required")
+        self.assertEqual(prepared["broker_execution"], "disabled")
+
+        rejected = self.client.post(
+            "/api/v1/portfolio/paper/orders/execute",
+            json={
+                "prepared_order": prepared,
+                "approval_token": prepared["approval_token"],
+                "approved": False,
+            },
+        )
+        self.assertEqual(rejected.status_code, 200)
+        self.assertEqual(rejected.json()["status"], "rejected")
+
+        executed = self.client.post(
+            "/api/v1/portfolio/paper/orders/execute",
+            json={
+                "prepared_order": prepared,
+                "approval_token": prepared["approval_token"],
+                "approved": True,
+            },
+        )
+        self.assertEqual(executed.status_code, 200)
+        self.assertEqual(executed.json()["status"], "executed")
+        trades = self.client.get("/api/v1/portfolio/trades", params={"account_id": account_id})
+        self.assertEqual(trades.json()["items"][0]["trade_uid"][:6], "paper:")
+
     def test_duplicate_trade_uid_returns_409(self) -> None:
         create_resp = self.client.post(
             "/api/v1/portfolio/accounts",

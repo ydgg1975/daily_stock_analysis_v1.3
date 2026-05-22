@@ -267,3 +267,42 @@ class PortfolioRiskResponse(BaseModel):
     sector_concentration: Dict[str, Any] = Field(default_factory=dict)
     drawdown: Dict[str, Any] = Field(default_factory=dict)
     stop_loss: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PaperTradePrepareRequest(BaseModel):
+    account_id: int
+    symbol: str = Field(..., min_length=1, max_length=16)
+    side: Literal["buy", "sell"]
+    quantity: float = Field(..., gt=0)
+    price: float = Field(..., gt=0)
+    trade_date: Optional[date] = None
+    market: Optional[Literal["cn", "hk", "us"]] = None
+    currency: Optional[str] = Field(None, min_length=3, max_length=8)
+    reason: Optional[str] = Field(None, max_length=255)
+    cost_method: Literal["fifo", "avg"] = "fifo"
+
+
+class PaperTradePrepareResponse(BaseModel):
+    status: str
+    mode: str
+    broker_execution: str
+    approval_token: str
+    order: Dict[str, Any]
+    risk_checks: List[Dict[str, Any]] = Field(default_factory=list)
+    can_execute_after_approval: bool
+
+
+class PaperTradeExecuteRequest(BaseModel):
+    prepared_order: Dict[str, Any]
+    approval_token: str = Field(..., min_length=1)
+    approved: bool = False
+
+
+class PaperTradeExecuteResponse(BaseModel):
+    status: str
+    mode: str
+    broker_execution: Optional[str] = None
+    trade_id: Optional[int] = None
+    reason: Optional[str] = None
+    order: Optional[Dict[str, Any]] = None
+    risk_checks: List[Dict[str, Any]] = Field(default_factory=list)

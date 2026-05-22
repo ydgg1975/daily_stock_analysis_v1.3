@@ -275,6 +275,35 @@ class AlertWorkerTestCase(unittest.TestCase):
     def _notifications(self, **filters) -> list[dict]:
         return self.service.list_notifications(page_size=100, **filters)["items"]
 
+    def test_trigger_diagnostics_include_event_monitoring_priority(self) -> None:
+        worker = AlertWorker(service=self.service)
+        rule_data = self._create_rule(
+            alert_type="price_change_percent",
+            parameters={"direction": "down", "change_pct": 5.0},
+        )
+        runtime_rule = worker._load_runtime_rules(self._config())[0]
+        result = {
+            "rule_id": rule_data["id"],
+            "record_status": "triggered",
+            "triggered": True,
+            "observed_value": -8.2,
+            "threshold": 5.0,
+            "data_source": "realtime_quote",
+            "reason": "600519 change down 5.00%: current = -8.20%",
+            "message": "600519 change down 5.00%: current = -8.20%",
+        }
+        result["event_monitoring"] = worker.event_monitoring_service.classify_alert_result(
+            runtime_rule.rule,
+            result,
+        )
+
+        trigger_id = worker._record_trigger(runtime_rule, result, "triggered")
+        triggers = self.service.repo.list_triggers(page=1, page_size=10)[0]
+
+        self.assertIsNotNone(trigger_id)
+        self.assertIn('"priority": "critical"', triggers[0].diagnostics)
+        self.assertIn('"thesis_break_risk": true', triggers[0].diagnostics)
+
     def _dispatch_result(
         self,
         success: bool = True,

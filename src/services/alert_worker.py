@@ -20,6 +20,7 @@ from src.agent.events import (
     validate_event_alert_rule,
 )
 from src.services.alert_service import AlertService
+from src.services.event_monitoring_service import EventMonitoringService
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class AlertWorker:
         self.fingerprint_ttl_seconds = max(1, int(fingerprint_ttl_seconds))
         self._trigger_fingerprints: Dict[str, float] = {}
         self._trigger_fingerprint_ttls: Dict[str, int] = {}
+        self.event_monitoring_service = EventMonitoringService()
 
     @staticmethod
     def _default_config_provider():
@@ -128,6 +130,10 @@ class AlertWorker:
                     "reason": self.service._sanitize_text(str(exc) or "Alert evaluation failed"),
                     "message": self.service._sanitize_text(str(exc) or "Alert evaluation failed"),
                 }
+            result["event_monitoring"] = self.event_monitoring_service.classify_alert_result(
+                runtime_rule.rule,
+                result,
+            )
 
             record_status = result.get("record_status")
             if record_status in WRITABLE_TRIGGER_STATUSES:
@@ -295,9 +301,11 @@ class AlertWorker:
         except (TypeError, ValueError):
             return None
 
-    @staticmethod
-    def _diagnostics_for_status(status: str, result: Dict[str, Any]) -> Optional[str]:
+    def _diagnostics_for_status(self, status: str, result: Dict[str, Any]) -> Optional[str]:
         if status == "triggered":
+            event = result.get("event_monitoring")
+            if isinstance(event, dict):
+                return json.dumps(event, ensure_ascii=False, sort_keys=True)
             return None
         return result.get("message") or result.get("reason")
 
@@ -340,8 +348,12 @@ class AlertWorker:
         from src.notification import NotificationBuilder, NotificationService
 
         notification_service = self.notifier or NotificationService()
-        title = f"Event Alert | {runtime_rule.rule.stock_code}"
+        event = result.get("event_monitoring") if isinstance(result.get("event_monitoring"), dict) else {}
+        priority = str(event.get("priority") or runtime_rule.severity or "warning").upper()
+        title = f"Event Alert [{priority}] | {runtime_rule.rule.stock_code}"
         content = result.get("reason") or result.get("message") or runtime_rule.rule.description or "Alert triggered"
+        if event.get("thesis_break_risk"):
+            content = f"{content}\nThesis break risk: yes"
         alert_text = NotificationBuilder.build_simple_alert(title=title, content=content, alert_type="warning")
 
         return notification_service.send_with_results(alert_text, route_type="alert")

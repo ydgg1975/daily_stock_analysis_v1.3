@@ -7,6 +7,7 @@ summary creation, and query methods.
 """
 
 import os
+import json
 import tempfile
 import unittest
 from datetime import date, datetime
@@ -43,6 +44,10 @@ class BacktestServiceTestCase(unittest.TestCase):
                     operation_advice="买入",
                     trend_prediction="看多",
                     analysis_summary="test",
+                    raw_result=json.dumps({
+                        "analysis_confidence": {"score": 0.82, "label": "high"},
+                        "risk_warning": "주의: 변동성 확대",
+                    }, ensure_ascii=False),
                     stop_loss=95.0,
                     take_profit=110.0,
                     created_at=old_created_at,
@@ -216,6 +221,20 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertIsNone(summary["code"])
         self.assertEqual(summary["scope"], "overall")
         self.assertEqual(summary["win_count"], 1)
+
+    def test_summary_diagnostics_include_confidence_and_risk_tracking(self) -> None:
+        service = BacktestService(self.db)
+        service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        summary = service.get_summary(scope="overall", code=None, eval_window_days=3)
+
+        self.assertIsNotNone(summary)
+        tracking = summary["diagnostics"]["performance_tracking"]
+        self.assertEqual(tracking["confidence_buckets"]["high"]["total"], 1)
+        self.assertEqual(tracking["confidence_buckets"]["high"]["win"], 1)
+        self.assertEqual(tracking["risk_warning_effectiveness"]["flagged_count"], 1)
+        self.assertEqual(tracking["risk_warning_effectiveness"]["flagged_downside_count"], 0)
+        self.assertEqual(tracking["benchmark"]["status"], "unavailable")
 
     def test_agent_learning_summary_helpers_keep_skill_rollups_neutral_until_supported(self) -> None:
         service = BacktestService(self.db)
