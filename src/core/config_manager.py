@@ -155,27 +155,35 @@ class ConfigManager:
         if not self._env_path.parent.exists():
             self._env_path.parent.mkdir(parents=True, exist_ok=True)
 
-        temp_path = self._env_path.with_suffix(self._env_path.suffix + ".tmp")
         content = "\n".join(entry.render() for entry in entries)
         if content and not content.endswith("\n"):
             content += "\n"
 
-        with temp_path.open("w", encoding="utf-8", newline="\n") as file_obj:
-            file_obj.write(content)
-            file_obj.flush()
-            os.fsync(file_obj.fileno())
+        temp_path = self._env_path.with_suffix(self._env_path.suffix + ".tmp")
+
+        try:
+            temp_fd = os.open(str(temp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+        except OSError:
+            self._rewrite_in_place(content)
+            return
+
+        try:
+            os.write(temp_fd, content.encode("utf-8"))
+            os.fsync(temp_fd)
+        finally:
+            os.close(temp_fd)
 
         try:
             os.replace(temp_path, self._env_path)
         except OSError as exc:
-            if exc.errno not in _FALLBACK_REWRITE_ERRNOS:
+            if exc.errno in _FALLBACK_REWRITE_ERRNOS:
+                logger.warning(
+                    "Atomic replace for .env failed with errno=%s, falling back to in-place rewrite",
+                    exc.errno,
+                )
+                self._rewrite_in_place(content)
+            else:
                 raise
-
-            logger.warning(
-                "Atomic replace for .env failed with errno=%s, falling back to in-place rewrite",
-                exc.errno,
-            )
-            self._rewrite_in_place(content)
         finally:
             if temp_path.exists():
                 temp_path.unlink()

@@ -86,6 +86,49 @@ class ConfigManagerTestCase(unittest.TestCase):
 
         self.assertEqual(self.env_path.read_text(encoding="utf-8"), "STOCK_LIST=000001\n")
 
+    def test_apply_updates_falls_back_when_temp_file_create_fails(self) -> None:
+        self.env_path.write_text("STOCK_LIST=600519\n", encoding="utf-8")
+
+        with patch("src.core.config_manager.os.open", side_effect=OSError(errno.EACCES, "permission denied")):
+            self.manager.apply_updates(
+                updates=[("STOCK_LIST", "000001")],
+                sensitive_keys=set(),
+                mask_token="******",
+            )
+
+        self.assertEqual(self.env_path.read_text(encoding="utf-8"), "STOCK_LIST=000001\n")
+
+    def test_apply_updates_raises_on_non_fallback_os_error(self) -> None:
+        self.env_path.write_text("STOCK_LIST=600519\n", encoding="utf-8")
+
+        with patch("src.core.config_manager.os.replace", side_effect=OSError(errno.EIO, "io error")):
+            with self.assertRaises(OSError) as ctx:
+                self.manager.apply_updates(
+                    updates=[("STOCK_LIST", "000001")],
+                    sensitive_keys=set(),
+                    mask_token="******",
+                )
+            self.assertEqual(ctx.exception.errno, errno.EIO)
+
+    def test_apply_updates_preserves_file_on_bind_mount(self) -> None:
+        """Simulate bind mount: os.replace fails with EXDEV, in-place rewrite must still produce correct output."""
+        self.env_path.write_text(
+            "# header\nAPI_KEY=old\nSTOCK_LIST=600519\n",
+            encoding="utf-8",
+        )
+
+        with patch("src.core.config_manager.os.replace", side_effect=OSError(errno.EXDEV, "Invalid cross-device link")):
+            self.manager.apply_updates(
+                updates=[("API_KEY", "new-key"), ("STOCK_LIST", "300750")],
+                sensitive_keys=set(),
+                mask_token="******",
+            )
+
+        content = self.env_path.read_text(encoding="utf-8")
+        self.assertIn("# header\n", content)
+        self.assertIn("API_KEY=new-key\n", content)
+        self.assertIn("STOCK_LIST=300750\n", content)
+
 
 if __name__ == "__main__":
     unittest.main()
