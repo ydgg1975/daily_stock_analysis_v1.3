@@ -29,6 +29,7 @@ def _make_realtime_quote(
     high: float = 16.29,
     low: float = 15.55,
     volume: int = 13995600,
+    amount: float = None,
     change_pct: float = 0.96,
 ) -> UnifiedRealtimeQuote:
     return UnifiedRealtimeQuote(
@@ -40,6 +41,7 @@ def _make_realtime_quote(
         high=high,
         low=low,
         volume=volume,
+        amount=amount,
         change_pct=change_pct,
     )
 
@@ -218,8 +220,104 @@ class TestEnhanceContextRealtimeOverride(unittest.TestCase):
         self.assertEqual(enhanced["today"]["ma20"], 14.9)
         self.assertIn("多头", enhanced["ma_status"])
         self.assertEqual(enhanced["date"], today.isoformat())
+        self.assertEqual(enhanced["today"]["date"], today.isoformat())
+        self.assertEqual(enhanced["today"]["data_source"], "realtime:tencent")
+        self.assertEqual(enhanced["today"]["realtime_source"], "tencent")
         self.assertIn("price_change_ratio", enhanced)
         self.assertIn("volume_change_ratio", enhanced)
+
+    @patch("src.core.pipeline.get_market_now")
+    @patch("src.core.pipeline.get_market_for_stock", return_value="cn")
+    def test_tencent_688691_volume_change_ratio_uses_normalized_share_volume(
+        self, _mock_market, mock_now
+    ) -> None:
+        today = date.today()
+        mock_now.return_value = datetime(
+            today.year, today.month, today.day, 10, 0, tzinfo=timezone.utc
+        )
+        context = {
+            "code": "688691",
+            "date": (today - timedelta(days=1)).isoformat(),
+            "today": {
+                "close": 128.46,
+                "volume": 19512753,
+                "amount": 2487341983,
+                "date": (today - timedelta(days=1)).isoformat(),
+                "dataSource": "AkshareFetcher",
+            },
+            "yesterday": {"close": 128.46, "volume": 19512753},
+        }
+        quote = UnifiedRealtimeQuote(
+            code="688691",
+            name="灿芯股份",
+            source=RealtimeSource.TENCENT,
+            price=122.70,
+            open_price=120.09,
+            high=125.96,
+            low=116.20,
+            volume=10931723,
+            amount=1327404280,
+            change_pct=3.40,
+        )
+        trend = TrendAnalysisResult(
+            code="688691",
+            trend_status=TrendStatus.BULL,
+            ma5=120.014,
+            ma10=119.425,
+            ma20=115.8305,
+        )
+
+        enhanced = self.pipeline._enhance_context(
+            context, quote, None, trend, "灿芯股份"
+        )
+
+        self.assertEqual(enhanced["today"]["volume"], 10931723)
+        self.assertEqual(enhanced["today"]["amount"], 1327404280)
+        self.assertEqual(enhanced["volume_change_ratio"], 0.56)
+        self.assertEqual(enhanced["today"]["date"], today.isoformat())
+        self.assertEqual(enhanced["today"]["data_source"], "realtime:tencent")
+        self.assertEqual(enhanced["today"]["realtime_source"], "tencent")
+        self.assertNotIn("dataSource", enhanced["today"])
+
+    @patch("src.core.pipeline.get_market_now")
+    @patch("src.core.pipeline.get_market_for_stock", return_value="cn")
+    def test_realtime_today_does_not_backfill_historical_amount_or_source(
+        self, _mock_market, mock_now
+    ) -> None:
+        today = date.today()
+        mock_now.return_value = datetime(
+            today.year, today.month, today.day, 10, 0, tzinfo=timezone.utc
+        )
+        context = {
+            "code": "600519",
+            "date": (today - timedelta(days=1)).isoformat(),
+            "today": {
+                "close": 15.0,
+                "amount": 999999,
+                "date": (today - timedelta(days=1)).isoformat(),
+                "dataSource": "AkshareFetcher",
+                "code": "600519",
+            },
+            "yesterday": {"close": 14.5, "volume": 1000000},
+        }
+        quote = _make_realtime_quote(price=15.72, amount=None)
+        trend = TrendAnalysisResult(
+            code="600519",
+            trend_status=TrendStatus.BULL,
+            ma5=15.5,
+            ma10=15.2,
+            ma20=14.9,
+        )
+
+        enhanced = self.pipeline._enhance_context(
+            context, quote, None, trend, "贵州茅台"
+        )
+
+        self.assertNotIn("amount", enhanced["today"])
+        self.assertNotIn("dataSource", enhanced["today"])
+        self.assertEqual(enhanced["today"]["date"], today.isoformat())
+        self.assertEqual(enhanced["today"]["data_source"], "realtime:tencent")
+        self.assertEqual(enhanced["today"]["code"], "600519")
 
     def test_enhance_context_injects_runtime_news_window_days(self) -> None:
         context = {"code": "600519", "today": {"close": 15.0}}

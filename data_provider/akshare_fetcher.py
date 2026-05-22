@@ -144,6 +144,8 @@ def _normalize_tencent_volume(fields: List[str]) -> Optional[int]:
     Tencent payloads have historically been documented inconsistently around
     field 6.  Use turnover, price, and circulating market value when available
     to choose between the raw field value and the legacy hand->share conversion.
+    If the payload cannot be cross-checked, preserve the old hand->share
+    fallback so legacy Tencent payloads do not regress to 1/100 of their volume.
     """
     if len(fields) <= 6 or not fields[6]:
         return None
@@ -165,8 +167,25 @@ def _normalize_tencent_volume(fields: List[str]) -> Optional[int]:
             hand_delta = abs(hand_to_share_volume - expected_volume)
             return raw_volume if raw_delta <= hand_delta else hand_to_share_volume
 
-    # Current Tencent realtime payloads observed in reports are already shares.
-    return raw_volume
+    return raw_volume * 100
+
+
+def _parse_tencent_amount(fields: List[str]) -> Optional[float]:
+    """
+    Parse Tencent quote amount in yuan.
+
+    Field 35 carries a more precise price/volume/amount tuple in observed
+    payloads.  Field 37 is the legacy amount-in-10k-yuan fallback.
+    """
+    if len(fields) > 35 and fields[35]:
+        parts = fields[35].split("/")
+        if len(parts) >= 3:
+            precise_amount = safe_float(parts[2])
+            if precise_amount is not None:
+                return precise_amount
+
+    amount_wan = safe_float(fields[37]) if len(fields) > 37 and fields[37] else None
+    return amount_wan * 10000 if amount_wan is not None else None
 
 
 def is_hk_stock_code(stock_code: str) -> bool:
@@ -1209,11 +1228,10 @@ class AkshareFetcher(BaseFetcher):
             # 腾讯数据字段顺序（完整）：
             # 1:名称 2:代码 3:最新价 4:昨收 5:今开 6:成交量 7:外盘 8:内盘
             # 9-28:买卖五档 30:时间戳 31:涨跌额 32:涨跌幅(%) 33:最高 34:最低 35:收盘/成交量/成交额
-            # 36:成交量(手) 37:成交额(万) 38:换手率(%) 39:市盈率 43:振幅(%)
+            # 36:成交量(口径随 payload 变化) 37:成交额(万) 38:换手率(%) 39:市盈率 43:振幅(%)
             # 44:流通市值(亿) 45:总市值(亿) 46:市净率 47:涨停价 48:跌停价 49:量比
             # 使用 realtime_types.py 中的统一转换函数
-            amount_wan = safe_float(fields[37]) if len(fields) > 37 and fields[37] else None
-            amount = amount_wan * 10000 if amount_wan is not None else None
+            amount = _parse_tencent_amount(fields)
             quote = UnifiedRealtimeQuote(
                 code=stock_code,
                 name=fields[1] if len(fields) > 1 else "",

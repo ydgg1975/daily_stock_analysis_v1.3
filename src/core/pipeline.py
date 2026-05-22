@@ -636,6 +636,12 @@ class StockAnalysisPipeline:
                 if enhanced.get('yesterday') and isinstance(enhanced['yesterday'], dict):
                     yesterday_close = enhanced['yesterday'].get('close')
                 orig_today = enhanced.get('today') or {}
+                market_today = get_market_now(
+                    get_market_for_stock(normalize_stock_code(enhanced.get('code', '')))
+                ).date().isoformat()
+                source = getattr(realtime_quote, 'source', None)
+                source_name = getattr(source, 'value', source)
+                source_name = str(source_name) if source_name is not None else 'unknown'
                 open_p = getattr(realtime_quote, 'open_price', None) or getattr(
                     realtime_quote, 'pre_close', None
                 ) or yesterday_close or orig_today.get('open') or price
@@ -652,6 +658,9 @@ class StockAnalysisPipeline:
                     'ma5': trend_result.ma5,
                     'ma10': trend_result.ma10,
                     'ma20': trend_result.ma20,
+                    'date': market_today,
+                    'data_source': f"realtime:{source_name}",
+                    'realtime_source': source_name,
                 }
                 if vol is not None:
                     realtime_today['volume'] = vol
@@ -659,16 +668,20 @@ class StockAnalysisPipeline:
                     realtime_today['amount'] = amt
                 if pct is not None:
                     realtime_today['pct_chg'] = pct
+                realtime_owned_fields = {
+                    'open', 'high', 'low', 'close',
+                    'volume', 'amount', 'pct_chg', 'pctChg',
+                    'date', 'data_source', 'dataSource', 'source',
+                    'realtime_source', 'realtimeSource',
+                }
                 for k, v in orig_today.items():
-                    if k not in realtime_today and v is not None:
+                    if k not in realtime_today and k not in realtime_owned_fields and v is not None:
                         realtime_today[k] = v
                 enhanced['today'] = realtime_today
                 enhanced['ma_status'] = self._compute_ma_status(
                     price, trend_result.ma5, trend_result.ma10, trend_result.ma20
                 )
-                enhanced['date'] = get_market_now(
-                    get_market_for_stock(normalize_stock_code(enhanced.get('code', '')))
-                ).date().isoformat()
+                enhanced['date'] = market_today
                 if yesterday_close is not None:
                     try:
                         yc = float(yesterday_close)
