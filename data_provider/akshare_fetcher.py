@@ -139,13 +139,12 @@ def _is_hk_code(stock_code: str) -> bool:
 
 def _normalize_tencent_volume(fields: List[str]) -> Optional[int]:
     """
-    Normalize Tencent quote volume to shares.
+    将腾讯实时行情成交量归一为股。
 
-    Tencent payloads have historically been documented inconsistently around
-    field 6.  Use turnover, price, and circulating market value when available
-    to choose between the raw field value and the legacy hand->share conversion.
-    If the payload cannot be cross-checked, preserve the old hand->share
-    fallback so legacy Tencent payloads do not regress to 1/100 of their volume.
+    腾讯返回内容对字段 6 的公开说明和实际返回不完全一致。优先使用
+    换手率、价格、流通市值交叉校验，在原值和旧的“手转股”结果中选择
+    更接近的一方。若无法交叉校验，则保留旧的“手转股”兜底逻辑，避免
+    传统腾讯返回内容回归为原成交量的 1/100。
     """
     if len(fields) <= 6 or not fields[6]:
         return None
@@ -172,10 +171,10 @@ def _normalize_tencent_volume(fields: List[str]) -> Optional[int]:
 
 def _parse_tencent_amount(fields: List[str]) -> Optional[float]:
     """
-    Parse Tencent quote amount in yuan.
+    解析腾讯实时行情成交额，单位为元。
 
-    Field 35 carries a more precise price/volume/amount tuple in observed
-    payloads.  Field 37 is the legacy amount-in-10k-yuan fallback.
+    观测到的返回内容中，字段 35 包含更精确的“价格/成交量/成交额”
+    三元组。字段 37 是旧的“万元”口径兜底字段。
     """
     if len(fields) > 35 and fields[35]:
         parts = fields[35].split("/")
