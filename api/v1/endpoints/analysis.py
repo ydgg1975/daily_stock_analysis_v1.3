@@ -75,6 +75,7 @@ from src.utils.data_processing import (
     parse_json_field,
     extract_fundamental_detail_fields,
     extract_board_detail_fields,
+    extract_realtime_detail_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -840,25 +841,39 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             stock_name = get_localized_stock_name(record.name, record.code, report_language)
 
             # Extract current_price / change_pct from context_snapshot
-            current_price = None
-            change_pct = None
             skills = None
             context_snapshot = parse_json_field(getattr(record, 'context_snapshot', None))
             if context_snapshot and isinstance(context_snapshot, dict):
                 raw_skills = context_snapshot.get("skills")
                 if isinstance(raw_skills, list):
                     skills = [str(skill) for skill in raw_skills]
-                enhanced_context = context_snapshot.get('enhanced_context') or {}
-                realtime = enhanced_context.get('realtime') or {}
-                current_price = realtime.get('price')
-                change_pct = realtime.get('change_pct')
-                realtime_quote_raw = context_snapshot.get('realtime_quote_raw') or {}
-                if current_price is None:
-                    current_price = realtime_quote_raw.get('price')
-                if change_pct is None:
-                    change_pct = realtime_quote_raw.get('change_pct')
-                if change_pct is None:
-                    change_pct = realtime_quote_raw.get('pct_chg')
+            realtime_fields = extract_realtime_detail_fields(context_snapshot)
+            current_price = realtime_fields.get("current_price")
+            change_pct = realtime_fields.get("change_pct")
+            fallback_fundamental = db.get_latest_fundamental_snapshot(
+                query_id=task_id,
+                code=record.code,
+            )
+            extracted_fundamental = extract_fundamental_detail_fields(
+                context_snapshot=context_snapshot,
+                fallback_fundamental_payload=fallback_fundamental,
+            )
+            extracted_boards = extract_board_detail_fields(
+                context_snapshot=context_snapshot,
+                fallback_fundamental_payload=fallback_fundamental,
+            )
+            has_board_details = bool(extracted_boards.get("belong_boards")) or extracted_boards.get("sector_rankings") is not None
+            details = None
+            if any(extracted_fundamental.values()) or has_board_details or context_snapshot is not None:
+                details = ReportDetails(
+                    news_content=getattr(record, "news_content", None),
+                    raw_result=raw_result,
+                    context_snapshot=context_snapshot,
+                    financial_report=extracted_fundamental.get("financial_report"),
+                    dividend_metrics=extracted_fundamental.get("dividend_metrics"),
+                    belong_boards=extracted_boards.get("belong_boards"),
+                    sector_rankings=extracted_boards.get("sector_rankings"),
+                )
 
             # Build report from DB record so completed tasks return real data
             report_dict = AnalysisReport(
@@ -886,6 +901,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     stop_loss=_stringify_report_strategy_value(getattr(record, 'stop_loss', None)),
                     take_profit=_stringify_report_strategy_value(getattr(record, 'take_profit', None)),
                 ),
+                details=details,
             ).model_dump()
             return TaskStatus(
                 task_id=task_id,

@@ -129,11 +129,52 @@ def extract_fundamental_context(
             fundamental = enhanced.get("fundamental_context")
             if isinstance(fundamental, dict):
                 return fundamental
+        top_level_fundamental = snapshot_obj.get("fundamental_context")
+        if isinstance(top_level_fundamental, dict):
+            return top_level_fundamental
 
     fallback_obj = parse_json_field(fallback_fundamental_payload)
     if isinstance(fallback_obj, dict):
         return fallback_obj
     return None
+
+
+def extract_realtime_detail_fields(context_snapshot: Any) -> Dict[str, Any]:
+    """
+    Extract stable realtime price/change fields from persisted context snapshots.
+
+    Supports both the standard `enhanced_context.realtime` layout and the
+    agent-mode top-level `realtime_quote` compatibility shape.
+    """
+    snapshot_obj = parse_json_field(context_snapshot)
+    if not isinstance(snapshot_obj, dict):
+        return {"current_price": None, "change_pct": None}
+
+    current_price = None
+    change_pct = None
+
+    enhanced = snapshot_obj.get("enhanced_context")
+    if isinstance(enhanced, dict):
+        realtime = enhanced.get("realtime")
+        if isinstance(realtime, dict):
+            current_price = realtime.get("price")
+            change_pct = realtime.get("change_pct")
+
+    for field in ("realtime_quote_raw", "realtime_quote"):
+        realtime_payload = snapshot_obj.get(field)
+        if not isinstance(realtime_payload, dict):
+            continue
+        if current_price is None:
+            current_price = realtime_payload.get("price")
+        if change_pct is None:
+            change_pct = realtime_payload.get("change_pct")
+        if change_pct is None:
+            change_pct = realtime_payload.get("pct_chg")
+
+    return {
+        "current_price": current_price,
+        "change_pct": change_pct,
+    }
 
 
 def extract_fundamental_detail_fields(
