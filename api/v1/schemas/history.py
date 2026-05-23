@@ -31,6 +31,7 @@ class HistoryItem(BaseModel):
                 "created_at": "2024-01-01T12:00:00",
             }
         }
+    })
 
 
 class HistoryListResponse(BaseModel):
@@ -50,6 +51,7 @@ class HistoryListResponse(BaseModel):
                 "items": [],
             }
         }
+    })
 
 
 class DeleteHistoryRequest(BaseModel):
@@ -79,6 +81,7 @@ class NewsIntelItem(BaseModel):
                 "url": "https://example.com/news/123",
             }
         }
+    })
 
 
 class NewsIntelResponse(BaseModel):
@@ -94,6 +97,7 @@ class NewsIntelResponse(BaseModel):
                 "items": [],
             }
         }
+    })
 
 
 class ReportMeta(BaseModel):
@@ -184,6 +188,7 @@ class AnalysisReport(BaseModel):
                 "details": None,
             }
         }
+    })
 
 
 class MarkdownReportResponse(BaseModel):
@@ -197,3 +202,4 @@ class MarkdownReportResponse(BaseModel):
                 "content": "# Apple (AAPL) Analysis Report\n\n> Analysis date: **2024-01-01**\n\n..."
             }
         }
+    })

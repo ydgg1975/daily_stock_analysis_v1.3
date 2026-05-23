@@ -60,6 +60,7 @@ class AnalyzeRequest(BaseModel):
                 "skills": ["bull_trend"],
             }
         }
+    })
 
 
 class MarketReviewRequest(BaseModel):
@@ -101,6 +102,7 @@ class AnalysisResultResponse(BaseModel):
                 "created_at": "2024-01-01T12:00:00",
             }
         }
+    })
 
 
 class TaskAccepted(BaseModel):
@@ -118,6 +120,7 @@ class TaskAccepted(BaseModel):
                 "message": "Analysis task accepted",
             }
         }
+    })
 
 
 class BatchTaskAcceptedItem(BaseModel):
@@ -137,6 +140,7 @@ class BatchTaskAcceptedItem(BaseModel):
                 "message": "분석 작업이 큐에 추가되었습니다: AAPL",
             }
         }
+    })
 
 
 class BatchDuplicateTaskItem(BaseModel):
@@ -154,6 +158,7 @@ class BatchDuplicateTaskItem(BaseModel):
                 "message": "종목 AAPL이 이미 분석 중입니다. (task_id: task_existing_123)",
             }
         }
+    })
 
 
 class BatchTaskAcceptedResponse(BaseModel):
@@ -184,6 +189,7 @@ class BatchTaskAcceptedResponse(BaseModel):
                 "message": "1개 작업을 제출했고 1개 중복 작업은 건너뛰었습니다.",
             }
         }
+    })
 
 
 class TaskStatus(BaseModel):
@@ -215,6 +221,7 @@ class TaskStatus(BaseModel):
                 "skills": ["bull_trend"],
             }
         }
+    })
 
 
 class TaskInfo(BaseModel):
@@ -254,6 +261,7 @@ class TaskInfo(BaseModel):
                 "skills": ["bull_trend"],
             }
         }
+    })
 
 
 class TaskListResponse(BaseModel):
@@ -273,6 +281,7 @@ class TaskListResponse(BaseModel):
                 "tasks": [],
             }
         }
+    })
 
 
 class DuplicateTaskErrorResponse(BaseModel):
@@ -292,3 +301,4 @@ class DuplicateTaskErrorResponse(BaseModel):
                 "existing_task_id": "abc123def456",
             }
         }
+    })

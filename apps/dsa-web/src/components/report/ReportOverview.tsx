@@ -85,8 +85,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
   const displayAdvice = localizeLegacyText(summary.operationAdvice);
   const displayTrend = localizeLegacyText(summary.trendPrediction);
   const relatedBoards = (Array.isArray(details?.belongBoards) ? details.belongBoards : [])
-    .filter((board) => normalizeBoardName(board?.name).length > 0)
-    .slice(0, 3);
+    .filter((board) => normalizeBoardName(board?.name).length > 0);
   const boardSignals = buildBoardSignalMap(details);
 
   const getPriceChangeStyle = (changePct: number | undefined): React.CSSProperties | undefined => {
@@ -214,53 +213,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
               </div>
             </Card>
           </div>
-
-          {relatedBoards.length > 0 && (
-            <Card variant="bordered" padding="sm" className="home-panel-card text-left">
-              <div className="mb-3 flex items-baseline gap-2">
-                <span className="label-uppercase">{text.boardLinkage}</span>
-                <h3 className="mt-0.5 text-base font-semibold text-foreground">{text.relatedBoards}</h3>
-              </div>
-
-              <div className="space-y-2.5">
-                {relatedBoards.map((board, index) => {
-                  const boardName = normalizeBoardName(board.name);
-                  const signal = boardSignals.get(boardName);
-                  return (
-                    <div
-                      key={`${boardName}-${board.code || index}`}
-                      className="flex flex-wrap items-center gap-2 text-sm"
-                    >
-                      <span className="home-accent-chip px-2 py-0.5 text-xs font-medium">
-                        {boardName}
-                      </span>
-                      {board.type && (
-                        <span className="home-board-pill rounded-full px-2 py-0.5 text-xs">
-                          {board.type}
-                        </span>
-                      )}
-                      {signal && (
-                        <Badge
-                          variant={getBoardStatusVariant(signal.status)}
-                          className="home-board-status-badge shadow-none"
-                        >
-                          {getBoardStatusLabel(signal.status)}
-                        </Badge>
-                      )}
-                      {signal && signal.changePct !== undefined && signal.changePct !== null && (
-                        <span
-                          className="text-xs font-mono"
-                          style={getPriceChangeStyle(signal.changePct)}
-                        >
-                          {formatChangePct(signal.changePct)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
         </div>
 
         <div className="flex flex-col self-stretch min-h-full">

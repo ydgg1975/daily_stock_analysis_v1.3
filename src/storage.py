@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 import time
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Callable, TypeVar
@@ -722,7 +723,15 @@ class AlertCooldownRecord(Base):
     )
 
 
-class DatabaseManager:
+class _DatabaseManagerMeta(type):
+    """Serialize DatabaseManager construction across __new__ and __init__."""
+
+    def __call__(cls, *args, **kwargs):
+        with cls._init_lock:
+            return super().__call__(*args, **kwargs)
+
+
+class DatabaseManager(metaclass=_DatabaseManagerMeta):
     """
     数据库管理器 - 单例模式
 
@@ -733,6 +742,7 @@ class DatabaseManager:
     """
 
     _instance: Optional['DatabaseManager'] = None
+    _init_lock = threading.RLock()
     _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
@@ -752,15 +762,12 @@ class DatabaseManager:
         if getattr(self, '_initialized', False):
             return
 
-        config = get_config()
-        if db_url is None:
-            db_url = config.get_db_url()
+        created_engine = None
 
-        self._db_url = db_url
-        self._sqlite_wal_enabled = config.sqlite_wal_enabled
-        self._sqlite_busy_timeout_ms = config.sqlite_busy_timeout_ms
-        self._sqlite_write_retry_max = config.sqlite_write_retry_max
-        self._sqlite_write_retry_base_delay = config.sqlite_write_retry_base_delay
+        try:
+            config = get_config()
+            if db_url is None:
+                db_url = config.get_db_url()
 
         engine_kwargs = {
             "echo": False,
@@ -795,8 +802,32 @@ class DatabaseManager:
         # 创建所有表
         Base.metadata.create_all(self._engine)
 
-        self._initialized = True
-        logger.info(f"数据库初始化完成: {db_url}")
+            # 创建 Session 工厂
+            self._SessionLocal = sessionmaker(
+                bind=self._engine,
+                autocommit=False,
+                autoflush=False,
+            )
+
+            # 创建所有表
+            Base.metadata.create_all(self._engine)
+
+            self._initialized = True
+            logger.info(f"数据库初始化完成: {db_url}")
+
+            # 注册退出钩子，确保程序退出时关闭数据库连接
+            atexit.register(DatabaseManager._cleanup_engine, self._engine)
+        except Exception:
+            self._initialized = False
+            try:
+                if created_engine is not None:
+                    created_engine.dispose()
+            except Exception as cleanup_exc:
+                logger.warning("数据库初始化失败后的引擎清理也失败: %s", cleanup_exc)
+            self._engine = None
+            self._SessionLocal = None
+            self.__class__._instance = None
+            raise
 
         # 注册退出钩子，确保程序退出时关闭数据库连接
         atexit.register(DatabaseManager._cleanup_engine, self._engine)
@@ -811,11 +842,12 @@ class DatabaseManager:
     @classmethod
     def reset_instance(cls) -> None:
         """重置单例（用于测试）"""
-        if cls._instance is not None:
-            if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
-                cls._instance._engine.dispose()
-            cls._instance._initialized = False
-            cls._instance = None
+        with cls._init_lock:
+            if cls._instance is not None:
+                if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
+                    cls._instance._engine.dispose()
+                cls._instance._initialized = False
+                cls._instance = None
 
     @classmethod
     def _cleanup_engine(cls, engine) -> None:

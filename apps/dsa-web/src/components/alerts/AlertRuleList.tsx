@@ -76,6 +76,18 @@ function formatParameters(rule: AlertRuleItem): string {
   return `CCI ${p.period ?? '-'}일 ${formatDirection(p.direction)} ${p.threshold ?? '-'}`;
 }
 
+function formatTarget(rule: AlertRuleItem): string {
+  if (rule.targetScope === 'watchlist') return 'default';
+  if (rule.targetScope === 'portfolio_account' || rule.targetScope === 'portfolio_holdings') {
+    return rule.target === 'all' ? '全部账户' : `账户 ${rule.target}`;
+  }
+  return rule.target;
+}
+
+function hasChildTargetCooldown(rule: AlertRuleItem): boolean {
+  return rule.targetScope === 'watchlist' || rule.targetScope === 'portfolio_holdings';
+}
+
 interface AlertRuleListProps {
   rules: AlertRuleItem[];
   total: number;
@@ -153,7 +165,10 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                     <div className="font-medium text-foreground">{rule.name}</div>
                     <div className="mt-1 text-xs text-muted-text">출처: {rule.source}</div>
                   </td>
-                  <td className="px-3 py-3 font-mono text-secondary-text">{rule.target}</td>
+                  <td className="px-3 py-3 text-secondary-text">
+                    <div className="font-mono">{formatTarget(rule)}</div>
+                    <div className="mt-1 text-xs">{scopeLabel[rule.targetScope] ?? rule.targetScope}</div>
+                  </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-col items-start gap-1">
                       <Badge variant="info">{typeLabel[rule.alertType]}</Badge>
@@ -169,6 +184,9 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                   <td className="px-3 py-3 text-xs text-secondary-text">
                     <div>{isCoolingDown(rule) ? '쿨다운 중' : '대기 중'}</div>
                     <div className="mt-1">{formatDateTime(rule.cooldownUntil)}</div>
+                    {hasChildTargetCooldown(rule) ? (
+                      <div className="mt-1 text-muted-text">子目标见触发历史</div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">{formatDateTime(rule.updatedAt ?? rule.createdAt)}</td>
                   <td className="px-3 py-3">

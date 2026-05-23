@@ -3,7 +3,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StockQuote(BaseModel):
@@ -39,6 +39,7 @@ class StockQuote(BaseModel):
                 "update_time": "2024-01-01T15:00:00",
             }
         }
+    })
 
 
 class KLineData(BaseModel):
@@ -66,6 +67,7 @@ class KLineData(BaseModel):
                 "change_percent": 0.84,
             }
         }
+    })
 
 
 class ExtractItem(BaseModel):

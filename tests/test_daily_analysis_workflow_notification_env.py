@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Static checks for notification env mappings in daily_analysis.yml."""
+"""Static checks for notification env mappings in 00-daily-analysis.yml."""
 
 from pathlib import Path
 
@@ -19,7 +19,7 @@ from src.services.notification_diagnostics import (
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-WORKFLOW_PATH = ROOT_DIR / ".github/workflows/daily_analysis.yml"
+WORKFLOW_PATH = ROOT_DIR / ".github/workflows/00-daily-analysis.yml"
 NOTIFICATIONS_DOC_PATH = ROOT_DIR / "docs/notifications.md"
 
 P0_EXCLUDED_BEHAVIOR_SWITCHES = {

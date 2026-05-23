@@ -3,7 +3,7 @@
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RootResponse(BaseModel):
@@ -19,6 +19,7 @@ class RootResponse(BaseModel):
                 "version": "1.0.0",
             }
         }
+    })
 
 
 class HealthResponse(BaseModel):
@@ -34,6 +35,7 @@ class HealthResponse(BaseModel):
                 "timestamp": "2024-01-01T12:00:00",
             }
         }
+    })
 
 
 class ErrorResponse(BaseModel):
@@ -51,6 +53,7 @@ class ErrorResponse(BaseModel):
                 "detail": None,
             }
         }
+    })
 
 
 class SuccessResponse(BaseModel):
@@ -68,3 +71,4 @@ class SuccessResponse(BaseModel):
                 "data": None,
             }
         }
+    })
