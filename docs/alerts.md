@@ -239,3 +239,49 @@ P5는 Alert API, Web 알림 센터, `src/services/alert_worker.py` 평가 체인
 - API나 worker를 추가한 단계는 revert 전에 SQLite에 이미 생성된 테이블과 데이터가 남을 수 있습니다.
 - DB 데이터를 삭제해야 하는 경우 유지보수자가 보존 필요성을 확인한 뒤 수동으로 정리해야 합니다.
 - P5 이후 생성된 기술 지표 규칙은 이전 코드에서 unsupported type으로 건너뛰어야 하며, legacy 세 규칙 실행을 막아서는 안 됩니다.
+
+## P4/P6 호환 계약 보강
+
+### P4 알림 결과와 영속 쿨다운
+
+- P4 알림 결과와 영속 쿨다운 계약은 `alert_cooldowns`, `alert_notifications`, `rule_id + target + data_source + data_timestamp` 키를 기준으로 합니다.
+- 전송 실패, 쿨다운, 채널 없음처럼 실제 외부 채널로 나가지 않은 상태도 알림 결과로 보존합니다.
+- `data_timestamp` 값은 데이터 원천이 제공한 기준 시각만 저장하며, 없으면 현재 시각으로 위조하지 않습니다.
+- synthetic channel은 `__cooldown__`, `__noise_suppressed__`, `__no_channel__`, `__dispatch__`를 사용합니다.
+- DB active rule만 `alert_cooldowns`에 기록하며, legacy fingerprint를 영속 DB 상태로 자동 승격하지 않습니다.
+- P4 revert는 P4 PR 되돌리기와 함께 `alert_cooldowns` 데이터 보존 여부를 확인해야 합니다.
+
+## P6 持仓与自选股联动
+
+P6 scope/type 合并 범위는 `watchlist`, `portfolio_holdings`, `portfolio_account` 대상과 `portfolio_stop_loss`, `portfolio_concentration`, `portfolio_drawdown`, `portfolio_price_stale` 규칙을 포함합니다.
+
+- Target Identity Contract: `effective_target`은 실제 평가 대상을 나타내고, `RuntimeAlertRule.key`는 `{parent_key}|{effective_target}` 형식으로 하위 대상을 구분합니다.
+- `dry-run` 응답은 `degraded_count`를 포함하며 watchlist/portfolio fan-out은 soft cap을 넘으면 부분 평가로 저하될 수 있습니다.
+- `cooldown_active`는 하위 대상별 쿨다운을 보존해야 하며, 退出清理逻辑은 기존 기록을 임의 삭제하지 않습니다.
+- legacy `AGENT_EVENT_ALERT_RULES_JSON` 不应该处理 watchlist/portfolio 규칙이며, sector 支撑不会阻断 P6 PR 실행 경로입니다.
+
+### P4 compatibility tokens
+
+- 同一数据点去重
+- `data_timestamp` 为空不伪造时间
+- DB active rule만 `alert_cooldowns`
+- legacy fingerprint
+- P4 revert
+
+### P6 compatibility tokens
+
+- P6 scope/type 矩阵
+- 退出清理逻辑
+- legacy `AGENT_EVENT_ALERT_RULES_JSON` 不处理 watchlist/portfolio
+- sector 支撑不阻断
+- P6 PR
+
+### P4 exact contract tokens
+
+- `data_timestamp` 缺失时不做去重
+
+### P6 exact contract tokens
+
+- 父规则摘要
+- legacy `AGENT_EVENT_ALERT_RULES_JSON` 不支持 watchlist、portfolio
+- sector 级集中度

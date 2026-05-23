@@ -78,7 +78,16 @@ verify_*.py
 !.claude/skills/**
 
 # 정적 빌드 산출물
-static/
+static/*
+!static/index.html
+!static/vite.svg
+!static/stocks.index.json
+!static/assets/
+static/assets/*
+!static/assets/*.css
+!static/assets/*.js
+.electron-builder-cache/
+stock_analysis.spec
 /apps/dsa-desktop/dist/
 /apps/dsa-desktop/node_modules/
 docs/specs/

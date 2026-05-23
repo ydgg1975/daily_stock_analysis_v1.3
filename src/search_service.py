@@ -113,6 +113,9 @@ class SearchResult:
     url: str
     source: str  # 来源网站
     published_date: Optional[str] = None
+    relevance_score: Optional[int] = None
+    relevance_category: Optional[str] = None
+    relevance_reasons: Optional[List[str]] = None
 
     def to_text(self) -> str:
         """转换为文本格式"""

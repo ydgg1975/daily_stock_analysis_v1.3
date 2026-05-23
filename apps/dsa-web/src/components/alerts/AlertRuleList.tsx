@@ -2,7 +2,7 @@ import type React from 'react';
 import { useState } from 'react';
 import { Bell, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, ConfirmDialog, EmptyState, Pagination, Select } from '../common';
-import type { AlertRuleItem, AlertRuleParameters, AlertType } from '../../types/alerts';
+import type { AlertRuleItem, AlertRuleParameters, AlertTargetScope, AlertType } from '../../types/alerts';
 import { formatDateTime } from '../../utils/format';
 
 export type AlertRuleEnabledFilter = 'all' | 'enabled' | 'disabled';
@@ -16,8 +16,8 @@ export interface AlertRuleBusyState {
 
 const ENABLED_FILTER_OPTIONS = [
   { value: 'all', label: '전체 상태' },
-  { value: 'enabled', label: '활성화됨' },
-  { value: 'disabled', label: '비활성화됨' },
+  { value: 'enabled', label: '활성화' },
+  { value: 'disabled', label: '비활성화' },
 ];
 
 const ALERT_TYPE_FILTER_OPTIONS = [
@@ -25,22 +25,37 @@ const ALERT_TYPE_FILTER_OPTIONS = [
   { value: 'price_cross', label: '가격 돌파' },
   { value: 'price_change_percent', label: '등락률' },
   { value: 'volume_spike', label: '거래량 급증' },
-  { value: 'ma_price_cross', label: '가격-이동평균 교차' },
+  { value: 'ma_price_cross', label: '이동평균 교차' },
   { value: 'rsi_threshold', label: 'RSI 임계값' },
   { value: 'macd_cross', label: 'MACD 교차' },
   { value: 'kdj_cross', label: 'KDJ 교차' },
   { value: 'cci_threshold', label: 'CCI 임계값' },
+  { value: 'portfolio_stop_loss', label: '포트폴리오 손절' },
+  { value: 'portfolio_concentration', label: '포트폴리오 집중도' },
+  { value: 'portfolio_drawdown', label: '포트폴리오 낙폭' },
+  { value: 'portfolio_price_stale', label: '포트폴리오 가격 지연' },
 ];
 
 const typeLabel: Record<AlertType, string> = {
   price_cross: '가격 돌파',
   price_change_percent: '등락률',
   volume_spike: '거래량 급증',
-  ma_price_cross: '가격-이동평균 교차',
+  ma_price_cross: '이동평균 교차',
   rsi_threshold: 'RSI 임계값',
   macd_cross: 'MACD 교차',
   kdj_cross: 'KDJ 교차',
   cci_threshold: 'CCI 임계값',
+  portfolio_stop_loss: '포트폴리오 손절',
+  portfolio_concentration: '포트폴리오 집중도',
+  portfolio_drawdown: '포트폴리오 낙폭',
+  portfolio_price_stale: '포트폴리오 가격 지연',
+};
+
+const scopeLabel: Record<AlertTargetScope, string> = {
+  single_symbol: '단일 종목',
+  watchlist: '관심 목록',
+  portfolio_holdings: '포트폴리오 보유 종목',
+  portfolio_account: '포트폴리오 계좌',
 };
 
 const severityLabel = {
@@ -73,13 +88,15 @@ function formatParameters(rule: AlertRuleItem): string {
   if (rule.alertType === 'rsi_threshold') return `RSI ${p.period ?? '-'}일 ${formatDirection(p.direction)} ${p.threshold ?? '-'}`;
   if (rule.alertType === 'macd_cross') return `${formatDirection(p.direction)} ${p.fastPeriod ?? '-'}/${p.slowPeriod ?? '-'}/${p.signalPeriod ?? '-'}`;
   if (rule.alertType === 'kdj_cross') return `${formatDirection(p.direction)} ${p.period ?? '-'}/${p.kPeriod ?? '-'}/${p.dPeriod ?? '-'}`;
-  return `CCI ${p.period ?? '-'}일 ${formatDirection(p.direction)} ${p.threshold ?? '-'}`;
+  if (rule.alertType === 'cci_threshold') return `CCI ${p.period ?? '-'}일 ${formatDirection(p.direction)} ${p.threshold ?? '-'}`;
+  if (rule.alertType === 'portfolio_stop_loss') return `손절 모드: ${p.mode ?? 'near'}`;
+  return '포트폴리오 조건';
 }
 
 function formatTarget(rule: AlertRuleItem): string {
   if (rule.targetScope === 'watchlist') return 'default';
   if (rule.targetScope === 'portfolio_account' || rule.targetScope === 'portfolio_holdings') {
-    return rule.target === 'all' ? '全部账户' : `账户 ${rule.target}`;
+    return rule.target === 'all' ? '전체 계좌' : `계좌 ${rule.target}`;
   }
   return rule.target;
 }
@@ -140,7 +157,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
           <EmptyState
             icon={<Bell className="h-6 w-6" />}
             title={isLoading ? '규칙을 불러오는 중' : '알림 규칙 없음'}
-            description="규칙을 만들면 백그라운드 평가 작업이 활성화된 알림을 주기적으로 처리합니다."
+            description="규칙을 만들면 조건을 만족하는 종목이나 포트폴리오 상태를 주기적으로 확인합니다."
           />
         </div>
       ) : (
@@ -149,7 +166,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
             <thead className="border-b border-border/60 text-xs uppercase text-muted-text">
               <tr>
                 <th className="px-3 py-2 font-medium">규칙</th>
-                <th className="px-3 py-2 font-medium">종목</th>
+                <th className="px-3 py-2 font-medium">대상</th>
                 <th className="px-3 py-2 font-medium">유형</th>
                 <th className="px-3 py-2 font-medium">조건</th>
                 <th className="px-3 py-2 font-medium">상태</th>
@@ -179,14 +196,12 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                   </td>
                   <td className="px-3 py-3 text-secondary-text">{formatParameters(rule)}</td>
                   <td className="px-3 py-3">
-                    <Badge variant={rule.enabled ? 'success' : 'default'}>{rule.enabled ? '활성화됨' : '비활성화됨'}</Badge>
+                    <Badge variant={rule.enabled ? 'success' : 'default'}>{rule.enabled ? '활성화' : '비활성화'}</Badge>
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">
                     <div>{isCoolingDown(rule) ? '쿨다운 중' : '대기 중'}</div>
                     <div className="mt-1">{formatDateTime(rule.cooldownUntil)}</div>
-                    {hasChildTargetCooldown(rule) ? (
-                      <div className="mt-1 text-muted-text">子目标见触发历史</div>
-                    ) : null}
+                    {hasChildTargetCooldown(rule) ? <div className="mt-1 text-muted-text">하위 대상별 쿨다운</div> : null}
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">{formatDateTime(rule.updatedAt ?? rule.createdAt)}</td>
                   <td className="px-3 py-3">
@@ -215,7 +230,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
       <ConfirmDialog
         isOpen={pendingDelete != null}
         title="알림 규칙 삭제"
-        message={pendingDelete ? `「${pendingDelete.name}」 규칙을 삭제하시겠습니까? 기존 트리거 기록은 삭제되지 않습니다.` : ''}
+        message={pendingDelete ? `"${pendingDelete.name}" 규칙을 삭제하시겠습니까? 기존 트리거 기록은 삭제되지 않습니다.` : ''}
         confirmText="삭제"
         cancelText="취소"
         isDanger

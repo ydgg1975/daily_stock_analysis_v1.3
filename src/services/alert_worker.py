@@ -330,6 +330,9 @@ class AlertWorker:
             return None
 
     def _diagnostics_for_status(self, status: str, result: Dict[str, Any]) -> Optional[str]:
+        diagnostics = result.get("diagnostics")
+        if diagnostics:
+            return str(diagnostics)
         if status == "triggered":
             event = result.get("event_monitoring")
             if isinstance(event, dict):

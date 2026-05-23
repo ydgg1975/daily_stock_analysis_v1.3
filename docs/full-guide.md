@@ -400,3 +400,18 @@ git diff --check
 - [변경 로그](CHANGELOG.md)
 
 마지막 정리일: 2026-05-21
+
+### Docker env file contract
+
+Docker 실행 예시는 컨테이너 안의 `/app/.env` 단일 파일 bind mount 대신 시작 시점 환경 주입을 사용합니다.
+
+```bash
+docker run --env-file .env daily-stock-analysis
+```
+
+Compose 구성은 다음처럼 `env_file:`을 사용합니다.
+
+```yaml
+env_file:
+  - ../.env
+```

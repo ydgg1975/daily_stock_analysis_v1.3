@@ -4,7 +4,7 @@ import type {
   ReportMeta,
   ReportSummary as ReportSummaryType,
 } from '../../types/analysis';
-import { Badge, Card, ScoreGauge } from '../common';
+import { Card, ScoreGauge } from '../common';
 import { formatDateTime } from '../../utils/format';
 import { localizeLegacyText } from '../../utils/legacyKoreanText';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
@@ -16,67 +16,11 @@ interface ReportOverviewProps {
   isHistory?: boolean;
 }
 
-type BoardStatus = 'leading' | 'lagging';
-
-type BoardSignal = {
-  status: BoardStatus;
-  changePct?: number;
-};
-
-const normalizeBoardName = (value?: string): string =>
-  (value || '').trim().replace(/\s+/g, ' ');
-
-const coerceFiniteNumber = (value: unknown): number | undefined => {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim().replace(/%$/, '');
-    if (!trimmed) {
-      return undefined;
-    }
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-};
-
-const buildBoardSignalMap = (details?: ReportDetailsType): Map<string, BoardSignal> => {
-  const signalMap = new Map<string, BoardSignal>();
-  const topBoards = Array.isArray(details?.sectorRankings?.top) ? details.sectorRankings.top : [];
-  const bottomBoards = Array.isArray(details?.sectorRankings?.bottom) ? details.sectorRankings.bottom : [];
-
-  topBoards.forEach((item) => {
-    const normalizedName = normalizeBoardName(item?.name);
-    if (!normalizedName) {
-      return;
-    }
-    signalMap.set(normalizedName, {
-      status: 'leading',
-      changePct: coerceFiniteNumber(item.changePct),
-    });
-  });
-
-  bottomBoards.forEach((item) => {
-    const normalizedName = normalizeBoardName(item?.name);
-    if (!normalizedName) {
-      return;
-    }
-    signalMap.set(normalizedName, {
-      status: 'lagging',
-      changePct: coerceFiniteNumber(item.changePct),
-    });
-  });
-
-  return signalMap;
-};
-
 /**
  */
 export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
   summary,
-  details,
 }) => {
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
@@ -84,9 +28,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
   const displaySummary = localizeLegacyText(summary.analysisSummary);
   const displayAdvice = localizeLegacyText(summary.operationAdvice);
   const displayTrend = localizeLegacyText(summary.trendPrediction);
-  const relatedBoards = (Array.isArray(details?.belongBoards) ? details.belongBoards : [])
-    .filter((board) => normalizeBoardName(board?.name).length > 0);
-  const boardSignals = buildBoardSignalMap(details);
 
   const getPriceChangeStyle = (changePct: number | undefined): React.CSSProperties | undefined => {
     if (changePct === undefined || changePct === null) {
@@ -108,20 +49,6 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
     if (changePct === undefined || changePct === null) return '--';
     const sign = changePct > 0 ? '+' : '';
     return `${sign}${changePct.toFixed(2)}%`;
-  };
-
-  const getBoardStatusLabel = (status: BoardStatus): string => {
-    if (status === 'leading') {
-      return text.leadingBoard;
-    }
-    return text.laggingBoard;
-  };
-
-  const getBoardStatusVariant = (status: BoardStatus): 'success' | 'danger' => {
-    if (status === 'leading') {
-      return 'success';
-    }
-    return 'danger';
   };
 
   return (

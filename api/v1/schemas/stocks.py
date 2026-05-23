@@ -22,22 +22,20 @@ class StockQuote(BaseModel):
     amount: Optional[float] = Field(None, description="거래대금")
     update_time: Optional[str] = Field(None, description="업데이트 시간")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "AAPL",
-                "stock_name": "Apple",
-                "current_price": 180.0,
-                "change": 1.5,
-                "change_percent": 0.84,
-                "open": 178.5,
-                "high": 181.0,
-                "low": 178.0,
-                "prev_close": 178.5,
-                "volume": 10000000,
-                "amount": 1800000000,
-                "update_time": "2024-01-01T15:00:00",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "stock_code": "600519",
+            "stock_name": "贵州茅台",
+            "current_price": 1800.0,
+            "change": 15.0,
+            "change_percent": 0.84,
+            "open": 1785.0,
+            "high": 1810.0,
+            "low": 1780.0,
+            "prev_close": 1785.0,
+            "volume": 10000000,
+            "amount": 18000000000,
+            "update_time": "2024-01-01T15:00:00",
         }
     })
 
@@ -54,18 +52,16 @@ class KLineData(BaseModel):
     amount: Optional[float] = Field(None, description="거래대금")
     change_percent: Optional[float] = Field(None, description="등락률(%)")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "date": "2024-01-01",
-                "open": 178.5,
-                "high": 181.0,
-                "low": 178.0,
-                "close": 180.0,
-                "volume": 10000000,
-                "amount": 1800000000,
-                "change_percent": 0.84,
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "date": "2024-01-01",
+            "open": 178.5,
+            "high": 181.0,
+            "low": 178.0,
+            "close": 180.0,
+            "volume": 10000000,
+            "amount": 1800000000,
+            "change_percent": 0.84,
         }
     })
 
@@ -94,15 +90,14 @@ class StockHistoryResponse(BaseModel):
     period: str = Field(..., description="K-line 주기")
     data: List[KLineData] = Field(default_factory=list, description="K-line 데이터 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "AAPL",
-                "stock_name": "Apple",
-                "period": "daily",
-                "data": [],
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "period": "daily",
+            "data": [],
         }
+    })
 
 
 class StockChartAnalysisResponse(BaseModel):

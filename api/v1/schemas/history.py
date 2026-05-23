@@ -18,18 +18,16 @@ class HistoryItem(BaseModel):
     operation_advice: Optional[str] = Field(None, description="운영 조언")
     created_at: Optional[str] = Field(None, description="생성 시간")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": 1234,
-                "query_id": "abc123",
-                "stock_code": "AAPL",
-                "stock_name": "Apple",
-                "report_type": "detailed",
-                "sentiment_score": 75,
-                "operation_advice": "hold",
-                "created_at": "2024-01-01T12:00:00",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": 1234,
+            "query_id": "abc123",
+            "stock_code": "600519",
+            "stock_name": "贵州茅台",
+            "report_type": "detailed",
+            "sentiment_score": 75,
+            "operation_advice": "hold",
+            "created_at": "2024-01-01T12:00:00",
         }
     })
 
@@ -42,15 +40,8 @@ class HistoryListResponse(BaseModel):
     limit: int = Field(..., description="페이지당 항목 수")
     items: List[HistoryItem] = Field(default_factory=list, description="기록 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total": 100,
-                "page": 1,
-                "limit": 20,
-                "items": [],
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"total": 100, "page": 1, "limit": 20, "items": []}
     })
 
 
@@ -73,13 +64,11 @@ class NewsIntelItem(BaseModel):
     snippet: str = Field("", description="뉴스 요약")
     url: str = Field(..., description="뉴스 링크")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "title": "Company reports stronger quarterly revenue",
-                "snippet": "Quarterly revenue increased 20% year over year...",
-                "url": "https://example.com/news/123",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "title": "Company reports stronger quarterly revenue",
+            "snippet": "Quarterly revenue increased 20% year over year...",
+            "url": "https://example.com/news/123",
         }
     })
 
@@ -90,13 +79,8 @@ class NewsIntelResponse(BaseModel):
     total: int = Field(..., description="뉴스 수")
     items: List[NewsIntelItem] = Field(default_factory=list, description="뉴스 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total": 2,
-                "items": [],
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"total": 2, "items": []}
     })
 
 
@@ -142,10 +126,10 @@ class ReportDetails(BaseModel):
     news_content: Optional[str] = Field(None, description="뉴스 요약")
     raw_result: Optional[Any] = Field(None, description="원본 분석 결과(JSON)")
     context_snapshot: Optional[Any] = Field(None, description="분석 당시 컨텍스트 스냅샷(JSON)")
-    financial_report: Optional[Any] = Field(None, description="구조화된 재무 보고서 요약(fundamental_context 기반)")
-    dividend_metrics: Optional[Any] = Field(None, description="구조화된 배당 지표(TTM 기준 포함)")
+    financial_report: Optional[Any] = Field(None, description="구조화된 재무 보고서 요약")
+    dividend_metrics: Optional[Any] = Field(None, description="구조화된 배당 지표")
     belong_boards: Optional[Any] = Field(None, description="관련 섹터 목록")
-    sector_rankings: Optional[Any] = Field(None, description="섹터 등락 순위 구조({top, bottom})")
+    sector_rankings: Optional[Any] = Field(None, description="섹터 등락 순위 구조")
     chart_analysis_report: Optional[Any] = Field(None, description="차트 구조, 지지/저항, 신호 충돌 요약")
     event_monitoring_report: Optional[Any] = Field(None, description="이벤트 모니터링 우선순위와 thesis 훼손 위험 요약")
 
@@ -157,36 +141,33 @@ class AnalysisReport(BaseModel):
     summary: ReportSummary = Field(..., description="요약 섹션")
     strategy: Optional[ReportStrategy] = Field(None, description="전략 가격 섹션")
     details: Optional[ReportDetails] = Field(None, description="상세 섹션")
-
     analysis_map: Optional[Any] = Field(None, description="Agent analysis flow map and trace data")
     analysis_confidence: Optional[Any] = Field(None, description="Agent confidence score and quality factors")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "meta": {
-                    "query_id": "abc123",
-                    "stock_code": "AAPL",
-                    "stock_name": "Apple",
-                    "report_type": "detailed",
-                    "report_language": "en",
-                    "created_at": "2024-01-01T12:00:00",
-                },
-                "summary": {
-                    "analysis_summary": "Technical momentum is constructive.",
-                    "operation_advice": "hold",
-                    "trend_prediction": "bullish",
-                    "sentiment_score": 75,
-                    "sentiment_label": "positive",
-                },
-                "strategy": {
-                    "ideal_buy": "180.00",
-                    "secondary_buy": "175.00",
-                    "stop_loss": "170.00",
-                    "take_profit": "200.00",
-                },
-                "details": None,
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "meta": {
+                "query_id": "abc123",
+                "stock_code": "AAPL",
+                "stock_name": "Apple",
+                "report_type": "detailed",
+                "report_language": "en",
+                "created_at": "2024-01-01T12:00:00",
+            },
+            "summary": {
+                "analysis_summary": "Technical momentum is constructive.",
+                "operation_advice": "hold",
+                "trend_prediction": "bullish",
+                "sentiment_score": 75,
+                "sentiment_label": "positive",
+            },
+            "strategy": {
+                "ideal_buy": "180.00",
+                "secondary_buy": "175.00",
+                "stop_loss": "170.00",
+                "take_profit": "200.00",
+            },
+            "details": None,
         }
     })
 
@@ -196,10 +177,6 @@ class MarkdownReportResponse(BaseModel):
 
     content: str = Field(..., description="전체 Markdown 보고서 내용")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "content": "# Apple (AAPL) Analysis Report\n\n> Analysis date: **2024-01-01**\n\n..."
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"content": "# Apple (AAPL) Analysis Report\n\n> Analysis date: **2024-01-01**\n\n..."}
     })

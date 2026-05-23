@@ -1123,12 +1123,18 @@ class NotificationService(
                         ])
                     # Position structure
                     if chip_data:
-                        chip_health = localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language)
-                        report_lines.extend([
-                            f"**{labels['chip_label']}**: {chip_data.get('profit_ratio', 'N/A')} | {chip_data.get('avg_cost', 'N/A')} | "
-                            f"{chip_data.get('concentration', 'N/A')} {chip_health}",
-                            "",
-                        ])
+                        if is_chip_structure_unavailable(chip_data):
+                            report_lines.extend([
+                                f"**{labels['chip_label']}**: {get_chip_unavailable_reason(chip_data, report_language)}",
+                                "",
+                            ])
+                        else:
+                            chip_health = localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language)
+                            report_lines.extend([
+                                f"**{labels['chip_label']}**: {chip_data.get('profit_ratio', 'N/A')} | {chip_data.get('avg_cost', 'N/A')} | "
+                                f"{chip_data.get('concentration', 'N/A')} {chip_health}",
+                                "",
+                            ])
 
                 # ========== Action plan ==========
                 battle = dashboard.get('battle_plan', {}) if dashboard else {}
@@ -1203,6 +1209,8 @@ class NotificationService(
                             f"{result.news_summary}",
                             "",
                         ])
+
+                self._append_fundamental_blocks(report_lines, result)
 
                 report_lines.extend([
                     "---",
@@ -1765,6 +1773,8 @@ class NotificationService(
                 f"- 💼 **{labels['has_position_label']}**: {pos_advice.get('has_position', labels['continue_holding'])}",
                 "",
             ])
+
+        self._append_fundamental_blocks(lines, result)
 
         lines.append("---")
         if self._should_show_llm_model():

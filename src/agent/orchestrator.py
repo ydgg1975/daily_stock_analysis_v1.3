@@ -1160,9 +1160,12 @@ class AgentOrchestrator:
         required_nodes = [node for node in nodes if node["status"] != "optional"]
         required_completed_count = sum(1 for node in required_nodes if node["status"] in completed_statuses)
         coverage = {
-            "completed_nodes": completed_count,
-            "total_nodes": len(nodes),
-            "ratio": round(completed_count / len(nodes), 4),
+            "completed_nodes": required_completed_count,
+            "total_nodes": len(required_nodes),
+            "ratio": round(required_completed_count / max(len(required_nodes), 1), 4),
+            "all_completed_nodes": completed_count,
+            "all_total_nodes": len(nodes),
+            "all_ratio": round(completed_count / len(nodes), 4),
             "required_completed_nodes": required_completed_count,
             "required_total_nodes": len(required_nodes),
             "required_ratio": round(required_completed_count / max(len(required_nodes), 1), 4),
@@ -1309,7 +1312,7 @@ class AgentOrchestrator:
 
     @staticmethod
     def _confidence_band(score: float) -> str:
-        if score >= 0.75:
+        if score >= 0.85:
             return "high"
         if score >= 0.45:
             return "medium"

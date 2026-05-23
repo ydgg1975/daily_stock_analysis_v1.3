@@ -4,7 +4,7 @@
 from enum import Enum
 from typing import Any, List, Optional
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from src.utils.analysis_metadata import SELECTION_SOURCE_PATTERN
 
@@ -21,44 +21,33 @@ class TaskStatusEnum(str, Enum):
 class AnalyzeRequest(BaseModel):
     """Analysis request parameters."""
 
-    stock_code: Optional[str] = Field(None, description="단일 종목 코드", example="AAPL")
-    stock_codes: Optional[List[str]] = Field(None, description="여러 종목 코드. stock_code와 둘 중 하나만 사용합니다.", example=["AAPL", "MSFT"])
-    report_type: str = Field(
-        "detailed",
-        description="보고서 유형: simple(간단) / detailed(상세) / full(전체) / brief(요약)",
-        pattern="^(simple|detailed|full|brief)$",
-    )
+    stock_code: Optional[str] = Field(None, description="단일 종목 코드", json_schema_extra={"example": "600519"})
+    stock_codes: Optional[List[str]] = Field(None, description="여러 종목 코드. stock_code와 둘 중 하나만 사용합니다.", json_schema_extra={"example": ["600519", "000858"]})
+    report_type: str = Field("detailed", description="보고서 유형: simple(간단) / detailed(상세) / full(전체) / brief(요약)", pattern="^(simple|detailed|full|brief)$")
     force_refresh: bool = Field(False, description="캐시를 무시하고 강제로 새로 분석할지 여부")
     async_mode: bool = Field(False, description="비동기 작업으로 실행할지 여부")
-    stock_name: Optional[str] = Field(None, description="사용자가 선택한 종목명(자동완성 등에서 제공)", example="Apple")
-    original_query: Optional[str] = Field(None, description="사용자의 원본 입력", example="Apple")
-    selection_source: Optional[str] = Field(
-        None,
-        description="종목 선택 출처: manual(직접 입력) | autocomplete(자동완성) | import(가져오기) | image(이미지 인식)",
-        pattern=SELECTION_SOURCE_PATTERN,
-        example="autocomplete",
-    )
+    stock_name: Optional[str] = Field(None, description="사용자가 선택한 종목명", json_schema_extra={"example": "贵州茅台"})
+    original_query: Optional[str] = Field(None, description="사용자의 원본 입력", json_schema_extra={"example": "茅台"})
+    selection_source: Optional[str] = Field(None, description="종목 선택 출처", pattern=SELECTION_SOURCE_PATTERN, json_schema_extra={"example": "autocomplete"})
     notify: bool = Field(True, description="푸시 알림을 보낼지 여부")
     skills: Optional[List[str]] = Field(
         None,
         validation_alias=AliasChoices("skills", "strategies"),
         description="이번 분석에 사용할 strategy skill ID 목록. legacy strategies 필드와 호환됩니다.",
-        example=["bull_trend", "growth_quality"],
+        json_schema_extra={"example": ["bull_trend", "growth_quality"]},
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "AAPL",
-                "report_type": "detailed",
-                "force_refresh": False,
-                "async_mode": False,
-                "stock_name": "Apple",
-                "original_query": "Apple",
-                "selection_source": "autocomplete",
-                "notify": True,
-                "skills": ["bull_trend"],
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "stock_code": "600519",
+            "report_type": "detailed",
+            "force_refresh": False,
+            "async_mode": False,
+            "stock_name": "贵州茅台",
+            "original_query": "茅台",
+            "selection_source": "autocomplete",
+            "notify": True,
+            "skills": ["bull_trend"],
         }
     })
 
@@ -87,20 +76,13 @@ class AnalysisResultResponse(BaseModel):
     report: Optional[Any] = Field(None, description="분석 보고서")
     created_at: str = Field(..., description="생성 시간")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "query_id": "abc123def456",
-                "stock_code": "AAPL",
-                "stock_name": "Apple",
-                "report": {
-                    "summary": {
-                        "sentiment_score": 75,
-                        "operation_advice": "hold",
-                    }
-                },
-                "created_at": "2024-01-01T12:00:00",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "query_id": "abc123def456",
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "report": {"summary": {"sentiment_score": 75, "operation_advice": "hold"}},
+            "created_at": "2024-01-01T12:00:00",
         }
     })
 
@@ -112,14 +94,8 @@ class TaskAccepted(BaseModel):
     status: str = Field(..., description="작업 상태", pattern="^(pending|processing)$")
     message: Optional[str] = Field(None, description="안내 메시지")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "status": "pending",
-                "message": "Analysis task accepted",
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"task_id": "task_abc123", "status": "pending", "message": "Analysis task accepted"}
     })
 
 
@@ -131,15 +107,8 @@ class BatchTaskAcceptedItem(BaseModel):
     status: str = Field(..., description="작업 상태", pattern="^(pending|processing)$")
     message: Optional[str] = Field(None, description="안내 메시지")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "stock_code": "AAPL",
-                "status": "pending",
-                "message": "분석 작업이 큐에 추가되었습니다: AAPL",
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"task_id": "task_abc123", "stock_code": "AAPL", "status": "pending", "message": "분석 작업이 큐에 추가되었습니다: AAPL"}
     })
 
 
@@ -150,14 +119,8 @@ class BatchDuplicateTaskItem(BaseModel):
     existing_task_id: str = Field(..., description="이미 존재하는 작업 ID")
     message: str = Field(..., description="오류 메시지")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stock_code": "AAPL",
-                "existing_task_id": "task_existing_123",
-                "message": "종목 AAPL이 이미 분석 중입니다. (task_id: task_existing_123)",
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"stock_code": "AAPL", "existing_task_id": "task_existing_123", "message": "종목 AAPL이 이미 분석 중입니다. (task_id: task_existing_123)"}
     })
 
 
@@ -168,26 +131,11 @@ class BatchTaskAcceptedResponse(BaseModel):
     duplicates: List[BatchDuplicateTaskItem] = Field(default_factory=list, description="중복으로 건너뛴 작업 목록")
     message: str = Field(..., description="요약 메시지")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "accepted": [
-                    {
-                        "task_id": "task_abc123",
-                        "stock_code": "AAPL",
-                        "status": "pending",
-                        "message": "분석 작업이 큐에 추가되었습니다: AAPL",
-                    }
-                ],
-                "duplicates": [
-                    {
-                        "stock_code": "MSFT",
-                        "existing_task_id": "task_existing_456",
-                        "message": "종목 MSFT가 이미 분석 중입니다. (task_id: task_existing_456)",
-                    }
-                ],
-                "message": "1개 작업을 제출했고 1개 중복 작업은 건너뛰었습니다.",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "accepted": [{"task_id": "task_abc123", "stock_code": "AAPL", "status": "pending", "message": "분석 작업이 큐에 추가되었습니다: AAPL"}],
+            "duplicates": [{"stock_code": "MSFT", "existing_task_id": "task_existing_456", "message": "종목 MSFT가 이미 분석 중입니다. (task_id: task_existing_456)"}],
+            "message": "1개 작업을 제출했고 1개 중복 작업은 건너뛰었습니다.",
         }
     })
 
@@ -206,20 +154,18 @@ class TaskStatus(BaseModel):
     selection_source: Optional[str] = Field(None, description="선택 출처", pattern=SELECTION_SOURCE_PATTERN)
     skills: Optional[List[str]] = Field(None, description="이번 작업에 사용한 strategy skill ID 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "task_abc123",
-                "status": "completed",
-                "progress": 100,
-                "result": None,
-                "market_review_report": None,
-                "error": None,
-                "stock_name": "Apple",
-                "original_query": "Apple",
-                "selection_source": "autocomplete",
-                "skills": ["bull_trend"],
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "task_id": "task_abc123",
+            "status": "completed",
+            "progress": 100,
+            "result": None,
+            "market_review_report": None,
+            "error": None,
+            "stock_name": "Apple",
+            "original_query": "Apple",
+            "selection_source": "autocomplete",
+            "skills": ["bull_trend"],
         }
     })
 
@@ -242,24 +188,22 @@ class TaskInfo(BaseModel):
     selection_source: Optional[str] = Field(None, description="선택 출처", pattern=SELECTION_SOURCE_PATTERN)
     skills: Optional[List[str]] = Field(None, description="이번 작업에 사용한 strategy skill ID 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "task_id": "abc123def456",
-                "stock_code": "AAPL",
-                "stock_name": "Apple",
-                "status": "processing",
-                "progress": 50,
-                "message": "분석 중...",
-                "report_type": "detailed",
-                "created_at": "2026-02-05T10:30:00",
-                "started_at": "2026-02-05T10:30:01",
-                "completed_at": None,
-                "error": None,
-                "original_query": "Apple",
-                "selection_source": "autocomplete",
-                "skills": ["bull_trend"],
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "task_id": "abc123def456",
+            "stock_code": "AAPL",
+            "stock_name": "Apple",
+            "status": "processing",
+            "progress": 50,
+            "message": "분석 중...",
+            "report_type": "detailed",
+            "created_at": "2026-02-05T10:30:00",
+            "started_at": "2026-02-05T10:30:01",
+            "completed_at": None,
+            "error": None,
+            "original_query": "Apple",
+            "selection_source": "autocomplete",
+            "skills": ["bull_trend"],
         }
     })
 
@@ -272,15 +216,8 @@ class TaskListResponse(BaseModel):
     processing: int = Field(..., description="처리 중인 작업 수")
     tasks: List[TaskInfo] = Field(..., description="작업 목록")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total": 3,
-                "pending": 1,
-                "processing": 2,
-                "tasks": [],
-            }
-        }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {"total": 3, "pending": 1, "processing": 2, "tasks": []}
     })
 
 
@@ -292,13 +229,11 @@ class DuplicateTaskErrorResponse(BaseModel):
     stock_code: str = Field(..., description="종목 코드")
     existing_task_id: str = Field(..., description="이미 존재하는 작업 ID")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "error": "duplicate_task",
-                "message": "종목 AAPL이 이미 분석 중입니다.",
-                "stock_code": "AAPL",
-                "existing_task_id": "abc123def456",
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "error": "duplicate_task",
+            "message": "종목 AAPL이 이미 분석 중입니다.",
+            "stock_code": "AAPL",
+            "existing_task_id": "abc123def456",
         }
     })

@@ -8,6 +8,7 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
 ## [Unreleased]
 
+- [수정] Python 3.14 환경에서 백엔드 데스크톱 패키징이 tiktoken 0.11.x PyO3 제한으로 실패하지 않도록 tiktoken 0.13.x 휠을 허용했습니다.
 - [테스트] 대표 A-share, HK, US 종목의 agent history와 chart analysis smoke test를 추가했습니다.
 - [테스트] 차트 분석, paper trading, portfolio analysis용 eval fixture와 회귀 검증을 추가했습니다.
 - [개선] Agent analysis map에 도구별 호출 수, 성공률, 실패율, timeout, cached count, 평균 실행 시간을 집계하는 tool metrics를 추가하고 Web 리포트에서 확인할 수 있게 했습니다.

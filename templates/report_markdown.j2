@@ -242,7 +242,15 @@
 
 {% set chip_data = data_persp.get('chip_structure', {}) %}
 {% if chip_data %}
-**{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', 'N/A') }} | {{ chip_data.get('avg_cost', 'N/A') }} | {{ chip_data.get('concentration', 'N/A') }} {{ localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language) }}
+{% if is_chip_structure_unavailable(chip_data) %}
+
+**{{ labels.chip_label }}**: {{ get_chip_unavailable_reason(chip_data, report_language) }}
+
+{% else %}
+
+**{{ labels.chip_label }}**: {{ chip_data.get('profit_ratio', 'N/A') }} | {{ chip_data.get('avg_cost', 'N/A') }} | {{ chip_data.get('concentration', 'N/A') }} {{ localize_chip_health(chip_data.get('chip_health', 'N/A'), report_language) }}
+
+{% endif %}
 {% endif %}
 {% endif %}
 

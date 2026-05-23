@@ -399,7 +399,7 @@ class StockAnalysisPipeline:
                     chip_data,
                     fundamental_context,
                     trend_result,
-                    history_df,
+                    history_df=history_df,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
