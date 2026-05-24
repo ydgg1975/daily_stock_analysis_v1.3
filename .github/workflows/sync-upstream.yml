@@ -1,0 +1,43 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # UTC+8 17:00 = UTC 09:00
+    - cron: '0 9 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/ZhuLinsen/daily_stock_analysis.git
+          git fetch upstream
+
+      - name: Check for upstream changes
+        run: |
+          behind=$(git rev-list --count main..upstream/main)
+          echo "behind=$behind" >> $GITHUB_ENV
+          echo "当前分支落后上游 $behind 个提交"
+
+      - name: Merge upstream/main
+        if: env.behind != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git merge upstream/main --no-edit
+
+      - name: Push to origin
+        if: env.behind != '0'
+        run: |
+          git push origin main
