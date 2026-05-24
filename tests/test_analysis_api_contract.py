@@ -1031,6 +1031,82 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             "白酒",
         )
 
+    def test_get_analysis_status_in_memory_task_enriches_agent_snapshot_board_details(self) -> None:
+        if get_analysis_status is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        context_snapshot = {
+            "fundamental_context": {
+                "belong_boards": [{"name": "白酒", "type": "行业"}],
+                "boards": {
+                    "data": {
+                        "top": [{"name": "白酒", "change_pct": 2.8}],
+                        "bottom": [],
+                    }
+                },
+            },
+            "realtime_quote": {
+                "price": 1888.0,
+                "change_pct": 1.56,
+            },
+        }
+        task = SimpleNamespace(
+            task_id="task_agent_snapshot_in_memory_1",
+            stock_code="600519",
+            stock_name="贵州茅台",
+            status=TaskStatus.COMPLETED,
+            progress=100,
+            result={
+                "stock_code": "600519",
+                "stock_name": "贵州茅台",
+                "report": {
+                    "meta": {
+                        "query_id": "task_agent_snapshot_in_memory_1",
+                        "stock_code": "600519",
+                        "stock_name": "贵州茅台",
+                        "report_type": "detailed",
+                        "report_language": "zh",
+                        "created_at": "2026-04-10T12:00:00",
+                        "model_used": "test-model",
+                    },
+                    "summary": {"analysis_summary": "summary"},
+                    "details": {"news_summary": "news"},
+                },
+            },
+            error=None,
+            original_query=None,
+            selection_source=None,
+            skills=None,
+            created_at=datetime(2026, 4, 10, 12, 0, 0),
+            completed_at=datetime(2026, 4, 10, 12, 1, 0),
+        )
+        record = SimpleNamespace(context_snapshot=json.dumps(context_snapshot))
+        mock_db = MagicMock()
+        mock_db.get_analysis_history.return_value = [record]
+        mock_db.get_latest_fundamental_snapshot.return_value = None
+
+        with patch("api.v1.endpoints.analysis.get_task_queue") as queue_mock, \
+             patch("src.storage.DatabaseManager.get_instance", return_value=mock_db):
+            queue_mock.return_value.get_task.return_value = task
+            status = get_analysis_status("task_agent_snapshot_in_memory_1")
+
+        self.assertEqual(status.status, "completed")
+        self.assertEqual(status.result.report["meta"]["current_price"], 1888.0)
+        self.assertEqual(status.result.report["meta"]["change_pct"], 1.56)
+        self.assertEqual(
+            status.result.report["details"]["belong_boards"],
+            [{"name": "白酒", "type": "行业"}],
+        )
+        self.assertEqual(
+            status.result.report["details"]["sector_rankings"]["top"][0]["name"],
+            "白酒",
+        )
+        mock_db.get_analysis_history.assert_called_once_with(
+            query_id="task_agent_snapshot_in_memory_1",
+            code="600519",
+            limit=1,
+        )
+
     def test_openapi_declares_single_and_batch_async_202_payloads(self) -> None:
         if create_app is None:
             self.skipTest("fastapi is not installed in this test environment")

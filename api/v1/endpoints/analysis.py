@@ -737,6 +737,32 @@ def _build_task_analysis_result(task: Any) -> AnalysisResultResponse:
             or datetime.now().isoformat()
         )
 
+    report_data = payload.get("report")
+    stock_code = payload.get("stock_code")
+    query_id = payload.get("query_id")
+    if isinstance(report_data, dict) and stock_code and query_id:
+        context_snapshot, fundamental_snapshot = _load_sync_fundamental_sources(
+            query_id=query_id,
+            stock_code=stock_code,
+        )
+        if context_snapshot is not None or fundamental_snapshot is not None:
+            try:
+                report = _build_analysis_report(
+                    report_data,
+                    query_id,
+                    stock_code,
+                    payload.get("stock_name") or getattr(task, "stock_name", None),
+                    context_snapshot=context_snapshot,
+                    fallback_fundamental_payload=fundamental_snapshot,
+                )
+                payload["report"] = report.model_dump()
+            except Exception as e:
+                logger.debug(
+                    "enrich in-memory task report failed (fail-open): task_id=%s err=%s",
+                    getattr(task, "task_id", None),
+                    e,
+                )
+
     return AnalysisResultResponse.model_validate(payload)
 
 
@@ -1017,6 +1043,13 @@ def _build_analysis_report(
         meta_data.get("stock_code", stock_code),
         report_language,
     )
+    realtime_fields = extract_realtime_detail_fields(context_snapshot)
+    current_price = meta_data.get("current_price")
+    if current_price is None:
+        current_price = realtime_fields.get("current_price")
+    change_pct = meta_data.get("change_pct")
+    if change_pct is None:
+        change_pct = realtime_fields.get("change_pct")
 
     meta = ReportMeta(
         query_id=meta_data.get("query_id", query_id),
@@ -1025,8 +1058,8 @@ def _build_analysis_report(
         report_type=meta_data.get("report_type", "detailed"),
         report_language=report_language,
         created_at=meta_data.get("created_at", datetime.now().isoformat()),
-        current_price=meta_data.get("current_price"),
-        change_pct=meta_data.get("change_pct"),
+        current_price=current_price,
+        change_pct=change_pct,
         model_used=normalize_model_used(meta_data.get("model_used")),
     )
 
