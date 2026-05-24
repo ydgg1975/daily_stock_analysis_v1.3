@@ -773,6 +773,10 @@ class Config:
     # === 系统配置 ===
     max_workers: int = 3  # 低并发防封禁
     debug: bool = False
+    extensions_enabled: bool = True  # Enable Extension Runtime framework
+    extensions_autoload_builtin: bool = True  # Auto-load built-in extension manifests
+    extensions_alphasift_enabled: bool = False  # Enable built-in AlphaSift manifest only
+    max_action_call_depth: int = 3  # Prevent recursive action loops
     http_proxy: Optional[str] = None  # HTTP 代理 (例如: http://127.0.0.1:10809)
     https_proxy: Optional[str] = None # HTTPS 代理
     
@@ -1530,6 +1534,15 @@ class Config:
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             max_workers=parse_env_int(os.getenv('MAX_WORKERS'), 3, field_name='MAX_WORKERS', minimum=1),
             debug=os.getenv('DEBUG', 'false').lower() == 'true',
+            extensions_enabled=parse_env_bool(os.getenv('EXTENSIONS_ENABLED'), default=True),
+            extensions_autoload_builtin=parse_env_bool(os.getenv('EXTENSIONS_AUTOLOAD_BUILTIN'), default=True),
+            extensions_alphasift_enabled=parse_env_bool(os.getenv('EXTENSIONS_ALPHASIFT_ENABLED'), default=False),
+            max_action_call_depth=parse_env_int(
+                os.getenv('MAX_ACTION_CALL_DEPTH'),
+                3,
+                field_name='MAX_ACTION_CALL_DEPTH',
+                minimum=1,
+            ),
             config_validate_mode=os.getenv('CONFIG_VALIDATE_MODE', 'warn').lower(),
             http_proxy=os.getenv('HTTP_PROXY'),
             https_proxy=os.getenv('HTTPS_PROXY'),

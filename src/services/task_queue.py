@@ -72,10 +72,16 @@ class TaskInfo:
     original_query: Optional[str] = None
     selection_source: Optional[str] = None
     skills: Optional[List[str]] = None
+    task_type: str = "analysis"
+    plugin_id: Optional[str] = None
+    action_id: Optional[str] = None
+    run_id: Optional[str] = None
+    subject: Optional[str] = None
+    dedupe_key: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert task info into an API-friendly dictionary."""
-        return {
+        payload = {
             "task_id": self.task_id,
             "stock_code": self.stock_code,
             "stock_name": self.stock_name,
@@ -91,6 +97,13 @@ class TaskInfo:
             "selection_source": self.selection_source,
             "skills": self.skills,
         }
+        if self.task_type != "analysis":
+            payload["task_type"] = self.task_type
+        for key in ("plugin_id", "action_id", "run_id", "subject", "dedupe_key"):
+            value = getattr(self, key)
+            if value is not None:
+                payload[key] = value
+        return payload
     
     def copy(self) -> 'TaskInfo':
         """Create a shallow copy of the task information."""
@@ -110,6 +123,12 @@ class TaskInfo:
             original_query=self.original_query,
             selection_source=self.selection_source,
             skills=list(self.skills) if self.skills is not None else None,
+            task_type=self.task_type,
+            plugin_id=self.plugin_id,
+            action_id=self.action_id,
+            run_id=self.run_id,
+            subject=self.subject,
+            dedupe_key=self.dedupe_key,
         )
 
 
@@ -159,6 +178,7 @@ class AnalysisTaskQueue:
         # 核心数据结构
         self._tasks: Dict[str, TaskInfo] = {}           # task_id -> TaskInfo
         self._analyzing_stocks: Dict[str, str] = {}     # dedupe_key -> task_id
+        self._background_dedupe_keys: Dict[str, str] = {}  # dedupe_key -> task_id
         self._futures: Dict[str, Future] = {}           # task_id -> Future
         
         # SSE 订阅者列表（asyncio.Queue 实例）
@@ -428,6 +448,12 @@ class AnalysisTaskQueue:
         report_type: str = "detailed",
         message: Optional[str] = "任务已加入队列",
         task_id: Optional[str] = None,
+        task_type: str = "background",
+        plugin_id: Optional[str] = None,
+        action_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        subject: Optional[str] = None,
+        dedupe_key: Optional[str] = None,
     ) -> TaskInfo:
         """
         Submit a generic background callable with task lifecycle tracking.
@@ -436,6 +462,7 @@ class AnalysisTaskQueue:
         map to standard per-stock async analysis flow.
         """
         task_id = task_id or uuid.uuid4().hex
+        normalized_dedupe_key = dedupe_key.strip() if isinstance(dedupe_key, str) and dedupe_key.strip() else None
         task_info = TaskInfo(
             task_id=task_id,
             stock_code=stock_code,
@@ -443,16 +470,31 @@ class AnalysisTaskQueue:
             status=TaskStatus.PENDING,
             message=message,
             report_type=report_type,
+            task_type=task_type,
+            plugin_id=plugin_id,
+            action_id=action_id,
+            run_id=run_id,
+            subject=subject,
+            dedupe_key=normalized_dedupe_key,
         )
 
         with self._data_lock:
             if task_id in self._tasks:
                 raise ValueError(f"任务 ID 已存在: {task_id}")
+            if normalized_dedupe_key and normalized_dedupe_key in self._background_dedupe_keys:
+                existing_task_id = self._background_dedupe_keys[normalized_dedupe_key]
+                raise ValueError(
+                    f"后台任务已存在: {normalized_dedupe_key} (task_id: {existing_task_id})"
+                )
             self._tasks[task_id] = task_info
+            if normalized_dedupe_key:
+                self._background_dedupe_keys[normalized_dedupe_key] = task_id
             try:
                 future = self.executor.submit(self._execute_background_task, task_id, run_task)
             except Exception:
                 del self._tasks[task_id]
+                if normalized_dedupe_key and self._background_dedupe_keys.get(normalized_dedupe_key) == task_id:
+                    del self._background_dedupe_keys[normalized_dedupe_key]
                 raise
 
             self._futures[task_id] = future
@@ -469,9 +511,17 @@ class AnalysisTaskQueue:
 
             task = self._tasks.pop(task_id, None)
             if task:
+                self._release_background_dedupe_locked(task)
                 dedupe_key = _dedupe_stock_code_key(task.stock_code)
                 if self._analyzing_stocks.get(dedupe_key) == task_id:
                     del self._analyzing_stocks[dedupe_key]
+
+    def _release_background_dedupe_locked(self, task: Optional[TaskInfo]) -> None:
+        """Release the generic background dedupe key for terminal/rolled-back tasks."""
+        if not task or not task.dedupe_key:
+            return
+        if self._background_dedupe_keys.get(task.dedupe_key) == task.task_id:
+            del self._background_dedupe_keys[task.dedupe_key]
     
     def get_task(self, task_id: str) -> Optional[TaskInfo]:
         """
@@ -719,6 +769,7 @@ class AnalysisTaskQueue:
                     task.completed_at = datetime.now()
                     task.result = result
                     task.message = "任务执行完成"
+                    self._release_background_dedupe_locked(task)
 
             self._broadcast_event("task_completed", task.to_dict())
             logger.info(f"[TaskQueue] 自定义任务完成: {task_id}")
@@ -739,6 +790,7 @@ class AnalysisTaskQueue:
                     task.completed_at = datetime.now()
                     task.error = error_msg[:200]
                     task.message = f"任务失败: {error_msg[:80]}"
+                    self._release_background_dedupe_locked(task)
 
             if task:
                 self._broadcast_event("task_failed", task.to_dict())

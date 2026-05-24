@@ -1,0 +1,20 @@
+id: alphasift
+name: AlphaSift
+version: 0.1.0
+kind: builtin
+description: Candidate discovery plugin manifest for the later AlphaSift action phase.
+requires:
+  - alphasift>=0.1.0
+permissions:
+  - candidate_discovery
+  - analysis.submit
+  - watchlist.write
+supported_markets:
+  - cn
+installation_hints:
+  - python -m pip install -e /path/to/alphasift
+setup_doc_url: docs/extensions.md
+default_enabled: false
+skills: []
+actions: []
+ui_contributions: []
