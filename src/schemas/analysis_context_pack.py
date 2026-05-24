@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -70,7 +70,7 @@ class AnalysisContextPack(BaseModel):
     """Versioned internal analysis input envelope."""
 
     subject: AnalysisSubject
-    pack_version: str = PACK_VERSION
+    pack_version: Literal["1.0"] = PACK_VERSION
     phase: Optional[Dict[str, Any]] = None
     blocks: Dict[str, AnalysisContextBlock] = Field(default_factory=dict)
     data_quality: DataQuality = Field(default_factory=DataQuality)

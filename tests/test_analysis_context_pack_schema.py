@@ -47,6 +47,13 @@ def test_pack_defaults_and_json_serialization_are_stable() -> None:
     assert dumped["created_at"] == "2026-05-24T09:30:00Z"
 
 
+def test_pack_version_is_fixed_to_p1_contract() -> None:
+    assert AnalysisContextPack(subject=_subject()).pack_version == PACK_VERSION
+
+    with pytest.raises(ValidationError):
+        AnalysisContextPack(subject=_subject(), pack_version="2.0")
+
+
 def test_item_and_block_timestamp_use_iso_strings() -> None:
     item = AnalysisContextItem(
         status=ContextFieldStatus.AVAILABLE,
