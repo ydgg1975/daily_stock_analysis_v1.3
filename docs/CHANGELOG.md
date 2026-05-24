@@ -11,38 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
-- [改进] 将每日股票分析 workflow 文件重命名为 `00-daily-analysis.yml`，让 GitHub Actions 列表优先展示用户最常用的每日分析入口。
-- [修复] 抽出 LiteLLM 生成参数适配层，对严格 temperature 模型按请求临时固定或省略参数，避免 GPT-5 / o 系列与 Kimi K2.6 拒绝默认温度请求。
-- [改进] LiteLLM 参数错误支持一次请求内自动修正重试，并在成功后进程内缓存策略，降低新模型参数兼容问题的人工配置成本。
-- [文档] 补充 Issue #1316 参数自愈改动的外部兼容依据、运行时配置清理边界与回滚证据；对应的 `LLM_TEMPERATURE` 保留回归点已在 `tests/test_system_config_service.py` 中存在（既有用例，无额外新增）。
-- [文档] 补充严格 temperature 兼容语义的官方来源、运行时依赖约束与 `LLM_TEMPERATURE` 回退/不回写路径说明。
-- [改进] 告警中心 P2 新增后台评估 worker，schedule 模式可同时评估持久化 active rules 与 legacy JSON 规则，并记录 `triggered` / `skipped` / `degraded` / `failed` 最小评估历史。
-- [修复] 统一 Windows 桌面安装包与自动更新元数据文件名，避免 Release 中出现重复安装包并阻断 `latest.yml` 指向不存在附件。
-- [修复] 桌面端启动 WebUI 时为入口页增加 no-cache 响应头和版本化 cache-busting URL，避免安装新版后 Electron 继续复用旧 WebUI 缓存。
-- [文档] 扩展 Web 设置页帮助信息，补充 Agent 模型、LiteLLM fallback/config/temperature 与 LLM 渠道编辑器字段说明。
-- [新功能] 新增 Finnhub / AlphaVantage 美股数据源适配器，扩展美股日线 failover 链至 Finnhub(P2) -> AlphaVantage(P3) -> Yfinance(P4) -> Longbridge(P5)。
-- [修复] AlphaVantage 适配器在 newest-first 原始数据下 pct_chg 计算错误：改为先按日期升序排序再计算涨跌幅。
-- [修复] 美股日线路由未包含 Finnhub / AlphaVantage：扩展 `get_daily_data()` 美股分支的 source_order 以覆盖新增数据源。
-- [文档] 新增小白客户端安装与配置指南，说明桌面客户端下载、基础模型配置、新闻源配置和常见问题。
-- [新功能] Web 首页个股分析支持选择策略。
-- [新功能] 新增热点题材、事件驱动、成长质量和预期重估策略。
-- [新功能] Web 新增告警中心 MVP，支持现有三类告警规则的创建、列表、启停、删除、dry-run 测试和触发历史查看。
-- [新功能] 告警中心 P4 记录真实通知尝试结果，并为持久化规则新增可查询的业务冷却状态。
-- [修复] 持仓快照在当天刷新时优先使用实时行情重算当前价、市值与未实现盈亏，避免复用旧收盘价导致页面刷新后盈亏不变。
-- [新功能] 告警中心 P5 支持 MA、RSI、MACD、KDJ、CCI 日线技术指标规则，并复用现有触发历史、通知结果和持久化冷却链路。
-- [改进] 将 RSI 计算口径从 SMA 调整为 Wilder's EMA / SMMA，统一分析报告与告警阈值口径。
-- [改进] 大盘复盘将红绿灯与盘面温度合并为终端友好的盘面信号分数，移除色块进度条与重复温度行。
-- [改进] 大盘复盘近三日市场线索改为标题与来源链接列表，移除摘要片段，降低中英混排和误读风险。
-- [修复] 告警中心对 DB 持久化规则的同一数据点 `triggered` 历史做 best-effort 去重，避免重复轮询刷出语义相同的触发记录。
-- [修复] 修复 DatabaseManager 冷启动并发初始化竞态，避免首批并发请求偶发拿到半初始化数据库实例。
-- [修复] 为 OpenAI-compatible 渠道补充 MiMo / LiteLLM fallback pricing 注册路径：在 Tool / Analyzer / 系统配置联调测试路径复用 `register_fallback_model_pricing`，避免未知模型因缺失计费信息导致调用失败。
-- [文档] 同步说明 fallback pricing 注册与 MiniMax / 小米 MiMo 兼容配置边界，补充相关 provider 示例与回退触发条件，限定为本次 #1282 修复范围内更新。
-- [修复] 个股报告筹码分布缺失或返回占位值时归一为单条降级说明，避免逐字段重复“数据缺失，无法判断”。
-- [文档] 补充 Issue #1367 兼容边界：本轮仅覆盖筹码分布缺失与相关资金流提示文案归一，不变更模型/provider/Base URL/LiteLLM 运行时配置清理语义；回退为恢复 `.env` 或回滚本次变更。
-- [改进] 个股新闻检索新增可解释相关度评分与 direct_company_news / sector_related_news / macro_market_news 分层，优先展示命中股票代码或公司主体的新闻。
-- [修复] 收紧港股新闻相关度中的裸短码匹配，避免将指数点数等普通数字误判为目标股票代码。
-- [修复] 修复个股新闻相关度中美股小写 ticker 后缀识别与 A/HK 弱相关新闻中文优先比较顺序。
-- [文档] Issue #1356 的结构化检测告警为既有上下文误报：本次仅调整个股新闻检索的相关度评分与分层排序（`direct_company_news` / `sector_related_news` / `macro_market_news`），不触及模型名、provider、LiteLLM 参数、Base URL 及运行时配置清理/迁移语义；无配置回写副作用，回退路径为回滚本次提交。
+- [修复] 归一腾讯实时行情成交量为股口径，避免量能变化倍数被放大并误导分析报告。
+- [改进] Web 路由页面改为按需加载，降低首包体积并增加路由加载失败恢复提示。
+- [修复] Docker 默认部署移除 `.env` 单文件挂载，避免 WebUI 保存配置时因 `os.replace` 更新挂载点触发 `Device or resource busy`。
+- [改进] Web 完整报告 Markdown 抽屉改为按需加载。
+- [改进] 新增市场阶段推断基线并明确盘前、盘中、午休、临近收盘、盘后和非交易日语义。
+- [新功能] 告警中心新增 P7 大盘红绿灯结构化规则，支持 `market_light_status` 与 `market_light_score_drop` 并复用现有 worker、触发历史、通知和冷却链路。
+- [修复] 修复 `STOCK_LIST` 使用裸 A 股代码时 Baostock 等数据源 fallback 的内部格式转换，保持用户配置继续使用 6 位股票编号。
+- [文档] 补齐告警中心 P8 文档与配置收口说明，明确 legacy JSON、高级规则、Web/API、Docker、GitHub Actions 与 Desktop 边界。
+- [修复] Windows 桌面端自动更新在用户确认重启安装后改为静默执行安装器，并在停止内置后端后清理进程引用，降低安装器提示“每日股票分析无法关闭”的概率。
+- [文档] 说明本次桌面修复仅覆盖 Windows NSIS 更新安装链路与后端进程生命周期清理；未改动设置项保存/模型运行时清理语义。移除此前误入的 `docker/Dockerfile` `npm registry` 变更，恢复部署构建与更新修复的职责隔离。
+- [修复] macOS 桌面端将运行时配置迁移到用户数据目录，并在旧 `.app` 包内文件仍可访问时迁移 `.env`、数据库和日志，避免后续替换升级后重新配置。
+- [改进] 新增运行态市场阶段上下文构造与降级测试。
+- [文档] 新增 AnalysisContextPack P0 上下文盘点，明确字段质量状态、现有状态映射和首版 pack 边界。
+
+## [3.18.0] - 2026-05-21
+
+### 发布亮点
+
+- feat: 告警中心扩展到 P2-P6，补齐后台评估、真实通知结果、业务冷却、技术指标规则，以及自选股 / 持仓 / 账户联动规则。
+- feat: 个股分析支持策略选择，新增热点题材、事件驱动、成长质量和预期重估策略，并为 HK/US 报告补充基本面、财务摘要、股东回报和关联板块。
+- feat: 新增 Finnhub / AlphaVantage 美股数据源适配器，扩展美股日线 failover 链，提升美股行情获取韧性。
+- fix: 修复桌面端发布打包、分析状态接口、AlphaVantage 涨跌幅、持仓实时估值、告警历史去重、数据库冷启动和 fallback pricing 注册等稳定性问题。
+
+### What's Changed
+
+- feat: Add alert-center P2-P6, Web strategy selection, HK/US fundamental context, static-report financial sections, and Finnhub / AlphaVantage US-market fallback.
+- improve: Refine LiteLLM parameter recovery, yfinance currency/dividend handling, RSI calculation, market-review presentation, stock-news relevance ranking, and report table rendering.
+- fix: Harden desktop packaging/update assets, completed analysis-status responses, AlphaVantage pct_chg routing, portfolio realtime snapshots, alert trigger dedupe, DatabaseManager cold start, and fallback pricing registration.
+- docs/tests: Add beginner setup and settings-help docs, document compatibility/rollback boundaries, and extend regression coverage for API, alert, packaging, and release paths.
 
 ## [3.17.1] - 2026-05-16
 
@@ -1508,7 +1505,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-[Unreleased]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.17.1...HEAD
+[Unreleased]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.18.0...HEAD
+[3.18.0]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.17.1...v3.18.0
 [3.17.1]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.17.0...v3.17.1
 [3.17.0]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.16.0...v3.17.0
 [3.16.0]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.15.0...v3.16.0

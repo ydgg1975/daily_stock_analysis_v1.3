@@ -366,7 +366,7 @@ daily_stock_analysis/
 > 行为说明：
 > - A 股：按 `valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards` 聚合能力返回；
 > - ETF：返回可得项，缺失能力标记为 `not_supported`，整体不影响原流程；
-> - 美股/港股：返回 `not_supported` 兜底块；
+> - 美股/港股：通过 yfinance 适配器返回 `valuation/growth/earnings/belong_boards`（来源 `info.sector`/`industry`），`institution/capital_flow/dragon_tiger/boards` 暂无对应数据源仍标记 `not_supported`；yfinance 不可用或字段缺失时整体降级回 `not_supported`，仍走 fail-open；
 > - 任何异常走 fail-open，仅记录错误，不影响技术面/新闻/筹码主链路。
 > - 配置 `TICKFLOW_API_KEY` 后，仅 A 股大盘复盘会额外优先尝试 TickFlow 的主要指数行情；若当前套餐支持标的池查询，市场涨跌统计也会优先尝试 TickFlow。个股链路和实时行情优先级不变。
 > - TickFlow 能力按套餐权限分层：有限权限套餐仍可使用主指数查询；支持 `CN_Equity_A` 标的池查询的套餐才会启用 TickFlow 市场统计。
@@ -374,10 +374,10 @@ daily_stock_analysis/
 > - TickFlow 实际返回的 `change_pct` / `amplitude` 为比例值；系统已在接入层统一转换为百分比值，确保与现有数据源字段语义一致。
 > - A 股大盘复盘报告采用盘后工作台式结构：固定包含盘面信号、指数明细、板块 Top 表、近三日市场线索、明日交易计划和风险提示；盘面信号以 `66/100（偏暖，可进攻）` 这类纯文本分数表达，避免色块进度条在不同终端显示不一致；近三日市场线索只列标题、来源和链接，不再展示搜索摘要片段；若部分数据源缺失，则保留可用区块并在对应位置降级展示。
 > - 字段契约：
->   - `fundamental_context.belong_boards` = 个股关联板块列表（当前仅 A 股写入；无数据时为 `[]`）；
->   - `fundamental_context.boards.data` = `sector_rankings`（板块涨跌榜，结构 `{top, bottom}`）；
->   - `fundamental_context.earnings.data.financial_report` = 财报摘要（报告期、营收、归母净利润、经营现金流、ROE）；
->   - `fundamental_context.earnings.data.dividend` = 分红指标（仅现金分红税前口径，含 `events`、`ttm_cash_dividend_per_share`、`ttm_dividend_yield_pct`）；
+>   - `fundamental_context.belong_boards` = 个股关联板块列表；A 股从 AkShare 板块名单写入，美股/港股从 yfinance `info.sector` / `info.industry` 写入，无数据时为 `[]`；
+>   - `fundamental_context.boards.data` = `sector_rankings`（板块涨跌榜，结构 `{top, bottom}`，HK/US 当前不提供）；
+>   - `fundamental_context.earnings.data.financial_report` = 财报摘要（报告期、营收、归母净利润、经营现金流、ROE，及 `currency` 来源 `info.financialCurrency`，HK ADR 常见为 CNY）；
+>   - `fundamental_context.earnings.data.dividend` = 分红指标（仅现金分红税前口径，含 `events`、`ttm_cash_dividend_per_share`、`ttm_dividend_yield_pct`、`currency`）。`currency` 独立读取自 `info.currency`，与 `financial_report.currency` 可能不同（HK ADR 财报 CNY、分红 HKD）；TTM yield 默认按 `ttm_cash / latest_price * 100`（同币种）即时重算，仅在 TTM cash 或 latest price 缺失时回退到 yfinance `trailingAnnualDividendYield` 或 `dividendYield`；
 >   - `get_stock_info.belong_boards` = 个股所属板块列表；
 >   - `get_stock_info.boards` 为兼容别名，值与 `belong_boards` 相同（未来仅在大版本考虑移除）；
 >   - `get_stock_info.sector_rankings` 与 `fundamental_context.boards.data` 保持一致。
@@ -454,7 +454,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   zhulinsen/daily_stock_analysis:latest \
   python main.py --serve-only --host 0.0.0.0 --port 8000
 
@@ -465,7 +464,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   zhulinsen/daily_stock_analysis:latest
 ```
 
@@ -499,7 +497,7 @@ x-common: &common
     - ../data:/app/data
     - ../logs:/app/logs
     - ../reports:/app/reports
-    - ../.env:/app/.env
+    - ../strategies:/app/strategies:ro
 
 services:
   # 定时任务模式
@@ -511,19 +509,20 @@ services:
   server:
     <<: *common
     container_name: stock-server
-    command: ["python", "main.py", "--serve-only", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["python", "main.py", "--serve-only", "--host", "0.0.0.0", "--port", "${API_PORT:-8000}"]
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
 ```
 
 ### `.env` 与数据目录映射说明
 
-无论你使用 `docker run` 还是 Compose，建议同时保留下面两种映射：
+无论你使用 `docker run` 还是 Compose，都需要区分启动环境变量注入和运行时文件写入：
 
 - 环境变量注入：`--env-file .env` 或 Compose 的 `env_file`
   作用：把 `.env` 中的键值作为容器启动时的环境变量传入 Python 进程。
-- 文件映射：`-v "$(pwd)/.env:/app/.env"` 或 Compose 的 `../.env:/app/.env`
-  作用：让容器内的 Web 设置页和后端读写同一份 `.env` 文件，修改后可持久化到宿主机。
+- 运行时配置写入：不要把宿主机 `.env` 作为单文件 bind mount 覆盖容器内 `.env` 路径。Docker 会把单文件挂载目标作为 mount point，配置保存时的 `os.replace()` 原子更新可能失败并报 `Device or resource busy`，回退写入也可能受权限限制。
+
+默认 Compose 和 `docker run` 示例仅使用 `env_file` / `--env-file` 注入启动配置，不再把宿主机 `.env` 单文件挂载进容器。WebUI 中保存的运行时配置默认写入容器内部配置文件，不等同于回写宿主机 `.env`；删除或重建容器后仍以启动时注入的 `.env` 为准。若需要持久化运行时配置，请将写入目标放到可写数据卷中（例如通过 `ENV_FILE=/app/data/runtime.env` 指向 `data` volume 中的文件），不要使用 `.env` 单文件 bind mount。
 
 推荐同时映射这几个目录：
 
@@ -568,7 +567,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   stock-analysis \
   python main.py --serve-only --host 0.0.0.0 --port 8000
 ```
@@ -703,6 +701,43 @@ docker run -e SCHEDULE_ENABLED=true -e SCHEDULE_RUN_IMMEDIATELY=false ...
 - 非交易日（周末 / 节假日）运行时，会回退到最近一个交易日检查本地数据；若该交易日数据已存在，则跳过重复抓取，否则继续补数
 - 交易日盘中或收盘前运行时，会以上一个已完成交易日作为复用目标；交易日收盘后运行时，当日数据已存在则可直接跳过，不存在则继续抓取
 - 覆盖方式：`TRADING_DAY_CHECK_ENABLED=false` 或 命令行 `--force-run`
+
+#### 市场阶段基线（Issue #1386 P0）
+
+P0 只新增内部市场阶段推断基线，不改变现有每日收盘报告、交易日跳过、断点续传、API、Web、Bot、Agent 或 GitHub Actions 默认行为。阶段推断用于后续 P1+ 的上下文契约准备；未安装 `exchange-calendars` 或日历异常时，阶段返回 `unknown`，但现有交易日判断和最新可复用交易日逻辑仍保持原来的 fail-open 行为。
+
+阶段枚举基于 regular session 语义：
+
+| 阶段 | 含义 |
+| --- | --- |
+| `premarket` | 常规交易时段开盘前；不代表已经获取盘前扩展时段行情 |
+| `intraday` | 常规交易时段内，且不处于午休或临近收盘窗口 |
+| `lunch_break` | 市场日历提供的午间休市窗口；无午休市场不会进入此阶段 |
+| `closing_auction` | 临近收盘启发式窗口：A 股 3 分钟、港股 10 分钟、美股 5 分钟；不代表完整交易所竞价制度 |
+| `postmarket` | 常规交易时段收盘后；不代表已经获取盘后扩展时段行情 |
+| `non_trading` | 当前市场本地日期不是交易日 |
+| `unknown` | 未知市场、日历不可用或日历异常，无法可靠推断阶段 |
+
+当前入口现状：
+
+- 普通个股分析、Agent 分析、Web 手动分析、Bot `/analyze` / `/ask`、schedule、GitHub Actions 仍沿用既有分析路径和盘后复盘口径，不会因为 P0 阶段基线自动切换 Prompt 或输出结构。
+- 大盘复盘仍按 `MARKET_REVIEW_REGION` 与交易日过滤运行，不消费市场阶段标签。
+- 跨市场混合自选股应按每个 symbol 自身市场分别推断阶段；聚合报告展示“多市场阶段不一致”留给 P1+。
+
+已知问题基线：
+
+- 盘中触发时，报告仍可能把尚未收盘的日内行情写成完整交易日复盘。
+- 输出仍可能偏向“今日走势复盘 / 明日关注”，而不是“当前盘中下一步观察”。
+- 实时行情时间戳、数据源、缓存和 stale 状态还没有统一进入阶段上下文。
+- 午间休市、临近收盘、非交易日强制运行等场景还没有被 Prompt 和报告结构显式表达。
+
+P0 不做：不接入 pipeline / Agent / API / Web / Bot，不修改报告 schema，不改告警 technical indicator 的 partial bar 判断，也不新增配置项。
+
+#### 运行态市场阶段上下文（Issue #1386 P1a）
+
+P1a 在普通个股分析 pipeline、legacy Agent context 和 multi-agent `ctx.meta` 中构造并传递内部 `market_phase_context`。该上下文包含市场、阶段、市场本地日期、最新可复用日线日期、交易日/开市/partial bar 三态标记、开收盘分钟数 best-effort 估算，以及 `unknown_market`、`calendar_unavailable`、`calendar_error` 等降级 warning code。
+
+P1a 仍不改变 Prompt 文案、API/Web/Bot 参数、报告结构、history/task status 稳定 metadata 或 quote freshness/data quality 语义；普通分析 history snapshot 和 Agent history snapshot 会剥离该运行态字段。后续 P1b 再定义可持久化 metadata 与任务状态展示契约。
 
 #### 使用 Crontab
 
@@ -1316,7 +1351,7 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 
 ## Agent 事件告警监控
 
-`AGENT_EVENT_MONITOR_ENABLED=true` 后，schedule 模式会按 `AGENT_EVENT_MONITOR_INTERVAL_MINUTES` 运行告警 worker。worker 每轮读取 Alert API 创建并启用的持久化规则，同时继续兼容 `AGENT_EVENT_ALERT_RULES_JSON` 中的 legacy 规则；触发后仍发送到现有通知渠道。Alert API / Web 持久化规则支持实时价、涨跌幅、成交量和日线技术指标；legacy JSON 仍仅支持三类基础规则。
+`AGENT_EVENT_MONITOR_ENABLED=true` 后，schedule 模式会按 `AGENT_EVENT_MONITOR_INTERVAL_MINUTES` 运行告警 worker。worker 每轮读取 Alert API 创建并启用的持久化规则，同时继续兼容 `AGENT_EVENT_ALERT_RULES_JSON` 中的 legacy 规则；触发后仍发送到现有通知渠道。Alert API / Web 持久化规则支持实时价、涨跌幅、成交量、日线技术指标、`watchlist`、`portfolio_holdings`、`portfolio_account`，以及 `market` 大盘红绿灯目标；legacy JSON 仍仅支持三类基础规则。
 
 > 兼容与迁移说明：本节记录当前事件告警规则（含 `price_change_percent`）运行时行为，未变更模型名、provider、Base URL、LiteLLM、`OPENAI_*`、`DEEPSEEK_*`、`GEMINI_*` 等外部模型/API 配置语义。legacy JSON 不会被自动迁移、删除或改写；若需回退，删除或关闭 `AGENT_EVENT_MONITOR_ENABLED` 即可停止后台告警 worker。
 
@@ -1330,6 +1365,12 @@ A: 检查是否启用了 Actions，以及 cron 表达式是否正确（注意是
 | `macd_cross` | `bullish_cross` / `bearish_cross` | `fast_period`、`slow_period`、`signal_period` | DIF/DEA 边缘金叉或死叉 |
 | `kdj_cross` | `bullish_cross` / `bearish_cross` | `period`、`k_period`、`d_period` | K/D 边缘金叉或死叉 |
 | `cci_threshold` | `above` / `below` | `period`、`threshold` | CCI 边缘上穿或下穿阈值 |
+| `portfolio_stop_loss` | `mode=near|breach` | - | 账户级止损接近或触发 |
+| `portfolio_concentration` | - | - | 账户级 symbol 集中度 |
+| `portfolio_drawdown` | - | - | 账户级最大回撤告警 |
+| `portfolio_price_stale` | - | - | 持仓价格 stale 或 missing |
+| `market_light_status` | - | `statuses` | 当前大盘红绿灯状态命中 `red/yellow` 列表 |
+| `market_light_score_drop` | - | `min_drop` | 相比上一交易日 Market Light score 下降达到阈值 |
 
 示例：
 
@@ -1341,7 +1382,7 @@ AGENT_EVENT_ALERT_RULES_JSON=[{"stock_code":"600519","alert_type":"price_cross",
 
 worker 会把 `triggered`、`skipped`、`degraded`、`failed` 写入 `alert_triggers` 作为评估历史；正常未触发不写历史。DB 持久化规则的 `triggered` 历史按 `rule_id + target + data_source + data_timestamp` 对同一数据点做 best-effort 去重，重复命中会复用最早一条触发记录，`data_timestamp` 缺失时不去重。真实触发后会把每个通知渠道的 attempt 写入 `alert_notifications`，并为 Alert API 创建的持久化规则写入 `alert_cooldowns` 业务冷却状态；若读取持久化冷却失败，worker 会临时使用进程内 fingerprint 防止 DB 异常期间重复推送。legacy `AGENT_EVENT_ALERT_RULES_JSON` 规则继续使用进程内 fingerprint 抑制，不写持久化冷却；通知基础设施的 `notification_noise.py` 降噪仍独立生效。Web 规则列表使用后端返回的 `cooldown_active` 判断冷却状态，避免浏览器本地时区解析影响展示。
 
-技术指标规则只使用日线 close 的边缘触发，partial bar 处理是服务器本地时区 + 16:00 的启发式，不做市场日历精确判定。WebUI 的“告警”页面可以管理持久化规则、执行一次性 dry-run 测试，并查看触发历史、通知尝试结果和只读冷却状态；详细边界见 [实时告警中心](alerts.md)。
+技术指标规则只使用日线 close 的边缘触发，partial bar 处理是服务器本地时区 + 16:00 的启发式，不做市场日历精确判定。`watchlist` 每轮刷新 `STOCK_LIST` 后展开，`portfolio_holdings` 从持仓快照的非零持仓按 symbol 去重展开，`portfolio_account` 复用持仓风险服务做账户级聚合评估。`market` 规则的 target 仅支持 `cn|hk|us`，使用结构化 `MarketLightSnapshot`；`trade_date` 来自当次 market overview，`data_quality=unavailable` 会跳过触发，非交易日会被交易日 gate 跳过，`market_light_score_drop` 只比较跨交易日 score。WebUI 的“告警”页面可以管理持久化规则、执行一次性 dry-run 测试，并查看触发历史、通知尝试结果和只读冷却状态；批量规则的列表冷却状态是父规则摘要，子目标冷却以触发历史为准。详细边界见 [实时告警中心](alerts.md)。
 
 ## 持仓管理说明
 

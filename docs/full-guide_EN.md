@@ -314,11 +314,14 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 > **Behavior Notes:**
 > - **A-shares**: Returns aggregated capabilities by `valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards`.
 > - **ETFs**: Returns available items, marks missing capabilities as `not_supported`, and does not affect the original flow overall.
-> - **US/HK stocks**: Returns `not_supported` fallback block.
+> - **US/HK stocks**: Returns `valuation/growth/earnings/belong_boards` (sourced from `info.sector`/`info.industry`) via the yfinance adapter; `institution/capital_flow/dragon_tiger/boards` stay `not_supported` because no offshore data feed exists today. Falls back to a full `not_supported` block if yfinance is unavailable or returns empty payloads. Still fail-open.
 > - Any exception uses fail-open logic, only logs errors without affecting the main technical/news/chip pipeline.
 > - **Field contracts**:
->   - `fundamental_context.belong_boards` = related board list for the stock (currently populated for A-shares only; `[]` when unavailable);
->   - `fundamental_context.boards.data` = `sector_rankings` (sector rise/fall leaderboard, structure `{top, bottom}`);
+>   - `fundamental_context.belong_boards` = related board list for the stock; A-shares are sourced from AkShare board membership, US/HK from yfinance `info.sector`/`info.industry`, `[]` when unavailable;
+>   - `fundamental_context.boards.data` = `sector_rankings` (sector rise/fall leaderboard, structure `{top, bottom}`; not provided for US/HK today);
+>   - `fundamental_context.earnings.data.financial_report.currency` = financial statement currency (`info.financialCurrency`; HK ADRs commonly report CNY here);
+>   - `fundamental_context.earnings.data.dividend.currency` = trading / dividend currency (`info.currency`; HK ADRs use HKD here even when the statement currency is CNY). The renderer reads each block's own currency rather than assuming a single global currency;
+>   - `fundamental_context.earnings.data.dividend.ttm_dividend_yield_pct` = `ttm_cash_dividend_per_share / latest_price * 100`, both sides in the trading currency. Falls back to `info.trailingAnnualDividendYield` (decimal) or `info.dividendYield` (already-percent passthrough) only when TTM cash or latest price is unavailable;
 >   - `get_stock_info.belong_boards` = list of sectors the individual stock belongs to;
 >   - `get_stock_info.boards` is a compatibility alias, value is identical to `belong_boards` (removal considered only in major version updates);
 >   - `get_stock_info.sector_rankings` stays consistent with `fundamental_context.boards.data`.
@@ -401,7 +404,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   zhulinsen/daily_stock_analysis:latest \
   python main.py --serve-only --host 0.0.0.0 --port 8000
 
@@ -412,7 +414,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   zhulinsen/daily_stock_analysis:latest
 ```
 
@@ -446,7 +447,6 @@ x-common: &common
     - ../data:/app/data
     - ../logs:/app/logs
     - ../reports:/app/reports
-    - ../.env:/app/.env
     - ../strategies:/app/strategies:ro
 
 services:
@@ -466,12 +466,13 @@ services:
 
 ### `.env` and Volume Mapping
 
-For both `docker run` and Compose, keep these two layers in mind:
+For both `docker run` and Compose, keep startup environment injection separate from runtime file writes:
 
 - Environment injection: `--env-file .env` or Compose `env_file`
   This passes key/value pairs from `.env` into the container process environment.
-- File mapping: `-v "$(pwd)/.env:/app/.env"` or Compose `../.env:/app/.env`
-  This mounts the same `.env` file into the container so the Web settings page and backend read/write the same persisted config file.
+- Runtime config writes: do not bind-mount the host `.env` as a single file over the container's `.env` path. Docker treats the target as a mount point, so the `os.replace()` atomic update used during config saves can fail with `Device or resource busy`; fallback in-place writes can also fail on permissions.
+
+The default Compose and `docker run` examples only use `env_file` / `--env-file` for startup config injection and no longer mount the host `.env` file into the container. Runtime config saved from the WebUI is written to the container-local config file by default and is not the same as writing back to the host `.env`; after deleting or recreating the container, startup still uses the injected `.env` file. If you need persistent runtime config, point `ENV_FILE` at a writable data volume file such as `/app/data/runtime.env` instead of using a single-file `.env` bind mount.
 
 Recommended host mappings:
 
@@ -516,7 +517,6 @@ docker run -d \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/logs:/app/logs" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/.env:/app/.env" \
   stock-analysis \
   python main.py --serve-only --host 0.0.0.0 --port 8000
 ```
@@ -589,6 +589,43 @@ crontab -e
 > Note: Scheduled mode reloads the saved `STOCK_LIST` before each run. If you also pass `--stocks`, it will not pin future scheduled executions to the startup snapshot; use a normal one-off run when you want to analyze a temporary stock list.
 >
 > When the built-in scheduler is started via `python main.py --schedule`, `python main.py --serve --schedule`, or an equivalent local mode, saving a new `SCHEDULE_TIME` from the WebUI will rebind the daily job on the next scheduler poll without restarting the process. The previous trigger time is removed instead of being kept alongside the new one.
+
+### Market Phase Baseline (Issue #1386 P0)
+
+P0 only adds an internal market-phase inference baseline. It does not change the existing daily post-market report, trading-day skip behavior, effective trading date resolution, API, Web, Bot, Agent, or GitHub Actions defaults. The phase inference is preparation for the P1+ context contract. If `exchange-calendars` is unavailable or the calendar lookup fails, the phase returns `unknown`; the existing trading-day filter and effective-date helpers keep their current fail-open behavior.
+
+The phase labels describe regular-session state:
+
+| Phase | Meaning |
+| --- | --- |
+| `premarket` | Before the regular session opens; does not mean extended-hours quotes were fetched |
+| `intraday` | Inside the regular session and outside lunch break or the near-close window |
+| `lunch_break` | Lunch break window supplied by the market calendar; markets without lunch breaks skip this phase |
+| `closing_auction` | Near-close heuristic window: 3 minutes for CN, 10 minutes for HK, and 5 minutes for US; this is not a full exchange auction model |
+| `postmarket` | After the regular session closes; does not mean post-market quotes were fetched |
+| `non_trading` | The current market-local date is not a trading session |
+| `unknown` | Unknown market, calendar unavailable, or calendar error, so the phase cannot be inferred reliably |
+
+Current entrypoint baseline:
+
+- Regular stock analysis, Agent analysis, Web manual analysis, Bot `/analyze` / `/ask`, schedule mode, and GitHub Actions still use the existing analysis path and post-market recap wording. P0 does not switch prompts or output schema automatically.
+- Market review still follows `MARKET_REVIEW_REGION` and trading-day filtering; it does not consume market phase labels.
+- Mixed-market watchlists should infer phase per symbol market. Displaying inconsistent phases in aggregate reports is left to P1+.
+
+Known problem baseline:
+
+- Intraday runs can still describe unfinished intraday data like a complete daily recap.
+- Output may still focus on "today's recap / watch tomorrow" instead of current intraday observation.
+- Quote timestamp, source, cache, and stale state are not yet unified into a phase context.
+- Lunch break, near-close, and forced non-trading-day runs are not yet explicit in prompts or report structure.
+
+P0 does not connect this baseline to pipeline / Agent / API / Web / Bot, does not change report schemas, does not change alert technical-indicator partial-bar handling, and does not add configuration keys.
+
+### Runtime Market Phase Context (Issue #1386 P1a)
+
+P1a constructs and passes an internal `market_phase_context` through the regular stock-analysis pipeline, the legacy Agent context, and multi-agent `ctx.meta`. The context includes market, phase, market-local date, effective daily-bar date, trading-day / market-open / partial-bar tristate flags, best-effort open/close minute estimates, and degradation warning codes such as `unknown_market`, `calendar_unavailable`, and `calendar_error`.
+
+P1a still does not change prompt wording, API/Web/Bot parameters, report schemas, stable history/task-status metadata, or quote freshness/data quality semantics. Regular history snapshots and Agent history snapshots strip this runtime-only field. P1b is left to define persistent metadata and task-status display contracts.
 
 ---
 
@@ -1160,7 +1197,7 @@ A: Check if Actions is enabled, and if cron expression is correct (note it's UTC
 
 ## Agent Event Monitor
 
-When `AGENT_EVENT_MONITOR_ENABLED=true`, schedule mode runs the alert worker every `AGENT_EVENT_MONITOR_INTERVAL_MINUTES` minutes. The worker reads enabled rules created through the Alert API and continues to support legacy rules in `AGENT_EVENT_ALERT_RULES_JSON`; triggered alerts still go through the existing notification channels. Alert API / Web persisted rules support price, change-percent, volume, and daily technical indicator rules; legacy JSON still supports only the three basic rule types.
+When `AGENT_EVENT_MONITOR_ENABLED=true`, schedule mode runs the alert worker every `AGENT_EVENT_MONITOR_INTERVAL_MINUTES` minutes. The worker reads enabled rules created through the Alert API and continues to support legacy rules in `AGENT_EVENT_ALERT_RULES_JSON`; triggered alerts still go through the existing notification channels. Alert API / Web persisted rules support price, change-percent, volume, daily technical indicators, `watchlist`, `portfolio_holdings`, `portfolio_account`, and `market` Market Light targets; legacy JSON still supports only the three basic rule types.
 
 > Compatibility and rollback note: this section documents current Event Monitor rule behavior (including `price_change_percent`) and does not change external model/provider API semantics such as model names, providers, Base URL, LiteLLM, `OPENAI_*`, `DEEPSEEK_*`, or `GEMINI_*` configuration.
 > Legacy JSON is not automatically migrated, deleted, or rewritten. To roll back the background alert worker, clear or disable `AGENT_EVENT_MONITOR_ENABLED`/related rule config.
@@ -1175,6 +1212,12 @@ When `AGENT_EVENT_MONITOR_ENABLED=true`, schedule mode runs the alert worker eve
 | `macd_cross` | `bullish_cross` / `bearish_cross` | `fast_period`, `slow_period`, `signal_period` | DIF/DEA edge golden/death cross |
 | `kdj_cross` | `bullish_cross` / `bearish_cross` | `period`, `k_period`, `d_period` | K/D edge golden/death cross |
 | `cci_threshold` | `above` / `below` | `period`, `threshold` | CCI edge-crosses a threshold |
+| `portfolio_stop_loss` | `mode=near|breach` | - | Account-level stop-loss proximity or breach |
+| `portfolio_concentration` | - | - | Account-level symbol concentration |
+| `portfolio_drawdown` | - | - | Account-level maximum drawdown alert |
+| `portfolio_price_stale` | - | - | Stale or missing portfolio prices |
+| `market_light_status` | - | `statuses` | Current Market Light status matches the configured `red/yellow` list |
+| `market_light_score_drop` | - | `min_drop` | Market Light score drops from the previous trading day by at least the threshold |
 
 Example:
 
@@ -1186,7 +1229,7 @@ AGENT_EVENT_ALERT_RULES_JSON=[{"stock_code":"600519","alert_type":"price_cross",
 
 The worker writes `triggered`, `skipped`, `degraded`, and `failed` rows to `alert_triggers` as evaluation history; normal non-triggered checks do not write history. For DB-persisted rules, `triggered` history is best-effort deduplicated by `rule_id + target + data_source + data_timestamp`: repeated hits for the same data point reuse the earliest trigger row, while records without `data_timestamp` are not deduplicated. Real triggers write per-channel attempts to `alert_notifications`, and Alert API persisted rules write business cooldown state to `alert_cooldowns`; if the persisted cooldown read fails, the worker temporarily falls back to the in-process fingerprint guard to avoid repeated notifications during the DB failure. Legacy `AGENT_EVENT_ALERT_RULES_JSON` rules continue to use the in-process fingerprint suppressor and do not write persisted cooldown state; the notification infrastructure `notification_noise.py` guard remains independent. The Web rule list uses the backend-provided `cooldown_active` flag instead of browser-local timezone parsing to decide whether a rule is cooling down.
 
-Technical indicator rules use daily-close edge triggers only. Partial-bar handling is a server-local-time + 16:00 heuristic and does not implement market-calendar precision. The WebUI "Alerts" page can manage persisted rules, run one-shot dry-run tests, and view trigger history, notification attempts, and read-only cooldown state. See [Real-Time Alert Center](alerts.md) for detailed boundaries.
+Technical indicator rules use daily-close edge triggers only. Partial-bar handling is a server-local-time + 16:00 heuristic and does not implement market-calendar precision. `watchlist` rules refresh and expand `STOCK_LIST` each worker run, `portfolio_holdings` expands non-zero snapshot positions with symbol de-duplication, and `portfolio_account` reuses the portfolio risk service for account-level aggregate evaluation. `market` rules accept only `cn|hk|us` targets and use structured `MarketLightSnapshot` data; `trade_date` comes from the current market overview, `data_quality=unavailable` skips triggering, non-trading days are skipped by the trading-day gate, and `market_light_score_drop` compares score across trading days only. The WebUI "Alerts" page can manage persisted rules, run one-shot dry-run tests, and view trigger history, notification attempts, and read-only cooldown state; cooldown on batch rules is a parent-rule summary, while child-target cooldown details are visible through trigger history. See [Real-Time Alert Center](alerts.md) for detailed boundaries.
 
 ---
 
