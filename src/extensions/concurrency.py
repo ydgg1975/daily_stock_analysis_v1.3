@@ -30,6 +30,9 @@ class InMemoryConcurrencyGuard:
 
     def acquire(self, action: ActionSpec, context: ActionContext) -> ConcurrencyDecision:
         """Try to reserve an execution slot for an action."""
+        if action.dedupe_strategy == "idempotency_key" and not context.idempotency_key:
+            return ConcurrencyDecision(allowed=False, reason="missing_idempotency_key")
+
         dedupe_key = self._build_dedupe_key(action, context)
         with self._lock:
             if dedupe_key and dedupe_key in self._dedupe_runs:

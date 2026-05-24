@@ -228,6 +228,17 @@ def test_runtime_blocks_unsupported_caller():
     assert result.error_code == ExtensionErrorCode.CALLER_NOT_ALLOWED.value
 
 
+def test_runtime_blocks_unsupported_caller_before_input_validation():
+    action = _echo_action(supported_callers=["web"])
+    runtime = ExtensionRuntime(ExtensionCatalog([action]))
+
+    result = runtime.execute("test.echo", {"message": 123, "extra": "nope"}, caller="agent")
+
+    assert result.status == ExtensionStatus.FAILED.value
+    assert result.error_code == ExtensionErrorCode.CALLER_NOT_ALLOWED.value
+    assert result.diagnostics == {}
+
+
 def test_runtime_requires_confirmation_when_declared():
     action = _echo_action(requires_confirmation=True)
     runtime = ExtensionRuntime(ExtensionCatalog([action]))
@@ -417,6 +428,24 @@ def test_runtime_idempotency_key_dedupe_conflict():
 
     assert result.status == ExtensionStatus.COMPLETED.value
     assert result.result["nested_error"] == ExtensionErrorCode.IDEMPOTENCY_CONFLICT.value
+
+
+def test_runtime_requires_idempotency_key_for_idempotency_dedupe():
+    called = {"value": False}
+
+    def _handler(_context: ActionContext):
+        called["value"] = True
+        return {"unexpected": True}
+
+    action = _echo_action(handler=_handler, dedupe_strategy="idempotency_key")
+    runtime = ExtensionRuntime(ExtensionCatalog([action]))
+
+    result = runtime.execute("test.echo", {"message": "hello"}, caller="web")
+
+    assert result.status == ExtensionStatus.FAILED.value
+    assert result.error_code == ExtensionErrorCode.INPUT_INVALID.value
+    assert result.diagnostics["reason"] == "context.idempotency_key is required for this action."
+    assert called["value"] is False
 
 
 def test_runtime_concurrency_limit_blocks_reentrant_action_without_dedupe():

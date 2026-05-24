@@ -106,6 +106,18 @@ class ExtensionRuntime:
 
         self._record_started(action, action_context, created_at)
 
+        denied = self.permission_guard.check(action, action_context)
+        if denied:
+            result = self._error_result(
+                run_id,
+                action_id,
+                ExtensionStatus.FAILED.value,
+                denied,
+                created_at=created_at,
+            )
+            self._record_finished(result)
+            return result
+
         schema_error = self._validate_input(action, payload)
         if schema_error:
             error_code, diagnostics = schema_error
@@ -126,18 +138,6 @@ class ExtensionRuntime:
                 action_id,
                 ExtensionStatus.FAILED.value,
                 ExtensionErrorCode.CALL_DEPTH_EXCEEDED.value,
-                created_at=created_at,
-            )
-            self._record_finished(result)
-            return result
-
-        denied = self.permission_guard.check(action, action_context)
-        if denied:
-            result = self._error_result(
-                run_id,
-                action_id,
-                ExtensionStatus.FAILED.value,
-                denied,
                 created_at=created_at,
             )
             self._record_finished(result)
@@ -174,17 +174,25 @@ class ExtensionRuntime:
 
         decision = self.concurrency_guard.acquire(action, action_context)
         if not decision.allowed:
-            code = (
-                ExtensionErrorCode.IDEMPOTENCY_CONFLICT.value
-                if decision.reason == "duplicate"
-                else ExtensionErrorCode.CONCURRENCY_LIMIT.value
+            if decision.reason == "duplicate":
+                code = ExtensionErrorCode.IDEMPOTENCY_CONFLICT.value
+            elif decision.reason == "missing_idempotency_key":
+                code = ExtensionErrorCode.INPUT_INVALID.value
+            else:
+                code = ExtensionErrorCode.CONCURRENCY_LIMIT.value
+            diagnostics = (
+                {"reason": "context.idempotency_key is required for this action."}
+                if decision.reason == "missing_idempotency_key"
+                else {"existing_run_id": decision.existing_run_id}
+                if decision.existing_run_id
+                else {}
             )
             result = self._error_result(
                 run_id,
                 action_id,
                 ExtensionStatus.FAILED.value,
                 code,
-                diagnostics={"existing_run_id": decision.existing_run_id} if decision.existing_run_id else {},
+                diagnostics=diagnostics,
                 created_at=created_at,
             )
             self._record_finished(result)
