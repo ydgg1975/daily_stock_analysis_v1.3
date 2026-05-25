@@ -107,7 +107,7 @@ const fieldDescriptionMap: Record<string, string> = {
   SERPAPI_API_KEYS: '用于新闻检索的 SerpAPI 密钥，支持逗号分隔多个。',
   BRAVE_API_KEYS: '用于新闻检索的 Brave Search 密钥，支持逗号分隔多个。',
   OPENAI_WEB_SEARCH_API_KEYS: '用于模型联网搜索的 OpenAI 密钥，建议使用独立 Key，不要复用分析模型配置。',
-  OPENAI_WEB_SEARCH_MODEL: '用于联网搜索的 OpenAI 模型，默认 gpt-5.5。',
+  OPENAI_WEB_SEARCH_MODEL: '用于联网搜索的 OpenAI 模型，默认 gpt-5.5；可参考 OpenAI Models 与 Web Search 官方文档确认可用性。',
   OPENAI_WEB_SEARCH_BASE_URL: 'OpenAI Web Search API 地址，默认 https://api.openai.com/v1。',
   SEARXNG_BASE_URLS: 'SearXNG 自建实例地址（逗号分隔，无配额兜底，需在 settings.yml 启用 format: json）。',
   SEARXNG_PUBLIC_INSTANCES_ENABLED: '当未配置 SearXNG 自建实例时，自动从 searx.space 获取公共实例并轮询使用；设为 false 可禁用该默认行为。',
