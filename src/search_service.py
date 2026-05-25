@@ -1523,7 +1523,8 @@ class OpenAIWebSearchProvider(BaseSearchProvider):
             time_hint = MiniMaxSearchProvider._time_hint(days, is_chinese=has_cjk)
             prompt = (
                 f"Search the web for recent news about: {query} {time_hint}.\n"
-                f"Return at most {max_results} items as strict JSON with this schema:\n"
+                "Return only valid JSON. Do not wrap it in Markdown or add prose.\n"
+                f"Return at most {max_results} items with this schema:\n"
                 '{"results":[{"title":"...","snippet":"...","url":"https://...",'
                 '"source":"...","published_date":"YYYY-MM-DD or empty"}]}\n'
                 "Prefer official announcements, exchange filings, and reputable "
@@ -1538,7 +1539,6 @@ class OpenAIWebSearchProvider(BaseSearchProvider):
                 "tools": [{"type": "web_search", "search_context_size": "low"}],
                 "tool_choice": "required",
                 "input": prompt,
-                "text": {"format": {"type": "json_object"}},
             }
             response = _post_with_retry(
                 f"{self.base_url}/responses",
@@ -1624,7 +1624,6 @@ class OpenAIWebSearchProvider(BaseSearchProvider):
         payload = {
             "model": self.model,
             "input": prompt,
-            "text": {"format": {"type": "json_object"}},
         }
         logger.info(
             "[OpenAI Web Search] Retrying with dedicated search model payload"

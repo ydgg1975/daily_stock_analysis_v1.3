@@ -69,6 +69,7 @@ class TestOpenAIWebSearchProvider(unittest.TestCase):
         self.assertEqual(payload["model"], "gpt-5.5")
         self.assertEqual(payload["tools"], [{"type": "web_search", "search_context_size": "low"}])
         self.assertEqual(payload["tool_choice"], "required")
+        self.assertNotIn("text", payload)
         self.assertIn("/responses", mock_post.call_args.args[0])
 
     def test_search_service_adds_openai_web_search_provider(self):
