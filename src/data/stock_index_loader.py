@@ -8,6 +8,7 @@ from threading import RLock
 from typing import Dict, Iterable
 
 from src.data.stock_mapping import is_meaningful_stock_name
+from src.services.stock_index_remote_service import get_remote_stock_index_cache_path
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ def get_stock_index_candidate_paths() -> tuple[Path, ...]:
     """Return the supported locations for the generated stock index."""
     repo_root = Path(__file__).resolve().parents[2]
     return (
+        get_remote_stock_index_cache_path(),
         repo_root / "apps" / "dsa-web" / "public" / _STOCK_INDEX_FILENAME,
         repo_root / "static" / _STOCK_INDEX_FILENAME,
     )
@@ -130,7 +132,12 @@ def get_index_stock_name(stock_code: str) -> str | None:
     return None
 
 
-def _clear_stock_index_cache_for_tests() -> None:
+def clear_stock_index_cache() -> None:
+    """Clear the in-process stock index lookup cache."""
     global _STOCK_INDEX_CACHE
     with _STOCK_INDEX_CACHE_LOCK:
         _STOCK_INDEX_CACHE = None
+
+
+def _clear_stock_index_cache_for_tests() -> None:
+    clear_stock_index_cache()
