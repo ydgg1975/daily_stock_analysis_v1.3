@@ -87,6 +87,19 @@ def normalize_stock_code(stock_code: str) -> str:
     code = stock_code.strip()
     upper = code.upper()
 
+    # Korean equities: keep explicit Yahoo-style suffixes so downstream
+    # fetchers can route them to KRX instead of stripping them as A-share codes.
+    if '.' in upper:
+        base, suffix = upper.rsplit('.', 1)
+        if suffix in ('KS', 'KQ') and base.isdigit() and len(base) == 6:
+            return f"{base}.{suffix}"
+
+    if upper.startswith(('KR', 'KS', 'KQ')) and not upper.startswith(('KR.', 'KS.', 'KQ.')):
+        candidate = upper[2:]
+        if candidate.isdigit() and len(candidate) == 6:
+            suffix = 'KQ' if upper.startswith('KQ') else 'KS'
+            return f"{candidate}.{suffix}"
+
     # Normalize HK prefix to a canonical 5-digit form (e.g. hk1810 -> HK01810)
     if upper.startswith('HK') and not upper.startswith('HK.'):
         candidate = upper[2:]
@@ -118,6 +131,10 @@ def normalize_stock_code(stock_code: str) -> str:
 
 
 ETF_PREFIXES = ("51", "52", "56", "58", "15", "16", "18")
+KNOWN_BARE_KR_CODES = {
+    "000660",  # SK hynix
+    "005930",  # Samsung Electronics
+}
 
 
 def _is_us_market(code: str) -> bool:
@@ -144,6 +161,20 @@ def _is_hk_market(code: str) -> bool:
     if normalized.isdigit() and len(normalized) == 5:
         return True
     return False
+
+
+def _is_kr_market(code: str) -> bool:
+    """Return True for Korean KRX/KOSDAQ symbols."""
+    normalized = (code or "").strip().upper()
+    if normalized.startswith(("KR", "KS", "KQ")) and normalized[2:].isdigit() and len(normalized[2:]) == 6:
+        return True
+    if "." in normalized:
+        base, suffix = normalized.rsplit(".", 1)
+        return suffix in {"KS", "KQ"} and base.isdigit() and len(base) == 6
+    # Keep legacy A-share routing for generic bare 6-digit codes. The Web UI
+    # now nudges Korean symbols to explicit .KS/.KQ forms; a small allow-list
+    # preserves the common Korean examples users type without an exchange suffix.
+    return normalized in KNOWN_BARE_KR_CODES
 
 
 def _is_etf_code(code: str) -> bool:
@@ -186,9 +217,11 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
 
 
 def _market_tag(code: str) -> str:
-    """返回市场标签: cn/us/hk."""
+    """返回市场标签: kr/us/hk/cn."""
     if _is_us_market(code):
         return "us"
+    if _is_kr_market(code):
+        return "kr"
     if _is_hk_market(code):
         return "hk"
     return "cn"
@@ -1151,14 +1184,17 @@ class DataFetcherManager:
         #   - 美股指数:       始终 YFinance 为首选（Longbridge 不提供指数K线）
         is_us_index = is_us_index_code(stock_code)
         is_us = is_us_index or is_us_stock_code(stock_code)
-        is_hk = (not is_us) and _is_hk_market(stock_code)
+        is_kr = (not is_us) and _is_kr_market(stock_code)
+        is_hk = (not is_us and not is_kr) and _is_hk_market(stock_code)
         if is_hk:
             fetchers = self._filter_daily_fetchers_for_market(fetchers, "hk")
+        if is_kr:
+            fetchers = [fetcher for fetcher in fetchers if fetcher.name == "YfinanceFetcher"]
         fetchers = self._filter_fetchers_by_capability(fetchers, capability="daily_data")
         total_fetchers = len(fetchers)
 
         if total_fetchers == 0:
-            market_label = "美股指数" if is_us_index else "美股" if is_us else "港股" if is_hk else "A股"
+            market_label = "美股指数" if is_us_index else "美股" if is_us else "한국 주식" if is_kr else "港股" if is_hk else "A股"
             error_summary = f"{market_label} {stock_code} 获取失败:\n暂无可用数据源"
             logger.error(f"[数据源终止] {stock_code} 获取失败: {error_summary}")
             raise DataFetchError(error_summary)
@@ -1386,7 +1422,17 @@ class DataFetcherManager:
         # ----------------------------------------------------------
         is_us_index = is_us_index_code(stock_code)
         is_us = is_us_index or _is_us_code(stock_code)
-        is_hk = (not is_us) and _is_hk_market(stock_code)
+        is_kr = (not is_us) and _is_kr_market(stock_code)
+        is_hk = (not is_us and not is_kr) and _is_hk_market(stock_code)
+
+        if is_kr:
+            quote = self._try_fetcher_quote(stock_code, "YfinanceFetcher")
+            if quote is not None:
+                logger.info(f"[실시간行情] 한국 주식 {stock_code} 성공获取 (来源: YfinanceFetcher)")
+                return quote
+            if log_final_failure:
+                logger.info(f"[실시간行情] 한국 주식 {stock_code} 无可用数据源")
+            return None
 
         if is_us or is_hk:
             prefer_lb = self._longbridge_preferred() and not is_us_index
@@ -2376,7 +2422,7 @@ class DataFetcherManager:
         stock_code = normalize_stock_code(stock_code)
         market = _market_tag(stock_code)
         is_etf = _is_etf_code(stock_code)
-        if market in {"us", "hk"}:
+        if market in {"us", "hk", "kr"}:
             return self._build_offshore_fundamental_context(
                 stock_code,
                 market=market,

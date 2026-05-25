@@ -14,6 +14,8 @@ class HistoryItem(BaseModel):
     stock_code: str = Field(..., description="종목 코드")
     stock_name: Optional[str] = Field(None, description="종목명")
     report_type: Optional[str] = Field(None, description="보고서 유형")
+    report_language: Optional[str] = Field(None, description="보고서 출력 언어")
+    is_legacy: bool = Field(False, description="현재 기본 KR/US 흐름과 다른 과거/레거시 기록 여부")
     sentiment_score: Optional[int] = Field(None, description="감성 점수. 과거 데이터는 0-100 범위를 벗어날 수 있어 읽을 때 제한하지 않습니다.")
     operation_advice: Optional[str] = Field(None, description="운영 조언")
     created_at: Optional[str] = Field(None, description="생성 시간")
@@ -25,6 +27,8 @@ class HistoryItem(BaseModel):
             "stock_code": "600519",
             "stock_name": "贵州茅台",
             "report_type": "detailed",
+            "report_language": "zh",
+            "is_legacy": True,
             "sentiment_score": 75,
             "operation_advice": "hold",
             "created_at": "2024-01-01T12:00:00",

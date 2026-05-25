@@ -16,6 +16,8 @@ export interface SearchOptions {
   limit?: number;
   /** Show only active stocks */
   activeOnly?: boolean;
+  /** Include markets hidden from the KR/US-focused default product surface */
+  includeUnsupportedMarkets?: boolean;
 }
 
 /**
@@ -37,10 +39,12 @@ export function searchStocks(
   }
   const limit = options.limit || SEARCH_CONFIG.DEFAULT_LIMIT;
   const activeOnly = options.activeOnly !== false;
+  const includeUnsupportedMarkets = options.includeUnsupportedMarkets === true;
 
   // Filter index
   const filteredIndex = index.filter(item => {
     if (activeOnly && !item.active) return false;
+    if (!includeUnsupportedMarkets && !['KR', 'US'].includes(item.market)) return false;
     return true;
   });
 

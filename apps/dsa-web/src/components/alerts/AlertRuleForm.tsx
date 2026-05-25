@@ -332,7 +332,7 @@ export const AlertRuleForm: React.FC<AlertRuleFormProps> = ({ onSubmit, isSubmit
 
   const renderTargetControl = () => {
     if (targetScope === 'single_symbol') {
-      return <Input label="종목 코드" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="600519 / AAPL / hk00700" disabled={isSubmitting} />;
+      return <Input label="종목 코드" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="005930.KS / AAPL" disabled={isSubmitting} />;
     }
     if (targetScope === 'watchlist') {
       return <Input label="대상" value="default" onChange={() => undefined} disabled />;

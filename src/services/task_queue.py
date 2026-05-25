@@ -32,6 +32,19 @@ from src.utils.analysis_metadata import SELECTION_SOURCES
 logger = logging.getLogger(__name__)
 
 
+def _localize_task_error_message(message: str) -> str:
+    """Translate common backend/provider task errors before exposing them to the UI."""
+    replacements = {
+        "LLM API Key 未配置": "LLM API Key가 설정되지 않았습니다",
+        "分析失败": "분석 실패",
+        "分析返回空结果": "분석 결과가 비어 있습니다",
+    }
+    localized = message
+    for source, target in replacements.items():
+        localized = localized.replace(source, target)
+    return localized
+
+
 def _dedupe_stock_code_key(stock_code: str) -> str:
     """
     Build the internal duplicate-detection key for a stock code.
@@ -122,7 +135,7 @@ class DuplicateTaskError(Exception):
     def __init__(self, stock_code: str, existing_task_id: str):
         self.stock_code = stock_code
         self.existing_task_id = existing_task_id
-        super().__init__(f"股票 {stock_code} 正在分析中 (task_id: {existing_task_id})")
+        super().__init__(f"종목 {stock_code}이 이미 분석 중입니다. (task_id: {existing_task_id})")
 
 
 class AnalysisTaskQueue:
@@ -382,7 +395,7 @@ class AnalysisTaskQueue:
                     stock_code=stock_code,
                     stock_name=stock_name,
                     status=TaskStatus.PENDING,
-                    message="任务已加入队列",
+                    message="분석 작업이 큐에 추가되었습니다.",
                     report_type=report_type,
                     original_query=original_query,
                     selection_source=selection_source,
@@ -426,7 +439,7 @@ class AnalysisTaskQueue:
         stock_code: str,
         stock_name: Optional[str] = None,
         report_type: str = "detailed",
-        message: Optional[str] = "任务已加入队列",
+        message: Optional[str] = "분석 작업이 큐에 추가되었습니다.",
         task_id: Optional[str] = None,
     ) -> TaskInfo:
         """
@@ -447,7 +460,7 @@ class AnalysisTaskQueue:
 
         with self._data_lock:
             if task_id in self._tasks:
-                raise ValueError(f"任务 ID 已存在: {task_id}")
+                raise ValueError(f"작업 ID가 이미 존재합니다: {task_id}")
             self._tasks[task_id] = task_info
             try:
                 future = self.executor.submit(self._execute_background_task, task_id, run_task)
@@ -603,7 +616,7 @@ class AnalysisTaskQueue:
                 return None
             task.status = TaskStatus.PROCESSING
             task.started_at = datetime.now()
-            task.message = "正在分析中..."
+            task.message = "분석 중..."
             task.progress = 10
 
         self._broadcast_event("task_started", task.to_dict())
@@ -637,7 +650,7 @@ class AnalysisTaskQueue:
                         task.progress = 100
                         task.completed_at = datetime.now()
                         task.result = result
-                        task.message = "分析完成"
+                        task.message = "분석 완료"
                         task.stock_name = result.get("stock_name", task.stock_name)
 
                         # 从分析中集合移除
@@ -654,10 +667,10 @@ class AnalysisTaskQueue:
                 return result
             else:
                 # 分析返回空结果
-                raise Exception(service.last_error or "分析返回空结果")
+                raise Exception(service.last_error or "분석 결과가 비어 있습니다")
 
         except Exception as e:
-            error_msg = str(e)
+            error_msg = _localize_task_error_message(str(e))
             logger.error(f"[TaskQueue] 작업 실패: {task_id} ({stock_code}), 오류: {error_msg}")
 
             with self._data_lock:
@@ -666,7 +679,7 @@ class AnalysisTaskQueue:
                     task.status = TaskStatus.FAILED
                     task.completed_at = datetime.now()
                     task.error = error_msg[:200]  # 限制错误信息长度
-                    task.message = f"分析失败: {error_msg[:50]}"
+                    task.message = f"분석 실패: {error_msg[:50]}"
 
                     # 从分析中集合移除
                     dedupe_key = _dedupe_stock_code_key(task.stock_code)
@@ -702,14 +715,14 @@ class AnalysisTaskQueue:
 
             task.status = TaskStatus.PROCESSING
             task.started_at = datetime.now()
-            task.message = "任务执行中"
+            task.message = "작업 실행 중"
             task.progress = 10
             self._broadcast_event("task_started", task.to_dict())
 
         try:
             result = run_task()
             if result is None:
-                raise RuntimeError("任务返回空结果，未生成可持久化内容")
+                raise RuntimeError("작업 결과가 비어 있어 저장할 내용을 생성하지 못했습니다")
 
             with self._data_lock:
                 task = self._tasks.get(task_id)
@@ -718,7 +731,7 @@ class AnalysisTaskQueue:
                     task.progress = 100
                     task.completed_at = datetime.now()
                     task.result = result
-                    task.message = "任务执行完成"
+                    task.message = "작업 실행 완료"
 
             self._broadcast_event("task_completed", task.to_dict())
             logger.info(f"[TaskQueue] 自定义任务完成: {task_id}")

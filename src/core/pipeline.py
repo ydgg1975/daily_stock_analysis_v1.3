@@ -270,7 +270,7 @@ class StockAnalysisPipeline:
         """
         stock_name = code
         try:
-            self._emit_progress(18, f"{code}：正在获取行情与筹码数据")
+            self._emit_progress(18, f"{code}: 시세와 칩 데이터를 가져오는 중")
             # 获取股票名称（先走轻量名称路径，后续若 realtime_quote 有 name 再覆盖）
             stock_name = self.fetcher_manager.get_stock_name(code, allow_realtime=False)
 
@@ -329,7 +329,7 @@ class StockAnalysisPipeline:
                     use_agent = True
                     logger.info(f"{stock_name}({code}) Auto-enabled agent mode due to configured skills: {configured_skills}")
 
-            self._emit_progress(32, f"{stock_name}：正在聚合基本面与趋势数据")
+            self._emit_progress(32, f"{stock_name}: 기본면과 추세 데이터를 모으는 중")
 
             # Step 2.5: 基本面能力聚合（统一入口，异常降级）
             # - 失败时返回 partial/failed，不影响既有技术面/新闻链路
@@ -389,7 +389,7 @@ class StockAnalysisPipeline:
 
             if use_agent:
                 logger.info(f"{stock_name}({code}) 启用 Agent 模式进行分析")
-                self._emit_progress(58, f"{stock_name}：正在切换 Agent 分析链路")
+                self._emit_progress(58, f"{stock_name}: Agent 분석 경로로 전환하는 중")
                 return self._analyze_with_agent(
                     code,
                     report_type,
@@ -404,7 +404,7 @@ class StockAnalysisPipeline:
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
-            self._emit_progress(46, f"{stock_name}：正在检索新闻与舆情")
+            self._emit_progress(46, f"{stock_name}: 뉴스와 여론 데이터를 검색하는 중")
             if self.search_service is not None and self.search_service.is_available:
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
@@ -456,7 +456,7 @@ class StockAnalysisPipeline:
                     logger.warning(f"{stock_name}({code}) Social sentiment fetch failed: {e}")
 
             # Step 5: 获取分析上下文（技术面数据）
-            self._emit_progress(58, f"{stock_name}：正在整理分析上下文")
+            self._emit_progress(58, f"{stock_name}: 분석 컨텍스트를 정리하는 중")
             context = self.db.get_analysis_context(code)
 
             if context is None:
@@ -493,10 +493,10 @@ class StockAnalysisPipeline:
                 llm_progress_state["last_progress"] = dynamic_progress
                 self._emit_progress(
                     dynamic_progress,
-                    f"{stock_name}：LLM 正在生成分析结果（已接收 {chars_received} 字符）",
+                    f"{stock_name}: LLM이 분석 결과를 생성하는 중 (수신 {chars_received}자)",
                 )
 
-            self._emit_progress(64, f"{stock_name}：正在请求 LLM 生成报告")
+            self._emit_progress(64, f"{stock_name}: LLM에 리포트 생성을 요청하는 중")
             result = self.analyzer.analyze(
                 enhanced_context,
                 news_context=news_context,
@@ -506,7 +506,7 @@ class StockAnalysisPipeline:
 
             # Step 7.5: 填充分析时的价格信息到 result
             if result:
-                self._emit_progress(94, f"{stock_name}：正在校验并整理分析结果")
+                self._emit_progress(94, f"{stock_name}: 분석 결과를 검증하고 정리하는 중")
                 result.query_id = query_id
                 realtime_data = enhanced_context.get('realtime', {})
                 result.current_price = realtime_data.get('price')
@@ -526,7 +526,7 @@ class StockAnalysisPipeline:
             # Step 8: 保存分析历史记录
             if result and result.success:
                 try:
-                    self._emit_progress(97, f"{stock_name}：正在保存分析报告")
+                    self._emit_progress(97, f"{stock_name}: 분석 리포트를 저장하는 중")
                     attach_thesis_tracking(result, self.db)
                     attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
                     attach_chart_analysis_report(result, history_df)
@@ -1694,7 +1694,7 @@ class StockAnalysisPipeline:
         frozen_td = self._resolve_resume_target_date(code, current_time=current_time)
         token = set_frozen_target_date(frozen_td)
         try:
-            self._emit_progress(12, f"{code}：正在准备分析任务")
+            self._emit_progress(12, f"{code}: 분석 작업을 준비하는 중")
             # Step 1: 获取并保存数据
             success, error = self.fetch_and_save_stock_data(
                 code, current_time=current_time
@@ -1704,7 +1704,7 @@ class StockAnalysisPipeline:
                 logger.warning(f"[{code}] 数据获取失败: {error}")
                 # 即使获取失败，也尝试用已有数据分析
             else:
-                self._emit_progress(16, f"{code}：行情数据准备完成")
+                self._emit_progress(16, f"{code}: 시세 데이터 준비 완료")
 
             # Step 2: AI 分析
             if skip_analysis:

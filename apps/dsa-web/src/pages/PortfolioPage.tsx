@@ -70,9 +70,9 @@ function getTodayIso(): string {
   return toDateInputValue(new Date());
 }
 
-function formatMoney(value: number | undefined | null, currency = 'CNY'): string {
+function formatMoney(value: number | undefined | null, currency = 'KRW'): string {
   if (value == null || Number.isNaN(value)) return '--';
-  return `${currency} ${Number(value).toLocaleString('zh-CN', {
+  return `${currency} ${Number(value).toLocaleString('ko-KR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -232,8 +232,8 @@ const PortfolioPage: React.FC = () => {
   const [accountForm, setAccountForm] = useState({
     name: '',
     broker: 'Demo',
-    market: 'cn' as 'cn' | 'hk' | 'us' | 'kr',
-    baseCurrency: 'CNY',
+    market: 'kr' as 'us' | 'kr',
+    baseCurrency: 'KRW',
   });
   const [costMethod, setCostMethod] = useState<PortfolioCostMethod>('fifo');
   const [snapshot, setSnapshot] = useState<PortfolioSnapshotResponse | null>(null);
@@ -310,7 +310,7 @@ const PortfolioPage: React.FC = () => {
     side: 'buy' as PortfolioSide,
     quantity: '',
     price: '',
-    market: 'us' as 'cn' | 'hk' | 'us',
+    market: 'us' as 'us' | 'kr',
     currency: 'USD',
     reason: '',
   });
@@ -789,7 +789,7 @@ const PortfolioPage: React.FC = () => {
         name,
         broker: accountForm.broker.trim() || undefined,
         market: accountForm.market,
-        baseCurrency: accountForm.baseCurrency.trim() || 'CNY',
+        baseCurrency: accountForm.baseCurrency.trim() || 'KRW',
       });
       await loadAccounts();
       setSelectedAccount(created.id);
@@ -1050,19 +1050,17 @@ const PortfolioPage: React.FC = () => {
             />
             <input
               className={PORTFOLIO_INPUT_CLASS}
-              placeholder="기준 통화, 예: CNY/USD/HKD/KRW"
+              placeholder="기준 통화, 예: KRW/USD"
               value={accountForm.baseCurrency}
               onChange={(e) => setAccountForm((prev) => ({ ...prev, baseCurrency: e.target.value.toUpperCase() }))}
             />
             <select
               className={PORTFOLIO_SELECT_CLASS}
               value={accountForm.market}
-              onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' | 'kr' }))}
+              onChange={(e) => setAccountForm((prev) => ({ ...prev, market: e.target.value as 'us' | 'kr' }))}
             >
-              <option value="cn">시장: 중국 A주(cn)</option>
-              <option value="hk">시장: 홍콩 주식(hk)</option>
+              <option value="kr">시장: 한국 주식(kr)</option>
               <option value="us">시장: 미국 주식(us)</option>
-              <option value='kr'>시장: 한국 주식(kr)</option>
             </select>
             <button type="submit" className="btn-secondary text-sm" disabled={accountCreating}>
               {accountCreating ? '생성 중...' : '계좌 생성'}
@@ -1074,15 +1072,15 @@ const PortfolioPage: React.FC = () => {
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <Card variant="gradient" padding="md">
           <p className="text-xs text-secondary">총자산</p>
-          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'CNY')}</p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalEquity, snapshot?.currency || 'KRW')}</p>
         </Card>
         <Card variant="gradient" padding="md">
           <p className="text-xs text-secondary">총평가액</p>
-          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'CNY')}</p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalMarketValue, snapshot?.currency || 'KRW')}</p>
         </Card>
         <Card variant="gradient" padding="md">
           <p className="text-xs text-secondary">총현금</p>
-          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'CNY')}</p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{formatMoney(snapshot?.totalCash, snapshot?.currency || 'KRW')}</p>
         </Card>
         <Card variant="gradient" padding="md">
           <div className="flex items-start justify-between gap-3">
@@ -1239,7 +1237,7 @@ const PortfolioPage: React.FC = () => {
           <h3 className="text-sm font-semibold text-foreground mb-2">계정</h3>
           <div className="text-xs text-secondary space-y-1">
             <div>계좌 수: {snapshot?.accountCount ?? 0}</div>
-            <div>표시 통화: {snapshot?.currency || 'CNY'}</div>
+            <div>표시 통화: {snapshot?.currency || 'KRW'}</div>
             <div>원가 방식: {(snapshot?.costMethod || costMethod).toUpperCase()}</div>
           </div>
         </Card>
@@ -1252,7 +1250,7 @@ const PortfolioPage: React.FC = () => {
             <Badge variant="info">approval required</Badge>
           </div>
           <form className="space-y-2" onSubmit={handlePaperPrepare}>
-            <input className={PORTFOLIO_INPUT_CLASS} placeholder="Paper 종목 코드, 예: AAPL" value={paperForm.symbol}
+            <input className={PORTFOLIO_INPUT_CLASS} placeholder="Paper 종목 코드, 예: 005930.KS 또는 AAPL" value={paperForm.symbol}
               onChange={(e) => setPaperForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
             <div className="grid grid-cols-2 gap-2">
               <input className={PORTFOLIO_INPUT_CLASS} type="date" value={paperForm.tradeDate}
@@ -1271,10 +1269,9 @@ const PortfolioPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <select className={PORTFOLIO_SELECT_CLASS} value={paperForm.market}
-                onChange={(e) => setPaperForm((prev) => ({ ...prev, market: e.target.value as 'cn' | 'hk' | 'us' }))}>
+                onChange={(e) => setPaperForm((prev) => ({ ...prev, market: e.target.value as 'us' | 'kr' }))}>
+                <option value="kr">KR</option>
                 <option value="us">US</option>
-                <option value="hk">HK</option>
-                <option value="cn">CN</option>
               </select>
               <input className={PORTFOLIO_INPUT_CLASS} placeholder="통화, 예: USD" value={paperForm.currency}
                 onChange={(e) => setPaperForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))} />
@@ -1485,7 +1482,7 @@ const PortfolioPage: React.FC = () => {
         <Card padding="md">
           <h3 className="text-sm font-semibold text-foreground mb-3">수동 입력: 거래</h3>
           <form className="space-y-2" onSubmit={handleTradeSubmit}>
-            <input className={PORTFOLIO_INPUT_CLASS} placeholder="종목 코드, 예: KR005930" value={tradeForm.symbol}
+            <input className={PORTFOLIO_INPUT_CLASS} placeholder="종목 코드, 예: 005930.KS 또는 AAPL" value={tradeForm.symbol}
               onChange={(e) => setTradeForm((prev) => ({ ...prev, symbol: e.target.value }))} required />
             <div className="grid grid-cols-2 gap-2">
               <input className={PORTFOLIO_INPUT_CLASS} type="date" value={tradeForm.tradeDate}

@@ -101,8 +101,8 @@ const fieldTitleMap: Record<string, string> = {
 };
 
 const fieldDescriptionMap: Record<string, string> = {
-  STOCK_LIST: '분석할 종목 코드를 쉼표로 구분해 입력합니다. 예: 600519,hk00700,AAPL',
-  TUSHARE_TOKEN: 'Tushare Pro 데이터 서비스에 연결하기 위한 토큰입니다.',
+  STOCK_LIST: '분석할 종목 코드를 쉼표로 구분해 입력합니다. 예: 005930.KS,000660.KS,AAPL',
+  TUSHARE_TOKEN: '중국 시장용 Tushare Pro 데이터 서비스 토큰입니다. 한국/미국 중심 기본 흐름에는 필요하지 않습니다.',
   BOCHA_API_KEYS: '뉴스 검색에 사용할 Bocha 키입니다. 여러 개는 쉼표로 구분합니다.',
   TAVILY_API_KEYS: '뉴스 검색에 사용할 Tavily 키입니다. 여러 개는 쉼표로 구분합니다.',
   ANSPIRE_API_KEYS: 'Anspire Open 키입니다. LLM 게이트웨이와 뉴스 검색에 함께 사용할 수 있습니다.',

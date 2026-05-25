@@ -126,6 +126,13 @@ def _convert_to_yf_symbol(stock_code: str) -> str:
     code = (stock_code or "").strip().upper()
     if not code:
         return code
+    if "." in code:
+        base, suffix = code.rsplit(".", 1)
+        if suffix in {"KS", "KQ"} and base.isdigit() and len(base) == 6:
+            return f"{base}.{suffix}"
+    if code.startswith(("KR", "KS", "KQ")) and code[2:].isdigit() and len(code[2:]) == 6:
+        suffix = "KQ" if code.startswith("KQ") else "KS"
+        return f"{code[2:]}.{suffix}"
     if code.startswith("HK"):
         digits = code[2:].lstrip("0") or "0"
         return f"{digits.zfill(4)}.HK"

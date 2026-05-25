@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const smokePassword = process.env.DSA_WEB_SMOKE_PASSWORD;
-const stockInputPlaceholder = '종목 코드나 이름을 입력하세요. 예: KR005930, AAPL';
+const stockInputPlaceholder = '종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL';
 
 async function login(page: Page) {
   test.skip(!smokePassword, 'Set DSA_WEB_SMOKE_PASSWORD to run report markdown tests.');

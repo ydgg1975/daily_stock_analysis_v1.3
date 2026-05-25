@@ -18,6 +18,7 @@ from typing import Optional, Set
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+KNOWN_BARE_KR_CODES = {"000660", "005930"}
 
 # Exchange-calendars availability
 _XCALS_AVAILABLE = False
@@ -31,13 +32,14 @@ except ImportError:
     )
 
 # Market -> exchange code (exchange-calendars)
-MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS"}
+MARKET_EXCHANGE = {"cn": "XSHG", "hk": "XHKG", "us": "XNYS", "kr": "XKRX"}
 
 # Market -> IANA timezone for "today"
 MARKET_TIMEZONE = {
     "cn": "Asia/Shanghai",
     "hk": "Asia/Hong_Kong",
     "us": "America/New_York",
+    "kr": "Asia/Seoul",
 }
 
 
@@ -46,7 +48,7 @@ def get_market_for_stock(code: str) -> Optional[str]:
     Infer market region for a stock code.
 
     Returns:
-        'cn' | 'hk' | 'us' | None (None = unrecognized, fail-open: treat as open)
+        'kr' | 'us' | 'hk' | 'cn' | None (None = unrecognized, fail-open: treat as open)
     """
     if not code or not isinstance(code, str):
         return None
@@ -56,9 +58,14 @@ def get_market_for_stock(code: str) -> Optional[str]:
 
     if is_us_stock_code(code) or is_us_index_code(code):
         return "us"
+    if code.endswith((".KS", ".KQ")):
+        return "kr"
+    if code.startswith(("KR", "KS", "KQ")) and code[2:].isdigit() and len(code[2:]) == 6:
+        return "kr"
     if is_hk_stock_code(code):
         return "hk"
-    # A-share: 6-digit numeric
+    if code in KNOWN_BARE_KR_CODES:
+        return "kr"
     if code.isdigit() and len(code) == 6:
         return "cn"
     return None

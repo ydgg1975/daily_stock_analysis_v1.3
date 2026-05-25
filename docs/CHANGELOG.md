@@ -8,6 +8,9 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
 ## [Unreleased]
 
+- [개선] 분석 기록 전체 초기화 API와 Web 버튼을 추가하고, 현재 KR/US 기본 흐름과 다른 과거 중국어/CN/HK 기록을 legacy 배지로 구분할 수 있게 했습니다.
+- [수정] Web 분석 입력 예시와 코드 검증을 KR/US 중심으로 조정해 KRX 코드가 중국 A주로 오인되는 혼선을 줄였습니다.
+- [개선] 기본 분석 흐름을 KR/US 중심으로 전환해 6자리 KRX 후보와 `.KS`/`.KQ` 종목을 yfinance 경로로 처리하고, Web 입력/자동완성/포트폴리오/채팅 예시에서 CN 중심 노출을 줄였습니다.
 - [수정] Python 3.14 환경에서 백엔드 데스크톱 패키징이 tiktoken 0.11.x PyO3 제한으로 실패하지 않도록 tiktoken 0.13.x 휠을 허용했습니다.
 - [테스트] 대표 A-share, HK, US 종목의 agent history와 chart analysis smoke test를 추가했습니다.
 - [테스트] 차트 분석, paper trading, portfolio analysis용 eval fixture와 회귀 검증을 추가했습니다.

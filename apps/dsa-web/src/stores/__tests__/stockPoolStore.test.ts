@@ -8,6 +8,7 @@ vi.mock('../../api/history', () => ({
     getList: vi.fn(),
     getDetail: vi.fn(),
     deleteRecords: vi.fn(),
+    resetRecords: vi.fn(),
   },
 }));
 
@@ -174,14 +175,7 @@ describe('stockPoolStore', () => {
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
-  it('accepts HK suffix codes from autocomplete without local validation errors', async () => {
-    vi.mocked(analysisApi.analyzeAsync).mockResolvedValue({
-      taskId: 'task-hk-1',
-      stockCode: '00700.HK',
-      status: 'pending',
-      message: 'accepted',
-    } as never);
-
+  it('rejects HK suffix codes in the default KR/US analysis mode', async () => {
     await useStockPoolStore.getState().submitAnalysis({
       stockCode: '00700.HK',
       stockName: '텐센트홀딩스',
@@ -190,16 +184,9 @@ describe('stockPoolStore', () => {
     });
 
     const state = useStockPoolStore.getState();
-    expect(state.inputError).toBeUndefined();
+    expect(state.inputError).toBe('종목 코드 형식이 올바르지 않습니다.');
     expect(state.isAnalyzing).toBe(false);
-    expect(analysisApi.analyzeAsync).toHaveBeenCalledWith(expect.objectContaining({
-      stockCode: '00700.HK',
-      reportType: 'detailed',
-      stockName: '텐센트홀딩스',
-      originalQuery: '00700',
-      selectionSource: 'autocomplete',
-      notify: true,
-    }));
+    expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });
 
   it('merges newly discovered history items during silent refresh', async () => {

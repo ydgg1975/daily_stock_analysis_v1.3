@@ -5,7 +5,7 @@ import type { Message } from '../stores/agentChatStore';
  */
 export function formatSessionAsMarkdown(messages: Message[]): string {
   const now = new Date();
-  const timeStr = now.toLocaleString('zh-CN', {
+  const timeStr = now.toLocaleString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

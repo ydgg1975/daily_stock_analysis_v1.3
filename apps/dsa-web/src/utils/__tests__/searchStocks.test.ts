@@ -2,7 +2,7 @@
  * searchStocks unit tests.
  */
 
-import { searchStocks } from '../searchStocks';
+import { searchStocks as searchStocksImpl } from '../searchStocks';
 import type { StockIndexItem } from '../../types/stockIndex';
 import { describe, expect, test } from 'vitest';
 
@@ -68,6 +68,18 @@ const mockIndex: StockIndexItem[] = [
     popularity: 98,
   },
   {
+    canonicalCode: "KR005930",
+    displayCode: "005930",
+    nameZh: "삼성전자",
+    pinyinFull: "samsung electronics",
+    pinyinAbbr: "samsung",
+    aliases: ["005930.KS"],
+    market: "KR",
+    assetType: "stock",
+    active: true,
+    popularity: 120,
+  },
+  {
     canonicalCode: "600000.SH",
     displayCode: "600000",
     nameZh: "浦发银行",
@@ -80,6 +92,12 @@ const mockIndex: StockIndexItem[] = [
     popularity: 80,
   },
 ];
+
+const searchStocks = (
+  query: string,
+  index: StockIndexItem[],
+  options: Parameters<typeof searchStocksImpl>[2] = {}
+) => searchStocksImpl(query, index, { includeUnsupportedMarkets: true, ...options });
 
 describe('searchStocks', () => {
   test('精确匹配代码', () => {
@@ -211,6 +229,24 @@ describe('searchStocks', () => {
     expect(results).toHaveLength(1);
     expect(results[0].canonicalCode).toBe('00700.HK');
     expect(results[0].market).toBe('HK');
+  });
+
+  test('Korean and US markets are visible by default', () => {
+    const korean = searchStocks('삼성전자', mockIndex);
+    expect(korean).toHaveLength(1);
+    expect(korean[0].canonicalCode).toBe('KR005930');
+
+    const us = searchStocks('AAPL', mockIndex);
+    expect(us).toHaveLength(1);
+    expect(us[0].canonicalCode).toBe('AAPL.US');
+  });
+
+  test('CN and HK markets are hidden by default but remain opt-in', () => {
+    expect(searchStocksImpl('贵州茅台', mockIndex)).toHaveLength(0);
+    expect(searchStocksImpl('00700', mockIndex)).toHaveLength(0);
+
+    expect(searchStocksImpl('贵州茅台', mockIndex, { includeUnsupportedMarkets: true })[0].market).toBe('CN');
+    expect(searchStocksImpl('00700', mockIndex, { includeUnsupportedMarkets: true })[0].market).toBe('HK');
   });
 
   describe('Edge case tests', () => {

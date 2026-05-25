@@ -52,7 +52,7 @@ test.describe('web smoke', () => {
   test('home page shows analysis entry and history panel after login', async ({ page }) => {
     await login(page);
 
-    const stockInput = page.getByPlaceholder('종목 코드나 이름을 입력하세요. 예: KR005930, AAPL');
+    const stockInput = page.getByPlaceholder('종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL');
     await expect(stockInput).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('link', { name: '홈' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'AI 종목 상담' })).toBeVisible();

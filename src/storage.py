@@ -1506,6 +1506,19 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             )
             return result.rowcount or 0
 
+    def delete_all_analysis_history_records(self) -> int:
+        """
+        Delete all stored analysis history records.
+
+        This is intended for local/development cleanup when legacy reports no
+        longer match the current product defaults. Backtest rows are removed
+        first because they reference analysis_history rows.
+        """
+        with self.session_scope() as session:
+            session.execute(delete(BacktestResult))
+            result = session.execute(delete(AnalysisHistory))
+            return result.rowcount or 0
+
     def get_latest_analysis_by_query_id(self, query_id: str) -> Optional[AnalysisHistory]:
         """
         根据 query_id 查询最新一条分析历史记录

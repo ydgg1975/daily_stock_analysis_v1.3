@@ -27,11 +27,11 @@ import { getReportText } from '../utils/reportLanguage';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
-  { label: '찬 이론으로 600519 분석', skill: 'chan_theory' },
-  { label: '파동 이론으로 CATL 추세 보기', skill: 'wave_theory' },
-  { label: 'BYD 추세 분석', skill: 'bull_trend' },
-  { label: '박스권 전략으로 SMIC 보기', skill: 'box_oscillation' },
-  { label: 'Tencent hk00700 분석', skill: 'bull_trend' },
+  { label: '찬 이론으로 005930.KS 분석', skill: 'chan_theory' },
+  { label: '파동 이론으로 AAPL 추세 보기', skill: 'wave_theory' },
+  { label: 'NVDA 추세 분석', skill: 'bull_trend' },
+  { label: '박스권 전략으로 000660.KS 보기', skill: 'box_oscillation' },
+  { label: 'MSFT 분석', skill: 'bull_trend' },
   { label: '감정 사이클로 종목 분석', skill: 'emotion_cycle' },
 ];
 
@@ -537,7 +537,7 @@ const ChatPage: React.FC = () => {
                         <>
                           <span className="separator" />
                           <span className="meta">
-                            {new Date(s.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                            {new Date(s.last_active).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
                           </span>
                         </>
                       )}
@@ -772,7 +772,7 @@ const ChatPage: React.FC = () => {
               <div className="flex h-full items-center justify-center">
                 <EmptyState
                   title="상담 시작"
-                  description="예: 「분석 600519」 또는 「AAPL 지금 사도 될까?」를 입력하면 AI가 실시간 데이터 도구를 호출해 판단 리포트를 생성합니다."
+                  description="예: 「분석 005930.KS」 또는 「AAPL 지금 사도 될까?」를 입력하면 AI가 실시간 데이터 도구를 호출해 판단 리포트를 생성합니다."
                   className="max-w-2xl border-dashed bg-card/55"
                   icon={(
                     <svg
@@ -1019,7 +1019,7 @@ const ChatPage: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="예: 분석 600519 / AAPL 지금 매수해도 될까? (Enter 전송, Shift+Enter 줄바꿈)"
+                  placeholder="예: 분석 005930.KS / AAPL 지금 매수해도 될까? (Enter 전송, Shift+Enter 줄바꿈)"
                   disabled={loading}
                   rows={1}
                   className="input-surface input-focus-glow flex-1 min-h-[44px] max-h-[200px] rounded-xl border bg-transparent px-4 py-2.5 text-sm transition-all focus:outline-none resize-none disabled:cursor-not-allowed disabled:opacity-60"

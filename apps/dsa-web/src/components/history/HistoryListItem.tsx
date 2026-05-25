@@ -87,6 +87,11 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
                     {stockName}
                   </span>
                 </span>
+                {item.isLegacy ? (
+                  <Badge variant="warning" size="sm" className="ml-2 align-middle text-[10px]">
+                    legacy
+                  </Badge>
+                ) : null}
               </div>
               {sentimentColor && (
                 <Badge

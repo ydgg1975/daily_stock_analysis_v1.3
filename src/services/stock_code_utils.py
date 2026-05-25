@@ -19,6 +19,9 @@ _PREFIX_DIGIT_LENS: dict = {
     "SS": (6,),
     "BJ": (6,),
     "HK": (1, 2, 3, 4, 5),
+    "KR": (6,),
+    "KS": (6,),
+    "KQ": (6,),
 }
 
 _SUFFIX_DIGIT_LENS: dict = {
@@ -27,6 +30,8 @@ _SUFFIX_DIGIT_LENS: dict = {
     ".SS": (6,),
     ".BJ": (6,),
     ".HK": (1, 2, 3, 4, 5),
+    ".KS": (6,),
+    ".KQ": (6,),
 }
 
 
@@ -44,7 +49,13 @@ def _strip_exchange_prefix(text: str) -> Optional[str]:
         if text.startswith(prefix):
             base = text[len(prefix):]
             if _valid_exchange_code(prefix, base, digit_lens):
-                return base.zfill(5) if prefix == "HK" else base
+                if prefix == "HK":
+                    return base.zfill(5)
+                if prefix in {"KR", "KS"}:
+                    return f"{base}.KS"
+                if prefix == "KQ":
+                    return f"{base}.KQ"
+                return base
     return None
 
 
@@ -55,7 +66,11 @@ def _strip_exchange_suffix(text: str) -> Optional[str]:
             base = text[: -len(suffix)].strip()
             exchange = suffix.lstrip(".")
             if _valid_exchange_code(exchange, base, digit_lens):
-                return base.zfill(5) if suffix == ".HK" else base
+                if suffix == ".HK":
+                    return base.zfill(5)
+                if suffix in {".KS", ".KQ"}:
+                    return f"{base}{suffix}"
+                return base
     return None
 
 

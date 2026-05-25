@@ -104,6 +104,8 @@ def get_history_list(
                 stock_code=item.get("stock_code", ""),
                 stock_name=item.get("stock_name"),
                 report_type=item.get("report_type"),
+                report_language=item.get("report_language"),
+                is_legacy=bool(item.get("is_legacy", False)),
                 sentiment_score=item.get("sentiment_score"),
                 operation_advice=item.get("operation_advice"),
                 created_at=item.get("created_at")
@@ -170,6 +172,37 @@ def delete_history_records(
             detail={
                 "error": "internal_error",
                 "message": f"이력 삭제 실패: {str(e)}"
+            }
+        )
+
+
+@router.delete(
+    "/reset",
+    response_model=DeleteHistoryResponse,
+    responses={
+        200: {"description": "초기화 성공"},
+        500: {"description": "서버 오류", "model": ErrorResponse},
+    },
+    summary="전체 분석 이력 초기화",
+    description="로컬에 저장된 모든 분석 이력과 연결된 백테스트 결과를 삭제합니다."
+)
+def reset_history_records(
+    db_manager: DatabaseManager = Depends(get_database_manager)
+) -> DeleteHistoryResponse:
+    """
+    로컬 분석 이력을 전체 초기화합니다.
+    """
+    try:
+        service = HistoryService(db_manager)
+        deleted = service.delete_all_history_records()
+        return DeleteHistoryResponse(deleted=deleted)
+    except Exception as e:
+        logger.error(f"전체 이력 초기화 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"전체 이력 초기화 실패: {str(e)}"
             }
         )
 

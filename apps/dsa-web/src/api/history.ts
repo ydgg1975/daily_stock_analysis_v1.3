@@ -76,4 +76,11 @@ export const historyApi = {
 
     return toCamelCase<{ deleted: number }>(response.data);
   },
+
+  /**
+   */
+  resetRecords: async (): Promise<{ deleted: number }> => {
+    const response = await apiClient.delete<Record<string, unknown>>('/api/v1/history/reset');
+    return toCamelCase<{ deleted: number }>(response.data);
+  },
 };

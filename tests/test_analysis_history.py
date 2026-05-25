@@ -772,6 +772,37 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertEqual(report.summary.trend_prediction, "Bullish")
         self.assertEqual(report.summary.sentiment_label, "Bullish")
 
+    def test_history_list_marks_zh_a_share_record_as_legacy(self) -> None:
+        """History list should distinguish old zh/CN reports from the KR/US default flow."""
+        self._save_history("query_legacy_list_001")
+
+        result = AnalysisResult(
+            code="AAPL",
+            name="Apple",
+            sentiment_score=65,
+            trend_prediction="Bullish",
+            operation_advice="Hold",
+            analysis_summary="US stock test",
+            report_language="en",
+        )
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_current_list_001",
+            report_type="simple",
+            news_content="news",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        items = HistoryService(self.db).get_history_list(limit=10)["items"]
+        by_code = {item["stock_code"]: item for item in items}
+
+        self.assertTrue(by_code["600519"]["is_legacy"])
+        self.assertEqual(by_code["600519"]["report_language"], "zh")
+        self.assertFalse(by_code["AAPL"]["is_legacy"])
+        self.assertEqual(by_code["AAPL"]["report_language"], "en")
+
     def test_history_markdown_uses_safe_bias_emoji_for_english_status(self) -> None:
         """English bias status should keep the correct non-risk emoji in markdown."""
         result = AnalysisResult(
@@ -846,6 +877,28 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 0,
             )
 
+    def test_delete_all_analysis_history_records_clears_history_and_backtests(self) -> None:
+        """전체 초기화는 모든 분석 기록과 연결 백테스트를 삭제해야 한다."""
+        record_id_1 = self._save_history("query_reset_001")
+        record_id_2 = self._save_history("query_reset_002")
+
+        with self.db.session_scope() as session:
+            session.add(BacktestResult(
+                analysis_history_id=record_id_1,
+                code="600519",
+                analysis_date=None,
+                eval_window_days=10,
+                engine_version="v1",
+                eval_status="pending",
+            ))
+
+        deleted = self.db.delete_all_analysis_history_records()
+        self.assertEqual(deleted, 2)
+
+        with self.db.get_session() as session:
+            self.assertEqual(session.query(AnalysisHistory).count(), 0)
+            self.assertEqual(session.query(BacktestResult).count(), 0)
+
     @patch("src.auth.is_auth_enabled", return_value=False)
     def test_delete_history_api_deletes_selected_records(self, mock_auth) -> None:
         """DELETE /api/v1/history should remove only the requested records."""
@@ -871,6 +924,27 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         with self.db.get_session() as session:
             self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_1).first())
             self.assertIsNotNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id_2).first())
+
+    @patch("src.auth.is_auth_enabled", return_value=False)
+    def test_reset_history_api_deletes_all_records(self, mock_auth) -> None:
+        """DELETE /api/v1/history/reset should clear all local analysis history."""
+        if TestClient is None or create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        self._save_history("query_reset_api_001")
+        self._save_history("query_reset_api_002")
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        client = TestClient(create_app(static_dir=static_dir))
+
+        response = client.request("DELETE", "/api/v1/history/reset")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("deleted"), 2)
+
+        with self.db.get_session() as session:
+            self.assertEqual(session.query(AnalysisHistory).count(), 0)
 
 
 class HistoryItemSchemaNegativeSentimentTest(unittest.TestCase):

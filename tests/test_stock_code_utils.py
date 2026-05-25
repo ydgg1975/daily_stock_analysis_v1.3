@@ -172,6 +172,12 @@ class TestNormalizeCode:
     def test_us_ticker(self):
         assert normalize_code("AAPL") == "AAPL"
 
+    def test_krx_suffix_and_prefix(self):
+        assert normalize_code("005930.KS") == "005930.KS"
+        assert normalize_code("091990.KQ") == "091990.KQ"
+        assert normalize_code("KR005930") == "005930.KS"
+        assert normalize_code("KQ091990") == "091990.KQ"
+
     # --- Invalid inputs ---
     def test_empty_returns_none(self):
         assert normalize_code("") is None

@@ -63,6 +63,25 @@ class HistoryService:
         """
         self.db = db_manager or DatabaseManager.get_instance()
 
+    @staticmethod
+    def _get_record_report_language(record) -> Optional[str]:
+        raw_result = parse_json_field(getattr(record, "raw_result", None))
+        if isinstance(raw_result, dict):
+            language = raw_result.get("report_language")
+            if isinstance(language, str) and language.strip():
+                return normalize_report_language(language)
+        return None
+
+    @staticmethod
+    def _is_legacy_record(record, report_language: Optional[str] = None) -> bool:
+        language = normalize_report_language(report_language) if report_language else None
+        code = str(getattr(record, "code", "") or "").strip().upper()
+        if language == "zh":
+            return True
+        if code.startswith("HK") or code.endswith(".HK"):
+            return True
+        return code.isdigit() and len(code) == 6 and code not in {"000660", "005930"}
+
     def get_history_list(
         self,
         stock_code: Optional[str] = None,
@@ -116,12 +135,15 @@ class HistoryService:
             # Convert to response format
             items = []
             for record in records:
+                report_language = self._get_record_report_language(record)
                 items.append({
                     "id": record.id,
                     "query_id": record.query_id,
                     "stock_code": record.code,
                     "stock_name": record.name,
                     "report_type": record.report_type,
+                    "report_language": report_language,
+                    "is_legacy": self._is_legacy_record(record, report_language),
                     "sentiment_score": record.sentiment_score,
                     "operation_advice": record.operation_advice,
                     "created_at": record.created_at.isoformat() if record.created_at else None,
@@ -324,6 +346,10 @@ class HistoryService:
                        receives a proper 500 error instead of a silent success.
         """
         return self.db.delete_analysis_history_records(record_ids)
+
+    def delete_all_history_records(self) -> int:
+        """Delete all locally stored analysis history records."""
+        return self.db.delete_all_analysis_history_records()
 
     def get_news_intel(self, query_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """

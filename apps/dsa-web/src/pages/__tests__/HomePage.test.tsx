@@ -24,6 +24,7 @@ vi.mock('../../api/history', () => ({
     getList: vi.fn(),
     getDetail: vi.fn(),
     deleteRecords: vi.fn(),
+    resetRecords: vi.fn(),
     getNews: vi.fn().mockResolvedValue({ total: 0, items: [] }),
     getMarkdown: vi.fn().mockResolvedValue('# report'),
   },
@@ -153,7 +154,7 @@ describe('HomePage', () => {
     expect(dashboard.firstElementChild?.className).toContain('min-h-0');
     expect(dashboard.querySelector('.flex-1.flex.min-h-0.overflow-hidden')).toBeTruthy();
     expect(screen.getByTestId('home-dashboard-scroll')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL')).toBeInTheDocument();
     expect(await screen.findByText('추세가 강세를 유지합니다')).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
@@ -199,7 +200,7 @@ describe('HomePage', () => {
       </MemoryRouter>,
     );
 
-    const input = await screen.findByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL');
+    const input = await screen.findByPlaceholderText('종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL');
     fireEvent.change(input, { target: { value: '600519' } });
     fireEvent.click(screen.getByRole('button', { name: '\uBD84\uC11D' }));
 
@@ -512,7 +513,7 @@ describe('HomePage', () => {
     await screen.findByText('추세가 강세를 유지합니다');
 
     // Type something else in the search box
-    const input = screen.getByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL');
+    const input = screen.getByPlaceholderText('종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL');
     fireEvent.change(input, { target: { value: 'AAPL' } });
 
     // Click "Reanalyze"
@@ -555,7 +556,7 @@ describe('HomePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '\uC804\uB7B5' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /\uC131\uC7A5 \uD488\uC9C8/ }));
 
-    const input = screen.getByPlaceholderText('\uC885\uBAA9 \uCF54\uB4DC\uB098 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694. \uC608: KR005930, AAPL');
+    const input = screen.getByPlaceholderText('종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL');
     fireEvent.change(input, { target: { value: '600519' } });
     fireEvent.click(screen.getByRole('button', { name: '\uBD84\uC11D' }));
 

@@ -17,7 +17,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.base.STOCK_LIST': {
     title: 'Watchlist',
     summary: 'Defines the stock codes used by analysis jobs and notification reports.',
-    usage: 'Separate symbols with commas. A-shares can use six-digit codes, HK stocks can use the hk prefix, and US stocks can use ticker symbols.',
+    usage: 'Separate symbols with commas. Korean stocks can use 005930.KS/091990.KQ or six-digit KRX candidates, and US stocks can use ticker symbols such as AAPL.',
     valueNotes: [
       'Scheduled mode rereads the saved STOCK_LIST before each run.',
       'A temporary --stocks argument only affects that manual run.',
@@ -109,7 +109,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
     summary: 'Token used for Tushare Pro data access.',
     usage: 'Paste the token from your Tushare account.',
     valueNotes: ['Available APIs depend on your Tushare permission level.'],
-    impact: ['Affects some A-share base data, stock lists, and enrichment data.'],
+    impact: ['Legacy CN-market data only. It is not required for the KR/US-focused default workflow.'],
     notes: ['Do not commit the token or print it in public logs.'],
   },
   'settings.data_source.REALTIME_SOURCE_PRIORITY': {
@@ -304,7 +304,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
     title: 'Trading Day Check',
     summary: 'Controls whether analysis is skipped on non-trading days.',
     usage: 'Default true. Set false or use --force-run to override.',
-    valueNotes: ['Uses market calendars for A-share, HK, US, and other supported markets.'],
+    valueNotes: ['Uses market calendars for Korean, US, and other supported markets.'],
     impact: ['Affects whether manual and scheduled runs execute on holidays.'],
     notes: ['Disabling it can produce reports with missing realtime quotes on closed markets.'],
   },

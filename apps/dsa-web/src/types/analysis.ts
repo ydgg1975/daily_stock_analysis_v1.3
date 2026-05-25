@@ -352,6 +352,8 @@ export interface HistoryItem {
   stockCode: string;
   stockName?: string;
   reportType?: ReportType;
+  reportLanguage?: ReportLanguage;
+  isLegacy?: boolean;
   sentimentScore?: number;
   operationAdvice?: string;
   createdAt: string;

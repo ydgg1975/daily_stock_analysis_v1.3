@@ -63,6 +63,7 @@ export interface StockPoolState {
   toggleHistorySelection: (recordId: number) => void;
   toggleSelectAllVisible: () => void;
   deleteSelectedHistory: () => Promise<void>;
+  resetHistory: () => Promise<void>;
   submitAnalysis: (options?: SubmitAnalysisOptions) => Promise<void>;
   setNotify: (notify: boolean) => void;
   syncTaskCreated: (task: TaskInfo) => void;
@@ -295,6 +296,33 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
           set({ selectedReport: null });
         }
       }
+    } catch (error) {
+      set({ error: getParsedApiError(error) });
+    } finally {
+      set({ isDeletingHistory: false });
+    }
+  },
+
+  resetHistory: async () => {
+    const state = get();
+    if (state.isDeletingHistory) {
+      return;
+    }
+
+    set({ isDeletingHistory: true });
+    try {
+      await historyApi.resetRecords();
+      reportRequestSeq += 1;
+      historyRequestSeq += 1;
+      set({
+        historyItems: [],
+        selectedHistoryIds: [],
+        selectedReport: null,
+        isLoadingReport: false,
+        hasMore: false,
+        currentPage: 1,
+        error: null,
+      });
     } catch (error) {
       set({ error: getParsedApiError(error) });
     } finally {

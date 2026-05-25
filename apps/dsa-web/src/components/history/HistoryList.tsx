@@ -18,6 +18,7 @@ interface HistoryListProps {
   onToggleItemSelection: (recordId: number) => void;
   onToggleSelectAll: () => void;
   onDeleteSelected: () => void;
+  onResetHistory: () => void;
   className?: string;
 }
 
@@ -34,6 +35,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   onToggleItemSelection,
   onToggleSelectAll,
   onDeleteSelected,
+  onResetHistory,
   className = '',
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -135,6 +137,15 @@ export const HistoryList: React.FC<HistoryListProps> = ({
               >
                 {isDeleting ? '삭제 중' : '선택 삭제'}
               </Button>
+              <Button
+                variant="secondary"
+                size="xsm"
+                onClick={onResetHistory}
+                disabled={isDeleting}
+                className="shrink-0"
+              >
+                전체 초기화
+              </Button>
             </div>
           )}
         </div>
@@ -148,7 +159,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
         ) : items.length === 0 ? (
           <DashboardStateBlock
             title="아직 분석 기록이 없습니다"
-            description="관심 종목을 분석하면 이곳에 기록이 표시됩니다."
+            description="한국/미국 관심 종목을 분석하면 이곳에 기록이 표시됩니다."
             icon={(
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -13,6 +13,7 @@ const baseProps = {
   onToggleItemSelection: vi.fn(),
   onToggleSelectAll: vi.fn(),
   onDeleteSelected: vi.fn(),
+  onResetHistory: vi.fn(),
 };
 
 const items: HistoryItem[] = [
@@ -42,7 +43,7 @@ describe('HistoryList', () => {
     const { container } = render(<HistoryList {...baseProps} items={[]} />);
 
     expect(screen.getByText('아직 분석 기록이 없습니다')).toBeInTheDocument();
-    expect(screen.getByText('관심 종목을 분석하면 이곳에 기록이 표시됩니다.')).toBeInTheDocument();
+    expect(screen.getByText('한국/미국 관심 종목을 분석하면 이곳에 기록이 표시됩니다.')).toBeInTheDocument();
     expect(screen.getByText('분석 기록')).toBeInTheDocument();
     expect(container.querySelector('.glass-card')).toBeTruthy();
   });
@@ -92,6 +93,23 @@ describe('HistoryList', () => {
     render(<HistoryList {...baseProps} items={items} />);
 
     expect(screen.getByRole('button', { name: '선택 삭제' })).toBeDisabled();
+  });
+
+  it('shows a reset action and legacy badge for old reports', () => {
+    const onResetHistory = vi.fn();
+
+    render(
+      <HistoryList
+        {...baseProps}
+        items={[{ ...items[0], isLegacy: true }]}
+        onResetHistory={onResetHistory}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '전체 초기화' }));
+
+    expect(screen.getByText('legacy')).toBeInTheDocument();
+    expect(onResetHistory).toHaveBeenCalledTimes(1);
   });
 
   it('keeps Korean stock names readable', () => {

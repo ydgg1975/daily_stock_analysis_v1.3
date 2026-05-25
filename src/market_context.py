@@ -2,7 +2,7 @@
 """
 Market context detection for LLM prompts.
 
-Detects the market (A-shares, HK, US) from a stock code and returns
+Detects the market (KR, US, HK, CN) from a stock code and returns
 market-specific role descriptions so prompts are not hardcoded to a
 single market.
 
@@ -12,17 +12,26 @@ Fixes: https://github.com/ZhuLinsen/daily_stock_analysis/issues/644
 import re
 from typing import Optional
 
+KNOWN_BARE_KR_CODES = {"000660", "005930"}
+
 
 def detect_market(stock_code: Optional[str]) -> str:
     """Detect market from stock code.
 
     Returns:
-        One of 'cn', 'hk', 'us', or 'cn' as fallback.
+        One of 'kr', 'us', 'hk', 'cn', or 'kr' as fallback.
     """
     if not stock_code:
         return "cn"
 
     code = stock_code.strip().upper()
+
+    if code.endswith((".KS", ".KQ")):
+        return "kr"
+    if code.startswith(("KR", "KS", "KQ")) and code[2:].isdigit() and len(code[2:]) == 6:
+        return "kr"
+    if code in KNOWN_BARE_KR_CODES:
+        return "kr"
 
     # HK stocks: HK00700, 00700.HK, or 5-digit pure numbers
     if code.startswith("HK") or code.endswith(".HK"):
@@ -39,7 +48,6 @@ def detect_market(stock_code: Optional[str]) -> str:
     if re.match(r'^[A-Z]{1,5}(\.[A-Z]{1,2})?$', code):
         return "us"
 
-    # Default: A-shares (6-digit numbers like 600519, 000001)
     return "cn"
 
 
@@ -57,6 +65,10 @@ _MARKET_ROLES = {
     "us": {
         "zh": "美股",
         "en": "US stock",
+    },
+    "kr": {
+        "zh": "韩国股票",
+        "en": "Korean stock",
     },
 }
 
@@ -89,6 +101,16 @@ _MARKET_GUIDELINES = {
         "en": (
             "- This analysis covers a **US stock** (listed on NYSE/NASDAQ).\n"
             "- US stocks have no daily price limits (but have circuit breakers), allow T+0 and pre/after-market trading. Consider USD FX, Fed policy, and SEC regulations."
+        ),
+    },
+    "kr": {
+        "zh": (
+            "- 本次分析对象为 **韩国股票**（韩国交易所/KOSDAQ 上市股票）。\n"
+            "- 请关注韩元汇率、韩国央行政策、半导体/出口周期、公司公告与外资资金流。不要套用中国 A 股的涨跌停和 T+1 规则。"
+        ),
+        "en": (
+            "- This analysis covers a **Korean stock** listed on KRX/KOSDAQ.\n"
+            "- Consider KRW FX, Bank of Korea policy, export cycles, company disclosures, and foreign investor flow. Do not apply China A-share price-limit or T+1 assumptions."
         ),
     },
 }

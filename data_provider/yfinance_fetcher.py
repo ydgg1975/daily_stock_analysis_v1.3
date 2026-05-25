@@ -86,6 +86,7 @@ class YfinanceFetcher(BaseFetcher):
         - A股沪市：600519.SS (Shanghai Stock Exchange)
         - A股深市：000001.SZ (Shenzhen Stock Exchange)
         - 港股：0700.HK (Hong Kong Stock Exchange)
+        - 한국 주식：005930.KS / 091990.KQ
         - 美股：AAPL, TSLA, GOOGL (无需后缀)
 
         Args:
@@ -103,6 +104,16 @@ class YfinanceFetcher(BaseFetcher):
             'AAPL'
         """
         code = stock_code.strip().upper()
+
+        # 한국 주식: 명시 suffix는 그대로 사용하고, 6자리 단독 입력은 KOSPI(.KS)
+        # 후보로 다룬다. KOSDAQ은 091990.KQ처럼 명시 suffix를 권장한다.
+        if '.' in code:
+            base, suffix = code.rsplit('.', 1)
+            if suffix in ('KS', 'KQ') and base.isdigit() and len(base) == 6:
+                return f"{base}.{suffix}"
+        if code.startswith(('KR', 'KS', 'KQ')) and code[2:].isdigit() and len(code[2:]) == 6:
+            suffix = 'KQ' if code.startswith('KQ') else 'KS'
+            return f"{code[2:]}.{suffix}"
 
         # 美股指数：映射到 Yahoo Finance 符号（如 SPX -> ^GSPC）
         yf_symbol, _ = get_us_index_yf_symbol(code)
@@ -140,6 +151,10 @@ class YfinanceFetcher(BaseFetcher):
         if is_bse_code(code):
             base = code.split('.')[0] if '.' in code else code
             return f"{base}.BJ"
+
+        # Product default: bare 6-digit symbols are KRX candidates.
+        if code.isdigit() and len(code) == 6:
+            return f"{code}.KS"
 
         # A股：根据代码前缀判断市场
         if code.startswith(('600', '601', '603', '688')):
