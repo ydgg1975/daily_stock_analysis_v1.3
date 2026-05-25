@@ -38,6 +38,20 @@ class TestStockIndexLoader(unittest.TestCase):
                 self.assertEqual(stock_index_loader.get_index_stock_name("700.HK"), "腾讯控股")
                 self.assertEqual(stock_index_loader.get_index_stock_name("aapl"), "苹果")
 
+    def test_default_candidate_paths_prefer_remote_cache(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            remote_cache = Path(temp_dir) / "data" / "cache" / "stocks.index.json"
+            with patch.object(
+                stock_index_loader,
+                "get_remote_stock_index_cache_path",
+                return_value=remote_cache,
+            ):
+                paths = stock_index_loader.get_stock_index_candidate_paths()
+
+            self.assertEqual(paths[0], remote_cache)
+            self.assertTrue(str(paths[1]).endswith("apps/dsa-web/public/stocks.index.json"))
+            self.assertTrue(str(paths[2]).endswith("static/stocks.index.json"))
+
     def test_get_stock_name_index_map_is_cached_after_first_load(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             index_path = Path(temp_dir) / "stocks.index.json"

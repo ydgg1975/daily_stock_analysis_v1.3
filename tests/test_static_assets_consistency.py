@@ -12,9 +12,11 @@ referenced by ``index.html`` does not exist on disk.
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 import sys
 from pathlib import Path
+from unittest.mock import ANY, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -260,6 +262,132 @@ def test_frontend_index_responses_are_not_cacheable(tmp_path: Path) -> None:
         )
         assert response.headers["pragma"] == "no-cache"
         assert response.headers["expires"] == "0"
+
+
+def _write_stock_index(path: Path, name: str = "平安银行", size: int = 1) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            [
+                [
+                    f"{index:06d}.SZ",
+                    f"{index:06d}",
+                    name,
+                    "pinganyinhang",
+                    "payh",
+                    [],
+                    "CN",
+                    "stock",
+                    True,
+                    100,
+                ]
+                for index in range(size)
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_stock_index_route_serves_remote_cache_first(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "stocks.index.json"
+    bundled_path = tmp_path / "bundled" / "stocks.index.json"
+    _write_stock_index(static_dir / "stocks.index.json", "内置静态")
+    _write_stock_index(cache_path, "远程缓存", size=100)
+    _write_stock_index(bundled_path, "源码内置")
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh") as schedule:
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.json()[0][2] == "远程缓存"
+    schedule.assert_called_once()
+
+
+def test_stock_index_route_falls_back_to_static_index(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "missing.json"
+    bundled_path = tmp_path / "bundled" / "stocks.index.json"
+    _write_stock_index(static_dir / "stocks.index.json", "内置静态")
+    _write_stock_index(bundled_path, "源码内置")
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh"):
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 200
+    assert response.json()[0][2] == "内置静态"
+
+
+def test_stock_index_route_skips_invalid_remote_cache(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "stocks.index.json"
+    bundled_path = tmp_path / "bundled" / "stocks.index.json"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text("not-json", encoding="utf-8")
+    _write_stock_index(static_dir / "stocks.index.json", "内置静态")
+    _write_stock_index(bundled_path, "源码内置")
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh"):
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 200
+    assert response.json()[0][2] == "内置静态"
+
+
+def test_stock_index_route_returns_404_when_all_candidates_missing(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "missing.json"
+    bundled_path = tmp_path / "bundled" / "missing.json"
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh"):
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 404
+    assert response.text == "stock index not found"
+
+
+def test_app_startup_schedules_stock_index_background_refresh(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+
+    with patch.object(app_module, "_schedule_stock_index_background_refresh") as schedule:
+        with TestClient(create_app(static_dir=static_dir)):
+            pass
+
+    schedule.assert_called_once_with(ANY, "startup")
 
 
 @pytest.mark.parametrize(
