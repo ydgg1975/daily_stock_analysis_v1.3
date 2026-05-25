@@ -599,6 +599,9 @@ class Config:
     tavily_api_keys: List[str] = field(default_factory=list)  # Tavily API Keys
     brave_api_keys: List[str] = field(default_factory=list)  # Brave Search API Keys
     serpapi_keys: List[str] = field(default_factory=list)  # SerpAPI Keys
+    openai_web_search_api_keys: List[str] = field(default_factory=list)  # OpenAI Web Search API Keys
+    openai_web_search_model: str = "gpt-5.5"  # OpenAI model with web_search support
+    openai_web_search_base_url: str = "https://api.openai.com/v1"  # OpenAI API base URL for web search
     searxng_base_urls: List[str] = field(default_factory=list)  # SearXNG instance URLs (self-hosted, no quota)
     searxng_public_instances_enabled: bool = True  # Auto-discover public SearXNG instances when base URLs are absent
 
@@ -1204,6 +1207,19 @@ class Config:
         brave_keys_str = os.getenv('BRAVE_API_KEYS', '')
         brave_api_keys = [k.strip() for k in brave_keys_str.split(',') if k.strip()]
 
+        openai_web_search_keys_str = os.getenv('OPENAI_WEB_SEARCH_API_KEYS', '')
+        openai_web_search_api_keys = [
+            k.strip() for k in openai_web_search_keys_str.split(',') if k.strip()
+        ]
+        openai_web_search_model = (
+            os.getenv('OPENAI_WEB_SEARCH_MODEL', '').strip()
+            or "gpt-5.5"
+        )
+        openai_web_search_base_url = (
+            os.getenv('OPENAI_WEB_SEARCH_BASE_URL', '').strip().rstrip('/')
+            or "https://api.openai.com/v1"
+        )
+
         _raw_urls = [u.strip() for u in os.getenv('SEARXNG_BASE_URLS', '').split(',') if u.strip()]
         searxng_base_urls = []
         invalid_searxng_urls = []
@@ -1342,6 +1358,9 @@ class Config:
             tavily_api_keys=tavily_api_keys,
             brave_api_keys=brave_api_keys,
             serpapi_keys=serpapi_keys,
+            openai_web_search_api_keys=openai_web_search_api_keys,
+            openai_web_search_model=openai_web_search_model,
+            openai_web_search_base_url=openai_web_search_base_url,
             searxng_base_urls=searxng_base_urls,
             searxng_public_instances_enabled=searxng_public_instances_enabled,
             social_sentiment_api_key=os.getenv('SOCIAL_SENTIMENT_API_KEY') or None,
@@ -2171,6 +2190,7 @@ class Config:
             self.anspire_api_keys
             or self.bocha_api_keys
             or self.minimax_api_keys
+            or self.openai_web_search_api_keys
             or self.tavily_api_keys
             or self.brave_api_keys
             or self.serpapi_keys
@@ -2417,7 +2437,7 @@ class Config:
         if not self.has_search_capability_enabled():
             issues.append(ConfigIssue(
                 severity="info",
-                message="未配置搜索引擎能力 (Bocha/MiniMax/Tavily/Brave/SerpAPI/SearXNG)，新闻搜索功能将不可用",
+                message="未配置搜索引擎能力 (Anspire/Bocha/Tavily/Brave/SerpAPI/MiniMax/OpenAI Web Search/SearXNG)，新闻搜索功能将不可用",
                 field="BOCHA_API_KEYS",
             ))
 

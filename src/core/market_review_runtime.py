@@ -64,6 +64,13 @@ def build_market_review_runtime(
             brave_keys=getattr(config, "brave_api_keys", None),
             serpapi_keys=getattr(config, "serpapi_keys", None),
             minimax_keys=getattr(config, "minimax_api_keys", None),
+            openai_web_search_keys=getattr(config, "openai_web_search_api_keys", None),
+            openai_web_search_model=getattr(config, "openai_web_search_model", "gpt-5.5"),
+            openai_web_search_base_url=getattr(
+                config,
+                "openai_web_search_base_url",
+                "https://api.openai.com/v1",
+            ),
             searxng_base_urls=getattr(config, "searxng_base_urls", None),
             searxng_public_instances_enabled=getattr(
                 config,

@@ -173,6 +173,14 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['影响无商业搜索 Key 时的新闻和网页搜索兜底能力。'],
     notes: ['公共实例稳定性不可控，生产环境建议使用自建或可信实例。'],
   },
+  'settings.data_source.OPENAI_WEB_SEARCH_API_KEYS': {
+    title: 'OpenAI Web Search',
+    summary: '使用 OpenAI 模型自带联网搜索补充新闻和网页信息。',
+    usage: '填写 OpenAI API Key；建议使用独立 Key，不要复用分析模型或第三方中转配置。',
+    valueNotes: ['多个 Key 使用英文逗号分隔。'],
+    impact: ['影响新闻检索、事件催化和报告中的外部信息上下文。'],
+    notes: ['该能力需要账号和模型支持 OpenAI Web Search。'],
+  },
   'settings.data_source.ENABLE_CHIP_DISTRIBUTION': {
     title: '筹码分布分析',
     summary: '控制是否启用筹码分布相关分析。',
@@ -578,6 +586,14 @@ const settingsHelpEnUS: SettingsHelpMap = {
     valueNotes: ['When public discovery is disabled, only these instances are used.'],
     impact: ['Affects fallback web search when commercial search keys are absent.'],
     notes: ['For production, prefer self-hosted or trusted instances over public ones.'],
+  },
+  'settings.data_source.OPENAI_WEB_SEARCH_API_KEYS': {
+    title: 'OpenAI Web Search',
+    summary: 'Uses OpenAI model-backed web search for news and web context.',
+    usage: 'Provide OpenAI API keys. Use a dedicated key rather than an analysis-model or proxy key.',
+    valueNotes: ['Separate multiple keys with English commas.'],
+    impact: ['Affects news retrieval, event catalysts, and external context in reports.'],
+    notes: ['Requires account and model support for OpenAI Web Search.'],
   },
   'settings.data_source.ENABLE_CHIP_DISTRIBUTION': {
     title: 'Chip Distribution',

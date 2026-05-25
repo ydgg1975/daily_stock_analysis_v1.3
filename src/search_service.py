@@ -1489,6 +1489,254 @@ class MiniMaxSearchProvider(BaseSearchProvider):
             return '未知来源'
 
 
+class OpenAIWebSearchProvider(BaseSearchProvider):
+    """
+    OpenAI Web Search provider using the Responses API.
+
+    This uses an OpenAI key dedicated to search so deployments can keep their
+    analysis LLM provider (for example DeepSeek) separate from the web search
+    backend.
+    """
+
+    DEFAULT_API_BASE = "https://api.openai.com/v1"
+    DEFAULT_MODEL = "gpt-5.5"
+
+    def __init__(
+        self,
+        api_keys: List[str],
+        model: str = DEFAULT_MODEL,
+        base_url: str = DEFAULT_API_BASE,
+    ):
+        super().__init__(api_keys, "OpenAI Web Search")
+        self.model = (model or self.DEFAULT_MODEL).strip()
+        self.base_url = (base_url or self.DEFAULT_API_BASE).strip().rstrip("/")
+
+    def _do_search(
+        self,
+        query: str,
+        api_key: str,
+        max_results: int,
+        days: int = 7,
+    ) -> SearchResponse:
+        try:
+            has_cjk = any('\u4e00' <= ch <= '\u9fff' for ch in query)
+            time_hint = MiniMaxSearchProvider._time_hint(days, is_chinese=has_cjk)
+            prompt = (
+                f"Search the web for recent news about: {query} {time_hint}.\n"
+                f"Return at most {max_results} items as strict JSON with this schema:\n"
+                '{"results":[{"title":"...","snippet":"...","url":"https://...",'
+                '"source":"...","published_date":"YYYY-MM-DD or empty"}]}\n'
+                "Prefer official announcements, exchange filings, and reputable "
+                "financial news. Do not include items without a URL."
+            )
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.model,
+                "tools": [{"type": "web_search", "search_context_size": "low"}],
+                "tool_choice": "required",
+                "input": prompt,
+                "text": {"format": {"type": "json_object"}},
+            }
+            response = _post_with_retry(
+                f"{self.base_url}/responses",
+                headers=headers,
+                json=payload,
+                timeout=30,
+            )
+
+            if response.status_code != 200:
+                retry_response = self._retry_with_search_model_if_needed(
+                    response=response,
+                    headers=headers,
+                    prompt=prompt,
+                    api_key=api_key,
+                )
+                if retry_response is not response:
+                    response = retry_response
+                if response.status_code != 200:
+                    error_msg = self._parse_http_error(response)
+                    logger.warning("[OpenAI Web Search] Search failed: %s", error_msg)
+                    return SearchResponse(
+                        query=query,
+                        results=[],
+                        provider=self.name,
+                        success=False,
+                        error_message=error_msg,
+                    )
+
+            data = response.json()
+            output_text = self._extract_output_text(data)
+            results = self._parse_results(output_text, max_results=max_results, days=days)
+
+            return SearchResponse(
+                query=query,
+                results=results,
+                provider=self.name,
+                success=True,
+            )
+
+        except requests.exceptions.Timeout:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message="Request timeout",
+            )
+        except requests.exceptions.RequestException as exc:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=f"Network error: {exc}",
+            )
+        except Exception as exc:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message=f"Unexpected error: {exc}",
+            )
+
+    def _retry_with_search_model_if_needed(
+        self,
+        *,
+        response: requests.Response,
+        headers: Dict[str, str],
+        prompt: str,
+        api_key: str,
+    ) -> requests.Response:
+        """Retry without tools for dedicated search models if hosted tools are unsupported."""
+        if not self.model.endswith("-search-api"):
+            return response
+
+        body = response.text.lower()
+        if response.status_code not in (400, 404) or (
+            "web_search" not in body and "tool" not in body and "unsupported" not in body
+        ):
+            return response
+
+        payload = {
+            "model": self.model,
+            "input": prompt,
+            "text": {"format": {"type": "json_object"}},
+        }
+        logger.info(
+            "[OpenAI Web Search] Retrying with dedicated search model payload"
+        )
+        return _post_with_retry(
+            f"{self.base_url}/responses",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+
+    @staticmethod
+    def _extract_output_text(data: Dict[str, Any]) -> str:
+        chunks: List[str] = []
+        for item in data.get("output", []) or []:
+            for content in item.get("content", []) or []:
+                if isinstance(content, dict) and content.get("type") in {
+                    "output_text",
+                    "text",
+                }:
+                    text = content.get("text")
+                    if text:
+                        chunks.append(str(text))
+        if chunks:
+            return "\n".join(chunks)
+        if data.get("output_text"):
+            return str(data["output_text"])
+        if data.get("text"):
+            return str(data["text"])
+        return ""
+
+    @classmethod
+    def _parse_results(
+        cls,
+        output_text: str,
+        *,
+        max_results: int,
+        days: int,
+    ) -> List[SearchResult]:
+        import json
+
+        if not output_text:
+            return []
+
+        parsed = cls._loads_json_object(output_text)
+        raw_results = parsed.get("results", []) if isinstance(parsed, dict) else []
+        results: List[SearchResult] = []
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or item.get("link") or "").strip()
+            title = str(item.get("title") or "").strip()
+            snippet = str(item.get("snippet") or item.get("summary") or "").strip()
+            if not url or not title:
+                continue
+            date_val = item.get("published_date") or item.get("date")
+            date_str = str(date_val).strip() if date_val else None
+            if not MiniMaxSearchProvider._is_within_days(date_str, days):
+                continue
+            source = str(item.get("source") or "").strip() or cls._extract_domain(url)
+            results.append(
+                SearchResult(
+                    title=title,
+                    snippet=snippet[:500],
+                    url=url,
+                    source=source,
+                    published_date=date_str,
+                )
+            )
+            if len(results) >= max_results:
+                break
+        return results
+
+    @staticmethod
+    def _loads_json_object(output_text: str) -> Dict[str, Any]:
+        import json
+
+        try:
+            parsed = json.loads(output_text)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            pass
+
+        match = re.search(r"\{.*\}", output_text, re.DOTALL)
+        if not match:
+            return {}
+        try:
+            parsed = json.loads(match.group(0))
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _parse_http_error(response: requests.Response) -> str:
+        try:
+            data = response.json()
+            error = data.get("error") if isinstance(data, dict) else None
+            if isinstance(error, dict):
+                return str(error.get("message") or error)
+            return str(data)[:300]
+        except Exception:
+            return f"HTTP {response.status_code}: {response.text[:300]}"
+
+    @staticmethod
+    def _extract_domain(url: str) -> str:
+        try:
+            parsed = urlparse(url)
+            return parsed.netloc.replace("www.", "") or "未知来源"
+        except Exception:
+            return "未知来源"
+
+
 class BraveSearchProvider(BaseSearchProvider):
     """
     Brave Search 搜索引擎
@@ -2169,6 +2417,9 @@ class SearchService:
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
+        openai_web_search_keys: Optional[List[str]] = None,
+        openai_web_search_model: str = "gpt-5.5",
+        openai_web_search_base_url: str = "https://api.openai.com/v1",
         searxng_base_urls: Optional[List[str]] = None,
         searxng_public_instances_enabled: bool = True,
         news_max_age_days: int = 3,
@@ -2184,6 +2435,9 @@ class SearchService:
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
+            openai_web_search_keys: OpenAI Web Search API Key 列表
+            openai_web_search_model: OpenAI Web Search 模型
+            openai_web_search_base_url: OpenAI Web Search API 地址
             searxng_base_urls: SearXNG 实例地址列表（自建无配额兜底）
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
             news_max_age_days: 新闻最大时效（天）
@@ -2233,7 +2487,22 @@ class SearchService:
             self._providers.append(MiniMaxSearchProvider(minimax_keys))
             logger.info(f"已配置 MiniMax 搜索，共 {len(minimax_keys)} 个 API Key")
 
-        # 6. SearXNG（自建实例优先；未配置时可自动发现公共实例）
+        # 6. OpenAI Web Search（模型自带联网搜索）
+        if openai_web_search_keys:
+            self._providers.append(
+                OpenAIWebSearchProvider(
+                    openai_web_search_keys,
+                    model=openai_web_search_model,
+                    base_url=openai_web_search_base_url,
+                )
+            )
+            logger.info(
+                "已配置 OpenAI Web Search，共 %s 个 API Key，模型: %s",
+                len(openai_web_search_keys),
+                openai_web_search_model,
+            )
+
+        # 7. SearXNG（自建实例优先；未配置时可自动发现公共实例）
         searxng_provider = SearXNGSearchProvider(
             searxng_base_urls,
             use_public_instances=bool(searxng_public_instances_enabled and not searxng_base_urls),
@@ -2245,7 +2514,7 @@ class SearchService:
             else:
                 logger.info("已启用 SearXNG 公共实例自动发现模式")
 
-        # 7. Anspire Search（实时智能搜索优化）
+        # 8. Anspire Search（实时智能搜索优化）
         if anspire_keys:
             self._providers.insert(0, AnspireSearchProvider(anspire_keys))
             logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
@@ -3919,6 +4188,9 @@ def get_search_service() -> SearchService:
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,
+                    openai_web_search_keys=config.openai_web_search_api_keys,
+                    openai_web_search_model=config.openai_web_search_model,
+                    openai_web_search_base_url=config.openai_web_search_base_url,
                     searxng_base_urls=config.searxng_base_urls,
                     searxng_public_instances_enabled=config.searxng_public_instances_enabled,
                     news_max_age_days=config.news_max_age_days,
