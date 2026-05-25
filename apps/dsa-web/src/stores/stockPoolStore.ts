@@ -30,6 +30,7 @@ type SubmitAnalysisOptions = {
 let reportRequestSeq = 0;
 let analyzeRequestSeq = 0;
 let historyRequestSeq = 0;
+let activeTaskRequestSeq = 0;
 const dismissedTaskIds = new Set<string>();
 
 export interface StockPoolState {
@@ -68,6 +69,7 @@ export interface StockPoolState {
   syncTaskCreated: (task: TaskInfo) => void;
   syncTaskUpdated: (task: TaskInfo) => void;
   syncTaskFailed: (task: TaskInfo) => void;
+  refreshActiveTasks: () => Promise<void>;
   removeTask: (taskId: string) => void;
   resetDashboardState: () => void;
 }
@@ -408,6 +410,42 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     set({ error: getParsedApiError(task.error || '分析失败') });
   },
 
+  refreshActiveTasks: async () => {
+    const requestId = ++activeTaskRequestSeq;
+    try {
+      const response = await analysisApi.getTasks({
+        status: 'pending,processing',
+        limit: 100,
+      });
+      if (requestId !== activeTaskRequestSeq) {
+        return;
+      }
+
+      const remoteTasks = response.tasks.filter(
+        (task) => !dismissedTaskIds.has(task.taskId),
+      );
+      const remoteTaskIds = new Set(remoteTasks.map((task) => task.taskId));
+      const remoteTaskById = new Map(remoteTasks.map((task) => [task.taskId, task]));
+      const isCompleteSnapshot = response.tasks.length === response.pending + response.processing;
+
+      const nextTasks = get().activeTasks
+        .filter((task) => !dismissedTaskIds.has(task.taskId))
+        .filter((task) => !isCompleteSnapshot || remoteTaskIds.has(task.taskId))
+        .map((task) => remoteTaskById.get(task.taskId) ?? task);
+
+      const localTaskIds = new Set(nextTasks.map((task) => task.taskId));
+      for (const task of remoteTasks) {
+        if (!localTaskIds.has(task.taskId)) {
+          nextTasks.push(task);
+        }
+      }
+
+      set({ activeTasks: nextTasks });
+    } catch {
+      // Keep the current task panel when reconciliation cannot reach the API.
+    }
+  },
+
   removeTask: (taskId) => {
     dismissedTaskIds.add(taskId);
     set({ activeTasks: get().activeTasks.filter((task) => task.taskId !== taskId) });
@@ -417,6 +455,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     historyRequestSeq += 1;
     reportRequestSeq = 0;
     analyzeRequestSeq = 0;
+    activeTaskRequestSeq += 1;
     dismissedTaskIds.clear();
     set({ ...initialState });
   },
