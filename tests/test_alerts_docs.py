@@ -240,9 +240,9 @@ def test_changelog_mentions_alert_p6_release_note() -> None:
     changelog = (PROJECT_ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
 
     assert "P6" in changelog
-    assert "自选股" in changelog
-    assert "持仓" in changelog
-    assert "账户联动规则" in changelog
+    assert "관심 종목" in changelog
+    assert "보유 종목" in changelog
+    assert "계좌 연동 규칙" in changelog
 
 
 def test_changelog_unreleased_keeps_flat_entries() -> None:

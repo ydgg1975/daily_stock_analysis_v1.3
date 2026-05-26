@@ -120,12 +120,12 @@ class TestAskCommandMultiStock(unittest.TestCase):
                 )
 
         with patch("src.agent.factory.build_agent_executor", return_value=FakeExecutor()):
-            with patch.object(command, "_build_portfolio_section", return_value="## 组合视角\n组合摘要"):
+            with patch.object(command, "_build_portfolio_section", return_value="## 포트폴리오 관점\n포트폴리오 요약"):
                 with patch("src.agent.conversation.conversation_manager"):
                     response = command._analyze_multi(config, message, ["600519", "000858"], None, "")
 
         self.assertTrue(response.markdown)
-        self.assertIn("## 组合视角", response.text)
+        self.assertIn("## 포트폴리오 관점", response.text)
         self.assertIn("| 600519 | buy | 72% |", response.text)
         self.assertIn("### 000858", response.text)
 
