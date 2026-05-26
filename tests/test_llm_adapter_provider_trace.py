@@ -75,15 +75,55 @@ def test_convert_messages_only_sends_provider_trace_to_matching_target_model() -
     ]
 
     matching = adapter._convert_messages(messages, target_model="anthropic/claude-test")
-    fallback = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
+    mismatched = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
 
     assert matching[0]["content"] == [{"type": "thinking", "thinking": "opaque"}]
     assert matching[0]["reasoning_content"] == "provider-only"
     assert matching[0]["tool_calls"][0]["provider_specific_fields"] == {"thought_signature": "sig-1"}
 
-    assert fallback[0]["content"] == "checking"
-    assert "reasoning_content" not in fallback[0]
-    assert "provider_specific_fields" not in fallback[0]["tool_calls"][0]
+    assert mismatched == []
+
+
+def test_convert_messages_skips_entire_trace_segment_for_mismatched_attempt() -> None:
+    adapter = LLMToolAdapter.__new__(LLMToolAdapter)
+    messages = [
+        {"role": "user", "content": "u1"},
+        {
+            "role": "assistant",
+            "content": "checking",
+            "_trace_provider": "deepseek",
+            "_trace_model": "deepseek/deepseek-chat",
+            "reasoning_content": "provider-only",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "echo",
+                    "arguments": {"message": "hello"},
+                    "provider_specific_fields": {"thought_signature": "sig-1"},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "tool-result",
+            "_trace_provider": "deepseek",
+            "_trace_model": "deepseek/deepseek-chat",
+        },
+        {"role": "assistant", "content": "a1-final"},
+    ]
+
+    primary = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
+    fallback = adapter._convert_messages(messages, target_model="deepseek/deepseek-chat")
+
+    assert [msg["role"] for msg in primary] == ["user", "assistant"]
+    assert primary[-1]["content"] == "a1-final"
+    assert all(msg.get("tool_call_id") != "call_1" for msg in primary)
+
+    assert [msg["role"] for msg in fallback] == ["user", "assistant", "tool", "assistant"]
+    assert fallback[1]["reasoning_content"] == "provider-only"
+    assert fallback[1]["tool_calls"][0]["provider_specific_fields"] == {"thought_signature": "sig-1"}
+    assert fallback[2]["tool_call_id"] == "call_1"
 
 
 def test_convert_messages_matches_slashless_openai_target_without_provider_leakage() -> None:
@@ -111,8 +151,7 @@ def test_convert_messages_matches_slashless_openai_target_without_provider_leaka
 
     assert matching[0]["reasoning_content"] == "provider-only"
     assert matching[0]["tool_calls"][0]["provider_specific_fields"] == {"thought_signature": "sig-1"}
-    assert "reasoning_content" not in mismatched[0]
-    assert "provider_specific_fields" not in mismatched[0]["tool_calls"][0]
+    assert mismatched == []
 
 
 def test_parse_litellm_response_extracts_claude_blocks_and_tool_provider_fields() -> None:

@@ -2063,7 +2063,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             # 倒序返回，保证时间顺序
             return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
 
-    def get_visible_conversation_messages(self, session_id: str) -> List[Dict[str, Any]]:
+    def get_visible_conversation_messages(self, session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Return visible user/assistant conversation messages in chronological order."""
         with self.session_scope() as session:
             stmt = (
@@ -2076,7 +2076,15 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 )
                 .order_by(ConversationMessage.created_at, ConversationMessage.id)
             )
+            if limit is not None:
+                stmt = (
+                    stmt.order_by(None)
+                    .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+                    .limit(limit)
+                )
             messages = session.execute(stmt).scalars().all()
+            if limit is not None:
+                messages = list(reversed(messages))
             return [
                 {
                     "id": msg.id,

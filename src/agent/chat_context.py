@@ -221,8 +221,7 @@ def _build_visible_history_state(
     """Return visible history with private ``_message_id`` anchors."""
     db = get_db()
     if not getattr(config, "agent_context_compression_enabled", False):
-        visible_messages = _load_visible_messages(session_id)
-        selected = visible_messages[-20:]
+        selected = _load_visible_messages(session_id, limit=20)
         messages = _to_chat_messages(selected, include_ids=True)
         return VisibleHistoryState(
             messages=messages,
@@ -349,8 +348,8 @@ def _build_visible_history_state(
     )
 
 
-def _load_visible_messages(session_id: str) -> List[VisibleMessage]:
-    rows = get_db().get_visible_conversation_messages(session_id)
+def _load_visible_messages(session_id: str, *, limit: Optional[int] = None) -> List[VisibleMessage]:
+    rows = get_db().get_visible_conversation_messages(session_id, limit=limit)
     messages = []
     for row in rows:
         role = str(row.get("role") or "")
@@ -445,7 +444,7 @@ def _restore_trace_metadata(
         if not isinstance(msg, dict):
             continue
         clean = strip_trace_metadata(msg)
-        if clean.get("role") == "assistant" and clean.get("tool_calls"):
+        if clean.get("role") in {"assistant", "tool"}:
             clean[TRACE_PROVIDER_KEY] = provider
             clean[TRACE_MODEL_KEY] = model
         restored.append(clean)

@@ -634,6 +634,13 @@ class LLMToolAdapter:
         openai_messages: List[Dict[str, Any]] = []
         target_provider = self._trace_provider_for_target(target_model)
         for msg in messages:
+            trace_matches_target = _message_trace_matches_target(
+                msg,
+                target_model,
+                target_provider=target_provider,
+            )
+            if not trace_matches_target:
+                continue
             if msg["role"] == "tool":
                 openai_messages.append({
                     "role": "tool",
@@ -641,11 +648,6 @@ class LLMToolAdapter:
                     "content": msg["content"] if isinstance(msg["content"], str) else json.dumps(msg["content"]),
                 })
             elif msg["role"] == "assistant" and msg.get("tool_calls"):
-                include_provider_trace = _message_trace_matches_target(
-                    msg,
-                    target_model,
-                    target_provider=target_provider,
-                )
                 openai_tc = []
                 for tc in msg["tool_calls"]:
                     tc_dict: Dict[str, Any] = {
@@ -656,17 +658,16 @@ class LLMToolAdapter:
                             "arguments": json.dumps(tc["arguments"]),
                         },
                     }
-                    if include_provider_trace:
-                        provider_specific_fields = dict(tc.get("provider_specific_fields") or {})
-                        sig = tc.get("thought_signature")
-                        if sig is not None:
-                            provider_specific_fields.setdefault("thought_signature", sig)
-                        if provider_specific_fields:
-                            tc_dict["provider_specific_fields"] = provider_specific_fields
+                    provider_specific_fields = dict(tc.get("provider_specific_fields") or {})
+                    sig = tc.get("thought_signature")
+                    if sig is not None:
+                        provider_specific_fields.setdefault("thought_signature", sig)
+                    if provider_specific_fields:
+                        tc_dict["provider_specific_fields"] = provider_specific_fields
                     openai_tc.append(tc_dict)
                 content = (
                     msg.get("provider_blocks")
-                    if include_provider_trace and msg.get("provider_blocks")
+                    if msg.get("provider_blocks")
                     else msg.get("content")
                 )
                 openai_msg: Dict[str, Any] = {
@@ -674,7 +675,7 @@ class LLMToolAdapter:
                     "content": content,
                     "tool_calls": openai_tc,
                 }
-                if include_provider_trace and msg.get("reasoning_content") is not None:
+                if msg.get("reasoning_content") is not None:
                     openai_msg["reasoning_content"] = msg["reasoning_content"]
                 openai_messages.append(openai_msg)
             else:
