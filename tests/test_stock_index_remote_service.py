@@ -71,6 +71,19 @@ def test_refresh_remote_stock_index_cache_writes_valid_payload(tmp_path: Path) -
     get.assert_called_once_with(service.DEFAULT_STOCK_INDEX_REMOTE_URL, timeout=10)
 
 
+def test_refresh_remote_stock_index_cache_decodes_remote_payload_as_utf8(tmp_path: Path) -> None:
+    cache_path = tmp_path / "stocks.index.json"
+    settings = service.RemoteStockIndexSettings(cache_path=cache_path)
+    response = _response(_stock_index_payload())
+    response.encoding = "ascii"
+
+    with patch.object(service.requests, "get", return_value=response):
+        result = service.refresh_remote_stock_index_cache(settings)
+
+    assert result.refreshed is True
+    assert json.loads(cache_path.read_text(encoding="utf-8"))[0][2] == "平安银行"
+
+
 def test_refresh_remote_stock_index_cache_clears_backend_loader_cache(tmp_path: Path) -> None:
     cache_path = tmp_path / "stocks.index.json"
     settings = service.RemoteStockIndexSettings(cache_path=cache_path)
@@ -157,6 +170,23 @@ def test_validate_stock_index_payload_accepts_bse_market() -> None:
     payload = _bse_stock_index_payload()
 
     assert service.validate_stock_index_payload(payload) is payload
+
+
+@pytest.mark.parametrize("popularity", [None, "100", True, float("nan"), float("inf")])
+def test_validate_stock_index_payload_rejects_invalid_popularity(popularity: object) -> None:
+    payload = _stock_index_payload()
+    payload[0][9] = popularity
+
+    with pytest.raises(ValueError, match="popularity"):
+        service.validate_stock_index_payload(payload)
+
+
+def test_validate_stock_index_payload_rejects_missing_popularity() -> None:
+    payload = _stock_index_payload()
+    payload[0] = payload[0][:9]
+
+    with pytest.raises(ValueError):
+        service.validate_stock_index_payload(payload)
 
 
 def test_missing_remote_stock_index_cache_is_silent(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

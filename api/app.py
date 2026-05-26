@@ -126,10 +126,10 @@ from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
 from api.v1.schemas.common import HealthResponse
+from src.data.stock_index_loader import find_existing_stock_index_path
 from src.services.system_config_service import SystemConfigService
 from src.services.stock_index_remote_service import (
     get_remote_stock_index_cache_path,
-    is_valid_remote_stock_index_file,
     refresh_remote_stock_index_cache,
     settings_from_config,
 )
@@ -327,15 +327,10 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 
     def _find_existing_stock_index_path() -> Optional[Path]:
         remote_cache_path = get_remote_stock_index_cache_path()
-        if remote_cache_path.is_file() and is_valid_remote_stock_index_file(remote_cache_path):
-            return remote_cache_path
-
-        for candidate in _stock_index_candidate_paths():
-            if candidate == remote_cache_path:
-                continue
-            if candidate.is_file():
-                return candidate
-        return None
+        return find_existing_stock_index_path(
+            _stock_index_candidate_paths(),
+            remote_cache_path=remote_cache_path,
+        )
 
     @app.api_route(
         f"/{_STOCK_INDEX_FILENAME}",

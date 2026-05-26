@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -102,7 +103,18 @@ def validate_stock_index_payload(
         if not isinstance(item, list) or len(item) < 10:
             raise ValueError(f"stock index item {index} is not a compressed tuple")
 
-        canonical_code, display_code, name, _pinyin, _abbr, aliases, market, asset_type, active = item[:9]
+        (
+            canonical_code,
+            display_code,
+            name,
+            _pinyin,
+            _abbr,
+            aliases,
+            market,
+            asset_type,
+            active,
+            popularity,
+        ) = item[:10]
         if not all(isinstance(value, str) and value.strip() for value in (canonical_code, display_code, name)):
             raise ValueError(f"stock index item {index} is missing code or name")
         if not isinstance(aliases, list):
@@ -113,6 +125,12 @@ def validate_stock_index_payload(
             raise ValueError(f"stock index item {index} has unsupported asset type: {asset_type!r}")
         if not isinstance(active, bool):
             raise ValueError(f"stock index item {index} active flag must be boolean")
+        if (
+            isinstance(popularity, bool)
+            or not isinstance(popularity, (int, float))
+            or not math.isfinite(float(popularity))
+        ):
+            raise ValueError(f"stock index item {index} popularity must be a finite number")
 
     return payload
 
@@ -135,7 +153,7 @@ def _download_remote_stock_index(settings: RemoteStockIndexSettings) -> bytes:
     response.raise_for_status()
 
     content = response.content
-    payload = json.loads(content.decode(response.encoding or "utf-8"))
+    payload = json.loads(content.decode("utf-8"))
     validate_stock_index_payload(payload)
     return content
 

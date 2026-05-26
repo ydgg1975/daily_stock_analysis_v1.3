@@ -14,6 +14,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import ANY, patch
@@ -289,7 +290,7 @@ def _write_stock_index(path: Path, name: str = "平安银行", size: int = 1) ->
     )
 
 
-def test_stock_index_route_serves_remote_cache_first(tmp_path: Path) -> None:
+def test_stock_index_route_serves_newer_remote_cache(tmp_path: Path) -> None:
     from api import app as app_module
     from api.app import create_app
 
@@ -299,6 +300,9 @@ def test_stock_index_route_serves_remote_cache_first(tmp_path: Path) -> None:
     _write_stock_index(static_dir / "stocks.index.json", "内置静态")
     _write_stock_index(cache_path, "远程缓存", size=100)
     _write_stock_index(bundled_path, "源码内置")
+    os.utime(static_dir / "stocks.index.json", (1_000, 1_000))
+    os.utime(cache_path, (2_000, 2_000))
+    os.utime(bundled_path, (1_000, 1_000))
 
     client = TestClient(create_app(static_dir=static_dir))
 
@@ -312,6 +316,31 @@ def test_stock_index_route_serves_remote_cache_first(tmp_path: Path) -> None:
     assert response.headers["cache-control"] == "no-cache"
     assert response.json()[0][2] == "远程缓存"
     schedule.assert_called_once()
+
+
+def test_stock_index_route_prefers_newer_static_index_over_older_remote_cache(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "stocks.index.json"
+    bundled_path = tmp_path / "bundled" / "stocks.index.json"
+    _write_stock_index(static_dir / "stocks.index.json", "新内置静态")
+    _write_stock_index(cache_path, "旧远程缓存", size=100)
+    _write_stock_index(bundled_path, "源码内置")
+    os.utime(static_dir / "stocks.index.json", (2_000, 2_000))
+    os.utime(cache_path, (1_000, 1_000))
+    os.utime(bundled_path, (1_000, 1_000))
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh"):
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 200
+    assert response.json()[0][2] == "新内置静态"
 
 
 def test_stock_index_route_falls_back_to_static_index(tmp_path: Path) -> None:
@@ -335,6 +364,31 @@ def test_stock_index_route_falls_back_to_static_index(tmp_path: Path) -> None:
     assert response.json()[0][2] == "内置静态"
 
 
+def test_stock_index_route_does_not_parse_bundled_candidates_on_hot_path(tmp_path: Path) -> None:
+    from api import app as app_module
+    from api.app import create_app
+    from src.data import stock_index_loader
+
+    static_dir = tmp_path / "static"
+    cache_path = tmp_path / "cache" / "missing.json"
+    bundled_path = tmp_path / "bundled" / "stocks.index.json"
+    _write_stock_index(static_dir / "stocks.index.json", "内置静态")
+    _write_stock_index(bundled_path, "源码内置")
+    os.utime(static_dir / "stocks.index.json", (2_000, 2_000))
+    os.utime(bundled_path, (1_000, 1_000))
+
+    client = TestClient(create_app(static_dir=static_dir))
+
+    with patch.object(app_module, "get_remote_stock_index_cache_path", return_value=cache_path), \
+         patch.object(app_module, "_bundled_stock_index_path", return_value=bundled_path), \
+         patch.object(app_module, "_schedule_stock_index_background_refresh"), \
+         patch.object(stock_index_loader, "_load_stock_index_file", side_effect=AssertionError("unexpected parse")):
+        response = client.get("/stocks.index.json")
+
+    assert response.status_code == 200
+    assert response.json()[0][2] == "内置静态"
+
+
 def test_stock_index_route_skips_invalid_remote_cache(tmp_path: Path) -> None:
     from api import app as app_module
     from api.app import create_app
@@ -346,6 +400,9 @@ def test_stock_index_route_skips_invalid_remote_cache(tmp_path: Path) -> None:
     cache_path.write_text("not-json", encoding="utf-8")
     _write_stock_index(static_dir / "stocks.index.json", "内置静态")
     _write_stock_index(bundled_path, "源码内置")
+    os.utime(cache_path, (3_000, 3_000))
+    os.utime(static_dir / "stocks.index.json", (2_000, 2_000))
+    os.utime(bundled_path, (1_000, 1_000))
 
     client = TestClient(create_app(static_dir=static_dir))
 
