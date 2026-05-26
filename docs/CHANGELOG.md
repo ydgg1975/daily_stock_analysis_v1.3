@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
@@ -8,6 +8,8 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 
 ## [Unreleased]
 
+
+- [개선] `REPORT_LANGUAGE=ko`를 기본 리포트 언어로 추가하고 Web 리포트 라벨과 AI 분석 프롬프트가 한국어 출력을 우선하도록 정리했습니다.
 - [개선] 분석 기록 전체 초기화 API와 Web 버튼을 추가하고, 현재 KR/US 기본 흐름과 다른 과거 CN/HK 기록을 legacy 배지로 구분할 수 있게 했습니다.
 - [수정] Web 분석 입력 예시와 코드 검증을 KR/US 중심으로 조정해 KRX 코드가 중국 A주로 오인되는 일을 줄였습니다.
 - [개선] Web 종목 자동완성에서 한국 종목의 `.KS`/`.KQ` suffix와 `KS`/`KQ` prefix 입력을 같은 후보로 매칭하도록 보강했습니다.
@@ -75,3 +77,4 @@ Daily Stock Analysis의 주요 변경 사항을 기록합니다.
 [Unreleased]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.18.0...HEAD
 [3.18.0]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.17.1...v3.18.0
 [3.17.1]: https://github.com/ZhuLinsen/daily_stock_analysis/compare/v3.17.0...v3.17.1
+

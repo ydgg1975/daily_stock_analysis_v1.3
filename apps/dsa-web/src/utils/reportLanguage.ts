@@ -1,7 +1,7 @@
 import type { ReportLanguage } from '../types/analysis';
 
 export const normalizeReportLanguage = (value?: string | null): ReportLanguage =>
-  value === 'zh' || value === 'en' || value === 'ko' ? value : 'ko';
+  value === 'zh' ? 'zh' : 'ko';
 
 const KO_REPORT_TEXT = {
   keyInsights: '핵심 인사이트',

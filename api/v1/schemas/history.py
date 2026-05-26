@@ -25,7 +25,7 @@ class HistoryItem(BaseModel):
             "id": 1234,
             "query_id": "abc123",
             "stock_code": "600519",
-            "stock_name": "贵州茅台",
+            "stock_name": "귀저우마오타이",
             "report_type": "detailed",
             "report_language": "zh",
             "is_legacy": True,
