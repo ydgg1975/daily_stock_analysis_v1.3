@@ -80,6 +80,18 @@ const mockIndex: StockIndexItem[] = [
     popularity: 120,
   },
   {
+    canonicalCode: "KR091990",
+    displayCode: "091990",
+    nameZh: "셀트리온헬스케어",
+    pinyinFull: "celltrion healthcare",
+    pinyinAbbr: "celltrion",
+    aliases: ["091990.KQ"],
+    market: "KR",
+    assetType: "stock",
+    active: true,
+    popularity: 110,
+  },
+  {
     canonicalCode: "600000.SH",
     displayCode: "600000",
     nameZh: "浦发银行",
@@ -239,6 +251,13 @@ describe('searchStocks', () => {
     const us = searchStocks('AAPL', mockIndex);
     expect(us).toHaveLength(1);
     expect(us[0].canonicalCode).toBe('AAPL.US');
+  });
+
+  test('Korean suffix and prefix code variants match autocomplete results', () => {
+    expect(searchStocksImpl('005930.KS', mockIndex)[0].canonicalCode).toBe('KR005930');
+    expect(searchStocksImpl('KS005930', mockIndex)[0].canonicalCode).toBe('KR005930');
+    expect(searchStocksImpl('091990.KQ', mockIndex)[0].canonicalCode).toBe('KR091990');
+    expect(searchStocksImpl('KQ091990', mockIndex)[0].canonicalCode).toBe('KR091990');
   });
 
   test('CN and HK markets are hidden by default but remain opt-in', () => {

@@ -119,7 +119,7 @@ const fieldDescriptionMap: Record<string, string> = {
   LITELLM_CONFIG: 'LiteLLM 고급 라우팅 YAML 파일 경로입니다.',
   LLM_CHANNELS: '여러 LLM 채널과 API Key, 모델 목록을 관리합니다.',
   LLM_TEMPERATURE: '모델 출력의 무작위성을 조정합니다. 낮을수록 안정적입니다.',
-  REPORT_LANGUAGE: '리포트와 알림 문구 언어입니다. zh, en, ko를 지원합니다.',
+  REPORT_LANGUAGE: '리포트와 알림 문구 언어입니다. en, zh를 지원합니다.',
   REPORT_TYPE: '리포트 상세 수준입니다. simple, full, brief를 지원합니다.',
   REPORT_SUMMARY_ONLY: '개별 종목 상세 없이 분석 요약만 전송합니다.',
   REPORT_SHOW_LLM_MODEL: '리포트 하단에 이번 분석에 사용한 모델명을 표시합니다.',

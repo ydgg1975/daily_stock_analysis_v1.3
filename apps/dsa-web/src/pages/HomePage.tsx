@@ -570,7 +570,7 @@ const HomePage: React.FC = () => {
                   onSubmit={(stockCode, stockName, selectionSource) => {
                     handleSubmitAnalysis(stockCode, stockName, selectionSource);
                   }}
-                  placeholder="종목 코드나 이름을 입력하세요. 예: 005930.KS, AAPL"
+                  placeholder="종목 코드나 이름을 입력하세요. 예: 005930.KS, 091990.KQ, AAPL"
                   disabled={isAnalyzing}
                   className={inputError ? 'border-danger/50' : undefined}
                 />

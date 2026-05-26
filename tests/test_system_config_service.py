@@ -729,8 +729,8 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertEqual(agent_arch_schema["validation"]["enum"], ["single", "multi"])
 
         report_language_schema = items["REPORT_LANGUAGE"]["schema"]
-        self.assertEqual(report_language_schema["validation"]["enum"], ["zh", "en"])
-        self.assertEqual(report_language_schema["options"][1]["value"], "en")
+        self.assertEqual(report_language_schema["validation"]["enum"], ["en", "zh"])
+        self.assertEqual(report_language_schema["options"][0]["value"], "en")
 
         self.assertEqual(items["AGENT_ORCHESTRATOR_TIMEOUT_S"]["schema"]["default_value"], "600")
         self.assertTrue(items["AGENT_DEEP_RESEARCH_BUDGET"]["schema"]["is_editable"])

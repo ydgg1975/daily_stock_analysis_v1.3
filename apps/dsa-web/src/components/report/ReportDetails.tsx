@@ -10,6 +10,7 @@ interface ReportDetailsProps {
   recordId?: number;
   language?: ReportLanguage;
 }
+
 export const ReportDetails: React.FC<ReportDetailsProps> = ({
   details,
   recordId,
@@ -41,16 +42,16 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
 
   const chart = details?.chartAnalysisReport;
   const eventReport = details?.eventMonitoringReport;
-  const chartHeading = reportLanguage === 'en' ? 'Chart Analysis' : '图表分析';
-  const chartSupportLabel = reportLanguage === 'en' ? 'Support' : '支撑';
-  const chartResistanceLabel = reportLanguage === 'en' ? 'Resistance' : '压力';
-  const chartPatternLabel = reportLanguage === 'en' ? 'Pattern' : '形态';
-  const chartSignalLabel = reportLanguage === 'en' ? 'Signal' : '信号';
-  const chartConflictLabel = reportLanguage === 'en' ? 'Conflicts' : '冲突';
-  const eventHeading = reportLanguage === 'en' ? 'Event Monitoring' : '事件监控';
-  const eventPriorityLabel = reportLanguage === 'en' ? 'Priority' : '优先级';
-  const eventThesisBreakLabel = reportLanguage === 'en' ? 'Thesis break risk' : '投资假设破坏风险';
-  const eventWatchLabel = reportLanguage === 'en' ? 'Watch items' : '监控事项';
+  const chartHeading = reportLanguage === 'en' ? 'Chart Analysis' : '차트 분석';
+  const chartSupportLabel = reportLanguage === 'en' ? 'Support' : '지지선';
+  const chartResistanceLabel = reportLanguage === 'en' ? 'Resistance' : '저항선';
+  const chartPatternLabel = reportLanguage === 'en' ? 'Pattern' : '패턴';
+  const chartSignalLabel = reportLanguage === 'en' ? 'Signal' : '신호';
+  const chartConflictLabel = reportLanguage === 'en' ? 'Conflicts' : '충돌';
+  const eventHeading = reportLanguage === 'en' ? 'Event Monitoring' : '이벤트 모니터링';
+  const eventPriorityLabel = reportLanguage === 'en' ? 'Priority' : '우선순위';
+  const eventThesisBreakLabel = reportLanguage === 'en' ? 'Thesis break risk' : '투자 가설 훼손 위험';
+  const eventWatchLabel = reportLanguage === 'en' ? 'Watch items' : '관찰 항목';
 
   if (!details?.rawResult && !details?.contextSnapshot && !recordId && !chart && !eventReport) {
     return null;
@@ -108,7 +109,6 @@ export const ReportDetails: React.FC<ReportDetailsProps> = ({
         className="mb-3"
       />
 
-      {/* Record ID */}
       {recordId && (
         <div className="home-divider mb-3 flex items-center gap-2 border-b pb-3 text-xs text-muted-text">
           <span>{text.recordId}:</span>

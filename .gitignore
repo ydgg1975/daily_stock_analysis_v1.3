@@ -1,19 +1,24 @@
-# 환경 변수 파일: 민감 정보가 포함될 수 있으므로 커밋하지 않습니다.
+# Environment files can contain secrets and must stay local.
 .env
 .env.*
 *.env
 *.env.local
 .env.*.local
 
-# 테스트용 임시 파일: 저장소 루트의 임시 test_*.py 스크립트만 제외합니다.
+# Temporary root-level test scripts, excluding committed test modules.
 /test_*.py
 /test.sh
 
-# 로컬 검토와 고급 실행 설정: 민감 정보나 임시 분석 산출물이 포함될 수 있습니다.
+# Local agent and review outputs.
 /.codex
+/.agentq/
 /review.md
 /litellm_config.yaml
 /litellm_config.*.yaml
+
+# Local chart preview artifacts.
+/chart_preview.html
+/apps/dsa-web/chart-analysis-preview.png
 
 # Python
 __pycache__/
@@ -37,7 +42,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# 가상 환경
+# Virtual environments
 venv/
 ENV/
 env/
@@ -51,7 +56,7 @@ env/
 *~
 .cursorrules
 
-# 데이터와 로그
+# Data and logs
 /data/
 logs/
 reports/
@@ -59,11 +64,11 @@ reports/
 *.sqlite
 *.sqlite3
 
-# 시스템 파일
+# System files
 .DS_Store
 Thumbs.db
 
-# 테스트 산출물
+# Test outputs
 .pytest_cache/
 .coverage
 htmlcov/
@@ -72,12 +77,12 @@ local/
 run.sh
 verify_*.py
 
-# Claude 작업 산출물은 제외하되 공유 저장소 skill은 버전 관리합니다.
+# Claude local work outputs are ignored, but shared repository skills are tracked.
 .claude/*
 !.claude/skills/
 !.claude/skills/**
 
-# 정적 빌드 산출물
+# Static frontend build outputs. Keep the built entry files tracked.
 static/*
 !static/index.html
 !static/vite.svg

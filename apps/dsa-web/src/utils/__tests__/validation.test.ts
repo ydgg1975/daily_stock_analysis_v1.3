@@ -24,7 +24,9 @@ describe('종목 검색어 검증', () => {
   });
 
   test('검증 메시지를 한국어로 반환한다', () => {
-    expect(validateStockCode('').message).toBe('종목 코드를 입력하세요.');
-    expect(validateStockCode('ABC123XYZ').message).toBe('종목 코드 형식이 올바르지 않습니다.');
+    expect(validateStockCode('').message).toBe('종목 코드나 이름을 입력하세요.');
+    expect(validateStockCode('ABC123XYZ').message).toBe(
+      '지원하는 종목 형식이 아닙니다. 예: 005930.KS, 091990.KQ, AAPL',
+    );
   });
 });

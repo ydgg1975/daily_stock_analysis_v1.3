@@ -130,7 +130,7 @@ describe('StockAutocomplete', () => {
       />
     );
 
-    const input = screen.getByPlaceholderText('종목 코드 또는 이름 입력');
+    const input = screen.getByPlaceholderText('종목 코드나 이름 입력 (예: 005930.KS, 091990.KQ, AAPL)');
     expect(input).toBeInTheDocument();
   });
 
@@ -236,7 +236,7 @@ describe('StockAutocomplete', () => {
         />
       );
 
-      const input = screen.getByPlaceholderText('종목 코드 또는 이름 입력');
+      const input = screen.getByPlaceholderText('종목 코드나 이름 입력 (예: 005930.KS, 091990.KQ, AAPL)');
       expect(input).toHaveAttribute('data-autocomplete-mode', 'fallback');
     });
 
@@ -267,7 +267,7 @@ describe('StockAutocomplete', () => {
         />
       );
 
-      const input = screen.getByPlaceholderText('종목 코드 또는 이름 입력');
+      const input = screen.getByPlaceholderText('종목 코드나 이름 입력 (예: 005930.KS, 091990.KQ, AAPL)');
       expect(input).toHaveAttribute('data-autocomplete-mode', 'fallback');
     });
 

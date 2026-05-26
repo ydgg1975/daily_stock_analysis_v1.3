@@ -226,7 +226,7 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.notification.report_output': {
     title: 'Report Output',
     summary: 'Controls notification detail level, language, and template output.',
-    usage: 'REPORT_TYPE supports simple/full/brief. REPORT_LANGUAGE supports zh/en/ko.',
+    usage: 'REPORT_TYPE supports simple/full/brief. REPORT_LANGUAGE supports en/zh.',
     valueNotes: ['Report language affects default report and notification text, not the Web UI language.'],
     impact: ['Affects notification length, language, and readability.'],
     notes: ['Full reports can be long and may be split by some platforms.'],

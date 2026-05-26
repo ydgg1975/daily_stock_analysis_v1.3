@@ -28,14 +28,14 @@ export const validateStockCode = (value: string): ValidationResult => {
   const normalized = value.trim().toUpperCase();
 
   if (!normalized) {
-    return { valid: false, message: '종목 코드를 입력하세요.', normalized };
+    return { valid: false, message: '종목 코드나 이름을 입력하세요.', normalized };
   }
 
   const valid = looksLikeStockCode(normalized);
 
   return {
     valid,
-    message: valid ? undefined : '종목 코드 형식이 올바르지 않습니다.',
+    message: valid ? undefined : '지원하는 종목 형식이 아닙니다. 예: 005930.KS, 091990.KQ, AAPL',
     normalized,
   };
 };

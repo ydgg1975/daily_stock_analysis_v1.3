@@ -92,6 +92,7 @@ function calculateMatchScore(query: string, item: StockIndexItem): number {
   let score = 0;
   const q = query.toLowerCase();
   const normalizedCanonicalCode = normalizeQuery(item.canonicalCode);
+  const normalizedCodeKeys = getCodeSearchKeys(item);
   const normalizedDisplayCode = normalizeQuery(item.displayCode);
   const normalizedName = normalizeQuery(item.nameZh);
   const normalizedPinyinFull = normalizeQuery(item.pinyinFull || '');
@@ -101,18 +102,19 @@ function calculateMatchScore(query: string, item: StockIndexItem): number {
   // 1. Exact match (96-100 points)
   if (q === normalizedCanonicalCode) return 100;
   if (q === normalizedDisplayCode) return 99;
+  if (normalizedCodeKeys.some(code => q === code)) return 99;
   if (q === normalizedName) return 98;
   if (normalizedAliases.some(a => a === q)) return 97;
   if (q === normalizedPinyinAbbr) return 96;
 
   // 2. Prefix match (77-80 points)
-  if (normalizedDisplayCode.startsWith(q)) score = Math.max(score, 80);
+  if (normalizedCodeKeys.some(code => code.startsWith(q)) || normalizedDisplayCode.startsWith(q)) score = Math.max(score, 80);
   if (normalizedName.startsWith(q)) score = Math.max(score, 79);
   if (normalizedPinyinAbbr.startsWith(q)) score = Math.max(score, 78);
   if (normalizedAliases.some(a => a.startsWith(q))) score = Math.max(score, 77);
 
   // 3. Contains match (57-60 points)
-  if (normalizedDisplayCode.includes(q)) score = Math.max(score, 60);
+  if (normalizedCodeKeys.some(code => code.includes(q)) || normalizedDisplayCode.includes(q)) score = Math.max(score, 60);
   if (normalizedName.includes(q)) score = Math.max(score, 59);
   if (normalizedPinyinFull.includes(q)) score = Math.max(score, 58);
   if (normalizedAliases.some(a => a.includes(q))) score = Math.max(score, 57);
@@ -135,14 +137,14 @@ function determineMatchType(score: number): 'exact' | 'prefix' | 'contains' | 'f
  */
 function determineMatchField(query: string, item: StockIndexItem): 'code' | 'name' | 'pinyin' | 'alias' {
   const q = query.toLowerCase();
-  const normalizedCanonicalCode = normalizeQuery(item.canonicalCode);
+  const normalizedCodeKeys = getCodeSearchKeys(item);
   const normalizedDisplayCode = normalizeQuery(item.displayCode);
   const normalizedName = normalizeQuery(item.nameZh);
   const normalizedPinyinFull = normalizeQuery(item.pinyinFull || '');
   const normalizedPinyinAbbr = normalizeQuery(item.pinyinAbbr || '');
   const normalizedAliases = item.aliases?.map(alias => normalizeQuery(alias)) || [];
 
-  if (normalizedCanonicalCode.includes(q) ||
+  if (normalizedCodeKeys.some(code => code.includes(q)) ||
       normalizedDisplayCode.includes(q)) {
     return 'code';
   }
@@ -153,6 +155,40 @@ function determineMatchField(query: string, item: StockIndexItem): 'code' | 'nam
   }
   if (normalizedAliases.some(a => a.includes(q))) return 'alias';
   return 'name';
+}
+
+function getCodeSearchKeys(item: StockIndexItem): string[] {
+  const keys = new Set<string>();
+  const add = (value?: string) => {
+    const normalized = normalizeQuery(value || '');
+    if (normalized) {
+      keys.add(normalized);
+    }
+  };
+
+  add(item.canonicalCode);
+  add(item.displayCode);
+  item.aliases?.forEach(add);
+
+  if (item.market === 'KR' && /^\d{6}$/.test(item.displayCode)) {
+    const suffixes = new Set(
+      item.aliases
+        ?.map(alias => alias.match(/^\d{6}\.(KS|KQ)$/i)?.[1]?.toUpperCase())
+        .filter((suffix): suffix is string => Boolean(suffix)) || []
+    );
+
+    if (suffixes.size === 0) {
+      suffixes.add('KS');
+    }
+
+    add(`KR${item.displayCode}`);
+    suffixes.forEach((suffix) => {
+      add(`${item.displayCode}.${suffix}`);
+      add(`${suffix}${item.displayCode}`);
+    });
+  }
+
+  return [...keys];
 }
 
 /**

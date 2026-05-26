@@ -37,7 +37,7 @@ function FallbackInput({
   onChange,
   onSubmit,
   disabled = false,
-  placeholder = '종목 코드 또는 이름 입력',
+  placeholder = '종목 코드나 이름 입력 (예: 005930.KS, 091990.KQ, AAPL)',
   className,
 }: StockAutocompleteProps) {
   return (
@@ -96,7 +96,7 @@ function StockAutocompleteInner({
   onChange,
   onSubmit,
   disabled = false,
-  placeholder = '종목 코드 또는 이름 입력',
+  placeholder = '종목 코드나 이름 입력 (예: 005930.KS, 091990.KQ, AAPL)',
   className,
 }: StockAutocompleteProps) {
   const { index, loading, fallback } = useStockIndex();
