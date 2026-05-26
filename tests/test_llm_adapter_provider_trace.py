@@ -75,15 +75,75 @@ def test_convert_messages_only_sends_provider_trace_to_matching_target_model() -
     ]
 
     matching = adapter._convert_messages(messages, target_model="anthropic/claude-test")
-    fallback = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
+    mismatched = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
 
     assert matching[0]["content"] == [{"type": "thinking", "thinking": "opaque"}]
     assert matching[0]["reasoning_content"] == "provider-only"
     assert matching[0]["tool_calls"][0]["provider_specific_fields"] == {"thought_signature": "sig-1"}
 
-    assert fallback[0]["content"] == "checking"
-    assert "reasoning_content" not in fallback[0]
-    assert "provider_specific_fields" not in fallback[0]["tool_calls"][0]
+    assert mismatched == []
+
+
+def test_convert_messages_skips_entire_trace_segment_for_mismatched_attempt() -> None:
+    adapter = LLMToolAdapter.__new__(LLMToolAdapter)
+    messages = [
+        {"role": "user", "content": "u1"},
+        {
+            "role": "assistant",
+            "content": "checking",
+            "_trace_provider": "deepseek",
+            "_trace_model": "deepseek/deepseek-chat",
+            "reasoning_content": "provider-only",
+            "tool_calls": [{"id": "call_1", "name": "echo", "arguments": {}}],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "tool-result",
+            "_trace_provider": "deepseek",
+            "_trace_model": "deepseek/deepseek-chat",
+        },
+        {"role": "assistant", "content": "final answer"},
+    ]
+
+    primary = adapter._convert_messages(messages, target_model="openai/gpt-4o-mini")
+    fallback = adapter._convert_messages(messages, target_model="deepseek/deepseek-chat")
+
+    assert [msg["role"] for msg in primary] == ["user", "assistant"]
+    assert primary[1]["content"] == "final answer"
+    assert all(msg.get("tool_call_id") != "call_1" for msg in primary)
+
+    assert [msg["role"] for msg in fallback] == ["user", "assistant", "tool", "assistant"]
+    assert fallback[1]["reasoning_content"] == "provider-only"
+    assert fallback[2]["tool_call_id"] == "call_1"
+
+
+def test_convert_messages_matches_slashless_openai_target_without_provider_leakage() -> None:
+    adapter = LLMToolAdapter.__new__(LLMToolAdapter)
+    messages = [
+        {
+            "role": "assistant",
+            "content": "checking",
+            "_trace_provider": "openai",
+            "_trace_model": "gpt-4o-mini",
+            "reasoning_content": "provider-only",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "echo",
+                    "arguments": {},
+                    "provider_specific_fields": {"thought_signature": "sig-1"},
+                }
+            ],
+        }
+    ]
+
+    matching = adapter._convert_messages(messages, target_model="gpt-4o-mini")
+    mismatched = adapter._convert_messages(messages, target_model="claude-router")
+
+    assert matching[0]["reasoning_content"] == "provider-only"
+    assert matching[0]["tool_calls"][0]["provider_specific_fields"] == {"thought_signature": "sig-1"}
+    assert mismatched == []
 
 
 def test_parse_litellm_response_extracts_claude_blocks_and_tool_provider_fields() -> None:
@@ -127,3 +187,35 @@ def test_parse_litellm_response_extracts_claude_blocks_and_tool_provider_fields(
         "thought_signature": "sig-1",
         "extra": "keep",
     }
+
+
+def test_parse_litellm_response_resolves_provider_for_slashless_router_alias() -> None:
+    adapter = LLMToolAdapter.__new__(LLMToolAdapter)
+    adapter._config = SimpleNamespace(
+        llm_model_list=[
+            {
+                "model_name": "claude-router",
+                "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+            }
+        ]
+    )
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content="ok",
+                    reasoning_content=None,
+                    tool_calls=[],
+                )
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+    )
+
+    parsed_alias = adapter._parse_litellm_response(response, "claude-router")
+    parsed_bare_openai = adapter._parse_litellm_response(response, "gpt-4o-mini")
+
+    assert parsed_alias.provider == "anthropic"
+    assert parsed_alias.model == "claude-router"
+    assert parsed_bare_openai.provider == "openai"
+    assert parsed_bare_openai.model == "gpt-4o-mini"

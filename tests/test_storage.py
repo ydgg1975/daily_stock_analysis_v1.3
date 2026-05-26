@@ -304,6 +304,25 @@ class TestStorage(unittest.TestCase):
 
         DatabaseManager.reset_instance()
 
+    def test_get_visible_conversation_messages_limit_returns_ordered_tail(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        db.save_conversation_message("visible-tail", "system", "hidden")
+        for idx in range(25):
+            db.save_conversation_message("visible-tail", "user", f"msg-{idx}")
+        db.save_conversation_message("visible-tail", "assistant", "")
+
+        messages = db.get_visible_conversation_messages("visible-tail", limit=20)
+
+        self.assertEqual(len(messages), 20)
+        self.assertEqual([item["content"] for item in messages[:2]], ["msg-5", "msg-6"])
+        self.assertEqual(messages[-1]["content"], "msg-24")
+        self.assertTrue(all(item["role"] == "user" for item in messages))
+        self.assertEqual(db.get_visible_conversation_messages("visible-tail", limit=0), [])
+
+        DatabaseManager.reset_instance()
+
     def test_file_sqlite_enables_wal_and_busy_timeout(self):
         temp_dir = tempfile.TemporaryDirectory()
         db_path = os.path.join(temp_dir.name, "sqlite_pragmas.db")

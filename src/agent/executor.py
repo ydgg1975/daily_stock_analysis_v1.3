@@ -640,14 +640,38 @@ class AgentExecutor:
                 anchor_user_message_id=user_message_id,
                 anchor_assistant_message_id=assistant_message_id,
             )
-            if diagnostics.trace_dropped_reason:
-                logger.debug(
-                    "Provider trace skipped for session %s: %s",
-                    session_id,
-                    diagnostics.trace_dropped_reason,
-                )
+        except Exception:
+            logger.warning(
+                "Provider trace extraction failed for session %s run %s",
+                session_id,
+                run_id,
+                exc_info=True,
+            )
+            return
+
+        if diagnostics.trace_dropped_reason:
+            logger.debug(
+                "Provider trace skipped for session %s run %s: %s",
+                session_id,
+                run_id,
+                diagnostics.trace_dropped_reason,
+            )
+        if not turns:
+            return
+
+        try:
             db = get_db()
-            for turn in turns:
+        except Exception:
+            logger.warning(
+                "Provider trace storage unavailable for session %s run %s",
+                session_id,
+                run_id,
+                exc_info=True,
+            )
+            return
+
+        for turn in turns:
+            try:
                 db.save_agent_provider_turn(
                     session_id=session_id,
                     run_id=run_id,
@@ -662,8 +686,15 @@ class AgentExecutor:
                     must_roundtrip=turn.must_roundtrip,
                     estimated_tokens=turn.estimated_tokens,
                 )
-        except Exception:
-            logger.warning("Provider trace persistence failed for session %s", session_id, exc_info=True)
+            except Exception:
+                logger.warning(
+                    "Provider trace persistence failed for session %s run %s provider=%s model=%s",
+                    session_id,
+                    run_id,
+                    turn.provider,
+                    turn.model,
+                    exc_info=True,
+                )
 
     def _run_loop(self, messages: List[Dict[str, Any]], tool_decls: List[Dict[str, Any]], parse_dashboard: bool, progress_callback: Optional[Callable] = None) -> AgentResult:
         """Delegate to the shared runner and adapt the result.

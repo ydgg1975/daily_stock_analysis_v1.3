@@ -353,6 +353,37 @@ class TestAgentExecutor(unittest.TestCase):
         DatabaseManager.reset_instance()
         Config.reset_instance()
 
+    def test_persist_provider_trace_logs_save_failure_without_failing_chat(self):
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        executor = AgentExecutor(registry, adapter, max_steps=2)
+        messages = [
+            {"role": "user", "content": "question"},
+            {
+                "role": "assistant",
+                "content": "checking",
+                "_trace_provider": "deepseek",
+                "_trace_model": "deepseek/deepseek-chat",
+                "reasoning_content": "r1",
+                "tool_calls": [{"id": "call_1", "name": "echo", "arguments": {"message": "x"}}],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "tool-result"},
+        ]
+        db = SimpleNamespace(save_agent_provider_turn=MagicMock(side_effect=RuntimeError("db down")))
+
+        with patch("src.agent.executor.get_db", return_value=db):
+            with self.assertLogs("src.agent.executor", level="WARNING") as logs:
+                executor._persist_provider_trace(
+                    session_id="executor-trace-fail-open",
+                    run_id="run-1",
+                    messages=messages,
+                    baseline_len=1,
+                    user_message_id=10,
+                    assistant_message_id=11,
+                )
+
+        self.assertIn("Provider trace persistence failed", "\n".join(logs.output))
+
     def test_multiple_tool_calls_in_one_step(self):
         """Agent requests multiple tool calls in a single response."""
         registry = _make_registry_with_echo()

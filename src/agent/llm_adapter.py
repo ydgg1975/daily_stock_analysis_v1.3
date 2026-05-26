@@ -23,11 +23,15 @@ from src.config import (
     get_configured_llm_models,
     get_effective_agent_models_to_try,
     get_effective_agent_primary_model,
-    resolve_litellm_wire_model,
 )
-from src.agent.provider_trace import TRACE_MODEL_KEY, TRACE_PROVIDER_KEY, trace_model_matches
+from src.agent.provider_trace import (
+    TRACE_MODEL_KEY,
+    TRACE_PROVIDER_KEY,
+    resolved_provider_namespace,
+    trace_model_matches,
+)
 from src.llm.errors import call_litellm_with_param_recovery
-from src.llm.generation_params import apply_litellm_generation_params
+from src.llm.generation_params import apply_litellm_generation_params, resolve_litellm_wire_model
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +193,12 @@ def _extract_provider_blocks(choice: Any) -> Tuple[List[Dict[str, Any]], Optiona
     return blocks, ("".join(text_parts).strip() or None)
 
 
-def _message_trace_matches_target(message: Dict[str, Any], target_model: Optional[str]) -> bool:
+def _message_trace_matches_target(
+    message: Dict[str, Any],
+    target_model: Optional[str],
+    *,
+    target_provider: Optional[str] = None,
+) -> bool:
     """Whether provider-specific fields in ``message`` can be sent to target."""
     if not target_model:
         return True
@@ -197,7 +206,12 @@ def _message_trace_matches_target(message: Dict[str, Any], target_model: Optiona
     trace_model = message.get(TRACE_MODEL_KEY)
     if not trace_provider and not trace_model:
         return True
-    return trace_model_matches(trace_provider, trace_model, target_model)
+    return trace_model_matches(
+        trace_provider,
+        trace_model,
+        target_model,
+        current_provider=target_provider,
+    )
 
 
 def _model_matches(model: str, entries: List[str]) -> bool:
@@ -618,7 +632,15 @@ class LLMToolAdapter:
     ) -> List[Dict[str, Any]]:
         """Convert internal message format to OpenAI-compatible format for litellm."""
         openai_messages: List[Dict[str, Any]] = []
+        target_provider = self._trace_provider_for_target(target_model)
         for msg in messages:
+            trace_matches_target = _message_trace_matches_target(
+                msg,
+                target_model,
+                target_provider=target_provider,
+            )
+            if not trace_matches_target:
+                continue
             if msg["role"] == "tool":
                 openai_messages.append({
                     "role": "tool",
@@ -636,19 +658,16 @@ class LLMToolAdapter:
                             "arguments": json.dumps(tc["arguments"]),
                         },
                     }
-                    include_provider_trace = _message_trace_matches_target(msg, target_model)
-                    if include_provider_trace:
-                        provider_specific_fields = dict(tc.get("provider_specific_fields") or {})
-                        sig = tc.get("thought_signature")
-                        if sig is not None:
-                            provider_specific_fields.setdefault("thought_signature", sig)
-                        if provider_specific_fields:
-                            tc_dict["provider_specific_fields"] = provider_specific_fields
+                    provider_specific_fields = dict(tc.get("provider_specific_fields") or {})
+                    sig = tc.get("thought_signature")
+                    if sig is not None:
+                        provider_specific_fields.setdefault("thought_signature", sig)
+                    if provider_specific_fields:
+                        tc_dict["provider_specific_fields"] = provider_specific_fields
                     openai_tc.append(tc_dict)
-                include_provider_trace = _message_trace_matches_target(msg, target_model)
                 content = (
                     msg.get("provider_blocks")
-                    if include_provider_trace and msg.get("provider_blocks")
+                    if msg.get("provider_blocks")
                     else msg.get("content")
                 )
                 openai_msg: Dict[str, Any] = {
@@ -656,7 +675,7 @@ class LLMToolAdapter:
                     "content": content,
                     "tool_calls": openai_tc,
                 }
-                if include_provider_trace and msg.get("reasoning_content") is not None:
+                if msg.get("reasoning_content") is not None:
                     openai_msg["reasoning_content"] = msg["reasoning_content"]
                 openai_messages.append(openai_msg)
             else:
@@ -665,6 +684,12 @@ class LLMToolAdapter:
                     "content": msg["content"],
                 })
         return openai_messages
+
+    def _trace_provider_for_target(self, target_model: Optional[str]) -> str:
+        if not target_model:
+            return ""
+        model_list = getattr(getattr(self, "_config", None), "llm_model_list", []) or []
+        return resolved_provider_namespace(target_model, model_list)
 
     def _parse_litellm_response(self, response: Any, model: str) -> LLMResponse:
         """Parse litellm OpenAI-compatible response into LLMResponse."""
@@ -723,7 +748,8 @@ class LLMToolAdapter:
                 "total_tokens": response.usage.total_tokens,
             }
 
-        provider_name = model.split("/")[0] if "/" in model else model
+        model_list = getattr(getattr(self, "_config", None), "llm_model_list", []) or []
+        provider_name = resolved_provider_namespace(model, model_list)
         return LLMResponse(
             content=text_content,
             tool_calls=tool_calls,

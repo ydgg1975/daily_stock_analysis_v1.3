@@ -17,6 +17,7 @@ from src.agent.provider_trace import (
     TRACE_MODEL_KEY,
     TRACE_PROVIDER_KEY,
     TraceDiagnostics,
+    resolved_provider_namespace,
     strip_trace_metadata,
     trace_model_matches,
 )
@@ -141,6 +142,7 @@ def build_agent_chat_context_bundle(
     candidate_models = get_effective_agent_models_to_try(config)
     if not candidate_models:
         candidate_models = [get_effective_agent_primary_model(config)]
+    candidate_trace_targets = _build_trace_match_targets(candidate_models, config)
     turns = db.get_agent_provider_turns(session_id, must_roundtrip_only=True)
     traces_by_anchor: Dict[int, List[Dict[str, Any]]] = {}
     pending_trace_tokens = 0
@@ -148,8 +150,13 @@ def build_agent_chat_context_bundle(
 
     for turn in turns:
         if not any(
-            trace_model_matches(turn.get("provider"), turn.get("model"), model)
-            for model in candidate_models
+            trace_model_matches(
+                turn.get("provider"),
+                turn.get("model"),
+                model,
+                current_provider=provider,
+            )
+            for model, provider in candidate_trace_targets
         ):
             diagnostics.model_mismatch += 1
             diagnostics.dropped_trace_count += 1
@@ -214,8 +221,7 @@ def _build_visible_history_state(
     """Return visible history with private ``_message_id`` anchors."""
     db = get_db()
     if not getattr(config, "agent_context_compression_enabled", False):
-        visible_messages = _load_visible_messages(session_id)
-        selected = visible_messages[-20:]
+        selected = _load_visible_messages(session_id, limit=20)
         messages = _to_chat_messages(selected, include_ids=True)
         return VisibleHistoryState(
             messages=messages,
@@ -342,8 +348,8 @@ def _build_visible_history_state(
     )
 
 
-def _load_visible_messages(session_id: str) -> List[VisibleMessage]:
-    rows = get_db().get_visible_conversation_messages(session_id)
+def _load_visible_messages(session_id: str, *, limit: Optional[int] = None) -> List[VisibleMessage]:
+    rows = get_db().get_visible_conversation_messages(session_id, limit=limit)
     messages = []
     for row in rows:
         role = str(row.get("role") or "")
@@ -438,11 +444,24 @@ def _restore_trace_metadata(
         if not isinstance(msg, dict):
             continue
         clean = strip_trace_metadata(msg)
-        if clean.get("role") == "assistant" and clean.get("tool_calls"):
-            clean[TRACE_PROVIDER_KEY] = provider
-            clean[TRACE_MODEL_KEY] = model
+        clean[TRACE_PROVIDER_KEY] = provider
+        clean[TRACE_MODEL_KEY] = model
         restored.append(clean)
     return restored
+
+
+def _build_trace_match_targets(
+    models: Sequence[str],
+    config: Any,
+) -> List[Tuple[str, str]]:
+    model_list = getattr(config, "llm_model_list", []) or []
+    targets: List[Tuple[str, str]] = []
+    for model in models:
+        normalized = str(model or "").strip()
+        if not normalized:
+            continue
+        targets.append((normalized, resolved_provider_namespace(normalized, model_list)))
+    return targets
 
 
 def _render_messages(messages: Sequence[Dict[str, Any]]) -> str:

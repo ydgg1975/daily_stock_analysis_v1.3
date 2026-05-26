@@ -16,7 +16,9 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from src.llm.generation_params import resolve_litellm_wire_model
 
 
 PROVIDER_TRACE_RETENTION_LIMIT = 3
@@ -82,12 +84,32 @@ def normalize_model_name(model: Any) -> str:
 def provider_namespace(model: Any) -> str:
     """Return the provider namespace used by LiteLLM-style model strings."""
     normalized = normalize_model_name(model)
+    if not normalized:
+        return ""
     if "/" in normalized:
         return normalized.split("/", 1)[0]
-    return normalized
+    return "openai"
 
 
-def trace_model_matches(trace_provider: Any, trace_model: Any, current_model: Any) -> bool:
+def resolved_provider_namespace(
+    model: Any,
+    model_list: Optional[Sequence[Dict[str, Any]]] = None,
+) -> str:
+    """Resolve router aliases before deriving the provider namespace."""
+    normalized = str(model or "").strip()
+    if not normalized:
+        return ""
+    wire_model = resolve_litellm_wire_model(normalized, list(model_list or []))
+    return provider_namespace(wire_model)
+
+
+def trace_model_matches(
+    trace_provider: Any,
+    trace_model: Any,
+    current_model: Any,
+    *,
+    current_provider: Any = None,
+) -> bool:
     """Return True only when provider namespace and full model string match."""
     trace_model_normalized = normalize_model_name(trace_model)
     current_model_normalized = normalize_model_name(current_model)
@@ -96,7 +118,8 @@ def trace_model_matches(trace_provider: Any, trace_model: Any, current_model: An
     if trace_model_normalized != current_model_normalized:
         return False
     provider_normalized = normalize_model_name(trace_provider)
-    return provider_normalized == provider_namespace(current_model_normalized)
+    expected_provider = normalize_model_name(current_provider) or provider_namespace(current_model_normalized)
+    return provider_normalized == expected_provider
 
 
 def estimate_protocol_tokens(messages: Sequence[Dict[str, Any]]) -> int:

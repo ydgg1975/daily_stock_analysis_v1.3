@@ -4,7 +4,37 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.agent.provider_trace import extract_provider_trace_turns  # noqa: E402
+from src.agent.provider_trace import (  # noqa: E402
+    extract_provider_trace_turns,
+    provider_namespace,
+    resolved_provider_namespace,
+    trace_model_matches,
+)
+
+
+def test_trace_model_matches_slashless_openai_namespace_without_widening_model_match() -> None:
+    assert provider_namespace("gpt-4o-mini") == "openai"
+    assert trace_model_matches("openai", "gpt-4o-mini", "gpt-4o-mini") is True
+    assert trace_model_matches("anthropic", "gpt-4o-mini", "gpt-4o-mini") is False
+    assert trace_model_matches("openai", "gpt-4o-mini", "openai/gpt-4o-mini") is False
+    assert trace_model_matches(
+        "anthropic",
+        "claude-router",
+        "claude-router",
+        current_provider="anthropic",
+    ) is True
+
+
+def test_resolved_provider_namespace_uses_router_alias_before_slashless_default() -> None:
+    model_list = [
+        {
+            "model_name": "claude-router",
+            "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+        }
+    ]
+
+    assert resolved_provider_namespace("claude-router", model_list) == "anthropic"
+    assert resolved_provider_namespace("gpt-4o-mini", model_list) == "openai"
 
 
 def test_extract_trace_scans_only_current_run_and_keeps_multi_step_tool_loop() -> None:

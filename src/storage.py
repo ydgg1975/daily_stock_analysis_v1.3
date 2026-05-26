@@ -2063,8 +2063,16 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             # 倒序返回，保证时间顺序
             return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
 
-    def get_visible_conversation_messages(self, session_id: str) -> List[Dict[str, Any]]:
+    def get_visible_conversation_messages(
+        self,
+        session_id: str,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Return visible user/assistant conversation messages in chronological order."""
+        limit_value = int(limit) if limit is not None else None
+        if limit_value is not None and limit_value <= 0:
+            return []
+
         with self.session_scope() as session:
             stmt = (
                 select(ConversationMessage)
@@ -2072,11 +2080,19 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     and_(
                         ConversationMessage.session_id == session_id,
                         ConversationMessage.role.in_(["user", "assistant"]),
+                        ConversationMessage.content != "",
                     )
                 )
-                .order_by(ConversationMessage.created_at, ConversationMessage.id)
             )
-            messages = session.execute(stmt).scalars().all()
+            if limit_value is not None:
+                stmt = stmt.order_by(
+                    ConversationMessage.created_at.desc(),
+                    ConversationMessage.id.desc(),
+                ).limit(limit_value)
+                messages = list(reversed(session.execute(stmt).scalars().all()))
+            else:
+                stmt = stmt.order_by(ConversationMessage.created_at, ConversationMessage.id)
+                messages = session.execute(stmt).scalars().all()
             return [
                 {
                     "id": msg.id,
@@ -2085,7 +2101,6 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     "created_at": msg.created_at,
                 }
                 for msg in messages
-                if msg.content
             ]
 
     def get_conversation_summary(self, session_id: str) -> Optional[Dict[str, Any]]:
