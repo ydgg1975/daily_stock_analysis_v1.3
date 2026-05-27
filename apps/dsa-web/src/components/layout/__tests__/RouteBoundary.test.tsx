@@ -48,15 +48,15 @@ describe('RouteOutletBoundary', () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByRole('navigation', { name: '主导航' })).toBeInTheDocument();
-      expect(await screen.findByRole('heading', { name: '页面加载失败' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '重新加载页面' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '返回首页' })).toBeInTheDocument();
+      expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '페이지를 불러오지 못했습니다' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '다시 불러오기' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '홈으로 이동' })).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole('link', { name: '持仓' }));
+      fireEvent.click(screen.getByRole('link', { name: '포트폴리오' }));
 
       expect(await screen.findByTestId('portfolio-page')).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: '页面加载失败' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: '페이지를 불러오지 못했습니다' })).not.toBeInTheDocument();
     } finally {
       consoleError.mockRestore();
     }

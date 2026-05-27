@@ -295,7 +295,7 @@ describe('ChatPage', () => {
     );
 
     fireEvent.click(await screen.findByRole('checkbox', { name: '이동평균 골든크로스' }));
-    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 005930\.KS/), {
       target: { value: '600519 분석' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
@@ -324,7 +324,7 @@ describe('ChatPage', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: '추세 분석' }));
     expect(screen.getByRole('checkbox', { name: '\uC77C\uBC18 \uBD84\uC11D' })).toBeChecked();
 
-    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 005930\.KS/), {
       target: { value: 'AAPL 분석' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
@@ -385,12 +385,12 @@ describe('ChatPage', () => {
     );
 
     fireEvent.click(await screen.findByRole('checkbox', { name: '이동평균 골든크로스' }));
-    fireEvent.click(screen.getByRole('button', { name: '\uCC2C \uC774\uB860\uC73C\uB85C 600519 \uBD84\uC11D' }));
+    fireEvent.click(screen.getByRole('button', { name: '\uCC2C \uC774\uB860\uC73C\uB85C 005930.KS \uBD84\uC11D' }));
 
     await waitFor(() => {
       expect(mockStartStream).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: '\uCC2C \uC774\uB860\uC73C\uB85C 600519 \uBD84\uC11D',
+          message: '\uCC2C \uC774\uB860\uC73C\uB85C 005930.KS \uBD84\uC11D',
           skills: ['chan_theory'],
         }),
         expect.objectContaining({
@@ -558,7 +558,7 @@ describe('ChatPage', () => {
       expect(screen.queryByText('\uC774\uC804 \uBD84\uC11D \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4. \uC9C0\uAE08 \uBC14\uB85C \uC774\uC5B4\uC11C \uC9C8\uBB38\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.')).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 600519/), {
+    fireEvent.change(screen.getByPlaceholderText(/\uBD84\uC11D 005930\.KS/), {
       target: { value: '거래량을 이어서 분석해 주세요' },
     });
     fireEvent.click(screen.getByRole('button', { name: '\uBCF4\uB0B4\uAE30' }));
@@ -670,7 +670,7 @@ describe('ChatPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '\uC0C1\uB2F4 \uC2DC\uC791' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/\uBD84\uC11D 600519/)).toHaveValue('');
+    expect(screen.getByPlaceholderText(/\uBD84\uC11D 005930\.KS/)).toHaveValue('');
     expect(historyApi.getDetail).not.toHaveBeenCalled();
   });
 

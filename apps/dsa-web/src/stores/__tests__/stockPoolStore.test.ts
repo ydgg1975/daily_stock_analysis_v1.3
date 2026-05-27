@@ -184,7 +184,7 @@ describe('stockPoolStore', () => {
     });
 
     const state = useStockPoolStore.getState();
-    expect(state.inputError).toBe('종목 코드 형식이 올바르지 않습니다.');
+    expect(state.inputError).toBe('지원하는 종목 형식이 아닙니다. 예: 005930.KS, 091990.KQ, AAPL');
     expect(state.isAnalyzing).toBe(false);
     expect(analysisApi.analyzeAsync).not.toHaveBeenCalled();
   });

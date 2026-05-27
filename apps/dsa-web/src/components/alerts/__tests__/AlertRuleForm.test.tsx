@@ -28,7 +28,7 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('규칙 이름'), { target: { value: '茅台가격 돌파' } });
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '1800' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({
@@ -51,7 +51,7 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('방향'), { target: { value: 'down' } });
     fireEvent.change(screen.getByLabelText('등락률 임계값(%)'), { target: { value: '3.5' } });
     fireEvent.change(screen.getByLabelText('심각도'), { target: { value: 'critical' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -69,8 +69,8 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'msft' } });
     fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'volume_spike' } });
     fireEvent.change(screen.getByLabelText('거래량 급증 배수'), { target: { value: '2.5' } });
-    fireEvent.click(screen.getByLabelText('생성 후 바로 활성화'));
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByLabelText('규칙 활성화'));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -91,7 +91,7 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('단기 기간'), { target: { value: '6' } });
     fireEvent.change(screen.getByLabelText('장기 기간'), { target: { value: '13' } });
     fireEvent.change(screen.getByLabelText('시그널 기간'), { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -113,7 +113,7 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
     fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'rsi_threshold' } });
     fireEvent.change(screen.getByLabelText('RSI 임계값'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('RSI 임계값은 0에서 100 사이여야 합니다');
     expect(onSubmit).not.toHaveBeenCalled();
@@ -127,9 +127,9 @@ describe('AlertRuleForm', () => {
     fireEvent.change(screen.getByLabelText('단기 기간'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('장기 기간'), { target: { value: '250' } });
     fireEvent.change(screen.getByLabelText('시그널 기간'), { target: { value: '250' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('MACD 계산에 필요한 501일 데이터가 최대 365일 제한을 초과합니다');
+    expect(screen.getByRole('alert')).toHaveTextContent('MACD 계산에 필요한 501개 데이터가 최대 365개 제한을 초과합니다.');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -138,13 +138,13 @@ describe('AlertRuleForm', () => {
 
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
     fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'rsi_threshold' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('RSI 임계값은 비워둘 수 없습니다');
     expect(onSubmit).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText('규칙 유형'), { target: { value: 'cci_threshold' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('CCI 임계값은 비워둘 수 없습니다');
     expect(onSubmit).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe('AlertRuleForm', () => {
 
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: '600519' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '0' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('가격 임계값은 0보다 큰 숫자여야 합니다');
     expect(onSubmit).not.toHaveBeenCalled();
@@ -166,19 +166,19 @@ describe('AlertRuleForm', () => {
 
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl-2026' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('종목 코드 형식이 올바르지 않습니다.');
+    expect(screen.getByRole('alert')).toHaveTextContent('지원하는 종목 형식이 아닙니다. 예: 005930.KS, 091990.KQ, AAPL');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('filters alert types and submits a watchlist rule payload', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('目标范围'), { target: { value: 'watchlist' } });
-    expect(screen.queryByText('组合止损')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('价格阈值'), { target: { value: '10' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    fireEvent.change(screen.getByLabelText('대상 범위'), { target: { value: 'watchlist' } });
+    expect(screen.queryByText('포트폴리오 손절')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -193,12 +193,12 @@ describe('AlertRuleForm', () => {
   it('loads accounts and submits portfolio stop-loss mode', async () => {
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('目标范围'), { target: { value: 'portfolio_account' } });
+    fireEvent.change(screen.getByLabelText('대상 범위'), { target: { value: 'portfolio_account' } });
     await waitFor(() => expect(getAccounts).toHaveBeenCalledWith(false));
-    expect(screen.queryByText('价格突破')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('账户'), { target: { value: '9' } });
-    fireEvent.change(screen.getByLabelText('止损模式'), { target: { value: 'breach' } });
-    fireEvent.click(screen.getByRole('button', { name: '创建规则' }));
+    expect(screen.queryByText('가격 돌파')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('계좌'), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText('손절 모드'), { target: { value: 'breach' } });
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -214,9 +214,9 @@ describe('AlertRuleForm', () => {
     getAccounts.mockRejectedValueOnce(new Error('boom'));
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
-    fireEvent.change(screen.getByLabelText('目标范围'), { target: { value: 'portfolio_holdings' } });
+    fireEvent.change(screen.getByLabelText('대상 범위'), { target: { value: 'portfolio_holdings' } });
     expect(await screen.findByRole('alert')).toHaveTextContent('boom');
-    expect(screen.getByLabelText('账户')).toHaveValue('all');
+    expect(screen.getByLabelText('계좌')).toHaveValue('all');
   });
 
   it('keeps form values when submit reports failure', async () => {
@@ -225,7 +225,7 @@ describe('AlertRuleForm', () => {
 
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(screen.getByLabelText('종목 코드')).toHaveValue('aapl');

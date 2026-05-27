@@ -137,7 +137,7 @@ describe('AlertsPage', () => {
     await screen.findByText('마오타이 가격 돌파');
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     await waitFor(() => {
       expect(createRule).toHaveBeenCalledWith(expect.objectContaining({
@@ -156,7 +156,7 @@ describe('AlertsPage', () => {
     await screen.findByText('마오타이 가격 돌파');
     fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'aapl' } });
     fireEvent.change(screen.getByLabelText('가격 임계값'), { target: { value: '200' } });
-    fireEvent.click(screen.getByRole('button', { name: '규칙 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '규칙 저장' }));
 
     expect(await screen.findByText('로드 실패')).toBeInTheDocument();
     expect(screen.getByLabelText('종목 코드')).toHaveValue('aapl');

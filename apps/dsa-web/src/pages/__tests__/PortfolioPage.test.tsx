@@ -685,7 +685,7 @@ describe('PortfolioPage FX refresh', () => {
 
 
 
-    fireEvent.change(screen.getByPlaceholderText('Paper 종목 코드, 예: AAPL'), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByPlaceholderText('Paper 종목 코드, 예: 005930.KS 또는 AAPL'), { target: { value: 'AAPL' } });
 
     fireEvent.change(screen.getByPlaceholderText('Paper 수량'), { target: { value: '2' } });
 

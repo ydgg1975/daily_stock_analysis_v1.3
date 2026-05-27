@@ -147,11 +147,11 @@ describe('AlertRuleList', () => {
       ],
     });
 
-    expect(screen.getByText('持仓标的')).toBeInTheDocument();
-    expect(screen.getByText('子目标见触发历史')).toBeInTheDocument();
-    expect(screen.getByText('账户 9')).toBeInTheDocument();
-    expect(screen.getAllByText('组合止损').length).toBeGreaterThan(0);
-    expect(screen.getByText('已触发止损')).toBeInTheDocument();
+    expect(screen.getByText('포트폴리오 보유 종목')).toBeInTheDocument();
+    expect(screen.getByText('하위 대상별 쿨다운')).toBeInTheDocument();
+    expect(screen.getByText('계좌 9')).toBeInTheDocument();
+    expect(screen.getAllByText('포트폴리오 손절').length).toBeGreaterThan(0);
+    expect(screen.getByText('손절 모드: breach')).toBeInTheDocument();
   });
 
   it('runs test and toggles enabled state', () => {
