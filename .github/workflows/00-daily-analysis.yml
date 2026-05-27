@@ -342,7 +342,7 @@ jobs:
           # ==========================================
           # 自选股配置
           # ==========================================
-          STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
+          STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST }}
           MARKET_REVIEW_REGION: ${{ vars.MARKET_REVIEW_REGION || secrets.MARKET_REVIEW_REGION || 'cn' }}
           MARKET_REVIEW_COLOR_SCHEME: ${{ vars.MARKET_REVIEW_COLOR_SCHEME || secrets.MARKET_REVIEW_COLOR_SCHEME || 'green_up' }}
           
@@ -370,6 +370,29 @@ jobs:
           REALTIME_SOURCE_PRIORITY: ${{ vars.REALTIME_SOURCE_PRIORITY || 'tencent,akshare_sina,efinance,akshare_em' }}
           
         run: |
+          has_any_env() {
+            for name in "$@"; do
+              if [ -n "${!name:-}" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          has_deepseek_config() {
+            has_any_env DEEPSEEK_API_KEY DEEPSEEK_API_KEYS LLM_DEEPSEEK_API_KEY LLM_DEEPSEEK_API_KEYS && return 0
+            [ "${LLM_PRIMARY_PROTOCOL,,}" = "deepseek" ] && has_any_env LLM_PRIMARY_API_KEY LLM_PRIMARY_API_KEYS && return 0
+            [ "${LLM_SECONDARY_PROTOCOL,,}" = "deepseek" ] && has_any_env LLM_SECONDARY_API_KEY LLM_SECONDARY_API_KEYS && return 0
+            return 1
+          }
+
+          has_openai_compatible_config() {
+            has_any_env OPENAI_API_KEY OPENAI_API_KEYS LLM_OPENAI_API_KEY LLM_OPENAI_API_KEYS && return 0
+            [ "${LLM_PRIMARY_PROTOCOL,,}" = "openai" ] && has_any_env LLM_PRIMARY_API_KEY LLM_PRIMARY_API_KEYS && return 0
+            [ "${LLM_SECONDARY_PROTOCOL,,}" = "openai" ] && has_any_env LLM_SECONDARY_API_KEY LLM_SECONDARY_API_KEYS && return 0
+            return 1
+          }
+
           # 处理 LITELLM YAML 配置文件
           if [ -n "$LITELLM_CONFIG_YAML" ] && [ -n "$LITELLM_CONFIG" ]; then
             echo "📝 使用 GitHub Actions Secrets/Variables 中的 LITELLM_CONFIG_YAML 配置"
@@ -382,6 +405,46 @@ jobs:
 
           # 判断运行模式
           MODE="${{ github.event.inputs.mode || 'full' }}"
+
+          # 部署预检：避免未配置自选股时静默分析示例股票。
+          if ! has_any_env STOCK_LIST; then
+            echo "::error title=缺少 STOCK_LIST::请在 Settings > Secrets and variables > Actions 中添加 STOCK_LIST，例如 600519,hk00700,AAPL。"
+            exit 1
+          fi
+
+          # 复用应用内配置校验，只把 error 级问题作为 Actions 失败条件。
+          python - <<'PY'
+          from src.config import get_config
+
+          errors = [issue for issue in get_config().validate_structured() if issue.severity == "error"]
+          for issue in errors:
+              field = f" ({issue.field})" if issue.field else ""
+              print(f"::error title=配置错误{field}::{issue.message}")
+          raise SystemExit(1 if errors else 0)
+          PY
+
+          has_notification=false
+          if has_any_env WECHAT_WEBHOOK_URL FEISHU_WEBHOOK_URL TELEGRAM_BOT_TOKEN DISCORD_WEBHOOK_URL SLACK_WEBHOOK_URL PUSHPLUS_TOKEN NTFY_URL CUSTOM_WEBHOOK_URLS ASTRBOT_URL SERVERCHAN3_SENDKEY; then
+            has_notification=true
+          fi
+          if [ -n "$EMAIL_SENDER" ] && [ -n "$EMAIL_PASSWORD" ]; then
+            has_notification=true
+          fi
+          if [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]; then
+            has_notification=true
+          fi
+          if [ -n "$PUSHOVER_USER_KEY" ] && [ -n "$PUSHOVER_API_TOKEN" ]; then
+            has_notification=true
+          fi
+          if [ -n "$SLACK_BOT_TOKEN" ] && [ -n "$SLACK_CHANNEL_ID" ]; then
+            has_notification=true
+          fi
+          if [ -n "$DISCORD_BOT_TOKEN" ] && [ -n "$DISCORD_MAIN_CHANNEL_ID" ]; then
+            has_notification=true
+          fi
+          if [ "$has_notification" != "true" ]; then
+            echo "::warning title=未检测到通知渠道::本次仍会运行并上传 reports/logs artifact；如需推送，请配置 WECHAT_WEBHOOK_URL 或 EMAIL_SENDER + EMAIL_PASSWORD。"
+          fi
           
           echo "=========================================="
           echo "🚀 A股自选股智能分析系统"
@@ -395,17 +458,13 @@ jobs:
           echo "📋 配置检查"
           echo "=========================================="
           echo "【AI 配置】"
-          if [ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ] || [ -n "$ANSPIRE_API_KEYS" ]; then
-            echo "  LiteLLM: ✅ 已配置"
-          else
-            echo "  LiteLLM: ❌ 未配置"
-          fi
-          echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
-          echo "  DeepSeek Key:   $([ -n "$DEEPSEEK_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  LiteLLM/Channels: $(has_any_env LITELLM_CONFIG LITELLM_CONFIG_YAML LITELLM_API_KEY LITELLM_MODEL LLM_CHANNELS && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  Gemini API Key: $(has_any_env GEMINI_API_KEY GEMINI_API_KEYS LLM_GEMINI_API_KEY LLM_GEMINI_API_KEYS && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  DeepSeek Key:   $(has_deepseek_config && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Anspire Key:    $([ -n "$ANSPIRE_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  AIHubMix Key:   $([ -n "$AIHUBMIX_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  OpenAI API Key: $([ -n "$OPENAI_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Anthropic Key:  $([ -n "$ANTHROPIC_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  OpenAI Compatible: $(has_openai_compatible_config && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  Anthropic Key:  $(has_any_env ANTHROPIC_API_KEY ANTHROPIC_API_KEYS LLM_ANTHROPIC_API_KEY LLM_ANTHROPIC_API_KEYS && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo ""
           echo "【数据源】"
           echo "  Tushare Token: $([ -n "$TUSHARE_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
@@ -435,6 +494,7 @@ jobs:
           echo "  ntfy: $([ -n "$NTFY_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Gotify: $([ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  企业微信: $([ -n "$WECHAT_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  邮箱: $([ -n "$EMAIL_SENDER" ] && [ -n "$EMAIL_PASSWORD" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  飞书: $([ -n "$FEISHU_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Telegram: $([ -n "$TELEGRAM_BOT_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Discord: $([ -n "$DISCORD_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"

@@ -58,6 +58,14 @@ def _load_daily_analysis_env() -> dict[str, str]:
     return analyze_step["env"]
 
 
+def _load_daily_analysis_run_script() -> str:
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["analyze"]["steps"]
+    analyze_step = next((step for step in steps if step.get("name") == "执行股票分析"), None)
+    assert analyze_step is not None
+    return analyze_step["run"]
+
+
 def test_daily_analysis_maps_all_provider_template_channels() -> None:
     templates = _extract_provider_templates()
     env = _load_daily_analysis_env()
@@ -112,3 +120,21 @@ def test_env_example_includes_provider_template_channel_examples() -> None:
 
     assert "LLM_CHANNELS=ark" not in env_example
     assert "LLM_ARK_" not in env_example
+
+
+def test_daily_analysis_requires_explicit_stock_list() -> None:
+    env = _load_daily_analysis_env()
+    run_script = _load_daily_analysis_run_script()
+
+    assert env["STOCK_LIST"] == "${{ vars.STOCK_LIST || secrets.STOCK_LIST }}"
+    assert "缺少 STOCK_LIST" in run_script
+    assert "validate_structured" in run_script
+
+
+def test_daily_analysis_status_reports_multi_key_llm_configs() -> None:
+    run_script = _load_daily_analysis_run_script()
+
+    assert "GEMINI_API_KEYS" in run_script
+    assert "DEEPSEEK_API_KEYS" in run_script
+    assert "OPENAI_API_KEYS" in run_script
+    assert "LLM_CHANNELS" in run_script

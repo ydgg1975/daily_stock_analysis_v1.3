@@ -40,6 +40,14 @@ def _load_daily_analysis_env() -> dict[str, str]:
     return analyze_step["env"]
 
 
+def _load_daily_analysis_run_script() -> str:
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["analyze"]["steps"]
+    analyze_step = next((step for step in steps if step.get("name") == "执行股票分析"), None)
+    assert analyze_step is not None
+    return analyze_step["run"]
+
+
 def test_daily_analysis_maps_p0_notification_env_keys() -> None:
     env = _load_daily_analysis_env()
 
@@ -80,3 +88,11 @@ def test_notification_actions_env_table_matches_generated_output() -> None:
     expected = generate_table()
 
     assert normalize_markdown_block(current) == normalize_markdown_block(expected)
+
+
+def test_daily_analysis_status_reports_email_channel() -> None:
+    run_script = _load_daily_analysis_run_script()
+
+    assert "邮箱:" in run_script
+    assert "EMAIL_SENDER" in run_script
+    assert "EMAIL_PASSWORD" in run_script
