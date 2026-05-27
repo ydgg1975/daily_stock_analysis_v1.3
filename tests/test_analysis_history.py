@@ -613,6 +613,61 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIn("Unnamed Stock (AAPL)", markdown)
         self.assertNotIn("核心结论", markdown)
 
+    def test_history_markdown_localizes_korean_fixed_sections(self) -> None:
+        """Korean markdown should not fall back to Chinese fixed section labels."""
+        result = AnalysisResult(
+            code="005930.KS",
+            name="삼성전자",
+            sentiment_score=68,
+            trend_prediction="Bullish",
+            operation_advice="Buy",
+            analysis_summary="반도체 업황 회복 기대가 유효합니다.",
+            report_language="ko",
+            event_monitoring_report={
+                "monitoring_priority": "high",
+                "thesis_break_risk": False,
+                "watch_items": ["실적 발표"],
+            },
+            chart_analysis_report={
+                "status": "ok",
+                "support": "72000",
+                "resistance": "78000",
+                "pattern_label": "상승 채널",
+                "visual_signal_label": "매수 우위",
+            },
+        )
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_korean_markdown_001",
+            report_type="full",
+            news_content="news",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(
+                AnalysisHistory.query_id == "query_korean_markdown_001"
+            ).first()
+            if row is None:
+                self.fail("history row was not saved")
+            record_id = row.id
+
+        markdown = HistoryService(self.db).get_markdown_report(str(record_id))
+
+        self.assertIsNotNone(markdown)
+        self.assertIn("분석 날짜", markdown)
+        self.assertIn("리포트 생성 시간", markdown)
+        self.assertIn("이벤트 모니터링", markdown)
+        self.assertIn("우선순위", markdown)
+        self.assertIn("차트 분석", markdown)
+        self.assertIn("지지선", markdown)
+        self.assertNotIn("分析日期", markdown)
+        self.assertNotIn("事件监控", markdown)
+        self.assertNotIn("图表分析", markdown)
+
     def test_history_markdown_returns_persisted_market_review_report(self) -> None:
         """Market review history should return the saved Markdown without rebuilding a stock report."""
         result = AnalysisResult(

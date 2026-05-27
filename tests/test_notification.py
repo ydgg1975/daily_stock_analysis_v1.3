@@ -643,6 +643,45 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         self.assertIn("Action Levels", out)
         self.assertIn("Hold", out)
 
+    @mock.patch("src.notification.get_config")
+    def test_generate_single_stock_report_localizes_korean_event_and_chart_sections(
+        self, mock_get_config: mock.MagicMock
+    ):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="ko")
+        service = NotificationService()
+        result = AnalysisResult(
+            code="005930.KS",
+            name="삼성전자",
+            sentiment_score=68,
+            trend_prediction="Bullish",
+            operation_advice="Buy",
+            analysis_summary="반도체 업황 회복 기대가 유효합니다.",
+            report_language="ko",
+            event_monitoring_report={
+                "monitoring_priority": "high",
+                "thesis_break_risk": False,
+                "watch_items": ["실적 발표"],
+            },
+            chart_analysis_report={
+                "status": "ok",
+                "support": "72000",
+                "resistance": "78000",
+                "pattern_label": "상승 채널",
+                "visual_signal_label": "매수 우위",
+            },
+        )
+
+        out = service.generate_single_stock_report(result)
+
+        self.assertIn("이벤트 모니터링", out)
+        self.assertIn("우선순위", out)
+        self.assertIn("투자 가설 훼손 위험", out)
+        self.assertIn("차트 분석", out)
+        self.assertIn("지지선", out)
+        self.assertIn("저항선", out)
+        self.assertNotIn("事件监控", out)
+        self.assertNotIn("图表分析", out)
+
     def _make_fundamental_context(self) -> dict:
         return {
             "earnings": {

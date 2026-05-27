@@ -645,14 +645,33 @@ class HistoryService:
         report_time = record.created_at.strftime("%H:%M:%S") if record.created_at else datetime.now().strftime("%H:%M:%S")
         report_language = normalize_report_language(getattr(result, "report_language", "zh"))
         labels = get_report_labels(report_language)
-        analysis_date_label = "Analysis Date" if report_language == "en" else "分析日期"
-        report_time_label = "Report Time" if report_language == "en" else "报告生成时间"
-        reason_label = "Rationale" if report_language == "en" else "操作理由"
-        risk_warning_label = "Risk Warning" if report_language == "en" else "风险提示"
-        technical_heading = "Technicals" if report_language == "en" else "技术面"
-        ma_label = "Moving Averages" if report_language == "en" else "均线"
-        volume_analysis_label = "Volume" if report_language == "en" else "量能"
-        news_heading = "News Flow" if report_language == "en" else "消息面"
+        if report_language == "en":
+            analysis_date_label = "Analysis Date"
+            report_time_label = "Report Time"
+            reason_label = "Rationale"
+            risk_warning_label = "Risk Warning"
+            technical_heading = "Technicals"
+            ma_label = "Moving Averages"
+            volume_analysis_label = "Volume"
+            news_heading = "News Flow"
+        elif report_language == "ko":
+            analysis_date_label = "분석 날짜"
+            report_time_label = "리포트 생성 시간"
+            reason_label = "판단 근거"
+            risk_warning_label = "위험 알림"
+            technical_heading = "기술적 분석"
+            ma_label = "이동평균"
+            volume_analysis_label = "거래량"
+            news_heading = "뉴스 흐름"
+        else:
+            analysis_date_label = "分析日期"
+            report_time_label = "报告生成时间"
+            reason_label = "操作理由"
+            risk_warning_label = "风险提示"
+            technical_heading = "技术面"
+            ma_label = "均线"
+            volume_analysis_label = "量能"
+            news_heading = "消息面"
 
         # Escape markdown special characters in stock name
         name_escaped = self._escape_md(
@@ -891,10 +910,21 @@ class HistoryService:
         chart_report = getattr(result, "chart_analysis_report", None) or {}
         event_report = getattr(result, "event_monitoring_report", None) or {}
         if event_report:
-            event_heading = "Event Monitoring" if report_language == "en" else "事件监控"
-            priority_label = "Priority" if report_language == "en" else "优先级"
-            thesis_break_label = "Thesis break risk" if report_language == "en" else "投资假设破坏风险"
-            watch_label = "Watch items" if report_language == "en" else "监控事项"
+            if report_language == "en":
+                event_heading = "Event Monitoring"
+                priority_label = "Priority"
+                thesis_break_label = "Thesis break risk"
+                watch_label = "Watch items"
+            elif report_language == "ko":
+                event_heading = "이벤트 모니터링"
+                priority_label = "우선순위"
+                thesis_break_label = "투자 가설 훼손 위험"
+                watch_label = "모니터링 항목"
+            else:
+                event_heading = "事件监控"
+                priority_label = "优先级"
+                thesis_break_label = "投资假设破坏风险"
+                watch_label = "监控事项"
             report_lines.extend([f"### 🚨 {event_heading}", ""])
             report_lines.append(
                 f"**{priority_label}**: {event_report.get('monitoring_priority', 'N/A')} | "
@@ -909,11 +939,24 @@ class HistoryService:
             report_lines.append("")
 
         if chart_report:
-            chart_heading = "Chart Analysis" if report_language == "en" else "图表分析"
-            support_label = "Support" if report_language == "en" else "支撑"
-            resistance_label = "Resistance" if report_language == "en" else "压力"
-            pattern_label = "Pattern" if report_language == "en" else "形态"
-            signal_label = "Signal" if report_language == "en" else "信号"
+            if report_language == "en":
+                chart_heading = "Chart Analysis"
+                support_label = "Support"
+                resistance_label = "Resistance"
+                pattern_label = "Pattern"
+                signal_label = "Signal"
+            elif report_language == "ko":
+                chart_heading = "차트 분석"
+                support_label = "지지선"
+                resistance_label = "저항선"
+                pattern_label = "패턴"
+                signal_label = "신호"
+            else:
+                chart_heading = "图表分析"
+                support_label = "支撑"
+                resistance_label = "压力"
+                pattern_label = "形态"
+                signal_label = "信号"
             report_lines.extend([f"### 📈 {chart_heading}", ""])
             if chart_report.get("status") == "ok":
                 report_lines.append(
