@@ -21,6 +21,7 @@ interface ReportOverviewProps {
 export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
   summary,
+  details,
 }) => {
   const reportLanguage = normalizeReportLanguage(meta.reportLanguage);
   const text = getReportText(reportLanguage);
@@ -45,11 +46,42 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
     return undefined;
   };
 
+  const normalizeChangePct = (changePct: unknown): number | undefined => {
+    if (typeof changePct === 'number' && Number.isFinite(changePct)) {
+      return changePct;
+    }
+    if (typeof changePct === 'string') {
+      const parsed = Number.parseFloat(changePct.replace('%', '').trim());
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  };
+
   const formatChangePct = (changePct: number | undefined): string => {
     if (changePct === undefined || changePct === null) return '--';
     const sign = changePct > 0 ? '+' : '';
     return `${sign}${changePct.toFixed(2)}%`;
   };
+
+  const relatedBoards = (details?.belongBoards ?? [])
+    .map((board) => ({
+      ...board,
+      name: localizeLegacyText((board.name ?? '').trim()),
+      type: board.type ? localizeLegacyText(board.type.trim()) : undefined,
+    }))
+    .filter((board) => board.name);
+
+  const topRankings = Array.isArray(details?.sectorRankings?.top)
+    ? details.sectorRankings.top
+    : [];
+  const bottomRankings = Array.isArray(details?.sectorRankings?.bottom)
+    ? details.sectorRankings.bottom
+    : [];
+  const rankingItems = [
+    ...topRankings.map((item) => ({ ...item, tone: 'leading' as const })),
+    ...bottomRankings.map((item) => ({ ...item, tone: 'lagging' as const })),
+  ].filter((item) => item.name);
+  const hasBoardLinkage = relatedBoards.length > 0 || rankingItems.length > 0;
 
   return (
     <div className="space-y-5">
@@ -140,6 +172,46 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
               </div>
             </Card>
           </div>
+
+          {hasBoardLinkage && (
+            <Card variant="bordered" padding="md" className="home-panel-card">
+              <div className="mb-3 flex items-baseline justify-between gap-3">
+                <div>
+                  <span className="label-uppercase">{text.boardLinkage}</span>
+                  <h3 className="mt-1 text-base font-semibold text-foreground">{text.relatedBoards}</h3>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {relatedBoards.map((board) => (
+                  <span
+                    key={`${board.name}-${board.type ?? ''}`}
+                    className="rounded-lg border border-border bg-surface/50 px-3 py-1.5 text-sm text-foreground"
+                  >
+                    {board.name}
+                    {board.type && (
+                      <span className="ml-2 text-xs text-muted-text">{board.type}</span>
+                    )}
+                  </span>
+                ))}
+                {rankingItems.map((item) => {
+                  const label = item.tone === 'leading' ? text.leadingBoard : text.laggingBoard;
+                  const pctValue = normalizeChangePct(item.changePct);
+                  const pct = pctValue !== undefined ? formatChangePct(pctValue) : undefined;
+                  return (
+                    <span
+                      key={`${item.tone}-${item.name}-${pct ?? ''}`}
+                      className="rounded-lg border border-border bg-surface/50 px-3 py-1.5 text-sm text-foreground"
+                    >
+                      <span className="font-medium">{localizeLegacyText(item.name.trim())}</span>
+                      <span className="ml-2 text-xs text-muted-text">{label}</span>
+                      {pct && <span className="ml-2 font-mono text-xs">{pct}</span>}
+                    </span>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
         </div>
 
         <div className="flex flex-col self-stretch min-h-full">

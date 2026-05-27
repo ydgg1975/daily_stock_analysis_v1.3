@@ -80,7 +80,7 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('관련 섹터')).toBeInTheDocument();
 
-    expect(screen.getByText('백주')).toBeInTheDocument();
+    expect(screen.getAllByText('백주').length).toBeGreaterThan(0);
 
     expect(screen.getByText('업종')).toBeInTheDocument();
 
@@ -174,7 +174,7 @@ describe('ReportOverview', () => {
 
     expect(screen.getByText('관련 섹터')).toBeInTheDocument();
 
-    expect(screen.getByText('백주')).toBeInTheDocument();
+    expect(screen.getAllByText('백주').length).toBeGreaterThan(0);
 
     expect(screen.getByText('약세')).toBeInTheDocument();
 
