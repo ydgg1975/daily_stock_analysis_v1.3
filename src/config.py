@@ -568,9 +568,9 @@ class Config:
     gemini_temperature: float = 0.7  # 温度파라미터（0.0-2.0，통제출력랜덤性，기본값0.7）
 
     # Gemini API 요청설정（防止 429 속도제한）
-    gemini_request_delay: float = 2.0  # 요청 간격(초)
+    gemini_request_delay: float = 2.0  # 요청간격（秒）
     gemini_max_retries: int = 5  # 최대재시도횟수
-    gemini_retry_delay: float = 5.0  # 재시도 기본 지연(초)
+    gemini_retry_delay: float = 5.0  # 재시도基础延时（秒）
 
     # Anthropic Claude API（备选，当 Gemini 사용불가时사용）
     anthropic_api_key: Optional[str] = None
@@ -608,7 +608,7 @@ class Config:
 
     # === 뉴스와분석필터설정 ===
     news_max_age_days: int = 3   # 뉴스최대时效（天）
-    news_strategy_profile: str = "short"  # 뉴스 조회 기간 전략: ultra_short/short/medium/long
+    news_strategy_profile: str = "short"  # 뉴스窗口전략档位：ultra_short/short/medium/long
     bias_threshold: float = 5.0  # 이격도阈치（%），초과此치알림不追고
 
     # === Agent 모드설정 ===
@@ -685,7 +685,7 @@ class Config:
     # Slack 통지설정
     slack_webhook_url: Optional[str] = None  # Slack Incoming Webhook URL
     slack_bot_token: Optional[str] = None  # Slack Bot Token (xoxb-...)
-    slack_channel_id: Optional[str] = None  # Slack 채널 ID(Bot 모드 필수)
+    slack_channel_id: Optional[str] = None  # Slack 频道 ID (Bot 모드必填)
 
     # AstrBot 통지설정
     astrbot_token: Optional[str] = None
@@ -709,7 +709,7 @@ class Config:
 
     # 리포트유형：simple(精简) 또는 full(완전)
     report_type: str = "simple"
-    report_language: str = "ko"
+    report_language: str = "en"
 
     # 仅분석결과요약：true 时只푸시汇총，不含개별종목详情（Issue #262）
     report_summary_only: bool = False
@@ -729,7 +729,7 @@ class Config:
     # Server酱3 푸시설정
     serverchan3_sendkey: Optional[str] = None  # Server酱3 SendKey
 
-    # 분석 간격 시간(초) - API 속도 제한 방지
+    # 분석간격시간（秒）- 위해방지API속도제한
     analysis_delay: float = 0.0  # 개별종목분석와시장분석之间의지연
 
     # Merge stock + market report into one notification (Issue #190)
@@ -795,7 +795,7 @@ class Config:
     enable_realtime_technical_indicators: bool = True
     # 매물대분포스위치（该인터페이스不안정，云端部署제안닫기）
     enable_chip_distribution: bool = True
-    # Eastmoney 인터페이스 패치 스위치
+    # 동방재부인터페이스补丁스위치
     enable_eastmoney_patch: bool = False
     # 실시간시세데이터소스우선순위（쉼표구분）
     # 추천顺序：tencent > akshare_sina > efinance > akshare_em > tushare
@@ -804,21 +804,21 @@ class Config:
     # - efinance/akshare_em: 동방재부전량인터페이스，데이터最전그러나容易당하다封
     # - tushare: Tushare Pro，필요2000积分，데이터전面（付费사용자可우선사용）
     realtime_source_priority: str = "tencent,akshare_sina,efinance,akshare_em"
-    # 실시간 시세 캐시 시간(초)
+    # 실시간시세캐시시간（秒）
     realtime_cache_ttl: int = 600
-    # 서킷브레이커 쿨링 시간(초)
+    # 서킷브레이커器쿨링시간（秒）
     circuit_breaker_cooldown: int = 300
 
     # === 기본面聚合스위치와다운그레이드보호 ===
-    # 전역 스위치: 비활성화 시 not_supported를 반환하고 주 프로세스 상태를 바꾸지 않음
+    # 전역총스위치；닫기时돌아가기 not_supported 그리고保持주프로세스无변화
     enable_fundamental_pipeline: bool = True
-    # 기본 분석 단계 총 예산(초)
+    # 기본面단계총예산（秒）
     fundamental_stage_timeout_seconds: float = FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT
-    # 단일 데이터 소스 호출 타임아웃(초)
+    # 단일能力源호출타임아웃（秒）
     fundamental_fetch_timeout_seconds: float = 3.0
     # 단일能力실패재시도횟수（已포함首차）
     fundamental_retry_max: int = 1
-    # 기본 분석 컨텍스트 TTL(초)
+    # 기본面컨텍스트단 TTL（秒）
     fundamental_cache_ttl_seconds: int = 120
     # 기본面캐시최대条目数（방지장시간실행메모리增장）
     fundamental_cache_max_entries: int = 256
@@ -835,7 +835,7 @@ class Config:
     discord_bot_status: str = "A주지능형분석 | /help"
 
     # === 流控설정（防차단핵심파라미터）===
-    # Akshare 요청 간격 범위(초)
+    # Akshare 요청간격범위（秒）
     akshare_sleep_min: float = 2.0
     akshare_sleep_max: float = 5.0
 
@@ -855,8 +855,8 @@ class Config:
     # === 봇설정 ===
     bot_enabled: bool = True              # 여부활성화봇기능
     bot_command_prefix: str = "/"         # 命令접두사
-    bot_rate_limit_requests: int = 10     # 빈도 제한: 창 안의 최대 요청 수
-    bot_rate_limit_window: int = 60       # 빈도 제한: 창 시간(초)
+    bot_rate_limit_requests: int = 10     # 빈도제한：窗口내최대요청数
+    bot_rate_limit_window: int = 60       # 빈도제한：窗口시간（秒）
     bot_admin_users: List[str] = field(default_factory=list)  # 관리자사용자 ID 목록
 
     # 페이수봇（이벤트구독）- 기존 feishu_app_id, feishu_app_secret
@@ -950,7 +950,7 @@ class Config:
         에서 .env 파일로딩설정
 
         로딩우선순위：
-        1. 대부분의 설정은 시스템 환경 변수를 우선합니다.
+        1. 대다数설정保持시스템환경변수우선
         2. WebUI 쓰기가능의실행期핵심键우선复사용持久化 `.env`，그러나유지시작时显式进程환경변수의 override
         3. 코드중의기본값치
         """
@@ -1581,7 +1581,7 @@ class Config:
                 'ENABLE_REALTIME_TECHNICAL_INDICATORS', 'true'
             ).lower() == 'true',
             enable_chip_distribution=os.getenv('ENABLE_CHIP_DISTRIBUTION', 'true').lower() == 'true',
-            # Eastmoney 인터페이스 패치 스위치
+            # 동방재부인터페이스补丁스위치
             enable_eastmoney_patch=os.getenv('ENABLE_EASTMONEY_PATCH', 'false').lower() == 'true',
             # 실시간시세데이터소스우선순위：
             # - tencent: 텐센트재경，有거래량비율/회전율/PE/PB등，단일주식조회안정（추천）
@@ -2050,16 +2050,16 @@ class Config:
         if file_value is not None:
             return file_value
 
-        return env_value or "ko"
+        return env_value or "en"
 
     @classmethod
     def _parse_report_language(cls, value: Optional[str]) -> str:
-        """Parse REPORT_LANGUAGE, fallback to ko for invalid values."""
-        normalized = normalize_report_language(value, default="zh")
+        """Parse REPORT_LANGUAGE, fallback to en for invalid values."""
+        normalized = normalize_report_language(value, default="en")
         raw = (value or "").strip()
         if raw and not is_supported_report_language_value(raw):
             logging.getLogger(__name__).warning(
-                "REPORT_LANGUAGE '%s' invalid, fallback to 'ko' (valid: ko/en/zh)",
+                "REPORT_LANGUAGE '%s' invalid, fallback to 'en' (valid: zh/en)",
                 value,
             )
         return normalized
@@ -2281,7 +2281,7 @@ class Config:
                 issues.append(ConfigIssue(
                     severity="warning",
                     message=(
-                        "감지됨 STOCK_GROUP_N 중存에서未포함에서 STOCK_LIST 내의주식："
+                        "邮件路由 감지됨 STOCK_GROUP_N 중存에서未포함에서 STOCK_LIST 내의주식："
                         f"{', '.join(missing_group_stocks[:6])}。"
                         "STOCK_GROUP_N 仅위해이메일라우팅，않음扩대분석범위；"
                         "请先를这些주식加入 STOCK_LIST。"
@@ -2321,6 +2321,11 @@ class Config:
                 ),
                 field="LITELLM_MODEL",
             ))
+            issues.append(ConfigIssue(
+                severity="info",
+                message="主模型 未显式设置，将使用可用通道或默认模型。",
+                field="LITELLM_MODEL",
+            ))
 
         available_router_models = get_configured_llm_models(self.llm_model_list)
         available_router_model_set = set(available_router_models)
@@ -2351,7 +2356,7 @@ class Config:
                 issues.append(ConfigIssue(
                     severity="error",
                     message=(
-                        "已설정의주모델未出现에서현재채널또는고级모델라우팅설정중。"
+                    "主模型 已설정의주모델未出现에서현재채널또는고级모델라우팅설정중。"
                         f" 현재사용가능모델：{', '.join(available_router_models[:6])}"
                     ),
                     field="LITELLM_MODEL",

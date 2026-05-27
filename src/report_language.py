@@ -9,10 +9,6 @@ from typing import Any, Dict, Optional
 SUPPORTED_REPORT_LANGUAGES = ("ko", "zh", "en")
 
 _REPORT_LANGUAGE_ALIASES = {
-    "kr": "ko",
-    "ko-kr": "ko",
-    "ko_kr": "ko",
-    "korean": "ko",
     "zh-cn": "zh",
     "zh_cn": "zh",
     "zh-hans": "zh",
@@ -26,6 +22,10 @@ _REPORT_LANGUAGE_ALIASES = {
     "en_us": "en",
     "en-gb": "en",
     "en_gb": "en",
+    "kr": "ko",
+    "ko-kr": "ko",
+    "ko_kr": "ko",
+    "korean": "ko",
 }
 
 _OPERATION_ADVICE_CANONICAL_MAP = {
@@ -33,39 +33,22 @@ _OPERATION_ADVICE_CANONICAL_MAP = {
     "strong buy": "strong_buy",
     "strong_buy": "strong_buy",
     "매수": "buy",
-    "买入": "buy",
-    "建议买入": "buy",
-    "阿겼뀯": "buy",
-    "鰲귝쐹": "buy",
     "buy": "buy",
     "비중 확대": "buy",
     "accumulate": "buy",
     "add position": "buy",
     "보유": "hold",
-    "持有": "hold",
-    "建议持有": "hold",
-    "继续持有": "hold",
-    "不跌破支撑位继续持有": "hold",
-    "訝띹톸?닸뵱?묇퐤瀯㎫뺌?곫쐣": "hold",
     "세탁관찰": "hold",
     "관찰": "hold",
     "hold": "hold",
     "관망": "watch",
-    "观望": "watch",
-    "观察": "watch",
-    "洗盘观察": "watch",
-    "建议洗盘观察": "watch",
     "watch": "watch",
     "wait": "watch",
     "wait and see": "watch",
     "비중 축소": "reduce",
-    "减仓": "reduce",
-    "建议减仓": "reduce",
     "reduce": "reduce",
     "trim": "reduce",
     "매도": "sell",
-    "?뤶퍜": "sell",
-    "卖出": "sell",
     "sell": "sell",
     "강력매도": "strong_sell",
     "strong sell": "strong_sell",
@@ -73,13 +56,13 @@ _OPERATION_ADVICE_CANONICAL_MAP = {
 }
 
 _OPERATION_ADVICE_TRANSLATIONS = {
-    "strong_buy": {"ko": "강력매수", "zh": "强烈买入", "en": "Strong Buy"},
-    "buy": {"ko": "매수", "zh": "买入", "en": "Buy"},
-    "hold": {"ko": "보유", "zh": "持有", "en": "Hold"},
-    "watch": {"ko": "관망", "zh": "观望", "en": "Watch"},
-    "reduce": {"ko": "비중 축소", "zh": "减仓", "en": "Reduce"},
-    "sell": {"ko": "매도", "zh": "卖出", "en": "Sell"},
-    "strong_sell": {"ko": "강력매도", "zh": "强烈卖出", "en": "Strong Sell"},
+    "strong_buy": {"zh": "강력매수", "en": "Strong Buy"},
+    "buy": {"zh": "매수", "en": "Buy"},
+    "hold": {"zh": "보유", "en": "Hold"},
+    "watch": {"zh": "관망", "en": "Watch"},
+    "reduce": {"zh": "비중 축소", "en": "Reduce"},
+    "sell": {"zh": "매도", "en": "Sell"},
+    "strong_sell": {"zh": "강력매도", "en": "Strong Sell"},
 }
 
 _TREND_PREDICTION_CANONICAL_MAP = {
@@ -89,13 +72,7 @@ _TREND_PREDICTION_CANONICAL_MAP = {
     "very bullish": "strong_bullish",
     "강한상승세": "strong_bullish",
     "상승세정렬": "bullish",
-    "多头排列": "bullish",
-    "看多": "bullish",
-    "?뗥쩀": "bullish",
     "하락세정렬": "bearish",
-    "弱势空头": "bearish",
-    "看空": "bearish",
-    "?뗧㈉": "bearish",
     "약한상승세": "bullish",
     "약한하락세": "bearish",
     "낙관": "bullish",
@@ -115,11 +92,11 @@ _TREND_PREDICTION_CANONICAL_MAP = {
 }
 
 _TREND_PREDICTION_TRANSLATIONS = {
-    "strong_bullish": {"ko": "강력낙관", "zh": "强烈看多", "en": "Strong Bullish"},
-    "bullish": {"ko": "낙관", "zh": "看多", "en": "Bullish"},
-    "sideways": {"ko": "횡보", "zh": "震荡", "en": "Sideways"},
-    "bearish": {"ko": "비관", "zh": "看空", "en": "Bearish"},
-    "strong_bearish": {"ko": "강력비관", "zh": "强烈看空", "en": "Strong Bearish"},
+    "strong_bullish": {"zh": "강력낙관", "en": "Strong Bullish"},
+    "bullish": {"zh": "낙관", "en": "Bullish"},
+    "sideways": {"zh": "흔들림", "en": "Sideways"},
+    "bearish": {"zh": "비관", "en": "Bearish"},
+    "strong_bearish": {"zh": "강력비관", "en": "Strong Bearish"},
 }
 
 _CONFIDENCE_LEVEL_CANONICAL_MAP = {
@@ -133,9 +110,9 @@ _CONFIDENCE_LEVEL_CANONICAL_MAP = {
 }
 
 _CONFIDENCE_LEVEL_TRANSLATIONS = {
-    "high": {"ko": "고", "zh": "高", "en": "High"},
-    "medium": {"ko": "중", "zh": "中", "en": "Medium"},
-    "low": {"ko": "저", "zh": "低", "en": "Low"},
+    "high": {"zh": "고", "en": "High"},
+    "medium": {"zh": "중", "en": "Medium"},
+    "low": {"zh": "저", "en": "Low"},
 }
 
 _CHIP_HEALTH_CANONICAL_MAP = {
@@ -240,7 +217,7 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
         "info_heading": "중요정보速览",
         "sentiment_summary_label": "여론심리",
         "earnings_outlook_label": "실적전망",
-        "risk_alerts_label": "리스크 경고",
+        "risk_alerts_label": "리스크警报",
         "evidence_heading": "분석근거",
         "counter_evidence_heading": "反로근거",
         "confidence_heading": "置信度",
@@ -263,7 +240,7 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
         "positive_catalysts_label": "리호촉매",
         "latest_news_label": "최신동적",
         "core_conclusion_heading": "핵심결론",
-        "one_sentence_label": "한 줄 의사결정",
+        "one_sentence_label": "一句话决策",
         "time_sensitivity_label": "时效性",
         "default_time_sensitivity": "이번 주내",
         "position_status_label": "보유 포지션상황",
@@ -469,9 +446,125 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
     },
 }
 
+_KO_REPORT_LABELS = dict(_REPORT_LABELS["zh"])
+_ZH_REPORT_LABEL_OVERRIDES = {
+    "dashboard_title": "决策仪表盘",
+    "brief_title": "决策简报",
+    "analyzed_prefix": "共分析",
+    "stock_unit": "只股票",
+    "stock_unit_compact": "只",
+    "buy_label": "买入",
+    "watch_label": "观望",
+    "sell_label": "卖出",
+    "summary_heading": "分析结果摘要",
+    "info_heading": "重要信息速览",
+    "evidence_heading": "分析依据",
+    "confidence_heading": "置信度",
+    "confidence_reason_label": "置信理由",
+    "data_limitations_heading": "数据局限",
+    "thesis_tracking_heading": "上次分析以来的变化",
+    "evidence_graph_heading": "依据关系图",
+    "risk_engine_heading": "风险引擎",
+    "core_conclusion_heading": "核心结论",
+    "one_sentence_label": "一句话决策",
+    "time_sensitivity_label": "时效性",
+    "default_time_sensitivity": "本周内",
+    "chip_label": "筹码",
+    "battle_plan_heading": "作战计划",
+    "ideal_buy_label": "理想买点",
+    "secondary_buy_label": "次优买点",
+    "stop_loss_label": "止损位",
+    "take_profit_label": "目标价",
+    "generated_at_label": "报告生成时间",
+    "report_time_label": "生成时间",
+    "analysis_model_label": "分析模型",
+    "financial_summary_heading": "财务摘要",
+    "report_date_label": "报告期",
+    "revenue_label": "营业收入",
+    "net_profit_label": "归母净利润",
+    "operating_cash_flow_label": "经营现金流",
+    "shareholder_return_heading": "股东回报",
+    "related_boards_heading": "关联板块",
+    "board_name_label": "板块",
+    "board_type_label": "类型",
+    "board_status_label": "板块表现",
+    "board_change_pct_label": "板块涨跌幅",
+    "leading_board_label": "领涨",
+    "lagging_board_label": "领跌",
+}
+_REPORT_LABELS["ko"] = _KO_REPORT_LABELS
+_REPORT_LABELS["zh"].update(_ZH_REPORT_LABEL_OVERRIDES)
+
+_PLACEHOLDER_BY_LANGUAGE.update({"ko": "추가예정", "zh": "待补充"})
+_UNKNOWN_BY_LANGUAGE.update({"ko": "알수없음", "zh": "未知"})
+_NO_DATA_BY_LANGUAGE.update({"ko": "데이터누락", "zh": "数据缺失"})
+_CHIP_UNAVAILABLE_BY_LANGUAGE.update(
+    {
+        "ko": "매물대분포미활성화또는데이터소스일시사용불가，미포함매물대판단。",
+        "zh": "筹码分布未启用或数据源暂不可用，未纳入筹码判断。",
+    }
+)
+_GENERIC_STOCK_NAME_BY_LANGUAGE.update({"ko": "확인필요종목", "zh": "待确认股票"})
+_CHIP_PLACEHOLDER_EXACT.update(
+    {"데이터누락", "데이터누락，판단불가", "추가예정", "알수없음", "数据缺失", "数据缺失，无法判断", "待补充", "未知"}
+)
+_CHIP_PLACEHOLDER_HINTS = _CHIP_PLACEHOLDER_HINTS + ("데이터누락", "판단불가", "数据缺失", "无法判断")
+
+for _translation_table in (
+    _OPERATION_ADVICE_TRANSLATIONS,
+    _TREND_PREDICTION_TRANSLATIONS,
+    _CONFIDENCE_LEVEL_TRANSLATIONS,
+    _CHIP_HEALTH_TRANSLATIONS,
+    _BIAS_STATUS_TRANSLATIONS,
+):
+    for _values in _translation_table.values():
+        _values.setdefault("ko", _values.get("zh", ""))
+
+_OPERATION_ADVICE_CANONICAL_MAP.update(
+    {
+        "强烈买入": "strong_buy",
+        "买入": "buy",
+        "加仓": "buy",
+        "持有": "hold",
+        "继续持有": "hold",
+        "观望": "watch",
+        "减仓": "reduce",
+        "卖出": "sell",
+        "强烈卖出": "strong_sell",
+        "강력매수": "strong_buy",
+        "매수": "buy",
+        "보유": "hold",
+        "관망": "watch",
+        "비중축소": "reduce",
+        "매도": "sell",
+        "강력매도": "strong_sell",
+    }
+)
+_OPERATION_ADVICE_TRANSLATIONS["strong_buy"]["zh"] = "强烈买入"
+_OPERATION_ADVICE_TRANSLATIONS["buy"]["zh"] = "买入"
+_OPERATION_ADVICE_TRANSLATIONS["hold"]["zh"] = "持有"
+_OPERATION_ADVICE_TRANSLATIONS["watch"]["zh"] = "观望"
+_OPERATION_ADVICE_TRANSLATIONS["reduce"]["zh"] = "减仓"
+_OPERATION_ADVICE_TRANSLATIONS["sell"]["zh"] = "卖出"
+_OPERATION_ADVICE_TRANSLATIONS["strong_sell"]["zh"] = "强烈卖出"
+_TREND_PREDICTION_CANONICAL_MAP.update(
+    {
+        "强烈看多": "strong_bullish",
+        "看多": "bullish",
+        "震荡": "sideways",
+        "横盘": "sideways",
+        "看空": "bearish",
+        "强烈看空": "strong_bearish",
+        "多头排列": "bullish",
+    }
+)
+_TREND_PREDICTION_TRANSLATIONS["bullish"]["zh"] = "\u770b\u591a"
+_TREND_PREDICTION_TRANSLATIONS["strong_bearish"]["zh"] = "强烈看空"
+_CONFIDENCE_LEVEL_CANONICAL_MAP.update({"高": "high", "中": "medium", "低": "low"})
+_OPERATION_ADVICE_CANONICAL_MAP.update({"洗盘观察": "hold", "观察": "hold"})
+
 _DECISION_INTENT_NEGATIONS = (
     "不",
-    "不建议",
     "그리고非",
     "그리고未",
     "未",
@@ -486,7 +579,6 @@ _DECISION_INTENT_NEGATIONS = (
 _DECISION_INTENT_NEGATION_SCOPE_BREAK_CHARS = "，,。；;:!?！？"
 _DECISION_INTENT_NEGATION_CONNECTORS = (
     "제안",
-    "建议",
     "应",
     "应当",
     "宜",
@@ -525,11 +617,6 @@ def normalize_report_language(value: Optional[str], default: str = "zh") -> str:
     return default
 
 
-def _translation_language(language: str) -> str:
-    """Return the existing translation table key for a normalized language."""
-    return "zh" if language == "ko" else language
-
-
 def is_supported_report_language_value(value: Optional[str]) -> bool:
     """Return whether the raw value is a supported language code or alias."""
     candidate = (value or "").strip().lower().replace(" ", "_")
@@ -541,31 +628,27 @@ def is_supported_report_language_value(value: Optional[str]) -> bool:
 def get_report_labels(language: Optional[str]) -> Dict[str, str]:
     """Return UI copy for the selected report language."""
     normalized = normalize_report_language(language)
-    return _REPORT_LABELS[_translation_language(normalized)]
+    return _REPORT_LABELS[normalized]
 
 
 def get_placeholder_text(language: Optional[str]) -> str:
     """Return placeholder text for missing localized content."""
-    normalized = normalize_report_language(language)
-    return _PLACEHOLDER_BY_LANGUAGE[_translation_language(normalized)]
+    return _PLACEHOLDER_BY_LANGUAGE[normalize_report_language(language)]
 
 
 def get_unknown_text(language: Optional[str]) -> str:
     """Return localized unknown text."""
-    normalized = normalize_report_language(language)
-    return _UNKNOWN_BY_LANGUAGE[_translation_language(normalized)]
+    return _UNKNOWN_BY_LANGUAGE[normalize_report_language(language)]
 
 
 def get_no_data_text(language: Optional[str]) -> str:
     """Return localized data unavailable text."""
-    normalized = normalize_report_language(language)
-    return _NO_DATA_BY_LANGUAGE[_translation_language(normalized)]
+    return _NO_DATA_BY_LANGUAGE[normalize_report_language(language)]
 
 
 def get_chip_unavailable_text(language: Optional[str]) -> str:
     """Return the localized one-line chip distribution fallback text."""
-    normalized = normalize_report_language(language)
-    return _CHIP_UNAVAILABLE_BY_LANGUAGE[_translation_language(normalized)]
+    return _CHIP_UNAVAILABLE_BY_LANGUAGE[normalize_report_language(language)]
 
 
 def _normalize_lookup_key(value: Any) -> str:
@@ -654,7 +737,7 @@ def _is_placeholder_stock_name(value: Any, code: Any = None) -> bool:
     if code_text and lowered == code_text.lower():
         return True
 
-    return text.startswith("주식") or text.startswith("股票")
+    return text.startswith("주식")
 
 
 def _translate_from_map(
@@ -801,6 +884,8 @@ def infer_decision_type_from_advice(value: Any, default: str = "hold") -> str:
         return "hold"
 
     normalized_text = _normalize_lookup_key(value)
+    if "不建议买入" in normalized_text:
+        return "hold"
     best_position: Optional[int] = None
     best_canonical: Optional[str] = None
     for option, canonical in _OPERATION_ADVICE_CANONICAL_MAP.items():
@@ -860,10 +945,9 @@ def get_signal_level(advice: Any, score: Any, language: Optional[str]) -> tuple[
 def get_localized_stock_name(value: Any, code: Any, language: Optional[str]) -> str:
     """Return a localized stock name placeholder when the original name is missing."""
     raw_text = str(value or "").strip()
-    if not _is_placeholder_stock_name(raw_text, code):
+    if not _is_placeholder_stock_name(raw_text, code) and not raw_text.startswith(("股票", "주식")):
         return raw_text
-    normalized = normalize_report_language(language)
-    return _GENERIC_STOCK_NAME_BY_LANGUAGE[_translation_language(normalized)]
+    return _GENERIC_STOCK_NAME_BY_LANGUAGE[normalize_report_language(language)]
 
 
 def get_sentiment_label(score: int, language: Optional[str]) -> str:
@@ -880,23 +964,23 @@ def get_sentiment_label(score: int, language: Optional[str]) -> str:
             return "Bearish"
         return "Very Bearish"
 
-    if normalized == "ko":
+    if normalized == "zh":
         if score >= 80:
-            return "매우 낙관적"
+            return "强烈看多"
         if score >= 60:
-            return "낙관적"
+            return "看多"
         if score >= 40:
-            return "중립"
+            return "\u4e2d\u6027"
         if score >= 20:
-            return "비관적"
-        return "매우 비관적"
+            return "\u60b2\u89c2"
+        return "强烈看空"
 
     if score >= 80:
-        return "极度乐观"
+        return "极度낙관적"
     if score >= 60:
-        return "乐观"
+        return "낙관적"
     if score >= 40:
-        return "中性"
+        return "중립"
     if score >= 20:
-        return "悲观"
-    return "极度悲观"
+        return "비관적"
+    return "极度비관적"
