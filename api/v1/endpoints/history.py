@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 ===================================
-이력 API
+历史记录接口
 ===================================
 
-역할:
-1. GET /api/v1/history 이력 목록 조회 API를 제공합니다.
-2. GET /api/v1/history/{query_id} 이력 상세 조회 API를 제공합니다.
+职责：
+1. 提供 GET /api/v1/history 历史列表查询接口
+2. 提供 GET /api/v1/history/{query_id} 历史详情查询接口
 """
 
 import logging
@@ -28,6 +28,7 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
     MarkdownReportResponse,
+    RunDiagnosticSummaryResponse,
 )
 from api.v1.schemas.common import ErrorResponse
 from src.storage import DatabaseManager
@@ -43,6 +44,7 @@ from src.utils.data_processing import (
     normalize_model_used,
     extract_fundamental_detail_fields,
     extract_board_detail_fields,
+    extract_realtime_detail_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,40 +56,40 @@ router = APIRouter()
     "",
     response_model=HistoryListResponse,
     responses={
-        200: {"description": "이력 목록"},
-        500: {"description": "서버 오류", "model": ErrorResponse},
+        200: {"description": "历史记录列表"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
     },
-    summary="분석 이력 목록 조회",
-    description="분석 이력 요약을 페이지 단위로 조회하며 종목 코드와 날짜 범위 필터를 지원합니다."
+    summary="获取历史分析列表",
+    description="分页获取历史分析记录摘要，支持按股票代码和日期范围筛选"
 )
 def get_history_list(
-    stock_code: Optional[str] = Query(None, description="종목 코드 필터"),
-    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
-    page: int = Query(1, ge=1, description="페이지 번호(1부터 시작)"),
-    limit: int = Query(20, ge=1, le=100, description="페이지당 개수"),
+    stock_code: Optional[str] = Query(None, description="股票代码筛选"),
+    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
+    page: int = Query(1, ge=1, description="页码（从 1 开始）"),
+    limit: int = Query(20, ge=1, le=100, description="每页数量"),
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> HistoryListResponse:
     """
-    분석 이력 목록 조회
-
-    분석 이력 요약을 페이지 단위로 조회하며 종목 코드와 날짜 범위 필터를 지원합니다.
-
+    获取历史分析列表
+    
+    分页获取历史分析记录摘要，支持按股票代码和日期范围筛选
+    
     Args:
-        stock_code: 종목 코드 필터
-        start_date: 시작일
-        end_date: 종료일
-        page: 페이지 번호
-        limit: 페이지당 개수
-        db_manager: 데이터베이스 관리자 의존성
-
+        stock_code: 股票代码筛选
+        start_date: 开始日期
+        end_date: 结束日期
+        page: 页码
+        limit: 每页数量
+        db_manager: 数据库管理器依赖
+        
     Returns:
-        HistoryListResponse: 이력 목록
+        HistoryListResponse: 历史记录列表
     """
     try:
         service = HistoryService(db_manager)
-
-        # Use def instead of async def so FastAPI runs it in the thread pool.
+        
+        # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(
             stock_code=stock_code,
             start_date=start_date,
@@ -95,8 +97,8 @@ def get_history_list(
             page=page,
             limit=limit
         )
-
-        # Convert to response model.
+        
+        # 转换为响应模型
         items = [
             HistoryItem(
                 id=item.get("id"),
@@ -104,29 +106,27 @@ def get_history_list(
                 stock_code=item.get("stock_code", ""),
                 stock_name=item.get("stock_name"),
                 report_type=item.get("report_type"),
-                report_language=item.get("report_language"),
-                is_legacy=bool(item.get("is_legacy", False)),
                 sentiment_score=item.get("sentiment_score"),
                 operation_advice=item.get("operation_advice"),
                 created_at=item.get("created_at")
             )
             for item in result.get("items", [])
         ]
-
+        
         return HistoryListResponse(
             total=result.get("total", 0),
             page=page,
             limit=limit,
             items=items
         )
-
+        
     except Exception as e:
-        logger.error(f"이력 목록 조회 실패: {e}", exc_info=True)
+        logger.error(f"查询历史列表失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"이력 목록 조회 실패: {str(e)}"
+                "message": f"查询历史列表失败: {str(e)}"
             }
         )
 
@@ -135,19 +135,19 @@ def get_history_list(
     "",
     response_model=DeleteHistoryResponse,
     responses={
-        200: {"description": "삭제 성공"},
-        400: {"description": "요청 파라미터 오류", "model": ErrorResponse},
-        500: {"description": "서버 오류", "model": ErrorResponse},
+        200: {"description": "删除成功"},
+        400: {"description": "请求参数错误", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
     },
-    summary="분석 이력 삭제",
-    description="이력 기본 키 ID로 분석 이력을 일괄 삭제합니다."
+    summary="删除历史分析记录",
+    description="按历史记录主键 ID 批量删除分析历史"
 )
 def delete_history_records(
     request: DeleteHistoryRequest = Body(...),
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> DeleteHistoryResponse:
     """
-    기본 키 ID로 분석 이력을 일괄 삭제합니다.
+    按主键 ID 批量删除历史分析记录。
     """
     record_ids = sorted({record_id for record_id in request.record_ids if record_id is not None})
     if not record_ids:
@@ -155,7 +155,7 @@ def delete_history_records(
             status_code=400,
             detail={
                 "error": "invalid_request",
-                "message": "record_ids는 비어 있을 수 없습니다."
+                "message": "record_ids 不能为空"
             }
         )
 
@@ -166,43 +166,12 @@ def delete_history_records(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"이력 삭제 실패: {e}", exc_info=True)
+        logger.error(f"删除历史记录失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"이력 삭제 실패: {str(e)}"
-            }
-        )
-
-
-@router.delete(
-    "/reset",
-    response_model=DeleteHistoryResponse,
-    responses={
-        200: {"description": "초기화 성공"},
-        500: {"description": "서버 오류", "model": ErrorResponse},
-    },
-    summary="전체 분석 이력 초기화",
-    description="로컬에 저장된 모든 분석 이력과 연결된 백테스트 결과를 삭제합니다."
-)
-def reset_history_records(
-    db_manager: DatabaseManager = Depends(get_database_manager)
-) -> DeleteHistoryResponse:
-    """
-    로컬 분석 이력을 전체 초기화합니다.
-    """
-    try:
-        service = HistoryService(db_manager)
-        deleted = service.delete_all_history_records()
-        return DeleteHistoryResponse(deleted=deleted)
-    except Exception as e:
-        logger.error(f"전체 이력 초기화 실패: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "internal_error",
-                "message": f"전체 이력 초기화 실패: {str(e)}"
+                "message": f"删除历史记录失败: {str(e)}"
             }
         )
 
@@ -211,72 +180,56 @@ def reset_history_records(
     "/{record_id}",
     response_model=AnalysisReport,
     responses={
-        200: {"description": "보고서 상세"},
-        404: {"description": "보고서 없음", "model": ErrorResponse},
-        500: {"description": "서버 오류", "model": ErrorResponse},
+        200: {"description": "报告详情"},
+        404: {"description": "报告不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
     },
-    summary="이력 보고서 상세 조회",
-    description="분석 이력 ID 또는 query_id로 전체 분석 보고서를 조회합니다."
+    summary="获取历史报告详情",
+    description="根据分析历史记录 ID 或 query_id 获取完整的历史分析报告"
 )
 def get_history_detail(
     record_id: str,
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> AnalysisReport:
     """
-    이력 보고서 상세 조회
-
-    분석 이력 기본 키 ID 또는 query_id로 전체 분석 보고서를 조회합니다.
-    먼저 기본 키 ID(정수)로 조회하고, 유효한 정수가 아니면 query_id로 조회합니다.
-
+    获取历史报告详情
+    
+    根据分析历史记录主键 ID 或 query_id 获取完整的历史分析报告。
+    优先尝试按主键 ID（整数）查询，若参数不是合法整数则按 query_id 查询。
+    
     Args:
-        record_id: 분석 이력 기본 키 ID(정수) 또는 query_id(문자열)
-        db_manager: 데이터베이스 관리자 의존성
-
+        record_id: 分析历史记录主键 ID（整数）或 query_id（字符串）
+        db_manager: 数据库管理器依赖
+        
     Returns:
-        AnalysisReport: 전체 분석 보고서
-
+        AnalysisReport: 完整分析报告
+        
     Raises:
-        HTTPException: 404 - 보고서 없음
+        HTTPException: 404 - 报告不存在
     """
     try:
         service = HistoryService(db_manager)
-
+        
         # Try integer ID first, fall back to query_id string lookup
         result = service.resolve_and_get_detail(record_id)
-
+        
         if result is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"id/query_id={record_id} 인 분석 기록을 찾을 수 없습니다."
+                    "message": f"未找到 id/query_id={record_id} 的分析记录"
                 }
             )
-
-        # Extract price information from context_snapshot.
-        # Use `is None` instead of `or` so 0.0 is not treated as missing.
-        # Do not use `change_60d` as a fallback for intraday change_pct.
-        current_price = None
-        change_pct = None
+        
+        # 从 context_snapshot 中提取价格信息
+        # 注意：使用 `is None` 而非 `or`，避免把 0.0（平盘）误判为缺失值；
+        # 同时不混用 `change_60d`（60 日累计涨跌幅）作为日内 change_pct 的兜底。
         context_snapshot = result.get("context_snapshot")
-        if context_snapshot and isinstance(context_snapshot, dict):
-            # Prefer enhanced_context.realtime.
-            enhanced_context = context_snapshot.get("enhanced_context") or {}
-            realtime = enhanced_context.get("realtime") or {}
-            current_price = realtime.get("price")
-            change_pct = realtime.get("change_pct")
-
-            # Fallback to realtime_quote_raw when missing.
-            realtime_quote_raw = context_snapshot.get("realtime_quote_raw")
-            if not isinstance(realtime_quote_raw, dict):
-                realtime_quote_raw = {}
-            if current_price is None:
-                current_price = realtime_quote_raw.get("price")
-            if change_pct is None:
-                change_pct = realtime_quote_raw.get("change_pct")
-            if change_pct is None:
-                change_pct = realtime_quote_raw.get("pct_chg")
-
+        realtime_fields = extract_realtime_detail_fields(context_snapshot)
+        current_price = realtime_fields.get("current_price")
+        change_pct = realtime_fields.get("change_pct")
+        
         raw_result = result.get("raw_result")
         if not isinstance(raw_result, dict):
             raw_result = {}
@@ -295,7 +248,7 @@ def get_history_detail(
             report_language,
         )
 
-        # Build response model.
+        # 构建响应模型
         meta = ReportMeta(
             id=result.get("id"),
             query_id=result.get("query_id", ""),
@@ -308,7 +261,7 @@ def get_history_detail(
             change_pct=change_pct,
             model_used=normalize_model_used(result.get("model_used"))
         )
-
+        
         summary = ReportSummary(
             analysis_summary=result.get("analysis_summary"),
             operation_advice=localize_operation_advice(
@@ -326,14 +279,14 @@ def get_history_detail(
                 else result.get("sentiment_label")
             )
         )
-
+        
         strategy = ReportStrategy(
             ideal_buy=result.get("ideal_buy"),
             secondary_buy=result.get("secondary_buy"),
             stop_loss=result.get("stop_loss"),
             take_profit=result.get("take_profit")
         )
-
+        
         fallback_fundamental = db_manager.get_latest_fundamental_snapshot(
             query_id=result.get("query_id", ""),
             code=result.get("stock_code", ""),
@@ -356,26 +309,67 @@ def get_history_detail(
             belong_boards=extracted_boards.get("belong_boards"),
             sector_rankings=extracted_boards.get("sector_rankings"),
         )
-
+        
         return AnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details,
-            analysis_map=raw_result.get("analysis_map"),
-            analysis_confidence=raw_result.get("analysis_confidence"),
+            details=details
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"이력 상세 조회 실패: {e}", exc_info=True)
+        logger.error(f"查询历史详情失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"이력 상세 조회 실패: {str(e)}"
+                "message": f"查询历史详情失败: {str(e)}"
             }
+        )
+
+
+@router.get(
+    "/{record_id}/diagnostics",
+    response_model=RunDiagnosticSummaryResponse,
+    responses={
+        200: {"description": "运行诊断摘要"},
+        404: {"description": "报告不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取历史报告运行诊断摘要",
+    description="根据分析历史记录 ID 或 query_id 获取用户可读诊断摘要和脱敏复制文本。",
+)
+def get_history_diagnostics(
+    record_id: str,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+) -> RunDiagnosticSummaryResponse:
+    """
+    获取历史报告运行诊断摘要。
+    """
+    try:
+        service = HistoryService(db_manager)
+        summary = service.resolve_and_get_diagnostics(record_id)
+        if summary is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到 id/query_id={record_id} 的分析记录",
+                },
+            )
+        return RunDiagnosticSummaryResponse.model_validate(summary)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询运行诊断摘要失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"查询运行诊断摘要失败: {str(e)}",
+            },
         )
 
 
@@ -383,30 +377,30 @@ def get_history_detail(
     "/{record_id}/news",
     response_model=NewsIntelResponse,
     responses={
-        200: {"description": "뉴스 정보 목록"},
-        500: {"description": "서버 오류", "model": ErrorResponse},
+        200: {"description": "新闻情报列表"},
+        500: {"description": "服务器错误", "model": ErrorResponse},
     },
-    summary="이력 보고서 관련 뉴스 조회",
-    description="분석 이력 ID로 관련 뉴스 정보를 조회합니다. 비어 있어도 200을 반환합니다."
+    summary="获取历史报告关联新闻",
+    description="根据分析历史记录 ID 获取关联的新闻情报列表（为空也返回 200）"
 )
 def get_history_news(
     record_id: str,
-    limit: int = Query(20, ge=1, le=100, description="반환 개수 제한"),
+    limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> NewsIntelResponse:
     """
-    이력 보고서 관련 뉴스 조회
+    获取历史报告关联新闻
 
-    분석 이력 ID 또는 query_id로 관련 뉴스 정보를 조회합니다.
-    Internally resolves record_id to query_id.
+    根据分析历史记录 ID 或 query_id 获取关联的新闻情报列表。
+    在内部完成 record_id → query_id 的解析。
 
     Args:
-        record_id: 분석 이력 기본 키 ID(정수) 또는 query_id(문자열)
-        limit: 반환 개수 제한
-        db_manager: 데이터베이스 관리자 의존성
+        record_id: 分析历史记录主键 ID（整数）或 query_id（字符串）
+        limit: 返回数量限制
+        db_manager: 数据库管理器依赖
 
     Returns:
-        NewsIntelResponse: 뉴스 정보 목록
+        NewsIntelResponse: 新闻情报列表
     """
     try:
         service = HistoryService(db_manager)
@@ -427,12 +421,12 @@ def get_history_news(
         )
 
     except Exception as e:
-        logger.error(f"뉴스 정보 조회 실패: {e}", exc_info=True)
+        logger.error(f"查询新闻情报失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"뉴스 정보 조회 실패: {str(e)}"
+                "message": f"查询新闻情报失败: {str(e)}"
             }
         )
 
@@ -441,32 +435,32 @@ def get_history_news(
     "/{record_id}/markdown",
     response_model=MarkdownReportResponse,
     responses={
-        200: {"description": "Markdown 형식 보고서"},
-        404: {"description": "보고서 없음", "model": ErrorResponse},
-        500: {"description": "서버 오류", "model": ErrorResponse},
+        200: {"description": "Markdown 格式报告"},
+        404: {"description": "报告不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
     },
-    summary="이력 보고서 Markdown 형식 조회",
-    description="분석 이력 ID로 Markdown 형식의 전체 분석 보고서를 조회합니다."
+    summary="获取历史报告 Markdown 格式",
+    description="根据分析历史记录 ID 获取 Markdown 格式的完整分析报告"
 )
 def get_history_markdown(
     record_id: str,
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> MarkdownReportResponse:
     """
-    이력 보고서의 Markdown 형식 내용을 조회합니다.
+    获取历史报告的 Markdown 格式内容
 
-    분석 이력 ID 또는 query_id로 알림 전송 형식과 같은 Markdown 보고서를 생성합니다.
+    根据分析历史记录 ID 或 query_id 生成与推送通知格式一致的 Markdown 报告。
 
     Args:
-        record_id: 분석 이력 기본 키 ID(정수) 또는 query_id(문자열)
-        db_manager: 데이터베이스 관리자 의존성
+        record_id: 分析历史记录主键 ID（整数）或 query_id（字符串）
+        db_manager: 数据库管理器依赖
 
     Returns:
-        MarkdownReportResponse: Markdown 형식 전체 보고서
+        MarkdownReportResponse: Markdown 格式的完整报告
 
     Raises:
-        HTTPException: 404 - 보고서 없음
-        HTTPException: 500 - 보고서 생성 실패(서버 내부 오류)
+        HTTPException: 404 - 报告不存在
+        HTTPException: 500 - 报告生成失败（服务器内部错误）
     """
     service = HistoryService(db_manager)
 
@@ -478,16 +472,16 @@ def get_history_markdown(
             status_code=500,
             detail={
                 "error": "generation_failed",
-                "message": f"Markdown 보고서 생성 실패: {e.message}"
+                "message": f"生成 Markdown 报告失败: {e.message}"
             }
         )
     except Exception as e:
-        logger.error(f"Markdown 보고서 조회 실패: {e}", exc_info=True)
+        logger.error(f"获取 Markdown 报告失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"Markdown 보고서 조회 실패: {str(e)}"
+                "message": f"获取 Markdown 报告失败: {str(e)}"
             }
         )
 
@@ -496,7 +490,7 @@ def get_history_markdown(
             status_code=404,
             detail={
                 "error": "not_found",
-                "message": f"id/query_id={record_id} 인 분석 기록을 찾을 수 없습니다."
+                "message": f"未找到 id/query_id={record_id} 的分析记录"
             }
         )
 

@@ -1,69 +1,71 @@
-# 문서 센터
+# 文档中心
 
-이 문서는 프로젝트 문서의 진입점입니다. README는 프로젝트 소개와 빠른 시작만 담고, 세부 설정과 운영 문서는 아래 항목에서 확인합니다.
+这里是项目文档入口。README 负责项目概览和快速开始；更完整的配置、部署、功能说明和排障内容从这里进入。
 
-## 상황별 바로가기
+## 按场景选择
 
-| 하고 싶은 일 | 먼저 볼 문서 | 이어서 볼 문서 |
+| 我想要 | 先看 | 继续看 |
 | --- | --- | --- |
-| 프로젝트를 빠르게 이해하기 | [README](../README.md) | [전체 설정과 운영 가이드](full-guide.md) |
-| 처음 실행하기 | [초보자 클라이언트 설정](beginner-client-setup.md) | [FAQ](FAQ.md) |
-| LLM 설정하기 | [LLM 설정 가이드](LLM_CONFIG_GUIDE.md) | [LLM provider 운영 가이드](llm-providers.md) |
-| 알림 설정하기 | [알림 기능 기준](notifications.md) | [Bot 명령과 연동](bot-command.md) |
-| 서버나 클라우드에 배포하기 | [배포 가이드](DEPLOY.md) | [Zeabur 배포](docker/zeabur-deployment.md) |
-| 데스크톱 앱 패키징하기 | [데스크톱 앱 패키징 가이드](desktop-package.md) | [배포 가이드](DEPLOY.md) |
-| 오류를 해결하기 | [FAQ](FAQ.md) | [변경 로그](CHANGELOG.md) |
-| 개발에 참여하기 | [기여 가이드](CONTRIBUTING.md) | [API 명세](architecture/api_spec.json) |
+| 快速了解项目能做什么 | [README](../README.md) | [完整配置与部署指南](full-guide.md) |
+| 第一次把项目跑起来 | [小白客户端安装与配置](beginner-client-setup.md) | [完整配置与部署指南](full-guide.md) |
+| 配置大模型渠道 | [LLM 配置指南](LLM_CONFIG_GUIDE.md) | [LLM 服务商配置指南](llm-providers.md) |
+| 配置推送通知 | [通知能力基线](notifications.md) | [完整配置与部署指南](full-guide.md) |
+| 部署到服务器或云平台 | [部署指南](DEPLOY.md) | [云端 WebUI 部署](deploy-webui-cloud.md)、[Zeabur 部署](docker/zeabur-deployment.md) |
+| 使用 Bot / IM 接入 | [Bot 命令与接入](bot-command.md) | [Bot 平台配置](bot/) |
+| 排查运行问题 | [FAQ](FAQ.md) | [更新日志](CHANGELOG.md) |
+| 参与开发或提交 PR | [贡献指南](CONTRIBUTING.md) | [API 规格](architecture/api_spec.json) |
 
-## 빠른 시작
+## 快速开始
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [README](../README.md) | 프로젝트 소개, 핵심 기능, 빠른 시작, 주요 진입점 |
-| [초보자 클라이언트 설정](beginner-client-setup.md) | 비개발자 기준 설치와 기본 설정 |
-| [전체 설정과 운영 가이드](full-guide.md) | 실행 방식, 환경 변수, 배포, 문제 해결 |
-| [FAQ](FAQ.md) | 자주 묻는 설정, 모델, 알림, 배포 문제 |
-| [변경 로그](CHANGELOG.md) | 주요 변경 사항과 마이그레이션 메모 |
+| [README](../README.md) | 项目定位、核心能力、快速开始、推送效果 |
+| [小白客户端安装与配置](beginner-client-setup.md) | 面向不会代码用户的客户端下载、Anspire Open / AIHubMix 模型配置、新闻源配置和常见问题 |
+| [完整配置与部署指南](full-guide.md) | 环境准备、运行方式、配置说明、部署路径和常见问题 |
+| [FAQ](FAQ.md) | 常见配置、模型、通知、部署和运行问题 |
+| [更新日志](CHANGELOG.md) | 版本变化、能力调整和迁移说明 |
 
-## 설정
+## 配置
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [LLM 설정 가이드](LLM_CONFIG_GUIDE.md) | LLM channel, LiteLLM, Agent 모델, Vision 모델 설정 |
-| [LLM provider 운영 가이드](llm-providers.md) | provider별 endpoint, 모델 예시, 오류 분류 |
-| [LiteLLM YAML 예시](examples/litellm_config.example.yaml) | 고급 LiteLLM YAML 구성 예시 |
-| [알림 기능 기준](notifications.md) | Telegram, Discord, Slack, 이메일 등 알림 채널 |
-| [Tushare 종목 목록 가이드](TUSHARE_STOCK_LIST_GUIDE.md) | Tushare 종목 목록 관련 설정 |
+| [LLM 配置指南](LLM_CONFIG_GUIDE.md) | 大模型渠道、三层配置、Web 设置页和常见模型配置 |
+| [LLM 服务商配置指南](llm-providers.md) | Provider 预设、Actions 映射、错误分类和诊断建议 |
+| [LiteLLM YAML 示例](examples/litellm_config.example.yaml) | LiteLLM 多渠道配置示例 |
+| [通知能力基线](notifications.md) | 企业微信、飞书、Telegram、Discord、Slack、邮件等通知渠道配置 |
+| [Tushare 股票列表指南](TUSHARE_STOCK_LIST_GUIDE.md) | Tushare 股票列表相关配置和使用说明 |
 
-## 기능별 문서
+## 使用专题
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [Bot 명령과 연동](bot-command.md) | Bot 명령, webhook, platform 연동 |
-| [Bot 플랫폼 설정](bot/) | 플랫폼별 Bot 설정 보조 문서 |
-| [실시간 알림 센터](alerts.md) | EventMonitor, Web 규칙 관리, 알림 결과 |
-| [이미지 추출 프롬프트](image-extract-prompt.md) | Vision LLM 주식 정보 추출 프롬프트 |
-| [OpenClaw Skill 연동](openclaw-skill-integration.md) | OpenClaw 외부 Skill 연동 |
+| [Bot 命令与接入](bot-command.md) | Bot 命令、Webhook、平台接入和回调说明 |
+| [Bot 平台配置](bot/) | 飞书、钉钉、Discord 等 Bot 配置截图和补充说明 |
+| [实时告警中心](alerts.md) | EventMonitor 基线、Web 规则管理、通知结果、冷却状态和 Phase 边界 |
+| [分析上下文包 P0/P1 契约](analysis-context-pack.md) | AnalysisContextPack 首版范围、上下文字段边界、字段质量状态、P1 内部 schema 和源码锚点 |
+| [图片识别 Prompt](image-extract-prompt.md) | 图片识别股票信息的 Prompt 与使用边界 |
+| [OpenClaw Skill 集成](openclaw-skill-integration.md) | OpenClaw / Skill 外部集成说明 |
 
-## 배포와 패키징
+## 部署与打包
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [배포 가이드](DEPLOY.md) | 서버, Docker, systemd, Supervisor 배포 |
-| [클라우드 Web UI 배포](deploy-webui-cloud.md) | 클라우드에서 Web UI를 공개하는 방법 |
-| [Zeabur 배포](docker/zeabur-deployment.md) | Zeabur 기반 배포와 운영 |
-| [데스크톱 앱 패키징 가이드](desktop-package.md) | Electron 데스크톱 앱 빌드와 릴리스 |
+| [部署指南](DEPLOY.md) | 服务器部署、Docker、systemd、Supervisor 等部署方式 |
+| [云端 WebUI 部署](deploy-webui-cloud.md) | 云服务器访问 WebUI 的部署说明 |
+| [Zeabur 部署](docker/zeabur-deployment.md) | Zeabur 平台部署说明 |
+| [桌面端打包说明](desktop-package.md) | Electron 桌面端和 Web 构建产物打包说明 |
 
-## 개발 참고
+## 参考与开发
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [API 명세](architecture/api_spec.json) | FastAPI OpenAPI 산출물 |
-| [기여 가이드](CONTRIBUTING.md) | Issue, PR, 테스트, 문서 동기화 규칙 |
+| [API 规格](architecture/api_spec.json) | FastAPI OpenAPI 规格产物 |
+| [贡献指南](CONTRIBUTING.md) | Issue、PR、测试、文档同步和协作要求 |
 
-## 다른 언어 문서
+## 多语言
 
-| 문서 | 내용 |
+| 文档 | 内容 |
 | --- | --- |
-| [English documentation index](INDEX_EN.md) | English documentation index |
-| [English README](README_EN.md) | English project overview and quick start |
+| [英文文档索引](INDEX_EN.md) | English documentation index |
+| [英文 README](README_EN.md) | English project overview and quick start |
+| [繁中 README](README_CHT.md) | 繁體中文項目概覽與快速開始 |

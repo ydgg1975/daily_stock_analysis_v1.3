@@ -1,71 +1,84 @@
-# 설정 페이지 도움말 유지보수 안내
+# 设置页配置帮助维护说明
 
-설정 페이지 도움말은 사용자가 WebUI 설정 화면 안에서 핵심 설명을 바로 확인하도록 돕는 문서와 코드 자산입니다. 화면에는 짧은 설명만 유지하고, 자세한 내용은 설정 항목 제목 옆 도움말 아이콘에서 확인하도록 구성합니다.
+设置页配置帮助用于把配置项的关键说明放到 WebUI 内部，减少用户在设置页和文档之间反复切换。页面上仍保留短描述，详细说明通过配置项标题旁的 help icon 打开。
 
-이 문서는 도움말 시스템의 유지보수 규칙을 설명합니다. 설정의 실제 의미, 기본값, 런타임 우선순위, 문제 해결 세부 내용은 `.env.example`, `docs/full-guide.md`, `docs/LLM_CONFIG_GUIDE.md`, `docs/llm-providers.md` 같은 주제 문서를 사실 기준으로 삼습니다.
+本文只说明帮助系统的维护规则，不替代完整配置文档。配置语义、默认值、运行时优先级和排障细节仍以 `.env.example`、`docs/full-guide.md` 及对应专题文档为事实源。
 
-## 데이터 구조
+## 数据结构
 
-후면 설정 등록부는 `src/core/config_registry.py`에서 각 필드에 도움말 메타데이터를 붙입니다.
+后端配置注册表在 `src/core/config_registry.py` 中为字段追加帮助元数据：
 
-- `help_key`: 프런트엔드 도움말 문구를 찾는 안정적인 key입니다.
-- `examples`: UI에 보여줄 설정 예시입니다. 민감 값은 `sk-xxxx`, `your_token` 같은 placeholder만 사용합니다.
-- `docs`: 관련 문서 링크입니다. 가능하면 저장소 안의 주제 문서나 전체 가이드를 가리킵니다.
-- `warning_codes`: 프런트엔드 표시나 향후 검증 확장에 사용할 안정적인 경고 code입니다.
+- `help_key`：前端多语言帮助文案的稳定 key。
+- `examples`：可直接展示的配置样例。敏感字段只能使用占位符，例如 `sk-xxxx`、`your_token`。
+- `docs`：相关文档链接，优先指向仓库内已有专题文档或完整指南。
+- `warning_codes`：面向前端或后续校验扩展的稳定提示 code。
 
-프런트엔드의 긴 도움말 문구는 `apps/dsa-web/src/locales/settingsHelp.ts`에서 관리합니다.
+前端长文案维护在 `apps/dsa-web/src/locales/settingsHelp.ts`：
 
-- 기본 문구는 한국어 기준으로 유지합니다.
-- 다른 언어 문구가 있다면 같은 의미 범위를 유지합니다.
-- 문구는 용도, 값 형식, 영향 범위, 주의 사항, 관련 문서를 설명해야 하며 주제 문서 전체를 복사하지 않습니다.
+- 默认展示中文文案。
+- 英文文案保留同样结构，便于后续扩展语言切换。
+- 文案应解释用途、取值说明、影响范围、注意事项和相关文档，不应复制完整专题文档。
 
-## 현재 범위
+## 覆盖范围
 
-기초 설정과 자주 틀리는 설정을 우선 다룹니다.
+PR1 覆盖基础设施与首批代表性配置项：
 
-- 기본 분석 대상: `STOCK_LIST`
-- LLM 런타임: `LITELLM_MODEL`, `LLM_CHANNELS`, Agent 모델, fallback 모델, YAML 라우팅, temperature
-- LLM 채널 편집기: 채널명, 프로토콜, Base URL, API Key, 모델 목록, 런타임 능력 검사, 주 모델, Agent 주 모델, Vision, fallback
-- 데이터와 검색: Tushare, 실시간 시세 우선순위, 실시간 기술 지표, 검색 API Key, SearXNG, 칩 분포, 뉴스 창
-- 알림: Webhook, Telegram, 이메일, Discord, Slack, 보고서 출력, Webhook SSL 검증
-- WebUI와 실행: host, port, 로그인 보호, 신뢰 프록시, 스케줄, 거래일 확인, 네트워크 프록시
+- `STOCK_LIST`
+- `LITELLM_MODEL`
+- `LLM_CHANNELS`
+- `FEISHU_WEBHOOK_URL`
+- `WEBUI_HOST`
 
-향후 Agent, 백테스트, 보고서 고급 필드, 로그, 데이터베이스, 데스크톱, 세부 배포 설정을 이어서 추가할 수 있습니다.
+PR2 继续覆盖高频、易填错配置项：
 
-## 범위 경계
+- AI 模型运行时：Agent 主模型、fallback 模型、高级 YAML 路由、temperature、provider API Key、OpenAI-compatible Base URL。
+- LLM Channels 编辑器内部字段：渠道名、协议、Base URL、API Key、模型列表、运行时能力检测、主模型、Agent 主模型、fallback、Vision 和 temperature。
+- 数据源与搜索：Tushare、实时行情优先级、实时技术指标、搜索 API Key、SearXNG、筹码分布、新闻窗口。
+- 通知：Webhook、Telegram、邮件、Discord/Slack 等聊天平台、报告输出、Webhook SSL 校验。
+- WebUI / auth / schedule / proxy：Host、Port、登录保护、可信反向代理、定时任务、交易日检查、网络代理。
 
-- `settingsHelp.ts`의 `settings.llm_channel.*` 문구는 LLM 채널 편집기 내부 필드 설명입니다. 개별 `.env` 키와 1:1로 대응하지 않을 수 있습니다.
-- 그 외 도움말 문구는 `src/core/config_registry.py`의 어떤 필드에서든 `help_key`로 추적 가능해야 합니다.
-- 도움말 문구는 설정 저장, 검증, 런타임 우선순위, `.env` 쓰기, 환경 변수 override 의미를 바꾸지 않습니다.
-- 실제 secret, 계정, token, 전체 Webhook URL, 로컬 절대 경로를 예시로 쓰지 않습니다.
-- LLM provider, 모델명, Base URL 예시는 저장소 문서나 공식 출처로 추적 가능해야 합니다.
-- 외부 provider의 전역 가용성, LiteLLM 호환 범위, fallback 정책은 도움말에서 단독으로 새 약속을 만들지 않습니다. 의미가 바뀌면 주제 문서와 PR 설명도 함께 수정합니다.
+PR3 registered-field slice / 阶段性补齐：聚焦 Web 设置页中实际展示/可配置字段的 Help 补齐，包括通用配置卡片当前可见字段和 AI legacy 条件可见字段：
 
-## 사실 기준 우선순위
+- Agent 配置（21 字段）：Agent 模式、最大推理步数、策略列表、策略目录、自然语言路由、架构、编排器模式、超时、风险否决、Deep Research 预算/超时、记忆、策略自动权重、策略路由、问股可见对话上下文压缩、事件监控开关/间隔、告警规则 JSON。
+- 回测配置（5 字段）：回测开关、评估窗口、最小记录年龄、引擎版本、中性回报带。
+- 报告配置（9 字段）：仅推送摘要、显示模型名、模板目录、渲染引擎、完整性校验/重试、历史信号对比、逐股推送、合并邮件。
+- 通知路由配置（9 字段）：报告/告警/系统错误渠道路由、去重/冷却、静默时段/时区、最低等级、每日摘要（预留）。
+- 系统运行时（7 字段）：日志级别、调试模式、最大并发、分析间隔、大盘分析开关/市场/配色。
+- AI legacy 与 Anspire 配置：provider 专用多 Key、模型名、温度、Vision 模型、max tokens 与 Anspire LLM 网关字段。
+- 数据源与搜索：TickFlow、SerpAPI、Brave、Bocha、MiniMax、SearXNG 公共实例、BIAS 阈值和 Pytdx 服务器字段。
+- 通知高级字段：飞书高级安全/应用字段、Telegram topic、Discord/Slack 高级字段、Pushover、ntfy、Gotify、PushPlus、ServerChan3、AstrBot 和自定义 Webhook 高级模板/鉴权字段。
 
-도움말을 새로 추가하거나 고칠 때는 아래 순서로 확인합니다.
+后续 PR 可继续覆盖 Web 设置页新增展示的字段或独立操作区；未在设置页展示的 `.env` 变量（如 DATABASE_PATH、SQLITE_*、MARKDOWN_TO_IMAGE_*、USE_PROXY、PROXY_HOST、PROXY_PORT、LOG_DIR、LITELLM_LOG_LEVEL 等）暂不属于本 PR3 切片范围。
 
-1. `.env.example`: 설정 키, 기본값, 예시 형식, 민감 값 placeholder
-2. `docs/full-guide.md`: 주요 설정 설명, 실행 진입점, 배포 맥락
-3. `docs/LLM_CONFIG_GUIDE.md`, `docs/llm-providers.md`: LLM 우선순위, Channels, provider/model, 호환 경계, 문제 해결
-4. 주제 문서: `docs/bot/feishu-bot-config.md`, `docs/deploy-webui-cloud.md`, `docs/desktop-package.md` 등
-5. 코드와 테스트: 문서와 코드가 다르면 실행 가능한 구현을 우선하고 문서를 함께 바로잡습니다.
+### 覆盖边界
 
-## 재시작 의미
+- `settingsHelp.ts` 中的 `settings.llm_channel.*` 系列为 LLM 渠道编辑器内部字段说明，仅用于前端渲染，不对应 `.env` 的单独配置项；这是 PR2 中刻意的“内置扩展”设计，用于提升编辑器可用性。
+- 其余 help 文案均应能从 `src/core/config_registry.py` 中某个字段的 `help_key` 映射到后端注册元数据，便于与文档源、`warning_codes` 一起统一维护。
 
-설정 페이지 저장은 보통 `.env`를 갱신하고 가능한 범위에서 런타임 설정을 새로 읽습니다. 도움말과 `warning_codes`는 다음 차이를 명확히 알려야 합니다.
+## 事实源优先级
 
-- `WEBUI_HOST`, `WEBUI_PORT`: 프로세스 시작 시 바인딩되는 값이므로 저장 후 현재 프로세스, Docker 컨테이너, 서비스 관리자를 재시작해야 합니다.
-- `RUN_IMMEDIATELY`: 비 schedule 모드 시작 시 한 번 실행할지를 정하는 값입니다. 실행 중인 WebUI/API 프로세스가 즉시 분석을 시작하게 만들지는 않습니다.
-- `SCHEDULE_ENABLED`, `SCHEDULE_RUN_IMMEDIATELY`: schedule 모드의 시작 동작입니다. 저장만으로 scheduler가 새로 시작되지는 않습니다.
-- `SCHEDULE_TIME`: 이미 실행 중인 scheduler가 즉시 새 시간을 반영하지 않을 수 있으므로, 안정적으로 적용하려면 schedule 프로세스를 재시작합니다.
+新增或修改帮助文案时，优先从以下位置核对：
 
-## 검증
+1. `.env.example`：配置键名、默认值、样例格式和敏感占位符。
+2. `docs/full-guide.md`：主要配置说明、运行入口和部署上下文。
+3. `docs/LLM_CONFIG_GUIDE.md`、`docs/llm-providers.md`：LLM 优先级、Channels、provider/model、兼容边界和排障说明。
+4. 专题文档：例如 `docs/bot/feishu-bot-config.md`、`docs/deploy-webui-cloud.md`、`docs/desktop-package.md`。
+5. 代码实现和测试：当文档与代码不一致时，先以可执行实现为准，并同步修正文档。
 
-도움말 관련 변경 후에는 가능한 범위에서 다음을 확인합니다.
+## 维护边界
 
-- 설정 등록부와 `settingsHelp.ts`의 `help_key` 불일치 여부
-- 새 문구에 secret, 실제 계정, 전체 Webhook URL이 포함되지 않았는지
-- 관련 문서 링크가 존재하는지
-- `python scripts/check_language_artifacts.py`
-- Web 설정 페이지를 바꿨다면 `cd apps/dsa-web && npm run lint && npm run build`
+- 帮助文案不能改变配置保存、校验、运行时优先级、`.env` 写回或环境变量覆盖语义。
+- 不展示真实密钥、账号、token、Webhook 完整值或本机绝对路径。
+- LLM 相关示例如果写入具体 provider 前缀、模型名或 Base URL，必须能追溯到当前仓库文档或官方来源；否则应使用占位符或链接到事实源。
+- 对第三方模型/API 的可用性、LiteLLM 兼容窗口或 provider fallback 规则，不在设置帮助中单独承诺；需要变更时必须同步更新专题文档和 PR 兼容性说明。
+- 中英双语文案应保持同一语义范围。若只更新一种语言，需要在交付说明中写明原因。
+- 首屏短描述保持简洁，详细说明放在 help dialog 中，避免 hover tooltip 与常驻短描述重复。
+
+## 重启语义
+
+设置页保存通常只写入 `.env` 并触发可运行时重载的配置刷新。帮助文案和 `warning_codes` 必须显式区分以下情况：
+
+- `WEBUI_HOST`、`WEBUI_PORT`：监听地址和端口只在进程启动时绑定，保存后必须重启当前进程、Docker 容器或服务管理器才会生效。
+- `RUN_IMMEDIATELY`：非 schedule 模式启动期单次运行配置，保存后不会让已运行的 WebUI/API 进程立即触发分析。
+- `SCHEDULE_ENABLED`、`SCHEDULE_RUN_IMMEDIATELY`：schedule 模式启动行为，保存后不会启动、停止或重建当前 scheduler，需要以 schedule 模式重启后生效。
+- `SCHEDULE_TIME`：不是重启必需项。已运行的 schedule 模式会在下一轮调度检查中读取新时间并重建 daily job；但如果当前进程未以 schedule 模式启动，保存该字段不会自动创建 scheduler。

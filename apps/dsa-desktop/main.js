@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, dialog, ipcMain, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -23,6 +23,7 @@ function resolveWindowBackgroundColor() {
 }
 
 const isWindows = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
 const appRootDev = path.resolve(__dirname, '..', '..');
 const GITHUB_OWNER = 'ZhuLinsen';
 const GITHUB_REPO = 'daily_stock_analysis';
@@ -210,7 +211,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       status: UPDATE_STATUS.ERROR,
       currentVersion: normalizedCurrentVersion,
       checkedAt,
-      message: '현재 데스크톱 버전이 유효한 semantic version이 아니어서 업데이트를 확인할 수 없습니다.',
+      message: '当前桌面端版本不是有效的语义化版本，无法检查更新。',
     });
   }
 
@@ -220,7 +221,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       status: UPDATE_STATUS.ERROR,
       currentVersion: normalizedCurrentVersion,
       checkedAt,
-      message: 'GitHub Release에서 인식 가능한 semantic version 태그를 찾을 수 없습니다.',
+      message: 'GitHub Release 未返回可识别的语义化版本标签。',
     });
   }
 
@@ -234,7 +235,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       checkedAt,
       releaseName: releaseMetadata.releaseName,
       tagName: releaseMetadata.tagName,
-      message: '버전 비교에 실패해서 사용 가능한 업데이트가 있는지 판단할 수 없습니다.',
+      message: '版本比较失败，无法判断是否存在可用更新。',
     });
   }
 
@@ -248,7 +249,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
       publishedAt: releaseMetadata.publishedAt,
       releaseName: releaseMetadata.releaseName,
       tagName: releaseMetadata.tagName,
-      message: `새 버전 ${releaseMetadata.version}을 찾았습니다. GitHub Releases에서 업데이트를 다운로드하세요.`,
+      message: `发现新版本 ${releaseMetadata.version}，可前往 GitHub Releases 下载更新。`,
     });
   }
 
@@ -261,7 +262,7 @@ function evaluateReleaseUpdate({ currentVersion, release, checkedAt = new Date()
     publishedAt: releaseMetadata.publishedAt,
     releaseName: releaseMetadata.releaseName,
     tagName: releaseMetadata.tagName,
-    message: '현재 데스크톱 앱이 최신 버전입니다.',
+    message: '当前桌面端已是最新版本。',
   });
 }
 
@@ -380,10 +381,13 @@ function resolveEnvExamplePath() {
   return path.join(appRootDev, '.env.example');
 }
 
+function resolvePackagedExeDir() {
+  return path.dirname(app.getPath('exe'));
+}
+
 function resolveAppDir() {
-  if (app.isPackaged) {
-    // exe suozaimulu
-    return path.dirname(app.getPath('exe'));
+  if (app.isPackaged && !isMac) {
+    return resolvePackagedExeDir();
   }
   return app.getPath('userData');
 }
@@ -561,6 +565,53 @@ function restorePackagedRuntimeStateFromBackup() {
   return result;
 }
 
+function migrateMacPackagedRuntimeState() {
+  const result = {
+    sourceDir: null,
+    targetDir: null,
+    migrated: [],
+    skipped: [],
+    failed: [],
+  };
+
+  if (!app.isPackaged || !isMac) {
+    return result;
+  }
+
+  const sourceDir = resolvePackagedExeDir();
+  const targetDir = resolveAppDir();
+  result.sourceDir = sourceDir;
+  result.targetDir = targetDir;
+
+  if (sourceDir === targetDir || !fs.existsSync(sourceDir)) {
+    return result;
+  }
+
+  DESKTOP_UPDATE_RUNTIME_RELATIVE_FILES.forEach((relativePath) => {
+    const source = path.join(sourceDir, relativePath);
+    const target = path.join(targetDir, relativePath);
+
+    if (!fs.existsSync(source)) {
+      return;
+    }
+    if (fs.existsSync(target)) {
+      result.skipped.push(relativePath);
+      return;
+    }
+
+    try {
+      ensureDirectory(path.dirname(target));
+      fs.copyFileSync(source, target);
+      result.migrated.push(relativePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      result.failed.push(`${relativePath} (${message})`);
+    }
+  });
+
+  return result;
+}
+
 function resolveBackendPath() {
   if (process.env.DSA_BACKEND_PATH) {
     return process.env.DSA_BACKEND_PATH;
@@ -592,13 +643,13 @@ function ensureDirectory(dirPath) {
 }
 
 function initLogging() {
-  const appDir = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getPath('userData');
+  const appDir = resolveAppDir();
   logFilePath = path.join(appDir, 'logs', 'desktop.log');
-
-  // Ensure the log directory exists before writing the first line.
+  
+  // 确保日志目录存在
   const logDir = path.dirname(logFilePath);
   ensureDirectory(logDir);
-
+  
   logLine('Desktop app starting');
 }
 
@@ -625,7 +676,7 @@ function decodeBackendOutput(data, decoder) {
 
   let decoded = decoder.decode(data, { stream: true });
 
-  // Some Windows console subprocesses still emit bytes in the local code page.
+  // Windows 控制台 / 子进程有时仍会吐出本地代码页字节，优先在明显乱码时回退到 GBK。
   if (isWindows && decoded.includes('\uFFFD')) {
     try {
       decoded = new TextDecoder('gbk', { fatal: false }).decode(data, { stream: true });
@@ -937,28 +988,33 @@ function startBackend({ port, envFile, dbPath, logDir }) {
 
 function waitForBackendExit(processRef, timeoutMs = 5000) {
   if (!processRef || processRef.exitCode !== null || processRef.signalCode) {
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   return new Promise((resolve) => {
     let settled = false;
     let timer = null;
+    let onExit = null;
 
-    const done = () => {
+    const done = (exited) => {
       if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timer);
-      processRef.removeListener('exit', done);
-      resolve();
+      if (onExit) {
+        processRef.removeListener('exit', onExit);
+      }
+      resolve(exited || processRef.exitCode !== null || Boolean(processRef.signalCode));
     };
 
+    onExit = () => done(true);
+
     timer = setTimeout(() => {
-      done();
+      done(false);
     }, timeoutMs);
 
-    processRef.once('exit', done);
+    processRef.once('exit', onExit);
   });
 }
 
@@ -966,19 +1022,39 @@ function __setBackendProcessForTest(processRef = null) {
   backendProcess = processRef;
 }
 
+function clearBackendProcessIfCurrent(processRef) {
+  if (backendProcess === processRef) {
+    backendProcess = null;
+  }
+}
+
 function stopBackend() {
-  if (!backendProcess || backendProcess.killed) {
+  if (!backendProcess) {
     return Promise.resolve();
   }
   const processToStop = backendProcess;
+  if (processToStop.exitCode !== null || processToStop.signalCode) {
+    clearBackendProcessIfCurrent(processToStop);
+    return Promise.resolve();
+  }
+
+  const waitAndClear = () => waitForBackendExit(processToStop, 10000)
+    .then((exited) => {
+      if (!exited) {
+        return;
+      }
+      clearBackendProcessIfCurrent(processToStop);
+    });
 
   if (isWindows) {
     spawn('taskkill', ['/PID', String(processToStop.pid), '/T', '/F'], { windowsHide: true }).on('error', () => {
     });
-    return waitForBackendExit(processToStop, 10000);
+    return waitAndClear();
   }
 
-  processToStop.kill('SIGTERM');
+  if (!processToStop.killed) {
+    processToStop.kill('SIGTERM');
+  }
   setTimeout(() => {
     if (processToStop.killed || processToStop.exitCode !== null || processToStop.signalCode) {
       return;
@@ -989,7 +1065,7 @@ function stopBackend() {
     }
   }, 3000);
 
-  return waitForBackendExit(processToStop, 10000);
+  return waitAndClear();
 }
 
 function resolveDesktopVersion() {
@@ -1112,15 +1188,15 @@ async function maybePromptDesktopUpdate(state) {
   }
 
   lastNotifiedUpdateVersion = state.latestVersion;
-  const currentVersion = state.currentVersion || resolveDesktopVersion() || '현재 버전';
+  const currentVersion = state.currentVersion || resolveDesktopVersion() || '当前版本';
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'info',
-    buttons: ['나중에', '다운로드 페이지 열기'],
+    buttons: ['稍后', '前往下载'],
     defaultId: 1,
     cancelId: 0,
-    title: '새 버전 발견',
-    message: `데스크톱 새 버전 ${state.latestVersion}을 찾았습니다.`,
-    detail: `현재 버전: ${currentVersion}. 새 버전은 GitHub Releases 다운로드 페이지에서 받을 수 있습니다.`,
+    title: '发现新版本',
+    message: `检测到桌面端新版本 ${state.latestVersion}`,
+    detail: `当前版本 ${currentVersion}。新版本将跳转到 GitHub Releases 下载页，不会静默下载或自动安装。`,
     noLink: true,
   });
 
@@ -1132,10 +1208,10 @@ async function maybePromptDesktopUpdate(state) {
 async function installDownloadedUpdate() {
   const updater = getElectronAutoUpdater();
   if (!updater) {
-    throw new Error('현재 실행 모드에서는 자동 업데이트 설치를 지원하지 않습니다.');
+    throw new Error('当前运行模式不支持自动安装更新。');
   }
   if (desktopUpdateState?.status !== UPDATE_STATUS.UPDATE_DOWNLOADED) {
-    throw new Error('업데이트 다운로드가 아직 완료되지 않아 자동 설치할 수 없습니다.');
+    throw new Error('更新尚未下载完成，无法自动安装。');
   }
 
   setDesktopUpdateState({
@@ -1143,7 +1219,7 @@ async function installDownloadedUpdate() {
     updateMode: UPDATE_MODE.AUTO,
     latestVersion: desktopUpdateState?.latestVersion || '',
     releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
-    message: 'in_progress 업데이트 설치를 위해 앱을 다시 시작하는 중...',
+    message: '正在重启并安装更新...',
   });
   let backupRoot = null;
   try {
@@ -1165,7 +1241,7 @@ async function installDownloadedUpdate() {
             latestVersion: desktopUpdateState?.latestVersion || '',
             releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
             checkedAt: new Date().toISOString(),
-            message: `업데이트 설치 준비 실패: ${error instanceof Error ? error.message : String(error)}`,
+            message: `更新安装准备失败：${error instanceof Error ? error.message : String(error)}`,
           });
           throw error;
         }
@@ -1174,8 +1250,8 @@ async function installDownloadedUpdate() {
       }
     }
 
-    logLine('[update] quit and install requested');
-    updater.quitAndInstall(false, true);
+    logLine('[update] silent quit and install requested');
+    updater.quitAndInstall(true, true);
     return true;
   } catch (error) {
     if (backupRoot) {
@@ -1200,12 +1276,12 @@ async function maybePromptInstallDownloadedUpdate(state) {
   lastPromptedInstallVersion = state.latestVersion;
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'info',
-    buttons: ['나중에', '지금 다시 시작'],
+    buttons: ['稍后', '立即重启安装'],
     defaultId: 1,
     cancelId: 0,
-    title: '업데이트 다운로드 완료',
-    message: `데스크톱 새 버전 ${state.latestVersion} 다운로드가 완료되었습니다.`,
-    detail: '앱을 다시 시작하면 설치가 자동으로 완료됩니다. 저장하지 않은 설정이나 초안은 먼저 저장하세요.',
+    title: '更新已下载',
+    message: `桌面端新版本 ${state.latestVersion} 已下载`,
+    detail: '重启应用后会自动完成安装。未保存的设置草稿请先保存。',
     noLink: true,
   });
 
@@ -1222,7 +1298,7 @@ async function maybePromptInstallDownloadedUpdate(state) {
         latestVersion: state.latestVersion || desktopUpdateState?.latestVersion || '',
         releaseUrl: state.releaseUrl || desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
         checkedAt: new Date().toISOString(),
-        message: `업데이트 설치 실패: ${message}. 저장하지 않은 초안을 저장한 뒤 다운로드 페이지에서 다시 시도하세요.`,
+        message: `更新安装失败：${message}。可先保存草稿并前往下载页，或稍后重试。`,
       });
     }
   }
@@ -1242,14 +1318,14 @@ function configureElectronAutoUpdater() {
       status: UPDATE_STATUS.CHECKING,
       updateMode: UPDATE_MODE.AUTO,
       currentVersion: resolveDesktopVersion(),
-      message: 'in_progress 데스크톱 업데이트를 확인하는 중...',
+      message: '正在检查桌面端更新...',
     });
   });
 
   updater.on('update-available', (info = {}) => {
-    const latestVersion = resolveUpdaterLatestVersion(info) || '최신 버전';
+    const latestVersion = resolveUpdaterLatestVersion(info) || '最新版本';
     const nextState = buildElectronUpdaterState(UPDATE_STATUS.UPDATE_AVAILABLE, info, {
-      message: `새 버전 ${latestVersion}을 찾았습니다. 백그라운드에서 업데이트를 다운로드하는 중...`,
+      message: `发现新版本 ${latestVersion}，正在后台下载更新...`,
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] auto update available latest=${nextState.latestVersion || 'unknown'}`);
@@ -1257,7 +1333,7 @@ function configureElectronAutoUpdater() {
 
   updater.on('update-not-available', (info = {}) => {
     const nextState = buildElectronUpdaterState(UPDATE_STATUS.UP_TO_DATE, info, {
-      message: '현재 데스크톱 앱이 최신 버전입니다.',
+      message: '当前桌面端已是最新版本。',
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] auto update not available current=${nextState.currentVersion || 'unknown'}`);
@@ -1275,8 +1351,8 @@ function configureElectronAutoUpdater() {
       totalBytes: progress.total,
       message:
         percent === null
-          ? 'in_progress 데스크톱 업데이트를 다운로드하는 중...'
-          : `in_progress 데스크톱 업데이트를 다운로드하는 중... ${percent.toFixed(percent % 1 === 0 ? 0 : 1)}%`,
+          ? '正在下载桌面端更新...'
+          : `正在下载桌面端更新（${percent.toFixed(percent % 1 === 0 ? 0 : 1)}%）...`,
     });
     logLine(`[update] download progress percent=${nextState.downloadPercent ?? 'unknown'}`);
   });
@@ -1287,8 +1363,8 @@ function configureElectronAutoUpdater() {
       latestVersion,
       downloadPercent: 100,
       message: latestVersion
-        ? `새 버전 ${latestVersion} 다운로드가 완료되었습니다. 앱을 다시 시작하면 설치가 완료됩니다.`
-        : '새 버전 다운로드가 완료되었습니다. 앱을 다시 시작하면 설치가 완료됩니다.',
+        ? `新版本 ${latestVersion} 已下载，可重启应用完成安装。`
+        : '新版本已下载，可重启应用完成安装。',
     });
     setDesktopUpdateState(nextState);
     logLine(`[update] downloaded latest=${nextState.latestVersion || 'unknown'}`);
@@ -1305,7 +1381,7 @@ function configureElectronAutoUpdater() {
       latestVersion: desktopUpdateState?.latestVersion || '',
       releaseUrl: desktopUpdateState?.releaseUrl || RELEASES_PAGE_URL,
       checkedAt: new Date().toISOString(),
-      message: `자동 업데이트 실패: ${message}`,
+      message: `自动更新失败：${message}`,
     });
   });
 
@@ -1316,7 +1392,7 @@ function configureElectronAutoUpdater() {
 async function performElectronUpdaterCheck({ manual = false } = {}) {
   const updater = configureElectronAutoUpdater();
   if (!updater) {
-    throw new Error('현재 플랫폼에서는 자동 업데이트 설치를 지원하지 않습니다.');
+    throw new Error('当前平台不支持自动安装更新。');
   }
   if (electronUpdateCheckInFlight) {
     return desktopUpdateState;
@@ -1327,7 +1403,7 @@ async function performElectronUpdaterCheck({ manual = false } = {}) {
     status: UPDATE_STATUS.CHECKING,
     updateMode: UPDATE_MODE.AUTO,
     currentVersion: resolveDesktopVersion(),
-    message: manual ? 'in_progress 데스크톱 업데이트를 확인하는 중...' : 'in_progress 백그라운드에서 데스크톱 업데이트를 확인하는 중...',
+    message: manual ? '正在检查桌面端更新...' : '正在后台检查桌面端更新...',
   });
 
   try {
@@ -1341,7 +1417,7 @@ async function performElectronUpdaterCheck({ manual = false } = {}) {
       updateMode: UPDATE_MODE.AUTO,
       currentVersion: resolveDesktopVersion(),
       checkedAt: new Date().toISOString(),
-      message: manual ? `업데이트 확인 실패: ${message}` : '',
+      message: manual ? `检查更新失败：${message}` : '',
     });
     return nextState;
   } finally {
@@ -1358,7 +1434,7 @@ async function performDesktopUpdateCheck({ manual = false, notify = false } = {}
   setDesktopUpdateState({
     status: UPDATE_STATUS.CHECKING,
     currentVersion,
-    message: manual ? 'in_progress 데스크톱 업데이트를 확인하는 중...' : 'in_progress 백그라운드에서 데스크톱 업데이트를 확인하는 중...',
+    message: manual ? '正在检查桌面端更新...' : '正在后台检查桌面端更新...',
   });
 
   try {
@@ -1380,7 +1456,7 @@ async function performDesktopUpdateCheck({ manual = false, notify = false } = {}
         status: UPDATE_STATUS.ERROR,
         currentVersion,
         checkedAt: new Date().toISOString(),
-        message: `업데이트 확인 실패: ${message}`,
+        message: `检查更新失败：${message}`,
       });
     }
 
@@ -1403,13 +1479,23 @@ ipcMain.handle('desktop:open-release-page', async (_event, releaseUrl) => {
 
 async function createWindow() {
   const restoreResult = isWindowsNsisInstalledApp() ? restorePackagedRuntimeStateFromBackup() : null;
+  const macMigrationResult = migrateMacPackagedRuntimeState();
   initLogging();
+  if (macMigrationResult.migrated.length) {
+    logLine(`[migration] migrated macOS runtime files from ${macMigrationResult.sourceDir} to ${macMigrationResult.targetDir}: ${macMigrationResult.migrated.join(', ')}`);
+  }
+  if (macMigrationResult.skipped.length) {
+    logLine(`[migration] skipped existing macOS runtime files: ${macMigrationResult.skipped.join(', ')}`);
+  }
+  if (macMigrationResult.failed.length) {
+    logLine(`[migration] failed to migrate macOS runtime files: ${macMigrationResult.failed.join(', ')}`);
+  }
   const restoreFailed = Boolean(restoreResult && restoreResult.failed.length);
   const restoreIssueDetails = restoreResult
-    ? restoreResult.failed.join(', ')
+    ? restoreResult.failed.join('；')
     : '';
   const restoreErrorMessage = restoreFailed
-    ? `지난 업데이트 설치가 완료되지 않았거나 런타임 파일 복구에 실패했습니다. 백업 폴더를 보관했습니다: ${restoreResult.backupRoot}. 확인 후 수동으로 복구하고 앱을 다시 시작하세요. 상세: ${restoreIssueDetails}`
+    ? `上次更新安装未完成或恢复运行时文件失败，已保留备份目录 ${restoreResult.backupRoot}，请确认后手动恢复并重启应用。明细：${restoreIssueDetails}`
     : '';
   setDesktopUpdateState({
     status: restoreFailed ? UPDATE_STATUS.ERROR : UPDATE_STATUS.IDLE,
@@ -1619,15 +1705,19 @@ module.exports = {
   extractReleaseMetadata,
   fetchLatestReleaseJson,
   buildMainPageUrl,
+  migrateMacPackagedRuntimeState,
   normalizeVersionString,
   parseSemver,
+  resolveAppDir,
   restorePackagedRuntimeStateFromBackup,
   sanitizeReleaseUrl,
   stopBackend,
+  __getBackendProcessForTest() {
+    return backendProcess;
+  },
   __setBackendProcessForTest,
   __setMainWindowForTest(mainWindowRef = null) {
     mainWindow = mainWindowRef;
   },
   waitForBackendExit,
 };
-

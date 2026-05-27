@@ -46,14 +46,20 @@ from src.report_language import (
 )
 from src.search_service import SearchService
 from src.services.social_sentiment_service import SocialSentimentService
-from src.services.evidence_graph_service import attach_evidence_graph
-from src.services.chart_analysis_service import attach_chart_analysis_report
-from src.services.event_monitoring_service import EventMonitoringService
-from src.services.stock_risk_service import attach_stock_risk_report
-from src.services.thesis_tracking_service import attach_thesis_tracking
+from src.services.run_diagnostics import (
+    activate_run_diagnostic_context,
+    current_diagnostic_snapshot,
+    get_current_diagnostic_context,
+    record_history_run,
+    record_llm_run,
+    record_notification_run,
+    reset_run_diagnostic_context,
+    sanitize_diagnostic_text,
+)
 from src.enums import ReportType
 from src.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from src.core.trading_calendar import (
+    build_market_phase_context,
     get_effective_trading_date,
     get_market_for_stock,
     get_market_now,
@@ -73,19 +79,20 @@ _SINGLE_STOCK_NOTIFY_LOCK_INIT_GUARD = threading.Lock()
 class StockAnalysisPipeline:
     """
     股票分析主流程调度器
-
+    
     职责：
     1. 管理整个分析流程
     2. 协调数据获取、存储、搜索、分析、通知等模块
     3. 实现并发控制和异常处理
     """
-
+    
     def __init__(
         self,
         config: Optional[Config] = None,
         max_workers: Optional[int] = None,
         source_message: Optional[BotMessage] = None,
         query_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
         query_source: Optional[str] = None,
         save_context_snapshot: Optional[bool] = None,
         progress_callback: Optional[Callable[[int, str], None]] = None,
@@ -93,7 +100,7 @@ class StockAnalysisPipeline:
     ):
         """
         初始化调度器
-
+        
         Args:
             config: 配置对象（可选，默认使用全局配置）
             max_workers: 最大并发线程数（可选，默认从配置读取）
@@ -102,13 +109,14 @@ class StockAnalysisPipeline:
         self.max_workers = max_workers or self.config.max_workers
         self.source_message = source_message
         self.query_id = query_id
+        self.trace_id = trace_id or query_id
         self.query_source = self._resolve_query_source(query_source)
         self.save_context_snapshot = (
             self.config.save_context_snapshot if save_context_snapshot is None else save_context_snapshot
         )
         self.progress_callback = progress_callback
         self.analysis_skills = list(analysis_skills) if analysis_skills is not None else None
-
+        
         # 初始化各模块
         self.db = get_db()
         self.fetcher_manager = DataFetcherManager()
@@ -117,7 +125,7 @@ class StockAnalysisPipeline:
         self.analyzer = GeminiAnalyzer(config=self.config, skills=self.analysis_skills)
         self.notifier = NotificationService(source_message=source_message)
         self._single_stock_notify_lock = threading.Lock()
-
+        
         # 初始化搜索服务（可选，初始化失败不应阻断主分析流程）
         try:
             self.search_service = SearchService(
@@ -135,7 +143,7 @@ class StockAnalysisPipeline:
         except Exception as exc:
             logger.warning("搜索服务初始化失败，将以无搜索模式运行: %s", exc, exc_info=True)
             self.search_service = None
-
+        
         logger.info(f"调度器初始化完成，最大并发数: {self.max_workers}")
         logger.info("已启用技术分析引擎（均线/趋势/量价指标）")
         # 打印实时行情/筹码配置状态
@@ -193,24 +201,24 @@ class StockAnalysisPipeline:
             )
 
     def fetch_and_save_stock_data(
-        self,
+        self, 
         code: str,
         force_refresh: bool = False,
         current_time: Optional[datetime] = None,
     ) -> Tuple[bool, Optional[str]]:
         """
         获取并保存单只股票数据
-
+        
         断点续传逻辑：
         1. 检查数据库是否已有最新可复用交易日数据
         2. 如果有且不强制刷新，则跳过网络请求
         3. 否则从数据源获取并保存
-
+        
         Args:
             code: 股票代码
             force_refresh: 是否强制刷新（忽略本地缓存）
             current_time: 本轮运行冻结的参考时间，用于统一断点续传目标交易日判断
-
+            
         Returns:
             Tuple[是否成功, 错误信息]
         """
@@ -247,11 +255,17 @@ class StockAnalysisPipeline:
             error_msg = f"获取/保存数据失败: {str(e)}"
             logger.error(f"{stock_name}({code}) {error_msg}")
             return False, error_msg
-
-    def analyze_stock(self, code: str, report_type: ReportType, query_id: str) -> Optional[AnalysisResult]:
+    
+    def analyze_stock(
+        self,
+        code: str,
+        report_type: ReportType,
+        query_id: str,
+        current_time: Optional[datetime] = None,
+    ) -> Optional[AnalysisResult]:
         """
         分析单只股票（增强版：含量比、换手率、筹码分析、多维度情报）
-
+        
         流程：
         1. 获取实时行情（量比、换手率）- 通过 DataFetcherManager 自动故障切换
         2. 获取筹码分布 - 通过 DataFetcherManager 带熔断保护
@@ -259,18 +273,28 @@ class StockAnalysisPipeline:
         4. 多维度情报搜索（最新消息+风险排查+业绩预期）
         5. 从数据库获取分析上下文
         6. 调用 AI 进行综合分析
-
+        
         Args:
             query_id: 查询链路关联 id
             code: 股票代码
             report_type: 报告类型
-
+            current_time: 本轮运行冻结的参考时间，用于统一市场阶段上下文
+            
         Returns:
             AnalysisResult 或 None（如果分析失败）
         """
         stock_name = code
         try:
-            self._emit_progress(18, f"{code}: 시세와 칩 데이터를 가져오는 중")
+            market = get_market_for_stock(normalize_stock_code(code))
+            market_phase_context = build_market_phase_context(
+                market=market,
+                current_time=current_time,
+                trigger_source=self.query_source,
+                analysis_intent="auto",
+            )
+            market_phase_context_dict = market_phase_context.to_dict()
+
+            self._emit_progress(18, f"{code}：正在获取行情与筹码数据")
             # 获取股票名称（先走轻量名称路径，后续若 realtime_quote 有 name 再覆盖）
             stock_name = self.fetcher_manager.get_stock_name(code, allow_realtime=False)
 
@@ -329,7 +353,7 @@ class StockAnalysisPipeline:
                     use_agent = True
                     logger.info(f"{stock_name}({code}) Auto-enabled agent mode due to configured skills: {configured_skills}")
 
-            self._emit_progress(32, f"{stock_name}: 기본면과 추세 데이터를 모으는 중")
+            self._emit_progress(32, f"{stock_name}：正在聚合基本面与趋势数据")
 
             # Step 2.5: 基本面能力聚合（统一入口，异常降级）
             # - 失败时返回 partial/failed，不影响既有技术面/新闻链路
@@ -367,7 +391,6 @@ class StockAnalysisPipeline:
 
             # Step 3: 趋势分析（基于交易理念）— 在 Agent 分支之前执行，供两条路径共用
             trend_result: Optional[TrendAnalysisResult] = None
-            history_df: Optional[pd.DataFrame] = None
             try:
                 from src.services.history_loader import get_frozen_target_date
                 _mkt = get_market_for_stock(normalize_stock_code(code))
@@ -380,7 +403,6 @@ class StockAnalysisPipeline:
                     # Issue #234: Augment with realtime for intraday MA calculation
                     if self.config.enable_realtime_quote and realtime_quote:
                         df = self._augment_historical_with_realtime(df, realtime_quote, code)
-                    history_df = df
                     trend_result = self.trend_analyzer.analyze(df, code)
                     logger.info(f"{stock_name}({code}) 趋势分析: {trend_result.trend_status.value}, "
                               f"买入信号={trend_result.buy_signal.value}, 评分={trend_result.signal_score}")
@@ -389,7 +411,7 @@ class StockAnalysisPipeline:
 
             if use_agent:
                 logger.info(f"{stock_name}({code}) 启用 Agent 模式进行分析")
-                self._emit_progress(58, f"{stock_name}: Agent 분석 경로로 전환하는 중")
+                self._emit_progress(58, f"{stock_name}：正在切换 Agent 分析链路")
                 return self._analyze_with_agent(
                     code,
                     report_type,
@@ -399,12 +421,13 @@ class StockAnalysisPipeline:
                     chip_data,
                     fundamental_context,
                     trend_result,
-                    history_df=history_df,
+                    market_phase_context=market_phase_context_dict,
                 )
 
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
-            self._emit_progress(46, f"{stock_name}: 뉴스와 여론 데이터를 검색하는 중")
+            news_result_count: Optional[int] = None
+            self._emit_progress(46, f"{stock_name}：正在检索新闻与舆情")
             if self.search_service is not None and self.search_service.is_available:
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
@@ -421,6 +444,7 @@ class StockAnalysisPipeline:
                     total_results = sum(
                         len(r.results) for r in intel_results.values() if r.success
                     )
+                    news_result_count = total_results
                     logger.info(f"{stock_name}({code}) 情报搜索完成: 共 {total_results} 条结果")
                     logger.debug(f"{stock_name}({code}) 情报搜索结果:\n{news_context}")
 
@@ -456,7 +480,7 @@ class StockAnalysisPipeline:
                     logger.warning(f"{stock_name}({code}) Social sentiment fetch failed: {e}")
 
             # Step 5: 获取分析上下文（技术面数据）
-            self._emit_progress(58, f"{stock_name}: 분석 컨텍스트를 정리하는 중")
+            self._emit_progress(58, f"{stock_name}：正在整理分析上下文")
             context = self.db.get_analysis_context(code)
 
             if context is None:
@@ -472,17 +496,18 @@ class StockAnalysisPipeline:
                     'today': {},
                     'yesterday': {}
                 }
-
+            
             # Step 6: 增强上下文数据（添加实时行情、筹码、趋势分析结果、股票名称）
             enhanced_context = self._enhance_context(
-                context,
-                realtime_quote,
+                context, 
+                realtime_quote, 
                 chip_data,
                 trend_result,
                 stock_name,  # 传入股票名称
                 fundamental_context,
             )
-
+            enhanced_context["market_phase_context"] = market_phase_context_dict
+            
             # Step 7: 调用 AI 分析（传入增强的上下文和新闻）
             llm_progress_state = {"last_progress": 64}
 
@@ -493,20 +518,49 @@ class StockAnalysisPipeline:
                 llm_progress_state["last_progress"] = dynamic_progress
                 self._emit_progress(
                     dynamic_progress,
-                    f"{stock_name}: LLM이 분석 결과를 생성하는 중 (수신 {chars_received}자)",
+                    f"{stock_name}：LLM 正在生成分析结果（已接收 {chars_received} 字符）",
                 )
 
-            self._emit_progress(64, f"{stock_name}: LLM에 리포트 생성을 요청하는 중")
-            result = self.analyzer.analyze(
-                enhanced_context,
-                news_context=news_context,
-                progress_callback=self._emit_progress,
-                stream_progress_callback=_on_llm_stream,
-            )
+            self._emit_progress(64, f"{stock_name}：正在请求 LLM 生成报告")
+            llm_started_at = time.monotonic()
+            try:
+                result = self.analyzer.analyze(
+                    enhanced_context,
+                    news_context=news_context,
+                    progress_callback=self._emit_progress,
+                    stream_progress_callback=_on_llm_stream,
+                )
+                llm_duration_ms = int((time.monotonic() - llm_started_at) * 1000)
+                record_llm_run(
+                    success=bool(result and getattr(result, "success", True)),
+                    model=getattr(result, "model_used", None) if result else None,
+                    call_type="analysis",
+                    duration_ms=llm_duration_ms,
+                    error_type=(
+                        None
+                        if result and getattr(result, "success", True)
+                        else "AnalysisResultError"
+                    ),
+                    error_message=(
+                        getattr(result, "error_message", None)
+                        if result and not getattr(result, "success", True)
+                        else ("LLM returned empty result" if result is None else None)
+                    ),
+                )
+            except Exception as exc:
+                record_llm_run(
+                    success=False,
+                    model=getattr(self.config, "litellm_model", None),
+                    call_type="analysis",
+                    duration_ms=int((time.monotonic() - llm_started_at) * 1000),
+                    error_type=type(exc).__name__,
+                    error_message=exc,
+                )
+                raise
 
             # Step 7.5: 填充分析时的价格信息到 result
             if result:
-                self._emit_progress(94, f"{stock_name}: 분석 결과를 검증하고 정리하는 중")
+                self._emit_progress(94, f"{stock_name}：正在校验并整理分析结果")
                 result.query_id = query_id
                 realtime_data = enhanced_context.get('realtime', {})
                 result.current_price = realtime_data.get('price')
@@ -526,19 +580,16 @@ class StockAnalysisPipeline:
             # Step 8: 保存分析历史记录
             if result and result.success:
                 try:
-                    self._emit_progress(97, f"{stock_name}: 분석 리포트를 저장하는 중")
-                    attach_thesis_tracking(result, self.db)
-                    attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
-                    attach_chart_analysis_report(result, history_df)
-                    EventMonitoringService().attach_report_summary(result)
-                    attach_evidence_graph(result)
+                    self._emit_progress(97, f"{stock_name}：正在保存分析报告")
                     context_snapshot = self._build_context_snapshot(
                         enhanced_context=enhanced_context,
                         news_content=news_context,
+                        news_result_count=news_result_count,
                         realtime_quote=realtime_quote,
                         chip_data=chip_data
                     )
-                    self.db.save_analysis_history(
+                    result.diagnostic_context_snapshot = context_snapshot
+                    saved_count = self.db.save_analysis_history(
                         result=result,
                         query_id=query_id,
                         report_type=report_type.value,
@@ -546,7 +597,16 @@ class StockAnalysisPipeline:
                         context_snapshot=context_snapshot,
                         save_snapshot=self.save_context_snapshot
                     )
+                    record_history_run(
+                        report_saved=bool(saved_count),
+                        metadata_saved=bool(saved_count),
+                    )
                 except Exception as e:
+                    record_history_run(
+                        report_saved=False,
+                        metadata_saved=False,
+                        error_message=e,
+                    )
                     logger.warning(f"{stock_name}({code}) 保存分析历史失败: {e}")
 
             return result
@@ -555,7 +615,7 @@ class StockAnalysisPipeline:
             logger.error(f"{stock_name}({code}) 分析失败: {e}")
             logger.exception(f"{stock_name}({code}) 详细错误信息:")
             return None
-
+    
     def _enhance_context(
         self,
         context: Dict[str, Any],
@@ -567,22 +627,22 @@ class StockAnalysisPipeline:
     ) -> Dict[str, Any]:
         """
         增强分析上下文
-
+        
         将实时行情、筹码分布、趋势分析结果、股票名称添加到上下文中
-
+        
         Args:
             context: 原始上下文
             realtime_quote: 实时行情数据（UnifiedRealtimeQuote 或 None）
             chip_data: 筹码分布数据
             trend_result: 趋势分析结果
             stock_name: 股票名称
-
+            
         Returns:
             增强后的上下文
         """
         enhanced = context.copy()
-        enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "ko"))
-
+        enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        
         # 添加股票名称
         if stock_name:
             enhanced['stock_name'] = stock_name
@@ -591,7 +651,7 @@ class StockAnalysisPipeline:
 
         # 将运行时搜索窗口透传给 analyzer，避免与全局配置重新读取产生窗口不一致
         enhanced['news_window_days'] = getattr(self.search_service, "news_window_days", 3)
-
+        
         # 添加实时行情（兼容不同数据源的字段差异）
         if realtime_quote:
             # 使用 getattr 安全获取字段，缺失字段返回 None 或默认值
@@ -612,7 +672,7 @@ class StockAnalysisPipeline:
             }
             # 移除 None 值以减少上下文大小
             enhanced['realtime'] = {k: v for k, v in enhanced['realtime'].items() if v is not None}
-
+        
         # 添加筹码分布
         if chip_data:
             current_price = getattr(realtime_quote, 'price', 0) if realtime_quote else 0
@@ -623,7 +683,7 @@ class StockAnalysisPipeline:
                 'concentration_70': chip_data.concentration_70,
                 'chip_status': chip_data.get_chip_status(current_price or 0),
             }
-
+        
         # 添加趋势分析结果
         if trend_result:
             enhanced['trend_analysis'] = {
@@ -811,23 +871,24 @@ class StockAnalysisPipeline:
             logger.warning("[%s] Agent history prefetch failed: %s", code, e)
 
     def _analyze_with_agent(
-        self,
-        code: str,
-        report_type: ReportType,
+        self, 
+        code: str, 
+        report_type: ReportType, 
         query_id: str,
         stock_name: str,
         realtime_quote: Any,
         chip_data: Optional[ChipDistribution],
         fundamental_context: Optional[Dict[str, Any]] = None,
         trend_result: Optional[TrendAnalysisResult] = None,
-        history_df: Optional[pd.DataFrame] = None,
+        *,
+        market_phase_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[AnalysisResult]:
         """
         使用 Agent 模式分析单只股票。
         """
         try:
             from src.agent.factory import build_agent_executor
-            report_language = normalize_report_language(getattr(self.config, "report_language", "ko"))
+            report_language = normalize_report_language(getattr(self.config, "report_language", "zh"))
 
             requested_skills = (
                 self.analysis_skills
@@ -847,7 +908,9 @@ class StockAnalysisPipeline:
             }
             if self.analysis_skills is not None:
                 initial_context["skills"] = self.analysis_skills
-
+            if market_phase_context is not None:
+                initial_context["market_phase_context"] = market_phase_context
+            
             if realtime_quote:
                 initial_context["realtime_quote"] = self._safe_to_dict(realtime_quote)
             if chip_data:
@@ -879,7 +942,19 @@ class StockAnalysisPipeline:
                 message = f"Analyze stock {code} ({stock_name}) and return the full decision dashboard JSON in English."
             else:
                 message = f"请分析股票 {code} ({stock_name})，并生成决策仪表盘报告。"
-            agent_result = executor.run(message, context=initial_context)
+            llm_started_at = time.monotonic()
+            try:
+                agent_result = executor.run(message, context=initial_context)
+            except Exception as exc:
+                record_llm_run(
+                    success=False,
+                    model=getattr(self.config, "agent_litellm_model", None),
+                    call_type="agent_analysis",
+                    duration_ms=int((time.monotonic() - llm_started_at) * 1000),
+                    error_type=type(exc).__name__,
+                    error_message=exc,
+                )
+                raise
 
             # 转换为 AnalysisResult
             result = self._agent_result_to_analysis_result(
@@ -889,6 +964,22 @@ class StockAnalysisPipeline:
                 report_type,
                 query_id,
                 trend_result=trend_result,
+            )
+            record_llm_run(
+                success=bool(result and getattr(result, "success", True)),
+                model=getattr(result, "model_used", None) if result else getattr(agent_result, "model", None),
+                call_type="agent_analysis",
+                duration_ms=int((time.monotonic() - llm_started_at) * 1000),
+                error_type=(
+                    None
+                    if result and getattr(result, "success", True)
+                    else "AgentResultError"
+                ),
+                error_message=(
+                    getattr(result, "error_message", None)
+                    if result and not getattr(result, "success", True)
+                    else ("Agent returned empty result" if result is None else None)
+                ),
             )
             if result:
                 result.query_id = query_id
@@ -946,21 +1037,39 @@ class StockAnalysisPipeline:
             # 保存分析历史记录
             if result and result.success:
                 try:
-                    initial_context["stock_name"] = resolved_stock_name
-                    attach_thesis_tracking(result, self.db)
-                    attach_stock_risk_report(result, trend_result=trend_result, history_df=history_df)
-                    attach_chart_analysis_report(result, history_df)
-                    EventMonitoringService().attach_report_summary(result)
-                    attach_evidence_graph(result)
-                    self.db.save_analysis_history(
+                    agent_context_snapshot = self._build_context_snapshot(
+                        enhanced_context={
+                            **self._without_market_phase_context(initial_context),
+                            "stock_name": resolved_stock_name,
+                        },
+                        news_content=initial_context.get("news_context"),
+                        realtime_quote=realtime_quote,
+                        chip_data=chip_data,
+                    )
+                    result.diagnostic_context_snapshot = agent_context_snapshot
+                    agent_context_snapshot["stock_name"] = resolved_stock_name
+                    saved_count = self.db.save_analysis_history(
                         result=result,
                         query_id=query_id,
                         report_type=report_type.value,
                         news_content=None,
-                        context_snapshot=initial_context,
-                        save_snapshot=self.save_context_snapshot
+                        context_snapshot=agent_context_snapshot,
+                        save_snapshot=self.save_context_snapshot,
                     )
+                    record_history_run(
+                        report_saved=bool(saved_count),
+                        metadata_saved=bool(saved_count),
+                    )
+                    latest_diagnostic_snapshot = current_diagnostic_snapshot()
+                    if latest_diagnostic_snapshot is not None:
+                        agent_context_snapshot["diagnostics"] = latest_diagnostic_snapshot
+                        result.diagnostic_context_snapshot = agent_context_snapshot
                 except Exception as e:
+                    record_history_run(
+                        report_saved=False,
+                        metadata_saved=False,
+                        error_message=e,
+                    )
                     logger.warning(f"[{code}] 保存 Agent 分析历史失败: {e}")
 
             return result
@@ -982,7 +1091,7 @@ class StockAnalysisPipeline:
         """
         将 AgentResult 转换为 AnalysisResult。
         """
-        report_language = normalize_report_language(getattr(self.config, "report_language", "ko"))
+        report_language = normalize_report_language(getattr(self.config, "report_language", "zh"))
         result = AnalysisResult(
             code=code,
             name=stock_name,
@@ -1445,11 +1554,11 @@ class StockAnalysisPipeline:
             if match:
                 return int(match.group())
         return default
-
+    
     def _describe_volume_ratio(self, volume_ratio: float) -> str:
         """
         量比描述
-
+        
         量比 = 当前成交量 / 过去5日平均成交量
         """
         if volume_ratio < 0.5:
@@ -1566,20 +1675,116 @@ class StockAnalysisPipeline:
         enhanced_context: Dict[str, Any],
         news_content: Optional[str],
         realtime_quote: Any,
-        chip_data: Optional[ChipDistribution]
+        chip_data: Optional[ChipDistribution],
+        news_result_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         构建分析上下文快照
         """
         snapshot = {
-            "enhanced_context": enhanced_context,
+            "enhanced_context": self._without_market_phase_context(enhanced_context),
             "news_content": news_content,
             "realtime_quote_raw": self._safe_to_dict(realtime_quote),
             "chip_distribution_raw": self._safe_to_dict(chip_data),
         }
+        if news_content is not None:
+            snapshot["news_retrieval_content"] = news_content
+        if news_result_count is not None:
+            snapshot["news_result_count"] = news_result_count
+        diagnostic_snapshot = current_diagnostic_snapshot()
+        if diagnostic_snapshot is not None:
+            snapshot["diagnostics"] = diagnostic_snapshot
         if self.analysis_skills is not None:
             snapshot["skills"] = list(self.analysis_skills)
         return snapshot
+
+    @staticmethod
+    def _build_notification_run_snapshot(
+        *,
+        channel: str,
+        status: str,
+        success: bool,
+        attempts: int = 1,
+        error_message: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        payload = {
+            "channel": channel,
+            "status": status,
+            "success": success,
+            "attempts": attempts,
+            "created_at": datetime.now().isoformat(),
+        }
+        sanitized_error = sanitize_diagnostic_text(error_message)
+        if sanitized_error:
+            payload["error_message_sanitized"] = sanitized_error
+        return payload
+
+    def _refresh_saved_diagnostic_snapshot(
+        self,
+        *,
+        result: Optional[AnalysisResult] = None,
+        results: Optional[List[AnalysisResult]] = None,
+        fallback_code: Optional[str] = None,
+        notification_run: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Patch persisted history diagnostics with notification outcomes."""
+        if not getattr(self, "save_context_snapshot", True):
+            return
+
+        db = getattr(self, "db", None)
+        updater = getattr(db, "update_analysis_history_diagnostics", None)
+        if not callable(updater):
+            return
+
+        diagnostic_snapshot = current_diagnostic_snapshot()
+        if diagnostic_snapshot is not None:
+            query_id = (
+                diagnostic_snapshot.get("query_id")
+                or getattr(result, "query_id", None)
+                or getattr(self, "query_id", None)
+            )
+            code = (
+                getattr(result, "code", None)
+                or fallback_code
+                or diagnostic_snapshot.get("stock_code")
+            )
+            if not query_id:
+                return
+            try:
+                updater(query_id=query_id, code=code, diagnostics=diagnostic_snapshot)
+            except Exception as exc:
+                logger.warning("回写运行诊断快照失败（fail-open）: %s", exc)
+            return
+
+        if notification_run is None:
+            return
+
+        target_results = list(results or ([] if result is None else [result]))
+        for item in target_results:
+            query_id = getattr(item, "query_id", None) or getattr(self, "query_id", None)
+            if not query_id:
+                continue
+            code = getattr(item, "code", None) or fallback_code
+            try:
+                updater(
+                    query_id=query_id,
+                    code=code,
+                    notification_runs=[notification_run],
+                )
+            except Exception as exc:
+                logger.warning("回写通知诊断快照失败（fail-open）: %s", exc)
+
+    @staticmethod
+    def _without_market_phase_context(context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Return a shallow copy without runtime-only market phase context.
+
+        P1a passes market phase through runtime analysis paths only; stable
+        history/task metadata is intentionally left for P1b.
+        """
+        sanitized = dict(context)
+        sanitized.pop("market_phase_context", None)
+        return sanitized
 
     @staticmethod
     def _resolve_resume_target_date(
@@ -1610,7 +1815,7 @@ class StockAnalysisPipeline:
                 return None
         return None
 
-    def _resolve_query_source(self, query_source: Optional[str]) -> str:
+    def _resolve_query_source(self, query_source: Optional[str] = None) -> str:
         """
         解析请求来源。
 
@@ -1628,9 +1833,9 @@ class StockAnalysisPipeline:
         """
         if query_source:
             return query_source
-        if self.source_message:
+        if getattr(self, "source_message", None):
             return "bot"
-        if self.query_id:
+        if getattr(self, "query_id", None):
             return "web"
         return "system"
 
@@ -1656,7 +1861,7 @@ class StockAnalysisPipeline:
             })
 
         return context
-
+    
     def process_single_stock(
         self,
         code: str,
@@ -1693,33 +1898,45 @@ class StockAnalysisPipeline:
         from src.services.history_loader import set_frozen_target_date, reset_frozen_target_date
         frozen_td = self._resolve_resume_target_date(code, current_time=current_time)
         token = set_frozen_target_date(frozen_td)
+        effective_query_id = analysis_query_id or getattr(self, "query_id", None) or uuid.uuid4().hex
+        effective_trace_id = getattr(self, "trace_id", None) or effective_query_id
+        diag_token = None
+        if get_current_diagnostic_context() is None:
+            diag_token = activate_run_diagnostic_context(
+                trace_id=effective_trace_id,
+                query_id=effective_query_id,
+                stock_code=code,
+                trigger_source=getattr(self, "query_source", None),
+            )
         try:
-            self._emit_progress(12, f"{code}: 분석 작업을 준비하는 중")
+            self._emit_progress(12, f"{code}：正在准备分析任务")
             # Step 1: 获取并保存数据
             success, error = self.fetch_and_save_stock_data(
                 code, current_time=current_time
             )
-
+            
             if not success:
                 logger.warning(f"[{code}] 数据获取失败: {error}")
                 # 即使获取失败，也尝试用已有数据分析
             else:
-                self._emit_progress(16, f"{code}: 시세 데이터 준비 완료")
-
+                self._emit_progress(16, f"{code}：行情数据准备完成")
+            
             # Step 2: AI 分析
             if skip_analysis:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
                 return None
-
-            effective_query_id = analysis_query_id or self.query_id or uuid.uuid4().hex
-            result = self.analyze_stock(code, report_type, query_id=effective_query_id)
-
+            
+            analyze_kwargs = {"query_id": effective_query_id}
+            if current_time is not None:
+                analyze_kwargs["current_time"] = current_time
+            result = self.analyze_stock(code, report_type, **analyze_kwargs)
+            
             if result and result.success:
                 logger.info(
                     f"[{code}] 分析完成: {result.operation_advice}, "
                     f"评分 {result.sentiment_score}"
                 )
-
+                
                 # 单股推送模式（#55）：每分析完一只股票立即推送
                 if single_stock_notify:
                     self._send_single_stock_notification(
@@ -1731,16 +1948,17 @@ class StockAnalysisPipeline:
                 logger.warning(
                     f"[{code}] 分析未成功: {result.error_message or '未知错误'}"
                 )
-
+            
             return result
-
+            
         except Exception as e:
             # 捕获所有异常，确保单股失败不影响整体
             logger.exception(f"[{code}] 处理过程发生未知异常: {e}")
             return None
         finally:
+            reset_run_diagnostic_context(diag_token)
             reset_frozen_target_date(token)
-
+    
     def run(
         self,
         stock_codes: Optional[List[str]] = None,
@@ -1767,23 +1985,23 @@ class StockAnalysisPipeline:
             分析结果列表
         """
         start_time = time.time()
-
+        
         # 使用配置中的股票列表
         if stock_codes is None:
             self.config.refresh_stock_list()
             stock_codes = self.config.stock_list
-
+        
         if not stock_codes:
             logger.error("未配置自选股列表，请在 .env 文件中设置 STOCK_LIST")
             return []
-
+        
         logger.info(f"===== 开始分析 {len(stock_codes)} 只股票 =====")
         logger.info(f"股票列表: {', '.join(stock_codes)}")
         logger.info(f"并发数: {self.max_workers}, 模式: {'仅获取数据' if dry_run else '完整分析'}")
 
         # 冻结本轮运行的统一参考时间，避免跨市场收盘边界时同批股票使用不同目标交易日。
         resume_reference_time = datetime.now(timezone.utc)
-
+        
         # === 批量预取实时行情（优化：避免每只股票都触发全量拉取）===
         # 只有股票数量 >= 5 时才进行预取，少量股票直接逐个查询更高效
         if len(stock_codes) >= 5:
@@ -1814,9 +2032,9 @@ class StockAnalysisPipeline:
                 "已启用单股推送模式：分析仍并发执行，通知改为在结果收集侧串行发送（报告类型: %s）",
                 report_type_str,
             )
-
+        
         results: List[AnalysisResult] = []
-
+        
         # 使用线程池并发处理
         # 注意：max_workers 设置较低（默认3）以避免触发反爬
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -1833,7 +2051,7 @@ class StockAnalysisPipeline:
                 ): code
                 for code in stock_codes
             }
-
+            
             # 收集结果
             for idx, future in enumerate(as_completed(future_to_code)):
                 code = future_to_code[future]
@@ -1864,10 +2082,10 @@ class StockAnalysisPipeline:
 
                 except Exception as e:
                     logger.error(f"[{code}] 任务执行失败: {e}")
-
+        
         # 统计
         elapsed_time = time.time() - start_time
-
+        
         # dry-run 模式下，数据获取成功即视为成功
         if dry_run:
             # 检查哪些股票的最新可复用交易日数据已存在
@@ -1885,10 +2103,10 @@ class StockAnalysisPipeline:
         else:
             success_count = len(results)
             fail_count = len(stock_codes) - success_count
-
+        
         logger.info("===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
-
+        
         # 保存报告到本地文件（无论是否推送通知都保存）
         if results and not dry_run:
             self._save_local_report(results, report_type)
@@ -1905,7 +2123,7 @@ class StockAnalysisPipeline:
                 self._send_notifications(results, report_type, skip_push=True)
             else:
                 self._send_notifications(results, report_type)
-
+        
         return results
 
     def _send_single_stock_notification(
@@ -1916,6 +2134,23 @@ class StockAnalysisPipeline:
     ) -> None:
         """发送单股通知，供直接单股入口和批量串行推送共用。"""
         if not self.notifier.is_available():
+            notification_run = self._build_notification_run_snapshot(
+                channel="report",
+                status="not_configured",
+                success=False,
+                attempts=0,
+            )
+            record_notification_run(
+                channel="report",
+                status="not_configured",
+                success=False,
+                attempts=0,
+            )
+            self._refresh_saved_diagnostic_snapshot(
+                result=result,
+                fallback_code=fallback_code,
+                notification_run=notification_run,
+            )
             return
 
         stock_code = getattr(result, "code", None) or fallback_code or "unknown"
@@ -1939,18 +2174,51 @@ class StockAnalysisPipeline:
                     report_content = self.notifier.generate_single_stock_report(result)
                     logger.info(f"[{stock_code}] 使用精简报告格式")
 
-                if self.notifier.send(
+                sent = self.notifier.send(
                     report_content,
                     email_stock_codes=[stock_code],
                     route_type="report",
                     severity="info",
                     dedup_key=f"report:single:{stock_code}:{report_type.value}",
                     cooldown_key=f"report:single:{stock_code}:{report_type.value}",
-                ):
+                )
+                notification_run = self._build_notification_run_snapshot(
+                    channel="report",
+                    status="success" if sent else "failed",
+                    success=sent,
+                )
+                record_notification_run(
+                    channel="report",
+                    status="success" if sent else "failed",
+                    success=sent,
+                )
+                self._refresh_saved_diagnostic_snapshot(
+                    result=result,
+                    fallback_code=fallback_code,
+                    notification_run=notification_run,
+                )
+                if sent:
                     logger.info(f"[{stock_code}] 单股推送成功")
                 else:
                     logger.warning(f"[{stock_code}] 单股推送失败")
             except Exception as e:
+                notification_run = self._build_notification_run_snapshot(
+                    channel="report",
+                    status="failed",
+                    success=False,
+                    error_message=e,
+                )
+                record_notification_run(
+                    channel="report",
+                    status="failed",
+                    success=False,
+                    error_message=e,
+                )
+                self._refresh_saved_diagnostic_snapshot(
+                    result=result,
+                    fallback_code=fallback_code,
+                    notification_run=notification_run,
+                )
                 logger.error(f"[{stock_code}] 单股推送异常: {e}")
 
     def _save_local_report(
@@ -1974,9 +2242,9 @@ class StockAnalysisPipeline:
     ) -> None:
         """
         发送分析结果通知
-
+        
         生成决策仪表盘格式的报告
-
+        
         Args:
             results: 分析结果列表
             skip_push: 是否跳过推送（仅保存到本地，用于单股推送模式）
@@ -1986,16 +2254,73 @@ class StockAnalysisPipeline:
         try:
             logger.info("生成决策仪表盘日报...")
             report = self._generate_aggregate_report(results, report_type)
-
+            
             # 跳过推送（单股推送模式 / 合并模式：报告已由 _save_local_report 保存）
             if skip_push:
+                notification_run = self._build_notification_run_snapshot(
+                    channel="report",
+                    status="skipped",
+                    success=False,
+                    attempts=0,
+                )
+                record_notification_run(
+                    channel="report",
+                    status="skipped",
+                    success=False,
+                    attempts=0,
+                )
+                self._refresh_saved_diagnostic_snapshot(
+                    results=results,
+                    notification_run=notification_run,
+                )
                 return
-
+            
             # 推送通知
             if self.notifier.is_available():
                 channels = self.notifier.get_available_channels()
                 channels = self.notifier.get_channels_for_route("report", channels=channels)
-                context_success = self.notifier.send_to_context(report)
+
+                def _send_channel_safely(
+                    channel_label: str,
+                    send_func: Callable[[], bool],
+                ) -> tuple[bool, Optional[Exception]]:
+                    try:
+                        return bool(send_func()), None
+                    except Exception as e:
+                        logger.exception(
+                            "通知渠道 %s 推送异常，继续尝试其他渠道: %s",
+                            channel_label,
+                            e,
+                        )
+                        return False, e
+
+                def _record_channel_result(
+                    channel_label: str,
+                    success: bool,
+                    error_message: Optional[Exception] = None,
+                    target_results: Optional[List[AnalysisResult]] = None,
+                ) -> None:
+                    notification_run = self._build_notification_run_snapshot(
+                        channel=channel_label,
+                        status="success" if success else "failed",
+                        success=success,
+                        error_message=error_message,
+                    )
+                    record_notification_run(
+                        channel=channel_label,
+                        status="success" if success else "failed",
+                        success=success,
+                        error_message=error_message,
+                    )
+                    self._refresh_saved_diagnostic_snapshot(
+                        results=results if target_results is None else target_results,
+                        notification_run=notification_run,
+                    )
+
+                send_context = self.notifier.send_to_context(report)
+                if send_context:
+                    _record_channel_result("__context__", True)
+
                 if channels and hasattr(self.notifier, "evaluate_noise_control"):
                     report_type_key = report_type.value if isinstance(report_type, ReportType) else str(report_type)
                     codes_key = ",".join(
@@ -2010,6 +2335,22 @@ class StockAnalysisPipeline:
                         cooldown_key=noise_key,
                     )
                     if not noise_decision.should_send:
+                        notification_run = self._build_notification_run_snapshot(
+                            channel="report",
+                            status="skipped",
+                            success=False,
+                            attempts=0,
+                        )
+                        record_notification_run(
+                            channel="report",
+                            status="skipped",
+                            success=False,
+                            attempts=0,
+                        )
+                        self._refresh_saved_diagnostic_snapshot(
+                            results=results,
+                            notification_run=notification_run,
+                        )
                         logger.info(noise_decision.message)
                         return
 
@@ -2034,17 +2375,6 @@ class StockAnalysisPipeline:
                         "npm i -g markdown-to-file" if engine == "markdown-to-file"
                         else "wkhtmltopdf (apt install wkhtmltopdf / brew install wkhtmltopdf)"
                     )
-
-                def _send_channel_safely(channel_label: str, send_func: Callable[[], bool]) -> bool:
-                    try:
-                        return bool(send_func())
-                    except Exception as e:
-                        logger.exception(
-                            "通知渠道 %s 推送异常，继续尝试其他渠道: %s",
-                            channel_label,
-                            e,
-                        )
-                        return False
 
                 image_bytes = None
                 if non_wechat_channels_needing_image:
@@ -2090,22 +2420,33 @@ class StockAnalysisPipeline:
                             return self.notifier._send_wechat_image(wechat_image_bytes)
                         return self.notifier.send_to_wechat(dashboard_content)
 
-                    wechat_success = _send_channel_safely(
+                    wechat_success, wechat_error = _send_channel_safely(
                         NotificationChannel.WECHAT.value,
                         _send_wechat_report,
                     )
+                    _record_channel_result(
+                        NotificationChannel.WECHAT.value,
+                        wechat_success,
+                        wechat_error,
+                    )
 
-                # Other channels send the full report so custom webhook truncation does not affect them.
+                # 其他渠道：发完整报告（避免自定义 Webhook 被 wechat 截断逻辑污染）
                 non_wechat_success = False
                 stock_email_groups = getattr(self.config, 'stock_email_groups', []) or []
                 for channel in channels:
                     if channel == NotificationChannel.WECHAT:
                         continue
                     if channel == NotificationChannel.FEISHU:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_feishu(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.TELEGRAM:
                         def _send_telegram_report() -> bool:
                             use_image = self.notifier._should_use_image_for_channel(
@@ -2115,10 +2456,16 @@ class StockAnalysisPipeline:
                                 return self.notifier._send_telegram_photo(image_bytes)
                             return self.notifier.send_to_telegram(report)
 
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             _send_telegram_report,
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.EMAIL:
                         if stock_email_groups:
                             code_to_emails: Dict[str, Optional[List[str]]] = {}
@@ -2164,10 +2511,17 @@ class StockAnalysisPipeline:
                                     f"{channel.value}:{','.join(receivers)}"
                                     if receivers else f"{channel.value}:default"
                                 )
-                                non_wechat_success = _send_channel_safely(
+                                channel_success, channel_error = _send_channel_safely(
                                     email_label,
                                     _send_email_group,
-                                ) or non_wechat_success
+                                )
+                                non_wechat_success = channel_success or non_wechat_success
+                                _record_channel_result(
+                                    email_label,
+                                    channel_success,
+                                    channel_error,
+                                    target_results=group_results,
+                                )
                         else:
                             def _send_email_report() -> bool:
                                 use_image = self.notifier._should_use_image_for_channel(
@@ -2177,10 +2531,16 @@ class StockAnalysisPipeline:
                                     return self.notifier._send_email_with_inline_image(image_bytes)
                                 return self.notifier.send_to_email(report)
 
-                            non_wechat_success = _send_channel_safely(
+                            channel_success, channel_error = _send_channel_safely(
                                 channel.value,
                                 _send_email_report,
-                            ) or non_wechat_success
+                            )
+                            non_wechat_success = channel_success or non_wechat_success
+                            _record_channel_result(
+                                channel.value,
+                                channel_success,
+                                channel_error,
+                            )
                     elif channel == NotificationChannel.CUSTOM:
                         def _send_custom_report() -> bool:
                             use_image = self.notifier._should_use_image_for_channel(
@@ -2192,45 +2552,93 @@ class StockAnalysisPipeline:
                                 )
                             return self.notifier.send_to_custom(report)
 
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             _send_custom_report,
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.PUSHPLUS:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_pushplus(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.SERVERCHAN3:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_serverchan3(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.DISCORD:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_discord(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.PUSHOVER:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_pushover(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.NTFY:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_ntfy(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.GOTIFY:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_gotify(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.ASTRBOT:
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             lambda: self.notifier.send_to_astrbot(report),
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     elif channel == NotificationChannel.SLACK:
                         def _send_slack_report() -> bool:
                             use_image = self.notifier._should_use_image_for_channel(
@@ -2242,14 +2650,21 @@ class StockAnalysisPipeline:
                                 )
                             return self.notifier.send_to_slack(report)
 
-                        non_wechat_success = _send_channel_safely(
+                        channel_success, channel_error = _send_channel_safely(
                             channel.value,
                             _send_slack_report,
-                        ) or non_wechat_success
+                        )
+                        non_wechat_success = channel_success or non_wechat_success
+                        _record_channel_result(
+                            channel.value,
+                            channel_success,
+                            channel_error,
+                        )
                     else:
                         logger.warning(f"未知通知渠道: {channel}")
 
-                success = wechat_success or non_wechat_success or context_success
+                has_targeted_channels = bool(channels)
+                success = wechat_success or non_wechat_success or send_context
                 if (
                     (wechat_success or non_wechat_success)
                     and noise_decision is not None
@@ -2267,10 +2682,58 @@ class StockAnalysisPipeline:
                     logger.info("决策仪表盘推送成功")
                 else:
                     logger.warning("决策仪表盘推送失败")
+                if not has_targeted_channels and not send_context:
+                    channel_label = ",".join(channel.value for channel in channels) or "report"
+                    notification_run = self._build_notification_run_snapshot(
+                        channel=channel_label,
+                        status="success" if success else "failed",
+                        success=success,
+                    )
+                    record_notification_run(
+                        channel=channel_label,
+                        status="success" if success else "failed",
+                        success=success,
+                    )
+                    self._refresh_saved_diagnostic_snapshot(
+                        results=results,
+                        notification_run=notification_run,
+                    )
             else:
+                notification_run = self._build_notification_run_snapshot(
+                    channel="report",
+                    status="not_configured",
+                    success=False,
+                    attempts=0,
+                )
+                record_notification_run(
+                    channel="report",
+                    status="not_configured",
+                    success=False,
+                    attempts=0,
+                )
+                self._refresh_saved_diagnostic_snapshot(
+                    results=results,
+                    notification_run=notification_run,
+                )
                 logger.info("通知渠道未配置，跳过推送")
-
+                
         except Exception as e:
+            notification_run = self._build_notification_run_snapshot(
+                channel="report",
+                status="failed",
+                success=False,
+                error_message=e,
+            )
+            record_notification_run(
+                channel="report",
+                status="failed",
+                success=False,
+                error_message=e,
+            )
+            self._refresh_saved_diagnostic_snapshot(
+                results=results,
+                notification_run=notification_run,
+            )
             if (
                 noise_decision is not None
                 and not noise_finalized

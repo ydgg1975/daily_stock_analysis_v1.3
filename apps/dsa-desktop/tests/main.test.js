@@ -167,7 +167,7 @@ test('evaluateReleaseUpdate reports update-available when release is newer', (t)
   assert.equal(state.releaseUrl, 'https://github.com/ZhuLinsen/daily_stock_analysis/releases/tag/v3.13.0');
   assert.equal(state.checkedAt, '2026-04-25T01:02:00Z');
   assert.equal(state.publishedAt, '2026-04-25T01:00:00Z');
-  assert.match(state.message, /3\.13\.0/);
+  assert.match(state.message, /发现新版本 3\.13\.0/);
 });
 
 test('evaluateReleaseUpdate reports up-to-date when version is current', (t) => {
@@ -200,7 +200,7 @@ test('evaluateReleaseUpdate reports error when current version is invalid', (t) 
   });
 
   assert.equal(state.status, mainModule.UPDATE_STATUS.ERROR);
-  assert.match(state.message, /semantic version/);
+  assert.match(state.message, /不是有效的语义化版本/);
 });
 
 test('checkForDesktopUpdates delegates to release fetcher', async (t) => {
@@ -278,6 +278,7 @@ test('auto download prompt falls back to error when install path fails', async (
   const envFile = path.join(exeDir, '.env');
   const backupRoot = path.join(userDataDir, '.dsa-desktop-update-backup');
   const originalRemove = fs.rmSync;
+  let quitAndInstallArgs = null;
   const fakeUpdater = {
     autoDownload: true,
     autoInstallOnAppQuit: false,
@@ -293,8 +294,9 @@ test('auto download prompt falls back to error when install path fails', async (
         });
       }
     },
-    quitAndInstall: () => {
-      throw new Error('installer process failed');
+    quitAndInstall: (...args) => {
+      quitAndInstallArgs = args;
+      throw new Error('安装进程启动失败');
     },
   };
 
@@ -337,8 +339,9 @@ test('auto download prompt falls back to error when install path fails', async (
   }
 
   assert.equal(state.status, mainModule.UPDATE_STATUS.ERROR);
-  assert.match(state.message, /installer process failed/);
+  assert.match(state.message, /更新安装失败/);
   assert.equal(state.updateMode, mainModule.UPDATE_MODE.AUTO);
+  assert.deepEqual(quitAndInstallArgs, [true, true]);
   assert.equal(fs.existsSync(backupRoot), false);
   assert.equal(fs.existsSync(path.join(backupRoot, 'runtime-state.json')), false);
 
@@ -355,6 +358,87 @@ test('desktop update backup list includes WAL and SHM artifacts', (t) => {
   assert.ok(files.includes(path.join('data', 'stock_analysis.db-wal')));
   assert.ok(files.includes(path.join('data', 'stock_analysis.db-shm')));
   assert.ok(files.includes(path.join('logs', 'desktop.log')));
+});
+
+test('macOS packaged runtime state uses userData and migrates old app bundle files', (t) => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsa-desktop-macos-migrate-'));
+  const oldAppDir = path.join(tempRoot, 'Daily Stock Analysis.app', 'Contents', 'MacOS');
+  const userDataDir = path.join(tempRoot, 'userData');
+  const exePath = path.join(oldAppDir, 'Daily Stock Analysis');
+  const oldDbPath = path.join(oldAppDir, 'data', 'stock_analysis.db');
+  const oldLogPath = path.join(oldAppDir, 'logs', 'desktop.log');
+
+  fs.mkdirSync(path.dirname(oldDbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(oldLogPath), { recursive: true });
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(exePath, '');
+  fs.writeFileSync(path.join(oldAppDir, '.env'), 'OPENAI_API_KEY=old-key\n', 'utf-8');
+  fs.writeFileSync(oldDbPath, 'old-db');
+  fs.writeFileSync(oldLogPath, 'old-log\n', 'utf-8');
+
+  const mainModule = loadMainModule(t, {
+    platform: 'darwin',
+    app: {
+      isPackaged: true,
+      getPath: (name) => {
+        if (name === 'exe') {
+          return exePath;
+        }
+        return userDataDir;
+      },
+    },
+  });
+
+  t.after(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  const migrationResult = mainModule.migrateMacPackagedRuntimeState();
+  assert.equal(mainModule.resolveAppDir(), userDataDir);
+  assert.deepEqual(migrationResult.failed, []);
+  assert.deepEqual(
+    [...migrationResult.migrated].sort(),
+    ['.env', path.join('data', 'stock_analysis.db'), path.join('logs', 'desktop.log')].sort()
+  );
+  assert.equal(fs.readFileSync(path.join(userDataDir, '.env'), 'utf-8'), 'OPENAI_API_KEY=old-key\n');
+  assert.equal(fs.readFileSync(path.join(userDataDir, 'data', 'stock_analysis.db'), 'utf-8'), 'old-db');
+  assert.equal(fs.readFileSync(path.join(userDataDir, 'logs', 'desktop.log'), 'utf-8'), 'old-log\n');
+});
+
+test('macOS runtime migration does not overwrite existing userData files', (t) => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dsa-desktop-macos-skip-'));
+  const oldAppDir = path.join(tempRoot, 'Daily Stock Analysis.app', 'Contents', 'MacOS');
+  const userDataDir = path.join(tempRoot, 'userData');
+  const exePath = path.join(oldAppDir, 'Daily Stock Analysis');
+
+  fs.mkdirSync(oldAppDir, { recursive: true });
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(exePath, '');
+  fs.writeFileSync(path.join(oldAppDir, '.env'), 'OPENAI_API_KEY=old-key\n', 'utf-8');
+  fs.writeFileSync(path.join(userDataDir, '.env'), 'OPENAI_API_KEY=new-key\n', 'utf-8');
+
+  const mainModule = loadMainModule(t, {
+    platform: 'darwin',
+    app: {
+      isPackaged: true,
+      getPath: (name) => {
+        if (name === 'exe') {
+          return exePath;
+        }
+        return userDataDir;
+      },
+    },
+  });
+
+  t.after(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  const migrationResult = mainModule.migrateMacPackagedRuntimeState();
+  assert.deepEqual(migrationResult.migrated, []);
+  assert.deepEqual(migrationResult.failed, []);
+  assert.deepEqual(migrationResult.skipped, ['.env']);
+  assert.equal(fs.readFileSync(path.join(userDataDir, '.env'), 'utf-8'), 'OPENAI_API_KEY=new-key\n');
 });
 
 test('restorePackagedRuntimeStateFromBackup keeps backup when copy fails', (t) => {
@@ -720,4 +804,87 @@ test('stopBackend waits for backend process exit', async (t) => {
   ]);
 
   assert.equal(killSignals.includes('SIGTERM'), true);
+  assert.equal(mainModule.__getBackendProcessForTest(), null);
+});
+
+test('stopBackend keeps backend process reference when exit wait times out', async (t) => {
+  const mainModule = loadMainModule(t, { platform: 'linux' });
+  const originalSetTimeout = global.setTimeout;
+  const killSignals = [];
+  const fakeBackend = new EventEmitter();
+
+  fakeBackend.pid = 4321;
+  fakeBackend.killed = false;
+  fakeBackend.exitCode = null;
+  fakeBackend.signalCode = null;
+  fakeBackend.kill = (signal) => {
+    killSignals.push(signal);
+    fakeBackend.killed = true;
+  };
+
+  global.setTimeout = (callback, delay, ...args) => (
+    originalSetTimeout(callback, delay >= 3000 ? 0 : delay, ...args)
+  );
+  mainModule.__setBackendProcessForTest(fakeBackend);
+
+  t.after(() => {
+    global.setTimeout = originalSetTimeout;
+    mainModule.__setBackendProcessForTest(null);
+  });
+
+  await Promise.race([
+    mainModule.stopBackend(),
+    new Promise((_, reject) => originalSetTimeout(() => reject(new Error('stopBackend did not resolve')), 200)),
+  ]);
+
+  assert.equal(killSignals.includes('SIGTERM'), true);
+  assert.equal(mainModule.__getBackendProcessForTest(), fakeBackend);
+});
+
+test('stopBackend uses taskkill on Windows and clears after backend exit', async (t) => {
+  const taskkillCalls = [];
+  const fakeBackend = new EventEmitter();
+  const fakeTaskkill = new EventEmitter();
+  const mainModule = loadMainModule(t, {
+    platform: 'win32',
+    childProcess: {
+      spawn: (command, args, options) => {
+        taskkillCalls.push({ command, args, options });
+        process.nextTick(() => {
+          fakeBackend.exitCode = 0;
+          fakeBackend.emit('exit', 0, null);
+          fakeTaskkill.emit('exit', 0, null);
+        });
+        return fakeTaskkill;
+      },
+    },
+  });
+
+  fakeBackend.pid = 4321;
+  fakeBackend.killed = false;
+  fakeBackend.exitCode = null;
+  fakeBackend.signalCode = null;
+  fakeBackend.kill = () => {
+    throw new Error('Windows stopBackend should use taskkill instead of process.kill');
+  };
+
+  mainModule.__setBackendProcessForTest(fakeBackend);
+
+  t.after(() => {
+    mainModule.__setBackendProcessForTest(null);
+  });
+
+  await Promise.race([
+    mainModule.stopBackend(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('stopBackend did not resolve')), 200)),
+  ]);
+
+  assert.deepEqual(taskkillCalls, [
+    {
+      command: 'taskkill',
+      args: ['/PID', '4321', '/T', '/F'],
+      options: { windowsHide: true },
+    },
+  ]);
+  assert.equal(mainModule.__getBackendProcessForTest(), null);
 });

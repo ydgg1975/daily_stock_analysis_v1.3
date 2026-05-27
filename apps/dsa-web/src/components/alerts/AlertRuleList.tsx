@@ -49,6 +49,8 @@ const typeLabel: Record<AlertType, string> = {
   portfolio_concentration: '포트폴리오 집중도',
   portfolio_drawdown: '포트폴리오 낙폭',
   portfolio_price_stale: '포트폴리오 가격 지연',
+  market_light_status: 'Market Light 상태',
+  market_light_score_drop: 'Market Light 점수 하락',
 };
 
 const scopeLabel: Record<AlertTargetScope, string> = {
@@ -56,6 +58,7 @@ const scopeLabel: Record<AlertTargetScope, string> = {
   watchlist: '관심 목록',
   portfolio_holdings: '포트폴리오 보유 종목',
   portfolio_account: '포트폴리오 계좌',
+  market: '시장',
 };
 
 const severityLabel = {

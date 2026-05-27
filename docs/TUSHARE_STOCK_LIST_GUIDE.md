@@ -1,141 +1,165 @@
-# Tushare 종목 목록 가져오기 가이드
+# Tushare 股票列表获取工具使用说明
 
-이 문서는 Tushare Pro에서 A주, 홍콩 주식, 미국 주식 목록을 가져와 로컬 CSV 파일로 저장하는 방법을 설명합니다.
+## 功能概述
 
-## 기능 개요
+从 Tushare Pro 获取 A股、港股、美股列表信息，保存为 CSV 文件到本地。
 
-`scripts/fetch_tushare_stock_list.py`는 Tushare API를 호출해 시장별 종목 목록을 수집하고 `data/` 디렉터리에 CSV 파일을 생성합니다. 이후 `scripts/generate_index_from_csv.py`를 사용하면 WebUI 자동완성이나 종목 검색에 활용할 색인 파일을 만들 수 있습니다.
+## 快速开始
 
-## 준비
+### 1. 配置 Token
 
-### 1. Tushare Token 설정
-
-프로젝트 루트의 `.env` 파일에 Tushare Token을 추가합니다.
-
-```env
-TUSHARE_TOKEN=your_tushare_token
-```
-
-Token은 [Tushare Pro](https://tushare.pro/weborder/#/login)에 가입한 뒤 발급받을 수 있습니다.
-
-### 2. 종목 목록 수집
+在项目根目录的 `.env` 文件中添加 Tushare Token：
 
 ```bash
-python scripts/fetch_tushare_stock_list.py
+TUSHARE_TOKEN=你的tushare_token
 ```
 
-### 3. 결과 확인
+> 获取 Token：访问 [Tushare Pro](https://tushare.pro/weborder/#/login) 注册并获取
 
-수집 결과는 `data/` 디렉터리에 저장됩니다.
+### 2. 运行脚本
 
-```text
+```bash
+python3 scripts/fetch_tushare_stock_list.py
+```
+
+如需针对 A 股名称状态做修正，可以加上 `--a-rk`，脚本会保持 `stock_basic` 作为基础来源，再用 `rt_k` 对带 `XD`、`XR`、`DR`、`N`、`C` 前缀的名称进行回填，并覆盖输出到 `data/stock_list_a.csv`：
+
+```bash
+python3 scripts/fetch_tushare_stock_list.py --a-rk
+```
+
+### 3. 查看输出
+
+数据将保存到 `data/` 目录：
+
+```
 data/
-├── stock_list_a.csv       # A주 목록
-├── stock_list_hk.csv      # 홍콩 주식 목록
-├── stock_list_us.csv      # 미국 주식 목록
-└── README_stock_list.md   # 생성 데이터 설명
+├── stock_list_a.csv       # A股列表（--a-rk 时为修正后名称）
+├── stock_list_hk.csv      # 港股列表
+├── stock_list_us.csv      # 美股列表
+└── README_stock_list.md   # 数据说明文档
 ```
 
-## 주요 특징
+## 功能特性
 
-- 자동 페이지 처리: 대량 데이터는 여러 페이지로 나누어 가져옵니다.
-- 요청 간 대기: API 제한을 피하기 위해 요청 사이에 대기 시간을 둡니다.
-- 시장별 실패 격리: 한 시장 수집이 실패해도 다른 시장 처리를 계속할 수 있습니다.
-- 진행 상황 표시: 실행 중 처리 상황을 콘솔에 표시합니다.
-- 설명 문서 생성: 생성된 CSV 구조를 설명하는 문서를 함께 만들 수 있습니다.
+✅ **自动分页**：美股数据自动分页读取（每页5000条）
+✅ **智能限流**：每次请求之间随机休息5-10秒
+✅ **错误处理**：单个市场失败不影响其他市场
+✅ **进度提示**：实时显示读取进度
+✅ **自动文档**：生成详细的数据说明文档
 
-## 시장별 API
+## 市场说明
 
-| 시장 | Tushare API | 포인트 요구 사항 | 예상 규모 |
-| --- | --- | --- | --- |
-| A주 | `stock_basic` | Tushare 정책에 따름 | 약 5,000개 |
-| 홍콩 주식 | `hk_basic` | Tushare 정책에 따름 | 약 2,000개 |
-| 미국 주식 | `us_basic` | Tushare 정책에 따름 | 약 10,000개 |
+| 市场 | 接口 | 积分要求 | 数据量 |
+|------|------|----------|--------|
+| A股 | stock_basic | 2000积分 | ~5000只 |
+| 港股 | hk_basic | 2000积分 | ~2000只 |
+| 美股 | us_basic | 120试用/5000正式 | ~10000只 |
 
-포인트 정책은 Tushare에서 변경될 수 있으므로 실제 요구 조건은 Tushare 공식 문서를 기준으로 확인하세요.
+## 输出文件格式
 
-## CSV 형식 예시
+### A股（stock_list_a.csv）
 
-### A주: `stock_list_a.csv`
+执行 `--a-rk` 时，这个文件会写入修正后的 A 股名称。
 
 ```csv
 ts_code,symbol,name,area,industry,market,exchange,list_date,...
-000001.SZ,000001,평안은행,선전,은행,메인보드,SZSE,19910403,...
-600519.SH,600519,귀주모태,귀주,백주,메인보드,SSE,20010827,...
+000001.SZ,000001,平安银行,深圳,银行,主板,SZSE,19910403,...
+600519.SH,600519,贵州茅台,贵州,白酒,主板,SSE,20010827,...
 ```
 
-### 홍콩 주식: `stock_list_hk.csv`
+### 港股（stock_list_hk.csv）
 
 ```csv
 ts_code,name,fullname,market,list_date,trade_unit,curr_type,...
-00700.HK,Tencent,Tencent Holdings Ltd,메인보드,20040616,100,HKD,...
-00005.HK,HSBC,HSBC Holdings plc,메인보드,19750401,100,HKD,...
+00700.HK,腾讯控股,腾讯控股有限公司,主板,20040616,100,HKD,...
+00005.HK,汇丰控股,汇丰控股有限公司,主板,19750401,100,HKD,...
 ```
 
-### 미국 주식: `stock_list_us.csv`
+### 美股（stock_list_us.csv）
 
 ```csv
 ts_code,name,enname,classify,list_date,...
-AAPL,Apple,Apple Inc.,EQT,19801212,...
-TSLA,Tesla,Tesla Inc.,EQT,20100629,...
-BABA,Alibaba,Alibaba Group,ADR,20140919,...
+AAPL,苹果,Apple Inc.,EQT,19801212,...
+TSLA,特斯拉,Tesla Inc.,EQT,20100629,...
+BABA,阿里巴巴,Alibaba Group,ADR,20140919,...
 ```
 
-실제 원천 데이터에는 중국어 종목명이나 지역명이 포함될 수 있습니다. 이 값은 데이터 자체의 일부이므로 문서의 설명 언어와 별개로 유지될 수 있습니다.
+## 使用示例
 
-## Python에서 읽기
+### Python 读取数据
 
 ```python
 import pandas as pd
 
-a_stocks = pd.read_csv("data/stock_list_a.csv")
-print(f"A주 종목 수: {len(a_stocks)}")
+# 读取 A股
+a_stocks = pd.read_csv('data/stock_list_a.csv')
+print(f"A股数量: {len(a_stocks)}")
 
-main_board = a_stocks[a_stocks["market"] == "메인보드"]
-print(f"메인보드 종목 수: {len(main_board)}")
+# 筛选主板股票
+main_board = a_stocks[a_stocks['market'] == '主板']
+print(f"主板数量: {len(main_board)}")
 
-stock = a_stocks[a_stocks["ts_code"] == "600519.SH"]
-print(stock[["name", "industry", "list_date"]])
+# 查找特定股票
+stock = a_stocks[a_stocks['ts_code'] == '600519.SH']
+print(stock[['name', 'industry', 'list_date']])
 ```
 
-## 색인 생성
+### 刷新股票自动补全索引
 
-CSV를 가져온 뒤 종목 검색 색인을 만들 수 있습니다.
+推荐直接使用一键刷新脚本，它会默认在抓取 A 股时使用 `--a-rk`，然后生成并同步自动补全索引：
 
 ```bash
-python scripts/generate_index_from_csv.py --test
-python scripts/generate_index_from_csv.py
+pip install -r requirements.txt
+python3 scripts/refresh_stock_index.py
 ```
 
-`--test`는 실제 파일 갱신 전 점검 용도로 사용합니다.
+生成自动补全索引依赖 `pypinyin` 写入中文股票的完整拼音和拼音首字母字段；缺少该依赖时脚本会直接失败，避免生成无法支持拼音搜索的降级索引。
 
-## 주의 사항
+如果你只想单独更新 CSV，可以先抓取数据：
 
-1. Tushare 포인트와 권한 정책은 계정 상태에 따라 다릅니다.
-2. API 호출 제한이 있으므로 짧은 시간에 반복 실행하지 않는 것이 좋습니다.
-3. CSV 파일은 원천 데이터 스냅샷입니다. 최신 상장/상폐 상태가 필요하면 다시 수집하세요.
-4. 네트워크 오류나 권한 오류가 나면 Token, 계정 권한, 포인트, Tushare 서비스 상태를 확인합니다.
-
-## 자주 묻는 질문
-
-### `TUSHARE_TOKEN`이 없다는 오류가 납니다.
-
-`.env` 파일에 다음 형식으로 Token을 추가했는지 확인합니다.
-
-```env
-TUSHARE_TOKEN=your_tushare_token
+```bash
+python3 scripts/fetch_tushare_stock_list.py --a-rk
 ```
 
-### 포인트가 부족하다는 오류가 납니다.
+如果已经有新的 CSV，只想重新生成索引：
 
-Tushare 계정의 포인트와 API 사용 권한을 확인하세요. 시장별 API는 필요한 권한이 다를 수 있습니다.
+```bash
+python3 scripts/generate_index_from_csv.py --test  # 先测试
+python3 scripts/generate_index_from_csv.py         # 确认后生成
+```
 
-### 수집이 중간에 실패합니다.
+## 注意事项
 
-네트워크 상태, Token 유효성, Tushare API 제한을 확인합니다. 일부 시장만 실패했다면 성공한 CSV는 그대로 활용할 수 있고, 나중에 다시 실행해 보강할 수 있습니다.
+1. **积分要求**：确保账号积分足够（A股/港股2000，美股120试用）
+2. **请求限制**：注意 API 的每分钟请求次数限制
+3. **数据更新**：建议每月更新一次数据
+4. **网络连接**：需要稳定的网络连接
 
-## 참고 링크
+## 常见问题
 
-- [Tushare](https://tushare.pro)
-- [Tushare 문서](https://tushare.pro/document/2)
-- [Tushare 포인트 안내](https://tushare.pro/document/1)
+### Q: 提示"未找到 TUSHARE_TOKEN"？
+**A**: 请在 `.env` 文件中配置 `TUSHARE_TOKEN=你的token`
+
+### Q: 提示"账号积分不足"？
+**A**:
+- A股/港股需要2000积分
+- 美股120积分试用，5000积分正式权限
+- 访问 https://tushare.pro 查看积分获取办法
+
+### Q: 读取失败怎么办？
+**A**:
+1. 检查网络连接
+2. 检查 Token 是否正确
+3. 查看账号积分是否足够
+4. 当前脚本不会自动重试；单次请求失败后会输出错误并结束，请排查原因后重新运行
+
+### Q: 数据更新频率？
+**A**: 建议每月更新一次，或根据需求调整
+
+## 相关链接
+
+- [Tushare 官网](https://tushare.pro)
+- [Tushare 文档](https://tushare.pro/document/2)
+- [积分获取办法](https://tushare.pro/document/1)
+- [API 数据调试](https://tushare.pro/document/2)
