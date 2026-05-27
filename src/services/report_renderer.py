@@ -112,7 +112,7 @@ def render(
             (getattr(result, "report_language", None) for result in results if getattr(result, "report_language", None)),
             None,
         )
-        or getattr(get_config(), "report_language", "zh")
+        or getattr(get_config(), "report_language", "ko")
     )
     labels = get_report_labels(report_language)
 

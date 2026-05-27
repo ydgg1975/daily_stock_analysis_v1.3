@@ -76,7 +76,7 @@ def run_market_review(
     """
     logger.info("开始执行大盘复盘分析...")
     config = get_config()
-    review_text = _get_market_review_text(getattr(config, "report_language", "zh"))
+    review_text = _get_market_review_text(getattr(config, "report_language", "ko"))
     region = (
         override_region
         if override_region is not None
@@ -175,7 +175,7 @@ def _persist_market_review_history(
     try:
         from src.storage import DatabaseManager
 
-        report_language = normalize_report_language(getattr(config, "report_language", "zh"))
+        report_language = normalize_report_language(getattr(config, "report_language", "ko"))
         summary = _summarize_market_review(review_report, report_language)
         if report_language == "en":
             stock_name = "Market Review"

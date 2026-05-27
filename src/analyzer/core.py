@@ -938,7 +938,7 @@ class GeminiAnalyzer:
 
         code = context.get('code', 'Unknown')
         config = self._get_runtime_config()
-        report_language = normalize_report_language(getattr(config, "report_language", "zh"))
+        report_language = normalize_report_language(getattr(config, "report_language", "ko"))
         system_prompt = self._get_analysis_system_prompt(report_language, stock_code=code)
 
         request_delay = config.gemini_request_delay
@@ -1652,7 +1652,7 @@ class GeminiAnalyzer:
     ) -> AnalysisResult:
         try:
             report_language = normalize_report_language(
-                getattr(self._get_runtime_config(), "report_language", "zh")
+                getattr(self._get_runtime_config(), "report_language", "ko")
             )
             cleaned_text = response_text
             if '```json' in cleaned_text:
@@ -1767,7 +1767,7 @@ class GeminiAnalyzer:
         name: str
     ) -> AnalysisResult:
         report_language = normalize_report_language(
-            getattr(self._get_runtime_config(), "report_language", "zh")
+            getattr(self._get_runtime_config(), "report_language", "ko")
         )
         sentiment_score = 50
         trend = 'Sideways' if report_language == "en" else '흔들림'

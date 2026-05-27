@@ -581,7 +581,7 @@ class StockAnalysisPipeline:
             增强后的上下文
         """
         enhanced = context.copy()
-        enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        enhanced["report_language"] = normalize_report_language(getattr(self.config, "report_language", "ko"))
 
         # 添加股票名称
         if stock_name:
@@ -827,7 +827,7 @@ class StockAnalysisPipeline:
         """
         try:
             from src.agent.factory import build_agent_executor
-            report_language = normalize_report_language(getattr(self.config, "report_language", "zh"))
+            report_language = normalize_report_language(getattr(self.config, "report_language", "ko"))
 
             requested_skills = (
                 self.analysis_skills
@@ -982,7 +982,7 @@ class StockAnalysisPipeline:
         """
         将 AgentResult 转换为 AnalysisResult。
         """
-        report_language = normalize_report_language(getattr(self.config, "report_language", "zh"))
+        report_language = normalize_report_language(getattr(self.config, "report_language", "ko"))
         result = AnalysisResult(
             code=code,
             name=stock_name,
