@@ -709,7 +709,7 @@ class Config:
 
     # 리포트유형：simple(精简) 또는 full(완전)
     report_type: str = "simple"
-    report_language: str = "en"
+    report_language: str = "ko"
 
     # 仅분석결과요약：true 时只푸시汇총，不含개별종목详情（Issue #262）
     report_summary_only: bool = False
@@ -2050,16 +2050,16 @@ class Config:
         if file_value is not None:
             return file_value
 
-        return env_value or "en"
+        return env_value or "ko"
 
     @classmethod
     def _parse_report_language(cls, value: Optional[str]) -> str:
-        """Parse REPORT_LANGUAGE, fallback to en for invalid values."""
-        normalized = normalize_report_language(value, default="en")
+        """Parse REPORT_LANGUAGE, fallback to ko for invalid values."""
+        normalized = normalize_report_language(value, default="ko")
         raw = (value or "").strip()
         if raw and not is_supported_report_language_value(raw):
             logging.getLogger(__name__).warning(
-                "REPORT_LANGUAGE '%s' invalid, fallback to 'en' (valid: zh/en)",
+                "REPORT_LANGUAGE '%s' invalid, fallback to 'ko' (valid: ko/en/zh)",
                 value,
             )
         return normalized

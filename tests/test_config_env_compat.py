@@ -246,6 +246,18 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_report_language_defaults_to_korean_when_unset(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.report_language, "ko")
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_report_show_llm_model_defaults_true_and_can_be_disabled(
         self,
         _mock_parse_yaml,
@@ -412,6 +424,13 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
             parsed = Config._parse_report_language("zh-cn")
 
         self.assertEqual(parsed, "zh")
+
+    def test_parse_report_language_invalid_value_falls_back_to_korean(self) -> None:
+        with self.assertLogs("src.config", level="WARNING") as logs:
+            parsed = Config._parse_report_language("invalid")
+
+        self.assertEqual(parsed, "ko")
+        self.assertIn("fallback to 'ko' (valid: ko/en/zh)", "\n".join(logs.output))
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
