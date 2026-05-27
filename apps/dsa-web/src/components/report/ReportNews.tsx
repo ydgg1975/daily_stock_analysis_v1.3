@@ -13,7 +13,7 @@ interface ReportNewsProps {
   limit?: number;
   language?: ReportLanguage;
 }
-export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'zh' }) => {
+export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'ko' }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
   const [isLoading, setIsLoading] = useState(false);

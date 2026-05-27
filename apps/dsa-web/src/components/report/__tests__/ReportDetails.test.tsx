@@ -86,11 +86,11 @@ describe('ReportDetails', () => {
       />,
     );
 
-    expect(screen.getByText('图表分析')).toBeInTheDocument();
+    expect(screen.getByText('차트 분석')).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
     expect(screen.getByText('120')).toBeInTheDocument();
     expect(screen.getByText('5-bar breakout')).toBeInTheDocument();
-    expect(screen.getByText('冲突: 1')).toBeInTheDocument();
+    expect(screen.getByText('충돌: 1')).toBeInTheDocument();
   });
 
   it('renders event monitoring summary when provided', () => {
@@ -107,7 +107,7 @@ describe('ReportDetails', () => {
       />,
     );
 
-    expect(screen.getByText('事件监控')).toBeInTheDocument();
+    expect(screen.getByText('이벤트 모니터링')).toBeInTheDocument();
     expect(screen.getByText('critical')).toBeInTheDocument();
     expect(screen.getByText('true')).toBeInTheDocument();
     expect(screen.getByText('- Re-check thesis.')).toBeInTheDocument();

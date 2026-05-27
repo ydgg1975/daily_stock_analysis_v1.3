@@ -74,8 +74,8 @@ const ChatPage: React.FC = () => {
   const shouldStickToBottomRef = useRef(true);
   const pendingScrollBehaviorRef = useRef<ScrollBehavior>('auto');
 
-  // Get localized text (default to Chinese)
-  const text = getReportText('zh');
+  // Get localized text (default to Korean)
+  const text = getReportText('ko');
 
   // Cleanup timers on unmount
   useEffect(() => {

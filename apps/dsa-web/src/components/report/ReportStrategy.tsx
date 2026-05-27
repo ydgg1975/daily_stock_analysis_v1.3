@@ -36,7 +36,7 @@ const StrategyItem: React.FC<StrategyItemProps> = ({
 
 /**
  */
-export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, language = 'zh' }) => {
+export const ReportStrategy: React.FC<ReportStrategyProps> = ({ strategy, language = 'ko' }) => {
   if (!strategy) {
     return null;
   }

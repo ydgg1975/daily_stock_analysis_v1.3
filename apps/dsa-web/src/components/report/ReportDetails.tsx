@@ -14,7 +14,7 @@ interface ReportDetailsProps {
 export const ReportDetails: React.FC<ReportDetailsProps> = ({
   details,
   recordId,
-  language = 'zh',
+  language = 'ko',
 }) => {
   type JsonPanel = 'raw' | 'snapshot';
   type CopiedPanelState = Record<JsonPanel, boolean>;
