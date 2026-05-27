@@ -352,6 +352,8 @@ def test_stock_index_route_falls_back_to_static_index(tmp_path: Path) -> None:
     bundled_path = tmp_path / "bundled" / "stocks.index.json"
     _write_stock_index(static_dir / "stocks.index.json", "内置静态")
     _write_stock_index(bundled_path, "源码内置")
+    os.utime(static_dir / "stocks.index.json", (1_000, 1_000))
+    os.utime(bundled_path, (2_000, 2_000))
 
     client = TestClient(create_app(static_dir=static_dir))
 

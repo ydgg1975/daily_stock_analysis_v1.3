@@ -319,10 +319,16 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         )
 
     def _stock_index_candidate_paths() -> tuple[Path, ...]:
-        return (
-            get_remote_stock_index_cache_path(),
+        local_candidates = (
             static_dir / _STOCK_INDEX_FILENAME,
             _bundled_stock_index_path(),
+        )
+        local_path = next((path for path in local_candidates if path.is_file()), None)
+        if local_path is None:
+            return (get_remote_stock_index_cache_path(),)
+        return (
+            get_remote_stock_index_cache_path(),
+            local_path,
         )
 
     def _find_existing_stock_index_path() -> Optional[Path]:
