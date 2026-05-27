@@ -140,7 +140,7 @@ def get_stock_name_multi_source(
             from data_provider.base import DataFetcherManager
             data_manager = DataFetcherManager()
         except Exception as e:
-            logger.debug(f"불가초기화 DataFetcherManager: {e}")
+            logger.debug(f"DataFetcherManager 초기화 실패: {e}")
 
     if data_manager:
         try:
@@ -149,7 +149,7 @@ def get_stock_name_multi_source(
                 STOCK_NAME_MAP[stock_code] = name
                 return name
         except Exception as e:
-            logger.debug(f"에서데이터源가져오기주식이름실패: {e}")
+            logger.debug(f"데이터 소스에서 종목명 조회 실패: {e}")
 
     return f'주식{stock_code}'
 
@@ -395,7 +395,7 @@ class GeminiAnalyzer:
         else:
             skills_section = ""
             if skill_instructions:
-                skills_section = f"## 激活의거래스킬\n\n{skill_instructions}\n"
+                skills_section = f"## 활성화된 거래 스킬\n\n{skill_instructions}\n"
             default_skill_policy_section = ""
             if default_skill_policy:
                 default_skill_policy_section = f"{default_skill_policy}\n"
@@ -418,11 +418,12 @@ class GeminiAnalyzer:
 """
         return base_prompt + """
 
-## 출력语言（최고우선순위）
+## 출력 언어 (최고 우선순위)
 
-- 모든 JSON 键名保持不变。
-- `decision_type` 필수保持위해 `buy|hold|sell`。
-- 모든面로사용자의人类可读텍스트치필수사용중국어。
+- 모든 JSON 키 이름은 그대로 유지하세요.
+- `decision_type` 값은 반드시 `buy|hold|sell` 중 하나를 사용하세요.
+- 사용자가 읽는 모든 텍스트 값은 한국어로 작성하세요.
+- 여기에는 `stock_name`, `trend_prediction`, `operation_advice`, `confidence_level`, 중첩 dashboard 텍스트, 체크리스트 항목, 모든 요약 필드가 포함됩니다.
 """
 
     def _has_channel_config(self, config: Config) -> bool:
@@ -943,8 +944,8 @@ class GeminiAnalyzer:
 
         request_delay = config.gemini_request_delay
         if request_delay > 0:
-            logger.debug(f"[LLM] 요청전대기 {request_delay:.1f} 秒...")
-            _emit_progress(65, f"{code}：LLM 요청전대기 {request_delay:.1f} 秒")
+            logger.debug(f"[LLM] 요청 전 {request_delay:.1f}초 대기...")
+            _emit_progress(65, f"{code}: LLM 요청 전 {request_delay:.1f}초 대기")
             time.sleep(request_delay)
 
         name = context.get('stock_name')
@@ -959,7 +960,7 @@ class GeminiAnalyzer:
                 code=code,
                 name=name,
                 sentiment_score=50,
-                trend_prediction='Sideways' if report_language == "en" else '흔들림',
+                trend_prediction='Sideways' if report_language == "en" else '횡보',
                 operation_advice='Hold' if report_language == "en" else '보유',
                 confidence_level='Low' if report_language == "en" else '저',
                 analysis_summary='AI analysis is unavailable because no API key is configured.' if report_language == "en" else 'AI 분석 기능을 사용할 수 없습니다. API Key가 설정되지 않았습니다.',
@@ -978,10 +979,10 @@ class GeminiAnalyzer:
             logger.info(f"========== AI 분석 {name}({code}) ==========")
             logger.info(f"[LLM설정] 모델: {model_name}")
             logger.info(f"[LLM설정] Prompt 길이: {len(prompt)} 문자")
-            logger.info(f"[LLM설정] 여부포함뉴스: {'是' if news_context else '否'}")
+            logger.info(f"[LLM설정] 뉴스 포함 여부: {'예' if news_context else '아니오'}")
 
             prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
-            logger.info(f"[LLM Prompt 预览]\n{prompt_preview}")
+            logger.info(f"[LLM Prompt 미리보기]\n{prompt_preview}")
             logger.debug(f"=== 완전 Prompt ({len(prompt)}문자) ===\n{prompt}\n=== End Prompt ===")
 
             generation_config = {
@@ -989,7 +990,7 @@ class GeminiAnalyzer:
                 "max_output_tokens": 8192,
             }
 
-            logger.info(f"[LLM호출] 시작호출 {model_name}...")
+            logger.info(f"[LLM호출] {model_name} 호출 시작...")
             _emit_progress(68, f"{name}: LLM 요청을 보냈고 응답을 기다리는 중")
 
             current_prompt = prompt
@@ -1022,10 +1023,10 @@ class GeminiAnalyzer:
                 elapsed = time.time() - start_time
 
                 logger.info(
-                    f"[LLM돌아가기] {model_name} 응답성공, 소요시간 {elapsed:.2f}s, 응답길이 {len(response_text)} 문자"
+                    f"[LLM응답] {model_name} 응답 성공, 소요 시간 {elapsed:.2f}s, 응답 길이 {len(response_text)} 문자"
                 )
                 response_preview = response_text[:300] + "..." if len(response_text) > 300 else response_text
-                logger.info(f"[LLM돌아가기 预览]\n{response_preview}")
+                logger.info(f"[LLM응답 미리보기]\n{response_preview}")
                 logger.debug(
                     f"=== {model_name} 완전응답 ({len(response_text)}문자) ===\n{response_text}\n=== End Response ==="
                 )
@@ -1054,7 +1055,7 @@ class GeminiAnalyzer:
                     )
                     retry_count += 1
                     logger.info(
-                        "[LLM완전性] 必填필드누락 %s，第 %d 차补전재시도",
+                        "[LLM완전성] 필수 필드 누락 %s, %d차 보완 재시도",
                         missing_fields,
                         retry_count,
                     )
@@ -1066,7 +1067,7 @@ class GeminiAnalyzer:
                 else:
                     self._apply_placeholder_fill(result, missing_fields)
                     logger.warning(
-                        "[LLM완전性] 必填필드누락 %s，已占位补전，不블로킹프로세스",
+                        "[LLM완전성] 필수 필드 누락 %s, placeholder로 보완하고 흐름을 계속합니다",
                         missing_fields,
                     )
                     break
@@ -1084,10 +1085,10 @@ class GeminiAnalyzer:
                 code=code,
                 name=name,
                 sentiment_score=50,
-                trend_prediction='Sideways' if report_language == "en" else '흔들림',
+                trend_prediction='Sideways' if report_language == "en" else '횡보',
                 operation_advice='Hold' if report_language == "en" else '보유',
                 confidence_level='Low' if report_language == "en" else '저',
-                analysis_summary=(f'Analysis failed: {str(e)[:100]}' if report_language == "en" else f'분석过程出错: {str(e)[:100]}'),
+                analysis_summary=(f'Analysis failed: {str(e)[:100]}' if report_language == "en" else f'분석 중 오류가 발생했습니다: {str(e)[:100]}'),
                 risk_warning='Analysis failed. Please retry later or review manually.' if report_language == "en" else '분석에 실패했습니다. 잠시 후 다시 시도하거나 수동으로 확인하세요.',
                 success=False,
                 error_message=str(e),
@@ -1116,7 +1117,7 @@ class GeminiAnalyzer:
 
         prompt = f"""# 의사결정대시보드분석요청
 
-## 📊 주식基础정보
+## 📊 종목 기본 정보
 | 项目 | 데이터 |
 |------|------|
 | 주식코드 | **{code}** |
@@ -1315,7 +1316,7 @@ class GeminiAnalyzer:
                     else "✅ 位置相에可控"
                 )
                 prompt += f"""
-### 기술와구조분석（供激活스킬판단参考）
+### 기술 및 구조 분석 (활성화된 스킬 판단 참고)
 | 지표 | 수치 | 설명 |
 |------|------|------|
 | 추세상태 | {trend.get('trend_status', unknown_text)} | |
@@ -1378,12 +1379,12 @@ class GeminiAnalyzer:
         if news_context:
             prompt += f"""
 으로하是 **{stock_name}({code})** 近{news_window_days}日의뉴스검색결과，请重点추출：
-1. 🚨 **리스크警报**：지분 감소、제재、리空
-2. 🎯 **리호촉매**：业绩、계약、政策
-3. 📊 **실적전망**：年报预告、业绩快报
+1. 🚨 **리스크 경고**: 지분 감소, 제재, 악재
+2. 🎯 **긍정 촉매**: 실적, 계약, 정책
+3. 📊 **실적 전망**: 연간 실적 예고, 실적 속보
 4. 🕒 **시간규칙（강制）**：
    - 출력到 `risk_alerts` / `positive_catalysts` / `latest_news` 의每一条都필수带구체적날짜（YYYY-MM-DD）
-   - 超出近{news_window_days}日窗口의뉴스一律忽略
+   - 최근 {news_window_days}일 범위를 벗어난 뉴스는 모두 무시
    - 시간알수없음、불가확인발행날짜의뉴스一律忽略
 
 ```
@@ -1400,7 +1401,7 @@ class GeminiAnalyzer:
 ⚠️ **데이터누락경고**
 에에서인터페이스제한，현재불가가져오기완전의실시간시세와기술지표데이터。
 请 **忽略상述테이블格중의 N/A 데이터**，重点근거 **【📰 여론인텔리전스】** 중의뉴스진행기본面와심리面 analysis。
-에서대답기술적측면문제（如이동평균선、이격도）时，请직접설명“데이터누락，판단불가”，**严禁编造데이터**。
+기술적 측면(예: 이동평균선, 이격도)을 답할 때 데이터가 부족하면 "데이터 누락, 판단 불가"라고 직접 설명하고, 데이터를 지어내지 마세요.
 """
 
         prompt += f"""
@@ -1414,7 +1415,7 @@ class GeminiAnalyzer:
             prompt += """
 > ⚠️ **지수/ETF 분석约束**：该标의위해지수추적型 ETF 또는시장지수。
 > - 리스크분석仅관심：**지수추세、추적오차、시장流动性**
-> - 严禁를펀드회사의소송、声誉、고管变动纳入리스크警报
+> - 펀드 회사의 소송, 평판, 임원 변동 같은 회사 경영 리스크를 리스크 경고에 넣지 마세요.
 > - 실적전망基에서**지수구성종목整体성과**，며非펀드회사재무제표
 > - `risk_alerts` 중不得出现펀드관리人관련의회사经영리스크
 
@@ -1428,7 +1429,7 @@ class GeminiAnalyzer:
             prompt += f"""
 
 ### 重点관심（필수明确대답）：
-1. ❓ 여부满足 MA5>MA10>MA20 상승세정렬？
+1. ❓ MA5>MA10>MA20 상승세 정렬을 충족하는가?
 2. ❓ 현재이격도여부에서안전범위내（<5%）？—— 초과5%필수标注"고점추격금지"
 3. ❓ 거래량여부配合（거래량 축소조정/거래량 확대돌파）？
 4. ❓ 매물대구조여부건전？
@@ -1438,7 +1439,7 @@ class GeminiAnalyzer:
             prompt += f"""
 
 ### 重点관심（필수明确대답）：
-1. ❓ 현재구조여부满足激活스킬의핵심트리거조건？
+1. ❓ 현재 구조가 활성화된 스킬의 핵심 트리거 조건을 충족하는가?
 2. ❓ 현재入场位置와리스크回报여부合理？若이탈过대，请明确설명대기조건
 3. ❓ 거래량、波动와매물대구조여부지원현재결론？
 4. ❓ 메시지面有无重대리空또는와스킬결론충돌의정보？
@@ -1448,12 +1449,12 @@ class GeminiAnalyzer:
 
 ### 의사결정대시보드要求：
 - **주식이름**：필수출력정确의중국어전称（如"귀저우마오타이"며非"주식{code}"）
-- **핵심결론**：一句话说清该买/该卖/该등
+- **핵심결론**: 매수/매도/대기 판단을 한 문장으로 명확히 설명
 - **보유 포지션分类제안**：空仓者怎么做 vs 보유 포지션者怎么做
 - **구체적狙击点位**：매수가、손절가、목표가（精确到分）
 - **확인清단일**：每项사용 ✅/⚠️/❌ 标记
 - **메시지面시간合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得포함超出近{news_window_days}日또는시간알수없음의정보
-- **기술적측면일치性**：严禁를“하락세정렬”와“상승세정렬”등互斥결론동시에当作유효근거；若기본面/이벤트面와기술적측면충돌，필수明确写“이벤트先行、기술待확인”또는“기본面偏다，그러나기술적측면尚未확인”
+- **기술적 측면 일관성**: "하락세 정렬"과 "상승세 정렬"처럼 서로 배타적인 결론을 동시에 유효 근거로 쓰지 마세요. 기본면/이벤트와 기술적 측면이 충돌하면 "이벤트 선행, 기술 확인 대기" 또는 "기본면 우위, 기술적 확인은 아직 부족"처럼 명확히 쓰세요.
 
 请출력완전의 JSON 형식의사결정대시보드。"""
 
@@ -1471,11 +1472,11 @@ class GeminiAnalyzer:
         else:
             prompt += f"""
 
-### 출력语言要求（최고우선순위）
-- 모든 JSON 键名필수保持不变，不要翻译键名。
-- `decision_type` 필수保持위해 `buy`、`hold`、`sell`。
-- 모든面로사용자의人类可读텍스트치필수사용중국어。
-- 当데이터누락时，请사용중국어직접설명“{no_data_text}，판단불가”。
+### 출력 언어 요구사항 (최고 우선순위)
+- 모든 JSON 키 이름은 정확히 유지하고 번역하지 마세요.
+- `decision_type` 값은 반드시 `buy`, `hold`, `sell` 중 하나를 사용하세요.
+- 사용자가 읽는 모든 텍스트 값은 한국어로 작성하세요.
+- 데이터가 부족하면 한국어로 직접 설명하고 "{no_data_text}, 판단 불가"라고 표시하세요.
 """
 
         return prompt
@@ -1585,7 +1586,7 @@ class GeminiAnalyzer:
                     lines.append("- dashboard.battle_plan.sniper_points.stop_loss: stop-loss level")
             return "\n".join(lines)
 
-        lines = ["### 补전要求：请에서상方분석基础상보충으로하必填내용，그리고출력완전 JSON："]
+        lines = ["### 보완 요구사항: 아래 필수 항목을 보완하고 전체 JSON을 다시 출력하세요:"]
         for f in missing_fields:
             if f == "sentiment_score":
                 lines.append("- sentiment_score: 0-100 종합점수")
@@ -1594,9 +1595,9 @@ class GeminiAnalyzer:
             elif f == "analysis_summary":
                 lines.append("- analysis_summary: 종합분석요약")
             elif f == "dashboard.core_conclusion.one_sentence":
-                lines.append("- dashboard.core_conclusion.one_sentence: 一句话决策")
+                lines.append("- dashboard.core_conclusion.one_sentence: 한 줄 의사결정")
             elif f == "dashboard.intelligence.risk_alerts":
-                lines.append("- dashboard.intelligence.risk_alerts: 리스크警报목록（可비어있음数组）")
+                lines.append("- dashboard.intelligence.risk_alerts: 리스크 경고 목록(비어 있는 배열 가능)")
             elif f == "dashboard.battle_plan.sniper_points.stop_loss":
                 lines.append("- dashboard.battle_plan.sniper_points.stop_loss: 손절가")
         return "\n".join(lines)
@@ -1613,7 +1614,7 @@ class GeminiAnalyzer:
         if normalize_report_language(report_language) == "en":
             prefix = "### The previous output is below. Complete the missing fields based on that output and return the full JSON again. Do not omit existing fields:"
         else:
-            prefix = "### 상한번출력如하，请에서该출력基础상补齐누락필드，그리고重신출력완전 JSON。不要省略기존필드："
+            prefix = "### 이전 출력은 아래와 같습니다. 기존 필드는 생략하지 말고 누락된 필드를 보완해 전체 JSON을 다시 출력하세요:"
         return "\n\n".join([
             base_prompt,
             prefix,
@@ -1800,7 +1801,7 @@ class GeminiAnalyzer:
         results = []
         for i, context in enumerate(contexts):
             if i > 0:
-                logger.debug(f"대기 {delay_between} 秒후계속...")
+                logger.debug(f"{delay_between}초 대기 후 계속...")
                 time.sleep(delay_between)
 
             result = self.analyze(context)
