@@ -133,9 +133,12 @@ class MarketAnalyzer:
         if self.profile.has_market_stats:
             self._get_market_statistics(overview)
 
-        # 3. 获取板块涨跌榜（A 股有，美股暂无）
+        # 3. 获取板块涨跌榜
         if self.profile.has_sector_rankings:
-            self._get_sector_rankings(overview)
+            if self.region == "us":
+                self._get_us_sector_rankings(overview)
+            else:
+                self._get_sector_rankings(overview)
 
         if self.region == "us":
             overview.macro_indicators = self._get_us_macro_indicators()
@@ -162,6 +165,60 @@ class MarketAnalyzer:
         return indicators
 
     
+    # 11 SPDR sector ETFs with display names
+    _US_SECTOR_ETFS = [
+        ("XLK", "Technology"),
+        ("XLF", "Financials"),
+        ("XLV", "Health Care"),
+        ("XLY", "Consumer Disc."),
+        ("XLP", "Consumer Staples"),
+        ("XLE", "Energy"),
+        ("XLI", "Industrials"),
+        ("XLB", "Materials"),
+        ("XLU", "Utilities"),
+        ("XLRE", "Real Estate"),
+        ("XLC", "Communication"),
+    ]
+
+    def _get_us_sector_rankings(self, overview: MarketOverview) -> None:
+        """Fetch today's performance for the 11 SPDR sector ETFs and populate sector rankings."""
+        logger.info("[大盘] 获取美股板块涨跌榜 (sector ETFs)...")
+        results = []
+        for symbol, name in self._US_SECTOR_ETFS:
+            change_pct = self._fetch_sector_etf_change(symbol)
+            if change_pct is not None:
+                results.append({"name": name, "change_pct": change_pct, "code": symbol})
+
+        if not results:
+            logger.warning("[大盘] 无法获取板块 ETF 行情")
+            return
+
+        results.sort(key=lambda x: x["change_pct"], reverse=True)
+        overview.top_sectors = results[:5]
+        overview.bottom_sectors = list(reversed(results[-5:]))
+        logger.info("[大盘] 领涨板块: %s", [s["name"] for s in overview.top_sectors])
+        logger.info("[大盘] 领跌板块: %s", [s["name"] for s in overview.bottom_sectors])
+
+    def _fetch_sector_etf_change(self, symbol: str) -> Optional[float]:
+        """Return today's % change for a sector ETF via yfinance fast_info."""
+        try:
+            import yfinance as yf
+            t = yf.Ticker(symbol)
+            fast = getattr(t, "fast_info", {}) or {}
+            last_price = fast.get("last_price")
+            prev_close = fast.get("previous_close")
+            if last_price and prev_close and float(prev_close) != 0:
+                return (float(last_price) - float(prev_close)) / float(prev_close) * 100
+            hist = t.history(period="2d")
+            if hist is not None and len(hist) >= 2:
+                prev = float(hist["Close"].iloc[-2])
+                last = float(hist["Close"].iloc[-1])
+                if prev:
+                    return (last - prev) / prev * 100
+        except Exception as exc:
+            logger.debug("[大盘] 板块 ETF %s 获取失败: %s", symbol, exc)
+        return None
+
     def _get_main_indices(self) -> List[MarketIndex]:
         """获取主要指数实时行情"""
         indices = []
@@ -492,13 +549,13 @@ class MarketAnalyzer:
 - 黄金: $[价格] ([%变动]) — [避险/中性/风险偏好]
 
 ### 📰 重大事件
-- （3-5条，只有真正影响市场的事项；没有就跳过）
+- （3-5条，总结新闻摘要中真正影响市场的事件；若新闻为暂无则写"暂无显著事件"）
 
 ### 🔄 板块轮动
-- （2-3条，说明领涨/领跌板块及原因）
+- （2-3条，说明领涨/领跌板块及原因；若板块数据为暂无则写"暂无板块数据"）
 
 ### ⚠️ 明日关注
-- （2-3条，提示明日风险或关注事件）
+- （2-3条，基于今日新闻和指数走势推断明日风险或关注点；若信息不足则写"暂无关注事项"）
 
 规则（必须遵守）：
 - VIX > 25：恐慌；20-25：谨慎；< 20：平静

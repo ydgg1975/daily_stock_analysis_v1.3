@@ -238,32 +238,47 @@ class TelegramSender:
         html_message = _markdown_to_html(message)
         return self._send(html_message, parse_mode="HTML", escape=False)
 
+    def send_news_digest(self, message: str) -> bool:
+        """Send a news digest message, converting [title](url) Markdown links to HTML anchors."""
+        if not message:
+            return False
+
+        def _news_to_html(text: str) -> str:
+            lines = text.splitlines()
+            out = []
+            for line in lines:
+                # Convert [text](url) links BEFORE html-escaping anything else
+                # Replace link patterns first, then escape remaining text
+                import re as _re
+                parts = _re.split(r'(\[[^\]]*\]\([^)]*\))', line)
+                converted_parts = []
+                for part in parts:
+                    m = _re.match(r'\[([^\]]*)\]\(([^)]*)\)', part)
+                    if m:
+                        link_text = html.escape(m.group(1))
+                        url = html.escape(m.group(2))
+                        converted_parts.append(f'<a href="{url}">{link_text}</a>')
+                    else:
+                        converted_parts.append(html.escape(part))
+                out.append("".join(converted_parts))
+            return "\n".join(out)
+
+        html_message = _news_to_html(message)
+        return self._send(html_message, parse_mode="HTML", escape=False)
+
     def send_portfolio_snapshot(self, portfolio: Dict[str, Dict]) -> bool:
         if not portfolio:
             content = "📊 *持仓快照*\n\n暂无持仓数据"
             return self._send(content)
 
         total_value = 0.0
-        total_pnl = 0.0
-        total_cost = 0.0
         value_seen = False
-        pnl_seen = False
         for item in portfolio.values():
             if item.get("total_value") is not None:
                 total_value += float(item["total_value"])
                 value_seen = True
-            if item.get("pnl") is not None:
-                total_pnl += float(item["pnl"])
-                pnl_seen = True
-            if item.get("shares") is not None and item.get("avg_buy_price") is not None:
-                total_cost += float(item["shares"]) * float(item["avg_buy_price"])
 
         total_value_text = _format_money(total_value) if value_seen else "暂无"
-        total_pnl_text = _format_money_signed(total_pnl) if pnl_seen else "暂无"
-        total_pnl_pct = None
-        if total_cost > 0 and pnl_seen:
-            total_pnl_pct = (total_pnl / total_cost) * 100
-        total_pnl_pct_text = _format_pct(total_pnl_pct, with_sign=True) if total_pnl_pct is not None else "暂无"
 
         def _fetch_today_change_pct(ticker: str) -> Optional[float]:
             try:
@@ -310,9 +325,10 @@ class TelegramSender:
         lines = ["📊 *Portfolio Snapshot*", ""]
         if impacts:
             today_change_pct = weighted_change_sum / total_today_value if total_today_value > 0 else 0.0
+            total_today_pnl = sum(i["impact"] for i in impacts)
+            today_pnl_text = _format_money_signed(total_today_pnl)
             lines.append(
-                f"💼 总市值: {total_value_text} | 总盈亏: {total_pnl_text} ({total_pnl_pct_text}) | "
-                f"今日变动: {today_change_pct:+.1f}%"
+                f"💼 总市值: {total_value_text} | 今日盈亏: {today_pnl_text} ({today_change_pct:+.1f}%)"
             )
             lines.append("")
 
@@ -338,7 +354,7 @@ class TelegramSender:
                     )
         else:
             lines.append(
-                f"💼 总市值: {total_value_text} | 总盈亏: {total_pnl_text} ({total_pnl_pct_text}) (今日行情暂无)"
+                f"💼 总市值: {total_value_text} | 今日盈亏: 暂无 (今日行情暂无)"
             )
 
         return self._send("\n".join(lines))

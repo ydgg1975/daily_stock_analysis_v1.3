@@ -19,6 +19,21 @@ from src.portfolio.google_sheets_reader import load_portfolio_from_config
 logger = logging.getLogger(__name__)
 
 
+def _find_affected_tickers(title: str, snippet: str, stock_list: List[str]) -> List[str]:
+    """Return tickers from stock_list that appear in the news title or snippet."""
+    text = f"{title} {snippet}".upper()
+    matched = []
+    for ticker in stock_list:
+        t = ticker.strip().upper()
+        if not t:
+            continue
+        # Match whole-word ticker (e.g. " NVDA " but not "QNVDA")
+        import re
+        if re.search(r'\b' + re.escape(t) + r'\b', text):
+            matched.append(t)
+    return matched
+
+
 def _dedupe_results(results: List[SearchResult]) -> List[SearchResult]:
     seen = set()
     deduped: List[SearchResult] = []
@@ -155,6 +170,16 @@ def run_daily_news(
 
     impact_emoji = {"利多": "🟢", "利空": "🔴", "中性": "⚪"}
 
+    # Build a title→url lookup for linking LLM-summarized headlines back to sources
+    url_map: dict = {}
+    for r in all_results:
+        if r.url and r.title:
+            url_map[r.title.strip()] = r.url
+
+    all_tickers = list({t.strip().upper() for t in (
+        list(portfolio.keys()) + config.stock_list
+    ) if t.strip()})
+
     if parsed:
         market_headline = parsed.get("market_headline") or ""
         top_news = parsed.get("top_news") or []
@@ -176,9 +201,22 @@ def run_daily_news(
                 reason = item.get("reason") or ""
                 tickers = item.get("affected_tickers") or []
                 emoji = impact_emoji.get(impact, "⚪")
-                lines.append(f"- {title} → {emoji} {impact}")
+                # Best-effort URL: exact title match first, then partial match
+                url = url_map.get(title.strip())
+                if not url:
+                    for src_title, src_url in url_map.items():
+                        if title[:40] and title[:40].lower() in src_title.lower():
+                            url = src_url
+                            break
+                if url:
+                    lines.append(f"- [{title}]({url}) → {emoji} {impact}")
+                else:
+                    lines.append(f"- {title} → {emoji} {impact}")
                 if reason:
                     lines.append(f"  {reason}")
+                # Backfill tickers if LLM returned none
+                if not tickers and all_tickers:
+                    tickers = _find_affected_tickers(title, "", all_tickers)
                 if tickers:
                     lines.append(f"  (涉及: {', '.join(tickers)})")
             lines.append("")
@@ -204,20 +242,30 @@ def run_daily_news(
 
         message = "\n".join(lines).strip()
     else:
-        # Fallback: raw headlines
+        # Fallback: raw headlines with links and affected tickers
         lines = [
             f"📰 每日新闻简报 — {report_date}",
             "",
         ]
         for item in all_results[:8]:
             source = item.source or "unknown"
-            lines.append(f"- {item.title} ({source})")
+            if item.url:
+                lines.append(f"- [{item.title}]({item.url}) ({source})")
+            else:
+                lines.append(f"- {item.title} ({source})")
+            if all_tickers:
+                tickers = _find_affected_tickers(item.title or "", item.snippet or "", all_tickers)
+                if tickers:
+                    lines.append(f"  (涉及: {', '.join(tickers)})")
         message = "\n".join(lines).strip()
 
     if send_notification:
         telegram = getattr(notifier, "_telegram", None)
         if telegram:
-            telegram.send_text(message)
+            if hasattr(telegram, "send_news_digest"):
+                telegram.send_news_digest(message)
+            else:
+                telegram.send_text(message)
         elif notifier.is_available():
             notifier.send(message)
         else:

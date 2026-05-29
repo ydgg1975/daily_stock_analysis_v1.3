@@ -90,7 +90,9 @@ def run_market_review_only(config, args: argparse.Namespace) -> int:
     notifier = NotificationService()
 
     search_service = None
-    if config.bocha_api_keys or config.tavily_api_keys or config.brave_api_keys or config.serpapi_keys:
+    if (config.bocha_api_keys or config.tavily_api_keys or config.brave_api_keys
+            or config.serpapi_keys or getattr(config, "finnhub_api_keys", [])
+            or getattr(config, "fmp_api_keys", [])):
         search_service = SearchService(
             bocha_keys=config.bocha_api_keys,
             tavily_keys=config.tavily_api_keys,
