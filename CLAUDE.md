@@ -45,11 +45,13 @@ This is a **daily automated US market review system** that fetches market data, 
 |--------|------|
 | `src/config.py` | Singleton dataclass config; reads `.env`; validates required keys |
 | `src/analyzer.py` | LiteLLM wrapper for Gemini; handles fallback model, JSON repair, token counting |
-| `src/market_analyzer.py` | Builds the 4-section market review (indices, events, sector rotation, watchlist) |
+| `src/market_analyzer.py` | Builds the 4-section market review; fetches 11 SPDR sector ETFs for 板块轮动 |
+| `src/core/market_profile.py` | `US_PROFILE` / `CN_PROFILE` — controls which sections are enabled per region |
 | `src/search_service.py` | Multi-provider news search; auto-rotates API keys; deduplicates results |
 | `src/stock_analyzer.py` | Technical analysis (MA/MACD/RSI/volume); produces `TrendAnalysisResult` |
 | `data_provider/base.py` | Strategy pattern fetcher manager; yfinance is the primary provider |
 | `src/storage.py` | SQLAlchemy ORM over SQLite (`data/analysis.db`) for OHLCV and analysis cache |
+| `src/core/daily_news.py` | Daily news digest; sends links + affected-ticker tags via `send_news_digest()` |
 | `src/core/signal_filter.py` | Consecutive-day filter: same buy signal required 2 days in a row to fire |
 | `src/core/budget_tracker.py` | Monthly deployment tracker; 45% first buy, 30% second buy rule |
 | `src/core/earnings_evaluator.py` | FMP earnings data → Gemini evaluation; gated by `EARNINGS_EVAL_ENABLED` |
@@ -79,6 +81,27 @@ Runtime state files (created automatically in `data/`):
 
 `GeminiAnalyzer` uses LiteLLM for provider-agnostic calls. The primary model is `LITELLM_MODEL` (default: `gemini/gemini-2.5-flash`), with automatic fallback to `GEMINI_MODEL_FALLBACK`. Responses are expected as structured JSON; `json_repair` handles malformed outputs. To swap providers, change `LITELLM_MODEL` in `.env` (e.g., `openai/gpt-4o`, `anthropic/claude-3-5-sonnet`).
 
+### Market Review Sections
+
+The `run_daily_review()` flow in `src/market_analyzer.py` produces 4 sections:
+
+1. **📊 指数表现** — SPY/QQQ/DJI/VIX/Gold from `_get_main_indices()`
+2. **📰 重大事件** — requires `search_service` to be initialized; gated in `main.py` on any of `finnhub_api_keys`, `fmp_api_keys`, `tavily_api_keys`, `brave_api_keys`, or `serpapi_keys`
+3. **🔄 板块轮动** — 11 SPDR sector ETFs (XLK, XLF, XLV, XLY, XLP, XLE, XLI, XLB, XLU, XLRE, XLC) fetched in `_get_us_sector_rankings()` via yfinance; sorted by today's `change_pct`
+4. **⚠️ 明日关注** — LLM inference from indices + news context
+
+### Portfolio Snapshot
+
+`send_portfolio_snapshot()` in `telegram_sender.py` shows **今日盈亏** (today's live P&L) — computed as `sum(position_value × today_change%)` across all holdings, so it always reconciles with the per-stock contributions shown below it. Requires each portfolio row to have `total_value` (or `shares` + `current_price`).
+
+### Daily News Digest
+
+`src/core/daily_news.py:run_daily_news()` sends via `send_news_digest()` (HTML parse mode) so `[title](url)` links render as clickable anchors in Telegram. Each headline also shows `(涉及: NVDA, MU)` from either the LLM's `affected_tickers` field or a regex keyword scan against `STOCK_LIST` + portfolio tickers.
+
 ### Telegram Output
 
-Messages are formatted in **HTML** (not Markdown) because it renders more reliably in Telegram mobile clients. All `TelegramSender` output uses `<b>`, `<i>`, `<code>` tags. The market review is written primarily in **Chinese**.
+Each message type has its own send method with the correct parse mode:
+- `send_market_review()` — HTML via `_markdown_to_html()`
+- `send_news_digest()` — HTML with `[text](url)` → `<a href>` conversion
+- `send_portfolio_snapshot()` — MarkdownV2
+- `send_text()` — MarkdownV2 (default for other messages)
