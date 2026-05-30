@@ -13,6 +13,8 @@ from typing import Optional, List, Any, Dict, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.v1.schemas.market_phase import MarketPhaseSummary
+
 
 class HistoryItem(BaseModel):
     """历史记录摘要（列表展示用）"""
@@ -118,6 +120,10 @@ class ReportMeta(BaseModel):
     current_price: Optional[float] = Field(None, description="分析时股价")
     change_pct: Optional[float] = Field(None, description="分析时涨跌幅(%)")
     model_used: Optional[str] = Field(None, description="分析使用的 LLM 模型")
+    market_phase_summary: Optional[MarketPhaseSummary] = Field(
+        None,
+        description="本次分析市场阶段低敏摘要",
+    )
 
 
 class ReportSummary(BaseModel):
