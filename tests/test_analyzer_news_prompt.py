@@ -317,6 +317,59 @@ class AnalyzerNewsPromptTestCase(unittest.TestCase):
             self.assertNotIn("### 今日行情", prompt)
             self.assertNotIn("| 收盘价 | 1870.0 元 |", prompt)
 
+    def test_format_prompt_does_not_label_realtime_overlay_as_previous_close(self) -> None:
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        for phase in ("premarket", "non_trading"):
+            context = {
+                "code": "600519",
+                "stock_name": "贵州茅台",
+                "date": "2026-03-27",
+                "today": {
+                    "close": 1882.5,
+                    "data_source": "realtime:tencent",
+                    "is_estimated": True,
+                    "estimated_fields": ["close", "open", "high", "low"],
+                },
+                "market_phase_context": {
+                    "phase": phase,
+                    "is_partial_bar": False,
+                    "warnings": [],
+                },
+            }
+
+            prompt = analyzer._format_prompt(context, "贵州茅台", news_context=None)
+
+            self.assertIn("### 最新行情", prompt)
+            self.assertIn("| 实时估算价 | 1882.5 元 |", prompt)
+            self.assertNotIn("### 上一完整交易日行情", prompt)
+            self.assertNotIn("| 上一完整交易日收盘价 | 1882.5 元 |", prompt)
+
+    def test_format_prompt_does_not_label_date_mismatch_as_previous_close(self) -> None:
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer()
+
+        context = {
+            "code": "600519",
+            "stock_name": "贵州茅台",
+            "date": "2026-03-27",
+            "today": {"close": 1882.5, "date": "2026-03-27"},
+            "market_phase_context": {
+                "phase": "premarket",
+                "effective_daily_bar_date": "2026-03-26",
+                "is_partial_bar": False,
+                "warnings": [],
+            },
+        }
+
+        prompt = analyzer._format_prompt(context, "贵州茅台", news_context=None)
+
+        self.assertIn("### 最新行情", prompt)
+        self.assertIn("| 最新价 | 1882.5 元 |", prompt)
+        self.assertNotIn("### 上一完整交易日行情", prompt)
+        self.assertNotIn("| 上一完整交易日收盘价 | 1882.5 元 |", prompt)
+
     def test_format_prompt_keeps_legacy_quote_labels_without_partial_intraday_context(self) -> None:
         with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
             analyzer = GeminiAnalyzer()
