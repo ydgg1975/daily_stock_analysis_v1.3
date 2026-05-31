@@ -750,6 +750,14 @@ P1a 在普通个股分析 pipeline、legacy Agent context 和 multi-agent `ctx.m
 
 P1a 本身不改变 Prompt 文案、API/Web/Bot 参数、报告结构、history/task status 稳定 metadata 或 quote freshness/data quality 语义；普通分析 history snapshot 和 Agent history snapshot 会剥离该运行态字段。后续 P1b 再定义可持久化 metadata 与任务状态展示契约。
 
+#### 市场阶段低敏 Metadata（Issue #1386 P1b）
+
+P1b 将 P1a 的 runtime `market_phase_context` 投影为稳定、低敏、可公开的 `market_phase_summary`，并写入 `analysis_history.context_snapshot` 顶层。历史详情、同步分析响应和 completed `/api/v1/analysis/status/{task_id}` 都通过 `report.meta.market_phase_summary` 返回同一份市场阶段元信息；completed 任务状态不新增 `TaskStatus` 顶层字段，只通过 `status.result.report.meta.market_phase_summary` 间接暴露。
+
+`market_phase_summary` 只包含市场、阶段、市场本地时间、session date、effective daily-bar date、交易日/开市/partial-bar 标记、开收盘分钟数、触发来源、分析意图和 warning code。它不暴露完整 `market_phase_context`，也不加入 quote freshness、fallback、stale 或 data_quality scoring 字段。`report.details.analysis_context_pack_overview` 仍表示 #1389 输入数据块质量摘要；API 返回的 `details.context_snapshot` 会剥离顶层 `market_phase_summary` 和 `analysis_context_pack_overview`，避免 raw snapshot 重复展示这些稳定公开字段。`SAVE_CONTEXT_SNAPSHOT=false` 或旧历史记录缺少 summary 时字段为空，报告仍正常返回。
+
+P1b 不改 Prompt、不新增 `analysis_phase` 请求参数、不做 Web 阶段标签或页面展示，也不覆盖 pending/processing TaskPanel、SSE 进行中事件、Bot、通知、`market_review` 或 P3 盘中数据质量字段。
+
 #### 市场阶段 Prompt 注入（Issue #1386 P2-min）
 
 P2-min 开始在已获得 `market_phase_context` 的分析路径中，把运行态市场阶段渲染为 LLM 可读的 Prompt 区块。普通分析、single Agent 和 multi-agent 会在 Prompt 中看到当前阶段、市场本地时间、最新可复用完整日线日期以及最小阶段约束：盘前不得描述“今日走势已经发生”，盘中 / 午间 / 临近收盘需说明最后一根日线可能未完成，盘后保留完整交易日复盘语义，非交易日或未知阶段保持保守表述。
@@ -764,7 +772,7 @@ P3 当时不新增 API/Web/Bot 参数，不写入 history/task status/report met
 
 #### AnalysisContextPack 低敏可见性（Issue #1389 P4）
 
-P4 新增 `report.details.analysis_context_pack_overview`，历史详情、同步分析响应和 completed `/api/v1/analysis/status/{task_id}` 都会返回同一份低敏 overview；Web 端报告页在“运行诊断”后、“策略点位”前展示数据块状态、来源、warning、missing reason、状态计数和新闻结果数。API 返回的 `details.context_snapshot` 会剥离顶层 `analysis_context_pack_overview`，避免透明度面板重复展示 raw snapshot。
+P4 新增 `report.details.analysis_context_pack_overview`，历史详情、同步分析响应和 completed `/api/v1/analysis/status/{task_id}` 都会返回同一份低敏 overview；Web 端报告页在“策略点位”和“资讯”之后展示默认折叠的数据块摘要，折叠头部展示可用数、缺失数、非零的其他状态计数和触发来源，展开后展示数据块状态、来源、warning、missing reason、状态计数和新闻结果数。API 返回的 `details.context_snapshot` 会剥离顶层 `analysis_context_pack_overview`，避免透明度面板重复展示 raw snapshot。
 
 该 overview 不包含完整 pack、`analysis_context_pack_summary` Prompt 字符串、`items.value`、新闻正文、`trend_result`、筹码或基本面原始 payload。`SAVE_CONTEXT_SNAPSHOT=false` 或旧历史记录缺少 overview 时字段为空，报告仍正常返回。本阶段不覆盖 pending/processing TaskPanel、SSE 进行中事件、通知摘要、Bot/Desktop 专属展示、`market_review` overview 或 P5 数据质量评分。
 
@@ -1240,7 +1248,7 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 - 📊 **实时进度** - 分析任务状态实时更新，支持多任务并行；普通分析链路在进入 LLM 阶段后会优先尝试 LiteLLM 流式生成，并通过任务 SSE 回灌更细粒度的 `message/progress`
 - 🗂️ **大盘复盘任务可见性** - 首页触发大盘复盘后会返回 `task_id` 并轮询 `GET /api/v1/analysis/status/{task_id}`，在进行中/完成/失败场景给出可见反馈，失败时直接透出报错内容
 - 🧾 **市场复盘历史可复用** - 大盘复盘任务会持久化到分析历史，`report_type` 为 `market_review`，可直接通过历史列表/详情打开对应 Markdown 或详情页，不会重新触发分析重算
-- 🧩 **输入数据块可见** - 普通分析报告会在历史详情、同步响应和 completed 任务状态中返回低敏 `AnalysisContextPack` overview，Web 报告页展示数据块状态、来源、缺失原因和降级摘要
+- 🧩 **输入数据块可见** - 普通分析报告会在历史详情、同步响应和 completed 任务状态中返回低敏 `AnalysisContextPack` overview，Web 报告页在策略点位和资讯之后默认折叠展示数据块状态、来源、缺失原因和降级摘要
 - 📈 **回测验证** - 评估历史分析准确率，查询方向胜率与模拟收益
 - 🔗 **API 文档** - 访问 `/docs` 查看 Swagger UI
 
