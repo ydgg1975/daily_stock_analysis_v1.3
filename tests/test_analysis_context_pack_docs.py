@@ -361,6 +361,8 @@ def test_full_guides_clarify_pack_summary_does_not_replace_legacy_payload_channe
     assert "折叠头部展示可用数、缺失数、非零的其他状态计数和触发来源" in guide
     assert "Web 报告页在策略点位和资讯之后默认折叠展示数据块状态" in guide
     assert "`details.context_snapshot` 会剥离顶层 `analysis_context_pack_overview`" in guide
+    assert "`report.meta.market_phase_summary`" in guide
+    assert "`details.context_snapshot` 会剥离顶层 `market_phase_summary`" in guide
 
     assert "in this new pack-summary section" in guide_en
     assert "not full `news.content`" in guide_en
@@ -371,3 +373,5 @@ def test_full_guides_clarify_pack_summary_does_not_replace_legacy_payload_channe
     assert "available/missing counts, non-zero other status counts, and trigger source" in guide_en
     assert "the Web report page shows the data-block summary collapsed after Strategy and News" in guide_en
     assert "API `details.context_snapshot` strips the top-level `analysis_context_pack_overview`" in guide_en
+    assert "`report.meta.market_phase_summary`" in guide_en
+    assert "API `details.context_snapshot` strips the top-level `market_phase_summary`" in guide_en
