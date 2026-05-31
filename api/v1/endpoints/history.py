@@ -62,18 +62,11 @@ router = APIRouter()
 def _normalize_code_for_grouping(code: str) -> str:
     """Normalize stock code for deduplication grouping.
 
-    Strips A-share suffixes (.SZ/.SH/.SS) and normalizes HK prefix case
-    so that 002460 and 002460.SZ are treated as the same stock.
+    Delegates to data_provider.base.normalize_stock_code which handles
+    SH600519, 600519.SH, HK00700, 00700.HK, BJ920748, etc.
     """
-    if not code:
-        return code
-    upper = code.upper()
-    for suffix in ('.SZ', '.SH', '.SS'):
-        if upper.endswith(suffix):
-            return code[:-len(suffix)]
-    if code.lower().startswith('hk'):
-        return code.lower()
-    return code
+    from data_provider.base import normalize_stock_code
+    return normalize_stock_code(code or "")
 
 
 @router.get(
