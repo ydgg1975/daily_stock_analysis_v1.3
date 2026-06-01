@@ -1122,10 +1122,6 @@ class Config:
             if (c or "").strip()
         ]
         
-        # 如果没有配置，使用默认的示例股票
-        if not stock_list:
-            stock_list = ['600519', '000001', '300750']
-        
         # === LiteLLM multi-key parsing ===
         # GEMINI_API_KEYS (comma-separated) > GEMINI_API_KEY (single)
         _gemini_keys_raw = os.getenv('GEMINI_API_KEYS', '')
@@ -2376,9 +2372,6 @@ class Config:
             if (c or "").strip()
         ]
 
-        if not stock_list:
-            stock_list = ['000001']
-
         self.stock_list = stock_list
     
     def validate_structured(self) -> List[ConfigIssue]:
@@ -2400,7 +2393,7 @@ class Config:
         if not self.stock_list:
             issues.append(ConfigIssue(
                 severity="error",
-                message="未配置自选股列表 (STOCK_LIST)",
+                message="未配置 STOCK_LIST。请设置至少一个股票代码，例如：600519,hk00700,AAPL。",
                 field="STOCK_LIST",
             ))
         elif self.stock_email_groups:
@@ -2452,10 +2445,12 @@ class Config:
             issues.append(ConfigIssue(
                 severity="error",
                 message=(
-                    "未配置任何可用的 AI 模型接入（高级模型路由配置 / 渠道 / API Key），"
-                    "AI 分析功能将不可用"
+                    "未配置任何 AI 模型 API Key。请至少配置 ANSPIRE_API_KEYS、"
+                    "AIHUBMIX_KEY、GEMINI_API_KEY、ANTHROPIC_API_KEY、"
+                    "OPENAI_API_KEY 或 DEEPSEEK_API_KEY 中的一个，或配置 "
+                    "LITELLM_CONFIG / LLM_CHANNELS 可用模型渠道。"
                 ),
-                field="LITELLM_CONFIG",
+                field="ANSPIRE_API_KEYS",
             ))
         elif not self.litellm_model:
             issues.append(ConfigIssue(
@@ -2596,6 +2591,49 @@ class Config:
                 message="未配置通知渠道，将不发送推送通知",
                 field="WECHAT_WEBHOOK_URL",
             ))
+
+        has_telegram_token = bool((self.telegram_bot_token or "").strip())
+        has_telegram_chat_id = bool((self.telegram_chat_id or "").strip())
+        if has_telegram_token != has_telegram_chat_id:
+            issues.append(ConfigIssue(
+                severity="error",
+                message="Telegram 通知配置不完整：TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 必须同时配置。",
+                field="TELEGRAM_CHAT_ID" if has_telegram_token else "TELEGRAM_BOT_TOKEN",
+            ))
+
+        has_email_sender = bool((self.email_sender or "").strip())
+        has_email_password = bool((self.email_password or "").strip())
+        if has_email_sender != has_email_password:
+            issues.append(ConfigIssue(
+                severity="error",
+                message="邮件通知配置不完整：EMAIL_SENDER 和 EMAIL_PASSWORD 必须同时配置。",
+                field="EMAIL_PASSWORD" if has_email_sender else "EMAIL_SENDER",
+            ))
+
+        def _warn_if_webhook_url_invalid(field: str, value: Optional[str]) -> None:
+            raw_url = (value or "").strip()
+            if not raw_url:
+                return
+            parsed = urlparse(raw_url)
+            if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
+                return
+            issues.append(ConfigIssue(
+                severity="warning",
+                message=f"{field} 看起来不是有效 URL，请确认是否以 http:// 或 https:// 开头。",
+                field=field,
+            ))
+
+        for field, value in (
+            ("WECHAT_WEBHOOK_URL", self.wechat_webhook_url),
+            ("FEISHU_WEBHOOK_URL", self.feishu_webhook_url),
+            ("DISCORD_WEBHOOK_URL", self.discord_webhook_url),
+            ("SLACK_WEBHOOK_URL", self.slack_webhook_url),
+            ("ASTRBOT_URL", self.astrbot_url),
+        ):
+            _warn_if_webhook_url_invalid(field, value)
+
+        for custom_url in self.custom_webhook_urls:
+            _warn_if_webhook_url_invalid("CUSTOM_WEBHOOK_URLS", custom_url)
 
         if self.ntfy_url and not _has_ntfy_topic_endpoint(self.ntfy_url):
             issues.append(ConfigIssue(
