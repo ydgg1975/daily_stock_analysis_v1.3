@@ -13,6 +13,7 @@
 
 import logging
 from typing import Optional
+import re
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, Depends
 
@@ -50,33 +51,60 @@ ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
 
 
 def _read_watchlist_codes(service: SystemConfigService) -> list:
-    """Read current STOCK_LIST codes, preserving original order."""
+    """Read and normalize STOCK_LIST codes, deduplicating by canonical form."""
     config_data = service.get_config(include_schema=False)
     stock_list_str = ""
     for item in config_data.get("items", []):
         if item.get("key") == "STOCK_LIST":
             stock_list_str = str(item.get("value", ""))
             break
-    return [c.strip() for c in stock_list_str.split(",") if c.strip()]
+    raw = [c.strip() for c in stock_list_str.split(",") if c.strip()]
+    seen = set()
+    normalized = []
+    for code in raw:
+        canonical = normalize_stock_code(code)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            normalized.append(canonical)
+    return normalized
 
 
 def _write_watchlist_codes(service: SystemConfigService, codes: list) -> None:
-    """Persist normalized stock codes to STOCK_LIST."""
+    """Persist deduplicated stock codes to STOCK_LIST."""
     config_data = service.get_config(include_schema=False)
     config_version = config_data.get("config_version", "")
-    new_value = ",".join(codes)
+    seen = set()
+    deduped = []
+    for code in codes:
+        canonical = normalize_stock_code(code)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            deduped.append(canonical)
     service.update(
         config_version=config_version,
-        items=[{"key": "STOCK_LIST", "value": new_value}],
+        items=[{"key": "STOCK_LIST", "value": ",".join(deduped)}],
         mask_token="******",
         reload_now=True,
     )
 
 
-def _validate_and_normalize_stock_code(code: str) -> str:
-    """Validate stock code format and return normalized form.
+# Stock code validation patterns (aligned with frontend validateStockCode)
+_STOCK_CODE_RE = re.compile(
+    r"^(?:\d{6}"                              # A-share 6-digit
+    r"|(?:SH|SZ|BJ)\d{6}"                     # exchange-prefixed A-share
+    r"|\d{6}\.(?:SH|SZ|SS|BJ)"                # exchange-suffixed A-share
+    r"|\d{1,5}\.HK"                           # HK suffix format
+    r"|HK\d{1,5}"                             # HK prefix format
+    r"|[A-Z]{1,5}(?:\.(?:US|[A-Z]))?"         # US ticker
+    r")$",
+    re.IGNORECASE,
+)
 
-    Raises HTTPException(400) if the code does not look like a valid stock code.
+
+def _validate_and_normalize_stock_code(code: str) -> str:
+    """Validate stock code format and return canonical form.
+
+    Raises HTTPException(400) if the code does not match supported formats.
     """
     stripped = code.strip()
     if not stripped:
@@ -84,8 +112,7 @@ def _validate_and_normalize_stock_code(code: str) -> str:
             status_code=400,
             detail={"error": "invalid_stock_code", "message": "股票代码不能为空"},
         )
-    normalized = normalize_stock_code(stripped)
-    if not normalized or len(normalized) < 2:
+    if not _STOCK_CODE_RE.match(stripped):
         raise HTTPException(
             status_code=400,
             detail={
@@ -93,7 +120,7 @@ def _validate_and_normalize_stock_code(code: str) -> str:
                 "message": f"'{stripped}' 不是合法的股票代码格式",
             },
         )
-    return normalized
+    return normalize_stock_code(stripped)
 
 
 @router.post(
