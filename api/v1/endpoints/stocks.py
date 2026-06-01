@@ -51,38 +51,23 @@ ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
 
 
 def _read_watchlist_codes(service: SystemConfigService) -> list:
-    """Read and normalize STOCK_LIST codes, deduplicating by canonical form."""
+    """Read STOCK_LIST codes as-is (no normalization)."""
     config_data = service.get_config(include_schema=False)
     stock_list_str = ""
     for item in config_data.get("items", []):
         if item.get("key") == "STOCK_LIST":
             stock_list_str = str(item.get("value", ""))
             break
-    raw = [c.strip() for c in stock_list_str.split(",") if c.strip()]
-    seen = set()
-    normalized = []
-    for code in raw:
-        canonical = normalize_stock_code(code)
-        if canonical and canonical not in seen:
-            seen.add(canonical)
-            normalized.append(canonical)
-    return normalized
+    return [c.strip() for c in stock_list_str.split(",") if c.strip()]
 
 
 def _write_watchlist_codes(service: SystemConfigService, codes: list) -> None:
-    """Persist deduplicated stock codes to STOCK_LIST."""
+    """Persist stock codes to STOCK_LIST as-is (no normalization)."""
     config_data = service.get_config(include_schema=False)
     config_version = config_data.get("config_version", "")
-    seen = set()
-    deduped = []
-    for code in codes:
-        canonical = normalize_stock_code(code)
-        if canonical and canonical not in seen:
-            seen.add(canonical)
-            deduped.append(canonical)
     service.update(
         config_version=config_version,
-        items=[{"key": "STOCK_LIST", "value": ",".join(deduped)}],
+        items=[{"key": "STOCK_LIST", "value": ",".join(codes)}],
         mask_token="******",
         reload_now=True,
     )
@@ -359,12 +344,13 @@ def add_to_watchlist(
     service: SystemConfigService = Depends(get_system_config_service),
 ) -> WatchlistResponse:
     try:
-        normalized = _validate_and_normalize_stock_code(request.stock_code)
+        validated = _validate_and_normalize_stock_code(request.stock_code)
         codes = _read_watchlist_codes(service)
-        if normalized not in codes:
-            codes.append(normalized)
+        normalized_existing = [normalize_stock_code(c) for c in codes]
+        if validated not in normalized_existing:
+            codes.append(request.stock_code.strip())
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已加入 {normalized}")
+        return WatchlistResponse(stock_codes=codes, message=f"已加入 {request.stock_code.strip()}")
     except HTTPException:
         raise
     except Exception as e:
@@ -391,12 +377,14 @@ def remove_from_watchlist(
     service: SystemConfigService = Depends(get_system_config_service),
 ) -> WatchlistResponse:
     try:
-        normalized = _validate_and_normalize_stock_code(request.stock_code)
+        validated = _validate_and_normalize_stock_code(request.stock_code)
         codes = _read_watchlist_codes(service)
-        if normalized in codes:
-            codes.remove(normalized)
+        normalized_existing = [normalize_stock_code(c) for c in codes]
+        if validated in normalized_existing:
+            idx = normalized_existing.index(validated)
+            removed = codes.pop(idx)
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已移除 {normalized}")
+        return WatchlistResponse(stock_codes=codes, message=f"已移除 {request.stock_code.strip()}")
     except HTTPException:
         raise
     except Exception as e:
