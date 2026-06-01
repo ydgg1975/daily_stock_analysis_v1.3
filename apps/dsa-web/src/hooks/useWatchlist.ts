@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { systemConfigApi } from '../api/systemConfig';
+import { normalizeStockCode } from '../utils/stockCode';
 
 export interface UseWatchlistReturn {
   watchlistCodes: string[];
@@ -64,7 +65,7 @@ export function useWatchlist(): UseWatchlistReturn {
   }, []);
 
   const isInWatchlist = useCallback(
-    (stockCode: string) => codes.includes(stockCode),
+    (stockCode: string) => codes.includes(normalizeStockCode(stockCode)),
     [codes],
   );
 
