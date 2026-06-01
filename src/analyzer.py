@@ -289,7 +289,30 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
             return not value.strip()
         return False
 
-    placeholder = get_placeholder_text(getattr(result, "report_language", "zh"))
+    report_language = normalize_report_language(getattr(result, "report_language", "zh"))
+    placeholder = get_placeholder_text(report_language)
+    phase_decision_placeholders = {
+        "dashboard.phase_decision.action_window": (
+            "Model did not provide a phase action window"
+            if report_language == "en"
+            else "模型未提供阶段化行动窗口"
+        ),
+        "dashboard.phase_decision.immediate_action": (
+            "Model did not provide a phase-aware immediate action"
+            if report_language == "en"
+            else "模型未提供阶段化即时动作"
+        ),
+        "dashboard.phase_decision.next_check_time": (
+            "Model did not provide a next check point"
+            if report_language == "en"
+            else "模型未提供下一次检查点"
+        ),
+        "dashboard.phase_decision.confidence_reason": (
+            "Model did not provide a phase confidence rationale"
+            if report_language == "en"
+            else "模型未提供阶段化置信度理由"
+        ),
+    }
     for field in missing_fields:
         if field == "sentiment_score":
             result.sentiment_score = 50
@@ -344,11 +367,17 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
                 phase_decision = {}
                 result.dashboard["phase_decision"] = phase_decision
             if field == "dashboard.phase_decision.phase_context":
-                phase_decision.setdefault("phase_context", {})
+                if not isinstance(phase_decision.get("phase_context"), dict):
+                    phase_decision["phase_context"] = {}
             elif field == "dashboard.phase_decision.watch_conditions":
-                phase_decision.setdefault("watch_conditions", [])
+                if not isinstance(phase_decision.get("watch_conditions"), list):
+                    phase_decision["watch_conditions"] = []
             elif field == "dashboard.phase_decision.data_limitations":
-                phase_decision.setdefault("data_limitations", [])
+                if not isinstance(phase_decision.get("data_limitations"), list):
+                    phase_decision["data_limitations"] = []
+            elif field in phase_decision_placeholders:
+                if _is_blank_text(phase_decision.get(field.rsplit(".", 1)[-1])):
+                    phase_decision[field.rsplit(".", 1)[-1]] = phase_decision_placeholders[field]
 
 
 # ---------- chip_structure fallback (Issue #589) ----------

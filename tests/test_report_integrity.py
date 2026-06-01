@@ -451,6 +451,45 @@ class TestApplyPlaceholderFill(unittest.TestCase):
         self.assertEqual(result.dashboard["intelligence"]["risk_alerts"], ["跌破支撑需减仓"])
         self.assertEqual(result.dashboard["battle_plan"]["sniper_points"]["stop_loss"], "待补充")
 
+    def test_phase_decision_placeholder_fill_satisfies_integrity_contract(self) -> None:
+        """Phase placeholders close the retry-exhausted integrity contract without fake conditions."""
+        result = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="震荡",
+            sentiment_score=50,
+            operation_advice="持有",
+            analysis_summary="已有摘要",
+            decision_type="hold",
+            dashboard={
+                "core_conclusion": {"one_sentence": "持有观望"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "100"}},
+                "phase_decision": {
+                    "phase_context": "invalid",
+                    "watch_conditions": "invalid",
+                    "data_limitations": None,
+                },
+            },
+        )
+
+        ok, missing = check_content_integrity(result, require_phase_decision=True)
+        self.assertFalse(ok)
+
+        apply_placeholder_fill(result, missing)
+
+        ok, missing = check_content_integrity(result, require_phase_decision=True)
+        self.assertTrue(ok)
+        self.assertEqual(missing, [])
+        phase_decision = result.dashboard["phase_decision"]
+        self.assertEqual(phase_decision["phase_context"], {})
+        self.assertEqual(phase_decision["watch_conditions"], [])
+        self.assertEqual(phase_decision["data_limitations"], [])
+        self.assertEqual(phase_decision["action_window"], "模型未提供阶段化行动窗口")
+        self.assertEqual(phase_decision["immediate_action"], "模型未提供阶段化即时动作")
+        self.assertEqual(phase_decision["next_check_time"], "模型未提供下一次检查点")
+        self.assertEqual(phase_decision["confidence_reason"], "模型未提供阶段化置信度理由")
+
 
 class TestIntegrityRetryPrompt(unittest.TestCase):
     """Retry prompt construction tests."""
