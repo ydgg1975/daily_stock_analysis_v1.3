@@ -647,6 +647,47 @@ class TestAgentResultConversion(unittest.TestCase):
         self.assertIn("agent:gemini", result.data_sources)
         self.assertIsNotNone(result.dashboard)
 
+    def test_convert_preserves_top_level_phase_decision_with_nested_dashboard(self):
+        """Agent top-level phase_decision should survive nested dashboard unwrapping."""
+        pipeline = self._make_pipeline()
+
+        from src.agent.executor import AgentResult
+        from src.enums import ReportType
+
+        dashboard = {
+            "stock_name": "贵州茅台",
+            "sentiment_score": 80,
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
+            "decision_type": "hold",
+            "confidence_level": "中",
+            "phase_decision": {
+                "phase_context": {"phase": "intraday", "market": "cn"},
+                "action_window": "盘中跟踪",
+                "immediate_action": "等待确认",
+                "watch_conditions": ["放量突破"],
+                "next_check_time": "14:30",
+                "confidence_reason": "等待确认",
+                "data_limitations": [],
+            },
+            "dashboard": {"core_conclusion": {"one_sentence": "看好"}},
+            "analysis_summary": "Testing",
+        }
+
+        agent_result = AgentResult(
+            success=True,
+            content=json.dumps(dashboard),
+            dashboard=dashboard,
+            provider="gemini",
+        )
+
+        result = pipeline._agent_result_to_analysis_result(
+            agent_result, "600519", "贵州茅台", ReportType.SIMPLE, "q-phase"
+        )
+
+        self.assertEqual(result.dashboard["phase_decision"]["phase_context"]["phase"], "intraday")
+        self.assertEqual(result.dashboard["phase_decision"]["watch_conditions"], ["放量突破"])
+
     def test_convert_failed_dashboard(self):
         """Failed AgentResult should produce a minimal AnalysisResult."""
         pipeline = self._make_pipeline()

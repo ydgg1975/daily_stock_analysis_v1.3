@@ -163,6 +163,33 @@ class TestCheckContentIntegrity(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("dashboard.intelligence.risk_alerts", missing)
 
+    def test_phase_decision_missing_only_when_required(self) -> None:
+        """Phase decision fields are required only for phase-aware analysis."""
+        result = AnalysisResult(
+            code="600519",
+            name="贵州茅台",
+            trend_prediction="看多",
+            sentiment_score=70,
+            operation_advice="持有",
+            analysis_summary="稳健",
+            decision_type="hold",
+            dashboard={
+                "core_conclusion": {"one_sentence": "持有"},
+                "intelligence": {"risk_alerts": []},
+                "battle_plan": {"sniper_points": {"stop_loss": "110"}},
+            },
+        )
+
+        ok, missing = check_content_integrity(result)
+        self.assertTrue(ok)
+        self.assertEqual(missing, [])
+
+        ok, missing = check_content_integrity(result, require_phase_decision=True)
+        self.assertFalse(ok)
+        self.assertIn("dashboard.phase_decision.phase_context", missing)
+        self.assertIn("dashboard.phase_decision.watch_conditions", missing)
+        self.assertIn("dashboard.phase_decision.data_limitations", missing)
+
     def test_fail_when_risk_alerts_is_none(self) -> None:
         """Integrity fails when risk_alerts is None."""
         result = AnalysisResult(
