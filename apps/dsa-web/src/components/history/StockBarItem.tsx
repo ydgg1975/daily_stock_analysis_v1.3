@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Badge } from '../common';
+import { Badge, Button } from '../common';
 import type { StockBarItem as StockBarItemType } from '../../types/analysis';
 import { getSentimentColor } from '../../types/analysis';
 import { formatDateTime } from '../../utils/format';
@@ -9,6 +9,8 @@ interface StockBarItemProps {
   item: StockBarItemType;
   isViewing: boolean;
   onClick: (recordId: number) => void;
+  onDelete?: (stockCode: string) => void;
+  isDeleting?: boolean;
   isMarketReview?: boolean;
 }
 
@@ -26,6 +28,8 @@ export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
   item,
   isViewing,
   onClick,
+  onDelete,
+  isDeleting = false,
   isMarketReview = false,
 }) => {
   const sentimentColor = item.sentimentScore !== undefined ? getSentimentColor(item.sentimentScore) : null;
@@ -95,6 +99,23 @@ export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
                   {operationLabel} {item.sentimentScore}
                 </Badge>
               ) : null}
+              {onDelete && !isMarketReview && (
+                <Button
+                  variant="ghost"
+                  size="xsm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.stockCode);
+                  }}
+                  disabled={isDeleting}
+                  className="opacity-0 group-hover/item:opacity-100 transition-opacity h-6 w-6 p-0 flex items-center justify-center"
+                  aria-label={`删除 ${item.stockName || item.stockCode} 历史记录`}
+                >
+                  <svg className="h-3.5 w-3.5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </Button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 mt-1">

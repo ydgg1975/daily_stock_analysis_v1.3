@@ -533,7 +533,7 @@ describe('HomePage', () => {
     await waitFor(() => {
       expect(screen.queryByText('暂无更多同股历史分析')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /贵州茅台/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /贵州茅台/ }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/2次/)).toBeInTheDocument();
 
     const historyCalls = vi.mocked(historyApi.getList).mock.calls.filter((call) => call[0]?.stockCode === '600519');

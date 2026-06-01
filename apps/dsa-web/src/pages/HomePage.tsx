@@ -4,6 +4,7 @@ import { BarChart3, Check, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getParsedApiError, type ParsedApiError } from '../api/error';
 import { analysisApi } from '../api/analysis';
+import { historyApi } from '../api/history';
 import { agentApi, type SkillInfo } from '../api/agent';
 import { systemConfigApi } from '../api/systemConfig';
 import { ApiErrorAlert, Button, EmptyState, InlineAlert } from '../components/common';
@@ -320,6 +321,21 @@ const HomePage: React.FC = () => {
     setSidebarOpen(false);
   }, [selectHistoryItem]);
 
+  const [isDeletingStock, setIsDeletingStock] = useState(false);
+  const handleDeleteStock = useCallback(async (stockCode: string) => {
+    if (isDeletingStock) return;
+    setIsDeletingStock(true);
+    try {
+      await historyApi.deleteByCode(stockCode);
+      await refreshStockBar();
+      await refreshHistory(true);
+    } catch {
+      // error silently ignored
+    } finally {
+      setIsDeletingStock(false);
+    }
+  }, [isDeletingStock, refreshStockBar, refreshHistory]);
+
   const handleSubmitAnalysis = useCallback(
     (
       stockCode?: string,
@@ -527,6 +543,8 @@ const HomePage: React.FC = () => {
           selectedStockCode={selectedReport?.meta.stockCode}
           selectedRecordId={selectedReport?.meta.id}
           onItemClick={handleHistoryItemClick}
+          onDeleteStock={handleDeleteStock}
+          isDeleting={isDeletingStock}
           className="flex-1 overflow-hidden"
         />
       </div>
@@ -536,6 +554,8 @@ const HomePage: React.FC = () => {
       stockBarItems,
       isLoadingStockBar,
       handleHistoryItemClick,
+      handleDeleteStock,
+      isDeletingStock,
       selectedReport?.meta.stockCode,
       selectedReport?.meta.id,
     ],

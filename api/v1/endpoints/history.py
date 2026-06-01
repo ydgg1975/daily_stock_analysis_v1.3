@@ -156,6 +156,37 @@ def get_history_list(
 
 
 @router.delete(
+    "/by-code/{stock_code}",
+    response_model=DeleteHistoryResponse,
+    responses={
+        200: {"description": "删除成功"},
+        404: {"description": "未找到记录", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="按股票代码删除历史分析记录",
+    description="删除指定股票代码的所有分析历史记录（支持代码变体归一化匹配）",
+)
+def delete_history_by_code(
+    stock_code: str,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+) -> DeleteHistoryResponse:
+    try:
+        candidates = HistoryService._history_code_filter_candidates(stock_code)
+        records, _ = db_manager.get_analysis_history_paginated(code=candidates, limit=10000)
+        record_ids = [r.id for r in records if r.id is not None]
+        if not record_ids:
+            return DeleteHistoryResponse(deleted=0)
+        deleted = db_manager.delete_analysis_history_records(record_ids)
+        return DeleteHistoryResponse(deleted=deleted)
+    except Exception as e:
+        logger.error(f"按股票代码删除历史记录失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "internal_error", "message": f"删除失败: {str(e)}"},
+        )
+
+
+@router.delete(
     "",
     response_model=DeleteHistoryResponse,
     responses={
@@ -267,6 +298,7 @@ def get_stock_bar(
                 )
             )
 
+        items = items[:limit]
         return StockBarResponse(total=len(items), items=items)
 
     except Exception as e:
