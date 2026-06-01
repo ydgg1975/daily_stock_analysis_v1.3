@@ -52,6 +52,7 @@ from src.utils.data_processing import normalize_model_used
 from src.notification_sender import (
     AstrbotSender,
     CustomWebhookSender,
+    DingtalkSender,
     DiscordSender,
     EmailSender,
     FeishuSender,
@@ -109,6 +110,7 @@ class NotificationChannel(Enum):
     DISCORD = "discord"    # Discord 机器人 (Bot)
     SLACK = "slack"        # Slack
     ASTRBOT = "astrbot"
+    DINGTALK = "dingtalk"  # 钉钉自定义机器人
     UNKNOWN = "unknown"    # 未知
 
 
@@ -159,6 +161,7 @@ class ChannelDetector:
             NotificationChannel.DISCORD: "Discord机器人",
             NotificationChannel.SLACK: "Slack",
             NotificationChannel.ASTRBOT: "ASTRBOT机器人",
+            NotificationChannel.DINGTALK: "钉钉",
             NotificationChannel.UNKNOWN: "未知渠道",
         }
         return names.get(channel, "未知渠道")
@@ -168,6 +171,7 @@ class NotificationService(
     AstrbotSender,
     CustomWebhookSender,
     DiscordSender,
+    DingtalkSender,
     EmailSender,
     FeishuSender,
     GotifySender,
@@ -225,6 +229,7 @@ class NotificationService(
         AstrbotSender.__init__(self, config)
         CustomWebhookSender.__init__(self, config)
         DiscordSender.__init__(self, config)
+        DingtalkSender.__init__(self, config)
         EmailSender.__init__(self, config)
         FeishuSender.__init__(self, config)
         GotifySender.__init__(self, config)
@@ -408,6 +413,9 @@ class NotificationService(
 
         if getattr(config, "astrbot_url", None):
             channels.append(NotificationChannel.ASTRBOT)
+
+        if getattr(config, "dingtalk_webhook_url", None):
+            channels.append(NotificationChannel.DINGTALK)
 
         return channels
 
@@ -2120,6 +2128,8 @@ class NotificationService(
             return self.send_to_slack(content)
         if channel == NotificationChannel.ASTRBOT:
             return self.send_to_astrbot(content)
+        if channel == NotificationChannel.DINGTALK:
+            return self.send_to_dingtalk(content)
         logger.warning(f"不支持的通知渠道: {channel}")
         return False
 

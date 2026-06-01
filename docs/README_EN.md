@@ -15,7 +15,7 @@
 
 **AI-powered stock analysis system for A-shares / Hong Kong / US stocks**
 
-Analyze your watchlist daily -> generate a decision dashboard -> push to Telegram / Discord / Slack / Email / WeChat Work / Feishu.
+Analyze your watchlist daily -> generate a decision dashboard -> push to Telegram / Discord / Slack / Email / WeChat Work / Feishu / DingTalk.
 
 [**Product Preview**](#-product-preview) · [**Key Features**](#-key-features) · [**Quick Start**](#-quick-start) · [**Sample Output**](#-sample-output) · [**Documentation Index**](./INDEX_EN.md) · [**Full Guide**](./full-guide_EN.md)
 
@@ -47,7 +47,7 @@ English | [简体中文](../README.md) | [繁體中文](README_CHT.md)
 | Web / desktop workspace | Manual analysis, task progress, history, full Markdown reports, backtest, portfolio, settings, and light/dark themes |
 | Agent strategy chat | Multi-turn Q&A with 15 built-in strategies across Web/Bot/API |
 | Smart import & autocomplete | Image, CSV/Excel, clipboard import; code/name/pinyin/alias autocomplete |
-| Automation & notifications | GitHub Actions, Docker, local scheduler, FastAPI service, and WeChat Work / Feishu / Telegram / Discord / Slack / Email delivery |
+| Automation & notifications | GitHub Actions, Docker, local scheduler, FastAPI service, and WeChat Work / Feishu / DingTalk / Telegram / Discord / Slack / Email delivery |
 
 > Detailed fields, fundamental P0 timeout semantics, trading rules, data-source priority, Web/API behavior, and troubleshooting live in the [Full Guide](./full-guide_EN.md).
 
@@ -97,6 +97,7 @@ Start with one provider and one API key. For multi-model routing, image recognit
 |-------------|-------------|
 | `WECHAT_WEBHOOK_URL` | WeChat Work bot |
 | `FEISHU_WEBHOOK_URL` | Feishu bot |
+| `DINGTALK_WEBHOOK_URL` | DingTalk bot |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram |
 | `DISCORD_WEBHOOK_URL` | Discord webhook |
 | `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` | Slack bot |

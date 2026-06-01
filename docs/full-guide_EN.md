@@ -96,11 +96,15 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 | `SERVERCHAN3_SENDKEY` | ServerChan v3 Sendkey ([Get here](https://sc3.ft07.com/), mobile app push service) | Optional |
 | `ASTRBOT_URL` | AstrBot Webhook URL | Optional |
 | `ASTRBOT_TOKEN` | Optional AstrBot Bearer Token | Optional |
+| `DINGTALK_WEBHOOK_URL` | DingTalk Bot Webhook URL | Optional |
+| `DINGTALK_WEBHOOK_SECRET` | DingTalk signing secret (required when "Signature" security is enabled) | Optional |
+| `DINGTALK_WEBHOOK_KEYWORD` | DingTalk security keyword (required when "Keyword" security is enabled) | Optional |
+| `DINGTALK_MAX_BYTES` | DingTalk per-message byte limit (default 20000) | Optional |
 | `NTFY_URL` | Full ntfy topic endpoint, must include topic path, e.g. `https://ntfy.sh/my-topic` | Optional |
 | `NTFY_TOKEN` | Optional ntfy Bearer Token | Optional |
 | `GOTIFY_URL` | Gotify server base URL, without `/message`; the sender appends `/message` | Optional |
 | `GOTIFY_TOKEN` | Gotify application token sent with the `X-Gotify-Key` header | Optional |
-| `CUSTOM_WEBHOOK_URLS` | Custom Webhook (supports DingTalk, etc., comma-separated) | Optional |
+| `CUSTOM_WEBHOOK_URLS` | Custom Webhook (Discord, Slack, Bark, etc., comma-separated) | Optional |
 | `CUSTOM_WEBHOOK_BEARER_TOKEN` | Bearer Token for custom webhooks (for authenticated webhooks) | Optional |
 | `CUSTOM_WEBHOOK_BODY_TEMPLATE` | Custom Webhook JSON body template for AstrBot, NapCat, or self-hosted services with special payloads | Optional |
 | `WEBHOOK_VERIFY_SSL` | HTTPS certificate verification for webhook-style notification requests that read this setting (default true). Set to false for self-signed certs. WARNING: Disabling has serious security risk (MITM), use only on trusted internal networks | Optional |
@@ -238,6 +242,10 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 | `CUSTOM_WEBHOOK_URLS` | Custom Webhook (comma-separated) | Optional |
 | `CUSTOM_WEBHOOK_BEARER_TOKEN` | Custom Webhook Bearer Token | Optional |
 | `WEBHOOK_VERIFY_SSL` | HTTPS certificate verification for webhook-style notification requests that read this setting (default true). Set to false for self-signed certs. WARNING: Disabling has serious security risk | Optional |
+| `DINGTALK_WEBHOOK_URL` | DingTalk Bot Webhook URL | Optional |
+| `DINGTALK_WEBHOOK_SECRET` | DingTalk signing secret (required when "Signature" security is enabled) | Optional |
+| `DINGTALK_WEBHOOK_KEYWORD` | DingTalk security keyword (required when "Keyword" security is enabled) | Optional |
+| `DINGTALK_MAX_BYTES` | DingTalk per-message byte limit (default 20000) | Optional |
 | `PUSHOVER_USER_KEY` | Pushover User Key | Optional |
 | `PUSHOVER_API_TOKEN` | Pushover API Token | Optional |
 | `NTFY_URL` | Full ntfy topic endpoint, must include topic path, e.g. `https://ntfy.sh/my-topic` | Optional |
@@ -248,7 +256,7 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 | `SERVERCHAN3_SENDKEY` | ServerChan v3 Sendkey | Optional |
 | `ASTRBOT_URL` | AstrBot Webhook URL | Optional |
 | `ASTRBOT_TOKEN` | Optional AstrBot Bearer Token | Optional |
-| `NOTIFICATION_REPORT_CHANNELS` | Report route channels, comma-separated. Allowed values: wechat,feishu,telegram,email,pushover,ntfy,gotify,pushplus,serverchan3,custom,discord,slack,astrbot | Optional |
+| `NOTIFICATION_REPORT_CHANNELS` | Report route channels, comma-separated. Allowed values: wechat,feishu,telegram,email,pushover,ntfy,gotify,pushplus,serverchan3,custom,discord,slack,astrbot,dingtalk | Optional |
 | `NOTIFICATION_ALERT_CHANNELS` | Alert route channels, comma-separated. Empty keeps all configured channels | Optional |
 | `NOTIFICATION_SYSTEM_ERROR_CHANNELS` | Reserved system_error route channels, comma-separated. Empty keeps all configured channels | Optional |
 | `NOTIFICATION_DEDUP_TTL_SECONDS` | Dedup TTL in seconds. `0` disables dedup | Optional |
@@ -747,7 +755,6 @@ EMAIL_GROUP_2=user2@example.com
 ### Custom Webhook
 
 Supports any POST JSON Webhook, including:
-- DingTalk Bot
 - Discord Webhook
 - Slack Webhook
 - Bark (iOS push)
@@ -787,6 +794,35 @@ or `group_id`:
 ```env
 CUSTOM_WEBHOOK_BODY_TEMPLATE={"user_id":123456,"message":$content_json}
 ```
+
+### DingTalk
+
+DingTalk custom bot is now a first-class notification channel with its own configuration entry (no longer requires `CUSTOM_WEBHOOK_URLS`).
+
+**Minimum viable config:**
+
+```env
+DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=your_token_here
+```
+
+**Step-by-step setup:**
+
+1. **Add a Custom Bot in your DingTalk group**:
+   - Open the target group → Group Settings → Smart Group Assistants → Add Robot → Custom
+   - Enter a name for the bot, then copy the generated **Webhook URL** (format: `https://oapi.dingtalk.com/robot/send?access_token=...`）
+2. Set `DINGTALK_WEBHOOK_URL` to the URL you just copied.
+3. Check the bot's **Security Settings** and add the corresponding config if any extra option is enabled:
+   - **No security**: only `DINGTALK_WEBHOOK_URL` is needed.
+   - **Signature enabled**: copy the signing secret into `DINGTALK_WEBHOOK_SECRET`. Both sides must be enabled or disabled together, otherwise DingTalk rejects the request.
+   - **Keyword enabled**: copy the keyword into `DINGTALK_WEBHOOK_KEYWORD`. The app prepends it to every message automatically; no need to change report templates.
+
+**Delivery behavior:**
+
+DingTalk sends reports with Markdown formatting (headings, bold, lists). Single message is limited to ~20KB by default (`DINGTALK_MAX_BYTES=20000`). Long content is automatically segmented and sent in chunks.
+
+**Notes:**
+- `DINGTALK_APP_KEY` / `DINGTALK_APP_SECRET` / `DINGTALK_STREAM_ENABLED` are for DingTalk Stream Bot (interactive mode — bot receives and replies to user messages). This is completely separate from webhook notification delivery and unnecessary if you only want to receive alerts.
+- If you previously configured DingTalk via `CUSTOM_WEBHOOK_URLS`, you can migrate to `DINGTALK_WEBHOOK_URL` for better error logging and diagnostics.
 
 ### ntfy / Gotify
 

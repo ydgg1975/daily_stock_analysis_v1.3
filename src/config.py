@@ -794,6 +794,11 @@ class Config:
     astrbot_token: Optional[str] = None
     astrbot_url: Optional[str] = None
 
+    # 钉钉自定义机器人 Webhook
+    dingtalk_webhook_url: Optional[str] = None
+    dingtalk_webhook_secret: Optional[str] = None  # 签名校验密钥（可选）
+    dingtalk_webhook_keyword: Optional[str] = None  # 安全设置关键词（可选）
+
     # 通知路由策略（Issue #1200 P3）：留空表示该类型使用全部已配置渠道
     notification_report_channels: List[str] = field(default_factory=list)
     notification_alert_channels: List[str] = field(default_factory=list)
@@ -841,6 +846,7 @@ class Config:
     # 消息长度限制（字节）- 超长自动分批发送
     feishu_max_bytes: int = 20000  # 飞书限制约 20KB，默认 20000 字节
     wechat_max_bytes: int = 4000   # 企业微信限制 4096 字节，默认 4000 字节
+    dingtalk_max_bytes: int = 20000  # 钉钉限制约 20KB，默认 20000 字节
     discord_max_words: int = 2000  # Discord 限制 2000 字，默认 2000 字
     wechat_msg_type: str = "markdown"  # 企业微信消息类型，默认 markdown 类型
 
@@ -1578,6 +1584,9 @@ class Config:
             slack_channel_id=os.getenv('SLACK_CHANNEL_ID'),
             astrbot_url=os.getenv('ASTRBOT_URL'),
             astrbot_token=os.getenv('ASTRBOT_TOKEN'),
+            dingtalk_webhook_url=os.getenv('DINGTALK_WEBHOOK_URL'),
+            dingtalk_webhook_secret=os.getenv('DINGTALK_WEBHOOK_SECRET'),
+            dingtalk_webhook_keyword=os.getenv('DINGTALK_WEBHOOK_KEYWORD'),
             notification_report_channels=parse_notification_route_channels(
                 os.getenv('NOTIFICATION_REPORT_CHANNELS')
             ),
@@ -1621,6 +1630,7 @@ class Config:
             feishu_max_bytes=parse_env_int(os.getenv('FEISHU_MAX_BYTES'), 20000, field_name='FEISHU_MAX_BYTES', minimum=1),
             wechat_max_bytes=wechat_max_bytes,
             wechat_msg_type=wechat_msg_type_lower,
+            dingtalk_max_bytes=parse_env_int(os.getenv('DINGTALK_MAX_BYTES'), 20000, field_name='DINGTALK_MAX_BYTES', minimum=1),
             discord_max_words=parse_env_int(os.getenv('DISCORD_MAX_WORDS'), 2000, field_name='DISCORD_MAX_WORDS', minimum=1),
             markdown_to_image_channels=[
                 c.strip().lower()
@@ -2584,6 +2594,7 @@ class Config:
             or self.serverchan3_sendkey
             or self.custom_webhook_urls
             or self.astrbot_url
+            or self.dingtalk_webhook_url
             or (self.discord_bot_token and self.discord_main_channel_id)
             or self.discord_webhook_url
             or self.slack_webhook_url

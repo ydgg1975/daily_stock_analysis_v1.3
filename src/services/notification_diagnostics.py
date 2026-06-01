@@ -140,6 +140,13 @@ CHANNEL_SPECS: Tuple[NotificationChannelSpec, ...] = (
         minimal_keys=("SERVERCHAN3_SENDKEY",),
     ),
     NotificationChannelSpec(
+        channel=NotificationChannel.DINGTALK.value,
+        display_name=ChannelDetector.get_channel_name(NotificationChannel.DINGTALK),
+        kind="configured",
+        minimal_keys=("DINGTALK_WEBHOOK_URL",),
+        advanced_keys=("DINGTALK_WEBHOOK_SECRET", "DINGTALK_WEBHOOK_KEYWORD"),
+    ),
+    NotificationChannelSpec(
         channel=NotificationChannel.CUSTOM.value,
         display_name=ChannelDetector.get_channel_name(NotificationChannel.CUSTOM),
         kind="configured",

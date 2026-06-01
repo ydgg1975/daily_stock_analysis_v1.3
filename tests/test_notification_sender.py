@@ -25,6 +25,7 @@ from src.config import Config
 from src.notification_sender import (
     AstrbotSender,
     CustomWebhookSender,
+    DingtalkSender,
     DiscordSender,
     EmailSender,
     FeishuSender,
@@ -1098,6 +1099,124 @@ class TestTelegramSender(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertEqual(mock_post.call_count, 2)
+
+
+
+class TestDingtalkSender(unittest.TestCase):
+    """Unit tests for DingtalkSender."""
+
+    def test_send_returns_false_when_no_webhook_url(self):
+        cfg = _config()
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertFalse(result)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_send_success_returns_true(self, mock_post):
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token")
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertTrue(result)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_send_http_error_returns_false(self, mock_post):
+        mock_post.return_value = _response(400)
+        cfg = _config(dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token")
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertFalse(result)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_send_api_error_returns_false(self, mock_post):
+        mock_post.return_value = _response(200, {"errcode": 40035, "errmsg": "invalid parameter"})
+        cfg = _config(dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token")
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertFalse(result)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_keyword_prepended_to_message(self, mock_post):
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_webhook_keyword="股票日报",
+        )
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertTrue(result)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["msgtype"], "markdown")
+        self.assertTrue(payload["markdown"]["text"].startswith("股票日报"))
+
+    @mock.patch("src.notification_sender.dingtalk_sender._time.time", return_value=1700000000.0)
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_signature_as_url_param(self, mock_post, mock_time):
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_webhook_secret="secret-token",
+        )
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("hello")
+        self.assertTrue(result)
+        url = mock_post.call_args.args[0]
+        self.assertIn("timestamp=1700000000", url)
+        self.assertIn("sign=", url)
+        # sign 中的特殊字符（+ / =）应该被 URL 编码
+        self.assertNotIn("secret-token", url)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_chunked_sends_all_chunks(self, mock_post):
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_webhook_keyword="关键词",
+            dingtalk_max_bytes=100,
+        )
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("A" * 3000)
+        self.assertTrue(result)
+        self.assertGreater(mock_post.call_count, 1)
+        for call in mock_post.call_args_list:
+            payload = call.kwargs["json"]
+            self.assertIn("关键词", payload["markdown"]["text"])
+
+
+class TestDingtalkSenderThroughNotificationService(unittest.TestCase):
+    """Regression: long DingTalk message through NotificationService (MRO check)."""
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_chunked_long_content_via_notification_service(self, mock_post):
+        """Send long content through NotificationService -
+        verifies _send_dingtalk_chunked_msg is resolved (not CustomWebhookSender's)."""
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_webhook_keyword="关键词",
+            dingtalk_max_bytes=100,
+        )
+        from src.notification import NotificationService
+        svc = NotificationService.__new__(NotificationService)
+        svc._config = cfg
+        svc._source_message = None
+        svc._context_channels = []
+        svc._markdown_to_image_channels = set()
+        svc._markdown_to_image_max_chars = 15000
+        svc._report_summary_only = False
+        svc._report_show_llm_model = True
+        svc._history_compare_cache = {}
+        svc._stock_email_groups = []
+        DingtalkSender.__init__(svc, cfg)
+        CustomWebhookSender.__init__(svc, cfg)
+
+        result = svc.send_to_dingtalk("B" * 3000)
+
+        self.assertTrue(result)
+        self.assertGreater(mock_post.call_count, 1)
+        for call in mock_post.call_args_list:
+            payload = call.kwargs["json"]
+            self.assertIn("关键词", payload["markdown"]["text"])
 
 
 if __name__ == "__main__":

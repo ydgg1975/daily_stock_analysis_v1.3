@@ -91,15 +91,20 @@ daily_stock_analysis/
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（多个用逗号分隔，留空则发给自己） | 可选 |
 | `EMAIL_SENDER_NAME` | 发件人显示名称（默认：daily_stock_analysis股票分析助手） | 可选 |
+| `EMAIL_SENDER_NAME` | 发件人显示名称（默认：daily_stock_analysis股票分析助手） | 可选 |
 | `PUSHPLUS_TOKEN` | PushPlus Token（[获取地址](https://www.pushplus.plus)，国内推送服务） | 可选 |
 | `SERVERCHAN3_SENDKEY` | Server酱³ Sendkey（[获取地址](https://sc3.ft07.com/)，手机APP推送服务） | 可选 |
 | `ASTRBOT_URL` | AstrBot Webhook URL | 可选 |
 | `ASTRBOT_TOKEN` | AstrBot Bearer Token（可选） | 可选 |
+| `DINGTALK_WEBHOOK_URL` | 钉钉自定义机器人 Webhook URL | 可选 |
+| `DINGTALK_WEBHOOK_SECRET` | 钉钉加签密钥（机器人安全设置开启"加签"时必填） | 可选 |
+| `DINGTALK_WEBHOOK_KEYWORD` | 钉钉安全设置关键词（开启"关键词"验证时必填） | 可选 |
+| `DINGTALK_MAX_BYTES` | 钉钉单条消息字节限制（默认 20000） | 可选 |
 | `NTFY_URL` | ntfy 完整 topic endpoint，必须包含 topic path，例如 `https://ntfy.sh/my-topic` | 可选 |
 | `NTFY_TOKEN` | ntfy Bearer Token（可选） | 可选 |
 | `GOTIFY_URL` | Gotify server base URL，不包含 `/message`；系统会自动拼接 `/message` | 可选 |
 | `GOTIFY_TOKEN` | Gotify application token，通过 `X-Gotify-Key` Header 发送 | 可选 |
-| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（支持钉钉等，多个用逗号分隔） | 可选 |
+| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（Discord、Slack、Bark 等，多个用逗号分隔） | 可选 |
 | `CUSTOM_WEBHOOK_BEARER_TOKEN` | 自定义 Webhook 的 Bearer Token（用于需要认证的 Webhook） | 可选 |
 | `CUSTOM_WEBHOOK_BODY_TEMPLATE` | 自定义 Webhook JSON body 模板，适配 AstrBot、NapCat、自建服务等特殊 payload | 可选 |
 | `WEBHOOK_VERIFY_SSL` | 读取该配置的 webhook-style HTTPS 通知请求证书校验（默认 true）。设为 false 可支持自签名证书。警告：关闭有严重安全风险（MITM），仅限可信内网 | 可选 |
@@ -285,7 +290,11 @@ daily_stock_analysis/
 | `SERVERCHAN3_SENDKEY` | Server酱³ Sendkey | 可选 |
 | `ASTRBOT_URL` | AstrBot Webhook URL | 可选 |
 | `ASTRBOT_TOKEN` | AstrBot Bearer Token（可选） | 可选 |
-| `NOTIFICATION_REPORT_CHANNELS` | report 路由渠道，逗号分隔；允许值：wechat,feishu,telegram,email,pushover,ntfy,gotify,pushplus,serverchan3,custom,discord,slack,astrbot | 可选 |
+| `DINGTALK_WEBHOOK_URL` | 钉钉自定义机器人 Webhook URL | 可选 |
+| `DINGTALK_WEBHOOK_SECRET` | 钉钉加签密钥（机器人安全设置开启"加签"时必填） | 可选 |
+| `DINGTALK_WEBHOOK_KEYWORD` | 钉钉安全设置关键词（开启"关键词"验证时必填） | 可选 |
+| `DINGTALK_MAX_BYTES` | 钉钉单条消息字节限制（默认 20000） | 可选 |
+| `NOTIFICATION_REPORT_CHANNELS` | report 路由渠道，逗号分隔；允许值：wechat,feishu,telegram,email,pushover,ntfy,gotify,pushplus,serverchan3,custom,discord,slack,astrbot,dingtalk | 可选 |
 | `NOTIFICATION_ALERT_CHANNELS` | alert 路由渠道，逗号分隔；留空保持全渠道 | 可选 |
 | `NOTIFICATION_SYSTEM_ERROR_CHANNELS` | system_error 预留路由渠道，逗号分隔；留空保持全渠道 | 可选 |
 | `NOTIFICATION_DEDUP_TTL_SECONDS` | 通知去重 TTL 秒数，`0` 关闭 | 可选 |
@@ -905,6 +914,35 @@ NapCat / OneBot 示例需按实际 endpoint、`user_id` 或 `group_id` 调整：
 ```env
 CUSTOM_WEBHOOK_BODY_TEMPLATE={"user_id":123456,"message":$content_json}
 ```
+
+### 钉钉
+
+钉钉自定义机器人现已作为一等通知渠道，有独立的配置入口（不再依赖 `CUSTOM_WEBHOOK_URLS`）。
+
+**最小可用配置：**
+
+```env
+DINGTALK_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=your_token_here
+```
+
+**完整步骤：**
+
+1. **在钉钉群中添加自定义机器人**：
+   - 打开目标群聊 → 群设置 → 智能群助手 → 添加机器人 → 自定义
+   - 填写机器人名称，复制生成的 **Webhook URL**（格式：`https://oapi.dingtalk.com/robot/send?access_token=...`）
+2. 设置 `DINGTALK_WEBHOOK_URL`（即上一步复制的 URL）。
+3. 查看机器人**安全设置**，根据启用的安全项决定是否需要补充配置：
+   - **无安全设置**：仅填 `DINGTALK_WEBHOOK_URL` 即可。
+   - **开启了「加签」**：把密钥填到 `DINGTALK_WEBHOOK_SECRET`。两端必须同时启用或同时不填，否则钉钉返回签名校验失败。
+   - **开启了「自定义关键词」**：把同一个关键词填到 `DINGTALK_WEBHOOK_KEYWORD`；系统会自动在每条消息前补上，无需手动修改报告模板。
+
+**发送效果：**
+
+钉钉渠道使用 Markdown 格式发送报告，支持标题、粗体、列表等基本格式。单条消息限制约 20KB（默认 `DINGTALK_MAX_BYTES=20000`），超长内容会自动分批发送。
+
+**注意：**
+- `DINGTALK_APP_KEY` / `DINGTALK_APP_SECRET` / `DINGTALK_STREAM_ENABLED` 用于钉钉 Stream Bot 交互模式（机器人接收并回复用户消息），与 Webhook 通知推送是完全不同的功能。只收通知时无需配置这三项。
+- 如果之前通过 `CUSTOM_WEBHOOK_URLS` 配置过钉钉，现可迁移到 `DINGTALK_WEBHOOK_URL`，获得更好的错误日志和诊断支持。
 
 ### ntfy / Gotify
 
