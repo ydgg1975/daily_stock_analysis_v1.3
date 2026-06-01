@@ -1,4 +1,5 @@
 import { validateStockCode } from './validation';
+import { normalizeStockCode } from './stockCode';
 
 const EXCHANGE_PREFIXES = new Set(['SH', 'SZ', 'BJ', 'HK', 'US', 'SS']);
 
@@ -13,6 +14,7 @@ export function extractStockCodeFromMessage(message: string): string | null {
     /\b(SZ\d{6})\b/gi,
     /\b(BJ\d{6})\b/gi,
     /\b(hk\d{4,5})\b/gi,
+    /\b(\d{1,5}\.HK)\b/gi,
     /\b(\d{5,6})\b/g,
     /\b([A-Z]{2,5})\b/g,
   ];
@@ -24,7 +26,7 @@ export function extractStockCodeFromMessage(message: string): string | null {
           continue;
         }
         const { valid, normalized } = validateStockCode(m);
-        if (valid) return normalized;
+        if (valid) return normalizeStockCode(normalized);
       }
     }
   }

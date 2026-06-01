@@ -26,6 +26,7 @@ import {
 import { isNearBottom } from '../utils/chatScroll';
 import { getReportText } from '../utils/reportLanguage';
 import { extractStockCodeFromMessage } from '../utils/chatStockCode';
+import { normalizeStockCode } from '../utils/stockCode';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
@@ -131,7 +132,7 @@ const ChatPage: React.FC = () => {
   }, [loadWatchlist]);
 
   const stockInWatchlist = useCallback(
-    (stockCode: string) => watchlistCodes.includes(stockCode),
+    (stockCode: string) => watchlistCodes.includes(normalizeStockCode(stockCode)),
     [watchlistCodes],
   );
 

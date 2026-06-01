@@ -95,6 +95,7 @@ _STOCK_CODE_RE = re.compile(
     r"|\d{6}\.(?:SH|SZ|SS|BJ)"                # exchange-suffixed A-share
     r"|\d{1,5}\.HK"                           # HK suffix format
     r"|HK\d{1,5}"                             # HK prefix format
+    r"|\d{5}"                                 # bare 5-digit HK code
     r"|[A-Z]{1,5}(?:\.(?:US|[A-Z]))?"         # US ticker
     r")$",
     re.IGNORECASE,
