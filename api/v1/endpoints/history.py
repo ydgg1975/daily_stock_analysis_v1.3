@@ -223,10 +223,13 @@ def get_stock_bar(
         start = date_type.fromisoformat(start_date) if start_date else None
         end = date_type.fromisoformat(end_date) if end_date else None
 
+        # Fetch more than limit to compensate for normalization dedup shrinkage
+        # (e.g. 002460 + 002460.SZ both initially counted but merged to one)
+        fetch_limit = min(limit * 3, 500)
         records = db_manager.get_distinct_stocks_from_history(
             start_date=start,
             end_date=end,
-            limit=limit,
+            limit=fetch_limit,
         )
 
         # Deduplicate by normalized code, keeping the record with highest id

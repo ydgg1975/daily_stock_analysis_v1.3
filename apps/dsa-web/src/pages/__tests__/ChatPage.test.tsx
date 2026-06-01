@@ -5,6 +5,7 @@ import { createParsedApiError } from '../../api/error';
 import { historyApi } from '../../api/history';
 import type { Message } from '../../stores/agentChatStore';
 import ChatPage from '../ChatPage';
+import { extractStockCodeFromMessage } from '../../utils/chatStockCode';
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -922,5 +923,48 @@ describe('ChatPage', () => {
     fireEvent.click(jumpButton);
 
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+});
+
+describe('extractStockCodeFromMessage', () => {
+  it('returns 6-digit A-share code', () => {
+    expect(extractStockCodeFromMessage('分析 600519 趋势')).toBe('600519');
+    expect(extractStockCodeFromMessage('002460')).toBe('002460');
+  });
+
+  it('returns HK prefixed code', () => {
+    expect(extractStockCodeFromMessage('分析 hk00700')).toBe('HK00700');
+  });
+
+  it('returns code with .SH/.SZ suffix', () => {
+    expect(extractStockCodeFromMessage('看 600519.SH')).toBe('600519.SH');
+    expect(extractStockCodeFromMessage('000001.SZ')).toBe('000001.SZ');
+  });
+
+  it('returns US ticker like AAPL', () => {
+    expect(extractStockCodeFromMessage('分析 AAPL 走势')).toBe('AAPL');
+    expect(extractStockCodeFromMessage('TSLA')).toBe('TSLA');
+  });
+
+  it('does NOT return exchange prefixes as tickers', () => {
+    expect(extractStockCodeFromMessage('分析 SH 走势')).toBeNull();
+    expect(extractStockCodeFromMessage('看看 BJ')).toBeNull();
+    expect(extractStockCodeFromMessage('HK')).toBeNull();
+    expect(extractStockCodeFromMessage('买入 SZ')).toBeNull();
+    expect(extractStockCodeFromMessage('US 市场')).toBeNull();
+    expect(extractStockCodeFromMessage('SS')).toBeNull();
+  });
+
+  it('returns null for messages without stock codes', () => {
+    expect(extractStockCodeFromMessage('茅台现在适合买入吗')).toBeNull();
+    expect(extractStockCodeFromMessage('大盘走势如何')).toBeNull();
+  });
+
+  it('matches prefixed code like SH600519', () => {
+    expect(extractStockCodeFromMessage('分析 SH600519')).toBe('SH600519');
+  });
+
+  it('returns SZ-prefixed code when standalone', () => {
+    expect(extractStockCodeFromMessage('SZ000001')).toBe('SZ000001');
   });
 });

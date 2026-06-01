@@ -25,7 +25,7 @@ import {
 } from '../utils/chatFollowUp';
 import { isNearBottom } from '../utils/chatScroll';
 import { getReportText } from '../utils/reportLanguage';
-import { validateStockCode } from '../utils/validation';
+import { extractStockCodeFromMessage } from '../utils/chatStockCode';
 
 // Quick question examples shown on empty state
 const QUICK_QUESTIONS = [
@@ -49,26 +49,6 @@ const getMessageSkillNames = (msg: Message): string[] => {
 };
 
 const getMessageSkillLabel = (msg: Message): string => getMessageSkillNames(msg).join('、');
-
-function extractStockCodeFromMessage(message: string): string | null {
-  const patterns = [
-    /\b(\d{6})\b/g,
-    /\b(hk\d{4,5})\b/gi,
-    /\b(00\d{4}\.SZ)\b/gi,
-    /\b(60\d{4}\.SH)\b/gi,
-    /\b([A-Z]{1,5})\b/g,
-  ];
-  for (const pattern of patterns) {
-    const matches = message.match(pattern);
-    if (matches) {
-      for (const m of matches) {
-        const { valid, normalized } = validateStockCode(m);
-        if (valid) return normalized;
-      }
-    }
-  }
-  return null;
-}
 
 const ChatPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
