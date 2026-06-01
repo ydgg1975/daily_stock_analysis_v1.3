@@ -181,6 +181,37 @@ def test_premarket_medium_confidence_immediate_action_rewrites_action_only() -> 
     assert "buy now" not in result.dashboard["phase_decision"]["immediate_action"].lower()
 
 
+def test_unknown_low_confidence_immediate_action_rewrites_action_only() -> None:
+    result = _result(
+        operation_advice="观察为主",
+        decision_type="hold",
+        confidence_level="低",
+        dashboard={
+            "core_conclusion": {"one_sentence": "观察为主"},
+            "phase_decision": {
+                "action_window": "未知阶段观察",
+                "immediate_action": "立即买入",
+                "watch_conditions": ["确认开市状态"],
+                "next_check_time": "阶段确认后",
+                "confidence_reason": "阶段未知",
+                "data_limitations": [],
+            },
+        },
+    )
+
+    adjustments = apply_phase_decision_guardrails(
+        result,
+        market_phase_summary=_phase("unknown"),
+        analysis_context_pack_overview=_overview("available"),
+        report_language="zh",
+    )
+
+    assert "non_intraday_action_adjusted" in adjustments
+    assert "confidence_capped_non_intraday_action" not in adjustments
+    assert result.confidence_level == "低"
+    assert result.dashboard["phase_decision"]["immediate_action"] == "等待盘中确认，禁止追高。"
+
+
 def test_premarket_degraded_immediate_action_uses_strongest_cap() -> None:
     result = _result()
 
