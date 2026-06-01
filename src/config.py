@@ -744,6 +744,10 @@ class Config:
     feishu_webhook_url: Optional[str] = None
     feishu_webhook_secret: Optional[str] = None  # 自定义机器人签名密钥（可选）
     feishu_webhook_keyword: Optional[str] = None  # 自定义机器人关键词（可选）
+
+    # 飞书应用机器人（App Bot）通知
+    feishu_chat_id: Optional[str] = None  # 目标群会话 chat_id（App Bot 模式必填）
+    feishu_domain: str = "feishu"  # 飞书域名: "feishu"(feishu.cn) / "lark"(larksuite.com)
     
     # Telegram 配置（需要同时配置 Bot Token 和 Chat ID）
     telegram_bot_token: Optional[str] = None  # Bot Token（@BotFather 获取）
@@ -1545,6 +1549,9 @@ class Config:
             feishu_webhook_url=os.getenv('FEISHU_WEBHOOK_URL'),
             feishu_webhook_secret=os.getenv('FEISHU_WEBHOOK_SECRET'),
             feishu_webhook_keyword=os.getenv('FEISHU_WEBHOOK_KEYWORD'),
+
+            feishu_chat_id=os.getenv('FEISHU_CHAT_ID'),
+            feishu_domain=os.getenv('FEISHU_DOMAIN', 'feishu'),
             telegram_bot_token=os.getenv('TELEGRAM_BOT_TOKEN'),
             telegram_chat_id=os.getenv('TELEGRAM_CHAT_ID'),
             telegram_message_thread_id=os.getenv('TELEGRAM_MESSAGE_THREAD_ID'),
@@ -2571,6 +2578,11 @@ class Config:
         has_notification = bool(
             self.wechat_webhook_url
             or self.feishu_webhook_url
+            or (
+                (self.feishu_app_id or "")
+                and (self.feishu_app_secret or "")
+                and (self.feishu_chat_id or "")
+            )
             or (self.telegram_bot_token and self.telegram_chat_id)
             or (self.email_sender and self.email_password)
             or (self.pushover_user_key and self.pushover_api_token)
@@ -2666,24 +2678,37 @@ class Config:
         has_feishu_app_secret = bool((self.feishu_app_secret or "").strip())
         has_feishu_app_credentials = has_feishu_app_id or has_feishu_app_secret
         has_feishu_doc_token = bool((self.feishu_folder_token or "").strip())
+        has_feishu_chat_id = bool((self.feishu_chat_id or "").strip())
         has_feishu_full_cloud_doc_credentials = (
             has_feishu_app_id
             and has_feishu_app_secret
             and has_feishu_doc_token
         )
+        # Suppress the "app credentials without a notification route" warning
+        # when the user has opted into App Bot notification (feishu_chat_id).
+        has_feishu_app_notification_route = (
+            has_feishu_app_id
+            and has_feishu_app_secret
+            and has_feishu_chat_id
+        )
         if (
             has_feishu_app_credentials
             and not has_feishu_full_cloud_doc_credentials
             and not self.feishu_webhook_url
-            and not (self.feishu_stream_enabled and has_feishu_app_id and has_feishu_app_secret)
+            and not self.feishu_stream_enabled
+            and not has_feishu_app_notification_route
         ):
+            suggestions = []
+            if has_feishu_app_id and has_feishu_app_secret:
+                suggestions.append("配置 FEISHU_CHAT_ID 开启 App Bot 定时推送")
+            if has_feishu_app_id and has_feishu_app_secret:
+                suggestions.append("开启 FEISHU_STREAM_ENABLED 使用应用机器人事件订阅")
+            suggestions.append("配置 FEISHU_WEBHOOK_URL 使用自定义机器人 Webhook 推送")
             issues.append(ConfigIssue(
                 severity="warning",
-                message=(
-                    "仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书群 Webhook 推送；"
-                    "如需群消息通知，请配置 FEISHU_WEBHOOK_URL。若要使用应用机器人，请同时开启 "
-                    "FEISHU_STREAM_ENABLED 并完成应用发布与权限配置。"
-                ),
+                message="仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书通知。"
+                        + " 请选择以下方式之一："
+                        + "；".join(suggestions) + "。",
                 field="FEISHU_WEBHOOK_URL",
             ))
 

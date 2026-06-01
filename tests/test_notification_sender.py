@@ -258,6 +258,113 @@ class TestFeishuSender(unittest.TestCase):
         self.assertFalse(result)
         mock_post.assert_not_called()
 
+    # ------------------------------------------------------------------
+    # App Bot mode tests
+    # ------------------------------------------------------------------
+
+    def test_app_bot_returns_false_when_no_app_credentials(self):
+        """send_to_feishu returns False when app credentials are missing."""
+        cfg = _config()
+        sender = FeishuSender(cfg)
+        self.assertFalse(sender.send_to_feishu("hello"))
+
+    def test_app_bot_returns_false_when_no_chat_id(self):
+        """send_to_feishu returns False when feishu_chat_id is missing."""
+        cfg = _config(
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+        )
+        sender = FeishuSender(cfg)
+        self.assertFalse(sender.send_to_feishu("hello"))
+
+    @mock.patch.object(FeishuSender, "_app_send_raw", return_value=True)
+    def test_app_bot_success_via_card(self, mock_raw):
+        """send_to_feishu sends an interactive card via App Bot on success."""
+        cfg = _config(
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+            feishu_chat_id="oc_chat",
+        )
+        sender = FeishuSender(cfg)
+        result = sender.send_to_feishu("**hello** world")
+
+        self.assertTrue(result)
+        mock_raw.assert_called_once()
+        # call_args[0] = (client, msg_type, content_json)
+        msg_type = mock_raw.call_args[0][1]
+        content_json = mock_raw.call_args[0][2]
+        self.assertEqual(msg_type, "interactive")
+        self.assertIn("**hello**", content_json)
+
+    @mock.patch.object(FeishuSender, "_app_send_raw", return_value=True)
+    def test_app_bot_card_fallback_to_text_on_formatted_content(self, mock_raw):
+        """App Bot falls back to text when interactive card fails."""
+        mock_raw.side_effect = [False, True]
+        cfg = _config(
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+            feishu_chat_id="oc_chat",
+        )
+        sender = FeishuSender(cfg)
+        result = sender.send_to_feishu("hello world")
+
+        self.assertTrue(result)
+        self.assertEqual(mock_raw.call_count, 2)
+        # call_args_list[0][0] = (client, msg_type, content_json)
+        self.assertEqual(mock_raw.call_args_list[0][0][1], "interactive")
+        self.assertEqual(mock_raw.call_args_list[1][0][1], "text")
+
+    @mock.patch.object(FeishuSender, "_app_send_raw", return_value=True)
+    def test_app_bot_card_first_success_no_fallback(self, mock_raw):
+        """App Bot sends interactive card successfully and does not try text."""
+        cfg = _config(
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+            feishu_chat_id="oc_chat",
+        )
+        sender = FeishuSender(cfg)
+        result = sender.send_to_feishu("**bold** text")
+
+        self.assertTrue(result)
+        mock_raw.assert_called_once()
+        # call_args_list[0][0][1] = msg_type, [0][0][2] = content_json
+        self.assertEqual(mock_raw.call_args_list[0][0][1], "interactive")
+        self.assertIn("**bold**", mock_raw.call_args_list[0][0][2])
+
+    @mock.patch("src.notification_sender.feishu_sender.requests.post")
+    @mock.patch.object(FeishuSender, "_app_send_raw", return_value=True)
+    def test_webhook_takes_precedence_over_app_bot(self, mock_app_raw, mock_webhook_post):
+        """When both webhook URL and App Bot credentials are configured, webhook is used."""
+        mock_webhook_post.return_value = _response(200, {"code": 0})
+        cfg = _config(
+            feishu_webhook_url="https://feishu.example/hook",
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+            feishu_chat_id="oc_chat",
+        )
+        sender = FeishuSender(cfg)
+        result = sender.send_to_feishu("hello")
+
+        self.assertTrue(result)
+        mock_webhook_post.assert_called_once()
+        mock_app_raw.assert_not_called()
+
+    @mock.patch.object(FeishuSender, "_app_send_raw", return_value=False)
+    def test_app_bot_chunking_long_content(self, mock_raw):
+        """Long content is chunked for App Bot."""
+        cfg = _config(
+            feishu_app_id="cli_app",
+            feishu_app_secret="secret",
+            feishu_chat_id="oc_chat",
+            feishu_max_bytes=200,
+        )
+        sender = FeishuSender(cfg)
+
+        result = sender.send_to_feishu("A" * 500)
+
+        self.assertFalse(result)  # All chunks fail
+        self.assertGreater(mock_raw.call_count, 1)
+
 
 class TestEmailSender(unittest.TestCase):
     """Unit tests for EmailSender (config and receiver logic; send path covered via service)."""
