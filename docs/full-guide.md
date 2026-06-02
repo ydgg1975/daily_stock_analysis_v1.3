@@ -312,6 +312,8 @@ daily_stock_analysis/
 > 4. 在云盘文件夹中添加群组为协作者（可管理权限）
 >
 > 说明：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` 用于飞书应用、云文档或 Stream Bot 模式，不会直接启用群 Webhook 推送。只想收通知时，请优先配置 `FEISHU_WEBHOOK_URL`。
+>
+> 补充：若同时配置 `FEISHU_CHAT_ID` 和 `FEISHU_RECEIVE_ID_TYPE`，则 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 可作为飞书 App Bot 的有效通知发送渠道，无需 Webhook 即可主动向指定 chat 推送。该方式走飞书 OpenAPI Bot 会话，与群 Webhook 是两条独立链路。
 
 ### 搜索服务配置
 
@@ -833,6 +835,7 @@ FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token
    - **开启了「关键词」**：把同一个关键词填到 `FEISHU_WEBHOOK_KEYWORD`；系统会自动在每条消息前补上，无需手动修改报告模板。
    - **开启了 IP 白名单**：确保当前运行环境的出口 IP 在白名单中（本地/Docker/GitHub Actions 出口 IP 各不相同）。
 4. `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 是飞书应用 / Stream Bot / 云文档模式专用，不会触发群 Webhook 推送，不要用它们替代 `FEISHU_WEBHOOK_URL`。
+5. 若已配置 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`，再配置 `FEISHU_CHAT_ID` 和 `FEISHU_RECEIVE_ID_TYPE`，则可通过飞书 App Bot 直接向指定群聊或用户推送通知，无需依赖群 Webhook。该方式走飞书 OpenAPI Bot 会话，与群 Webhook 是两条独立链路。
 
 **常见失败原因：**
 - 只填了 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`，没有配置 `FEISHU_WEBHOOK_URL`

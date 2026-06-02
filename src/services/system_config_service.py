@@ -134,6 +134,11 @@ class SystemConfigService:
         "FEISHU_WEBHOOK_SECRET": ("feishu_webhook_secret", "string"),
         "FEISHU_WEBHOOK_KEYWORD": ("feishu_webhook_keyword", "string"),
         "FEISHU_MAX_BYTES": ("feishu_max_bytes", "int"),
+        "FEISHU_APP_ID": ("feishu_app_id", "string"),
+        "FEISHU_APP_SECRET": ("feishu_app_secret", "string"),
+        "FEISHU_CHAT_ID": ("feishu_chat_id", "string"),
+        "FEISHU_RECEIVE_ID_TYPE": ("feishu_receive_id_type", "string"),
+        "FEISHU_DOMAIN": ("feishu_domain", "string"),
         "TELEGRAM_BOT_TOKEN": ("telegram_bot_token", "string"),
         "TELEGRAM_CHAT_ID": ("telegram_chat_id", "string"),
         "TELEGRAM_MESSAGE_THREAD_ID": ("telegram_message_thread_id", "string"),
@@ -167,7 +172,7 @@ class SystemConfigService:
     }
     _NOTIFICATION_REQUIRED_KEY_GROUPS: Dict[str, Tuple[Tuple[str, ...], ...]] = {
         "wechat": (("WECHAT_WEBHOOK_URL",),),
-        "feishu": (("FEISHU_WEBHOOK_URL",),),
+        "feishu": (("FEISHU_WEBHOOK_URL",), ("FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_CHAT_ID")),
         "telegram": (("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"),),
         "email": (("EMAIL_SENDER", "EMAIL_PASSWORD"),),
         "pushover": (("PUSHOVER_USER_KEY", "PUSHOVER_API_TOKEN"),),
@@ -182,7 +187,7 @@ class SystemConfigService:
     }
     _NOTIFICATION_TEST_TARGET_KEYS: Dict[str, Tuple[str, ...]] = {
         "wechat": ("WECHAT_WEBHOOK_URL",),
-        "feishu": ("FEISHU_WEBHOOK_URL",),
+        "feishu": ("FEISHU_WEBHOOK_URL", "FEISHU_APP_ID", "FEISHU_CHAT_ID"),
         "telegram": ("TELEGRAM_BOT_TOKEN",),
         "email": ("EMAIL_RECEIVERS", "EMAIL_SENDER"),
         "pushover": ("PUSHOVER_USER_KEY",),
@@ -3293,10 +3298,12 @@ class SystemConfigService:
             "FEISHU_WEBHOOK_KEYWORD",
             "FEISHU_STREAM_ENABLED",
             "FEISHU_FOLDER_TOKEN",
+            "FEISHU_CHAT_ID",
         }
         has_feishu_app_id = bool((effective_map.get("FEISHU_APP_ID") or "").strip())
         has_feishu_app_secret = bool((effective_map.get("FEISHU_APP_SECRET") or "").strip())
         has_feishu_app_credentials = has_feishu_app_id or has_feishu_app_secret
+        has_feishu_app_bot_chat = bool((effective_map.get("FEISHU_CHAT_ID") or "").strip())
         has_feishu_webhook = bool((effective_map.get("FEISHU_WEBHOOK_URL") or "").strip())
         has_feishu_folder_token = bool((effective_map.get("FEISHU_FOLDER_TOKEN") or "").strip())
         has_feishu_full_cloud_doc_credentials = (
@@ -3312,11 +3319,17 @@ class SystemConfigService:
             .lower()
             == "true"
         )
+        has_feishu_app_bot_route = (
+            has_feishu_app_id
+            and has_feishu_app_secret
+            and has_feishu_app_bot_chat
+        )
         if (
             has_feishu_app_credentials
             and not has_feishu_full_cloud_doc_credentials
             and not has_feishu_webhook
             and not (feishu_stream_enabled and has_feishu_app_id and has_feishu_app_secret)
+            and not has_feishu_app_bot_route
             and (updated_keys & feishu_relevant_keys)
         ):
             issues.append(
@@ -3325,11 +3338,11 @@ class SystemConfigService:
                     "code": "feishu_mode_mismatch",
                     "message": (
                         "仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书群 Webhook 推送；"
-                        "如需通知推送请填写 FEISHU_WEBHOOK_URL，若要使用应用机器人请同时开启 "
-                        "FEISHU_STREAM_ENABLED 并完成应用发布与权限配置。"
+                        "如需通知推送请填写 FEISHU_WEBHOOK_URL、配置 FEISHU_CHAT_ID 使用 App Bot 推送，"
+                        "或同时开启 FEISHU_STREAM_ENABLED 并完成应用发布与权限配置。"
                     ),
                     "severity": "warning",
-                    "expected": "FEISHU_WEBHOOK_URL or FEISHU_STREAM_ENABLED=true",
+                    "expected": "FEISHU_WEBHOOK_URL or FEISHU_CHAT_ID or FEISHU_STREAM_ENABLED=true",
                     "actual": "app credentials only",
                 }
             )

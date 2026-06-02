@@ -275,6 +275,8 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 > 4. Add the group as a collaborator to the cloud drive folder (with manage permissions)
 >
 > Note: `FEISHU_APP_ID` / `FEISHU_APP_SECRET` are for Feishu app mode, cloud documents, or Stream Bot mode. They do not enable group webhook notifications by themselves. For simple push notifications, use `FEISHU_WEBHOOK_URL` first.
+>
+> Supplement: When `FEISHU_CHAT_ID` and `FEISHU_RECEIVE_ID_TYPE` are also configured, `FEISHU_APP_ID` / `FEISHU_APP_SECRET` can serve as a valid Feishu App Bot notification channel, pushing directly to a specified chat without relying on group webhooks. This uses the Feishu OpenAPI Bot session route, which is independent of the group webhook path.
 
 ### Search Service Configuration
 
@@ -701,6 +703,7 @@ FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your_hook_token
    - **Keyword enabled**: copy the exact same keyword into `FEISHU_WEBHOOK_KEYWORD`. The app will prepend it to every message automatically; no need to change report templates.
    - **IP allowlist enabled**: make sure the outbound IP of your runtime (local / Docker / GitHub Actions each have different IPs) is on the allowlist.
 4. `FEISHU_APP_ID` / `FEISHU_APP_SECRET` are for Feishu app / Stream Bot / cloud document flows only — they do **not** trigger group webhook notifications and must not be used instead of `FEISHU_WEBHOOK_URL`.
+5. If `FEISHU_APP_ID` / `FEISHU_APP_SECRET` are configured together with `FEISHU_CHAT_ID` and `FEISHU_RECEIVE_ID_TYPE`, the Feishu App Bot can push notifications directly to a specified chat or user, no group webhook required. This uses the Feishu OpenAPI Bot session route, independent of the group webhook path.
 
 **Common failure causes:**
 - Only `FEISHU_APP_ID` / `FEISHU_APP_SECRET` were set, but `FEISHU_WEBHOOK_URL` was not configured

@@ -355,6 +355,12 @@ class NotificationService(
 
         if getattr(config, "feishu_webhook_url", None):
             channels.append(NotificationChannel.FEISHU)
+        elif (
+            (getattr(config, "feishu_app_id", None) or "").strip()
+            and (getattr(config, "feishu_app_secret", None) or "").strip()
+            and (getattr(config, "feishu_chat_id", None) or "").strip()
+        ):
+            channels.append(NotificationChannel.FEISHU)
 
         if (
             getattr(config, "telegram_bot_token", None)
