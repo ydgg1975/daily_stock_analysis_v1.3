@@ -204,10 +204,34 @@ class TestValidateStructuredLLM:
 
         issues = cfg.validate_structured()
 
-        error = next(i for i in issues if i.severity == "error" and i.field == "ANSPIRE_API_KEYS")
-        assert "未配置任何 AI 模型 API Key" in error.message
+        error = next(i for i in issues if i.severity == "error" and i.field == "LITELLM_CONFIG")
+        assert "未配置任何可用的 AI 模型接入" in error.message
         assert "ANSPIRE_API_KEYS" in error.message
         assert "DEEPSEEK_API_KEY" in error.message
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_declared_llm_channels_without_models_reports_channel_error(
+        self,
+        _mock_parse_yaml,
+        _mock_setup_env,
+    ):
+        with patch.dict(
+            "os.environ",
+            {
+                "LLM_CHANNELS": "primary",
+                "LLM_PRIMARY_API_KEY": "sk-primary-test-value",
+            },
+            clear=True,
+        ):
+            cfg = Config._load_from_env()
+
+        issues = cfg.validate_structured()
+
+        error = next(i for i in issues if i.severity == "error" and i.field == "LLM_CHANNELS")
+        assert "已配置 LLM_CHANNELS" in error.message
+        assert "LLM_<CHANNEL>_MODELS" in error.message
+        assert not any(i.severity == "error" and i.field == "ANSPIRE_API_KEYS" for i in issues)
 
     def test_llm_channels_only_no_error(self):
         """LLM_CHANNELS populated via llm_model_list must NOT trigger an error.

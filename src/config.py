@@ -651,6 +651,9 @@ class Config:
     llm_models_source: str = "legacy_env"
     # LLM_CHANNELS: list of channel dicts, each with name/base_url/api_keys/models
     llm_channels: List[Dict[str, Any]] = field(default_factory=list)
+    # Raw channel names requested through LLM_CHANNELS, including channels that
+    # were skipped during parsing because required channel fields were missing.
+    llm_channel_names: List[str] = field(default_factory=list)
     # Pre-built LiteLLM Router model_list (populated from channels, YAML, or legacy keys)
     llm_model_list: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -1231,6 +1234,7 @@ class Config:
         litellm_config_path = os.getenv('LITELLM_CONFIG', '').strip() or None
         llm_models_source = "legacy_env"
         llm_channels: List[Dict[str, Any]] = []
+        llm_channel_names: List[str] = []
         llm_model_list: List[Dict[str, Any]] = []
 
         # Priority 1: LITELLM_CONFIG (standard LiteLLM YAML config file)
@@ -1243,6 +1247,11 @@ class Config:
         if not llm_model_list:
             _channels_str = os.getenv('LLM_CHANNELS', '').strip()
             if _channels_str:
+                llm_channel_names = [
+                    ch.strip().lower()
+                    for ch in _channels_str.split(',')
+                    if ch.strip()
+                ]
                 llm_channels = cls._parse_llm_channels(_channels_str)
                 llm_model_list = cls._channels_to_model_list(llm_channels)
                 if llm_model_list:
@@ -1431,6 +1440,7 @@ class Config:
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,
+            llm_channel_names=llm_channel_names,
             llm_model_list=llm_model_list,
             gemini_api_keys=gemini_api_keys,
             anthropic_api_keys=anthropic_api_keys,
@@ -2442,16 +2452,36 @@ class Config:
         # direct litellm env path and therefore do not populate llm_model_list.
         has_direct_env_model = bool(self.litellm_model) and _uses_direct_env_provider(self.litellm_model)
         if not self.llm_model_list and not has_direct_env_model:
-            issues.append(ConfigIssue(
-                severity="error",
-                message=(
-                    "未配置任何 AI 模型 API Key。请至少配置 ANSPIRE_API_KEYS、"
-                    "AIHUBMIX_KEY、GEMINI_API_KEY、ANTHROPIC_API_KEY、"
-                    "OPENAI_API_KEY 或 DEEPSEEK_API_KEY 中的一个，或配置 "
-                    "LITELLM_CONFIG / LLM_CHANNELS 可用模型渠道。"
-                ),
-                field="ANSPIRE_API_KEYS",
-            ))
+            if self.litellm_config_path:
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=(
+                        "已配置 LITELLM_CONFIG，但未解析出可用模型。"
+                        "请检查 YAML 中的 model_list、litellm_params 和环境变量引用。"
+                    ),
+                    field="LITELLM_CONFIG",
+                ))
+            elif self.llm_channel_names:
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=(
+                        "已配置 LLM_CHANNELS，但未解析出可用模型渠道。"
+                        "请检查对应 LLM_<CHANNEL>_API_KEY(S)、"
+                        "LLM_<CHANNEL>_MODELS、LLM_<CHANNEL>_PROTOCOL 或 Base URL。"
+                    ),
+                    field="LLM_CHANNELS",
+                ))
+            else:
+                issues.append(ConfigIssue(
+                    severity="error",
+                    message=(
+                        "未配置任何可用的 AI 模型接入。请至少配置 ANSPIRE_API_KEYS、"
+                        "AIHUBMIX_KEY、GEMINI_API_KEY、ANTHROPIC_API_KEY、"
+                        "OPENAI_API_KEY 或 DEEPSEEK_API_KEY 中的一个，或配置 "
+                        "LITELLM_CONFIG / LLM_CHANNELS 可用模型渠道。"
+                    ),
+                    field="LITELLM_CONFIG",
+                ))
         elif not self.litellm_model:
             issues.append(ConfigIssue(
                 severity="info",
