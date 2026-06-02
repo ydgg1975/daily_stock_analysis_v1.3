@@ -48,7 +48,7 @@ class HealthEndpointAuthEnabledTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._patcher = patch("src.auth.is_auth_enabled", return_value=True)
+        cls._patcher = patch("api.middlewares.auth.is_auth_enabled", return_value=True)
         cls._patcher.start()
         cls._temp_dir, cls.client = _make_client()
 
