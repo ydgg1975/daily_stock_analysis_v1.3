@@ -95,7 +95,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         aria-expanded={open}
         aria-label="切换主题"
       >
-        <TriggerIcon className={cn(iconClassName ?? ['shrink-0', isRailVariant ? 'h-[18px] w-[18px]' : isNavVariant ? 'h-5 w-5' : 'h-4 w-4'])} />
+        <TriggerIcon className={iconClassName ?? cn('shrink-0', isRailVariant ? 'h-[18px] w-[18px]' : isNavVariant ? 'h-5 w-5' : 'h-4 w-4')} />
         {isRailVariant ? (
           <span className={labelClassName}>主题</span>
         ) : isNavVariant ? (
