@@ -84,20 +84,32 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
     "deepseek-chat": {"thinking": {"type": "enabled"}},
 }
 
-# Custom model pricing for models not in LiteLLM's built-in price list
+# Custom model pricing for models not in LiteLLM's built-in price list.
 # Official MiniMax pricing: https://platform.minimax.io/docs/guides/pricing-paygo
-# - MiniMax-M3: $0.6/M input tokens, $2.4/M output tokens (default, supports vision)
-# - MiniMax-M2.7: $0.3/M input tokens, $1.2/M output tokens
+# - MiniMax-M3: $0.6/M input tokens, $2.4/M output tokens for prompts <=512K input
+#   tokens. Officially supports up to 1M input tokens with a separate higher
+#   price tier for the >512K bucket; we conservatively register only the
+#   <=512K bucket here because the cost tracker carries a single per-token
+#   price and the higher-tier price is not modeled. Long prompts will be
+#   cost-estimated using the <=512K rate; treat the estimate as a floor in
+#   that case.
+# - MiniMax-M2.7: $0.3/M input tokens, $1.2/M output tokens.
+# - MiniMax-M2.5: kept as legacy so existing user configs continue to report
+#   accurate cost. Still listed as a Legacy Model on the official pricing
+#   page; remove only after we have user-facing migration guidance.
 _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
     "MiniMax-M3": {
         "supports_function_calling": True,
         "supports_vision": True,
         "supports_audio_input": False,
         "supports_audio_output": False,
+        # Project-conservative bound for the <=512K input-token price tier.
+        # MiniMax-M3 supports up to 1M input tokens officially, but pricing
+        # changes above 512K; see comment block above.
         "context_window": 512000,
         "max_tokens": 128000,
-        "input_cost_per_token": 0.0000006,   # $0.6 / 1M tokens
-        "output_cost_per_token": 0.0000024,   # $2.4 / 1M tokens
+        "input_cost_per_token": 0.0000006,   # $0.6 / 1M tokens (<=512K input bucket)
+        "output_cost_per_token": 0.0000024,   # $2.4 / 1M tokens (<=512K input bucket)
     },
     "MiniMax-M2.7": {
         "supports_function_calling": True,
@@ -108,6 +120,19 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
         "max_tokens": 10000,
         "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens
         "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens
+    },
+    # Legacy model retained for backward compatibility with existing user
+    # configs; values match the previous M2.5 entry to avoid silently
+    # zero-costing prior cost estimates.
+    "MiniMax-M2.5": {
+        "supports_function_calling": True,
+        "supports_vision": False,
+        "supports_audio_input": False,
+        "supports_audio_output": False,
+        "context_window": 245760,
+        "max_tokens": 8192,
+        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens (legacy)
+        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens (legacy)
     },
 }
 
