@@ -462,11 +462,12 @@ def get_snapshot(
 
 @router.post(
     "/positions/{symbol}/analysis",
+    status_code=202,
     response_model=TaskAccepted,
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": DuplicateTaskErrorResponse}, 500: {"model": ErrorResponse}},
     summary="Submit manual analysis for a held portfolio position",
 )
-def analyze_position(symbol: str, request: PortfolioPositionAnalysisRequest) -> JSONResponse:
+def analyze_position(symbol: str, request: PortfolioPositionAnalysisRequest) -> TaskAccepted | JSONResponse:
     service = PortfolioService()
     try:
         context = _resolve_position_analysis_context(service, symbol=symbol, account_id=request.account_id)
@@ -507,7 +508,7 @@ def analyze_position(symbol: str, request: PortfolioPositionAnalysisRequest) -> 
         message=f"分析任务已加入队列: {task.stock_code}",
         analysis_phase=task.analysis_phase,
     )
-    return JSONResponse(status_code=202, content=response.model_dump())
+    return response
 
 
 def _resolve_position_analysis_context(
