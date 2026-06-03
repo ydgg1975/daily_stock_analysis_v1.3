@@ -86,19 +86,20 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
 
 # Custom model pricing for models not in LiteLLM's built-in price list
 # Official MiniMax pricing: https://platform.minimax.io/docs/guides/pricing-paygo
-# - MiniMax-M2.7 / M2.5: $0.3/M input tokens, $1.2/M output tokens
+# - MiniMax-M3: $0.6/M input tokens, $2.4/M output tokens (default, supports vision)
+# - MiniMax-M2.7: $0.3/M input tokens, $1.2/M output tokens
 _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
-    "MiniMax-M2.7": {
+    "MiniMax-M3": {
         "supports_function_calling": True,
-        "supports_vision": False,
+        "supports_vision": True,
         "supports_audio_input": False,
         "supports_audio_output": False,
-        "context_window": 100000,
-        "max_tokens": 10000,
-        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens
-        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens
+        "context_window": 512000,
+        "max_tokens": 128000,
+        "input_cost_per_token": 0.0000006,   # $0.6 / 1M tokens
+        "output_cost_per_token": 0.0000024,   # $2.4 / 1M tokens
     },
-    "MiniMax-M2.5": {
+    "MiniMax-M2.7": {
         "supports_function_calling": True,
         "supports_vision": False,
         "supports_audio_input": False,
@@ -699,7 +700,7 @@ class LLMToolAdapter:
         provider_blocks, provider_text = _extract_provider_blocks(choice)
 
         # Handle MiniMax-specific content_blocks format
-        # MiniMax-M2.7 may return content_blocks at choice level or inside message
+        # MiniMax-M3 may return content_blocks at choice level or inside message
         # Check both possible locations for content_blocks to ensure consistency
         # Concatenate ALL text blocks to avoid truncating multi-block responses
         text_content = choice.message.content
