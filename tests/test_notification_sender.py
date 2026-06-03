@@ -1203,6 +1203,76 @@ class TestDingtalkSender(unittest.TestCase):
                 f"Chunk payload {payload_bytes} bytes exceeds max {cfg.dingtalk_max_bytes}",
             )
 
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_markdown_with_escaping_routes_to_chunked(self, mock_post):
+        """Content heavy in newlines/quotes/backslashes inflates via json.dumps →
+        the simulated payload check must route to chunked, not send a single
+        oversized POST."""
+        mock_post.return_value = _response(200, {"errcode": 0})
+        # Build realistic Markdown with tables, newlines, and backslashes —
+        # all of which expand in json.dumps(ensure_ascii=False):
+        #   \\n (1 raw byte) → \\\\n (2 JSON bytes)
+        #   \"  (1 raw byte) → \\\"  (2 JSON bytes)
+        #   \\\\ (1 raw byte) → \\\\  (2 JSON bytes)
+        report = ""
+        for i in range(30):
+            report += f"## 股票{i:03d} 分析报告\n\n"
+            report += "| 指标 | 数值 |\n|------|------|\n"
+            report += f'| 当前价格 | \\"{100 + i}\\n" |\n'
+            report += '| 评级 | "强烈推荐" |\n'
+            report += f'\\n\\n📊 技术分析: 路径 C:\\\\Users\\\\data\\\\stock{i:03d}.csv\\n'
+            report += "---\n\n"
+
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_max_bytes=4096,
+        )
+        sender = DingtalkSender(cfg)
+
+        # Simulated serialised payload should exceed max_bytes — route to chunked
+        simulated = sender._build_payload(sender._apply_keyword_prefix(report))
+        simulated_bytes = len(json.dumps(simulated, ensure_ascii=False).encode("utf-8"))
+        self.assertGreater(
+            simulated_bytes, cfg.dingtalk_max_bytes,
+            f"Simulated payload ({simulated_bytes}) should exceed max ({cfg.dingtalk_max_bytes}) "
+            "to trigger chunked path",
+        )
+
+        result = sender.send_to_dingtalk(report)
+        self.assertTrue(result)
+        self.assertGreater(mock_post.call_count, 1, "Should have used chunked path")
+        for call in mock_post.call_args_list:
+            payload = call.kwargs["json"]
+            payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            self.assertLessEqual(
+                payload_bytes,
+                cfg.dingtalk_max_bytes,
+                f"Chunk with escaping: {payload_bytes} bytes > max {cfg.dingtalk_max_bytes}",
+            )
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_single_send_respects_max_bytes_with_json_escaping(self, mock_post):
+        """Even a short message with JSON-escapable characters must stay ≤ max_bytes
+        on the single-send path."""
+        mock_post.return_value = _response(200, {"errcode": 0})
+        # Content short enough for single send but contains escaping
+        content = '价格: "100\\n" 路径: C:\\\\Users\\\\data\\\\stock.csv'
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_max_bytes=500,
+        )
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk(content)
+        self.assertTrue(result)
+        self.assertEqual(mock_post.call_count, 1)
+        payload = mock_post.call_args.kwargs["json"]
+        payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        self.assertLessEqual(
+            payload_bytes,
+            cfg.dingtalk_max_bytes,
+            f"Single payload with escaping {payload_bytes} > max {cfg.dingtalk_max_bytes}",
+        )
+
 
 class TestDingtalkSenderThroughNotificationService(unittest.TestCase):
     """Regression: long DingTalk message through NotificationService (MRO check)."""

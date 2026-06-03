@@ -114,6 +114,7 @@ class SystemConfigService:
     _NOTIFICATION_TEST_CHANNELS: Tuple[str, ...] = (
         "wechat",
         "feishu",
+        "dingtalk",
         "telegram",
         "email",
         "pushover",
@@ -134,6 +135,10 @@ class SystemConfigService:
         "FEISHU_WEBHOOK_SECRET": ("feishu_webhook_secret", "string"),
         "FEISHU_WEBHOOK_KEYWORD": ("feishu_webhook_keyword", "string"),
         "FEISHU_MAX_BYTES": ("feishu_max_bytes", "int"),
+        "DINGTALK_WEBHOOK_URL": ("dingtalk_webhook_url", "string"),
+        "DINGTALK_WEBHOOK_SECRET": ("dingtalk_webhook_secret", "string"),
+        "DINGTALK_WEBHOOK_KEYWORD": ("dingtalk_webhook_keyword", "string"),
+        "DINGTALK_MAX_BYTES": ("dingtalk_max_bytes", "int"),
         "TELEGRAM_BOT_TOKEN": ("telegram_bot_token", "string"),
         "TELEGRAM_CHAT_ID": ("telegram_chat_id", "string"),
         "TELEGRAM_MESSAGE_THREAD_ID": ("telegram_message_thread_id", "string"),
@@ -168,6 +173,7 @@ class SystemConfigService:
     _NOTIFICATION_REQUIRED_KEY_GROUPS: Dict[str, Tuple[Tuple[str, ...], ...]] = {
         "wechat": (("WECHAT_WEBHOOK_URL",),),
         "feishu": (("FEISHU_WEBHOOK_URL",),),
+        "dingtalk": (("DINGTALK_WEBHOOK_URL",),),
         "telegram": (("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"),),
         "email": (("EMAIL_SENDER", "EMAIL_PASSWORD"),),
         "pushover": (("PUSHOVER_USER_KEY", "PUSHOVER_API_TOKEN"),),
@@ -183,6 +189,7 @@ class SystemConfigService:
     _NOTIFICATION_TEST_TARGET_KEYS: Dict[str, Tuple[str, ...]] = {
         "wechat": ("WECHAT_WEBHOOK_URL",),
         "feishu": ("FEISHU_WEBHOOK_URL",),
+        "dingtalk": ("DINGTALK_WEBHOOK_URL",),
         "telegram": ("TELEGRAM_BOT_TOKEN",),
         "email": ("EMAIL_RECEIVERS", "EMAIL_SENDER"),
         "pushover": ("PUSHOVER_USER_KEY",),
@@ -2076,6 +2083,7 @@ class SystemConfigService:
             defaults = {
                 "WECHAT_MAX_BYTES": 4000,
                 "FEISHU_MAX_BYTES": 20000,
+                "DINGTALK_MAX_BYTES": 20000,
                 "DISCORD_MAX_WORDS": 2000,
             }
             return parse_env_int(value, defaults.get(key, 0), field_name=key, minimum=1)
@@ -2095,6 +2103,7 @@ class SystemConfigService:
         from src.notification_sender import (
             AstrbotSender,
             CustomWebhookSender,
+            DingtalkSender,
             DiscordSender,
             EmailSender,
             FeishuSender,
@@ -2140,6 +2149,7 @@ class SystemConfigService:
         dispatch = {
             "wechat": lambda: WechatSender(config).send_to_wechat(titled_content, timeout_seconds=timeout_seconds),
             "feishu": lambda: FeishuSender(config).send_to_feishu(titled_content, timeout_seconds=timeout_seconds),
+            "dingtalk": lambda: DingtalkSender(config).send_to_dingtalk(titled_content, timeout_seconds=timeout_seconds),
             "telegram": lambda: TelegramSender(config).send_to_telegram(titled_content, timeout_seconds=timeout_seconds),
             "email": lambda: EmailSender(config).send_to_email(content, subject=title, timeout_seconds=timeout_seconds),
             "pushover": lambda: PushoverSender(config).send_to_pushover(content, title=title, timeout_seconds=timeout_seconds),
@@ -2666,7 +2676,7 @@ class SystemConfigService:
 
     def _build_setup_notification_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
         configured = (
-            self._has_any_config_value(effective_map, ("WECHAT_WEBHOOK_URL", "FEISHU_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"))
+            self._has_any_config_value(effective_map, ("WECHAT_WEBHOOK_URL", "FEISHU_WEBHOOK_URL", "DISCORD_WEBHOOK_URL", "DINGTALK_WEBHOOK_URL"))
             or (
                 self._has_any_config_value(effective_map, ("TELEGRAM_BOT_TOKEN",))
                 and self._has_any_config_value(effective_map, ("TELEGRAM_CHAT_ID",))

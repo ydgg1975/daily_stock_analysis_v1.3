@@ -103,18 +103,25 @@ class DingtalkSender:
 
         max_bytes = self._dingtalk_max_bytes
         # Effective budget for raw content: max_bytes minus payload skeleton and keyword prefix.
-        # This matches the actual bytes that _send_dingtalk_message will POST.
         content_budget = max_bytes - self._payload_skeleton_bytes - self._keyword_prefix_bytes
 
         if content_budget <= 0:
             logger.error(f"钉钉消息限制({max_bytes}字节)不足以容纳最小通知结构")
             return False
 
-        # Judge against raw content bytes — if it exceeds the effective budget,
-        # chunking is needed.  The chunked path accounts for per-chunk marker overhead.
-        content_bytes = len(content.encode('utf-8'))
-        if content_bytes > content_budget:
-            logger.info(f"钉钉消息内容超长({content_bytes}字节/{len(content)}字符)，将分批发送")
+        # Simulate actual serialised payload to decide single vs chunked.
+        # Raw content bytes + keyword may fit content_budget, but JSON escaping
+        # (\\n → \\\\n, \" → \\\", \\ → \\\\) can inflate the serialised payload
+        # beyond max_bytes.  Use the real json.dumps output as the decision point.
+        simulated_payload = self._build_payload(self._apply_keyword_prefix(content))
+        simulated_bytes = len(json.dumps(simulated_payload, ensure_ascii=False).encode('utf-8'))
+
+        if simulated_bytes > max_bytes:
+            logger.info(
+                "钉钉消息序列化后超长(%d字节>%d)，将分批发送",
+                simulated_bytes,
+                max_bytes,
+            )
             return self._send_dingtalk_chunked_msg(content, content_budget)
 
         try:
@@ -168,6 +175,17 @@ class DingtalkSender:
             marker = f"\n\n📄 *({i + 1}/{total})*" if total > 1 else ""
             chunk_with_keyword = self._apply_keyword_prefix(chunk + marker)
             payload = self._build_payload(chunk_with_keyword)
+
+            # Final gate: verify serialised payload does not exceed max_bytes.
+            # JSON escaping (\\n, \\", \\\\) can inflate the byte count beyond the
+            # raw-content budget, so we check the real POST body here.
+            payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+            if payload_bytes > self._dingtalk_max_bytes:
+                logger.error(
+                    "钉钉第 %d/%d 批序列化后 %d 字节超过限制 %d, 跳过该批次",
+                    i + 1, total, payload_bytes, self._dingtalk_max_bytes,
+                )
+                continue
 
             if self._post_dingtalk(payload, timeout_seconds=30):
                 success_count += 1

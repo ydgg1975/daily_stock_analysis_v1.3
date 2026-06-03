@@ -14,6 +14,7 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 const CHANNEL_OPTIONS: Array<{ value: NotificationTestChannel; label: string }> = [
   { value: 'wechat', label: '企业微信' },
   { value: 'feishu', label: '飞书 Webhook' },
+  { value: 'dingtalk', label: '钉钉 Webhook' },
   { value: 'telegram', label: 'Telegram' },
   { value: 'email', label: '邮件' },
   { value: 'pushover', label: 'Pushover' },
