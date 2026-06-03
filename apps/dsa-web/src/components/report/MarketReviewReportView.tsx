@@ -38,6 +38,12 @@ type MarketReviewSection = {
   content: string;
   icon: typeof FileText;
 };
+type StructuredMarketData = {
+  id: string;
+  title?: string;
+  breadth?: MarketReviewPayload['breadth'];
+  indices: NonNullable<MarketReviewPayload['indices']>;
+};
 
 const isMarketReviewPayload = (value: unknown): value is MarketReviewPayload =>
   Boolean(value && typeof value === 'object');
@@ -157,6 +163,37 @@ const getPayloadSections = (payload?: MarketReviewPayload | null): MarketReviewS
     }));
 };
 
+const hasStructuredMarketData = (payload?: MarketReviewPayload | null): boolean =>
+  Boolean(payload?.breadth || payload?.indices?.length);
+
+const getStructuredMarketData = (payload?: MarketReviewPayload | null): StructuredMarketData[] => {
+  if (!payload) {
+    return [];
+  }
+
+  if (payload.markets) {
+    return Object.entries(payload.markets)
+      .filter(([, marketPayload]) => hasStructuredMarketData(marketPayload))
+      .map(([region, marketPayload]) => ({
+        id: region,
+        title: marketPayload.title || region.toUpperCase(),
+        breadth: marketPayload.breadth,
+        indices: marketPayload.indices || [],
+      }));
+  }
+
+  if (!hasStructuredMarketData(payload)) {
+    return [];
+  }
+
+  return [{
+    id: payload.region || 'market',
+    title: payload.title,
+    breadth: payload.breadth,
+    indices: payload.indices || [],
+  }];
+};
+
 const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
   reviewSummary: string;
   noReviewSummary: string;
@@ -165,6 +202,15 @@ const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
   noRotationView: string;
   riskAndWatch: string;
   noRiskWatch: string;
+  structuredMarketData: string;
+  advancers: string;
+  decliners: string;
+  limitUpDown: string;
+  turnover: string;
+  index: string;
+  last: string;
+  change: string;
+  highLow: string;
 }> = {
   zh: {
     reviewSummary: '复盘摘要',
@@ -174,6 +220,15 @@ const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
     noRotationView: '暂无轮动观点',
     riskAndWatch: '风险与观察',
     noRiskWatch: '暂无观察重点',
+    structuredMarketData: '结构化大盘数据',
+    advancers: '上涨家数',
+    decliners: '下跌家数',
+    limitUpDown: '涨停/跌停',
+    turnover: '成交额',
+    index: '指数',
+    last: '最新',
+    change: '涨跌幅',
+    highLow: '高/低',
   },
   en: {
     reviewSummary: 'Review Summary',
@@ -183,6 +238,15 @@ const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
     noRotationView: 'No rotation view yet',
     riskAndWatch: 'Risks & Watchlist',
     noRiskWatch: 'No key observations yet',
+    structuredMarketData: 'Structured Market Data',
+    advancers: 'Advancers',
+    decliners: 'Decliners',
+    limitUpDown: 'Limit Up/Down',
+    turnover: 'Turnover',
+    index: 'Index',
+    last: 'Last',
+    change: 'Change',
+    highLow: 'High/Low',
   },
 };
 
@@ -221,11 +285,11 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
     },
     [marketReviewPayload, structuredContent],
   );
-  const primaryPayload = marketReviewPayload?.markets
-    ? Object.values(marketReviewPayload.markets)[0]
-    : marketReviewPayload;
-  const indices = primaryPayload?.indices || [];
-  const breadth = primaryPayload?.breadth;
+  const structuredMarketData = useMemo(
+    () => getStructuredMarketData(marketReviewPayload),
+    [marketReviewPayload],
+  );
+  const showStructuredMarketTitles = Boolean(marketReviewPayload?.markets);
 
   useEffect(() => {
     if (!recordId || providedContent || hasStructuredContent) {
@@ -375,58 +439,71 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
         </div>
       ) : null}
 
-      {indices.length > 0 || breadth ? (
+      {structuredMarketData.length > 0 ? (
         <Card variant="bordered" padding="md" className="home-panel-card text-left">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <BarChart3 className="h-4 w-4" aria-hidden="true" />
             </span>
-            <h3 className="text-base font-semibold text-foreground">Structured Market Data</h3>
+            <h3 className="text-base font-semibold text-foreground">{marketReviewText.structuredMarketData}</h3>
           </div>
-          {breadth ? (
-            <div className="mb-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-              <div className="rounded-lg border border-subtle p-3">
-                <p className="label-uppercase">Advancers</p>
-                <p className="mt-1 font-semibold text-foreground">{breadth.upCount ?? '-'}</p>
+          <div className="space-y-5">
+            {structuredMarketData.map((marketData) => (
+              <div key={marketData.id} className="space-y-3">
+                {showStructuredMarketTitles ? (
+                  <h4 className="text-sm font-semibold text-foreground">{marketData.title}</h4>
+                ) : null}
+                {marketData.breadth ? (
+                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+                    <div className="rounded-lg border border-subtle p-3">
+                      <p className="label-uppercase">{marketReviewText.advancers}</p>
+                      <p className="mt-1 font-semibold text-foreground">{marketData.breadth.upCount ?? '-'}</p>
+                    </div>
+                    <div className="rounded-lg border border-subtle p-3">
+                      <p className="label-uppercase">{marketReviewText.decliners}</p>
+                      <p className="mt-1 font-semibold text-foreground">{marketData.breadth.downCount ?? '-'}</p>
+                    </div>
+                    <div className="rounded-lg border border-subtle p-3">
+                      <p className="label-uppercase">{marketReviewText.limitUpDown}</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {marketData.breadth.limitUpCount ?? '-'} / {marketData.breadth.limitDownCount ?? '-'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-subtle p-3">
+                      <p className="label-uppercase">{marketReviewText.turnover}</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {marketData.breadth.totalAmount ?? '-'} {marketData.breadth.turnoverUnit || ''}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+                {marketData.indices.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-xs uppercase text-muted-text">
+                        <tr>
+                          <th className="px-2 py-2">{marketReviewText.index}</th>
+                          <th className="px-2 py-2">{marketReviewText.last}</th>
+                          <th className="px-2 py-2">{marketReviewText.change}</th>
+                          <th className="px-2 py-2">{marketReviewText.highLow}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-subtle">
+                        {marketData.indices.map((index) => (
+                          <tr key={index.code || index.name}>
+                            <td className="px-2 py-2 font-medium text-foreground">{index.name}</td>
+                            <td className="px-2 py-2 text-secondary-text">{index.current ?? '-'}</td>
+                            <td className="px-2 py-2 text-secondary-text">{index.changePct !== undefined ? `${index.changePct}%` : '-'}</td>
+                            <td className="px-2 py-2 text-secondary-text">{index.high ?? '-'} / {index.low ?? '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
               </div>
-              <div className="rounded-lg border border-subtle p-3">
-                <p className="label-uppercase">Decliners</p>
-                <p className="mt-1 font-semibold text-foreground">{breadth.downCount ?? '-'}</p>
-              </div>
-              <div className="rounded-lg border border-subtle p-3">
-                <p className="label-uppercase">Limit Up/Down</p>
-                <p className="mt-1 font-semibold text-foreground">{breadth.limitUpCount ?? '-'} / {breadth.limitDownCount ?? '-'}</p>
-              </div>
-              <div className="rounded-lg border border-subtle p-3">
-                <p className="label-uppercase">Turnover</p>
-                <p className="mt-1 font-semibold text-foreground">{breadth.totalAmount ?? '-'} {breadth.turnoverUnit || ''}</p>
-              </div>
-            </div>
-          ) : null}
-          {indices.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-xs uppercase text-muted-text">
-                  <tr>
-                    <th className="px-2 py-2">Index</th>
-                    <th className="px-2 py-2">Last</th>
-                    <th className="px-2 py-2">Change</th>
-                    <th className="px-2 py-2">High/Low</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-subtle">
-                  {indices.map((index) => (
-                    <tr key={index.code || index.name}>
-                      <td className="px-2 py-2 font-medium text-foreground">{index.name}</td>
-                      <td className="px-2 py-2 text-secondary-text">{index.current ?? '-'}</td>
-                      <td className="px-2 py-2 text-secondary-text">{index.changePct !== undefined ? `${index.changePct}%` : '-'}</td>
-                      <td className="px-2 py-2 text-secondary-text">{index.high ?? '-'} / {index.low ?? '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
+            ))}
+          </div>
         </Card>
       ) : null}
 
