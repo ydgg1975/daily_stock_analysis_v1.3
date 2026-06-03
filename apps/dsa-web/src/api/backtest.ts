@@ -6,6 +6,7 @@ import type {
   BacktestResultsResponse,
   BacktestResultItem,
   PerformanceMetrics,
+  BacktestPhaseFilter,
 } from '../types/backtest';
 
 // ============ API ============
@@ -37,7 +38,7 @@ export const backtestApi = {
     evalWindowDays?: number;
     analysisDateFrom?: string;
     analysisDateTo?: string;
-    analysisPhase?: string;
+    analysisPhase?: BacktestPhaseFilter;
     page?: number;
     limit?: number;
   } = {}): Promise<BacktestResultsResponse> => {
@@ -71,7 +72,7 @@ export const backtestApi = {
     evalWindowDays?: number;
     analysisDateFrom?: string;
     analysisDateTo?: string;
-    analysisPhase?: string;
+    analysisPhase?: BacktestPhaseFilter;
   } = {}): Promise<PerformanceMetrics | null> => {
     try {
       const queryParams: Record<string, string | number> = {};
@@ -100,7 +101,7 @@ export const backtestApi = {
     evalWindowDays?: number;
     analysisDateFrom?: string;
     analysisDateTo?: string;
-    analysisPhase?: string;
+    analysisPhase?: BacktestPhaseFilter;
   } = {}): Promise<PerformanceMetrics | null> => {
     try {
       const queryParams: Record<string, string | number> = {};

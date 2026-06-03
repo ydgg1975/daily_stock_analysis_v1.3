@@ -6,6 +6,9 @@ import type { MarketPhaseSummary } from './analysis';
 
 // ============ Request / Response ============
 
+export type BacktestAnalysisPhase = 'premarket' | 'intraday' | 'postmarket' | 'unknown';
+export type BacktestPhaseFilter = BacktestAnalysisPhase | 'all';
+
 export interface BacktestRunRequest {
   code?: string;
   force?: boolean;

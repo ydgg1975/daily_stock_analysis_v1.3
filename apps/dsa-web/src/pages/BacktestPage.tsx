@@ -9,6 +9,7 @@ import type {
   BacktestResultItem,
   BacktestRunResponse,
   PerformanceMetrics,
+  BacktestPhaseFilter,
 } from '../types/backtest';
 import { getMarketPhaseSummaryLabel } from '../utils/marketPhase';
 
@@ -17,7 +18,7 @@ const BACKTEST_INPUT_CLASS =
 const BACKTEST_COMPACT_INPUT_CLASS =
   'input-surface input-focus-glow h-10 rounded-xl border bg-transparent px-3 py-2 text-xs transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60';
 
-const PHASE_FILTER_OPTIONS = [
+const PHASE_FILTER_OPTIONS: Array<{ value: BacktestPhaseFilter; label: string }> = [
   { value: 'all', label: '全部阶段' },
   { value: 'premarket', label: '盘前' },
   { value: 'intraday', label: '盘中' },
@@ -239,7 +240,7 @@ const BacktestPage: React.FC = () => {
   const [codeFilter, setCodeFilter] = useState('');
   const [analysisDateFrom, setAnalysisDateFrom] = useState('');
   const [analysisDateTo, setAnalysisDateTo] = useState('');
-  const [phaseFilter, setPhaseFilter] = useState('all');
+  const [phaseFilter, setPhaseFilter] = useState<BacktestPhaseFilter>('all');
   const [evalDays, setEvalDays] = useState('');
   const [forceRerun, setForceRerun] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -269,7 +270,7 @@ const BacktestPage: React.FC = () => {
     windowDays?: number,
     startDate?: string,
     endDate?: string,
-    phase?: string,
+    phase?: BacktestPhaseFilter,
   ) => {
     setIsLoadingResults(true);
     try {
@@ -300,7 +301,7 @@ const BacktestPage: React.FC = () => {
     windowDays?: number,
     startDate?: string,
     endDate?: string,
-    phase?: string,
+    phase?: BacktestPhaseFilter,
   ) => {
     setIsLoadingPerf(true);
     try {
@@ -444,7 +445,7 @@ const BacktestPage: React.FC = () => {
             <span className="text-xs text-muted-text">阶段</span>
             <select
               value={phaseFilter}
-              onChange={(e) => setPhaseFilter(e.target.value)}
+              onChange={(e) => setPhaseFilter(e.target.value as BacktestPhaseFilter)}
               disabled={isRunning}
               className={`${BACKTEST_COMPACT_INPUT_CLASS} w-28`}
             >

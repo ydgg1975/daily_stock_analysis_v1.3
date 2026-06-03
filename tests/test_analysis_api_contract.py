@@ -1717,6 +1717,35 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             },
         )
 
+    def test_openapi_declares_backtest_phase_filter_enum_and_400(self) -> None:
+        if create_app is None:
+            self.skipTest("fastapi is not installed in this test environment")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app = create_app(static_dir=Path(temp_dir))
+            paths = app.openapi()["paths"]
+
+        for path in (
+            "/api/v1/backtest/results",
+            "/api/v1/backtest/performance",
+            "/api/v1/backtest/performance/{code}",
+        ):
+            operation = paths[path]["get"]
+            self.assertIn("400", operation["responses"])
+            params = {param["name"]: param for param in operation["parameters"]}
+            schema = params["analysis_phase"]["schema"]
+            enum_values = set()
+            stack = [schema]
+            while stack:
+                current = stack.pop()
+                if not isinstance(current, dict):
+                    continue
+                enum_values.update(current.get("enum") or [])
+                stack.extend(current.get("anyOf") or [])
+                stack.extend(current.get("oneOf") or [])
+
+            self.assertEqual(enum_values, {"premarket", "intraday", "postmarket", "unknown"})
+
     def test_market_review_endpoint_accepts_omitted_body(self) -> None:
         if create_app is None or analysis_endpoint_module is None:
             self.skipTest("fastapi is not installed in this test environment")

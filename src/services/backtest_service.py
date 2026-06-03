@@ -228,19 +228,14 @@ class BacktestService:
         config = get_config()
         engine_version = str(getattr(config, "backtest_engine_version", "v1"))
 
-        # When date filters are active and no explicit window is requested,
-        # infer the smallest available window to stay aligned with summary metrics.
-        if eval_window_days is None and (analysis_date_from is not None or analysis_date_to is not None):
-            windows = self.repo.get_distinct_eval_windows(
+        phase_bucket = self._normalize_phase_filter(analysis_phase)
+        if eval_window_days is None and (analysis_date_from is not None or analysis_date_to is not None or phase_bucket is not None):
+            eval_window_days = self._infer_eval_window_for_query(
                 code=code,
                 engine_version=engine_version,
                 analysis_date_from=analysis_date_from,
                 analysis_date_to=analysis_date_to,
             )
-            if windows:
-                eval_window_days = windows[0]
-
-        phase_bucket = self._normalize_phase_filter(analysis_phase)
         if phase_bucket is not None:
             return self._get_recent_evaluations_by_phase(
                 code=code,
@@ -294,6 +289,13 @@ class BacktestService:
 
         phase_bucket = self._normalize_phase_filter(analysis_phase)
         if analysis_date_from is not None or analysis_date_to is not None or phase_bucket is not None:
+            if eval_window_days is None:
+                eval_window_days = self._infer_eval_window_for_query(
+                    code=code,
+                    engine_version=engine_version,
+                    analysis_date_from=analysis_date_from,
+                    analysis_date_to=analysis_date_to,
+                )
             ew = int(eval_window_days) if eval_window_days is not None else None
             count = self.repo.count_results(
                 code=code,
@@ -322,12 +324,13 @@ class BacktestService:
                     raise ValueError(
                         "Phase-filtered summary matches too many rows; narrow the analysis date range or stock code."
                     )
-                phase_counts = self._phase_counts_from_contexts([snapshot for _, snapshot in rows_with_context])
-                filtered_rows = [
-                    row
+                filtered_pairs = [
+                    (row, snapshot)
                     for row, snapshot in rows_with_context
                     if self._phase_bucket_from_snapshot(snapshot) == phase_bucket
                 ]
+                phase_counts = self._phase_counts_from_contexts([snapshot for _, snapshot in filtered_pairs])
+                filtered_rows = [row for row, _ in filtered_pairs]
                 return self._build_dynamic_summary(
                     rows=filtered_rows,
                     scope=scope,
@@ -395,6 +398,22 @@ class BacktestService:
         normalized["strategy_id"] = strategy_id
         return normalized
 
+    def _infer_eval_window_for_query(
+        self,
+        *,
+        code: Optional[str],
+        engine_version: str,
+        analysis_date_from: Optional[date],
+        analysis_date_to: Optional[date],
+    ) -> Optional[int]:
+        windows = self.repo.get_distinct_eval_windows(
+            code=code,
+            engine_version=engine_version,
+            analysis_date_from=analysis_date_from,
+            analysis_date_to=analysis_date_to,
+        )
+        return windows[0] if windows else None
+
     def _get_recent_evaluations_by_phase(
         self,
         *,
@@ -415,10 +434,10 @@ class BacktestService:
         page_rows: List[Tuple[BacktestResult, Optional[str], Optional[str], Optional[Dict[str, Any]], str]] = []
 
         while True:
-            if scanned >= self.MAX_DYNAMIC_SUMMARY_ROWS:
-                raise ValueError(
-                    "Phase-filtered results match too many rows; narrow the analysis date range or stock code."
-                )
+            remaining_probe_rows = self.MAX_DYNAMIC_SUMMARY_ROWS + 1 - scanned
+            if remaining_probe_rows <= 0:
+                raise ValueError("Phase-filtered results match too many rows; narrow the analysis date range or stock code.")
+            batch_limit = min(batch_size, remaining_probe_rows)
             batch = self.repo.get_results_with_context_batch(
                 code=code,
                 eval_window_days=eval_window_days,
@@ -427,11 +446,13 @@ class BacktestService:
                 analysis_date_to=analysis_date_to,
                 days=None,
                 offset=sql_offset,
-                limit=min(batch_size, self.MAX_DYNAMIC_SUMMARY_ROWS - scanned),
+                limit=batch_limit,
             )
             if not batch:
                 break
             scanned += len(batch)
+            if scanned > self.MAX_DYNAMIC_SUMMARY_ROWS:
+                raise ValueError("Phase-filtered results match too many rows; narrow the analysis date range or stock code.")
             sql_offset += len(batch)
             for result, stock_name, trend_prediction, _created_at, context_snapshot in batch:
                 summary = extract_market_phase_summary(context_snapshot)
@@ -441,7 +462,7 @@ class BacktestService:
                 if matched_total >= page_offset and len(page_rows) < limit:
                     page_rows.append((result, stock_name, trend_prediction, summary, bucket))
                 matched_total += 1
-            if len(batch) < batch_size:
+            if len(batch) < batch_limit:
                 break
 
         items = [
