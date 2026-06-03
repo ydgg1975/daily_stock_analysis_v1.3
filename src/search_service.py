@@ -12,6 +12,7 @@ A股自选股智能分析系统 - 搜索服务模块
 """
 
 import logging
+import os
 import re
 import threading
 import time
@@ -40,6 +41,19 @@ from src.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Repo-tagged User-Agent so Keenable can attribute free/paid traffic from this project.
+# Version is derived from package metadata when available, falling back to a coarse tag.
+try:
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    try:
+        _KEENABLE_CLIENT_VERSION = _pkg_version("daily_stock_analysis")
+    except PackageNotFoundError:
+        _KEENABLE_CLIENT_VERSION = "dev"
+except Exception:  # pragma: no cover - importlib.metadata always present on 3.10+
+    _KEENABLE_CLIENT_VERSION = "dev"
+KEENABLE_USER_AGENT = f"keenable-daily-stock-analysis/{_KEENABLE_CLIENT_VERSION}"
 
 # Transient network errors (retryable)
 _SEARCH_TRANSIENT_EXCEPTIONS = (
@@ -2093,10 +2107,186 @@ class SearXNGSearchProvider(BaseSearchProvider):
         )
 
 
+class KeenableSearchProvider(BaseSearchProvider):
+    """
+    Keenable 搜索引擎 (https://keenable.ai)
+
+    特点：
+    - 专为 AI Agent 优化的 Web 搜索 API
+    - 使用 KEENABLE_API_KEYS 鉴权（X-API-Key 头），支持多 Key 负载均衡
+    - 通过 published_after 做时间范围过滤，按相关度返回结构化结果
+
+    契约说明：
+    - 请求体只含 query + mode，Keenable API 无 max_results/limit 参数；
+      返回结果的条数裁剪沿用本仓库各 provider 统一的 max_results 约定。
+    - base_url 仅来自 KEENABLE_API_URL 环境变量（默认 https://api.keenable.ai），
+      强制 HTTPS（仅本地 loopback 允许 http），不暴露为构造参数。
+
+    文档：https://keenable.ai
+    """
+
+    DEFAULT_API_BASE = "https://api.keenable.ai"
+
+    def __init__(self, api_keys: List[str]):
+        super().__init__(api_keys, "Keenable")
+
+    def _resolve_api_base(self) -> Optional[str]:
+        """Read KEENABLE_API_URL (HTTPS enforced; http allowed only for loopback)."""
+        api_base = os.getenv("KEENABLE_API_URL", self.DEFAULT_API_BASE).rstrip("/")
+        parsed = urlparse(api_base)
+        is_loopback = parsed.hostname in ("127.0.0.1", "localhost", "::1")
+        if parsed.scheme == "https" or (parsed.scheme == "http" and is_loopback):
+            return api_base
+        logger.error("[Keenable] KEENABLE_API_URL 必须使用 HTTPS（当前: %s）", api_base)
+        return None
+
+    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """执行 Keenable 搜索"""
+        api_base = self._resolve_api_base()
+        if not api_base:
+            return SearchResponse(
+                query=query,
+                results=[],
+                provider=self.name,
+                success=False,
+                error_message="KEENABLE_API_URL 必须使用 HTTPS",
+            )
+
+        url = f"{api_base}/v1/search"
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": api_key,
+            "User-Agent": KEENABLE_USER_AGENT,
+        }
+        # mode 固定 pro（keyless public 端点才会拒绝 realtime）；不发送 max_results/limit。
+        payload: Dict[str, Any] = {"query": query, "mode": "pro"}
+        if days and days > 0:
+            payload["published_after"] = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        try:
+            response = _post_with_retry(url, headers=headers, json=payload, timeout=15)
+
+            if response.status_code != 200:
+                try:
+                    if response.headers.get('content-type', '').startswith('application/json'):
+                        error_data = response.json()
+                        error_message = (
+                            error_data.get('detail')
+                            or error_data.get('message')
+                            or response.text
+                        )
+                    else:
+                        error_message = response.text
+                except Exception:
+                    error_message = response.text
+
+                if response.status_code == 401:
+                    error_msg = f"API KEY 无效: {error_message}"
+                elif response.status_code == 402:
+                    error_msg = f"额度不足: {error_message}"
+                elif response.status_code == 429:
+                    error_msg = f"请求频率达到限制: {error_message}"
+                elif response.status_code >= 500:
+                    error_msg = f"服务端错误 HTTP {response.status_code}: {error_message}"
+                else:
+                    error_msg = f"HTTP {response.status_code}: {error_message}"
+
+                logger.warning(f"[Keenable] 搜索失败: {error_msg}")
+                return SearchResponse(
+                    query=query,
+                    results=[],
+                    provider=self.name,
+                    success=False,
+                    error_message=error_msg,
+                )
+
+            try:
+                data = response.json()
+            except ValueError as e:
+                error_msg = f"响应JSON解析失败: {str(e)}"
+                logger.error(f"[Keenable] {error_msg}")
+                return SearchResponse(
+                    query=query,
+                    results=[],
+                    provider=self.name,
+                    success=False,
+                    error_message=error_msg,
+                )
+
+            results_raw = data.get("results")
+            if not isinstance(results_raw, list):
+                error_msg = "响应中缺少 results 列表"
+                logger.error(f"[Keenable] {error_msg}，原始响应: {data}")
+                return SearchResponse(
+                    query=query,
+                    results=[],
+                    provider=self.name,
+                    success=False,
+                    error_message=error_msg,
+                )
+
+            logger.info(f"[Keenable] 搜索完成，query='{query}'")
+
+            results = []
+            for item in results_raw[:max_results]:
+                if not isinstance(item, dict):
+                    continue
+                snippet = item.get("description") or ""
+                if snippet and len(snippet) > 500:
+                    snippet = snippet[:500] + "..."
+                results.append(SearchResult(
+                    title=item.get("title", ""),
+                    snippet=snippet,
+                    url=item.get("url", ""),
+                    source=self._extract_domain(item.get("url", "")),
+                    published_date=item.get("published_at"),
+                ))
+
+            logger.info(f"[Keenable] 成功解析 {len(results)} 条结果")
+            return SearchResponse(
+                query=query,
+                results=results,
+                provider=self.name,
+                success=True,
+            )
+
+        except requests.exceptions.Timeout:
+            error_msg = "请求超时"
+            logger.error(f"[Keenable] {error_msg}")
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=error_msg,
+            )
+        except requests.exceptions.RequestException as e:
+            error_msg = f"网络请求失败: {str(e)}"
+            logger.error(f"[Keenable] {error_msg}")
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=error_msg,
+            )
+        except Exception as e:
+            error_msg = f"未知错误: {str(e)}"
+            logger.error(f"[Keenable] {error_msg}")
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=error_msg,
+            )
+
+    @staticmethod
+    def _extract_domain(url: str) -> str:
+        """从 URL 提取域名作为来源"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.replace('www.', '')
+            return domain or '未知来源'
+        except Exception:
+            return '未知来源'
+
+
 class SearchService:
     """
     搜索服务
-    
+
     功能：
     1. 管理多个搜索引擎
     2. 自动故障转移
@@ -2169,6 +2359,7 @@ class SearchService:
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
+        keenable_keys: Optional[List[str]] = None,
         searxng_base_urls: Optional[List[str]] = None,
         searxng_public_instances_enabled: bool = True,
         news_max_age_days: int = 3,
@@ -2184,6 +2375,7 @@ class SearchService:
             brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
             minimax_keys: MiniMax API Key 列表
+            keenable_keys: Keenable Search API Key 列表（配置后作为最高优先级提供方）
             searxng_base_urls: SearXNG 实例地址列表（自建无配额兜底）
             searxng_public_instances_enabled: 未配置自建实例时，是否自动使用公共 SearXNG 实例
             news_max_age_days: 新闻最大时效（天）
@@ -2249,7 +2441,12 @@ class SearchService:
         if anspire_keys:
             self._providers.insert(0, AnspireSearchProvider(anspire_keys))
             logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
-            
+
+        # 8. Keenable（AI Agent 优化的 Web 搜索，配置后作为最高优先级提供方）
+        if keenable_keys:
+            self._providers.insert(0, KeenableSearchProvider(keenable_keys))
+            logger.info(f"已配置 Keenable 搜索，共 {len(keenable_keys)} 个 API Key")
+
         if not self._providers:
             logger.warning("未配置任何搜索能力，新闻搜索功能将不可用")
 
@@ -3919,6 +4116,7 @@ def get_search_service() -> SearchService:
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,
+                    keenable_keys=config.keenable_api_keys,
                     searxng_base_urls=config.searxng_base_urls,
                     searxng_public_instances_enabled=config.searxng_public_instances_enabled,
                     news_max_age_days=config.news_max_age_days,
