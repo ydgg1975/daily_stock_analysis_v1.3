@@ -172,6 +172,14 @@ CHANNEL_PROFILES: Dict[str, ChannelProfile] = {
         default_mode="plain_fallback",
         supports_link=True,
     ),
+    "dingtalk": ChannelProfile(
+        channel="dingtalk",
+        markdown="dingtalk_markdown",
+        default_mode="full_report",
+        max_text_bytes=20000,
+        supports_link=True,
+        notes="DingTalk custom robot webhook with signing/keyword security and auto-chunking.",
+    ),
     "unknown": ChannelProfile(
         channel="unknown",
         markdown="plain_text",

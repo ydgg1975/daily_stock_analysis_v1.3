@@ -1176,11 +1176,32 @@ class TestDingtalkSender(unittest.TestCase):
         )
         sender = DingtalkSender(cfg)
         result = sender.send_to_dingtalk("A" * 3000)
+        # dingtalk_max_bytes=100 < payload overhead → budget too small, returns False
+        self.assertFalse(result)
+
+    @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_chunked_payloads_never_exceed_max_bytes(self, mock_post):
+        """Each chunk's actual serialized JSON payload must be ≤ configured max_bytes."""
+        mock_post.return_value = _response(200, {"errcode": 0})
+        cfg = _config(
+            dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
+            dingtalk_webhook_keyword="关键词",
+            dingtalk_max_bytes=500,
+        )
+        sender = DingtalkSender(cfg)
+        result = sender.send_to_dingtalk("B" * 8000)
         self.assertTrue(result)
         self.assertGreater(mock_post.call_count, 1)
         for call in mock_post.call_args_list:
             payload = call.kwargs["json"]
             self.assertIn("关键词", payload["markdown"]["text"])
+            # Verify actual serialized payload stays within max_bytes
+            payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            self.assertLessEqual(
+                payload_bytes,
+                cfg.dingtalk_max_bytes,
+                f"Chunk payload {payload_bytes} bytes exceeds max {cfg.dingtalk_max_bytes}",
+            )
 
 
 class TestDingtalkSenderThroughNotificationService(unittest.TestCase):
@@ -1188,13 +1209,13 @@ class TestDingtalkSenderThroughNotificationService(unittest.TestCase):
 
     @mock.patch("src.notification_sender.dingtalk_sender.requests.post")
     def test_chunked_long_content_via_notification_service(self, mock_post):
-        """Send long content through NotificationService -
+        """Send long content through NotificationService —
         verifies _send_dingtalk_chunked_msg is resolved (not CustomWebhookSender's)."""
         mock_post.return_value = _response(200, {"errcode": 0})
         cfg = _config(
             dingtalk_webhook_url="https://oapi.dingtalk.com/robot/send?access_token=token",
             dingtalk_webhook_keyword="关键词",
-            dingtalk_max_bytes=100,
+            dingtalk_max_bytes=500,
         )
         from src.notification import NotificationService
         svc = NotificationService.__new__(NotificationService)
@@ -1217,6 +1238,13 @@ class TestDingtalkSenderThroughNotificationService(unittest.TestCase):
         for call in mock_post.call_args_list:
             payload = call.kwargs["json"]
             self.assertIn("关键词", payload["markdown"]["text"])
+            # Verify actual serialized payload stays within max_bytes
+            payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            self.assertLessEqual(
+                payload_bytes,
+                cfg.dingtalk_max_bytes,
+                f"Chunk payload {payload_bytes} bytes exceeds max {cfg.dingtalk_max_bytes}",
+            )
 
 
 if __name__ == "__main__":

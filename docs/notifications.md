@@ -62,6 +62,9 @@
 | `FEISHU_WEBHOOK_URL` | minimal | feishu | Secret | - |
 | `FEISHU_WEBHOOK_SECRET` | advanced | feishu | Secret | - |
 | `FEISHU_WEBHOOK_KEYWORD` | advanced | feishu | Variable or Secret | - |
+| `DINGTALK_WEBHOOK_URL` | minimal | dingtalk | Secret | - |
+| `DINGTALK_WEBHOOK_SECRET` | advanced | dingtalk | Secret | - |
+| `DINGTALK_WEBHOOK_KEYWORD` | advanced | dingtalk | Variable or Secret | - |
 | `TELEGRAM_BOT_TOKEN` | minimal | telegram | Secret | - |
 | `TELEGRAM_CHAT_ID` | minimal | telegram | Secret | - |
 | `TELEGRAM_MESSAGE_THREAD_ID` | advanced | telegram | Secret | - |

@@ -48,6 +48,18 @@ class DingtalkSender:
         self._dingtalk_max_bytes = getattr(config, 'dingtalk_max_bytes', DINGTALK_DEFAULT_MAX_BYTES)
         self._webhook_verify_ssl = getattr(config, 'webhook_verify_ssl', True)
 
+        # Pre-compute per-message overheads so send/chunk decisions use actual payload sizes.
+        # keyword prefix bytes (empty string when no keyword configured)
+        self._keyword_prefix_bytes = len(self._get_keyword_prefix().encode('utf-8'))
+        # JSON payload skeleton without text content
+        _empty_payload = self._build_payload("")
+        self._payload_skeleton_bytes = len(json.dumps(_empty_payload, ensure_ascii=False).encode('utf-8'))
+        # Maximum marker overhead for chunked messages: "\n\n📄 *(999/999)*" + safety margin
+        self._page_marker_max_bytes = max(
+            len("\n\n📄 *(99/99)*".encode('utf-8')),
+            len("\n\n📄 *(999/999)*".encode('utf-8')),
+        ) + 4  # modest safety margin for emoji width variance
+
     def _get_keyword_prefix(self) -> str:
         """Return the keyword prefix required by DingTalk webhook security settings."""
         if not self._dingtalk_keyword:
@@ -90,12 +102,20 @@ class DingtalkSender:
             return False
 
         max_bytes = self._dingtalk_max_bytes
+        # Effective budget for raw content: max_bytes minus payload skeleton and keyword prefix.
+        # This matches the actual bytes that _send_dingtalk_message will POST.
+        content_budget = max_bytes - self._payload_skeleton_bytes - self._keyword_prefix_bytes
 
-        # 检查字节长度，超长则分批发送
+        if content_budget <= 0:
+            logger.error(f"钉钉消息限制({max_bytes}字节)不足以容纳最小通知结构")
+            return False
+
+        # Judge against raw content bytes — if it exceeds the effective budget,
+        # chunking is needed.  The chunked path accounts for per-chunk marker overhead.
         content_bytes = len(content.encode('utf-8'))
-        if content_bytes > max_bytes:
+        if content_bytes > content_budget:
             logger.info(f"钉钉消息内容超长({content_bytes}字节/{len(content)}字符)，将分批发送")
-            return self._send_dingtalk_chunked_msg(content, max_bytes)
+            return self._send_dingtalk_chunked_msg(content, content_budget)
 
         try:
             return self._send_dingtalk_message(content, timeout_seconds=timeout_seconds)
@@ -109,22 +129,35 @@ class DingtalkSender:
         payload = self._build_payload(prepared_content)
         return self._post_dingtalk(payload, timeout_seconds=timeout_seconds)
 
-    def _send_dingtalk_chunked_msg(self, content: str, max_bytes: int) -> bool:
+    def _send_dingtalk_chunked_msg(self, content: str, content_budget: int) -> bool:
         """
         分批发送长消息到钉钉
 
-        按内容块智能分割，确保每批不超过限制
+        按内容块智能分割，确保每批不超过 max_bytes。
+
+        ``content_budget`` is the maximum raw content bytes a single chunk payload
+        may contain, already reduced by payload skeleton + keyword prefix overhead.
+        This method further subtracts per-chunk marker overhead.
 
         Args:
             content: 完整消息内容
-            max_bytes: 单条消息最大字节数
+            content_budget: 单条消息对raw content的预算
 
         Returns:
             是否全部发送成功
         """
-        # 为 payload 开销预留空间
-        budget = max(1000, max_bytes - 1500)
-        chunks = chunk_content_by_max_bytes(content, budget)
+        # Per-chunk budget must also reserve room for the page marker "\n\n📄 *(N/T)*"
+        chunk_budget = content_budget - self._page_marker_max_bytes
+        if chunk_budget < 100:
+            logger.error(
+                f"钉钉消息限制太小，单条 chunk 可用预算 {chunk_budget} 字节，无法发送 "
+                f"(max_bytes={self._dingtalk_max_bytes}, "
+                f"keyword_bytes={self._keyword_prefix_bytes}, "
+                f"payload_overhead={self._payload_skeleton_bytes})"
+            )
+            return False
+
+        chunks = chunk_content_by_max_bytes(content, chunk_budget)
         if not chunks:
             return False
 
