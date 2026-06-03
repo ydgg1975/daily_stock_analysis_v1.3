@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 FEISHU_SDK_AVAILABLE = False
-lark = None  # type: ignore[assignment]
+_lark: Any = None  # type: ignore[assignment]
 FEISHU_DOMAIN = "feishu"
 LARK_DOMAIN = "lark"
 try:
-    import lark_oapi as lark
+    import lark_oapi as _lark
     from lark_oapi.api.im.v1 import (
         CreateMessageRequest,
         CreateMessageRequestBody,
@@ -115,6 +115,26 @@ class FeishuSender:
         self._app_client_lock = threading.Lock()
 
     # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_card_body(content: str) -> dict:
+        """Build a Feishu interactive-card body (without the ``msg_type`` wrapper)."""
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": "股票智能分析报告"},
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {"tag": "lark_md", "content": content},
+                }
+            ],
+        }
+
+    # ------------------------------------------------------------------
     # Webhook helpers (unchanged legacy path)
     # ------------------------------------------------------------------
 
@@ -168,11 +188,11 @@ class FeishuSender:
                 return None
             try:
                 self._app_client = (
-                    lark.Client.builder()
+                    _lark.Client.builder()
                     .app_id(self._feishu_app_id)
                     .app_secret(self._feishu_app_secret)
                     .domain(self._feishu_domain)
-                    .log_level(lark.LogLevel.WARNING)
+                    .log_level(_lark.LogLevel.WARNING)
                     .build()
                 )
                 logger.info("飞书 App Bot 客户端初始化成功 (domain=%s)", self._feishu_domain)
@@ -216,7 +236,7 @@ class FeishuSender:
             chunks = chunk_content_by_max_bytes(
                 content, self._feishu_max_bytes, add_page_marker=True
             )
-        except ValueError as e:
+        except (ValueError, TypeError, Exception) as e:
             logger.error("App Bot 分片失败: %s", e)
             return False
 
@@ -237,21 +257,7 @@ class FeishuSender:
         which converts all Markdown constructs to ``lark_md``-compatible format.
         The interactive card uses ``tag: lark_md`` for rendering.
         """
-        card_payload = json.dumps(
-            {
-                "config": {"wide_screen_mode": True},
-                "header": {
-                    "title": {"tag": "plain_text", "content": "股票智能分析报告"},
-                },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {"tag": "lark_md", "content": content},
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        )
+        card_payload = json.dumps(self._build_card_body(content), ensure_ascii=False)
 
         if self._app_send_raw(client, "interactive", card_payload):
             return True
@@ -289,8 +295,12 @@ class FeishuSender:
                 if resp.success():
                     logger.info("App Bot 消息发送成功 (type=%s)", msg_type)
                     return True
+                try:
+                    log_id = resp.get_log_id()
+                except (AttributeError, Exception):
+                    log_id = "N/A"
                 status = "code=%s, msg=%s, log_id=%s" % (
-                    resp.code, resp.msg, resp.get_log_id(),
+                    resp.code, resp.msg, log_id,
                 )
                 last_response_error = status
                 logger.warning(
@@ -331,6 +341,9 @@ class FeishuSender:
         Returns:
             Whether the send succeeded.
         """
+        if content is None:
+            logger.error("send_to_feishu: content 不能为 None")
+            return False
         if self._feishu_url:
             return self._send_via_webhook(content, timeout_seconds=timeout_seconds)
         return self._send_via_app_bot(content)
@@ -401,14 +414,27 @@ class FeishuSender:
         def _post_payload(payload: Dict[str, Any]) -> bool:
             request_payload = dict(payload)
             request_payload.update(security_fields)
-            response = requests.post(
-                self._feishu_url,
-                json=request_payload,
-                timeout=timeout_seconds or _APP_SEND_TIMEOUT_SECONDS,
-                verify=self._webhook_verify_ssl,
-            )
+            try:
+                response = requests.post(
+                    self._feishu_url,
+                    json=request_payload,
+                    timeout=timeout_seconds or _APP_SEND_TIMEOUT_SECONDS,
+                    verify=self._webhook_verify_ssl,
+                )
+            except (requests.exceptions.ConnectionError,
+                     requests.exceptions.Timeout,
+                     requests.exceptions.RequestException) as e:
+                logger.error("飞书 Webhook 网络请求异常: %s", e)
+                return False
             if response.status_code == 200:
-                result = response.json()
+                try:
+                    result = response.json()
+                except (ValueError, AttributeError):
+                    logger.error("飞书 Webhook 返回非 JSON 响应: %s", response.text[:200])
+                    return False
+                if not isinstance(result, dict):
+                    logger.error("飞书 Webhook 返回非预期格式: %s", type(result).__name__)
+                    return False
                 code = result.get("code") if "code" in result else result.get("StatusCode")
                 if code == 0:
                     logger.info("飞书 Webhook 消息发送成功")
@@ -422,21 +448,7 @@ class FeishuSender:
             logger.error("飞书 Webhook 请求失败: HTTP %d", response.status_code)
             return False
 
-        card_payload = {
-            "msg_type": "interactive",
-            "card": {
-                "config": {"wide_screen_mode": True},
-                "header": {
-                    "title": {"tag": "plain_text", "content": "股票智能分析报告"},
-                },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {"tag": "lark_md", "content": prepared_content},
-                    }
-                ],
-            },
-        }
+        card_payload = {"msg_type": "interactive", "card": self._build_card_body(prepared_content)}
 
         if _post_payload(card_payload):
             return True

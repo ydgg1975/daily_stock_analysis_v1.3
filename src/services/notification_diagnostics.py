@@ -89,7 +89,7 @@ CHANNEL_SPECS: Tuple[NotificationChannelSpec, ...] = (
         kind="configured",
         minimal_keys=("FEISHU_WEBHOOK_URL",),
         alternative_minimal_keys=(("FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_CHAT_ID"),),
-        advanced_keys=("FEISHU_WEBHOOK_SECRET", "FEISHU_WEBHOOK_KEYWORD"),
+        advanced_keys=("FEISHU_WEBHOOK_SECRET", "FEISHU_WEBHOOK_KEYWORD", "FEISHU_RECEIVE_ID_TYPE", "FEISHU_DOMAIN"),
     ),
     NotificationChannelSpec(
         channel=NotificationChannel.TELEGRAM.value,

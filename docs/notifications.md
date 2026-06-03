@@ -83,6 +83,11 @@
 | `DISCORD_WEBHOOK_URL` | minimal | discord | Secret | - |
 | `DISCORD_BOT_TOKEN` | minimal | discord | Secret | - |
 | `DISCORD_MAIN_CHANNEL_ID` | minimal | discord | Secret | - |
+| `FEISHU_APP_ID` | minimal | feishu | Secret | - |
+| `FEISHU_APP_SECRET` | minimal | feishu | Secret | - |
+| `FEISHU_CHAT_ID` | minimal | feishu | Variable or Secret | - |
+| `FEISHU_RECEIVE_ID_TYPE` | advanced | feishu | Variable or Secret | - |
+| `FEISHU_DOMAIN` | advanced | feishu | Variable or Secret | - |
 | `ASTRBOT_URL` | minimal | astrbot | Secret | - |
 | `ASTRBOT_TOKEN` | advanced | astrbot | Secret | - |
 | `SERVERCHAN3_SENDKEY` | minimal | serverchan3 | Secret | - |
