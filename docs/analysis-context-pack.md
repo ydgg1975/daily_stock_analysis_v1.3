@@ -123,7 +123,7 @@ P4 Web 展示只在报告详情页渲染 `AnalysisContextSummary`，位置在策
 
 ## P5 数据质量评分与 Prompt 数据限制
 
-P5 在不升级 `PACK_VERSION`、不新增 fetcher、不新增配置项、不做历史迁移的前提下补齐三件事：内部低敏数据质量评分、跨模型通用的 Prompt 数据限制区块，以及既有 `analysis_context_pack_overview` 的低敏可见性扩展。P5 不改变 LLM 输出 JSON schema，不做后处理强制改写，也不纳入 #1386 的盘中动作字段。
+P5 在不升级 `PACK_VERSION`、不新增 fetcher、不新增配置项、不做历史迁移的前提下补齐三件事：内部低敏数据质量评分、跨模型通用的 Prompt 数据限制区块，以及既有 `analysis_context_pack_overview` 的低敏可见性扩展。#1389 P5 仍不改变 LLM 输出 JSON schema，也不做后处理强制改写；#1386 P5 会消费这里的低敏输入质量，在报告 `dashboard.phase_decision` 中输出盘中动作字段与质量护栏结果。
 
 状态契约新增 `fetch_failed`，用于“当前字段或数据块本次抓取明确失败”。首版只在已有 artifact 明确失败时使用，例如 `fundamental_context.status == "failed"`；空新闻、未配置搜索、无实时 quote artifact 或 chip 缺失仍保持既有 `missing` / `not_supported` 语义，避免把未启用能力误报成抓取失败。`fetch_failed` 不代表整次分析失败。
 
@@ -139,6 +139,8 @@ P5 在不升级 `PACK_VERSION`、不新增 fetcher、不新增配置项、不做
 `limitations` 优先列出核心块 `quote` / `daily_bars` / `technical` 的 `stale`、`fallback`、`missing`、`fetch_failed`、`partial`、`estimated`；其次列出辅助块 `news` / `fundamentals` / `chip` 的 `fetch_failed`、`fallback`、`stale`。辅助块单纯缺失不进入限制列表，避免把新闻缺失、未配置搜索或不支持能力解释成利好/利空。
 
 Prompt 数据限制只在 `format_analysis_context_pack_prompt_section()` 内渲染，紧跟 pack summary，因此普通分析、single Agent 和 multi-agent 复用同一消费路径。中文输出 `数据限制`，英文输出 `Data Limitations`；只有真实 score 存在时才输出评分行。若 `quote`、`daily_bars` 或 `technical` 为 degraded 状态，Prompt 明确要求最终 JSON 的 `confidence_level` 不得为 `高` / `High`。Prompt 继续只使用 status/source/warnings/missing_reason/低敏评分，不输出 raw payload、新闻正文、趋势原始值、secret、token 或 webhook。
+
+#1386 P2-full 在 P5 score/limitations 之后、confidence/safety 之前追加最小的 `phase × degraded data` 交叉约束：当 `AnalysisContextPack.phase` 来自合法 `MarketPhaseContext`，且 `quote`、`daily_bars` 或 `technical` 存在 degraded 状态时，Prompt 只补充当前阶段下数据质量如何限制盘中判断、开盘计划或保守分析；它不替代 P5 的 confidence/safety 规则，也不复述 `market_phase_context` 的 phase-only 文案。`pack.phase` 缺失、非 dict 或包含非法 phase 时 fail-open，仅保留 P5 通用数据限制。
 
 overview 只扩展现有公开面：`analysis_context_pack_overview.data_quality` 白名单包含 `overall_score`、`level`、`block_scores`、`limitations`，不重复公开 `warnings`。`render_analysis_context_pack_overview()` 与 `extract_analysis_context_pack_overview()` / persisted sanitizer 都会清洗该对象；旧 overview 缺少 `data_quality` 时仍正常读取。`details.context_snapshot` 继续剥离顶层 `analysis_context_pack_overview`，不公开完整 pack。
 
