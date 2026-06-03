@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tests for health check endpoints: /api/health and /api/v1/health."""
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
