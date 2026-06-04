@@ -146,6 +146,9 @@ class TestExtractStockCode(unittest.TestCase):
             "市盈率 TTM 怎么看",
             "PE 怎么看",
             "PE TTM",
+            "WHAT IS PE",
+            "PE IS HIGH",
+            "WHAT IS TTM",
             "YOY",
             "QOQ",
             "EBITDA",
@@ -158,6 +161,7 @@ class TestExtractStockCode(unittest.TestCase):
     def test_finance_abbrev_before_real_ticker(self):
         self.assertEqual(_extract_stock_code("PE AAPL 怎么看"), "AAPL")
         self.assertEqual(_extract_stock_code("TTM AAPL 怎么看"), "AAPL")
+        self.assertEqual(_extract_stock_code("WHAT IS PE AAPL"), "AAPL")
 
     # --- Priority: A-share > HK > US ---
 
@@ -186,6 +190,7 @@ class TestExtractStockCode(unittest.TestCase):
         expected_in_set = {
             "BUY", "SELL", "HOLD", "ETF", "IPO", "RSI", "MACD", "STOCK", "TREND",
             "TTM", "PE", "YOY", "QOQ", "EBITDA", "DCF", "CAGR",
+            "IS", "WHAT", "HIGH",
         }
         self.assertTrue(expected_in_set.issubset(_COMMON_WORDS))
 

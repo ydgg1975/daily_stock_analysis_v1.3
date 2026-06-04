@@ -967,12 +967,16 @@ describe('extractStockCodeFromMessage', () => {
     expect(extractStockCodeFromMessage('PE 怎么看')).toBeNull();
     expect(extractStockCodeFromMessage('MACD 还没金叉吗')).toBeNull();
     expect(extractStockCodeFromMessage('RSI 怎么看')).toBeNull();
+    expect(extractStockCodeFromMessage('WHAT IS PE')).toBeNull();
+    expect(extractStockCodeFromMessage('PE IS HIGH')).toBeNull();
+    expect(extractStockCodeFromMessage('WHAT IS TTM')).toBeNull();
   });
 
   it('skips finance abbreviations before a real ticker', () => {
     expect(extractStockCodeFromMessage('PE AAPL 怎么看')).toBe('AAPL');
     expect(extractStockCodeFromMessage('TTM AAPL 怎么看')).toBe('AAPL');
     expect(extractStockCodeFromMessage('MACD AAPL 怎么看')).toBe('AAPL');
+    expect(extractStockCodeFromMessage('WHAT IS PE AAPL')).toBe('AAPL');
   });
 
   it('does NOT return exchange prefixes as tickers', () => {

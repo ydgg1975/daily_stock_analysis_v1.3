@@ -1368,6 +1368,9 @@ class AgentOrchestrator:
 # be kept at module level to avoid re-creating it on every call.
 _COMMON_WORDS: set[str] = {
     # Pronouns / articles / prepositions / conjunctions
+    "AM", "AS", "AT", "BE", "BY", "DO", "GO", "HE", "IF", "IN",
+    "IS", "IT", "ME", "MY", "NO", "OF", "ON", "OR", "SO", "TO",
+    "UP", "US", "WE",
     "THE", "AND", "FOR", "ARE", "BUT", "NOT", "YOU", "ALL",
     "CAN", "HAD", "HER", "WAS", "ONE", "OUR", "OUT", "HAS",
     "HIS", "HOW", "ITS", "LET", "MAY", "NEW", "NOW", "OLD",
