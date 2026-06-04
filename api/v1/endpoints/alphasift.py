@@ -104,6 +104,17 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
             )
 
         install_spec = _validate_install_spec(config.alphasift_install_spec)
+        if _is_packaged_runtime():
+            raise HTTPException(
+                status_code=424,
+                detail={
+                    "error": "alphasift_install_packaged_runtime_unsupported",
+                    "message": (
+                        "打包后的桌面端不支持运行期自动 pip 安装 AlphaSift。"
+                        "请升级到已内置 AlphaSift 的桌面包，或使用源码部署并在当前 Python 环境中手动安装。"
+                    ),
+                },
+            )
 
         try:
             _purge_alphasift_modules()
@@ -148,7 +159,6 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
             install_spec_is_default=_is_default_alphasift_install_spec(install_spec),
         )
 
-
 def _validate_install_spec(raw_install_spec: str) -> str:
     install_spec = (raw_install_spec or "").strip()
     if not install_spec or install_spec.lower() == "alphasift":
@@ -173,6 +183,10 @@ def _validate_install_spec(raw_install_spec: str) -> str:
         )
 
     return install_spec
+
+
+def _is_packaged_runtime() -> bool:
+    return bool(getattr(sys, "frozen", False) or getattr(sys, "_MEIPASS", None))
 
 
 @router.post("/screen")

@@ -41,8 +41,19 @@ fi
 log "Installing backend dependencies..."
 "${PYTHON_BIN}" -m pip install -r "${ROOT_DIR}/requirements.txt"
 
+log "Bundling AlphaSift desktop dependency..."
+alpha_sift_install_spec="$("${PYTHON_BIN}" -c "from src.config import DEFAULT_ALPHASIFT_INSTALL_SPEC; print(DEFAULT_ALPHASIFT_INSTALL_SPEC)")"
+if [[ -z "${alpha_sift_install_spec}" ]]; then
+  echo "ERROR: DEFAULT_ALPHASIFT_INSTALL_SPEC is empty; cannot bundle AlphaSift for desktop."
+  exit 1
+fi
+"${PYTHON_BIN}" -m pip install "${alpha_sift_install_spec}"
+
 log "Checking python-multipart availability..."
 "${PYTHON_BIN}" -c "import multipart, multipart.multipart"
+
+log "Checking AlphaSift adapter availability..."
+"${PYTHON_BIN}" -c "import alphasift.dsa_adapter"
 
 if [[ -d "${ROOT_DIR}/dist/backend" ]]; then
   rm -rf "${ROOT_DIR}/dist/backend"
@@ -74,6 +85,9 @@ hidden_imports=(
   "api.v1.endpoints.history"
   "api.v1.endpoints.stocks"
   "api.v1.endpoints.health"
+  "api.v1.endpoints.alphasift"
+  "alphasift"
+  "alphasift.dsa_adapter"
   "api.v1.schemas"
   "api.v1.schemas.analysis"
   "api.v1.schemas.history"
@@ -103,7 +117,7 @@ for module in "${hidden_imports[@]}"; do
 done
 
 pushd "${ROOT_DIR}" >/dev/null
-cmd=("${PYTHON_BIN}" -m PyInstaller --name stock_analysis --onedir --noconfirm --noconsole --add-data "static:static" --add-data "strategies:strategies" --collect-data litellm --collect-data tiktoken)
+cmd=("${PYTHON_BIN}" -m PyInstaller --name stock_analysis --onedir --noconfirm --noconsole --add-data "static:static" --add-data "strategies:strategies" --collect-data litellm --collect-data tiktoken --collect-all alphasift)
 cmd+=("${hidden_import_args[@]}" "main.py")
 
 echo "Running: ${cmd[*]}"
@@ -136,6 +150,13 @@ fi
 packaged_strategy_count="$(find "${packaged_strategies}" -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
 if [[ "${packaged_strategy_count}" != "${source_strategy_count}" ]]; then
   echo "ERROR: packaged strategies count mismatch: expected ${source_strategy_count}, got ${packaged_strategy_count}."
+  exit 1
+fi
+
+log "Verifying packaged AlphaSift adapter files..."
+packaged_alphasift_count="$(find "${ROOT_DIR}/dist/backend/stock_analysis" -path '*alphasift*' | wc -l | tr -d '[:space:]')"
+if [[ "${packaged_alphasift_count}" == "0" ]]; then
+  echo "ERROR: packaged AlphaSift adapter files not found under dist/backend/stock_analysis."
   exit 1
 fi
 

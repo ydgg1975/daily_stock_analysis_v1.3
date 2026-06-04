@@ -62,7 +62,7 @@ AlphaSift 侧已在 `ZhuLinsen/alphasift@b2ca66dd47001b9a09890cfe21c2b18c7219ccf
 ## DSA 后端行为
 
 - `/api/v1/alphasift/status`：返回开关、可用性、默认安装来源标识和适配层元信息；不会暴露完整安装来源。
-- `/api/v1/alphasift/install`：开启流程在适配层缺失时会调用它；桌面模式（`DSA_DESKTOP_MODE=true`）不要求管理员会话，非桌面部署必须启用 `ADMIN_AUTH_ENABLED=true` 并携带有效管理员会话，否则返回 `401/403`。接口只允许默认受信任安装来源，并会强制重装锁定 commit，避免旧版 `alphasift` 包残留。
+- `/api/v1/alphasift/install`：开启流程在适配层缺失时会调用它；桌面模式（`DSA_DESKTOP_MODE=true`）不要求管理员会话，非桌面部署必须启用 `ADMIN_AUTH_ENABLED=true` 并携带有效管理员会话，否则返回 `401/403`。接口只允许默认受信任安装来源，并会强制重装锁定 commit，避免旧版 `alphasift` 包残留。打包桌面端不支持运行期 pip 安装，如果依赖缺失会返回明确错误，用户应升级到已内置 AlphaSift 的桌面包或改用源码部署。
 - `/api/v1/alphasift/strategies`：读取 AlphaSift 策略列表；如果 `ALPHASIFT_ENABLED=true` 且 `diagnostics.reason=missing_module`，会先按 `/install` 的同一鉴权要求自动安装后再读取；若适配层状态异常，会返回 `424 + diagnostics`，不触发自动安装。
 - `/api/v1/alphasift/screen`：调用适配层 `screen(..., use_llm=True)`，并在调用期间临时注入 DSA 已解析的 LLM 运行环境，同时向支持 `context` 的适配层传入结构化 LLM 配置；如果已开启但 `diagnostics.reason=missing_module`，会先按 `/install` 的同一鉴权要求自动安装后再运行；运行时异常则返回 `424 + diagnostics` 并保留原始错误边界。
 
@@ -86,6 +86,7 @@ AlphaSift 侧已在 `ZhuLinsen/alphasift@b2ca66dd47001b9a09890cfe21c2b18c7219ccf
 
 - 未开启返回 `403 alphasift_disabled`。
 - 受控安装接口来源不受信任返回 `403 alphasift_install_spec_not_allowed`。
+- 打包桌面端尝试运行期自动安装返回 `424 alphasift_install_packaged_runtime_unsupported`。
 - AlphaSift 未安装、缺少适配层或适配层不可调用返回 `424`。
 - 市场或策略被适配层拒绝时返回 `400/422`。
 - 运行失败返回 `424 alphasift_screen_failed`。
@@ -104,7 +105,7 @@ AlphaSift 侧已在 `ZhuLinsen/alphasift@b2ca66dd47001b9a09890cfe21c2b18c7219ccf
 
 源码运行的桌面端复用同一个 Python 后端环境，并设置 `DSA_DESKTOP_MODE=true`；通过设置页开启时如缺少适配层，会直接尝试自动安装默认受信任来源。
 
-打包后的桌面端通常不依赖运行期 `pip install`：`scripts/build-backend.ps1` 会在构建阶段安装默认 `ALPHASIFT_INSTALL_SPEC` 并把 `alphasift.dsa_adapter` 收集进 PyInstaller 产物。发布包默认仍关闭；用户在 Web 设置页开启后会先检查适配层，若打包产物异常缺失，再尝试受控自动安装。
+打包后的桌面端不依赖运行期 `pip install`：`scripts/build-backend.ps1` 和 `scripts/build-backend-macos.sh` 会在构建阶段安装默认 `ALPHASIFT_INSTALL_SPEC` 并把 `alphasift.dsa_adapter` 收集进 PyInstaller 产物。发布包默认仍关闭；用户在 Web 设置页开启后会先检查适配层，若打包产物异常缺失，会返回明确错误并提示升级桌面包或使用源码部署。
 
 ## Docker 说明
 
