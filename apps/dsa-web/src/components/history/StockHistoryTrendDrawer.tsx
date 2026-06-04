@@ -23,9 +23,9 @@ interface StockHistoryTrendDrawerProps {
 }
 
 const RANGE_OPTIONS: Array<{ value: StockHistoryRange; label: string }> = [
-  { value: 'all', label: '全部历史' },
-  { value: '30d', label: '近30天' },
-  { value: '90d', label: '近90天' },
+  { value: 'all', label: 'All History' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: '90d', label: 'Last 90 Days' },
 ];
 
 const isPresent = <T,>(value: T | null | undefined): value is T =>
@@ -57,7 +57,7 @@ const getPriceChangeStyle = (value?: number): React.CSSProperties | undefined =>
 const formatModelName = (value?: string): string => {
   const model = value?.trim();
   if (!model) {
-    return '未记录';
+    return 'Not recorded';
   }
   const parts = model.split('/').filter(Boolean);
   return parts[parts.length - 1] || model;
@@ -113,8 +113,8 @@ const summarizeView = (items: HistoryItem[], report: AnalysisReport, currentId?:
     averageScore,
     latestTime: formatDateTime(items[0]?.createdAt || report.meta.createdAt),
     modelSummary: modelEntries
-      .map(([model, count]) => `${model} ${count}次`)
-      .join(' / ') || '未记录',
+      .map(([model, count]) => `${model} ${count}x`)
+      .join(' / ') || 'Not recorded',
     currentModel,
     modelCount: modelEntries.length,
   };
@@ -194,27 +194,27 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
               </svg>
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-foreground">历史趋势</h2>
+              <h2 className="text-2xl font-bold text-foreground">Historical Trend</h2>
               <p className="mt-1 text-sm text-secondary-text">
                 {report.meta.stockName || report.meta.stockCode} · {report.meta.stockCode}
               </p>
             </div>
           </div>
           <Button variant="secondary" size="sm" onClick={onClose}>
-            返回当前报告
+            Return To Current Report
           </Button>
         </div>
       </Card>
 
       {isLoading ? (
-        <DashboardStateBlock loading title="加载同股历史中..." />
+        <DashboardStateBlock loading title="Loading same-stock history..." />
       ) : error ? (
         <DashboardStateBlock
-          title="历史趋势加载失败"
-          description="请稍后重试"
+          title="Historical Trend Failed To Load"
+          description="Please try again later"
           action={(
             <Button variant="secondary" size="sm" onClick={onRetry}>
-              重新加载
+              Reload
             </Button>
           )}
         />
@@ -222,9 +222,9 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
         <Card variant="bordered" padding="md" className="home-panel-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-semibold text-foreground">暂无更多同股历史分析</h3>
+              <h3 className="text-base font-semibold text-foreground">No More Same-stock Analysis Yet</h3>
               <p className="mt-1 text-sm text-secondary-text">
-                完成多次分析后，这里会展示观点变化、评分走势和模型记录。
+                After several analyses, this view will show opinion changes, score trends, and model records.
               </p>
             </div>
             <RangeControls filters={filters} onRangeChange={onRangeChange} />
@@ -234,20 +234,20 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
         <>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              label="分析次数"
-              value={`${total || items.length} 次`}
-              hint={`最近一次 ${summary.latestTime}`}
+              label="Analysis Count"
+              value={`${total || items.length}x`}
+              hint={`Latest ${summary.latestTime}`}
             />
-            <MetricCard label="当前观点" value={summary.currentAdvice} />
+            <MetricCard label="Current View" value={summary.currentAdvice} />
             <MetricCard
-              label="当前分数"
+              label="Current Score"
               value={formatNumber(summary.currentScore, 0)}
-              hint={`平均分 ${formatNumber(summary.averageScore, 1)}`}
+              hint={`Average ${formatNumber(summary.averageScore, 1)}`}
             />
             <MetricCard
-              label="最近模型"
+              label="Latest Model"
               value={summary.currentModel}
-              hint={`历史模型 ${summary.modelCount} 种`}
+              hint={`${summary.modelCount} historical model(s)`}
               title={summary.modelSummary}
             />
           </div>
@@ -255,9 +255,9 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
           <Card variant="bordered" padding="md" className="home-panel-card">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-semibold text-foreground">历史分析记录</h3>
+                <h3 className="text-base font-semibold text-foreground">Historical Analysis Records</h3>
                 <p className="mt-1 text-sm text-secondary-text">
-                  已加载 {items.length} / {total || items.length} 条 · 排序：最新优先 · 模型：全部
+                  Loaded {items.length} / {total || items.length} · Sort: newest first · Model: all
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -268,9 +268,9 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
                     size="sm"
                     onClick={onLoadMore}
                     isLoading={isLoadingMore}
-                    loadingText="加载中..."
+                    loadingText="Loading..."
                   >
-                    加载更多
+                    Load More
                   </Button>
                 ) : null}
               </div>
@@ -291,15 +291,15 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
                 </colgroup>
                 <thead className="border-b border-border/60 bg-background/35 text-xs text-secondary-text">
                   <tr>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">时间</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">分析结果</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">分数</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">股价</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">涨跌幅</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">量比</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">换手率</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">模型</th>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">操作</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Time</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Analysis Result</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Score</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Price</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Change</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Volume Ratio</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Turnover</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Model</th>
+                    <th className="whitespace-nowrap px-4 py-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/55">
@@ -346,7 +346,7 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
                         <td className="px-3 py-3 font-mono text-secondary-text">
                           {formatNumber(item.turnoverRate, 2)}{isPresent(item.turnoverRate) ? '%' : ''}
                         </td>
-                        <td className="truncate px-3 py-3 text-secondary-text" title={item.modelUsed || '未记录模型'}>
+                        <td className="truncate px-3 py-3 text-secondary-text" title={item.modelUsed || 'Model not recorded'}>
                           {formatModelName(item.modelUsed)}
                         </td>
                         <td className="px-3 py-3">
@@ -359,7 +359,7 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
                               onClose();
                             }}
                           >
-                            查看报告
+                            View Report
                           </button>
                         </td>
                       </tr>

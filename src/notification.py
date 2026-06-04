@@ -45,6 +45,7 @@ from src.report_language import (
     localize_operation_advice,
     localize_trend_prediction,
     normalize_report_language,
+    sanitize_english_report_text,
 )
 from bot.models import BotMessage
 from src.utils.sanitize import sanitize_diagnostic_text
@@ -323,8 +324,10 @@ class NotificationService(
         """Generate the aggregate report content used by merge/save/push paths."""
         normalized_type = self._normalize_report_type(report_type)
         if normalized_type == ReportType.BRIEF:
-            return self.generate_brief_report(results, report_date=report_date)
-        return self.generate_dashboard_report(results, report_date=report_date)
+            content = self.generate_brief_report(results, report_date=report_date)
+        else:
+            content = self.generate_dashboard_report(results, report_date=report_date)
+        return sanitize_english_report_text(content, self._get_report_language(results))
 
     def _collect_models_used(self, results: List[AnalysisResult]) -> List[str]:
         if not self._should_show_llm_model():

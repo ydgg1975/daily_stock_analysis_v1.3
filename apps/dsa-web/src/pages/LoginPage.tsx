@@ -8,6 +8,7 @@ import type { ParsedApiError } from '../api/error';
 import { isParsedApiError } from '../api/error';
 import { useAuth } from '../hooks';
 import { SettingsAlert } from '../components/settings';
+import { toEnglishText } from '../utils/englishText';
 
 const LoginPage: React.FC = () => {
   const { login, passwordSet, setupState } = useAuth();
@@ -15,7 +16,7 @@ const LoginPage: React.FC = () => {
 
   // Set page title
   useEffect(() => {
-    document.title = '登录 - DSA';
+    document.title = 'Login - DSA';
   }, []);
   const [searchParams] = useSearchParams();
   const rawRedirect = searchParams.get('redirect') ?? '';
@@ -52,7 +53,7 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     if (isFirstTime && password !== passwordConfirm) {
-      setError('两次输入的密码不一致');
+      setError('The two passwords do not match.');
       return;
     }
     setIsSubmitting(true);
@@ -61,7 +62,7 @@ const LoginPage: React.FC = () => {
       if (result.success) {
         navigate(redirect, { replace: true });
       } else {
-        setError(result.error ?? '登录失败');
+        setError(toEnglishText(result.error, 'Login failed.'));
       }
     } finally {
       setIsSubmitting(false);
@@ -154,19 +155,19 @@ const LoginPage: React.FC = () => {
                 {isFirstTime ? (
                   <>
                     <ShieldCheck className="h-6 w-6 text-emerald-400" />
-                    <span>设置初始密码</span>
+                    <span>Set Initial Password</span>
                   </>
                 ) : (
                   <>
                     <Lock className="h-5 w-5 text-[var(--login-accent-text)]" />
-                    <span>管理员登录</span>
+                    <span>Admin Login</span>
                   </>
                 )}
               </h1>
               <p className="mt-2 text-sm text-[var(--login-text-secondary)]">
                 {isFirstTime
-                  ? '首次启用认证，请为系统工作台设置管理员密码。'
-                  : '访问 DSA 量化决策引擎需要有效的身份凭证。'}
+                  ? 'Authentication is enabled for the first time. Set an administrator password for the workspace.'
+                  : 'A valid administrator password is required to access the DSA decision engine.'}
               </p>
             </div>
 
@@ -178,8 +179,8 @@ const LoginPage: React.FC = () => {
                   appearance="login"
                   allowTogglePassword
                   iconType="password"
-                  label={isFirstTime ? '管理员密码' : '登录密码'}
-                  placeholder={isFirstTime ? '请设置 6 位以上密码' : '请输入密码'}
+                  label={isFirstTime ? 'Administrator password' : 'Password'}
+                  placeholder={isFirstTime ? 'Set a password with at least 6 characters' : 'Enter your password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isSubmitting}
@@ -194,8 +195,8 @@ const LoginPage: React.FC = () => {
                     appearance="login"
                     allowTogglePassword
                     iconType="password"
-                    label="确认密码"
-                    placeholder="再次确认管理员密码"
+                    label="Confirm password"
+                    placeholder="Confirm the administrator password"
                     value={passwordConfirm}
                     onChange={(e) => setPasswordConfirm(e.target.value)}
                     disabled={isSubmitting}
@@ -211,8 +212,8 @@ const LoginPage: React.FC = () => {
                   className="overflow-hidden"
                 >
                   <SettingsAlert
-                    title={isFirstTime ? '配置失败' : '验证未通过'}
-                    message={isParsedApiError(error) ? error.message : error}
+                    title={isFirstTime ? 'Setup failed' : 'Verification failed'}
+                    message={isParsedApiError(error) ? toEnglishText(error.message, 'Verification failed.') : toEnglishText(error, 'Verification failed.')}
                     variant="error"
                     className="!border-[var(--login-error-border)] !bg-[var(--login-error-bg)] !text-[var(--login-error-text)]"
                   />
@@ -230,10 +231,10 @@ const LoginPage: React.FC = () => {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{isFirstTime ? '初始化中...' : '正在建立连接...'}</span>
+                      <span>{isFirstTime ? 'Initialising...' : 'Connecting...'}</span>
                     </>
                   ) : (
-                    <span>{isFirstTime ? '完成设置并登录' : '授权进入工作台'}</span>
+                    <span>{isFirstTime ? 'Finish setup and log in' : 'Enter workspace'}</span>
                   )}
                 </div>
                 <div className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] pointer-events-none" />

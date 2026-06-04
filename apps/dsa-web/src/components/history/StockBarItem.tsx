@@ -17,11 +17,11 @@ interface StockBarItemProps {
 const getOperationBadgeLabel = (advice?: string) => {
   const normalized = advice?.trim();
   if (!normalized) return null;
-  if (normalized.includes('减仓')) return '减仓';
-  if (normalized.includes('卖')) return '卖出';
-  if (normalized.includes('观望') || normalized.includes('等待')) return '观望';
-  if (normalized.includes('买') || normalized.includes('布局')) return '买入';
-  return normalized.split(/[，。；、\s]/)[0] || '建议';
+  if (normalized.includes('减仓') || /reduce/i.test(normalized)) return 'Reduce';
+  if (normalized.includes('卖') || /sell/i.test(normalized)) return 'Sell';
+  if (normalized.includes('观望') || normalized.includes('等待') || /hold|watch|wait/i.test(normalized)) return 'Hold';
+  if (normalized.includes('买') || normalized.includes('布局') || /buy|accumulate/i.test(normalized)) return 'Buy';
+  return normalized.split(/[，。；、\s]/)[0] || 'Advice';
 };
 
 export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
@@ -83,7 +83,7 @@ export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
                     backgroundColor: 'rgba(245,158,11,0.1)',
                   }}
                 >
-                  大盘
+                  Market
                 </Badge>
               ) : operationLabel && sentimentColor ? (
                 <Badge
@@ -109,7 +109,7 @@ export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
                   }}
                   disabled={isDeleting}
                   className="opacity-0 group-hover/item:opacity-100 transition-opacity h-6 w-6 p-0 flex items-center justify-center"
-                  aria-label={`删除 ${item.stockName || item.stockCode} 历史记录`}
+                  aria-label={`Delete history records for ${item.stockName || item.stockCode}`}
                 >
                   <svg className="h-3.5 w-3.5 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -134,7 +134,7 @@ export const StockBarItemComponent: React.FC<StockBarItemProps> = ({
               <>
                 <span className="w-1 h-1 rounded-full bg-subtle-hover" />
                 <span className="text-[10px] text-muted-text">
-                  {item.analysisCount}次
+                  {item.analysisCount}x
                 </span>
               </>
             )}

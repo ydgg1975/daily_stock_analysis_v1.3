@@ -5,6 +5,7 @@ import type {
   AnalysisContextPackOverview,
   ReportLanguage,
 } from '../../types/analysis';
+import { toEnglishText } from '../../utils/englishText';
 import { normalizeReportLanguage } from '../../utils/reportLanguage';
 import { Badge, Card, StatusDot } from '../common';
 import { DashboardPanelHeader } from '../dashboard';
@@ -37,12 +38,12 @@ const QUALITY_STYLE = {
 
 const BLOCK_LABELS: Record<ReportLanguage, Record<string, string>> = {
   zh: {
-    quote: '行情',
-    daily_bars: '日线',
-    technical: '技术',
-    news: '新闻',
-    fundamentals: '基本面',
-    chip: '筹码',
+    quote: 'quote',
+    daily_bars: 'daily bars',
+    technical: 'technical',
+    news: 'news',
+    fundamentals: 'fundamentals',
+    chip: 'chip',
   },
   en: {
     quote: 'quote',
@@ -56,31 +57,31 @@ const BLOCK_LABELS: Record<ReportLanguage, Record<string, string>> = {
 
 const TEXT = {
   zh: {
-    eyebrow: '数据上下文',
-    title: '输入数据块',
-    counts: '状态计数',
-    source: '来源',
-    warnings: '告警',
-    missingReasons: '缺失原因',
-    qualityScore: '质量分',
-    limitations: '数据限制',
-    newsResultCount: '新闻结果数',
-    triggerSource: '触发来源',
+    eyebrow: 'DATA CONTEXT',
+    title: 'Input Blocks',
+    counts: 'Status Counts',
+    source: 'Source',
+    warnings: 'Warnings',
+    missingReasons: 'Missing Reasons',
+    qualityScore: 'Quality',
+    limitations: 'Data Limitations',
+    newsResultCount: 'News Results',
+    triggerSource: 'Trigger',
     qualityLevel: {
-      good: '良好',
-      usable: '可用',
-      limited: '受限',
-      poor: '较差',
+      good: 'Good',
+      usable: 'Usable',
+      limited: 'Limited',
+      poor: 'Poor',
     },
     status: {
-      available: '可用',
-      missing: '缺失',
-      not_supported: '不支持',
-      fallback: '降级',
-      stale: '过期',
-      estimated: '估算',
-      partial: '部分可用',
-      fetch_failed: '抓取失败',
+      available: 'Available',
+      missing: 'Missing',
+      not_supported: 'Not supported',
+      fallback: 'Fallback',
+      stale: 'Stale',
+      estimated: 'Estimated',
+      partial: 'Partial',
+      fetch_failed: 'Fetch failed',
     },
   },
   en: {
@@ -144,23 +145,23 @@ const formatLimitation = (
 ): string => {
   const [rawKey, ...statusParts] = value.split(':');
   if (!rawKey || statusParts.length === 0) {
-    return value;
+    return toEnglishText(value, 'Unavailable');
   }
 
   const key = rawKey.trim();
   const status = statusParts.join(':').trim();
   if (!key || !status) {
-    return value;
+    return toEnglishText(value, 'Unavailable');
   }
 
   const label = BLOCK_LABELS[language][key] || key;
   const statusLabel = (text.status as Record<string, string>)[status] || status;
-  return language === 'zh' ? `${label}：${statusLabel}` : `${label}: ${statusLabel}`;
+  return `${toEnglishText(label, key)}: ${toEnglishText(statusLabel, status)}`;
 };
 
 export const AnalysisContextSummary: React.FC<AnalysisContextSummaryProps> = ({
   overview,
-  language = 'zh',
+  language = 'en',
 }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = TEXT[reportLanguage];
@@ -180,12 +181,13 @@ export const AnalysisContextSummary: React.FC<AnalysisContextSummaryProps> = ({
       ? `${text.newsResultCount}: ${overview.metadata.newsResultCount}`
       : null,
   ].filter((item): item is string => Boolean(item));
-  const triggerSource = overview.metadata?.triggerSource?.trim();
+  const triggerSource = toEnglishText(overview.metadata?.triggerSource?.trim(), '');
   const quality = overview.dataQuality;
   const qualityLevel = quality?.level || undefined;
   const qualityStyle = qualityLevel ? QUALITY_STYLE[qualityLevel] : undefined;
   const qualityLabel = qualityLevel ? text.qualityLevel[qualityLevel] : undefined;
-  const limitations = quality?.limitations?.map((item) => formatLimitation(item, reportLanguage, text)) || [];
+  const limitations = quality?.limitations?.map((item) => formatLimitation(item, reportLanguage, text)).filter(Boolean) || [];
+  const warnings = overview.warnings?.map((item) => toEnglishText(item, 'Warning')).filter(Boolean) || [];
 
   return (
     <Card variant="bordered" padding="none" className="home-panel-card">
@@ -274,10 +276,10 @@ export const AnalysisContextSummary: React.FC<AnalysisContextSummaryProps> = ({
             </div>
           ) : null}
 
-          {overview.warnings?.length ? (
+          {warnings.length ? (
             <div className="mb-3 home-subpanel p-3 text-xs leading-5 text-warning">
               <span className="font-medium">{text.warnings}: </span>
-              {overview.warnings.join(', ')}
+              {warnings.join(', ')}
             </div>
           ) : null}
 
@@ -288,27 +290,27 @@ export const AnalysisContextSummary: React.FC<AnalysisContextSummaryProps> = ({
                 <div key={block.key} className="home-subpanel p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{block.label}</p>
+                      <p className="truncate text-sm font-medium text-foreground">{toEnglishText(block.label, BLOCK_LABELS.en[block.key] || block.key)}</p>
                       {block.source ? (
                         <p className="mt-1 truncate text-xs text-secondary-text">
-                          {text.source}: {block.source}
+                          {text.source}: {toEnglishText(block.source, 'Unknown')}
                         </p>
                       ) : null}
                     </div>
                     <Badge variant={style.variant} className="shrink-0 gap-1.5 shadow-none">
                       <StatusDot tone={style.tone} className="h-1.5 w-1.5" />
-                      {text.status[block.status] || block.status}
+                      {toEnglishText(text.status[block.status], block.status)}
                     </Badge>
                   </div>
 
                   {block.warnings?.length ? (
                     <p className="mt-2 text-xs leading-5 text-warning">
-                      {text.warnings}: {block.warnings.join(', ')}
+                      {text.warnings}: {block.warnings.map((item) => toEnglishText(item, 'Warning')).filter(Boolean).join(', ')}
                     </p>
                   ) : null}
                   {block.missingReasons?.length ? (
                     <p className="mt-2 text-xs leading-5 text-muted-text">
-                      {text.missingReasons}: {block.missingReasons.join(', ')}
+                      {text.missingReasons}: {block.missingReasons.map((item) => toEnglishText(item, 'Missing reason')).filter(Boolean).join(', ')}
                     </p>
                   ) : null}
                 </div>

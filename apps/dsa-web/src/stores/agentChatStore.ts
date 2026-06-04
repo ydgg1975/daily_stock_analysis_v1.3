@@ -7,6 +7,7 @@ import {
   isParsedApiError,
   type ParsedApiError,
 } from '../api/error';
+import { joinEnglishList } from '../utils/englishText';
 import { generateUUID } from '../utils/uuid';
 
 const STORAGE_KEY_SESSION = 'dsa_chat_session_id';
@@ -231,8 +232,8 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
     const streamSessionId = payload.session_id || storeSessionId;
     const skillNames = meta?.skillNames?.length
       ? meta.skillNames
-      : [meta?.skillName ?? '通用'];
-    const skillName = skillNames.join('、');
+      : [meta?.skillName ?? 'General'];
+    const skillName = joinEnglishList(skillNames, 'General');
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -277,14 +278,14 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
           if (event.type === 'done') {
             const doneEvent = event as unknown as StreamFailureEvent;
             if (doneEvent.success === false) {
-              throw getStreamFailureError(doneEvent, '大模型调用出错，请检查 API Key 配置');
+              throw getStreamFailureError(doneEvent, 'The model call failed. Please check the API key configuration.');
             }
             finalContent = doneEvent.content ?? '';
             return;
           }
 
           if (event.type === 'error') {
-            throw getStreamFailureError(event as unknown as StreamFailureEvent, '分析出错');
+            throw getStreamFailureError(event as unknown as StreamFailureEvent, 'Analysis failed');
           }
 
         currentProgressSteps.push(event);
@@ -330,7 +331,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
             {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: finalContent || '（无内容）',
+              content: finalContent || '(no content)',
               skills: payload.skills,
               skill: payload.skills?.[0],
               skillNames,

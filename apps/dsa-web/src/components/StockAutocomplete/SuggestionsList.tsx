@@ -9,6 +9,7 @@ import type { CSSProperties } from 'react';
 import type { StockSuggestion } from '../../types/stockIndex';
 import { Badge } from '../common';
 import { cn } from '../../utils/cn';
+import { toEnglishText } from '../../utils/englishText';
 
 export interface SuggestionsListProps {
   /** Suggestion list */
@@ -66,7 +67,7 @@ export function SuggestionsList({
             {/* Name and code */}
             <div className="flex flex-col">
               <span className="text-sm font-medium text-primary-text">
-                {suggestion.nameZh}
+                {toEnglishText(suggestion.nameZh, suggestion.displayCode || suggestion.canonicalCode)}
               </span>
               <span className="text-sm text-secondary-text">
                 {suggestion.displayCode}
@@ -84,12 +85,12 @@ export function SuggestionsList({
 
 // Helper component: Market badge
 const MARKET_BADGE_CONFIG = {
-  CN: { label: 'A股', className: 'border-danger/25 bg-danger/10 text-danger' },
-  HK: { label: '港股', className: 'border-success/25 bg-success/10 text-success' },
-  US: { label: '美股', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
-  INDEX: { label: '指数', className: 'border-purple/25 bg-purple/10 text-purple' },
+  CN: { label: 'CN', className: 'border-danger/25 bg-danger/10 text-danger' },
+  HK: { label: 'HK', className: 'border-success/25 bg-success/10 text-success' },
+  US: { label: 'US', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
+  INDEX: { label: 'Index', className: 'border-purple/25 bg-purple/10 text-purple' },
   ETF: { label: 'ETF', className: 'border-warning/25 bg-warning/10 text-warning' },
-  BSE: { label: '北交所', className: 'border-orange-500/25 bg-orange-500/10 text-orange-500' },
+  BSE: { label: 'BSE', className: 'border-orange-500/25 bg-orange-500/10 text-orange-500' },
 } as const;
 
 function MarketBadge({ market }: { market: string }) {
@@ -109,10 +110,10 @@ function MarketBadge({ market }: { market: string }) {
 // Helper component: Match type badge
 function MatchTypeBadge({ matchType }: { matchType: string }) {
   const configMap = {
-    exact: { label: '精确', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
-    prefix: { label: '前缀', className: 'border-purple/25 bg-purple/10 text-purple' },
-    contains: { label: '包含', className: 'border-warning/25 bg-warning/10 text-warning' },
-    fuzzy: { label: '模糊', className: 'border-border/55 bg-elevated/75 text-muted-text' },
+    exact: { label: 'Exact', className: 'border-cyan/25 bg-cyan/10 text-cyan' },
+    prefix: { label: 'Prefix', className: 'border-purple/25 bg-purple/10 text-purple' },
+    contains: { label: 'Contains', className: 'border-warning/25 bg-warning/10 text-warning' },
+    fuzzy: { label: 'Fuzzy', className: 'border-border/55 bg-elevated/75 text-muted-text' },
   };
 
   const config = configMap[matchType as keyof typeof configMap] || configMap.fuzzy;

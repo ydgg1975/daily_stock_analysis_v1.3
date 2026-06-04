@@ -32,6 +32,14 @@ type BoardSignal = {
 const normalizeBoardName = (value?: string): string =>
   (value || '').trim().replace(/\s+/g, ' ');
 
+const getBoardTypeLabel = (value?: string): string => {
+  const normalized = (value || '').trim();
+  if (normalized === '行业') return 'Industry';
+  if (normalized === '概念') return 'Theme';
+  if (normalized === '板块') return 'Sector';
+  return normalized;
+};
+
 const coerceFiniteNumber = (value: unknown): number | undefined => {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : undefined;
@@ -238,7 +246,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                             </span>
                             {board.type && (
                               <span className="home-board-pill rounded-full px-2 py-0.5 text-xs">
-                                {board.type}
+                                {getBoardTypeLabel(board.type)}
                               </span>
                             )}
                             {signal && (
@@ -296,7 +304,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
           {watchlist && meta.reportType !== 'market_review' && (
             <Card variant="bordered" padding="sm" className="home-panel-card">
               <div className="text-center space-y-3">
-                <span className="label-uppercase">自选</span>
+                <span className="label-uppercase">Watchlist</span>
                 <div className="text-xs text-muted-text font-mono">{meta.stockCode}</div>
                 <Button
                   variant={watchlist.isInWatchlist(meta.stockCode) ? 'danger-subtle' : 'secondary'}
@@ -305,7 +313,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   onClick={() => watchlist.onToggle(meta.stockCode)}
                   className="w-full text-xs"
                 >
-                  {watchlist.isInWatchlist(meta.stockCode) ? '从自选删除' : '加入自选'}
+                  {watchlist.isInWatchlist(meta.stockCode) ? 'Remove From Watchlist' : 'Add To Watchlist'}
                 </Button>
                 {watchlist.actionMessage && (
                   <p className="text-[11px] text-secondary-text animate-in fade-in">{watchlist.actionMessage}</p>

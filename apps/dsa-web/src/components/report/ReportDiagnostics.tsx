@@ -9,6 +9,7 @@ import type {
   RunDiagnosticStatus,
   RunDiagnosticSummary,
 } from '../../types/analysis';
+import { toEnglishText } from '../../utils/englishText';
 import { normalizeReportLanguage } from '../../utils/reportLanguage';
 import { Badge, Button, Card, StatusDot } from '../common';
 
@@ -32,32 +33,32 @@ const COMPONENT_ORDER = [
 
 const TEXT = {
   zh: {
-    eyebrow: '运行诊断',
-    title: '运行状态',
-    loading: '诊断加载中...',
-    unavailable: '运行诊断暂不可用',
-    noComponents: '暂无组件诊断',
-    components: '关键链路',
-    advanced: '高级字段',
-    copy: '复制排障信息',
-    copied: '已复制',
+    eyebrow: 'RUN DIAGNOSTICS',
+    title: 'Run Status',
+    loading: 'Loading diagnostics...',
+    unavailable: 'Diagnostics unavailable',
+    noComponents: 'No component diagnostics',
+    components: 'Key Path',
+    advanced: 'Advanced Fields',
+    copy: 'Copy diagnostics',
+    copied: 'Copied',
     trace: 'Trace',
     task: 'Task',
     query: 'Query',
-    trigger: '触发来源',
+    trigger: 'Trigger',
     overall: {
-      normal: '正常',
-      degraded: '部分降级',
-      failed: '失败',
-      unknown: '未知',
+      normal: 'Normal',
+      degraded: 'Degraded',
+      failed: 'Failed',
+      unknown: 'Unknown',
     },
     component: {
-      ok: '正常',
-      degraded: '最近失败后已降级',
-      failed: '失败',
-      unknown: '未知',
-      not_configured: '未配置',
-      skipped: '已跳过',
+      ok: 'Normal',
+      degraded: 'Recent failure',
+      failed: 'Failed',
+      unknown: 'Unknown',
+      not_configured: 'Not configured',
+      skipped: 'Skipped',
     },
   },
   en: {
@@ -125,13 +126,28 @@ const getOrderedComponents = (
   return [...ordered, ...remaining];
 };
 
+const sanitizeDiagnosticValue = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    return toEnglishText(value, 'Unavailable');
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDiagnosticValue(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, sanitizeDiagnosticValue(entry)]),
+    );
+  }
+  return value;
+};
+
 /**
  * Collapsed report diagnostics for self-hosted troubleshooting.
  */
 export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
   recordId,
   summary,
-  language = 'zh',
+  language = 'en',
 }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = TEXT[reportLanguage];
@@ -225,12 +241,12 @@ export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
     taskId: visibleSummary.taskId,
     queryId: visibleSummary.queryId,
     stockCode: visibleSummary.stockCode,
-    triggerSource: visibleSummary.triggerSource,
+    triggerSource: toEnglishText(visibleSummary.triggerSource, ''),
     components: components.reduce<Record<string, Record<string, unknown>>>((payload, component) => {
       payload[component.key] = {
         status: component.status,
-        message: component.message,
-        details: component.details || {},
+        message: toEnglishText(component.message, 'No message'),
+        details: sanitizeDiagnosticValue(component.details || {}),
       };
       return payload;
     }, {}),
@@ -295,7 +311,7 @@ export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0 space-y-2">
               <p className="text-sm leading-6 text-foreground">
-                {visibleSummary.reason}
+                {toEnglishText(visibleSummary.reason, text.unavailable)}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-text">
                 {traceId ? (
@@ -315,7 +331,7 @@ export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
                 ) : null}
                 {visibleSummary.triggerSource ? (
                   <span className="home-accent-chip px-2 py-0.5">
-                    {text.trigger}: {visibleSummary.triggerSource}
+                    {text.trigger}: {toEnglishText(visibleSummary.triggerSource, 'Unknown')}
                   </span>
                 ) : null}
               </div>
@@ -344,10 +360,10 @@ export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">
-                          {component.label}
+                          {toEnglishText(component.label, component.key)}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-secondary-text">
-                          {component.message}
+                          {toEnglishText(component.message, 'No message')}
                         </p>
                       </div>
                       <Badge variant={componentStyle.variant} className="shrink-0 gap-1.5 shadow-none">

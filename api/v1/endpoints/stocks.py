@@ -308,23 +308,23 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
     "/watchlist",
     response_model=WatchlistResponse,
     responses={
-        200: {"description": "当前自选队列"},
-        500: {"description": "服务器错误", "model": ErrorResponse},
+        200: {"description": "Current watchlist"},
+        500: {"description": "Server error", "model": ErrorResponse},
     },
-    summary="获取自选队列",
-    description="返回当前 STOCK_LIST 配置中的所有股票代码。",
+    summary="Get watchlist",
+    description="Return all stock codes from STOCK_LIST.",
 )
 def get_watchlist(
     service: SystemConfigService = Depends(get_system_config_service),
 ) -> WatchlistResponse:
     try:
         codes = _read_watchlist_codes(service)
-        return WatchlistResponse(stock_codes=codes, message=f"当前自选 {len(codes)} 只股票")
+        return WatchlistResponse(stock_codes=codes, message=f"Watchlist contains {len(codes)} stock(s)")
     except Exception as e:
         logger.error(f"获取自选队列失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "internal_error", "message": f"获取自选队列失败: {str(e)}"},
+            detail={"error": "internal_error", "message": f"Failed to read watchlist: {str(e)}"},
         )
 
 
@@ -332,12 +332,12 @@ def get_watchlist(
     "/watchlist/add",
     response_model=WatchlistResponse,
     responses={
-        200: {"description": "已加入自选"},
-        400: {"description": "参数错误", "model": ErrorResponse},
-        500: {"description": "服务器错误", "model": ErrorResponse},
+        200: {"description": "Added to watchlist"},
+        400: {"description": "Bad request", "model": ErrorResponse},
+        500: {"description": "Server error", "model": ErrorResponse},
     },
-    summary="加入自选队列",
-    description="将指定股票代码加入 STOCK_LIST。",
+    summary="Add to watchlist",
+    description="Add a stock code to STOCK_LIST.",
 )
 def add_to_watchlist(
     request: WatchlistRequest,
@@ -350,14 +350,14 @@ def add_to_watchlist(
         if validated not in normalized_existing:
             codes.append(request.stock_code.strip())
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已加入 {request.stock_code.strip()}")
+        return WatchlistResponse(stock_codes=codes, message=f"Added {request.stock_code.strip()}")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"加入自选失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "internal_error", "message": f"加入自选失败: {str(e)}"},
+            detail={"error": "internal_error", "message": f"Failed to add to watchlist: {str(e)}"},
         )
 
 
@@ -365,12 +365,12 @@ def add_to_watchlist(
     "/watchlist/remove",
     response_model=WatchlistResponse,
     responses={
-        200: {"description": "已从自选删除"},
-        400: {"description": "参数错误", "model": ErrorResponse},
-        500: {"description": "服务器错误", "model": ErrorResponse},
+        200: {"description": "Removed from watchlist"},
+        400: {"description": "Bad request", "model": ErrorResponse},
+        500: {"description": "Server error", "model": ErrorResponse},
     },
-    summary="从自选队列删除",
-    description="从 STOCK_LIST 中移除指定股票代码。",
+    summary="Remove from watchlist",
+    description="Remove a stock code from STOCK_LIST.",
 )
 def remove_from_watchlist(
     request: WatchlistRequest,
@@ -384,14 +384,14 @@ def remove_from_watchlist(
             idx = normalized_existing.index(validated)
             removed = codes.pop(idx)
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已移除 {request.stock_code.strip()}")
+        return WatchlistResponse(stock_codes=codes, message=f"Removed {request.stock_code.strip()}")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"从自选删除失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "internal_error", "message": f"从自选删除失败: {str(e)}"},
+            detail={"error": "internal_error", "message": f"Failed to remove from watchlist: {str(e)}"},
         )
 
 

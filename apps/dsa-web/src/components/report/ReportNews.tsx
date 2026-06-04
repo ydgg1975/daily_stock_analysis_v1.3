@@ -17,7 +17,7 @@ interface ReportNewsProps {
 /**
  * 资讯区组件 - 终端风格
  */
-export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'zh' }) => {
+export const ReportNews: React.FC<ReportNewsProps> = ({ recordId, limit = 8, language = 'en' }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = getReportText(reportLanguage);
   const [isLoading, setIsLoading] = useState(false);

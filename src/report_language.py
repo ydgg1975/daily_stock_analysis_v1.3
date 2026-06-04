@@ -24,6 +24,80 @@ _REPORT_LANGUAGE_ALIASES = {
     "en_gb": "en",
 }
 
+_ENGLISH_TEXT_REPLACEMENTS = {
+    "立即行动": "Immediate action",
+    "今日内": "Today",
+    "本周内": "This week",
+    "不急": "Not urgent",
+    "安全": "Safe",
+    "警戒": "Caution",
+    "警惕": "Caution",
+    "危险": "Danger",
+    "缩量": "Contracting volume",
+    "放量": "Expanding volume",
+    "平量": "Flat volume",
+    "看多": "Bullish",
+    "看空": "Bearish",
+    "震荡": "Sideways",
+    "持有": "Hold",
+    "买入": "Buy",
+    "卖出": "Sell",
+    "观望": "Watch",
+    "多头排列": "Bullish alignment",
+    "空头排列": "Bearish alignment",
+    "乖离率": "Bias",
+    "量能": "Volume",
+    "筹码": "Chip structure",
+    "估值": "Valuation",
+    "无重大利空": "No major negative catalysts",
+    "合理": "reasonable",
+    "行业": "Industry",
+    "概念": "Theme",
+    "板块": "Sector",
+    "检查项": "Check ",
+    "报告生成时间": "Generated At",
+    "分析模型": "Model",
+}
+
+
+def sanitize_english_report_text(text: Any, language: Optional[str] = None) -> str:
+    """Remove common Chinese leftovers from English Markdown reports.
+
+    This is intentionally conservative: it is a presentation clean-up for
+    English-mode trial reports, not a semantic rewrite of the analysis.
+    """
+    value = "" if text is None else str(text)
+    if normalize_report_language(language, default="zh") != "en":
+        return value
+
+    def _convert_ten_thousand_shares(match: re.Match[str]) -> str:
+        try:
+            shares_m = float(match.group(1)) / 100.0
+        except ValueError:
+            return match.group(0)
+        return f"{shares_m:.2f}M shares"
+
+    def _convert_hundred_million_usd(match: re.Match[str]) -> str:
+        try:
+            usd_b = float(match.group(1)) / 10.0
+        except ValueError:
+            return match.group(0)
+        return f"{usd_b:.2f}B USD"
+
+    value = re.sub(r"(\d+(?:\.\d+)?)\s*万股", _convert_ten_thousand_shares, value)
+    value = re.sub(r"(\d+(?:\.\d+)?)\s*亿美元", _convert_hundred_million_usd, value)
+    value = re.sub(r"(\d+(?:\.\d+)?)\s*美元", r"\1 USD", value)
+
+    for source, target in _ENGLISH_TEXT_REPLACEMENTS.items():
+        value = value.replace(source, target)
+
+    value = re.sub(r"Check\s*(\d+)[：:]", r"Check \1:", value)
+    value = value.replace("：", ":")
+    value = value.replace("（", "(").replace("）", ")")
+    value = re.sub(r"[\u4e00-\u9fff]+", "", value)
+    value = re.sub(r"[ \t]{2,}", " ", value)
+    return value
+
 _OPERATION_ADVICE_CANONICAL_MAP = {
     "强烈买入": "strong_buy",
     "strong buy": "strong_buy",

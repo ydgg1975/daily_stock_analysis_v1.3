@@ -24,7 +24,7 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +47,78 @@ _FRONTEND_INDEX_NO_CACHE_HEADERS = {
     "Pragma": "no-cache",
     "Expires": "0",
 }
+_HAN_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+_OPENAPI_TEXT_REPLACEMENTS = {
+    "A股/港股/美股自选股智能分析系统 API": "AI stock analysis API for A-shares, Hong Kong, and US stocks",
+    "功能模块": "Modules",
+    "股票分析": "Stock analysis",
+    "触发 AI 智能分析": "Trigger AI analysis",
+    "历史记录": "History",
+    "查询历史分析报告": "Query historical analysis reports",
+    "股票数据": "Stock data",
+    "获取行情数据": "Fetch market data",
+    "认证方式": "Authentication",
+    "支持可选的运行时认证": "Optional runtime authentication is supported",
+    "通过 WebUI 设置页面启用/关闭": "enable or disable it from Web settings",
+    "健康检查": "Health check",
+    "用于负载均衡器或监控系统检查服务状态": "Check service status for load balancers and monitoring systems",
+    "股票代码": "Stock code",
+    "股票名称": "Stock name",
+    "当前价格": "Current price",
+    "涨跌额": "Price change",
+    "涨跌幅": "Change %",
+    "开盘价": "Open price",
+    "最高价": "High price",
+    "最低价": "Low price",
+    "昨收价": "Previous close",
+    "成交量": "Volume",
+    "成交额": "Turnover",
+    "更新时间": "Updated at",
+    "日期": "Date",
+    "收盘价": "Close price",
+    "置信度": "Confidence",
+    "总记录数": "Total records",
+    "当前页码": "Current page",
+    "每页数量": "Page size",
+    "记录列表": "Records",
+    "创建时间": "Created at",
+    "操作建议": "Action advice",
+    "趋势预测": "Trend prediction",
+    "分析摘要": "Analysis summary",
+    "情绪评分": "Sentiment score",
+    "情绪标签": "Sentiment label",
+    "元信息": "Metadata",
+    "概览区": "Overview",
+    "策略点位区": "Strategy levels",
+    "详情区": "Details",
+    "报告输出语言": "Report output language",
+    "报告类型": "Report type",
+    "新闻摘要": "News summary",
+    "新闻标题": "News title",
+    "新闻链接": "News URL",
+    "新闻列表": "News items",
+    "当前自选队列": "Current watchlist",
+    "获取自选队列": "Get watchlist",
+    "返回当前 STOCK_LIST 配置中的所有股票代码。": "Return all stock codes from STOCK_LIST.",
+    "已加入自选": "Added to watchlist",
+    "加入自选队列": "Add to watchlist",
+    "将指定股票代码加入 STOCK_LIST。": "Add a stock code to STOCK_LIST.",
+    "已从自选删除": "Removed from watchlist",
+    "从自选队列删除": "Remove from watchlist",
+    "从 STOCK_LIST 中移除指定股票代码。": "Remove a stock code from STOCK_LIST.",
+    "参数错误": "Bad request",
+    "服务器错误": "Server error",
+    "行情数据": "Market quote",
+    "股票不存在": "Stock not found",
+    "获取股票实时行情": "Get realtime stock quote",
+    "获取指定股票的最新行情数据": "Get the latest quote for a stock.",
+    "当前自选队列股票代码列表": "Current watchlist stock codes",
+    "操作结果描述": "Operation result message",
+    "服务状态": "Service status",
+    "时间戳": "Timestamp",
+    "错误类型": "Error type",
+    "错误消息": "Error message",
+}
 
 
 def _frontend_index_response(static_dir: Path) -> FileResponse:
@@ -54,6 +126,49 @@ def _frontend_index_response(static_dir: Path) -> FileResponse:
         static_dir / "index.html",
         headers=_FRONTEND_INDEX_NO_CACHE_HEADERS,
     )
+
+
+def _is_english_report_mode() -> bool:
+    return (os.getenv("REPORT_LANGUAGE") or "").strip().lower() in {"en", "english", "en-gb", "en-us"}
+
+
+def _english_openapi_text(value: str) -> str:
+    if not _HAN_PATTERN.search(value):
+        return value
+
+    text = value
+    for source, target in _OPENAPI_TEXT_REPLACEMENTS.items():
+        text = text.replace(source, target)
+    text = text.replace("（", "(").replace("）", ")").replace("：", ":")
+
+    if _HAN_PATTERN.search(text):
+        return "English-mode documentation placeholder."
+    return text
+
+
+def _sanitize_openapi_for_english(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_openapi_for_english(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_openapi_for_english(item) for item in value]
+    if isinstance(value, str):
+        return _english_openapi_text(value)
+    return value
+
+
+def _install_english_openapi_schema(app: FastAPI) -> None:
+    if not _is_english_report_mode():
+        return
+
+    default_openapi = app.openapi
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        app.openapi_schema = _sanitize_openapi_for_english(default_openapi())
+        return app.openapi_schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
 
 def _check_frontend_assets_consistency(static_dir: Path) -> List[str]:
@@ -204,13 +319,13 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     app = FastAPI(
         title="Daily Stock Analysis API",
         description=(
-            "A股/港股/美股自选股智能分析系统 API\n\n"
-            "## 功能模块\n"
-            "- 股票分析：触发 AI 智能分析\n"
-            "- 历史记录：查询历史分析报告\n"
-            "- 股票数据：获取行情数据\n\n"
-            "## 认证方式\n"
-            "支持可选的运行时认证（通过 WebUI 设置页面启用/关闭）"
+            "AI stock analysis API for A-shares, Hong Kong, and US stocks.\n\n"
+            "## Modules\n"
+            "- Stock analysis: trigger AI analysis\n"
+            "- History: query historical analysis reports\n"
+            "- Stock data: fetch market data\n\n"
+            "## Authentication\n"
+            "Optional runtime authentication is supported and can be managed from Web settings."
         ),
         version="1.0.0",
         lifespan=app_lifespan,
@@ -273,7 +388,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             return _frontend_index_response(static_dir)
     else:
         _FRONTEND_NOT_BUILT_HTML = """<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DSA - Frontend Not Built</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
@@ -308,8 +423,8 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         "/api/health",
         response_model=HealthResponse,
         tags=["Health"],
-        summary="健康检查",
-        description="用于负载均衡器或监控系统检查服务状态"
+        summary="Health check",
+        description="Check service status for load balancers and monitoring systems."
     )
     async def health_check() -> HealthResponse:
         """健康检查接口"""
@@ -423,6 +538,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 
             return _frontend_index_response(static_dir)
     
+    _install_english_openapi_schema(app)
     return app
 
 

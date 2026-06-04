@@ -1,25 +1,26 @@
 import type { SystemConfigCategory } from '../types/systemConfig';
+import { formatIdentifier, toEnglishText } from './englishText';
 
 const categoryTitleMap: Record<SystemConfigCategory, string> = {
-  base: '基础设置',
-  data_source: '数据源',
-  ai_model: 'AI 模型',
-  notification: '通知渠道',
-  system: '系统设置',
-  agent: 'Agent 设置',
-  backtest: '回测配置',
-  uncategorized: '其他',
+  base: 'Base Settings',
+  data_source: 'Data Sources',
+  ai_model: 'AI Models',
+  notification: 'Notification Channels',
+  system: 'System Settings',
+  agent: 'Agent Settings',
+  backtest: 'Backtest Settings',
+  uncategorized: 'Other',
 };
 
 const categoryDescriptionMap: Partial<Record<SystemConfigCategory, string>> = {
-  base: '管理自选股与基础运行参数。',
-  data_source: '管理行情数据源与优先级策略。',
-  ai_model: '管理模型服务、模型名称与推理参数。',
-  notification: '管理机器人、Webhook 和消息推送配置。',
-  system: '管理调度、日志、端口等系统级参数。',
-  agent: '管理 Agent 模式、策略与多 Agent 编排配置。',
-  backtest: '管理回测开关、评估窗口和引擎参数。',
-  uncategorized: '其他未归类的配置项。',
+  base: 'Manage the watchlist and core runtime parameters.',
+  data_source: 'Manage market-data providers and source priority.',
+  ai_model: 'Manage model services, model names, and inference parameters.',
+  notification: 'Manage bots, webhooks, and message delivery.',
+  system: 'Manage scheduling, logs, ports, and system-level parameters.',
+  agent: 'Manage Agent mode, strategies, and multi-agent orchestration.',
+  backtest: 'Manage backtest enablement, evaluation windows, and engine parameters.',
+  uncategorized: 'Other uncategorised settings.',
 };
 
 const fieldTitleMap: Record<string, string> = {
@@ -316,66 +317,66 @@ const fieldDescriptionMap: Record<string, string> = {
 
 const fieldOptionLabelMap: Record<string, Record<string, string>> = {
   NEWS_STRATEGY_PROFILE: {
-    ultra_short: '超短线（1天）',
-    short: '短期（3天）',
-    medium: '中期（7天）',
-    long: '长期（30天）',
+    ultra_short: 'Ultra-short (1 day)',
+    short: 'Short (3 days)',
+    medium: 'Medium (7 days)',
+    long: 'Long (30 days)',
   },
   REPORT_TYPE: {
-    simple: '简洁',
-    full: '完整',
-    brief: '简报',
+    simple: 'Simple',
+    full: 'Full',
+    brief: 'Brief',
   },
   REPORT_LANGUAGE: {
-    zh: '中文',
-    en: '英文',
-    chinese: '中文',
-    english: '英文',
+    zh: 'Chinese',
+    en: 'English',
+    chinese: 'Chinese',
+    english: 'English',
   },
   NOTIFICATION_MIN_SEVERITY: {
-    '': '未设置',
-    'not set': '未设置',
-    info: '信息',
-    warning: '警告',
-    error: '错误',
-    critical: '严重',
+    '': 'Not set',
+    'not set': 'Not set',
+    info: 'Info',
+    warning: 'Warning',
+    error: 'Error',
+    critical: 'Critical',
   },
   MARKET_REVIEW_COLOR_SCHEME: {
-    green_up: '绿涨红跌',
-    red_up: '红涨绿跌',
-    'green up / red down': '绿涨红跌',
-    'red up / green down': '红涨绿跌',
+    green_up: 'Green up / red down',
+    red_up: 'Red up / green down',
+    'green up / red down': 'Green up / red down',
+    'red up / green down': 'Red up / green down',
   },
   LOG_LEVEL: {
-    debug: '调试',
-    info: '信息',
-    warning: '警告',
-    error: '错误',
-    critical: '严重',
+    debug: 'Debug',
+    info: 'Info',
+    warning: 'Warning',
+    error: 'Error',
+    critical: 'Critical',
   },
   MARKET_REVIEW_REGION: {
-    cn: 'A 股',
-    hk: '港股',
-    us: '美股',
-    both: '全部市场',
+    cn: 'A-shares',
+    hk: 'Hong Kong',
+    us: 'United States',
+    both: 'All Markets',
   },
   AGENT_ARCH: {
-    single: '单 Agent',
-    multi: '多 Agent（编排）',
-    'single agent': '单 Agent',
-    'multi agent (orchestrator)': '多 Agent（编排）',
+    single: 'Single Agent',
+    multi: 'Multi-Agent (orchestrated)',
+    'single agent': 'Single Agent',
+    'multi agent (orchestrator)': 'Multi-Agent (orchestrated)',
   },
   AGENT_ORCHESTRATOR_MODE: {
-    quick: '快速',
-    standard: '标准',
-    full: '完整',
-    specialist: '专家',
+    quick: 'Quick',
+    standard: 'Standard',
+    full: 'Full',
+    specialist: 'Specialist',
   },
   AGENT_SKILL_ROUTING: {
-    auto: '自动（按市场状态）',
-    manual: '手动（使用 AGENT_SKILLS）',
-    'auto (regime-based)': '自动（按市场状态）',
-    'manual (use agent_skills)': '手动（使用 AGENT_SKILLS）',
+    auto: 'Auto (regime-based)',
+    manual: 'Manual (use AGENT_SKILLS)',
+    'auto (regime-based)': 'Auto (regime-based)',
+    'manual (use agent_skills)': 'Manual (use AGENT_SKILLS)',
   },
 };
 
@@ -384,38 +385,46 @@ function normalizeOptionToken(raw: string): string {
 }
 
 export function getCategoryTitleZh(category: SystemConfigCategory, fallback?: string): string {
-  return categoryTitleMap[category] || fallback || category;
+  const value = fallback !== undefined ? fallback : categoryTitleMap[category] || category;
+  return toEnglishText(value, formatIdentifier(category));
 }
 
 export function getCategoryDescriptionZh(category: SystemConfigCategory, fallback?: string): string {
-  return categoryDescriptionMap[category] || fallback || '';
+  const value = fallback !== undefined ? fallback : categoryDescriptionMap[category] || '';
+  return toEnglishText(value, value ? formatIdentifier(category) : '');
 }
 
 export function getFieldTitleZh(key: string, fallback?: string): string {
-  return fieldTitleMap[key] || fallback || key;
+  const value = fallback !== undefined ? fallback : fieldTitleMap[key] || key;
+  return toEnglishText(value, formatIdentifier(key));
 }
 
 export function getFieldDescriptionZh(key: string, fallback?: string): string {
-  return fieldDescriptionMap[key] || fallback || '';
+  const value = fallback !== undefined ? fallback : fieldDescriptionMap[key] || '';
+  return toEnglishText(value, value ? `Configure ${formatIdentifier(key)}.` : '');
 }
 
 export function getFieldOptionLabelZh(key: string, value: string, fallbackLabel?: string): string {
+  if (fallbackLabel) {
+    return toEnglishText(fallbackLabel, formatIdentifier(fallbackLabel));
+  }
+
   const map = fieldOptionLabelMap[key];
   if (!map) {
-    return fallbackLabel ?? value;
+    return toEnglishText(fallbackLabel ?? value, formatIdentifier(fallbackLabel ?? value));
   }
 
   const byValue = map[normalizeOptionToken(value)];
   if (byValue) {
-    return byValue;
+    return toEnglishText(byValue, formatIdentifier(value));
   }
 
   if (fallbackLabel) {
     const byLabel = map[normalizeOptionToken(fallbackLabel)];
     if (byLabel) {
-      return byLabel;
+      return toEnglishText(byLabel, formatIdentifier(fallbackLabel));
     }
   }
 
-  return fallbackLabel ?? value;
+  return toEnglishText(fallbackLabel ?? value, formatIdentifier(fallbackLabel ?? value));
 }

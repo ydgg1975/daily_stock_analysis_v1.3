@@ -1890,10 +1890,10 @@ const settingsHelpEnUS: SettingsHelpMap = {
 };
 
 function getPreferredHelpMap(locale?: string | null): SettingsHelpMap {
-  if (locale?.toLowerCase().startsWith('en')) {
-    return settingsHelpEnUS;
+  if (locale?.toLowerCase().startsWith('zh')) {
+    return settingsHelpZhCN;
   }
-  return settingsHelpZhCN;
+  return settingsHelpEnUS;
 }
 
 export function getSettingsHelpContent(
@@ -1905,14 +1905,15 @@ export function getSettingsHelpContent(
     return null;
   }
 
-  const localized = getPreferredHelpMap(locale)[helpKey] ?? settingsHelpZhCN[helpKey];
+  const prefersChinese = locale?.toLowerCase().startsWith('zh');
+  const localized = getPreferredHelpMap(locale)[helpKey] ?? (prefersChinese ? settingsHelpZhCN[helpKey] : undefined);
   if (localized) {
     return localized;
   }
 
   if (fallbackDescription) {
     return {
-      title: '配置说明',
+      title: 'Setting Help',
       summary: fallbackDescription,
     };
   }

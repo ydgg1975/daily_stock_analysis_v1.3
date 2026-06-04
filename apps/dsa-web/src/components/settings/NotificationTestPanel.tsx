@@ -12,16 +12,16 @@ import { ApiErrorAlert, Badge, Button, InlineAlert, Input, Select } from '../com
 import { SettingsSectionCard } from './SettingsSectionCard';
 
 const CHANNEL_OPTIONS: Array<{ value: NotificationTestChannel; label: string }> = [
-  { value: 'wechat', label: '企业微信' },
-  { value: 'feishu', label: '飞书 Webhook' },
+  { value: 'wechat', label: 'WeCom' },
+  { value: 'feishu', label: 'Feishu Webhook' },
   { value: 'telegram', label: 'Telegram' },
-  { value: 'email', label: '邮件' },
+  { value: 'email', label: 'Email' },
   { value: 'pushover', label: 'Pushover' },
   { value: 'ntfy', label: 'ntfy' },
   { value: 'gotify', label: 'Gotify' },
   { value: 'pushplus', label: 'PushPlus' },
-  { value: 'serverchan3', label: 'Server酱3' },
-  { value: 'custom', label: '自定义 Webhook' },
+  { value: 'serverchan3', label: 'ServerChan3' },
+  { value: 'custom', label: 'Custom Webhook' },
   { value: 'discord', label: 'Discord' },
   { value: 'slack', label: 'Slack' },
   { value: 'astrbot', label: 'AstrBot' },
@@ -45,8 +45,8 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
   disabled = false,
 }) => {
   const [channel, setChannel] = useState<NotificationTestChannel>('wechat');
-  const [title, setTitle] = useState('DSA 通知测试');
-  const [content, setContent] = useState('这是一条来自 DSA Web 设置页的通知测试消息。');
+  const [title, setTitle] = useState('DSA Notification Test');
+  const [content, setContent] = useState('This is a test notification from the DSA Web settings page.');
   const [timeoutSeconds, setTimeoutSeconds] = useState('20');
   const [result, setResult] = useState<TestNotificationChannelResponse | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -66,8 +66,8 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
         channel,
         items: normalizedItems,
         maskToken,
-        title: title.trim() || 'DSA 通知测试',
-        content: content.trim() || '这是一条来自 DSA Web 设置页的通知测试消息。',
+        title: title.trim() || 'DSA Notification Test',
+        content: content.trim() || 'This is a test notification from the DSA Web settings page.',
         timeoutSeconds: clampTimeout(timeoutSeconds),
       });
       setResult(payload);
@@ -80,8 +80,8 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
 
   return (
     <SettingsSectionCard
-      title="通知测试"
-      description="使用当前页面草稿发送一条真实测试通知；测试不会保存配置。"
+      title="Notification Test"
+      description="Send a real test notification using the current page draft. The test does not save settings."
       actions={(
         <Button
           type="button"
@@ -90,30 +90,30 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
           onClick={() => void runTest()}
           disabled={disabled || isTesting}
           isLoading={isTesting}
-          loadingText="测试中..."
+          loadingText="Testing..."
         >
           <Send className="h-4 w-4" />
-          发送测试
+          Send Test
         </Button>
       )}
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_120px]">
         <Select
-          label="渠道"
+          label="Channel"
           value={channel}
           options={CHANNEL_OPTIONS}
           disabled={disabled || isTesting}
           onChange={(value) => setChannel(value as NotificationTestChannel)}
         />
         <Input
-          label="标题"
+          label="Title"
           value={title}
           maxLength={80}
           disabled={disabled || isTesting}
           onChange={(event) => setTitle(event.target.value)}
         />
         <Input
-          label="超时秒数"
+          label="Timeout Seconds"
           type="number"
           min={1}
           max={120}
@@ -125,7 +125,7 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
       </div>
 
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-foreground">正文</span>
+        <span className="mb-2 block text-sm font-medium text-foreground">Body</span>
         <textarea
           value={content}
           maxLength={1000}
@@ -142,7 +142,7 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
         <div className="space-y-3">
           <InlineAlert
             variant={result.success ? 'success' : 'danger'}
-            title={result.success ? '测试成功' : '测试失败'}
+            title={result.success ? 'Test Successful' : 'Test Failed'}
             message={(
               <span>
                 {result.message}
@@ -163,7 +163,7 @@ export const NotificationTestPanel: React.FC<NotificationTestPanelProps> = ({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={attempt.success ? 'success' : 'danger'}>
-                          {attempt.success ? '成功' : '失败'}
+                          {attempt.success ? 'Success' : 'Failure'}
                         </Badge>
                         <span className="text-sm font-medium text-foreground">
                           Attempt {index + 1}

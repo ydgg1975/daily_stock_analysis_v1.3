@@ -17,6 +17,7 @@ import { TaskPanel } from '../components/tasks';
 import { useDashboardLifecycle, useHomeDashboardState } from '../hooks';
 import { useWatchlist } from '../hooks/useWatchlist';
 import type { SetupStatusResponse } from '../types/systemConfig';
+import { getEnglishStrategyText } from '../utils/englishText';
 import { getReportText, normalizeReportLanguage } from '../utils/reportLanguage';
 
 type MarketReviewNotice = {
@@ -111,7 +112,7 @@ const HomePage: React.FC = () => {
   } = useHomeDashboardState();
 
   useEffect(() => {
-    document.title = '每日选股分析 - DSA';
+    document.title = 'Daily Stock Analysis - DSA';
   }, []);
 
   useEffect(() => {
@@ -188,24 +189,33 @@ const HomePage: React.FC = () => {
     closeHistoryTrend();
   }, [closeHistoryTrend, isHistoryTrendOpen, isHistoryTrendUnavailable]);
 
-  const selectedStrategy = useMemo(
-    () => analysisSkills.find((skill) => skill.id === selectedStrategyId),
-    [analysisSkills, selectedStrategyId],
-  );
   const selectedAnalysisSkills = useMemo(
     () => (selectedStrategyId ? [selectedStrategyId] : undefined),
     [selectedStrategyId],
   );
   const strategyOptions = useMemo(
     () => [
-      { id: '', name: '默认策略', description: '沿用系统默认分析框架' },
-      ...analysisSkills.map((skill) => ({
-        id: skill.id,
-        name: skill.name,
-        description: skill.description,
-      })),
+      {
+        id: '',
+        name: 'Default Strategy',
+        description: 'Use the standard analysis framework.',
+        category: 'Default',
+      },
+      ...analysisSkills.map((skill) => {
+        const text = getEnglishStrategyText(skill.id, skill.name, skill.description);
+        return {
+          id: skill.id,
+          name: text.name,
+          description: text.description || 'Strategy-specific stock analysis.',
+          category: text.category || 'Strategy',
+        };
+      }),
     ],
     [analysisSkills],
+  );
+  const selectedStrategyOption = useMemo(
+    () => strategyOptions.find((option) => option.id === selectedStrategyId) || strategyOptions[0],
+    [selectedStrategyId, strategyOptions],
   );
   const closeStrategyMenu = useCallback((restoreFocus = false) => {
     setStrategyMenuOpen(false);
@@ -393,8 +403,8 @@ const HomePage: React.FC = () => {
           setMarketReviewReport(null);
           setMarketReviewNotice({
             variant: 'danger',
-            title: '大盘复盘已超时',
-            message: '任务长时间未返回最终结果，请在任务列表/历史中查看。',
+            title: 'Market Review Timed Out',
+            message: 'The task did not return a final result in time. Check the task list or history.',
           });
           scrollMarketReviewFeedbackIntoView();
           return false;
@@ -408,11 +418,11 @@ const HomePage: React.FC = () => {
             setMarketReviewReport(null);
             const progress = typeof status.progress === 'number'
               ? `${status.progress}%`
-              : '进行中';
+              : 'In progress';
             setMarketReviewNotice({
               variant: 'warning',
-              title: '大盘复盘进行中',
-              message: `任务状态：${status.status}（${progress}）`,
+              title: 'Market Review In Progress',
+              message: `Task status: ${status.status} (${progress})`,
             });
             return true;
           }
@@ -425,8 +435,8 @@ const HomePage: React.FC = () => {
             setMarketReviewReport(marketReviewText ? marketReviewText.trim() : null);
             setMarketReviewNotice({
               variant: 'success',
-              title: '大盘复盘已完成',
-              message: marketReviewText ? '大盘复盘任务已完成，结果如下：' : '大盘复盘任务已完成，结果已生成并按配置推送。',
+              title: 'Market Review Complete',
+              message: marketReviewText ? 'Market review is complete. Results are below:' : 'Market review is complete. Results were generated and pushed according to settings.',
             });
             setMarketReviewError(null);
             scrollMarketReviewFeedbackIntoView();
@@ -442,7 +452,7 @@ const HomePage: React.FC = () => {
                   status: 500,
                   data: {
                     error: 'market_review_failed',
-                    message: status.error || '大盘复盘执行失败。',
+                    message: status.error || 'Market review failed.',
                   },
                 },
               }),
@@ -456,8 +466,8 @@ const HomePage: React.FC = () => {
           setMarketReviewReport(null);
           setMarketReviewNotice({
             variant: 'danger',
-            title: '大盘复盘状态异常',
-            message: `收到未知任务状态：${status.status}`,
+            title: 'Unexpected Market Review Status',
+            message: `Received unknown task status: ${status.status}`,
           });
           scrollMarketReviewFeedbackIntoView();
           return false;
@@ -500,7 +510,7 @@ const HomePage: React.FC = () => {
       const result = await analysisApi.triggerMarketReview({ sendNotification: notify });
       setMarketReviewNotice({
         variant: 'success',
-        title: '大盘复盘已提交',
+        title: 'Market Review Submitted',
         message: result.message,
       });
       scrollMarketReviewFeedbackIntoView();
@@ -528,7 +538,7 @@ const HomePage: React.FC = () => {
         setTimeout(() => setMarketReviewReportCopied(false), 2000);
       },
       (err) => {
-        console.error('复制失败:', err);
+        console.error('Copy failed:', err);
       },
     );
   }, [marketReviewReport]);
@@ -573,7 +583,7 @@ const HomePage: React.FC = () => {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden -ml-1 flex-shrink-0 rounded-lg p-1.5 text-secondary-text transition-colors hover:bg-hover hover:text-foreground"
-                aria-label="历史记录"
+                aria-label="History"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -586,7 +596,7 @@ const HomePage: React.FC = () => {
                   onSubmit={(stockCode, stockName, selectionSource) => {
                     handleSubmitAnalysis(stockCode, stockName, selectionSource);
                   }}
-                  placeholder="输入股票代码或名称，如 600519、贵州茅台、AAPL"
+                  placeholder="Enter a stock code or name, e.g. 600519, AAPL"
                   disabled={isAnalyzing}
                   className={inputError ? 'border-danger/50' : undefined}
                 />
@@ -603,10 +613,10 @@ const HomePage: React.FC = () => {
                     onClick={() => setStrategyMenuOpen((open) => !open)}
                     onKeyDown={handleStrategyButtonKeyDown}
                     disabled={isAnalyzing}
-                    className="home-surface-button flex h-10 max-w-[8.5rem] items-center gap-1.5 rounded-xl px-3 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-[11rem]"
+                    className="strategy-selector-trigger home-surface-button flex h-10 max-w-[9.75rem] items-center gap-1.5 rounded-[10px] px-3 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-[13rem]"
                   >
                     <SlidersHorizontal className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">{selectedStrategy?.name || '策略'}</span>
+                    <span className="truncate">{selectedStrategyOption?.name || 'Strategy'}</span>
                   </button>
                   {strategyMenuOpen ? (
                     <div
@@ -614,7 +624,7 @@ const HomePage: React.FC = () => {
                       role="menu"
                       aria-labelledby="strategy-menu-button"
                       onKeyDown={handleStrategyMenuKeyDown}
-                      className="absolute right-0 top-11 z-[120] max-h-80 w-[min(18rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-subtle bg-elevated p-1.5 text-sm text-foreground shadow-2xl"
+                      className="strategy-selector-menu absolute right-0 top-11 z-[120] max-h-80 w-[min(21rem,calc(100vw-1.5rem))] overflow-y-auto rounded-[10px] border border-subtle bg-elevated p-1.5 text-sm text-foreground"
                     >
                       {strategyOptions.map((option, index) => {
                         const selected = selectedStrategyId === option.id;
@@ -629,12 +639,15 @@ const HomePage: React.FC = () => {
                             aria-checked={selected}
                             tabIndex={-1}
                             onClick={() => selectStrategy(option.id)}
-                            className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-hover"
+                            className={`strategy-selector-option flex w-full items-start gap-2 rounded-lg px-2.5 py-2.5 text-left transition-colors ${selected ? 'is-selected' : ''}`}
                           >
                             <Check className={`mt-0.5 h-4 w-4 flex-shrink-0 ${selected ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
                             <span className="min-w-0">
-                              <span className="block font-medium">{option.name}</span>
-                              <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-muted-text">{option.description}</span>
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="strategy-selector-option-title block truncate">{option.name}</span>
+                                <span className="strategy-selector-option-tag">{option.category}</span>
+                              </span>
+                              <span className="mt-1 line-clamp-2 block text-xs leading-5 text-muted-text">{option.description}</span>
                             </span>
                           </button>
                         );
@@ -652,19 +665,19 @@ const HomePage: React.FC = () => {
                   onChange={(e) => setNotify(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border accent-primary"
                 />
-                推送通知
+                Send notification
               </label>
               <Button
                 type="button"
                 variant="secondary"
                 size="md"
                 isLoading={isSubmittingMarketReview}
-                loadingText="提交中"
+                loadingText="Submitting"
                 onClick={() => void handleTriggerMarketReview()}
                 className="h-10 flex-1 whitespace-nowrap md:flex-none"
               >
                 <BarChart3 className="h-4 w-4" aria-hidden="true" />
-                大盘复盘
+                Market Review
               </Button>
               <button
                 type="button"
@@ -678,10 +691,10 @@ const HomePage: React.FC = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    分析中
+                    Analysing
                   </>
                 ) : (
-                  '分析'
+                  'Analyse'
                 )}
               </button>
             </div>
@@ -693,7 +706,7 @@ const HomePage: React.FC = () => {
             {inputError ? (
               <InlineAlert
                 variant="danger"
-                title="输入有误"
+                title="Input Error"
                 message={inputError}
                 className="rounded-xl px-3 py-2 text-xs shadow-none"
               />
@@ -701,7 +714,7 @@ const HomePage: React.FC = () => {
             {!inputError && duplicateError ? (
               <InlineAlert
                 variant="warning"
-                title="任务已存在"
+                title="Task Already Exists"
                 message={duplicateError}
                 className="rounded-xl px-3 py-2 text-xs shadow-none"
               />
@@ -713,11 +726,11 @@ const HomePage: React.FC = () => {
           <div className="px-3 pb-2 md:px-4">
             <InlineAlert
               variant="warning"
-              title="基础配置未完成"
+              title="Basic Configuration Incomplete"
               message={
                 setupMissingLabels
-                  ? `还缺少 ${setupMissingLabels}，完成后即可开始最小可用分析。`
-                  : '还缺少基础配置，完成后即可开始最小可用分析。'
+                  ? `Still missing ${setupMissingLabels}. Complete that and you can start the smallest useful analysis.`
+                  : 'Basic configuration is still missing. Complete it and you can start the smallest useful analysis.'
               }
               action={(
                 <Button
@@ -726,7 +739,7 @@ const HomePage: React.FC = () => {
                   size="sm"
                   onClick={() => navigate('/settings')}
                 >
-                  去配置
+                  Go To Settings
                 </Button>
               )}
               className="rounded-xl px-3 py-2 text-xs shadow-none"
@@ -780,14 +793,14 @@ const HomePage: React.FC = () => {
             {marketReviewReport ? (
               <div className="mb-3 rounded-xl border border-subtle bg-surface/70 px-3 py-3 text-xs text-secondary-text shadow-sm">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="font-semibold text-foreground">大盘复盘报告</p>
+                  <p className="font-semibold text-foreground">Market Review Report</p>
                   <button
                     type="button"
                     className="home-surface-button h-7 rounded-md px-3 py-1 text-xs text-foreground"
                     disabled={marketReviewReportCopied}
                     onClick={() => void handleCopyMarketReviewReport()}
                   >
-                    {marketReviewReportCopied ? '已复制' : '复制'}
+                    {marketReviewReportCopied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
                 <pre
@@ -808,7 +821,7 @@ const HomePage: React.FC = () => {
             ) : null}
             {isLoadingReport ? (
               <div className="flex h-full flex-col items-center justify-center">
-                <DashboardStateBlock title="加载报告中..." loading />
+                <DashboardStateBlock title="Loading report..." loading />
               </div>
             ) : selectedReport ? (
               <div className={isHistoryTrendOpen ? 'max-w-6xl space-y-4 pb-8' : 'max-w-4xl space-y-4 pb-8'}>
@@ -833,7 +846,7 @@ const HomePage: React.FC = () => {
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    追问 AI
+                    Ask AI
                   </Button>
                   <Button
                     variant="home-action-ai"
@@ -849,7 +862,7 @@ const HomePage: React.FC = () => {
                     }}
                   >
                     <BarChart3 className="h-4 w-4" />
-                    历史趋势
+                    Historical Trend
                   </Button>
                   <Button
                     variant="home-action-ai"
@@ -896,8 +909,8 @@ const HomePage: React.FC = () => {
             ) : (
               <div className="flex h-full items-center justify-center">
                 <EmptyState
-                  title="开始分析"
-                  description="输入股票代码进行分析，或从左侧选择历史报告查看。"
+                  title="Start Analysis"
+                  description="Enter a stock code to analyse, or choose a historical report from the left."
                   className="max-w-xl border-dashed"
                   icon={(
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
