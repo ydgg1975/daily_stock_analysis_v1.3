@@ -327,10 +327,10 @@ const settingsHelpZhCN: SettingsHelpMap = {
     summary: '选择飞书 API 的区域：feishu 对应飞书国内版（feishu.cn），lark 对应 Lark 国际版（larksuite.com）。',
     usage: '国内用户选择 feishu；海外 / Lark 用户选择 lark。',
     valueNotes: [
-      '仅影响 App Bot 和云文档的 API 调用域名，不影响 Webhook URL。',
+      '仅影响 App Bot 主动推送的 API 调用域名，不影响 Webhook URL。',
       '选错会导致 API 调用失败（SDK 连错服务器）。',
     ],
-    impact: ['影响飞书 App Bot 和云文档的 API 连通性。'],
+    impact: ['影响飞书 App Bot 主动推送的 API 连通性。'],
     notes: ['如果值不是 feishu 或 lark，运行时会自动回退到 feishu。'],
   },
   'settings.notification.DINGTALK_STREAM_ENABLED': {
@@ -1309,10 +1309,10 @@ const settingsHelpEnUS: SettingsHelpMap = {
     summary: 'Selects the Feishu API region: feishu for mainland China (feishu.cn), lark for international (larksuite.com).',
     usage: 'Mainland China users choose feishu; international / Lark users choose lark.',
     valueNotes: [
-      'Only affects the API domain used by App Bot and cloud document; does not affect webhook URLs.',
+      'Only affects the API domain used by App Bot notification delivery; does not affect webhook URLs.',
       'Choosing the wrong domain causes API errors (SDK connects to the wrong server).',
     ],
-    impact: ['Affects API connectivity for Feishu App Bot and cloud documents.'],
+    impact: ['Affects API connectivity for Feishu App Bot notification delivery.'],
     notes: ['If the value is neither feishu nor lark, the runtime falls back to feishu.'],
   },
   'settings.notification.DINGTALK_STREAM_ENABLED': {
