@@ -31,6 +31,10 @@ from src.notification_noise import (
     parse_notification_quiet_hours,
     validate_notification_timezone,
 )
+from src.notification_contracts import (
+    is_feishu_app_bot_configured,
+    is_feishu_static_configured,
+)
 from src.llm import generation_params as llm_generation_params
 
 logger = logging.getLogger(__name__)
@@ -2678,40 +2682,35 @@ class Config:
 
         has_feishu_app_id = bool((self.feishu_app_id or "").strip())
         has_feishu_app_secret = bool((self.feishu_app_secret or "").strip())
+        has_feishu_app_credentials_complete = has_feishu_app_id and has_feishu_app_secret
         has_feishu_app_credentials = has_feishu_app_id or has_feishu_app_secret
         has_feishu_doc_token = bool((self.feishu_folder_token or "").strip())
-        has_feishu_chat_id = bool((self.feishu_chat_id or "").strip())
         has_feishu_full_cloud_doc_credentials = (
-            has_feishu_app_id
-            and has_feishu_app_secret
+            has_feishu_app_credentials_complete
             and has_feishu_doc_token
         )
-        # Suppress the "app credentials without a notification route" warning
-        # when the user has opted into App Bot notification (feishu_chat_id).
-        has_feishu_app_notification_route = (
-            has_feishu_app_id
-            and has_feishu_app_secret
-            and has_feishu_chat_id
-        )
+        has_feishu_stream_route = bool(self.feishu_stream_enabled and has_feishu_app_credentials_complete)
+        has_feishu_app_notification_route = is_feishu_app_bot_configured(self)
         if (
             has_feishu_app_credentials
             and not has_feishu_full_cloud_doc_credentials
-            and not self.feishu_webhook_url
-            and not self.feishu_stream_enabled
+            and not is_feishu_static_configured(self)
+            and not has_feishu_stream_route
             and not has_feishu_app_notification_route
         ):
             suggestions = []
-            if has_feishu_app_id and has_feishu_app_secret:
-                suggestions.append("配置 FEISHU_CHAT_ID 开启 App Bot 定时推送")
-            if has_feishu_app_id and has_feishu_app_secret:
+            if has_feishu_app_credentials_complete:
+                suggestions.append("配置 FEISHU_CHAT_ID 开启 App Bot 主动推送")
                 suggestions.append("开启 FEISHU_STREAM_ENABLED 使用应用机器人事件订阅")
+            else:
+                suggestions.append("补齐 FEISHU_APP_ID / FEISHU_APP_SECRET 后配置 FEISHU_CHAT_ID 开启 App Bot 主动推送")
             suggestions.append("配置 FEISHU_WEBHOOK_URL 使用自定义机器人 Webhook 推送")
             issues.append(ConfigIssue(
                 severity="warning",
-                message="仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书通知。"
+                message="仅配置 FEISHU_APP_ID / FEISHU_APP_SECRET 不会开启飞书静态通知。"
                         + " 请选择以下方式之一："
                         + "；".join(suggestions) + "。",
-                field="FEISHU_WEBHOOK_URL",
+                field="FEISHU_CHAT_ID",
             ))
 
         # --- Deprecated field migration hints ---

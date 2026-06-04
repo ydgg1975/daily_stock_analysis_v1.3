@@ -15,7 +15,7 @@ import os
 import threading
 import time
 import uuid as uuid_mod
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -26,9 +26,6 @@ from src.formatters import (
     chunk_content_by_max_bytes,
     format_feishu_markdown,
 )
-
-if TYPE_CHECKING:
-    import lark_oapi as lark
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +58,7 @@ except ImportError:
 
 _APP_SEND_RETRIES = 3
 _APP_SEND_BACKOFF_SECONDS = (1.0, 2.0, 4.0)
-_APP_SEND_TIMEOUT_SECONDS = 30
+_WEBHOOK_SEND_TIMEOUT_SECONDS = 30
 
 # Sentinel for "client not yet initialised".
 _NO_CLIENT = object()
@@ -174,7 +171,9 @@ class FeishuSender:
             if self._app_client is not _NO_CLIENT:
                 return self._app_client
             if not FEISHU_SDK_AVAILABLE:
-                logger.warning("飞书 App Bot 需要 lark-oapi 库: pip install lark-oapi")
+                logger.warning(
+                    "飞书 App Bot 需要 lark-oapi 库；标准安装请运行: pip install -r requirements.txt"
+                )
                 self._app_client = None
                 return None
             if not self._feishu_app_id or not self._feishu_app_secret:
@@ -213,10 +212,6 @@ class FeishuSender:
 
         client = self._ensure_app_client()
         if client is None:
-            if not FEISHU_SDK_AVAILABLE:
-                logger.warning("飞书 App Bot 需要 lark-oapi 库: pip install lark-oapi")
-            elif not self._feishu_app_id or not self._feishu_app_secret:
-                logger.warning("飞书 App Bot 凭据不全，请检查 FEISHU_APP_ID / FEISHU_APP_SECRET")
             return False
 
         formatted = format_feishu_markdown(content)
@@ -267,62 +262,78 @@ class FeishuSender:
         return self._app_send_raw(client, "text", text_payload)
 
     def _app_send_raw(self, client: Any, msg_type: str, content_json: str) -> bool:
-        """Low-level send via lark-oapi SDK with retry and idempotency UUID."""
+        """Low-level send via lark-oapi SDK with retry and idempotency UUID.
+
+        Request construction is done once outside the retry loop; it is
+        deterministic and a construction error is a programming error, not
+        a transient failure.
+        """
         if client is None:
             return False
 
         send_uuid = str(uuid_mod.uuid4())
-        last_response_error: Optional[str] = None
-        last_exception_type: Optional[str] = None
-        last_exception_detail: Optional[str] = None
+        try:
+            req = (
+                CreateMessageRequest.builder()
+                .receive_id_type(self._feishu_receive_id_type)
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(self._feishu_chat_id)
+                    .content(content_json)
+                    .msg_type(msg_type)
+                    .uuid(send_uuid)
+                    .build()
+                )
+                .build()
+            )
+        except Exception as e:
+            logger.error("App Bot 请求构建失败: %s: %s", type(e).__name__, e)
+            return False
+
+        last_status: Optional[str] = None
 
         for attempt in range(_APP_SEND_RETRIES):
             try:
-                req = (
-                    CreateMessageRequest.builder()
-                    .receive_id_type(self._feishu_receive_id_type)
-                    .request_body(
-                        CreateMessageRequestBody.builder()
-                        .receive_id(self._feishu_chat_id)
-                        .content(content_json)
-                        .msg_type(msg_type)
-                        .uuid(send_uuid)
-                        .build()
-                    )
-                    .build()
-                )
                 resp = client.im.v1.message.create(req)
-                if resp.success():
-                    logger.info("App Bot 消息发送成功 (type=%s)", msg_type)
-                    return True
-                try:
-                    log_id = resp.get_log_id()
-                except (AttributeError, Exception):
-                    log_id = "N/A"
-                status = "code=%s, msg=%s, log_id=%s" % (
-                    resp.code, resp.msg, log_id,
-                )
-                last_response_error = status
-                logger.warning(
-                    "App Bot 发送失败 (attempt=%d/%d): %s",
-                    attempt + 1, _APP_SEND_RETRIES, status,
-                )
             except Exception as e:
-                last_exception_type = type(e).__name__
-                last_exception_detail = str(e)
                 logger.warning(
                     "App Bot 发送异常 (attempt=%d/%d): %s: %s",
-                    attempt + 1, _APP_SEND_RETRIES,
-                    last_exception_type, last_exception_detail,
+                    attempt + 1, _APP_SEND_RETRIES, type(e).__name__, e,
                 )
+                if attempt < _APP_SEND_RETRIES - 1:
+                    time.sleep(
+                        _APP_SEND_BACKOFF_SECONDS[
+                            min(attempt, len(_APP_SEND_BACKOFF_SECONDS) - 1)
+                        ]
+                    )
+                continue
+
+            if resp.success():
+                logger.info("App Bot 消息发送成功 (type=%s)", msg_type)
+                return True
+
+            try:
+                log_id = resp.get_log_id()
+            except (AttributeError, Exception):
+                log_id = "N/A"
+            status = "code=%s, msg=%s, log_id=%s" % (
+                resp.code, resp.msg, log_id,
+            )
+            last_status = status
+            logger.warning(
+                "App Bot 发送失败 (attempt=%d/%d): %s",
+                attempt + 1, _APP_SEND_RETRIES, status,
+            )
 
             if attempt < _APP_SEND_RETRIES - 1:
-                time.sleep(_APP_SEND_BACKOFF_SECONDS[min(attempt, len(_APP_SEND_BACKOFF_SECONDS) - 1)])
+                time.sleep(
+                    _APP_SEND_BACKOFF_SECONDS[
+                        min(attempt, len(_APP_SEND_BACKOFF_SECONDS) - 1)
+                    ]
+                )
 
-        if last_response_error:
-            logger.error("App Bot 发送最终失败: %s", last_response_error)
-        elif last_exception_type:
-            logger.error("App Bot 发送最终失败: %s: %s", last_exception_type, last_exception_detail)
+        if last_status:
+            logger.error("App Bot 发送最终失败: %s", last_status)
         return False
 
     # ------------------------------------------------------------------
@@ -418,7 +429,7 @@ class FeishuSender:
                 response = requests.post(
                     self._feishu_url,
                     json=request_payload,
-                    timeout=timeout_seconds or _APP_SEND_TIMEOUT_SECONDS,
+                    timeout=timeout_seconds or _WEBHOOK_SEND_TIMEOUT_SECONDS,
                     verify=self._webhook_verify_ssl,
                 )
             except (requests.exceptions.ConnectionError,

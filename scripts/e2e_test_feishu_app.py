@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Feishu App Bot setup validation and live-send smoke test.
+Feishu App Bot manual smoke validation and live-send test.
 
 Usage:
     ssh <host> "python3 /path/to/e2e_test_feishu_app.py"
@@ -8,16 +8,14 @@ Usage:
 Requires FEISHU_APP_ID and FEISHU_APP_SECRET env vars set on the target host.
 Optionally set FEISHU_CHAT_ID to send a live test message via interactive card.
 Optionally set FEISHU_OPEN_ID to send a live P2P test message (overrides CHAT_ID).
-Optionally set FEISHU_TEST_SEND_TEXT=1 to test plain-text-only delivery.
 Optionally set FEISHU_DOMAIN to "lark" for international (Lark) tenants.
 """
-import json
 import logging
 import os
 import sys
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-logger = logging.getLogger("e2e")
+logger = logging.getLogger("feishu-manual-smoke")
 
 # 1. Check credentials
 app_id = os.getenv("FEISHU_APP_ID", "").strip()
@@ -29,8 +27,19 @@ if not app_id or not app_secret:
 # 2. Try getting tenant_access_token
 import requests
 
+_domain = os.getenv("FEISHU_DOMAIN", "feishu").strip().lower()
+if _domain not in ("feishu", "lark"):
+    logger.warning("Invalid FEISHU_DOMAIN=%s; falling back to feishu", _domain)
+    _domain = "feishu"
+_base_host_by_domain = {
+    "feishu": "open.feishu.cn",
+    "lark": "open.larksuite.com",
+}
+_base_host = _base_host_by_domain[_domain]
+logger.info("using domain=%s base_host=%s", _domain, _base_host)
+
 resp = requests.post(
-    "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+    f"https://{_base_host}/open-apis/auth/v3/tenant_access_token/internal",
     json={"app_id": app_id, "app_secret": app_secret},
     timeout=30,
 )
@@ -44,7 +53,7 @@ logger.info("token obtained OK")
 
 # 3. List chats (groups) to find available chat_ids
 chats_resp = requests.get(
-    "https://open.feishu.cn/open-apis/im/v1/chats?page_size=20",
+    f"https://{_base_host}/open-apis/im/v1/chats?page_size=20",
     headers={"Authorization": f"Bearer {token}"},
     timeout=30,
 )
@@ -62,30 +71,32 @@ else:
     logger.warning("chat list failed (may lack im:chat permission): %s", chats_data)
     logger.warning("Trying /bot/v3/info instead...")
 
-# 4. Import lark-oapi SDK (must be installed manually)
+# 4. Import lark-oapi SDK (installed by standard requirements.txt setup)
 try:
     import lark_oapi as lark
-    from lark_oapi.api.im.v1 import (
-        CreateMessageRequest,
-        CreateMessageRequestBody,
-    )
 except ImportError:
     logger.error(
-        "lark-oapi is NOT installed. Install it manually before running this test:\n"
-        "    pip install lark-oapi"
+        "lark-oapi is NOT installed. Standard project setup installs it via:\n"
+        "    pip install -r requirements.txt"
     )
     sys.exit(1)
 
-# 5. Verify SDK client initialisation
-bot_resp = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
-logger.info("lark-oapi SDK client init OK")
-logger.info("E2E setup verification passed.")
+# 5. Verify SDK client initialisation (with domain support)
+smoke_client = (
+    lark.Client.builder()
+    .app_id(app_id)
+    .app_secret(app_secret)
+    .domain(
+        lark.core.const.FEISHU_DOMAIN if _domain == "feishu" else lark.core.const.LARK_DOMAIN
+    )
+    .build()
+)
+logger.info("lark-oapi SDK client init OK (domain=%s, client=%s)", _domain, type(smoke_client).__name__)
+logger.info("manual smoke setup verification passed.")
 
 # 6. Live send test
 _chat_id = os.getenv("FEISHU_CHAT_ID", "").strip()
 _open_id = os.getenv("FEISHU_OPEN_ID", "").strip()
-_test_text_only = os.getenv("FEISHU_TEST_SEND_TEXT", "").strip() == "1"
-_domain = os.getenv("FEISHU_DOMAIN", "feishu").strip().lower()
 
 _receive_id_type = "chat_id"
 _receive_id = _chat_id
@@ -117,28 +128,15 @@ if _receive_id:
 
     # Interactive-card send (default FeishuSender path: card-first, text-fallback)
     ok_card = sender.send_to_feishu(
-        "**E2E Test Message**\n\n"
-        "This is an automated test from `e2e_test_feishu_app.py`\n"
-        f"(mode: {_receive_id_type}{', text-only' if _test_text_only else ''})."
+        "**Feishu Manual Smoke Test Message**\n\n"
+        "This is a manual smoke test from `e2e_test_feishu_app.py`\n"
+        f"(mode: {_receive_id_type})."
     )
     if ok_card:
         logger.info("Live send test PASSED (via card or text fallback).")
     else:
-        logger.error("Live send test FAILED — check FEISHU_CHAT_ID and bot permissions.")
+        logger.error("Live send test FAILED - check FEISHU_CHAT_ID and bot permissions.")
         sys.exit(1)
-
-    # Text-only send (bypasses card construction)
-    if _test_text_only:
-        import lark_oapi as _lark2
-        client = _lark2.Client.builder().app_id(app_id).app_secret(app_secret).domain(
-            _lark2.core.const.FEISHU_DOMAIN if _domain == "feishu" else _lark2.core.const.LARK_DOMAIN
-        ).build()
-        text_json = json.dumps({"text": "**E2E Plain Text Test**\n\nFrom `e2e_test_feishu_app.py` (text-only mode)."}, ensure_ascii=False)
-        ok_text = sender._app_send_raw(client, "text", text_json)
-        if ok_text:
-            logger.info("Text-only send PASSED.")
-        else:
-            logger.warning("Text-only send FAILED (card path already succeeded).")
 else:
     logger.info(
         "Neither FEISHU_CHAT_ID nor FEISHU_OPEN_ID set; skipping live send. "
