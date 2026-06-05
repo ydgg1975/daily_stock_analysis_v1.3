@@ -2,6 +2,7 @@ import { validateStockCode } from './validation';
 import { normalizeStockCode } from './stockCode';
 
 const EXCHANGE_PREFIXES = new Set(['SH', 'SZ', 'BJ', 'HK', 'US', 'SS']);
+const LOWERCASE_TICKER_CONTEXT_RE = /换成|改看|分析|看看|研究|诊断|比较|对比|\bvs\b|和[^，。,.!?！？]{0,40}比|差异(?!化)|区别|不同|相比|对照|比一比|哪个|哪只|哪一个|谁更|更值得|更适合|怎么选|选哪|二选一/i;
 
 // Mirrors backend _COMMON_WORDS for #1596 free-text extraction only.
 // Explicit validation via validateStockCode() intentionally keeps its original contract.
@@ -58,6 +59,9 @@ export function extractStockCodesFromMessage(message: string): string[] {
     /\b(\d{5,6})\b/g,
     /\b([A-Z]{2,5})\b/g,
   ];
+  if (LOWERCASE_TICKER_CONTEXT_RE.test(message)) {
+    patterns.push(/\b([a-z]{2,5}(?:\.[a-z]{1,2})?)\b/g);
+  }
 
   const matches: Array<{ value: string; index: number; priority: number }> = [];
   patterns.forEach((pattern, priority) => {

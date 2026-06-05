@@ -26,6 +26,7 @@ SWITCH_CLEANUP_KEYS = {
 
 _STRONG_COMPARE_PATTERN = re.compile(r"比较|对比|vs\b|和[^，。,.!?！？]{0,40}比", re.IGNORECASE)
 _WEAK_COMPARE_HINT_PATTERN = re.compile(r"差异(?!化)|区别|不同|相比|对照|比一比")
+_CHOICE_COMPARE_PATTERN = re.compile(r"哪个|哪只|哪一个|谁更|更值得|更适合|怎么选|选哪|二选一")
 _LINKED_COMPARE_PATTERN = re.compile(
     r"(?:和|与|跟|同)(?P<body>[^，。,.!?！？]{0,40})(?:差异(?!化)|区别|不同|相比|对照|比一比)"
 )
@@ -112,6 +113,7 @@ def extract_stock_codes(text: str) -> List[str]:
         _SWITCH_PATTERN.search(text)
         or _STRONG_COMPARE_PATTERN.search(text)
         or _WEAK_COMPARE_HINT_PATTERN.search(text)
+        or _CHOICE_COMPARE_PATTERN.search(text)
     ):
         for match in _LOWERCASE_TICKER_PATTERN.finditer(text):
             _append_candidate(candidates, match.group(1))
@@ -122,12 +124,16 @@ def extract_stock_codes(text: str) -> List[str]:
 def _is_compare_message(message: str, candidates: List[str], current_code: str) -> bool:
     if _STRONG_COMPARE_PATTERN.search(message):
         return True
+    new_candidates = {code for code in candidates if code != current_code}
+    if len(new_candidates) >= 2:
+        return True
+    if _CHOICE_COMPARE_PATTERN.search(message) and len(candidates) >= 2:
+        return True
     if not _WEAK_COMPARE_HINT_PATTERN.search(message):
         return False
     if len(candidates) >= 2:
         return True
 
-    new_candidates = {code for code in candidates if code != current_code}
     if not new_candidates:
         return False
 

@@ -42,6 +42,7 @@ const MAX_SELECTED_SKILLS = 3;
 const CONTEXT_COMPRESSION_CONFIG_KEY = 'AGENT_CONTEXT_COMPRESSION_ENABLED';
 const STRONG_COMPARE_STOCK_MESSAGE_RE = /比较|对比|\bvs\b|和[^，。,.!?！？]{0,40}比/i;
 const WEAK_COMPARE_STOCK_MESSAGE_RE = /差异(?!化)|区别|不同|相比|对照|比一比/;
+const CHOICE_COMPARE_STOCK_MESSAGE_RE = /哪个|哪只|哪一个|谁更|更值得|更适合|怎么选|选哪|二选一/;
 const LINKED_COMPARE_STOCK_MESSAGE_RE = /(?:和|与|跟|同)[^，。,.!?！？]{0,40}(?:差异(?!化)|区别|不同|相比|对照|比一比)/;
 const SWITCH_STOCK_MESSAGE_RE = /换成|改看|分析|看看|研究|诊断/;
 
@@ -65,6 +66,16 @@ const isCompareStockMessage = (
   if (STRONG_COMPARE_STOCK_MESSAGE_RE.test(message)) {
     return true;
   }
+  const current = currentStockCode ? normalizeStockCode(currentStockCode) : null;
+  const newStockCodes = current
+    ? stockCodes.filter((code) => code !== current)
+    : stockCodes;
+  if (newStockCodes.length >= 2) {
+    return true;
+  }
+  if (CHOICE_COMPARE_STOCK_MESSAGE_RE.test(message) && stockCodes.length >= 2) {
+    return true;
+  }
   if (!WEAK_COMPARE_STOCK_MESSAGE_RE.test(message)) {
     return false;
   }
@@ -74,7 +85,6 @@ const isCompareStockMessage = (
   if (!currentStockCode) {
     return false;
   }
-  const current = normalizeStockCode(currentStockCode);
   const hasNewStock = stockCodes.some((code) => code !== current);
   return hasNewStock && LINKED_COMPARE_STOCK_MESSAGE_RE.test(message);
 };

@@ -953,6 +953,36 @@ describe('ChatPage', () => {
     });
   });
 
+  it('keeps active stock context for choice-style multi-stock messages', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+      target: { value: 'AAPL 和 TSLA 哪个更值得买' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(mockStartStream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          message: 'AAPL 和 TSLA 哪个更值得买',
+          context: {
+            stock_code: '600519',
+            stock_name: '贵州茅台',
+          },
+        }),
+        expect.objectContaining({
+          skillName: '趋势分析',
+        }),
+      );
+    });
+  });
+
   it('switches active stock context for single-stock difference phrasing', async () => {
     render(
       <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0']}>
@@ -973,6 +1003,36 @@ describe('ChatPage', () => {
           message: '分析 AAPL 的差异化优势',
           context: {
             stock_code: 'AAPL',
+            stock_name: null,
+          },
+        }),
+        expect.objectContaining({
+          skillName: '趋势分析',
+        }),
+      );
+    });
+  });
+
+  it('switches active stock context for lowercase US ticker switch messages', async () => {
+    render(
+      <MemoryRouter initialEntries={['/chat?stock=600519&name=%E8%B4%B5%E5%B7%9E%E8%8C%85%E5%8F%B0']}>
+        <ChatPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByDisplayValue('请深入分析 贵州茅台(600519)')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/分析 600519/), {
+      target: { value: '分析tsla' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(mockStartStream).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          message: '分析tsla',
+          context: {
+            stock_code: 'TSLA',
             stock_name: null,
           },
         }),
@@ -1333,6 +1393,14 @@ describe('extractStockCodeFromMessage', () => {
   it('returns all stock codes in message order', () => {
     expect(extractStockCodesFromMessage('分析 600519 和 AAPL 的差异')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('分析 AAPL 和 600519 的差异')).toEqual(['AAPL', '600519']);
+    expect(extractStockCodesFromMessage('AAPL 和 TSLA 哪个更值得买')).toEqual(['AAPL', 'TSLA']);
+  });
+
+  it('extracts lowercase tickers only with explicit stock intent hints', () => {
+    expect(extractStockCodesFromMessage('分析tsla')).toEqual(['TSLA']);
+    expect(extractStockCodesFromMessage('看看 tsla')).toEqual(['TSLA']);
+    expect(extractStockCodesFromMessage('aapl 和 tsla 哪个更值得买')).toEqual(['AAPL', 'TSLA']);
+    expect(extractStockCodesFromMessage('hello tsla')).toEqual([]);
   });
 
   it('returns all HK and A-share suffix variants without exchange suffix tokens', () => {

@@ -288,6 +288,35 @@ class TestStockScopeResolution(unittest.TestCase):
                 self.assertEqual(result.effective_context["stock_name"], "匿名标的")
                 self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "AAPL"})
 
+    def test_multiple_explicit_codes_are_compare_scope(self):
+        cases = [
+            ("AAPL 和 TSLA 哪个更值得买", {"600519", "AAPL", "TSLA"}),
+            ("AAPL 和 TSLA 谁更适合", {"600519", "AAPL", "TSLA"}),
+            ("分析 AAPL 和 TSLA", {"600519", "AAPL", "TSLA"}),
+        ]
+
+        for message, expected_allowed in cases:
+            with self.subTest(message=message):
+                result = resolve_stock_scope(
+                    message,
+                    {"stock_code": "600519", "stock_name": "匿名标的"},
+                )
+
+                self.assertEqual(result.stock_scope.mode, "compare")
+                self.assertEqual(result.effective_context["stock_code"], "600519")
+                self.assertEqual(result.effective_context["stock_name"], "匿名标的")
+                self.assertEqual(result.stock_scope.allowed_stock_codes, expected_allowed)
+
+    def test_multiple_lowercase_explicit_codes_are_compare_scope_with_choice_hint(self):
+        result = resolve_stock_scope(
+            "aapl 和 tsla 哪个更值得买",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "compare")
+        self.assertEqual(result.effective_context["stock_code"], "600519")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "AAPL", "TSLA"})
+
     def test_single_stock_difference_phrase_still_switches_context(self):
         result = resolve_stock_scope(
             "分析 AAPL 的差异化优势",
