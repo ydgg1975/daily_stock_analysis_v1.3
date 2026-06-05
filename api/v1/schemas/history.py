@@ -260,6 +260,8 @@ class ReportDetails(BaseModel):
     dividend_metrics: Optional[Any] = Field(None, description="结构化分红指标（含 TTM 口径）")
     belong_boards: Optional[Any] = Field(None, description="关联板块列表")
     sector_rankings: Optional[Any] = Field(None, description="板块涨跌榜（结构 {top, bottom}）")
+    chart_analysis_report: Optional[Any] = Field(None, description="图表分析报告")
+    event_monitoring_report: Optional[Any] = Field(None, description="事件监控报告")
 
 
 class AnalysisReport(BaseModel):
@@ -269,6 +271,8 @@ class AnalysisReport(BaseModel):
     summary: ReportSummary = Field(..., description="概览区")
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
     details: Optional[ReportDetails] = Field(None, description="详情区")
+    analysis_map: Optional[Dict[str, Any]] = Field(None, description="Agent 分析覆盖和工具轨迹")
+    analysis_confidence: Optional[Dict[str, Any]] = Field(None, description="Agent 分析置信度元数据")
 
     model_config = ConfigDict(json_schema_extra={
         "example": {

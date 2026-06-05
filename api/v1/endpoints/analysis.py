@@ -1092,6 +1092,8 @@ def _build_analysis_report(
     summary_data = report_data.get("summary", {})
     strategy_data = report_data.get("strategy", {})
     details_data = report_data.get("details", {})
+    chart_analysis_report = report_data.get("chart_analysis_report")
+    event_monitoring_report = report_data.get("event_monitoring_report")
     report_language = normalize_report_language(
         meta_data.get("report_language")
         or (context_snapshot or {}).get("report_language")
@@ -1171,7 +1173,15 @@ def _build_analysis_report(
     api_context_snapshot = sanitize_context_snapshot_for_api(context_snapshot)
     details = None
     has_board_details = bool(extracted_boards.get("belong_boards")) or extracted_boards.get("sector_rankings") is not None
-    if details_data or any(extracted_fundamental.values()) or has_board_details or context_snapshot is not None or analysis_context_pack_overview is not None:
+    if (
+        details_data
+        or chart_analysis_report is not None
+        or event_monitoring_report is not None
+        or any(extracted_fundamental.values())
+        or has_board_details
+        or context_snapshot is not None
+        or analysis_context_pack_overview is not None
+    ):
         details = ReportDetails(
             news_content=details_data.get("news_summary") or details_data.get("news_content"),
             raw_result=details_data,
@@ -1181,11 +1191,15 @@ def _build_analysis_report(
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
             belong_boards=extracted_boards.get("belong_boards"),
             sector_rankings=extracted_boards.get("sector_rankings"),
+            chart_analysis_report=chart_analysis_report,
+            event_monitoring_report=event_monitoring_report,
         )
 
     return AnalysisReport(
         meta=meta,
         summary=summary,
         strategy=strategy,
-        details=details
+        details=details,
+        analysis_map=report_data.get("analysis_map"),
+        analysis_confidence=report_data.get("analysis_confidence"),
     )

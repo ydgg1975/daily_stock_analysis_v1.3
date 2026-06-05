@@ -11,6 +11,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - [改进] #1390 P0 为个股分析与历史/回测展示新增可选八态 `action` / `action_label` 建议动作字段，保留 `operation_advice` 自由文本和 `decision_type=buy|hold|sell` 统计口径，不新增迁移或配置项。
 - [修复] #1390 收紧建议动作 legacy fallback：英文 `not to ...` 与 `avoid selling/reducing/trimming ...` 等否定/回避表达不再误判为买卖动作，Web 旧记录不再把中文金融上下文、`buy or sell`、多 guard 歧义文本或 `buyback` / `buy-back` / `buy back` / `selloff` / `sell-off` / `sell off` 等英文复合词渲染成 action badge，并在有结构化 `action` 时让回测/历史趋势等入口按界面语言显示 action 标签。
+- [修复] Web 个股栏和历史卡片在窄布局下不再让市场阶段标签遮挡股票名称。
+- [修复] 问股自由文本追问不再将 TTM、PE、YOY 等金融缩写误识别为新股票代码。
+- [修复] GitHub Actions 每日分析工作流读取 SearXNG 自建实例地址时支持 Variables 优先、Secrets 回退，修复仅配置 Variables 时 URL 不生效的问题。
+- [新功能] Web 大盘复盘历史新增独立集合入口，支持按 `MARKET` / `market_review` 聚合查看与单条记录删除，并避免混入普通个股栏。
+- [修复] Web/桌面端左侧导航选中态改用 border 实现，避免蓝色竖条指示器溢出侧栏边界；侧栏展开宽度 116px → 136px，新增 rail 紧凑模式。
+- [修复] Windows 桌面端自动更新安装目录不再预先加引号，避免带空格路径在自动安装时触发“缺少快捷方式 / 找不到 Daily Stock Analysis.exe”的系统弹窗。
+- [修复] Agent 分析路径生成 AnalysisContextPack overview 前复用已落库日线分析上下文，避免日线已抓取成功仍显示 `daily_bars_missing`。
+- [新功能] Web 大盘复盘报告新增专用展示视图，历史入口和首页即时结果统一使用 Markdown/GFM 渲染并隐藏个股专属模块。
+- [新功能] 大盘复盘新增结构化 `market_review_payload`，Web、历史详情和推送统一基于结构化数据渲染，并保留 Markdown 兼容展示。
+- [文档] 本次迭代仅重构大盘复盘展示链路（统一 Markdown/GFM 渲染与结构化 payload 渲染），不涉及 `LITELLM_*`、`LLM_*`、`provider/model/base_url` 等运行时配置语义；如需回退采用常规发布回滚。
+- [修复] 修正大盘复盘结构化 `breadth` 的可用性判断：当市场不支持/抓取失败（如美股、港股或 A 股 breadth 不可用）时不下发 `breadth`，前端展示“暂无数据”，避免误导性 0 值。
+- [修复] 明确大盘复盘语言行为调整为遵循全局 `report_language`，并在回退场景保持原语种提示（如美股/港股默认会按配置语言展示）；兼容性变化说明见该条款，无需额外改动 provider/model/base_url。
+- [修复] 美股中文场景下，市场标签与策略蓝图（`Strategy Blueprint/Strategy Framework`）已本地化为中文显示，避免 `report_language=zh` 下混入英文策略段落与市场标签；与 Issue #1555 的历史/即时结果一致。
+- [修复] Docker Web 设置页读取配置时在活跃 `.env` 文件缺项时回退展示启动注入的同名环境变量，并补清 `env_file` / `--env-file`、`ENV_FILE=/app/data/runtime.env` 与单文件 `.env` 挂载边界文档。
+- [文档] 补充说明：LLM / LiteLLM 兼容键的回退仅用于 Settings 界面展示与校验上下文拼装，不改写、不迁移、不清理用户现有的 provider/model/base URL 持久化配置；未发生 provider / model / base URL 语义迁移，仅保留同名启动注入的展示级兜底。兼容边界依据 `requirements.txt`（`litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`、`openai>=1.0.0`）；官方语义来源：[LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible)、[OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat/create)。回退/恢复路径为：重启/更新后清理同名 `env_file` / `--env-file` / `environment` 覆盖后使用持久化保存值，或通过桌面端导入/导出 `.env` 片段恢复；仅在 WebUI 未改写同名启动注入值时才会按该片段接管。验证回归点见 `tests/test_system_config_service.py::test_get_config_uses_runtime_env_as_display_fallback`、`tests/test_system_config_service.py::test_get_config_runtime_env_fallback_does_not_persist_llm_fields_on_save`、`tests/test_system_config_service.py::test_runtime_env_fallback_does_not_override_saved_provider_and_base_url_settings`、以及 `tests/test_system_config_api.py` 的 `/api/v1/system/config` 获取/保存链路回归。
+
+- [수정] `REPORT_LANGUAGE=zh` 리포트 렌더링 호환성과 분석 API의 agent trace/detail 응답 필드 보존을 복구했습니다.
+- [수정] Web AI 상담 화면의 컨텍스트 압축과 이어질문 안내에 남아 있던 이전 중국어 빌드 문구가 한국어로 표시되도록 정적 번들을 갱신했습니다.
+- [수정] Web 데이터 신뢰도 패널이 이전 `zh` 리포트 언어 값을 받아도 기본 한국어 라벨로 안전하게 표시되도록 했습니다.
+- [개선] 미국 주식 전략 가격대가 원화가 아닌 달러 단위로 표시되도록 하고, 주요 미국 종목을 `애플`, `엔비디아`, `테슬라` 같은 한국어 이름으로도 검색할 수 있게 했습니다.
+- [수정] `애플` 같은 한국어 종목명을 직접 분석 요청해도 백엔드가 한글 입력과 자동완성 별칭을 해석하고, 잘못된 입력 안내가 한국어로 표시되도록 했습니다.
+- [수정] Web 전략 선택 메뉴와 AI 상담 스킬 목록에서 병음으로 보이던 전략 이름과 설명을 한국어로 표시하도록 했습니다.
+- [개선] Web UI의 기본 문서 언어와 초기 제목을 한국어로 고정하고, 이후 영어 UI 선택 기능을 붙일 수 있는 기본 언어 유틸을 추가했습니다.
+- [수정] Web 작업 진행 카드와 미국 주식 섹터/산업 태그에 남아 있던 중국어 또는 깨진 인코딩 문구가 한국어로 표시되도록 정리했습니다.
+- [개선] 미국 주식 일봉 데이터 기본 우선순위를 yfinance 무료 경로로 고정하고 `US_DAILY_DATA_SOURCE_ORDER`로 선택형 유료/제한 API 우선순위를 바꿀 수 있게 했습니다.
+- [개선] AI 종목 리포트가 매수/관망/매도 결론, 판단 이유, 조건 변화, 리스크를 초보자도 이해하기 쉬운 표현으로 설명하도록 프롬프트 규칙을 보강했습니다.
+- [개선] Web 종목 자동완성 인덱스에 로컬 한국 종목명을 포함해 `삼성전자` 같은 한국어 종목명으로 KRX 종목을 검색할 수 있게 했습니다.
+- [개선] 네이버 증권 공개 목록을 이용해 KOSPI/KOSDAQ 종목명을 자동완성 인덱스에 갱신하는 스크립트를 추가했습니다.
+- [수정] Web 분석 진행 카드에 표시되는 작업 대기열과 분석 단계 문구가 중국어로 노출되지 않도록 한국어로 정리했습니다.
+- [수정] LLM 분석 요청에 300초 기본 타임아웃과 장시간 대기 안내 문구를 적용해 Web 진행률이 AI 응답 단계에서 멈춘 것처럼 보이지 않도록 했습니다.
+- [수정] LLM 스트리밍이 첫 응답 전에 빈 응답으로 실패하면 같은 모델 일반 요청으로 오래 대기하지 않고 다음 fallback 모델로 전환하도록 했습니다.
+- [수정] 한국어 최신 리포트에 일부 혼합 언어 문구가 있어도 리포트 상세 데이터와 실행 가격대가 숨겨지지 않도록 했습니다.
+- [수정] KIS 시가총액 값을 회전율로 오인하지 않도록 해 한국 종목 데이터 신뢰도 저하 표시와 AI 판단 왜곡을 줄였습니다.
+- [개선] 한국 종목 최신 뉴스 검색 결과가 없을 때 종목명 중심의 단순 검색어로 한 번 더 조회하도록 했습니다.
+- [개선] 한국어 리포트의 `Hold and watch` 상태값과 진단 상태 문구를 더 자연스러운 한국어로 표시하도록 정리했습니다.
+- [개선] Web AI 모델 설정에서 활성 LLM 채널의 `/models` 목록을 일괄 새로고침하고 최신 모델 선택 목록에 바로 반영할 수 있게 했습니다.
+- [수정] yfinance가 날짜 index 이름 없이 MultiIndex 일봉 데이터를 반환하는 경우에도 미국/한국 종목 일봉을 `date` 컬럼으로 정규화하도록 수정했습니다.
+- [수정] 주요 한국 종목의 로컬 이름 매핑을 추가해 KRX 분석 리포트와 뉴스 검색어가 `005930.KS` 같은 코드 대신 `삼성전자` 같은 종목명을 사용할 수 있게 했습니다.
+- [개선] KRX 종목 뉴스 검색이 중국 A주 키워드 대신 한국어 뉴스, 공시, 실적, 증권사 리포트 키워드를 사용하도록 검색 쿼리를 분리했습니다.
+- [개선] 한국어 리포트의 고정 라벨, 상태값, 주요 단위를 자연스러운 한국어로 정리하고 중국어 혼합 표현을 줄였습니다.
+- [수정] 한국어 모드의 분석 기록 목록과 시장 리뷰 기록에서 이전 중국어/깨진 인코딩 기록이 그대로 노출되지 않도록 보정했습니다.
+- [문서] SearXNG 자가 호스팅 운영 가이드를 추가하고 `.env.example`과 `scripts/check_env.py --search` 검색 점검 명령을 보강했습니다.
+- [개선] 한국투자증권 KIS Open API 조회 전용 fetcher를 추가해 한국 종목 현재가와 일봉 데이터를 KIS 우선, yfinance fallback 흐름으로 조회할 수 있게 했습니다.
+- [개선] 미국 주식 기본 분석에 SEC EDGAR 공시 이력과 XBRL companyfacts 조회를 추가해 API 키 없이 10-K/10-Q/8-K와 핵심 재무 fact를 보강할 수 있게 했습니다.
+- [개선] OpenDART adapter를 추가해 한국 종목 fundamental context에 최근 공시와 단일회사 주요계정 재무 데이터를 병합할 수 있게 했습니다.
+- [개선] `REPORT_LANGUAGE=ko`를 기본 리포트 언어로 추가하고 Web 리포트 라벨과 AI 분석 프롬프트가 한국어 출력을 우선하도록 정리했습니다.
+- [수정] `REPORT_LANGUAGE` 런타임 기본값과 invalid fallback을 설정 스키마와 같은 `ko`/`en`/`zh` 계약에 맞췄습니다.
+- [수정] 분석, 알림, 리포트 렌더링의 설정 기반 언어 fallback이 한국어 기본값을 따르도록 맞췄습니다.
+- [수정] 한국어 히스토리 Markdown과 단일 종목 알림 리포트의 이벤트/차트 고정 제목이 중국어로 표시되지 않도록 보정했습니다.
+- [수정] Web 리포트 컴포넌트가 언어 값이 없을 때 한국어 기본 문구를 사용하고 영어 리포트 언어를 올바르게 정규화하도록 수정했습니다.
+- [수정] Web 리포트 개요에서 관련 섹터와 섹터 등락률 섹션이 다시 표시되도록 복구했습니다.
+- [수정] 한국어 리포트 모드의 AI 분석 프롬프트, fallback 문구, 설정 주석에 남아 있던 혼합 언어 표현을 자연스러운 한국어로 정리했습니다.
+- [수정] 한국어 리포트 언어 확장 중 기존 중국어 리포트 라벨, placeholder, 분석 프롬프트 호환성이 깨지지 않도록 `zh` 동작을 복구했습니다.
+- [개선] 분석 기록 전체 초기화 API와 Web 버튼을 추가하고, 현재 KR/US 기본 흐름과 다른 과거 CN/HK 기록을 legacy 배지로 구분할 수 있게 했습니다.
+- [수정] Web 분석 입력 예시와 코드 검증을 KR/US 중심으로 조정해 KRX 코드가 중국 A주로 오인되는 일을 줄였습니다.
+- [개선] Web 종목 자동완성에서 한국 종목의 `.KS`/`.KQ` suffix와 `KS`/`KQ` prefix 입력을 같은 후보로 매칭하도록 보강했습니다.
+- [개선] 기본 분석 흐름을 KR/US 중심으로 전환하고, 6자리 KRX 후보는 `.KS`/`.KQ` 종목으로 yfinance 경로에서 처리하도록 정리했습니다.
+- [수정] 리포트 언어 설정의 기본값과 안내를 실제 지원 범위인 `ko`/`en`/`zh` 기준으로 맞췄습니다.
+- [수정] Python 3.14 환경에서 백엔드 테스트용 패키지 설치가 tiktoken 0.11.x PyO3 제한으로 실패하지 않도록 tiktoken 0.13.x 대역을 허용했습니다.
+- [테스트] A-share, HK, US 종목의 agent history와 chart analysis smoke test를 추가했습니다.
+- [테스트] 차트 분석, paper trading, portfolio analysis의 eval fixture와 회귀 검증을 추가했습니다.
+- [개선] Agent analysis map에 도구별 호출 수, 성공 수, 실패 수, timeout, cached count, 평균 실행 시간을 집계하는 tool metrics를 추가했습니다.
+- [개선] Vision provider가 없거나 Vision 분석이 실패해도 차트 분석 도구가 기존 수치 기반 분석을 유지하고 fallback 사유를 표시하도록 했습니다.
+- [개선] Vision 차트 해석에 evidence 블록을 추가해 VLM 근거, confidence, 불확실성, 수치 분석과의 충돌 여부를 구조화했습니다.
+- [개선] Web 리포트에 데이터 신뢰도 판단 상태와 통합 리포트 보드를 추가해 confidence, evidence, risk, chart, event, portfolio 상태를 한 화면에서 확인할 수 있게 했습니다.
+- [개선] Alert P6에서 관심 종목, 보유 종목, 계좌 연동 규칙 기반 이벤트 알림 범위와 우선순위 처리를 정리했습니다.
+- [테스트] 한국어 기준 API, Bot, 로그 메시지와 배포 문서 명령 예시의 회귀 테스트 기본값을 정리했습니다.
+- [개선] 종목 리포트에 핵심 근거, 반대 근거, 데이터 한계, 확신도 사유를 표시하는 분석 메타데이터를 추가했습니다.
+- [개선] 종목별 이전 분석과 현재 분석을 비교해 투자 가설 상태와 주요 변경점을 리포트에 표시하는 thesis tracking을 추가했습니다.
+- [개선] 종목 리포트의 결론, 근거, 반대 근거, 리스크, 데이터 출처를 연결하는 evidence graph 메타데이터를 추가했습니다.
+- [개선] 종목별 변동성, 최대 낙폭, 기술적 위험 플래그, 사용자 주의사항을 도출하는 단일 종목 리스크 엔진을 추가했습니다.
+- [개선] 백테스트 요약 diagnostics에 confidence bucket별 성과와 리스크 경고 적중률을 추가했습니다.
+- [개선] 이벤트 알림 트리거에 우선순위, thesis 훼손 위험, 모니터링 커버리지 메타데이터를 추가했습니다.
+- [개선] Agent 도구에 차트 분석 생성과 paper trading 주문 준비 기능을 연결했습니다.
+- [개선] 차트 SVG에 가격 날짜 축, 지지와 저항 레이어, RSI 기준선, MACD histogram과 표시 신호 레이어를 추가했습니다.
+- [수정] Bot 자연어 라우팅과 플랫폼 어댑터의 사용자 안내 문구에서 중국어 기반 예시와 안내 문구를 줄이고 한국어와 영어 기준으로 정리했습니다.
+- [수정] Web 호스트 설정과 API endpoint의 사용자 노출 오류 문구, 로그, Swagger 설명에 남아 있던 중국어 기반 문구를 한국어와 영어 기준으로 정리했습니다.
+- [수정] 비동기 분석 작업 서비스와 WebUI 프런트엔드에서 출력물 준비 로그의 깨진 문자열을 한국어로 복구했습니다.
+- [수정] Bot 명령 응답과 Agent API 스트리밍 표시명의 깨진 문자열 및 중국어 기반 사용자 노출 문구를 한국어 기준으로 정리했습니다.
+- [수정] Web 화면의 깨진 감정 레이어, 구분자, 과거 리포트 표시 문자열을 한국어로 정리했습니다.
+- [개선] LLM 채널 추가 화면의 API Key 저장 위치와 연결 테스트의 비저장 동작을 안내했습니다.
+- [수정] AI 모델 설정의 Anthropic 관련 설명에 남아 있던 중국어 문구를 한국어로 교체했습니다.
+- [수정] 인증 API 오류 문구와 CLI 안내말의 중국어 기반 사용자 노출 문자열을 한국어 기준으로 정리했습니다.
+- [수정] 설정 스키마와 안내말의 중국어 문서 링크와 이전 upstream 문서 링크를 현재 저장소의 한국어 기준으로 정리했습니다.
+- [문서] LLM 설정 가이드, 테스트 패키징 가이드, provider 운영 가이드, Zeabur 배포 가이드, 문서 인덱스, OpenClaw Skill 연동 가이드를 현재 흐름 기준의 한국어 문서로 정리했습니다.
+- [문서] `.env.example`과 LiteLLM YAML 예시의 깨진 주석을 현재 환경 변수 기준 설명으로 정리했습니다.
+- [테스트] Windows 환경에서 Docker entrypoint shell 테스트가 `sh` 부재로 실패하지 않도록 건너뛰기 처리를 추가했습니다.
+- [테스트] market analyzer 정적 검사에 UTF-8 인코딩을 명시해 Windows 기본 인코딩 오류를 방지했습니다.
+- [ci] PR 리뷰 워크플로의 체크 이름과 자동 리뷰 보고서를 한국어로 정리했습니다.
+- [ci] 데스크톱 변경 시 `apps/dsa-desktop` 테스트를 실행하는 CI 게이트를 추가했습니다.
+- [chore] 언어 아티팩트 검사 스크립트를 추가하고 CI에서 사용자 노출 영역을 검사하도록 연결했습니다.
+- [수정] API 오류 메시지와 Bot 명령 응답에 남아 있던 깨진 문구를 한국어로 정리했습니다.
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 - [修复] 桌面发布打包改用冻结可执行文件运行时探针校验 `alphasift.dsa_adapter`，避免 macOS PyInstaller 将模块内嵌进可执行文件时被文件系统/zip 扫描误判为缺失。
