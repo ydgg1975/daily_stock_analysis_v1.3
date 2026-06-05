@@ -31,7 +31,7 @@ _LINKED_COMPARE_PATTERN = re.compile(
     r"(?:和|与|跟|同)(?P<body>[^，。,.!?！？]{0,40})(?:差异(?!化)|区别|不同|相比|对照|比一比)"
 )
 _SWITCH_PATTERN = re.compile(r"换成|改看|分析|看看|研究|诊断")
-_LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z.])([a-z]{2,5}(?:\.[a-z]{1,2})?)(?![a-zA-Z])")
+_LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z.])([a-z]{2,5}(?:\.[a-z]{1,2})?)(?![a-zA-Z0-9])")
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ def extract_stock_codes(text: str) -> List[str]:
         (r"(?<![a-zA-Z])hk\d{4,5}(?!\d)", re.IGNORECASE),
         (r"(?<![a-zA-Z])\d{1,5}\.HK(?![a-zA-Z])", re.IGNORECASE),
         (r"(?<!\d)(?:[03648]\d{5}|92\d{4})(?!\d)", 0),
-        (r"(?<![a-zA-Z.])([A-Z]{2,5}(?:\.[A-Z]{1,2})?)(?![a-zA-Z])", 0),
+        (r"(?<![a-zA-Z.])([A-Z]{2,5}(?:\.[A-Z]{1,2})?)(?![a-zA-Z0-9])", 0),
     ):
         for match in re.finditer(pattern, text, flags):
             raw = match.group(1) if match.lastindex else match.group(0)

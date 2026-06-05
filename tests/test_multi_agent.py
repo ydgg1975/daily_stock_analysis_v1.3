@@ -328,7 +328,7 @@ class TestStockScopeResolution(unittest.TestCase):
         self.assertEqual(result.effective_context["stock_code"], "AAPL")
         self.assertEqual(result.effective_context["stock_name"], "")
 
-    def test_compare_does_not_treat_exchange_suffixes_as_standalone_tickers(self):
+    def test_compare_does_not_treat_exchange_affixes_as_standalone_tickers(self):
         cases = [
             ("比较 1810.HK 和 AAPL", {"600519", "HK01810", "AAPL"}, {"HK"}),
             ("比较 0700.HK 和 600519", {"600519", "HK00700"}, {"HK"}),
@@ -336,6 +336,11 @@ class TestStockScopeResolution(unittest.TestCase):
             ("比较 000001.SZ 和 AAPL", {"600519", "000001", "AAPL"}, {"SZ"}),
             ("比较 600519.SS 和 AAPL", {"600519", "AAPL"}, {"SS"}),
             ("比较 1810.hk 和 tsla", {"600519", "HK01810", "TSLA"}, {"HK"}),
+            ("比较 SH600519 和 AAPL", {"600519", "AAPL"}, {"SH"}),
+            ("比较 SZ000001 和 AAPL", {"600519", "000001", "AAPL"}, {"SZ"}),
+            ("比较 BJ920748 和 AAPL", {"600519", "920748", "AAPL"}, {"BJ"}),
+            ("比较 HK01810 和 AAPL", {"600519", "HK01810", "AAPL"}, {"HK"}),
+            ("比较 hk01810 和 tsla", {"600519", "HK01810", "TSLA"}, {"HK"}),
         ]
 
         for message, expected_allowed, forbidden_tokens in cases:

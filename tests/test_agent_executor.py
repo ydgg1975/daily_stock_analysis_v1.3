@@ -515,12 +515,16 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertFalse(result.tool_calls_log[0].get("guarded", False))
         self.assertFalse(result.tool_calls_log[1].get("guarded", False))
 
-    def test_run_agent_loop_blocks_exchange_suffix_tokens_from_compare_scope(self):
+    def test_run_agent_loop_blocks_exchange_affix_tokens_from_compare_scope(self):
         cases = [
             ("比较 1810.HK 和 AAPL", "HK"),
             ("比较 600519.SH 和 AAPL", "SH"),
             ("比较 000001.SZ 和 AAPL", "SZ"),
             ("比较 600519.SS 和 AAPL", "SS"),
+            ("比较 SH600519 和 AAPL", "SH"),
+            ("比较 SZ000001 和 AAPL", "SZ"),
+            ("比较 BJ920748 和 AAPL", "BJ"),
+            ("比较 HK01810 和 AAPL", "HK"),
         ]
 
         for message, requested_code in cases:

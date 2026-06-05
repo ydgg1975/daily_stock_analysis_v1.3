@@ -1403,10 +1403,14 @@ describe('extractStockCodeFromMessage', () => {
     expect(extractStockCodesFromMessage('hello tsla')).toEqual([]);
   });
 
-  it('returns all HK and A-share suffix variants without exchange suffix tokens', () => {
+  it('returns all HK and A-share variants without exchange affix tokens', () => {
     expect(extractStockCodesFromMessage('比较 1810.HK 和 AAPL')).toEqual(['HK01810', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 600519.SH 和 AAPL')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('比较 000001.SZ 和 SS')).toEqual(['000001']);
+    expect(extractStockCodesFromMessage('比较 SH600519 和 AAPL')).toEqual(['600519', 'AAPL']);
+    expect(extractStockCodesFromMessage('比较 SZ000001 和 AAPL')).toEqual(['000001', 'AAPL']);
+    expect(extractStockCodesFromMessage('比较 BJ920748 和 AAPL')).toEqual(['920748', 'AAPL']);
+    expect(extractStockCodesFromMessage('比较 HK01810 和 AAPL')).toEqual(['HK01810', 'AAPL']);
   });
 
   it('does not return denied abbreviations in multi-code extraction', () => {
