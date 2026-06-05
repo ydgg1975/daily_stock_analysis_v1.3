@@ -305,6 +305,13 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             return HTMLResponse(content=_FRONTEND_NOT_BUILT_HTML)
     
     @app.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["Health"],
+        summary="健康检查",
+        description="用于负载均衡器或监控系统检查服务状态"
+    )
+    @app.get(
         "/api/health",
         response_model=HealthResponse,
         tags=["Health"],
