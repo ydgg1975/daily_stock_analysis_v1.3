@@ -31,6 +31,61 @@ class TestStorage(unittest.TestCase):
         self.assertIn("metadata.create_all", row.description)
 
         DatabaseManager.reset_instance()
+
+    def test_schema_migration_record_is_idempotent(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        db._ensure_schema_migration_record()
+        db._ensure_schema_migration_record()
+
+        with db.get_session() as session:
+            count = session.execute(
+                select(func.count()).select_from(DatabaseSchemaMigration)
+            ).scalar_one()
+
+        self.assertEqual(count, 1)
+
+        DatabaseManager.reset_instance()
+
+    def test_schema_migration_record_handles_concurrent_initialization(self):
+        DatabaseManager.reset_instance()
+        temp_dir = tempfile.TemporaryDirectory()
+        db_path = os.path.join(temp_dir.name, "schema_migration_race.db")
+        db = DatabaseManager(db_url=f"sqlite:///{db_path}")
+        worker_count = 8
+        barrier = threading.Barrier(worker_count)
+        errors = []
+        state_lock = threading.Lock()
+
+        with db.get_session() as session:
+            session.query(DatabaseSchemaMigration).delete()
+            session.commit()
+
+        def ensure_record() -> None:
+            try:
+                barrier.wait(timeout=5)
+                db._ensure_schema_migration_record()
+            except Exception as exc:
+                with state_lock:
+                    errors.append(exc)
+
+        threads = [threading.Thread(target=ensure_record) for _ in range(worker_count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        with db.get_session() as session:
+            rows = session.execute(select(DatabaseSchemaMigration)).scalars().all()
+
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].version, CURRENT_SCHEMA_VERSION)
+
+        DatabaseManager.reset_instance()
+        temp_dir.cleanup()
     
     def test_parse_sniper_value(self):
         """测试解析狙击点位数值"""

@@ -875,13 +875,24 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
     def _ensure_schema_migration_record(self) -> None:
         session = self._SessionLocal()
+        values = {
+            "version": CURRENT_SCHEMA_VERSION,
+            "description": "Baseline schema created through SQLAlchemy metadata.create_all",
+        }
         try:
-            if session.get(DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION) is None:
-                session.add(DatabaseSchemaMigration(
-                    version=CURRENT_SCHEMA_VERSION,
-                    description="Baseline schema created through SQLAlchemy metadata.create_all",
-                ))
+            if self._is_sqlite_engine:
+                statement = sqlite_insert(DatabaseSchemaMigration).values(**values)
+                statement = statement.on_conflict_do_nothing(index_elements=["version"])
+                session.execute(statement)
+            else:
+                session.execute(DatabaseSchemaMigration.__table__.insert().values(**values))
             session.commit()
+        except IntegrityError:
+            session.rollback()
+            with self._SessionLocal() as verify_session:
+                existing = verify_session.get(DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION)
+            if existing is None:
+                raise
         except Exception:
             session.rollback()
             raise
