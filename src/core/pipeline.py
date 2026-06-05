@@ -2254,7 +2254,17 @@ class StockAnalysisPipeline:
             # Step 2: AI 分析
             if skip_analysis:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
-                return None
+                return AnalysisResult(
+                    code=code,
+                    name=code,
+                    sentiment_score=0,
+                    trend_prediction="",
+                    operation_advice="",
+                    decision_type="hold",
+                    analysis_summary="dry-run data fetch completed" if success else "",
+                    success=success,
+                    error_message=error,
+                )
             
             analyze_kwargs = {"query_id": effective_query_id}
             if current_time is not None:
@@ -2364,6 +2374,7 @@ class StockAnalysisPipeline:
             )
         
         results: List[AnalysisResult] = []
+        dry_run_observed_result = False
         
         # 使用线程池并发处理
         # 注意：max_workers 设置较低（默认3）以避免触发反爬
@@ -2387,6 +2398,8 @@ class StockAnalysisPipeline:
                 code = future_to_code[future]
                 try:
                     result = future.result()
+                    if dry_run and result is not None:
+                        dry_run_observed_result = True
                     if result and result.success:
                         results.append(result)
                         if single_stock_notify and send_notification and not dry_run:
@@ -2418,17 +2431,20 @@ class StockAnalysisPipeline:
         
         # dry-run 模式下，数据获取成功即视为成功
         if dry_run:
-            # 检查哪些股票的最新可复用交易日数据已存在
-            success_count = sum(
-                1
-                for code in stock_codes
-                if self.db.has_today_data(
-                    code,
-                    self._resolve_resume_target_date(
-                        code, current_time=resume_reference_time
-                    ),
+            if dry_run_observed_result:
+                success_count = len(results)
+            else:
+                # 检查哪些股票的最新可复用交易日数据已存在
+                success_count = sum(
+                    1
+                    for code in stock_codes
+                    if self.db.has_today_data(
+                        code,
+                        self._resolve_resume_target_date(
+                            code, current_time=resume_reference_time
+                        ),
+                    )
                 )
-            )
             fail_count = len(stock_codes) - success_count
         else:
             success_count = len(results)

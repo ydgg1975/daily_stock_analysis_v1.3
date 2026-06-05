@@ -346,7 +346,7 @@ class AnalysisTaskQueue:
         """
         stock_code = canonical_stock_code(stock_code)
         if not stock_code:
-            raise ValueError("종목 코드는 비어 있거나 공백만 포함할 수 없습니다.")
+            raise ValueError("股票代码不能为空或仅包含空白字符")
 
         accepted, duplicates = self.submit_tasks_batch(
             [stock_code],

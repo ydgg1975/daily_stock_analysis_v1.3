@@ -74,6 +74,35 @@ class TestPipelinePrefetchBehavior(unittest.TestCase):
             ],
         )
 
+    def test_run_dry_run_counts_fetch_result_success_before_date_probe(self):
+        pipeline = self._build_pipeline(process_result=SimpleNamespace(success=True))
+
+        results = pipeline.run(
+            stock_codes=["AAPL"],
+            dry_run=True,
+            send_notification=False,
+        )
+
+        self.assertEqual(len(results), 1)
+        pipeline.db.has_today_data.assert_not_called()
+
+    def test_process_single_stock_dry_run_returns_fetch_status(self):
+        pipeline = StockAnalysisPipeline.__new__(StockAnalysisPipeline)
+        pipeline.fetch_and_save_stock_data = MagicMock(return_value=(True, None))
+        pipeline._resolve_resume_target_date = MagicMock(return_value=date(2026, 3, 26))
+        pipeline._emit_progress = MagicMock()
+
+        result = StockAnalysisPipeline.process_single_stock(
+            pipeline,
+            "AAPL",
+            skip_analysis=True,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertTrue(result.success)
+        self.assertEqual(result.code, "AAPL")
+        self.assertEqual(result.name, "AAPL")
+
     def test_run_uses_one_frozen_reference_time_for_tasks_and_dry_run_stats(self):
         pipeline = self._build_pipeline(process_result=None)
         pipeline._resolve_resume_target_date = MagicMock(

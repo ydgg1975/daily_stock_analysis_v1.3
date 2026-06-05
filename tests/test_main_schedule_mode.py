@@ -522,6 +522,27 @@ class MainScheduleModeTestCase(unittest.TestCase):
         pipeline.run.assert_called_once()
         run_market_review.assert_not_called()
 
+    def test_run_full_analysis_dry_run_skips_feishu_doc_import(self) -> None:
+        args = self._make_args(dry_run=True, no_notify=True, no_market_review=True)
+        config = self._make_config(
+            trading_day_check_enabled=False,
+            market_review_enabled=False,
+            single_stock_notify=False,
+            merge_email_notification=False,
+            analysis_delay=0,
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = [SimpleNamespace(success=True)]
+
+        with patch("src.core.pipeline.StockAnalysisPipeline", return_value=pipeline), \
+             patch("main.logger.error") as logger_error:
+            main.run_full_analysis(config, args, ["AAPL"])
+
+        pipeline.run.assert_called_once()
+        self.assertFalse(
+            any("Feishu document generation failed" in str(call.args[0]) for call in logger_error.call_args_list)
+        )
+
     def test_market_review_mode_uses_shared_runtime_assembly(self) -> None:
         args = self._make_args(market_review=True)
         config = self._make_config(

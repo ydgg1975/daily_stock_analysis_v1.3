@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 补充说明：LLM / LiteLLM 兼容键的回退仅用于 Settings 界面展示与校验上下文拼装，不改写、不迁移、不清理用户现有的 provider/model/base URL 持久化配置；未发生 provider / model / base URL 语义迁移，仅保留同名启动注入的展示级兜底。兼容边界依据 `requirements.txt`（`litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`、`openai>=1.0.0`）；官方语义来源：[LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible)、[OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat/create)。回退/恢复路径为：重启/更新后清理同名 `env_file` / `--env-file` / `environment` 覆盖后使用持久化保存值，或通过桌面端导入/导出 `.env` 片段恢复；仅在 WebUI 未改写同名启动注入值时才会按该片段接管。验证回归点见 `tests/test_system_config_service.py::test_get_config_uses_runtime_env_as_display_fallback`、`tests/test_system_config_service.py::test_get_config_runtime_env_fallback_does_not_persist_llm_fields_on_save`、`tests/test_system_config_service.py::test_runtime_env_fallback_does_not_override_saved_provider_and_base_url_settings`、以及 `tests/test_system_config_api.py` 的 `/api/v1/system/config` 获取/保存链路回归。
 
 - [수정] `REPORT_LANGUAGE=zh` 리포트 렌더링 호환성과 분석 API의 agent trace/detail 응답 필드 보존을 복구했습니다.
+- [수정] CLI dry-run에서 실제 데이터 저장 성공이 실패로 집계되거나 Feishu 문서 생성 오류가 불필요하게 기록되지 않도록 했습니다.
 - [수정] Web AI 상담 화면의 컨텍스트 압축과 이어질문 안내에 남아 있던 이전 중국어 빌드 문구가 한국어로 표시되도록 정적 번들을 갱신했습니다.
 - [수정] Web 데이터 신뢰도 패널이 이전 `zh` 리포트 언어 값을 받아도 기본 한국어 라벨로 안전하게 표시되도록 했습니다.
 - [개선] 미국 주식 전략 가격대가 원화가 아닌 달러 단위로 표시되도록 하고, 주요 미국 종목을 `애플`, `엔비디아`, `테슬라` 같은 한국어 이름으로도 검색할 수 있게 했습니다.
