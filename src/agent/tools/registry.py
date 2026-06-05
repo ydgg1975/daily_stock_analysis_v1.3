@@ -110,6 +110,15 @@ class ToolRegistry:
         """Return a tool definition by name."""
         return self._tools.get(name)
 
+    def resolve(self, name: str) -> Optional[ToolDefinition]:
+        """Return a tool definition, accepting provider-namespaced names."""
+        tool_def = self._tools.get(name)
+        if tool_def is None and ":" in name:
+            tool_def = self._tools.get(name.split(":", 1)[-1])
+        if tool_def is None and "." in name:
+            tool_def = self._tools.get(name.rsplit(".", 1)[-1])
+        return tool_def
+
     def list_tools(self, category: Optional[str] = None) -> List[ToolDefinition]:
         """List all tools, optionally filtered by category."""
         tools = list(self._tools.values())
@@ -144,10 +153,7 @@ class ToolRegistry:
 
         Supports Gemini namespaced tool names (e.g. default_api:get_realtime_quote -> get_realtime_quote).
         """
-        tool_def = self._tools.get(name)
-        if tool_def is None and ":" in name:
-            # Gemini may return namespaced names like default_api:get_realtime_quote
-            tool_def = self._tools.get(name.split(":", 1)[-1])
+        tool_def = self.resolve(name)
         if tool_def is None:
             raise KeyError(f"Tool '{name}' not found in registry. Available: {self.list_names()}")
 

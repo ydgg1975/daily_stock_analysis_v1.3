@@ -7,7 +7,8 @@
  *   600519.SH   → 600519     SH.600519   → 600519
  *   SZ000001    → 000001     000001.SZ   → 000001
  *   BJ920748    → 920748     920748.BJ   → 920748
- *   HK00700     → HK00700    00700.HK    → HK00700
+ *   HK00700     → HK00700    00700       → HK00700
+ *   00700.HK    → HK00700
  *   hk1810      → HK01810    1810.HK     → HK01810
  *   AAPL        → AAPL       TSLA        → TSLA
  */
@@ -21,6 +22,11 @@ export function normalizeStockCode(stockCode: string): string {
     if (/^\d{1,5}$/.test(candidate) && candidate.length >= 1 && candidate.length <= 5) {
       return `HK${candidate.padStart(5, '0')}`;
     }
+  }
+
+  // Pure 5-digit codes are HK stocks by validateStockCode() contract.
+  if (/^\d{5}$/.test(upper)) {
+    return `HK${upper}`;
   }
 
   // Strip SH/SZ prefix (e.g. SH600519 → 600519)
