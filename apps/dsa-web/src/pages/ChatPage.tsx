@@ -40,6 +40,10 @@ const QUICK_QUESTIONS = [
 
 const MAX_SELECTED_SKILLS = 3;
 const CONTEXT_COMPRESSION_CONFIG_KEY = 'AGENT_CONTEXT_COMPRESSION_ENABLED';
+const COMPARE_STOCK_MESSAGE_RE = /比较|对比|\bvs\b|和[^，。,.!?！？]{0,40}比/i;
+const SWITCH_STOCK_MESSAGE_RE = /换成|改看|分析|看看|研究|诊断/;
+
+type ActiveStockContext = Pick<ChatFollowUpContext, 'stock_code' | 'stock_name'>;
 
 const getMessageSkillNames = (msg: Message): string[] => {
   if (msg.skillNames?.length) return msg.skillNames;
@@ -78,6 +82,7 @@ const ChatPage: React.FC = () => {
   const [isWatchlistActioning, setIsWatchlistActioning] = useState(false);
   const [watchlistMessage, setWatchlistMessage] = useState<string | null>(null);
   const [activeStockCode, setActiveStockCode] = useState<string | null>(null);
+  const [activeStockContext, setActiveStockContext] = useState<ActiveStockContext | null>(null);
   const watchlistMessageTimerRef = useRef<number | null>(null);
   const copyResetTimerRef = useRef<Partial<Record<string, number>>>({});
   const messagesViewportRef = useRef<HTMLDivElement>(null);
@@ -374,16 +379,25 @@ const ChatPage: React.FC = () => {
 
   const handleStartNewChat = useCallback(() => {
     followUpContextRef.current = null;
+    setActiveStockContext(null);
+    setActiveStockCode(null);
     requestScrollToBottom('auto');
     useAgentChatStore.getState().startNewChat();
     setSidebarOpen(false);
   }, [requestScrollToBottom]);
 
   const handleSwitchSession = useCallback((targetSessionId: string) => {
+    if (targetSessionId === sessionId) {
+      setSidebarOpen(false);
+      return;
+    }
+    followUpContextRef.current = null;
+    setActiveStockContext(null);
+    setActiveStockCode(null);
     requestScrollToBottom('auto');
     switchSession(targetSessionId);
     setSidebarOpen(false);
-  }, [requestScrollToBottom, switchSession]);
+  }, [requestScrollToBottom, sessionId, switchSession]);
 
   const confirmDelete = useCallback(() => {
     if (!deleteConfirmId) return;
@@ -414,6 +428,10 @@ const ChatPage: React.FC = () => {
     const hydrationToken = ++followUpHydrationTokenRef.current;
     setInput(buildFollowUpPrompt(stock, name));
     setActiveStockCode(stock);
+    setActiveStockContext({
+      stock_code: stock,
+      stock_name: name,
+    });
     followUpContextRef.current = {
       stock_code: stock,
       stock_name: name,
@@ -446,15 +464,33 @@ const ChatPage: React.FC = () => {
       const usedSkillNames = usedSkillIds.length > 0 ? getSkillNames(usedSkillIds) : ['通用'];
 
       const stockCode = extractStockCodeFromMessage(msgText);
+      let nextActiveStockContext = activeStockContext;
+      let useActiveContextForThisSend = false;
       if (stockCode) {
-        setActiveStockCode(stockCode);
+        const isCompare = COMPARE_STOCK_MESSAGE_RE.test(msgText);
+        const isSwitch = SWITCH_STOCK_MESSAGE_RE.test(msgText);
+        const isDifferentStock = activeStockContext?.stock_code !== stockCode;
+        if (!isCompare && (!activeStockContext || isSwitch)) {
+          nextActiveStockContext = {
+            stock_code: stockCode,
+            stock_name: activeStockContext && !isDifferentStock
+              ? activeStockContext.stock_name
+              : null,
+          };
+          useActiveContextForThisSend = isSwitch && isDifferentStock;
+          setActiveStockContext(nextActiveStockContext);
+          setActiveStockCode(stockCode);
+        }
       }
+      const contextForSend = useActiveContextForThisSend
+        ? nextActiveStockContext
+        : followUpContextRef.current ?? nextActiveStockContext ?? undefined;
 
       const payload = {
         message: msgText,
         session_id: sessionId,
         ...(usedSkillIds.length > 0 ? { skills: usedSkillIds } : {}),
-        context: followUpContextRef.current ?? undefined,
+        context: contextForSend ?? undefined,
       };
       followUpHydrationTokenRef.current += 1;
       followUpContextRef.current = null;
@@ -467,7 +503,7 @@ const ChatPage: React.FC = () => {
         skillName: usedSkillNames.join('、'),
       });
     },
-    [getSkillNames, input, loading, normalizeSelectedSkillIds, requestScrollToBottom, selectedSkillIds, sessionId, startStream],
+    [activeStockContext, getSkillNames, input, loading, normalizeSelectedSkillIds, requestScrollToBottom, selectedSkillIds, sessionId, startStream],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

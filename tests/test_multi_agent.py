@@ -35,6 +35,7 @@ from src.agent.protocols import (
     StageResult,
     StageStatus,
 )
+from src.agent.stock_scope import StockScope, resolve_stock_scope
 from src.config import AGENT_MAX_STEPS_DEFAULT, Config
 from src.storage import DatabaseManager
 
@@ -193,6 +194,101 @@ class TestExtractStockCode(unittest.TestCase):
             "IS", "WHAT", "HIGH",
         }
         self.assertTrue(expected_in_set.issubset(_COMMON_WORDS))
+
+
+# ============================================================
+# Stock scope resolution
+# ============================================================
+
+class TestStockScopeResolution(unittest.TestCase):
+    """Validate chat stock-scope state transitions."""
+
+    def test_maintain_keeps_current_stock_for_finance_abbrev_followup(self):
+        result = resolve_stock_scope(
+            "如果不考虑 TTM 呢",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "maintain")
+        self.assertEqual(result.effective_context["stock_code"], "600519")
+        self.assertEqual(result.effective_context["stock_name"], "匿名标的")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519"})
+
+    def test_switch_clears_old_stock_context_fields(self):
+        result = resolve_stock_scope(
+            "换成 AAPL 看看",
+            {
+                "stock_code": "600519",
+                "stock_name": "匿名标的",
+                "previous_analysis_summary": {"summary": "old"},
+                "previous_strategy": {"action": "hold"},
+                "previous_price": 1800,
+                "previous_change_pct": 1.2,
+                "realtime_quote": {"price": 1800},
+                "analysis_context_pack_summary": "old pack",
+                "report_language": "zh",
+            },
+        )
+
+        self.assertEqual(result.stock_scope.mode, "switch")
+        self.assertEqual(result.stock_scope.expected_stock_code, "AAPL")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"AAPL"})
+        self.assertEqual(result.effective_context["stock_code"], "AAPL")
+        self.assertEqual(result.effective_context["stock_name"], "")
+        self.assertEqual(result.effective_context["report_language"], "zh")
+        for stale_key in (
+            "previous_analysis_summary",
+            "previous_strategy",
+            "previous_price",
+            "previous_change_pct",
+            "realtime_quote",
+            "analysis_context_pack_summary",
+        ):
+            self.assertNotIn(stale_key, result.effective_context)
+
+    def test_switch_allows_single_new_code_when_current_code_is_mentioned(self):
+        result = resolve_stock_scope(
+            "换成 AAPL 看看，不考虑 600519",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "switch")
+        self.assertEqual(result.stock_scope.expected_stock_code, "AAPL")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"AAPL"})
+        self.assertEqual(result.effective_context["stock_code"], "AAPL")
+        self.assertEqual(result.effective_context["stock_name"], "")
+
+    def test_compare_allows_multiple_codes_without_polluting_current_context(self):
+        result = resolve_stock_scope(
+            "比较 600519 和 AAPL",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "compare")
+        self.assertEqual(result.effective_context["stock_code"], "600519")
+        self.assertEqual(result.effective_context["stock_name"], "匿名标的")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "AAPL"})
+
+    def test_switch_recognizes_lowercase_us_ticker_with_explicit_hint(self):
+        result = resolve_stock_scope(
+            "分析tsla",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "switch")
+        self.assertEqual(result.stock_scope.expected_stock_code, "TSLA")
+        self.assertEqual(result.effective_context["stock_code"], "TSLA")
+        self.assertEqual(result.effective_context["stock_name"], "")
+
+    def test_compare_recognizes_lowercase_us_tickers(self):
+        result = resolve_stock_scope(
+            "比较 600519 和 tsla",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "compare")
+        self.assertEqual(result.effective_context["stock_code"], "600519")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "TSLA"})
 
 
 # ============================================================
@@ -945,6 +1041,37 @@ class TestOrchestratorExecution(unittest.TestCase):
         self.assertEqual(build_history.call_args.args[0], "session-1")
         self.assertIs(build_history.call_args.args[1], orch.llm_adapter)
 
+    def test_chat_resolves_scope_and_stores_it_for_multi_agent_chain(self):
+        from src.agent.orchestrator import OrchestratorResult
+
+        orch = self._make_orchestrator()
+        captured = {}
+
+        def fake_execute(ctx, parse_dashboard=False, progress_callback=None):
+            captured["ctx"] = ctx
+            return OrchestratorResult(success=True, content="assistant reply")
+
+        with patch.object(orch, "_execute_pipeline", side_effect=fake_execute):
+            with patch("src.agent.orchestrator.build_visible_chat_history", return_value=[]):
+                with patch("src.agent.conversation.conversation_manager.get_or_create"):
+                    with patch("src.agent.conversation.conversation_manager.add_message"):
+                        orch.chat(
+                            "换成 AAPL 看看",
+                            "session-1",
+                            context={
+                                "stock_code": "600519",
+                                "stock_name": "匿名标的",
+                                "previous_analysis_summary": {"summary": "old"},
+                            },
+                        )
+
+        ctx = captured["ctx"]
+        self.assertEqual(ctx.stock_code, "AAPL")
+        self.assertEqual(ctx.stock_name, "")
+        self.assertNotIn("previous_analysis_summary", ctx.meta)
+        self.assertEqual(ctx.meta["stock_scope"].mode, "switch")
+        self.assertEqual(ctx.meta["stock_scope"].expected_stock_code, "AAPL")
+
     def test_chat_does_not_read_or_write_provider_trace(self):
         from src.agent.orchestrator import OrchestratorResult
 
@@ -1250,6 +1377,25 @@ class TestBaseAgentMessageAssembly(unittest.TestCase):
         pack_message = messages[pack_indexes[0]]
         self.assertEqual(pack_message["role"], "user")
         self.assertNotIn("analysis_context_pack_summary", pack_message["content"])
+
+    def test_run_passes_stock_scope_from_context_meta_to_shared_runner(self):
+        from src.agent.runner import RunLoopResult
+
+        agent = self._make_agent()
+        ctx = AgentContext(query="hello", stock_code="600519")
+        ctx.meta["stock_scope"] = StockScope(
+            expected_stock_code="600519",
+            allowed_stock_codes={"600519"},
+        )
+
+        with patch(
+            "src.agent.agents.base_agent.run_agent_loop",
+            return_value=RunLoopResult(success=True, content="ok"),
+        ) as run_loop:
+            result = agent.run(ctx)
+
+        self.assertEqual(result.status, StageStatus.COMPLETED)
+        self.assertIs(run_loop.call_args.kwargs["stock_scope"], ctx.meta["stock_scope"])
 
 
 # ============================================================

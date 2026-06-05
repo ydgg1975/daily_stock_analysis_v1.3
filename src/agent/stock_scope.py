@@ -1,0 +1,176 @@
+# -*- coding: utf-8 -*-
+"""Stock-scope helpers for ask-stock follow-up chat turns."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Optional, Set
+
+
+SWITCH_CLEANUP_KEYS = {
+    "stock_name",
+    "previous_analysis_summary",
+    "previous_strategy",
+    "previous_price",
+    "previous_change_pct",
+    "realtime_quote",
+    "daily_history",
+    "chip_distribution",
+    "trend_result",
+    "news_context",
+    "fundamental_context",
+    "analysis_context_pack_summary",
+    "market_phase_context",
+}
+
+_COMPARE_PATTERN = re.compile(r"比较|对比|vs\b|和[^，。,.!?！？]{0,40}比", re.IGNORECASE)
+_SWITCH_PATTERN = re.compile(r"换成|改看|分析|看看|研究|诊断")
+_LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z])([a-z]{2,5}(?:\.[a-z]{1,2})?)(?![a-zA-Z])")
+
+
+@dataclass(frozen=True)
+class StockScope:
+    """Runtime stock-scope contract for one chat turn."""
+
+    expected_stock_code: str = ""
+    allowed_stock_codes: Set[str] = field(default_factory=set)
+    mode: str = "maintain"
+
+    def as_log_payload(self) -> Dict[str, Any]:
+        return {
+            "expected_stock_code": self.expected_stock_code,
+            "allowed_stock_codes": sorted(self.allowed_stock_codes),
+            "mode": self.mode,
+        }
+
+
+@dataclass(frozen=True)
+class StockScopeResolution:
+    """Result produced before a chat turn enters the agent loop."""
+
+    effective_context: Dict[str, Any]
+    stock_scope: Optional[StockScope]
+
+
+def _normalize_stock_code(value: Any) -> str:
+    """Normalize a code with the runner's canonical stock-code rules."""
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if not text:
+        return ""
+    try:
+        from src.agent.runner import _normalize_tool_stock_code
+
+        normalized = _normalize_tool_stock_code(text)
+    except Exception:
+        normalized = text.strip().upper()
+    return normalized if isinstance(normalized, str) else str(normalized)
+
+
+def _is_denied_candidate(candidate: str) -> bool:
+    try:
+        from src.agent.orchestrator import _COMMON_WORDS
+
+        return candidate.strip().upper() in _COMMON_WORDS
+    except Exception:
+        return False
+
+
+def _append_candidate(candidates: List[str], candidate: str) -> None:
+    normalized = _normalize_stock_code(candidate)
+    if not normalized or _is_denied_candidate(normalized):
+        return
+    if normalized not in candidates:
+        candidates.append(normalized)
+
+
+def extract_stock_codes(text: str) -> List[str]:
+    """Extract all explicit stock-code candidates from free text."""
+    if not text:
+        return []
+
+    candidates: List[str] = []
+
+    for pattern, flags in (
+        (r"(?<![a-zA-Z])(?:SH|SZ|BJ)\d{6}(?!\d)", re.IGNORECASE),
+        (r"(?<![a-zA-Z])hk\d{4,5}(?!\d)", re.IGNORECASE),
+        (r"(?<![a-zA-Z])\d{1,5}\.HK(?![a-zA-Z])", re.IGNORECASE),
+        (r"(?<!\d)(?:[03648]\d{5}|92\d{4})(?!\d)", 0),
+        (r"(?<![a-zA-Z])([A-Z]{2,5}(?:\.[A-Z]{1,2})?)(?![a-zA-Z])", 0),
+    ):
+        for match in re.finditer(pattern, text, flags):
+            raw = match.group(1) if match.lastindex else match.group(0)
+            _append_candidate(candidates, raw)
+
+    if _SWITCH_PATTERN.search(text) or _COMPARE_PATTERN.search(text):
+        for match in _LOWERCASE_TICKER_PATTERN.finditer(text):
+            _append_candidate(candidates, match.group(1))
+
+    return candidates
+
+
+def _with_skills(context: Dict[str, Any], skills: Optional[Iterable[str]]) -> Dict[str, Any]:
+    if skills is None:
+        return context
+    next_context = dict(context)
+    next_context["skills"] = list(skills)
+    return next_context
+
+
+def _switch_context(context: Dict[str, Any], stock_code: str) -> Dict[str, Any]:
+    next_context = {
+        key: value
+        for key, value in context.items()
+        if key not in SWITCH_CLEANUP_KEYS and key != "allowed_stock_codes"
+    }
+    next_context["stock_code"] = stock_code
+    next_context["stock_name"] = ""
+    return next_context
+
+
+def resolve_stock_scope(
+    message: str,
+    context: Optional[Dict[str, Any]],
+    *,
+    skills: Optional[Iterable[str]] = None,
+) -> StockScopeResolution:
+    """Resolve the effective context and stock tool scope for one chat turn."""
+    original_context = dict(context or {})
+    current_code = _normalize_stock_code(original_context.get("stock_code"))
+    original_context.pop("allowed_stock_codes", None)
+
+    if not current_code:
+        return StockScopeResolution(
+            effective_context=_with_skills(original_context, skills),
+            stock_scope=None,
+        )
+
+    candidates = extract_stock_codes(message or "")
+    new_candidates = [code for code in candidates if code != current_code]
+    mode = "maintain"
+    effective_context = dict(original_context)
+    expected = current_code
+    allowed = {current_code}
+
+    if _COMPARE_PATTERN.search(message or ""):
+        mode = "compare"
+        allowed.update(candidates)
+    elif _SWITCH_PATTERN.search(message or "") and len(new_candidates) == 1:
+        mode = "switch"
+        expected = new_candidates[0]
+        allowed = {expected}
+        effective_context = _switch_context(original_context, expected)
+
+    effective_context["stock_code"] = expected if mode == "switch" else current_code
+    effective_context = _with_skills(effective_context, skills)
+
+    return StockScopeResolution(
+        effective_context=effective_context,
+        stock_scope=StockScope(
+            expected_stock_code=expected,
+            allowed_stock_codes=allowed,
+            mode=mode,
+        ),
+    )
