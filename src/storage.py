@@ -57,6 +57,7 @@ from src.config import get_config
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+CURRENT_SCHEMA_VERSION = "2026-06-05-create-all-baseline"
 
 # SQLAlchemy ORM 基类
 Base = declarative_base()
@@ -66,6 +67,16 @@ if TYPE_CHECKING:
 
 
 # === 数据模型定义 ===
+
+class DatabaseSchemaMigration(Base):
+    """Applied database schema version marker."""
+
+    __tablename__ = 'schema_migrations'
+
+    version = Column(String(64), primary_key=True)
+    description = Column(String(255), nullable=False)
+    applied_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
 
 class StockDaily(Base):
     """
@@ -843,6 +854,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
             # 创建所有表
             Base.metadata.create_all(self._engine)
+            self._ensure_schema_migration_record()
 
             self._initialized = True
             logger.info(f"数据库初始化完成: {db_url}")
@@ -860,6 +872,21 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             self._SessionLocal = None
             self.__class__._instance = None
             raise
+
+    def _ensure_schema_migration_record(self) -> None:
+        session = self._SessionLocal()
+        try:
+            if session.get(DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION) is None:
+                session.add(DatabaseSchemaMigration(
+                    version=CURRENT_SCHEMA_VERSION,
+                    description="Baseline schema created through SQLAlchemy metadata.create_all",
+                ))
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     @classmethod
     def get_instance(cls) -> 'DatabaseManager':

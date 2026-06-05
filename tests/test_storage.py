@@ -15,9 +15,22 @@ from sqlalchemy.sql import func
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.config import Config
-from src.storage import Base, DatabaseManager, StockDaily
+from src.storage import Base, CURRENT_SCHEMA_VERSION, DatabaseManager, DatabaseSchemaMigration, StockDaily
 
 class TestStorage(unittest.TestCase):
+
+    def test_database_initialization_records_schema_version(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        with db.get_session() as session:
+            row = session.get(DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION)
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row.version, CURRENT_SCHEMA_VERSION)
+        self.assertIn("metadata.create_all", row.description)
+
+        DatabaseManager.reset_instance()
     
     def test_parse_sniper_value(self):
         """测试解析狙击点位数值"""
