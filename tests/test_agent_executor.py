@@ -433,6 +433,61 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertEqual(executed_calls, [("quote", "1810.HK")])
         self.assertFalse(result.tool_calls_log[0].get("guarded", False))
 
+    def test_run_agent_loop_blocks_exchange_suffix_tokens_from_compare_scope(self):
+        cases = [
+            ("比较 1810.HK 和 AAPL", "HK"),
+            ("比较 600519.SH 和 AAPL", "SH"),
+            ("比较 000001.SZ 和 AAPL", "SZ"),
+            ("比较 600519.SS 和 AAPL", "SS"),
+        ]
+
+        for message, requested_code in cases:
+            with self.subTest(message=message, requested_code=requested_code):
+                executed_calls = []
+                registry = _make_stock_registry(executed_calls)
+                adapter = _make_mock_adapter()
+                adapter.call_with_tools.side_effect = [
+                    LLMResponse(
+                        content="Need quote.",
+                        tool_calls=[
+                            ToolCall(
+                                id="quote_1",
+                                name="get_realtime_quote",
+                                arguments={"stock_code": requested_code},
+                            ),
+                        ],
+                        usage={"total_tokens": 10},
+                        provider="openai",
+                    ),
+                    LLMResponse(
+                        content="Blocked invalid suffix token.",
+                        tool_calls=[],
+                        usage={"total_tokens": 10},
+                        provider="openai",
+                    ),
+                ]
+                scope = resolve_stock_scope(message, {"stock_code": "600519"}).stock_scope
+
+                self.assertNotIn(requested_code, scope.allowed_stock_codes)
+                result = run_agent_loop(
+                    messages=[
+                        {"role": "system", "content": "system"},
+                        {"role": "user", "content": message},
+                    ],
+                    tool_registry=registry,
+                    llm_adapter=adapter,
+                    max_steps=3,
+                    stock_scope=scope,
+                )
+
+                self.assertTrue(result.success)
+                self.assertEqual(executed_calls, [])
+                self.assertTrue(result.tool_calls_log[0]["guarded"])
+                self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], requested_code)
+                tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
+                self.assertEqual(len(tool_messages), 1)
+                self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+
     def test_run_agent_loop_guards_namespaced_search_tool_stock_code_only(self):
         executed_calls = []
         registry = _make_stock_registry(executed_calls)

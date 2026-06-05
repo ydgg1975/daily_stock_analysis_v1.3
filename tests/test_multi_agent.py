@@ -269,6 +269,28 @@ class TestStockScopeResolution(unittest.TestCase):
         self.assertEqual(result.effective_context["stock_name"], "匿名标的")
         self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "AAPL"})
 
+    def test_compare_does_not_treat_exchange_suffixes_as_standalone_tickers(self):
+        cases = [
+            ("比较 1810.HK 和 AAPL", {"600519", "HK01810", "AAPL"}, {"HK"}),
+            ("比较 0700.HK 和 600519", {"600519", "HK00700"}, {"HK"}),
+            ("比较 600519.SH 和 AAPL", {"600519", "AAPL"}, {"SH"}),
+            ("比较 000001.SZ 和 AAPL", {"600519", "000001", "AAPL"}, {"SZ"}),
+            ("比较 600519.SS 和 AAPL", {"600519", "AAPL"}, {"SS"}),
+            ("比较 1810.hk 和 tsla", {"600519", "HK01810", "TSLA"}, {"HK"}),
+        ]
+
+        for message, expected_allowed, forbidden_tokens in cases:
+            with self.subTest(message=message):
+                result = resolve_stock_scope(
+                    message,
+                    {"stock_code": "600519", "stock_name": "匿名标的"},
+                )
+
+                self.assertEqual(result.stock_scope.mode, "compare")
+                self.assertEqual(result.stock_scope.allowed_stock_codes, expected_allowed)
+                for token in forbidden_tokens:
+                    self.assertNotIn(token, result.stock_scope.allowed_stock_codes)
+
     def test_switch_recognizes_lowercase_us_ticker_with_explicit_hint(self):
         result = resolve_stock_scope(
             "分析tsla",
