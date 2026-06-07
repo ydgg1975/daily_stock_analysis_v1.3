@@ -45,7 +45,7 @@ describe('StockBarItemComponent', () => {
     ).toBeInTheDocument();
   });
 
-  it('uses structured action label before legacy operation advice', () => {
+  it('uses structured action before legacy operation advice', () => {
     render(
       <StockBarItemComponent
         item={{
@@ -83,6 +83,25 @@ describe('StockBarItemComponent', () => {
     const actions = screen.getByTestId('history-card-actions');
     expect(within(actions).getByText('回避 28')).toBeInTheDocument();
     expect(within(actions).queryByText('买入 28')).not.toBeInTheDocument();
+  });
+
+  it('uses the unified legacy fallback for backend-aligned hold advice without structured action', () => {
+    render(
+      <StockBarItemComponent
+        item={{
+          ...issue1600Item,
+          action: null,
+          actionLabel: null,
+          operationAdvice: '洗盘观察',
+          sentimentScore: 48,
+        }}
+        isViewing={false}
+        onClick={vi.fn()}
+      />,
+    );
+
+    const actions = screen.getByTestId('history-card-actions');
+    expect(within(actions).getByText('持有 48')).toBeInTheDocument();
   });
 
   it('does not render ambiguous English legacy advice as a buy action', () => {

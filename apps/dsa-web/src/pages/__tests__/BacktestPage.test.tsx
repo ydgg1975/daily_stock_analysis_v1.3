@@ -154,7 +154,7 @@ describe('BacktestPage', () => {
     expect(rowScope.getByText('继续持有')).toBeInTheDocument();
   });
 
-  it('localizes the taxonomy label when backtest actionLabel is missing in English UI mode', async () => {
+  it('uses localized taxonomy labels before server labels in English UI mode', async () => {
     mockGetResults.mockResolvedValueOnce({
       total: 1,
       page: 1,
@@ -164,7 +164,7 @@ describe('BacktestPage', () => {
           ...baseResultItem,
           operationAdvice: 'continue holding',
           action: 'watch',
-          actionLabel: null,
+          actionLabel: '观望',
           trendPrediction: 'range-bound',
         },
       ],

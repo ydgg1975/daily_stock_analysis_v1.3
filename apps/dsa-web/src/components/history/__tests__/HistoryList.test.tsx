@@ -77,7 +77,7 @@ describe('HistoryList', () => {
     expect(onToggleItemSelection).toHaveBeenCalledWith(1);
   });
 
-  it('uses structured action label before legacy operation advice', () => {
+  it('uses structured action before legacy operation advice', () => {
     render(
       <HistoryList
         {...baseProps}
@@ -115,6 +115,26 @@ describe('HistoryList', () => {
 
     expect(screen.getByText('回避 28')).toBeInTheDocument();
     expect(screen.queryByText('买入 28')).not.toBeInTheDocument();
+  });
+
+  it('uses the unified legacy fallback for backend-aligned hold advice without structured action', () => {
+    render(
+      <HistoryList
+        {...baseProps}
+        items={[
+          {
+            ...items[0],
+            action: null,
+            actionLabel: null,
+            operationAdvice: '洗盘观察',
+            sentimentScore: 48,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('持有 48')).toBeInTheDocument();
+    expect(screen.queryByText('情绪 48')).not.toBeInTheDocument();
   });
 
   it('does not render ambiguous English legacy advice as a buy action', () => {

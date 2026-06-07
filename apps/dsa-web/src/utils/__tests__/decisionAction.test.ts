@@ -19,8 +19,11 @@ const englishLabels: DecisionActionLabelMap = {
 };
 
 describe('decisionAction helpers', () => {
-  it('prefers structured action label over legacy advice text', () => {
+  it('uses structured action taxonomy before server label and legacy advice text', () => {
     expect(getDecisionActionLabel('avoid', '回避', '买入', '建议')).toBe('回避');
+    expect(getDecisionActionLabel('sell', '买入', null, 'Advice', englishLabels)).toBe('Sell');
+    expect(getDecisionActionTone('sell', '买入', null)).toBe('danger');
+    expect(getDecisionActionLabel(null, '买入', null, 'Advice', englishLabels)).toBe('买入');
   });
 
   it('falls back to the action taxonomy label when actionLabel is absent', () => {
@@ -49,6 +52,8 @@ describe('decisionAction helpers', () => {
 
   it('keeps legacy fallback compatible with negated sell and add advice', () => {
     expect(getLegacyDecisionActionLabel('不建议卖出，继续观察')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('洗盘观察')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('洗盘观察', englishLabels)).toBe('Hold');
     expect(getLegacyDecisionActionLabel('无需减仓，维持仓位')).toBe('持有');
     expect(getLegacyDecisionActionLabel('无须减仓，维持仓位')).toBe('持有');
     expect(getLegacyDecisionActionLabel('不建议加仓，等待回踩')).toBe('持有');

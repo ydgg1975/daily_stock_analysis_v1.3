@@ -195,7 +195,7 @@ export const getLegacyDecisionAction = (advice?: string | null): DecisionAction 
   if (normalized.includes('强烈卖出') || normalized.includes('卖出') || normalized.includes('清仓') || matchesEnglishTerm(lower, ['sell'])) {
     matches.add('sell');
   }
-  if (normalized.includes('持有') || matchesEnglishTerm(lower, ['hold'])) {
+  if (normalized.includes('持有') || normalized.includes('洗盘观察') || matchesEnglishTerm(lower, ['hold'])) {
     matches.add('hold');
   }
   if (normalized.includes('观望') || normalized.includes('等待') || matchesEnglishTerm(lower, ['watch', 'wait'])) {
@@ -218,10 +218,10 @@ export const getDecisionActionLabel = (
   emptyLabel: string | null = '建议',
   labels?: Partial<DecisionActionLabelMap>,
 ): string | null => {
-  const explicitLabel = actionLabel?.trim();
-  if (explicitLabel) return explicitLabel;
   const actionLabels = resolveActionLabels(labels);
   if (action) return actionLabels[action];
+  const explicitLabel = actionLabel?.trim();
+  if (explicitLabel) return explicitLabel;
   return getLegacyDecisionActionLabel(legacyAdvice, actionLabels) || emptyLabel;
 };
 

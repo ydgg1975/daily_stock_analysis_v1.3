@@ -44,7 +44,7 @@ describe('StockHistoryTrendDrawer', () => {
     window.localStorage.clear();
   });
 
-  it('prefers structured action label in summary and rows', () => {
+  it('uses structured action in summary and rows', () => {
     render(
       <StockHistoryTrendDrawer
         report={report}
@@ -141,7 +141,7 @@ describe('StockHistoryTrendDrawer', () => {
     expect(screen.queryByText('预警')).not.toBeInTheDocument();
   });
 
-  it('uses localized taxonomy labels when actionLabel is missing in English UI mode', () => {
+  it('uses localized taxonomy labels before server labels in English UI mode', () => {
     window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
 
     render(
@@ -151,15 +151,15 @@ describe('StockHistoryTrendDrawer', () => {
             ...report,
             summary: {
               ...report.summary,
-              action: 'watch',
-              actionLabel: null,
+              action: 'sell',
+              actionLabel: '买入',
             },
           }}
           items={[
             {
               ...items[0],
-              action: 'watch',
-              actionLabel: null,
+              action: 'sell',
+              actionLabel: '买入',
             },
           ]}
           total={1}
@@ -176,7 +176,7 @@ describe('StockHistoryTrendDrawer', () => {
       </UiLanguageProvider>,
     );
 
-    expect(screen.getAllByText('Watch').length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText('观望')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Sell').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('买入')).not.toBeInTheDocument();
   });
 });
