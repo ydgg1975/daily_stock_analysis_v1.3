@@ -234,6 +234,11 @@ _NEGATED_ACTION_PHRASES: Dict[DecisionAction, tuple[str, ...]] = {
 }
 
 _GUARD_ACTIONS: tuple[DecisionAction, ...] = ("avoid", "alert")
+_ENGLISH_NEGATED_ACTION_TERMS: Dict[DecisionAction, tuple[str, ...]] = {
+    "avoid": ("buy",),
+    "hold": ("add", "accumulate", "sell", "reduce", "trim"),
+}
+_ENGLISH_DEFERRED_ACTION_TERMS = ("buy", "add", "accumulate", "sell", "reduce", "trim")
 
 
 def _normalize_key(value: Any) -> str:
@@ -247,6 +252,34 @@ def _word_or_substring_match(text: str, phrase: str) -> bool:
     if re.search(r"[a-z]", normalized_phrase):
         return bool(re.search(rf"(?<![a-z0-9_]){re.escape(normalized_phrase)}(?![a-z0-9_])", text))
     return normalized_phrase in text
+
+
+def _english_negated_action_matches(text: str) -> set[DecisionAction]:
+    matches: set[DecisionAction] = set()
+    negation_prefix = (
+        r"(?:not\s+(?:a\s+|an\s+)?|"
+        r"no\s+(?:need\s+to\s+)?|"
+        r"need\s+not\s+|"
+        r"cannot\s+|can't\s+|cant\s+|"
+        r"do\s+not\s+|don't\s+|dont\s+)"
+    )
+    for action, terms in _ENGLISH_NEGATED_ACTION_TERMS.items():
+        for term in terms:
+            if re.search(rf"(?<![a-z0-9_]){negation_prefix}{re.escape(term)}(?![a-z0-9_])", text):
+                matches.add(action)
+    return matches
+
+
+def _has_english_deferred_action(text: str) -> bool:
+    terms = "|".join(re.escape(term) for term in _ENGLISH_DEFERRED_ACTION_TERMS)
+    if re.search(rf"(?<![a-z0-9_])wait(?:ing)?\s+to\s+(?:{terms})(?![a-z0-9_])", text):
+        return True
+    return bool(
+        re.search(
+            rf"(?<![a-z0-9_])waiting\s+(?:for|until)\b.*?(?<![a-z0-9_])(?:{terms})(?![a-z0-9_])",
+            text,
+        )
+    )
 
 
 def _explicit_action(value: Any) -> Optional[DecisionAction]:
@@ -273,7 +306,11 @@ def normalize_decision_action(value: Any) -> Optional[DecisionAction]:
     if not text:
         return None
 
+    if _has_english_deferred_action(text):
+        return None
+
     negated_matches: set[DecisionAction] = set()
+    negated_matches.update(_english_negated_action_matches(text))
     for action, phrases in _NEGATED_ACTION_PHRASES.items():
         if any(_word_or_substring_match(text, phrase) for phrase in phrases):
             negated_matches.add(action)

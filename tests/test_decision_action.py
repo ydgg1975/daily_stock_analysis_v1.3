@@ -56,7 +56,10 @@ def test_normalize_decision_action_matrix(value: str, expected: str) -> None:
     assert normalize_decision_action(value) == expected
 
 
-@pytest.mark.parametrize("value", ["", None, "观察", "等待突破后买入", "买入或卖出", "普通复盘说明"])
+@pytest.mark.parametrize(
+    "value",
+    ["", None, "观察", "等待突破后买入", "waiting to buy", "买入或卖出", "buy or sell", "普通复盘说明"],
+)
 def test_normalize_decision_action_unknown_or_ambiguous_returns_none(value: str | None) -> None:
     assert normalize_decision_action(value) is None
 
@@ -83,6 +86,7 @@ def test_normalize_decision_action_unknown_or_ambiguous_returns_none(value: str 
         ("need not buy", "avoid"),
         ("cannot buy", "avoid"),
         ("can't buy", "avoid"),
+        ("not a buy yet", "avoid"),
         ("不建议加仓", "hold"),
         ("无须加仓", "hold"),
         ("no add", "hold"),
@@ -100,6 +104,7 @@ def test_normalize_decision_action_unknown_or_ambiguous_returns_none(value: str 
         ("no need to sell", "hold"),
         ("cannot sell", "hold"),
         ("can't sell", "hold"),
+        ("not a sell yet", "hold"),
         ("无需减仓", "hold"),
         ("无须减仓", "hold"),
         ("no reduce", "hold"),
@@ -107,6 +112,7 @@ def test_normalize_decision_action_unknown_or_ambiguous_returns_none(value: str 
         ("cannot reduce", "hold"),
         ("no trim", "hold"),
         ("can't trim", "hold"),
+        ("not a trim yet", "hold"),
         ("不建议清仓", "hold"),
     ],
 )
@@ -124,6 +130,7 @@ def test_normalize_decision_action_handles_negated_trade_actions(value: str, exp
         "no need to buy before confirmation",
         "cannot buy before confirmation",
         "can't buy before confirmation",
+        "not a buy yet",
     ],
 )
 def test_build_action_fields_prioritizes_negated_buy_advice_over_embedded_buy_phrase(advice: str) -> None:
@@ -149,6 +156,8 @@ def test_build_action_fields_prioritizes_negated_buy_advice_over_embedded_buy_ph
         "can't reduce exposure",
         "no trim while trend holds",
         "cannot trim while trend holds",
+        "not a sell yet",
+        "not a trim yet",
     ],
 )
 def test_build_action_fields_prioritizes_negated_hold_advice_over_embedded_trade_phrase(advice: str) -> None:

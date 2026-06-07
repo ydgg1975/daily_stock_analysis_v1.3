@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type DecisionActionLabelMap,
   getDecisionActionLabel,
   getDecisionActionTone,
   getLegacyDecisionActionLabel,
 } from '../decisionAction';
+
+const englishLabels: DecisionActionLabelMap = {
+  buy: 'Buy',
+  add: 'Add',
+  hold: 'Hold',
+  reduce: 'Reduce',
+  sell: 'Sell',
+  watch: 'Watch',
+  avoid: 'Avoid',
+  alert: 'Alert',
+};
 
 describe('decisionAction helpers', () => {
   it('prefers structured action label over legacy advice text', () => {
@@ -12,6 +24,7 @@ describe('decisionAction helpers', () => {
 
   it('falls back to the action taxonomy label when actionLabel is absent', () => {
     expect(getDecisionActionLabel('add', null, '持有', '建议')).toBe('加仓');
+    expect(getDecisionActionLabel('watch', null, '持有', 'Advice', englishLabels)).toBe('Watch');
   });
 
   it('keeps legacy fallback compatible with negated buy advice', () => {
@@ -26,6 +39,9 @@ describe('decisionAction helpers', () => {
     expect(getLegacyDecisionActionLabel('no need to buy before confirmation')).toBe('回避');
     expect(getLegacyDecisionActionLabel('cannot buy before confirmation')).toBe('回避');
     expect(getLegacyDecisionActionLabel("can't buy before confirmation")).toBe('回避');
+    expect(getLegacyDecisionActionLabel('not a buy yet')).toBe('回避');
+    expect(getLegacyDecisionActionLabel('not a buy yet', englishLabels)).toBe('Avoid');
+    expect(getLegacyDecisionActionLabel('waiting to buy')).toBeNull();
   });
 
   it('keeps legacy fallback compatible with negated sell and add advice', () => {
@@ -44,6 +60,9 @@ describe('decisionAction helpers', () => {
     expect(getLegacyDecisionActionLabel("can't reduce exposure")).toBe('持有');
     expect(getLegacyDecisionActionLabel('no trim while trend holds')).toBe('持有');
     expect(getLegacyDecisionActionLabel('cannot trim while trend holds')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('not a sell yet')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('not a trim yet')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('not a trim yet', englishLabels)).toBe('Hold');
     expect(getDecisionActionTone(null, null, '不建议卖出，继续观察')).toBe('success');
   });
 

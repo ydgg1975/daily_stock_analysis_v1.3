@@ -11,6 +11,7 @@ import type {
   PerformanceMetrics,
   BacktestPhaseFilter,
 } from '../types/backtest';
+import { getDecisionActionLabel } from '../utils/decisionAction';
 import { getMarketPhaseSummaryLabel } from '../utils/marketPhase';
 
 const BACKTEST_INPUT_CLASS =
@@ -608,58 +609,69 @@ const BacktestPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((row) => (
-                      <tr
-                        key={row.analysisHistoryId}
-                        className="backtest-table-row"
-                      >
-                        <td className="backtest-table-cell backtest-table-code">
-                          <div className="flex flex-col">
-                            <span>{row.code}</span>
-                            <span className="text-xs text-muted-text">{row.stockName || '--'}</span>
-                          </div>
-                        </td>
-                        <td className="backtest-table-cell text-secondary-text">{row.analysisDate || '--'}</td>
-                        <td className="backtest-table-cell text-secondary-text">{phaseLabel(row)}</td>
-                        <td className="backtest-table-cell max-w-[220px] text-foreground">
-                          {(row.trendPrediction || row.operationAdvice) ? (
-                            <Tooltip
-                              content={[row.trendPrediction, row.operationAdvice].filter(Boolean).join(' / ')}
-                              focusable
-                            >
-                              <div className="flex flex-col gap-1">
-                                <span className="block truncate">{row.trendPrediction || '--'}</span>
-                                <span className="block truncate text-xs text-secondary-text">{row.operationAdvice || '--'}</span>
-                              </div>
-                            </Tooltip>
-                          ) : (
-                            '--'
-                          )}
-                        </td>
-                        <td className="backtest-table-cell">
-                          <div className="flex items-center gap-2">
-                            {actualMovementBadge(row.actualMovement)}
-                            <span className={
-                              row.actualReturnPct != null
-                                ? row.actualReturnPct > 0 ? 'text-success' : row.actualReturnPct < 0 ? 'text-danger' : 'text-secondary-text'
-                                : 'text-muted-text'
-                            }>
-                              {pct(row.actualReturnPct)}
+                    {results.map((row) => {
+                      const actionLabel = getDecisionActionLabel(row.action, row.actionLabel, null, null);
+                      const predictionParts = [actionLabel, row.trendPrediction, row.operationAdvice]
+                        .filter((part): part is string => Boolean(part));
+
+                      return (
+                        <tr
+                          key={row.analysisHistoryId}
+                          className="backtest-table-row"
+                        >
+                          <td className="backtest-table-cell backtest-table-code">
+                            <div className="flex flex-col">
+                              <span>{row.code}</span>
+                              <span className="text-xs text-muted-text">{row.stockName || '--'}</span>
+                            </div>
+                          </td>
+                          <td className="backtest-table-cell text-secondary-text">{row.analysisDate || '--'}</td>
+                          <td className="backtest-table-cell text-secondary-text">{phaseLabel(row)}</td>
+                          <td className="backtest-table-cell max-w-[220px] text-foreground">
+                            {predictionParts.length ? (
+                              <Tooltip
+                                content={predictionParts.join(' / ')}
+                                focusable
+                              >
+                                <div className="flex flex-col gap-1">
+                                  <span className="block truncate">{actionLabel || row.trendPrediction || '--'}</span>
+                                  {actionLabel && row.trendPrediction && (
+                                    <span className="block truncate text-xs text-secondary-text">{row.trendPrediction}</span>
+                                  )}
+                                  {row.operationAdvice && (
+                                    <span className="block truncate text-xs text-secondary-text">{row.operationAdvice}</span>
+                                  )}
+                                </div>
+                              </Tooltip>
+                            ) : (
+                              '--'
+                            )}
+                          </td>
+                          <td className="backtest-table-cell">
+                            <div className="flex items-center gap-2">
+                              {actualMovementBadge(row.actualMovement)}
+                              <span className={
+                                row.actualReturnPct != null
+                                  ? row.actualReturnPct > 0 ? 'text-success' : row.actualReturnPct < 0 ? 'text-danger' : 'text-secondary-text'
+                                  : 'text-muted-text'
+                              }>
+                                {pct(row.actualReturnPct)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="backtest-table-cell">
+                            <span className="flex items-center gap-2">
+                              {boolIcon(row.directionCorrect)}
+                              <span className="text-muted-text">
+                                {row.directionExpected ? labelFromMap(row.directionExpected, DIRECTION_EXPECTED_LABELS) : ''}
+                              </span>
                             </span>
-                          </div>
-                        </td>
-                        <td className="backtest-table-cell">
-                          <span className="flex items-center gap-2">
-                            {boolIcon(row.directionCorrect)}
-                            <span className="text-muted-text">
-                              {row.directionExpected ? labelFromMap(row.directionExpected, DIRECTION_EXPECTED_LABELS) : ''}
-                            </span>
-                          </span>
-                        </td>
-                        <td className="backtest-table-cell">{outcomeBadge(row.outcome)}</td>
-                        <td className="backtest-table-cell">{statusBadge(row.evalStatus)}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="backtest-table-cell">{outcomeBadge(row.outcome)}</td>
+                          <td className="backtest-table-cell">{statusBadge(row.evalStatus)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

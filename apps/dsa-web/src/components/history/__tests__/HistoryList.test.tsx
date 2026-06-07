@@ -97,6 +97,26 @@ describe('HistoryList', () => {
     expect(screen.queryByText('买入 35')).not.toBeInTheDocument();
   });
 
+  it('uses the unified legacy fallback for negated buy advice without structured action', () => {
+    render(
+      <HistoryList
+        {...baseProps}
+        items={[
+          {
+            ...items[0],
+            action: null,
+            actionLabel: null,
+            operationAdvice: '不建议买入，等待确认',
+            sentimentScore: 28,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('回避 28')).toBeInTheDocument();
+    expect(screen.queryByText('买入 28')).not.toBeInTheDocument();
+  });
+
   it('toggles select-all when clicking the label text', () => {
     const onToggleSelectAll = vi.fn();
 

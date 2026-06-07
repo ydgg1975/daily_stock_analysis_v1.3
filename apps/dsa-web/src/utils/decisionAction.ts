@@ -1,8 +1,9 @@
 import type { DecisionAction } from '../types/analysis';
 
 export type DecisionActionTone = 'success' | 'warning' | 'danger' | 'default';
+export type DecisionActionLabelMap = Record<DecisionAction, string>;
 
-const ACTION_LABELS: Record<DecisionAction, string> = {
+export const DEFAULT_DECISION_ACTION_LABELS: DecisionActionLabelMap = {
   buy: '买入',
   add: '加仓',
   hold: '持有',
@@ -13,6 +14,11 @@ const ACTION_LABELS: Record<DecisionAction, string> = {
   alert: '预警',
 };
 
+const resolveActionLabels = (labels?: Partial<DecisionActionLabelMap>): DecisionActionLabelMap => ({
+  ...DEFAULT_DECISION_ACTION_LABELS,
+  ...labels,
+});
+
 const firstAdviceToken = (value?: string | null): string | null => {
   const normalized = value?.trim();
   if (!normalized) return null;
@@ -22,10 +28,36 @@ const firstAdviceToken = (value?: string | null): string | null => {
 const includesAny = (value: string, phrases: readonly string[]): boolean =>
   phrases.some((phrase) => value.includes(phrase));
 
-export const getLegacyDecisionActionLabel = (advice?: string | null): string | null => {
+const normalizeEnglishAdvice = (value: string): string =>
+  value.toLowerCase().replace(/[_-]/g, ' ');
+
+const matchesEnglishNegatedAction = (value: string, terms: readonly string[]): boolean => {
+  const negationPrefix = String.raw`(?:not\s+(?:a\s+|an\s+)?|no\s+(?:need\s+to\s+)?|need\s+not\s+|cannot\s+|can't\s+|cant\s+|do\s+not\s+|don't\s+|dont\s+)`;
+  return terms.some((term) =>
+    new RegExp(`(^|[^a-z0-9_])${negationPrefix}${term}(?=$|[^a-z0-9_])`).test(value),
+  );
+};
+
+const hasEnglishDeferredAction = (value: string): boolean => {
+  const terms = String.raw`(?:buy|add|accumulate|sell|reduce|trim)`;
+  return (
+    new RegExp(`(^|[^a-z0-9_])wait(?:ing)?\\s+to\\s+${terms}(?=$|[^a-z0-9_])`).test(value) ||
+    new RegExp(`(^|[^a-z0-9_])waiting\\s+(?:for|until)\\b.*?${terms}(?=$|[^a-z0-9_])`).test(value)
+  );
+};
+
+export const getLegacyDecisionActionLabel = (
+  advice?: string | null,
+  labels?: Partial<DecisionActionLabelMap>,
+): string | null => {
   const normalized = advice?.trim();
   if (!normalized) return null;
-  const lower = normalized.toLowerCase();
+  const lower = normalizeEnglishAdvice(normalized);
+  const actionLabels = resolveActionLabels(labels);
+
+  if (hasEnglishDeferredAction(lower)) {
+    return null;
+  }
 
   if (
     includesAny(normalized, [
@@ -50,6 +82,7 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
       '无需布局',
       '无须布局',
     ]) ||
+    matchesEnglishNegatedAction(lower, ['buy']) ||
     lower.includes('do not buy') ||
     lower.includes('no buy') ||
     lower.includes('no need to buy') ||
@@ -58,7 +91,7 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
     lower.includes("can't buy") ||
     lower.includes('cant buy')
   ) {
-    return '回避';
+    return actionLabels.avoid;
   }
   if (
     includesAny(normalized, [
@@ -93,6 +126,7 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
       '不宜清仓',
       '暂不清仓',
     ]) ||
+    matchesEnglishNegatedAction(lower, ['add', 'accumulate', 'sell', 'reduce', 'trim']) ||
     lower.includes('not add') ||
     lower.includes('do not add') ||
     lower.includes("don't add") ||
@@ -144,7 +178,7 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
     lower.includes("can't sell") ||
     lower.includes('cant sell')
   ) {
-    return '持有';
+    return actionLabels.hold;
   }
   if (
     normalized.includes('不建议买入') ||
@@ -153,7 +187,7 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
     normalized.includes('规避') ||
     lower.includes('do not buy')
   ) {
-    return '回避';
+    return actionLabels.avoid;
   }
   if (
     normalized.includes('风险预警') ||
@@ -161,14 +195,14 @@ export const getLegacyDecisionActionLabel = (advice?: string | null): string | n
     normalized.includes('警惕') ||
     lower.includes('risk alert')
   ) {
-    return '预警';
+    return actionLabels.alert;
   }
-  if (normalized.includes('加仓') || normalized.includes('增持')) return '加仓';
-  if (normalized.includes('减仓')) return '减仓';
-  if (normalized.includes('卖') || normalized.includes('清仓')) return '卖出';
-  if (normalized.includes('持有')) return '持有';
-  if (normalized.includes('观望') || normalized.includes('等待')) return '观望';
-  if (normalized.includes('买') || normalized.includes('布局') || normalized.includes('建仓')) return '买入';
+  if (normalized.includes('加仓') || normalized.includes('增持')) return actionLabels.add;
+  if (normalized.includes('减仓')) return actionLabels.reduce;
+  if (normalized.includes('卖') || normalized.includes('清仓')) return actionLabels.sell;
+  if (normalized.includes('持有')) return actionLabels.hold;
+  if (normalized.includes('观望') || normalized.includes('等待')) return actionLabels.watch;
+  if (normalized.includes('买') || normalized.includes('布局') || normalized.includes('建仓')) return actionLabels.buy;
   return firstAdviceToken(normalized);
 };
 
@@ -177,11 +211,13 @@ export const getDecisionActionLabel = (
   actionLabel?: string | null,
   legacyAdvice?: string | null,
   emptyLabel: string | null = '建议',
+  labels?: Partial<DecisionActionLabelMap>,
 ): string | null => {
   const explicitLabel = actionLabel?.trim();
   if (explicitLabel) return explicitLabel;
-  if (action) return ACTION_LABELS[action];
-  return getLegacyDecisionActionLabel(legacyAdvice) || emptyLabel;
+  const actionLabels = resolveActionLabels(labels);
+  if (action) return actionLabels[action];
+  return getLegacyDecisionActionLabel(legacyAdvice, actionLabels) || emptyLabel;
 };
 
 export const getDecisionActionTone = (
