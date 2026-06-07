@@ -10,7 +10,8 @@ Tests for AnalysisReportSchema validation and analyzer fallback behavior.
 import json
 import sys
 import unittest
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 # Mock litellm before importing analyzer (optional runtime dep)
 try:
@@ -57,6 +58,35 @@ class TestAnalysisReportSchema(unittest.TestCase):
         schema = AnalysisReportSchema.model_validate(data)
         self.assertIsNone(schema.dashboard)
         self.assertIsNone(schema.analysis_summary)
+
+    def test_schema_accepts_phase_decision_and_defaults_lists(self) -> None:
+        """Dashboard accepts the optional phase_decision contract."""
+        data = {
+            "stock_name": "贵州茅台",
+            "sentiment_score": 70,
+            "trend_prediction": "震荡",
+            "operation_advice": "持有",
+            "dashboard": {
+                "core_conclusion": {"one_sentence": "等待确认"},
+                "phase_decision": {
+                    "phase_context": {"phase": "intraday", "market": "cn"},
+                    "action_window": "盘中跟踪",
+                    "immediate_action": "等待确认",
+                    "next_check_time": "14:30",
+                    "confidence_reason": "数据质量可用",
+                },
+            },
+        }
+
+        schema = AnalysisReportSchema.model_validate(data)
+
+        self.assertIsNotNone(schema.dashboard)
+        phase_decision = schema.dashboard and schema.dashboard.phase_decision
+        self.assertIsNotNone(phase_decision)
+        if phase_decision:
+            self.assertEqual(phase_decision.watch_conditions, [])
+            self.assertEqual(phase_decision.data_limitations, [])
+            self.assertEqual(phase_decision.phase_context["phase"], "intraday")
 
     def test_schema_allows_numeric_strings(self) -> None:
         """Schema accepts string values for numeric fields (LLM may return N/A)."""
@@ -130,3 +160,39 @@ class TestAnalyzerSchemaFallback(unittest.TestCase):
         self.assertEqual(result.name, "贵州茅台")
         self.assertEqual(result.sentiment_score, 72)
         self.assertEqual(result.analysis_summary, "技术面向好")
+
+    def test_parse_response_keeps_unknown_dashboard_fields(self) -> None:
+        analyzer = GeminiAnalyzer()
+        response = json.dumps({
+            "stock_name": "贵州茅台",
+            "sentiment_score": 72,
+            "trend_prediction": "看多",
+            "operation_advice": "持有",
+            "decision_type": "hold",
+            "analysis_summary": "技术面向好",
+            "dashboard": {
+                "core_conclusion": {
+                    "one_sentence": "先观察",
+                    "signal_type": "🟡持有观望",
+                },
+                "decision_stability": {
+                    "applied": True,
+                    "reason": "回测验证",
+                },
+            },
+        })
+        result = analyzer._parse_response(response, "600519", "股票600519")
+        self.assertEqual(result.dashboard["decision_stability"]["applied"], True)
+        self.assertEqual(result.dashboard["decision_stability"]["reason"], "回测验证")
+
+    def test_parse_text_response_honors_injected_runtime_report_language(self) -> None:
+        """Fallback text parsing should use the analyzer's injected config, not the global singleton."""
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer(config=SimpleNamespace(report_language="en"))
+
+        result = analyzer._parse_text_response("bullish buy setup", "AAPL", "Apple")
+
+        self.assertEqual(result.report_language, "en")
+        self.assertEqual(result.trend_prediction, "Bullish")
+        self.assertEqual(result.operation_advice, "Buy")
+        self.assertEqual(result.confidence_level, "Low")

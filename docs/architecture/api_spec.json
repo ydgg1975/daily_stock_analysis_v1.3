@@ -55,6 +55,28 @@
         }
       }
     },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "根路径健康检查",
+        "description": "用于负载均衡器或监控系统检查服务状态；即使静态 Web 前端已构建，也返回 JSON 而不是 SPA HTML fallback。",
+        "operationId": "rootHealthCheck",
+        "responses": {
+          "200": {
+            "description": "服务健康",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -63,6 +85,28 @@
         "summary": "健康检查",
         "description": "用于负载均衡器或监控系统检查服务状态",
         "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "服务健康",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "v1 健康检查",
+        "description": "API v1 前缀下的健康检查接口，用于监控系统和客户端探测服务状态。",
+        "operationId": "v1HealthCheck",
         "responses": {
           "200": {
             "description": "服务健康",
@@ -111,7 +155,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskAccepted"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TaskAccepted"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BatchTaskAcceptedResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -222,13 +273,21 @@
           "History"
         ],
         "summary": "获取历史分析列表",
-        "description": "分页获取历史分析记录摘要，支持按股票代码和日期范围筛选",
+        "description": "分页获取历史分析记录摘要，支持按股票代码、报告类型和日期范围筛选",
         "operationId": "getHistoryList",
         "parameters": [
           {
             "name": "stock_code",
             "in": "query",
             "description": "股票代码筛选",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "report_type",
+            "in": "query",
+            "description": "报告类型筛选（如 market_review）；不传则返回所有类型历史。",
             "schema": {
               "type": "string"
             }
@@ -497,6 +556,147 @@
         }
       }
     },
+    "/api/v1/system/config/export": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "summary": "导出 `.env` 备份",
+        "description": "返回当前已保存 `.env` 的原始文本内容，用于配置备份。",
+        "operationId": "exportSystemConfig",
+        "responses": {
+          "200": {
+            "description": "导出成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportSystemConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "未开启管理员鉴权（`ADMIN_AUTH_ENABLED=false`）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "导出失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/config/import": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "summary": "导入 `.env` 备份",
+        "description": "按键级覆盖方式把备份文本合并到当前 `.env`，并沿用现有配置版本冲突保护。",
+        "operationId": "importSystemConfig",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSystemConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "导入成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateSystemConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "导入文件无效或配置校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SystemConfigValidationErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "未开启管理员鉴权（`ADMIN_AUTH_ENABLED=false`）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "配置版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemConfigConflictResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "导入失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/config/validate": {
       "post": {
         "tags": [
@@ -629,10 +829,12 @@
             "type": "string",
             "enum": [
               "simple",
-              "detailed"
+              "detailed",
+              "full",
+              "brief"
             ],
             "default": "detailed",
-            "description": "报告类型"
+            "description": "报告类型：simple(精简) / detailed(完整) / full(完整) / brief(简洁)"
           },
           "force_refresh": {
             "type": "boolean",
@@ -643,6 +845,17 @@
             "type": "boolean",
             "default": false,
             "description": "是否使用异步模式"
+          },
+          "analysis_phase": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "premarket",
+              "intraday",
+              "postmarket"
+            ],
+            "default": "auto",
+            "description": "分析阶段覆盖：auto(自动推断) / premarket(盘前) / intraday(盘中) / postmarket(盘后)"
           }
         }
       },
@@ -692,11 +905,109 @@
           "message": {
             "type": "string",
             "example": "Analysis task accepted"
+          },
+          "analysis_phase": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "premarket",
+              "intraday",
+              "postmarket"
+            ],
+            "default": "auto",
+            "description": "请求的分析阶段"
           }
         },
         "required": [
           "task_id",
           "status"
+        ]
+      },
+      "BatchTaskAcceptedItem": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "任务 ID，用于查询状态"
+          },
+          "stock_code": {
+            "type": "string",
+            "description": "股票代码"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "analysis_phase": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "premarket",
+              "intraday",
+              "postmarket"
+            ],
+            "default": "auto",
+            "description": "请求的分析阶段"
+          }
+        },
+        "required": [
+          "task_id",
+          "stock_code",
+          "status"
+        ]
+      },
+      "BatchDuplicateTaskItem": {
+        "type": "object",
+        "properties": {
+          "stock_code": {
+            "type": "string",
+            "description": "股票代码"
+          },
+          "existing_task_id": {
+            "type": "string",
+            "description": "已存在的任务 ID"
+          },
+          "message": {
+            "type": "string",
+            "description": "错误信息"
+          }
+        },
+        "required": [
+          "stock_code",
+          "existing_task_id",
+          "message"
+        ]
+      },
+      "BatchTaskAcceptedResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchTaskAcceptedItem"
+            }
+          },
+          "duplicates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchDuplicateTaskItem"
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "汇总信息"
+          }
+        },
+        "required": [
+          "accepted",
+          "duplicates",
+          "message"
         ]
       },
       "TaskStatus": {
@@ -724,6 +1035,17 @@
           "error": {
             "type": "string",
             "description": "错误信息（仅在 failed 时存在）"
+          },
+          "analysis_phase": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "premarket",
+              "intraday",
+              "postmarket"
+            ],
+            "nullable": true,
+            "description": "请求的分析阶段；无持久化字段的历史 DB fallback 可能为空"
           }
         },
         "required": [
@@ -793,6 +1115,17 @@
           "error": {
             "type": "string",
             "description": "错误信息"
+          },
+          "analysis_phase": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "premarket",
+              "intraday",
+              "postmarket"
+            ],
+            "default": "auto",
+            "description": "请求的分析阶段"
           }
         },
         "required": [
@@ -1334,6 +1667,28 @@
           "items"
         ]
       },
+      "ExportSystemConfigResponse": {
+        "type": "object",
+        "description": "`.env` 原文导出响应",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "当前已保存 `.env` 的原始文本内容"
+          },
+          "config_version": {
+            "type": "string",
+            "description": "导出时对应的配置版本"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "content",
+          "config_version"
+        ]
+      },
       "SystemConfigUpdateItem": {
         "type": "object",
         "description": "配置更新项",
@@ -1378,6 +1733,27 @@
         "required": [
           "config_version",
           "items"
+        ]
+      },
+      "ImportSystemConfigRequest": {
+        "type": "object",
+        "description": "`.env` 导入请求",
+        "properties": {
+          "config_version": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "待导入的 `.env` 原始文本"
+          },
+          "reload_now": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "config_version",
+          "content"
         ]
       },
       "UpdateSystemConfigResponse": {

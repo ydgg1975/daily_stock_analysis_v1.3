@@ -6,6 +6,8 @@ export type ApiErrorCategory =
   | 'llm_not_configured'
   | 'model_tool_incompatible'
   | 'invalid_tool_call'
+  | 'portfolio_oversell'
+  | 'portfolio_busy'
   | 'upstream_llm_400'
   | 'upstream_timeout'
   | 'upstream_network'
@@ -152,6 +154,19 @@ function extractValidationDetail(detail: unknown): string | null {
   return parts.length > 0 ? parts.join('; ') : null;
 }
 
+function extractErrorCode(data: unknown): string | null {
+  if (!isRecord(data)) {
+    return null;
+  }
+
+  const detail = data.detail;
+  if (isRecord(detail)) {
+    return pickString(detail.error, detail.code, data.error, data.code);
+  }
+
+  return pickString(data.error, data.code);
+}
+
 export function extractErrorPayloadText(data: unknown): string | null {
   if (typeof data === 'string') {
     return data.trim() || null;
@@ -278,12 +293,13 @@ export function parseApiError(error: unknown): ParsedApiError {
   const response = getResponse(error);
   const status = response?.status;
   const payloadText = extractErrorPayloadText(response?.data);
+  const errorCode = extractErrorCode(response?.data);
   const errorMessage = getErrorMessage(error);
   const causeMessage = getCauseMessage(error);
   const code = getErrorCode(error);
   const rawMessage = pickString(payloadText, response?.statusText, errorMessage, causeMessage, code)
     ?? '请求未成功完成，请稍后重试。';
-  const matchText = buildMatchText([rawMessage, errorMessage, causeMessage, code, response?.statusText]);
+  const matchText = buildMatchText([rawMessage, errorMessage, causeMessage, code, errorCode, response?.statusText]);
 
   if (includesAny(matchText, ['agent mode is not enabled', 'agent_mode'])) {
     return createParsedApiError({
@@ -307,10 +323,81 @@ export function parseApiError(error: unknown): ParsedApiError {
     });
   }
 
+  if (errorCode === 'portfolio_oversell' || includesAny(matchText, ['oversell detected'])) {
+    return createParsedApiError({
+      title: '卖出数量超过可用持仓',
+      message: '卖出数量超过当前可用持仓，请删除或修正对应卖出流水后重试。',
+      rawMessage,
+      status,
+      category: 'portfolio_oversell',
+    });
+  }
+
+  if (errorCode === 'portfolio_busy' || includesAny(matchText, ['portfolio ledger is busy'])) {
+    return createParsedApiError({
+      title: '持仓账本正忙',
+      message: '持仓账本正在处理另一笔变更，请稍后重试。',
+      rawMessage,
+      status,
+      category: 'portfolio_busy',
+    });
+  }
+
+  if (errorCode === 'alphasift_install_failed') {
+    return createParsedApiError({
+      title: 'AlphaSift 修复安装失败',
+      message: 'DSA 已尝试修复安装 AlphaSift，但 pip 安装未成功。请检查 ALPHASIFT_INSTALL_SPEC、网络代理或后端 Python 环境。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_install_spec_missing') {
+    return createParsedApiError({
+      title: 'AlphaSift 安装来源未配置',
+      message: '请先确认后端依赖已安装；如需使用修复安装入口，请配置受信任的 ALPHASIFT_INSTALL_SPEC。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_install_spec_not_allowed') {
+    return createParsedApiError({
+      title: 'AlphaSift 安装来源受限',
+      message: '修复安装仅允许使用受信任的 AlphaSift GitHub 来源；如需本地路径或 wheel，请先手动安装到当前 Python 环境。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_unavailable' || includesAny(matchText, ['cannot import alphasift', 'alphasift.screen'])) {
+    return createParsedApiError({
+      title: 'AlphaSift 未就绪',
+      message: '当前 DSA 后端环境无法导入 alphasift。请先执行 pip install -r requirements.txt，或重建 Docker/桌面后端产物。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_adapter_unavailable') {
+    return createParsedApiError({
+      title: 'AlphaSift 适配层不可用',
+      message: '当前 AlphaSift 版本缺少 DSA 稳定适配层。请重新安装或升级 AlphaSift 后再试。',
+      category: 'http_error',
+      rawMessage,
+      status,
+    });
+  }
+
   const noConfiguredLlm = (
     includesAny(matchText, ['all llm models failed']) && includesAny(matchText, ['last error: none'])
   ) || includesAny(matchText, [
     'no llm configured',
+    'no effective primary model configured',
     'litellm_model not configured',
     'ai analysis will be unavailable',
   ]);
@@ -390,13 +477,12 @@ export function parseApiError(error: unknown): ParsedApiError {
   }
 
   const hasLlmProviderHint = includesAny(matchText, [
-    'bad request',
     'chat/completions',
     'generativelanguage',
     'openai',
     'gemini',
   ]);
-  if ((status === 400 || includesAny(matchText, ['bad request'])) && hasLlmProviderHint) {
+  if (status === 400 && hasLlmProviderHint) {
     return createParsedApiError({
       title: '上游模型接口拒绝了当前请求',
       message: '本地服务正常，但上游模型接口拒绝了请求，请检查模型名称、参数格式或工具调用兼容性。',

@@ -9,15 +9,37 @@ Responsibilities:
 2. Provide pagination and filtering functionality
 3. Generate detailed reports in Markdown format
 """
-
+from __future__ import annotations
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from datetime import date, datetime, timedelta
+from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
+from src.config import get_config, resolve_news_window_days
+from src.report_language import (
+    get_bias_status_emoji,
+    get_localized_stock_name,
+    get_report_labels,
+    get_signal_level,
+    get_chip_unavailable_reason,
+    is_chip_structure_unavailable,
+    localize_bias_status,
+    localize_chip_health,
+    localize_operation_advice,
+    localize_trend_prediction,
+    normalize_report_language,
+)
 from src.storage import DatabaseManager
-from src.utils.data_processing import normalize_model_used, parse_json_field
-from src.analyzer import AnalysisResult
+from src.services.run_diagnostics import build_run_diagnostic_summary
+from src.market_phase_summary import extract_market_phase_summary
+from src.utils.data_processing import (
+    extract_realtime_detail_fields,
+    normalize_model_used,
+    parse_json_field,
+)
+
+if TYPE_CHECKING:
+    from src.analyzer import AnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +68,74 @@ class HistoryService:
             db_manager: Database manager (optional, defaults to singleton instance)
         """
         self.db = db_manager or DatabaseManager.get_instance()
+
+    @staticmethod
+    def _history_code_filter_candidates(stock_code: str) -> List[str]:
+        raw_code = str(stock_code or "").strip()
+        if not raw_code:
+            return []
+
+        candidates: List[str] = []
+
+        def add(candidate: str) -> None:
+            candidate = str(candidate or "").strip().upper()
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+
+        try:
+            from data_provider.base import (
+                canonical_stock_code,
+                is_bse_code,
+                normalize_stock_code,
+            )
+
+            raw_canonical = canonical_stock_code(raw_code)
+            normalized = canonical_stock_code(normalize_stock_code(raw_canonical))
+        except Exception:
+            add(raw_code)
+            return candidates
+
+        def add_hk_variants(digits: str) -> None:
+            if not digits or not digits.isdigit():
+                return
+
+            normalized_digits = digits.zfill(5)
+            add(f"HK{normalized_digits}")
+            add(f"{normalized_digits}.HK")
+
+            unpadded_digits = digits.lstrip("0")
+            if unpadded_digits:
+                add(f"{unpadded_digits}.HK")
+
+        add(raw_canonical)
+        add(normalized)
+
+        if normalized.startswith("HK") and normalized[2:].isdigit():
+            add_hk_variants(normalized[2:])
+        elif normalized.isdigit() and len(normalized) == 5:
+            add_hk_variants(normalized)
+        elif normalized.isdigit() and len(normalized) == 6:
+            exchange = None
+            if is_bse_code(normalized):
+                exchange = "BJ"
+            elif normalized.startswith(("5", "6", "9")):
+                exchange = "SH"
+            elif normalized.startswith(("0", "1", "2", "3")):
+                exchange = "SZ"
+
+            if exchange:
+                add(f"{normalized}.{exchange}")
+                add(f"{exchange}{normalized}")
+                if exchange == "SH":
+                    add(f"{normalized}.SS")
+                    add(f"SS{normalized}")
+
+        return candidates
     
     def get_history_list(
         self,
         stock_code: Optional[str] = None,
+        report_type: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         page: int = 1,
@@ -60,6 +146,7 @@ class HistoryService:
         
         Args:
             stock_code: Stock code filter
+            report_type: Report type filter
             start_date: Start date (YYYY-MM-DD)
             end_date: End date (YYYY-MM-DD)
             page: Page number
@@ -69,6 +156,9 @@ class HistoryService:
             Dictionary containing total count and items
         """
         try:
+            if stock_code:
+                stock_code = self._history_code_filter_candidates(stock_code)
+
             # Parse date parameters
             start_dt = None
             end_dt = None
@@ -91,6 +181,7 @@ class HistoryService:
             # Use new paginated query method
             records, total = self.db.get_analysis_history_paginated(
                 code=stock_code,
+                report_type=report_type,
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
@@ -100,16 +191,7 @@ class HistoryService:
             # Convert to response format
             items = []
             for record in records:
-                items.append({
-                    "id": record.id,
-                    "query_id": record.query_id,
-                    "stock_code": record.code,
-                    "stock_name": record.name,
-                    "report_type": record.report_type,
-                    "sentiment_score": record.sentiment_score,
-                    "operation_advice": record.operation_advice,
-                    "created_at": record.created_at.isoformat() if record.created_at else None,
-                })
+                items.append(self._record_to_list_item_dict(record))
             
             return {
                 "total": total,
@@ -119,6 +201,84 @@ class HistoryService:
         except Exception as e:
             logger.error(f"查询历史列表失败: {e}", exc_info=True)
             return {"total": 0, "items": []}
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            if isinstance(value, str):
+                value = value.strip().replace("%", "")
+                if not value:
+                    return None
+            parsed = float(value)
+            return parsed if parsed == parsed else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _first_present(*values: Any) -> Any:
+        for value in values:
+            if value is not None and value != "":
+                return value
+        return None
+
+    def _extract_history_market_fields(self, context_snapshot: Any) -> Dict[str, Optional[float]]:
+        snapshot_obj = parse_json_field(context_snapshot)
+        realtime_fields = extract_realtime_detail_fields(snapshot_obj)
+
+        volume_ratio = None
+        turnover_rate = None
+        if isinstance(snapshot_obj, dict):
+            enhanced = snapshot_obj.get("enhanced_context")
+            realtime = enhanced.get("realtime") if isinstance(enhanced, dict) else None
+            quote_raw = snapshot_obj.get("realtime_quote_raw")
+            quote = snapshot_obj.get("realtime_quote")
+            for source in (realtime, quote_raw, quote):
+                if not isinstance(source, dict):
+                    continue
+                if volume_ratio is None:
+                    volume_ratio = self._first_present(
+                        source.get("volume_ratio"),
+                        source.get("volumeRatio"),
+                    )
+                if turnover_rate is None:
+                    turnover_rate = self._first_present(
+                        source.get("turnover_rate"),
+                        source.get("turnoverRate"),
+                        source.get("turnover"),
+                    )
+
+        return {
+            "current_price": self._safe_float(realtime_fields.get("current_price")),
+            "change_pct": self._safe_float(realtime_fields.get("change_pct")),
+            "volume_ratio": self._safe_float(volume_ratio),
+            "turnover_rate": self._safe_float(turnover_rate),
+        }
+
+    def _record_to_list_item_dict(self, record) -> Dict[str, Any]:
+        raw_result = parse_json_field(getattr(record, "raw_result", None))
+        model_used = raw_result.get("model_used") if isinstance(raw_result, dict) else None
+        market_fields = self._extract_history_market_fields(
+            getattr(record, "context_snapshot", None)
+        )
+        market_phase_summary = extract_market_phase_summary(getattr(record, "context_snapshot", None))
+
+        return {
+            "id": record.id,
+            "query_id": record.query_id,
+            "stock_code": record.code,
+            "stock_name": record.name,
+            "report_type": record.report_type,
+            "trend_prediction": record.trend_prediction,
+            "analysis_summary": record.analysis_summary,
+            "sentiment_score": record.sentiment_score,
+            "operation_advice": record.operation_advice,
+            "model_used": normalize_model_used(model_used),
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "market_phase_summary": market_phase_summary,
+            **market_fields,
+        }
 
     def _resolve_record(self, record_id: str):
         """
@@ -183,6 +343,46 @@ class HistoryService:
             logger.error(f"resolve_and_get_news failed for {record_id}: {e}", exc_info=True)
             return []
 
+    def resolve_and_get_diagnostics(self, record_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Resolve record_id and return a user-facing run diagnostic summary.
+
+        Legacy records without diagnostic snapshots return an ``unknown``
+        summary instead of failing. Storage and JSON parsing errors are
+        propagated so callers can surface backend failures accurately.
+        """
+        record = self._resolve_record(record_id)
+        if not record:
+            return None
+
+        return build_run_diagnostic_summary(
+            context_snapshot=self._parse_diagnostic_json_field(
+                getattr(record, "context_snapshot", None),
+                "context_snapshot",
+            ),
+            raw_result=self._parse_diagnostic_json_field(
+                getattr(record, "raw_result", None),
+                "raw_result",
+            ),
+            report_saved=True,
+            query_id=getattr(record, "query_id", None),
+            stock_code=getattr(record, "code", None),
+        )
+
+    @staticmethod
+    def _parse_diagnostic_json_field(value: Any, field_name: str) -> Any:
+        """Strict JSON parser for persisted diagnostic inputs."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                raise ValueError(f"invalid {field_name} JSON") from exc
+        return value
+
     def get_history_detail_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """
         Get history report detail.
@@ -236,6 +436,20 @@ class HistoryService:
             display_points[field] = str(db_value) if db_value is not None else None
         return display_points
 
+    @staticmethod
+    def _extract_market_review_content(record, raw_result: Any) -> Optional[str]:
+        """Return persisted market review content from raw_result or news_content."""
+        if isinstance(raw_result, dict):
+            for field in ("raw_response", "market_review_report"):
+                content = raw_result.get(field)
+                if isinstance(content, str) and content.strip():
+                    return content
+
+        news_content = getattr(record, "news_content", None)
+        if isinstance(news_content, str) and news_content.strip():
+            return news_content
+        return None
+
     def _record_to_detail_dict(self, record) -> Dict[str, Any]:
         """
         Convert an AnalysisHistory ORM record to a detail response dict.
@@ -253,6 +467,10 @@ class HistoryService:
             except json.JSONDecodeError:
                 context_snapshot = record.context_snapshot
 
+        market_review_content = None
+        if getattr(record, "report_type", None) == "market_review":
+            market_review_content = self._extract_market_review_content(record, raw_result)
+
         return {
             "id": record.id,
             "query_id": record.query_id,
@@ -261,7 +479,7 @@ class HistoryService:
             "report_type": record.report_type,
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "model_used": model_used,
-            "analysis_summary": record.analysis_summary,
+            "analysis_summary": market_review_content or record.analysis_summary,
             "operation_advice": record.operation_advice,
             "trend_prediction": record.trend_prediction,
             "sentiment_score": record.sentiment_score,
@@ -270,7 +488,7 @@ class HistoryService:
             "secondary_buy": sniper_points.get("secondary_buy"),
             "stop_loss": sniper_points.get("stop_loss"),
             "take_profit": sniper_points.get("take_profit"),
-            "news_content": record.news_content,
+            "news_content": market_review_content or record.news_content,
             "raw_result": raw_result,
             "context_snapshot": context_snapshot,
         }
@@ -379,7 +597,31 @@ class HistoryService:
             if item.fetched_at and start_time <= item.fetched_at <= end_time
         ]
 
-        return matched[:limit]
+        # 历史兜底链路也做发布时间硬过滤，避免旧库脏数据重新冒出。
+        cfg = get_config()
+        window_days = resolve_news_window_days(
+            news_max_age_days=getattr(cfg, "news_max_age_days", 3),
+            news_strategy_profile=getattr(cfg, "news_strategy_profile", "short"),
+        )
+        # Anchor to analysis date instead of "today" to preserve historical context.
+        anchor_date = analysis.created_at.date()
+        latest_allowed = anchor_date + timedelta(days=1)
+        earliest_allowed = anchor_date - timedelta(days=max(0, window_days - 1))
+
+        filtered = []
+        for item in matched:
+            if not item.published_date:
+                continue
+            if isinstance(item.published_date, datetime):
+                published = item.published_date.date()
+            elif isinstance(item.published_date, date):
+                published = item.published_date
+            else:
+                continue
+            if earliest_allowed <= published <= latest_allowed:
+                filtered.append(item)
+
+        return filtered[:limit]
     
     def _get_sentiment_label(self, score: int) -> str:
         """
@@ -432,6 +674,16 @@ class HistoryService:
                 record_id=record_id
             )
 
+        if getattr(record, "report_type", None) == "market_review":
+            markdown_report = self._extract_market_review_content(record, raw_result)
+            if markdown_report:
+                return markdown_report
+            logger.error(f"get_markdown_report: market review report is empty for {record_id}")
+            raise MarkdownReportGenerationError(
+                f"market review report is empty for record {record_id}",
+                record_id=record_id,
+            )
+
         try:
             result = self._rebuild_analysis_result(raw_result, record)
         except Exception as e:
@@ -444,7 +696,7 @@ class HistoryService:
         if not result:
             logger.error(f"get_markdown_report: _rebuild_analysis_result returned None for {record_id}")
             raise MarkdownReportGenerationError(
-                f"Failed to rebuild AnalysisResult from raw_result",
+                "Failed to rebuild AnalysisResult from raw_result",
                 record_id=record_id
             )
 
@@ -474,6 +726,7 @@ class HistoryService:
             AnalysisResult object or None
         """
         try:
+            from src.analyzer import AnalysisResult
             # Extract dashboard data if available
             dashboard = raw_result.get("dashboard", {})
 
@@ -486,6 +739,7 @@ class HistoryService:
                 operation_advice=raw_result.get("operation_advice", record.operation_advice or ""),
                 decision_type=raw_result.get("decision_type", "hold"),
                 confidence_level=raw_result.get("confidence_level", "中"),
+                report_language=normalize_report_language(raw_result.get("report_language")),
                 dashboard=dashboard,
                 trend_analysis=raw_result.get("trend_analysis", ""),
                 short_term_outlook=raw_result.get("short_term_outlook", ""),
@@ -537,18 +791,30 @@ class HistoryService:
         """
         report_date = record.created_at.strftime("%Y-%m-%d") if record.created_at else datetime.now().strftime("%Y-%m-%d")
         report_time = record.created_at.strftime("%H:%M:%S") if record.created_at else datetime.now().strftime("%H:%M:%S")
+        report_language = normalize_report_language(getattr(result, "report_language", "zh"))
+        labels = get_report_labels(report_language)
+        analysis_date_label = "Analysis Date" if report_language == "en" else "分析日期"
+        report_time_label = "Report Time" if report_language == "en" else "报告生成时间"
+        reason_label = "Rationale" if report_language == "en" else "操作理由"
+        risk_warning_label = "Risk Warning" if report_language == "en" else "风险提示"
+        technical_heading = "Technicals" if report_language == "en" else "技术面"
+        ma_label = "Moving Averages" if report_language == "en" else "均线"
+        volume_analysis_label = "Volume" if report_language == "en" else "量能"
+        news_heading = "News Flow" if report_language == "en" else "消息面"
 
         # Escape markdown special characters in stock name
-        name_escaped = self._escape_md(result.name) if result.name else result.code
+        name_escaped = self._escape_md(
+            get_localized_stock_name(result.name, result.code, report_language)
+        ) or result.code
 
         # Get signal level
         signal_text, signal_emoji, signal_tag = self._get_signal_level(result)
         dashboard = result.dashboard if hasattr(result, 'dashboard') and result.dashboard else {}
 
         report_lines = [
-            f"# 📊 {name_escaped} ({result.code}) 分析报告",
+            f"# 📊 {name_escaped} ({result.code}) {labels['report_title']}",
             "",
-            f"> 分析日期：**{report_date}** | 报告生成时间：{report_time}",
+            f"> {analysis_date_label}: **{report_date}** | {report_time_label}: {report_time}",
             "",
             "---",
             "",
@@ -558,63 +824,63 @@ class HistoryService:
         intel = dashboard.get('intelligence', {}) if dashboard else {}
         if intel:
             report_lines.extend([
-                "### 📰 重要信息速览",
+                f"### 📰 {labels['info_heading']}",
                 "",
             ])
             # 舆情情绪总结
             if intel.get('sentiment_summary'):
-                report_lines.append(f"**💭 舆情情绪**: {intel['sentiment_summary']}")
+                report_lines.append(f"**💭 {labels['sentiment_summary_label']}**: {intel['sentiment_summary']}")
             # 业绩预期
             if intel.get('earnings_outlook'):
-                report_lines.append(f"**📊 业绩预期**: {intel['earnings_outlook']}")
+                report_lines.append(f"**📊 {labels['earnings_outlook_label']}**: {intel['earnings_outlook']}")
             # 风险警报（醒目显示）
             risk_alerts = intel.get('risk_alerts', [])
             if risk_alerts:
                 report_lines.append("")
-                report_lines.append("**🚨 风险警报**:")
+                report_lines.append(f"**🚨 {labels['risk_alerts_label']}**:")
                 for alert in risk_alerts:
                     report_lines.append(f"- {alert}")
             # 利好催化
             catalysts = intel.get('positive_catalysts', [])
             if catalysts:
                 report_lines.append("")
-                report_lines.append("**✨ 利好催化**:")
+                report_lines.append(f"**✨ {labels['positive_catalysts_label']}**:")
                 for cat in catalysts:
                     report_lines.append(f"- {cat}")
             # 最新消息
             if intel.get('latest_news'):
                 report_lines.append("")
-                report_lines.append(f"**📢 最新动态**: {intel['latest_news']}")
+                report_lines.append(f"**📢 {labels['latest_news_label']}**: {intel['latest_news']}")
             report_lines.append("")
 
         # ========== 核心结论 ==========
         core = dashboard.get('core_conclusion', {}) if dashboard else {}
         one_sentence = core.get('one_sentence', result.analysis_summary)
-        time_sense = core.get('time_sensitivity', '本周内')
+        time_sense = core.get('time_sensitivity', labels['default_time_sensitivity'])
         pos_advice = core.get('position_advice', {})
 
         report_lines.extend([
-            "### 📌 核心结论",
+            f"### 📌 {labels['core_conclusion_heading']}",
             "",
-            f"**{signal_emoji} {signal_text}** | {result.trend_prediction}",
+            f"**{signal_emoji} {signal_text}** | {localize_trend_prediction(result.trend_prediction, report_language)}",
             "",
-            f"> **一句话决策**: {one_sentence}",
+            f"> **{labels['one_sentence_label']}**: {one_sentence}",
             "",
-            f"⏰ **时效性**: {time_sense}",
+            f"⏰ **{labels['time_sensitivity_label']}**: {time_sense}",
             "",
         ])
         # 持仓分类建议
         if pos_advice:
             report_lines.extend([
-                "| 持仓情况 | 操作建议 |",
+                f"| {labels['position_status_label']} | {labels['action_advice_label']} |",
                 "|---------|---------|",
-                f"| 🆕 **空仓者** | {pos_advice.get('no_position', result.operation_advice)} |",
-                f"| 💼 **持仓者** | {pos_advice.get('has_position', '继续持有')} |",
+                f"| 🆕 **{labels['no_position_label']}** | {pos_advice.get('no_position', localize_operation_advice(result.operation_advice, report_language))} |",
+                f"| 💼 **{labels['has_position_label']}** | {pos_advice.get('has_position', labels['continue_holding'])} |",
                 "",
             ])
 
         # ========== 行情快照 ==========
-        self._append_market_snapshot_to_report(report_lines, result)
+        self._append_market_snapshot_to_report(report_lines, result, labels)
 
         # ========== 数据透视 ==========
         data_persp = dashboard.get('data_perspective', {}) if dashboard else {}
@@ -625,83 +891,112 @@ class HistoryService:
             chip_data = data_persp.get('chip_structure', {})
 
             report_lines.extend([
-                "### 📊 数据透视",
+                f"### 📊 {labels['data_perspective_heading']}",
                 "",
             ])
             # 趋势状态
             if trend_data:
-                is_bullish = "✅ 是" if trend_data.get('is_bullish', False) else "❌ 否"
+                is_bullish = (
+                    f"✅ {labels['yes_label']}"
+                    if trend_data.get('is_bullish', False)
+                    else f"❌ {labels['no_label']}"
+                )
                 report_lines.extend([
-                    f"**均线排列**: {trend_data.get('ma_alignment', 'N/A')} | 多头排列: {is_bullish} | 趋势强度: {trend_data.get('trend_score', 'N/A')}/100",
+                    f"**{labels['ma_alignment_label']}**: {trend_data.get('ma_alignment', 'N/A')} | "
+                    f"{labels['bullish_alignment_label']}: {is_bullish} | "
+                    f"{labels['trend_strength_label']}: {trend_data.get('trend_score', 'N/A')}/100",
                     "",
                 ])
             # 价格位置
             if price_data:
-                bias_status = price_data.get('bias_status', 'N/A')
-                bias_emoji = "✅" if bias_status == "安全" else ("⚠️" if bias_status == "警戒" else "🚨")
+                raw_bias_status = price_data.get('bias_status', 'N/A')
+                bias_status = localize_bias_status(raw_bias_status, report_language)
+                bias_emoji = get_bias_status_emoji(raw_bias_status)
                 report_lines.extend([
-                    "| 价格指标 | 数值 |",
+                    f"| {labels['price_metrics_label']} | {labels['current_price_label']} |",
                     "|---------|------|",
-                    f"| 当前价 | {price_data.get('current_price', 'N/A')} |",
-                    f"| MA5 | {price_data.get('ma5', 'N/A')} |",
-                    f"| MA10 | {price_data.get('ma10', 'N/A')} |",
-                    f"| MA20 | {price_data.get('ma20', 'N/A')} |",
-                    f"| 乖离率(MA5) | {price_data.get('bias_ma5', 'N/A')}% {bias_emoji}{bias_status} |",
-                    f"| 支撑位 | {price_data.get('support_level', 'N/A')} |",
-                    f"| 压力位 | {price_data.get('resistance_level', 'N/A')} |",
+                    f"| {labels['current_price_label']} | {price_data.get('current_price', 'N/A')} |",
+                    f"| {labels['ma5_label']} | {price_data.get('ma5', 'N/A')} |",
+                    f"| {labels['ma10_label']} | {price_data.get('ma10', 'N/A')} |",
+                    f"| {labels['ma20_label']} | {price_data.get('ma20', 'N/A')} |",
+                    f"| {labels['bias_ma5_label']} | {price_data.get('bias_ma5', 'N/A')}% {bias_emoji}{bias_status} |",
+                    f"| {labels['support_level_label']} | {price_data.get('support_level', 'N/A')} |",
+                    f"| {labels['resistance_level_label']} | {price_data.get('resistance_level', 'N/A')} |",
                     "",
                 ])
             # 量能分析
             if vol_data:
                 report_lines.extend([
-                    f"**量能**: 量比 {vol_data.get('volume_ratio', 'N/A')} ({vol_data.get('volume_status', '')}) | 换手率 {vol_data.get('turnover_rate', 'N/A')}%",
+                    f"**{labels['volume_label']}**: {labels['volume_ratio_label']} {vol_data.get('volume_ratio', 'N/A')} "
+                    f"({vol_data.get('volume_status', '')}) | {labels['turnover_rate_label']} {vol_data.get('turnover_rate', 'N/A')}%",
                     f"💡 *{vol_data.get('volume_meaning', '')}*",
                     "",
                 ])
             # 筹码结构
             if chip_data:
-                chip_health = chip_data.get('chip_health', 'N/A')
-                chip_emoji = "✅" if chip_health == "健康" else ("⚠️" if chip_health == "一般" else "🚨")
-                report_lines.extend([
-                    f"**筹码**: 获利比例 {chip_data.get('profit_ratio', 'N/A')} | 平均成本 {chip_data.get('avg_cost', 'N/A')} | 集中度 {chip_data.get('concentration', 'N/A')} {chip_emoji}{chip_health}",
-                    "",
-                ])
+                if is_chip_structure_unavailable(chip_data):
+                    report_lines.extend([
+                        f"**{labels['chip_label']}**: {get_chip_unavailable_reason(chip_data, report_language)}",
+                        "",
+                    ])
+                else:
+                    raw_chip_health = chip_data.get('chip_health', 'N/A')
+                    chip_health = localize_chip_health(raw_chip_health, report_language)
+                    normalized_chip_health = str(raw_chip_health or "").strip().lower()
+                    if normalized_chip_health in {"健康", "healthy"}:
+                        chip_emoji = "✅"
+                    elif normalized_chip_health in {"一般", "average"}:
+                        chip_emoji = "⚠️"
+                    else:
+                        chip_emoji = "🚨"
+                    report_lines.extend([
+                        f"**{labels['chip_label']}**: {chip_data.get('profit_ratio', 'N/A')} | {chip_data.get('avg_cost', 'N/A')} | "
+                        f"{chip_data.get('concentration', 'N/A')} {chip_emoji}{chip_health}",
+                        "",
+                    ])
+            else:
+                chip_unavailable_reason = get_chip_unavailable_reason(data_persp, report_language)
+                if chip_unavailable_reason:
+                    report_lines.extend([
+                        f"**{labels['chip_label']}**: {chip_unavailable_reason}",
+                        "",
+                    ])
 
         # ========== 作战计划 ==========
         battle = dashboard.get('battle_plan', {}) if dashboard else {}
         if battle:
             report_lines.extend([
-                "### 🎯 作战计划",
+                f"### 🎯 {labels['battle_plan_heading']}",
                 "",
             ])
             # 狙击点位
             sniper = battle.get('sniper_points', {})
             if sniper:
                 report_lines.extend([
-                    "**📍 狙击点位**",
+                    f"**📍 {labels['action_points_heading']}**",
                     "",
-                    "| 点位类型 | 价格 |",
+                    f"| {labels['action_points_heading']} | {labels['current_price_label']} |",
                     "|---------|------|",
-                    f"| 🎯 理想买入点 | {self._clean_sniper_value(sniper.get('ideal_buy', 'N/A'))} |",
-                    f"| 🔵 次优买入点 | {self._clean_sniper_value(sniper.get('secondary_buy', 'N/A'))} |",
-                    f"| 🛑 止损位 | {self._clean_sniper_value(sniper.get('stop_loss', 'N/A'))} |",
-                    f"| 🎊 目标位 | {self._clean_sniper_value(sniper.get('take_profit', 'N/A'))} |",
+                    f"| 🎯 {labels['ideal_buy_label']} | {self._clean_sniper_value(sniper.get('ideal_buy', 'N/A'))} |",
+                    f"| 🔵 {labels['secondary_buy_label']} | {self._clean_sniper_value(sniper.get('secondary_buy', 'N/A'))} |",
+                    f"| 🛑 {labels['stop_loss_label']} | {self._clean_sniper_value(sniper.get('stop_loss', 'N/A'))} |",
+                    f"| 🎊 {labels['take_profit_label']} | {self._clean_sniper_value(sniper.get('take_profit', 'N/A'))} |",
                     "",
                 ])
             # 仓位策略
             position = battle.get('position_strategy', {})
             if position:
                 report_lines.extend([
-                    f"**💰 仓位建议**: {position.get('suggested_position', 'N/A')}",
-                    f"- 建仓策略: {position.get('entry_plan', 'N/A')}",
-                    f"- 风控策略: {position.get('risk_control', 'N/A')}",
+                    f"**💰 {labels['suggested_position_label']}**: {position.get('suggested_position', 'N/A')}",
+                    f"- {labels['entry_plan_label']}: {position.get('entry_plan', 'N/A')}",
+                    f"- {labels['risk_control_label']}: {position.get('risk_control', 'N/A')}",
                     "",
                 ])
             # 检查清单
             checklist = battle.get('action_checklist', []) if battle else []
             if checklist:
                 report_lines.extend([
-                    "**✅ 检查清单**",
+                    f"**✅ {labels['checklist_heading']}**",
                     "",
                 ])
                 for item in checklist:
@@ -713,30 +1008,30 @@ class HistoryService:
             # 操作理由
             if result.buy_reason:
                 report_lines.extend([
-                    f"**💡 操作理由**: {result.buy_reason}",
+                    f"**💡 {reason_label}**: {result.buy_reason}",
                     "",
                 ])
             # 风险提示
             if result.risk_warning:
                 report_lines.extend([
-                    f"**⚠️ 风险提示**: {result.risk_warning}",
+                    f"**⚠️ {risk_warning_label}**: {result.risk_warning}",
                     "",
                 ])
             # 技术面分析
             if result.ma_analysis or result.volume_analysis:
                 report_lines.extend([
-                    "### 📊 技术面",
+                    f"### 📊 {technical_heading}",
                     "",
                 ])
                 if result.ma_analysis:
-                    report_lines.append(f"**均线**: {result.ma_analysis}")
+                    report_lines.append(f"**{ma_label}**: {result.ma_analysis}")
                 if result.volume_analysis:
-                    report_lines.append(f"**量能**: {result.volume_analysis}")
+                    report_lines.append(f"**{volume_analysis_label}**: {result.volume_analysis}")
                 report_lines.append("")
             # 消息面
             if result.news_summary:
                 report_lines.extend([
-                    "### 📰 消息面",
+                    f"### 📰 {news_heading}",
                     f"{result.news_summary}",
                     "",
                 ])
@@ -745,7 +1040,7 @@ class HistoryService:
         report_lines.extend([
             "---",
             "",
-            f"*报告生成时间：{report_time}*",
+            f"*{labels['generated_at_label']}: {report_time}*",
         ])
 
         return "\n".join(report_lines)
@@ -769,15 +1064,11 @@ class HistoryService:
 
     def _get_signal_level(self, result: AnalysisResult) -> Tuple[str, str, str]:
         """Get signal level based on sentiment score and decision type."""
-        score = result.sentiment_score or 50
-        decision = getattr(result, 'decision_type', '')
-
-        if decision == 'buy' or score >= 70:
-            return ('买入', '🟢', '买入')
-        elif decision == 'sell' or score < 35:
-            return ('卖出', '🔴', '卖出')
-        else:
-            return ('观望', '⚪', '观望')
+        return get_signal_level(
+            result.operation_advice,
+            result.sentiment_score,
+            getattr(result, "report_language", "zh"),
+        )
 
     @staticmethod
     def _safe_format_number(value: Any, fmt: str = ".2f") -> str:
@@ -806,37 +1097,44 @@ class HistoryService:
         return str(value)
 
     @staticmethod
-    def _append_market_snapshot_to_report(lines: List[str], result: AnalysisResult) -> None:
+    def _append_market_snapshot_to_report(
+        lines: List[str],
+        result: AnalysisResult,
+        labels: Dict[str, str],
+    ) -> None:
         """Append market snapshot data to report lines."""
         snapshot = getattr(result, 'market_snapshot', None)
         if not snapshot:
             return
 
         lines.extend([
-            "### 📈 行情快照",
+            f"### 📈 {labels['market_snapshot_heading']}",
             "",
-            "| 指标 | 数值 |",
+            f"| {labels['price_metrics_label']} | {labels['current_price_label']} |",
             "|------|------|",
         ])
 
         # Price info
-        current_price = snapshot.get('current_price') or result.current_price
-        change_pct = snapshot.get('change_pct') or result.change_pct
+        current_price = snapshot.get('price') or snapshot.get('current_price') or result.current_price
+        change_pct = snapshot.get('change_pct') or snapshot.get('pct_chg') or result.change_pct
         if current_price is not None:
             current_str = HistoryService._safe_format_number(current_price, ".2f")
             if change_pct is not None:
-                change_str = f"{HistoryService._safe_format_number(change_pct, '+.2f')}%"
+                if isinstance(change_pct, str) and change_pct.strip().endswith("%"):
+                    change_str = change_pct.strip()
+                else:
+                    change_str = f"{HistoryService._safe_format_number(change_pct, '+.2f')}%"
             else:
                 change_str = "--"
-            lines.append(f"| 当前价 | **{current_str}** ({change_str}) |")
+            lines.append(f"| {labels['current_price_label']} | **{current_str}** ({change_str}) |")
 
         # Other metrics
         metrics = [
-            ("开盘价", "open", ".2f"),
-            ("最高价", "high", ".2f"),
-            ("最低价", "low", ".2f"),
-            ("成交量", "volume", ",.0f"),
-            ("成交额", "amount", ",.0f"),
+            (labels['open_label'], "open", ".2f"),
+            (labels['high_label'], "high", ".2f"),
+            (labels['low_label'], "low", ".2f"),
+            (labels['volume_label'], "volume", ",.0f"),
+            (labels['amount_label'], "amount", ",.0f"),
         ]
         for label, key, fmt in metrics:
             value = snapshot.get(key)

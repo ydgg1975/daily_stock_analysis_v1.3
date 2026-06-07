@@ -6,6 +6,7 @@ import type {
   BacktestResultsResponse,
   BacktestResultItem,
   PerformanceMetrics,
+  BacktestPhaseFilter,
 } from '../types/backtest';
 
 // ============ API ============
@@ -35,14 +36,20 @@ export const backtestApi = {
   getResults: async (params: {
     code?: string;
     evalWindowDays?: number;
+    analysisDateFrom?: string;
+    analysisDateTo?: string;
+    analysisPhase?: BacktestPhaseFilter;
     page?: number;
     limit?: number;
   } = {}): Promise<BacktestResultsResponse> => {
-    const { code, evalWindowDays, page = 1, limit = 20 } = params;
+    const { code, evalWindowDays, analysisDateFrom, analysisDateTo, analysisPhase, page = 1, limit = 20 } = params;
 
     const queryParams: Record<string, string | number> = { page, limit };
     if (code) queryParams.code = code;
     if (evalWindowDays) queryParams.eval_window_days = evalWindowDays;
+    if (analysisDateFrom) queryParams.analysis_date_from = analysisDateFrom;
+    if (analysisDateTo) queryParams.analysis_date_to = analysisDateTo;
+    if (analysisPhase && analysisPhase !== 'all') queryParams.analysis_phase = analysisPhase;
 
     const response = await apiClient.get<Record<string, unknown>>(
       '/api/v1/backtest/results',
@@ -61,13 +68,21 @@ export const backtestApi = {
   /**
    * Get overall performance metrics
    */
-  getOverallPerformance: async (evalWindowDays?: number): Promise<PerformanceMetrics | null> => {
+  getOverallPerformance: async (params: {
+    evalWindowDays?: number;
+    analysisDateFrom?: string;
+    analysisDateTo?: string;
+    analysisPhase?: BacktestPhaseFilter;
+  } = {}): Promise<PerformanceMetrics | null> => {
     try {
-      const params: Record<string, number> = {};
-      if (evalWindowDays) params.eval_window_days = evalWindowDays;
+      const queryParams: Record<string, string | number> = {};
+      if (params.evalWindowDays) queryParams.eval_window_days = params.evalWindowDays;
+      if (params.analysisDateFrom) queryParams.analysis_date_from = params.analysisDateFrom;
+      if (params.analysisDateTo) queryParams.analysis_date_to = params.analysisDateTo;
+      if (params.analysisPhase && params.analysisPhase !== 'all') queryParams.analysis_phase = params.analysisPhase;
       const response = await apiClient.get<Record<string, unknown>>(
         '/api/v1/backtest/performance',
-        { params },
+        { params: queryParams },
       );
       return toCamelCase<PerformanceMetrics>(response.data);
     } catch (err: unknown) {
@@ -82,13 +97,21 @@ export const backtestApi = {
   /**
    * Get per-stock performance metrics
    */
-  getStockPerformance: async (code: string, evalWindowDays?: number): Promise<PerformanceMetrics | null> => {
+  getStockPerformance: async (code: string, params: {
+    evalWindowDays?: number;
+    analysisDateFrom?: string;
+    analysisDateTo?: string;
+    analysisPhase?: BacktestPhaseFilter;
+  } = {}): Promise<PerformanceMetrics | null> => {
     try {
-      const params: Record<string, number> = {};
-      if (evalWindowDays) params.eval_window_days = evalWindowDays;
+      const queryParams: Record<string, string | number> = {};
+      if (params.evalWindowDays) queryParams.eval_window_days = params.evalWindowDays;
+      if (params.analysisDateFrom) queryParams.analysis_date_from = params.analysisDateFrom;
+      if (params.analysisDateTo) queryParams.analysis_date_to = params.analysisDateTo;
+      if (params.analysisPhase && params.analysisPhase !== 'all') queryParams.analysis_phase = params.analysisPhase;
       const response = await apiClient.get<Record<string, unknown>>(
         `/api/v1/backtest/performance/${encodeURIComponent(code)}`,
-        { params },
+        { params: queryParams },
       );
       return toCamelCase<PerformanceMetrics>(response.data);
     } catch (err: unknown) {
