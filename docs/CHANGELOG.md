@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] #1381 个股分析新增按当日/市场复用的大盘环境摘要，普通 Pipeline 与 Agent 分析 Prompt 可读取低敏大盘背景，并在高风险/退潮环境下软化激进买入建议。
 - [文档] #1381 的范围为后端 runtime：为单股分析接入当日复用的大盘环境摘要，未新增独立 API、Web 阶段结果独立展示、四阶段日报结构化持久化或日报状态表变更，兼容边界仅聚焦运行时 LLM 路由读取链路。
 - [文档] #1381 仅复用现有配置读取语义，不改动 provider/model/base_url 默认值或持久化/清理/迁移链路（`SystemConfig` 写入路径与配置降级逻辑保持不变）；官方语义依据见 https://docs.litellm.ai/docs/providers/openai_compatible 与 https://platform.openai.com/docs/api-reference/chat/create，回退路径为常规发布回滚（撤销相关提交）。
-- [测试] #1381 覆盖后端 runtime 与兼容回归：`tests/test_main_schedule_mode.py`、`tests/test_pipeline_daily_market_context.py`、`tests/test_daily_market_context.py`、`tests/test_daily_market_context_guardrail.py`、`tests/test_agent_executor.py`、`tests/test_market_review_runtime.py`、`tests/test_system_config_service.py`、`tests/test_system_config_api.py`、`tests/test_llm_channel_config.py`。
+- [测试] #1381 覆盖后端 runtime 与兼容核验：本轮受影响/直接执行的验收项为 `tests/test_main_schedule_mode.py`、`tests/test_pipeline_daily_market_context.py`、`tests/test_daily_market_context.py`、`tests/test_daily_market_context_guardrail.py`、`tests/test_agent_executor.py`；配置兼容语义继续沿用既有回归：`tests/test_system_config_service.py`、`tests/test_system_config_api.py`、`tests/test_llm_channel_config.py`、`tests/test_market_review_runtime.py`（均为既有测试文件，未新增）。
 
 ## [3.20.0] - 2026-06-03
 
