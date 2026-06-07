@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../../contexts/UiLanguageContext';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../../utils/uiLanguage';
 import { StockHistoryTrendDrawer } from '../StockHistoryTrendDrawer';
 import type { AnalysisReport, HistoryItem } from '../../../types/analysis';
 
@@ -38,6 +40,10 @@ const items: HistoryItem[] = [
 ];
 
 describe('StockHistoryTrendDrawer', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('prefers structured action label in summary and rows', () => {
     render(
       <StockHistoryTrendDrawer
@@ -95,5 +101,44 @@ describe('StockHistoryTrendDrawer', () => {
 
     expect(screen.getAllByText('继续持有，等待突破').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('持有')).not.toBeInTheDocument();
+  });
+
+  it('uses localized taxonomy labels when actionLabel is missing in English UI mode', () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+
+    render(
+      <UiLanguageProvider>
+        <StockHistoryTrendDrawer
+          report={{
+            ...report,
+            summary: {
+              ...report.summary,
+              action: 'watch',
+              actionLabel: null,
+            },
+          }}
+          items={[
+            {
+              ...items[0],
+              action: 'watch',
+              actionLabel: null,
+            },
+          ]}
+          total={1}
+          hasMore={false}
+          isLoading={false}
+          isLoadingMore={false}
+          filters={{ range: 'all', model: 'all', sort: 'desc' }}
+          onClose={vi.fn()}
+          onRangeChange={vi.fn()}
+          onLoadMore={vi.fn()}
+          onSelectRecord={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      </UiLanguageProvider>,
+    );
+
+    expect(screen.getAllByText('Watch').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('观望')).not.toBeInTheDocument();
   });
 });

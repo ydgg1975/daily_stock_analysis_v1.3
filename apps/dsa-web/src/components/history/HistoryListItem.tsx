@@ -2,7 +2,7 @@ import type React from 'react';
 import { Badge } from '../common';
 import type { HistoryItem } from '../../types/analysis';
 import { getSentimentColor } from '../../types/analysis';
-import { getDecisionActionLabel, type DecisionActionLabelMap } from '../../utils/decisionAction';
+import { buildDecisionActionLabelMap, getDecisionActionLabel } from '../../utils/decisionAction';
 import { formatDateTime } from '../../utils/format';
 import { getMarketPhaseSummaryLabel } from '../../utils/marketPhase';
 import { truncateStockName } from '../../utils/stockName';
@@ -28,16 +28,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
   const { language, t } = useUiLanguage();
   const sentimentColor = item.sentimentScore !== undefined ? getSentimentColor(item.sentimentScore) : null;
   const stockName = item.stockName || item.stockCode;
-  const actionLabels: DecisionActionLabelMap = {
-    buy: t('history.actionBuy'),
-    add: t('history.actionAdd'),
-    hold: t('history.actionHold'),
-    reduce: t('history.actionReduce'),
-    sell: t('history.actionSell'),
-    watch: t('history.actionWatch'),
-    avoid: t('history.actionAvoid'),
-    alert: t('history.actionAlert'),
-  };
+  const actionLabels = buildDecisionActionLabelMap(t);
   const operationLabel = getDecisionActionLabel(
     item.action,
     item.actionLabel,

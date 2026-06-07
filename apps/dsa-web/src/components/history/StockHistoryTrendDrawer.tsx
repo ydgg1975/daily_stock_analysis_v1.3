@@ -2,7 +2,12 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AnalysisReport, HistoryItem, StockHistoryFilters, StockHistoryRange } from '../../types/analysis';
 import { getSentimentColor } from '../../types/analysis';
-import { getDecisionActionLabel, getDecisionActionTone } from '../../utils/decisionAction';
+import {
+  buildDecisionActionLabelMap,
+  getDecisionActionLabel,
+  getDecisionActionTone,
+  type DecisionActionLabelMap,
+} from '../../utils/decisionAction';
 import { formatDateTime } from '../../utils/format';
 import { Badge, Button, Card } from '../common';
 import { DashboardStateBlock } from '../dashboard';
@@ -68,8 +73,8 @@ const formatModelName = (value: string | undefined, t: (key: UiTextKey, params?:
 
 type AdviceSource = Pick<HistoryItem, 'operationAdvice' | 'trendPrediction' | 'action' | 'actionLabel'>;
 
-const formatAdviceParts = (item: AdviceSource): string[] => {
-  const actionLabel = getDecisionActionLabel(item.action, item.actionLabel, null, null);
+const formatAdviceParts = (item: AdviceSource, actionLabels: DecisionActionLabelMap): string[] => {
+  const actionLabel = getDecisionActionLabel(item.action, item.actionLabel, null, null, actionLabels);
   const adviceText = actionLabel || item.operationAdvice?.trim();
   const parts = [actionLabel?.trim(), item.trendPrediction?.trim()]
     .filter((part): part is string => Boolean(part));
@@ -79,13 +84,14 @@ const formatAdviceParts = (item: AdviceSource): string[] => {
   return parts.length ? parts : ['--'];
 };
 
-const formatAdvice = (item: AdviceSource): string =>
-  formatAdviceParts(item)[0];
+const formatAdvice = (item: AdviceSource, actionLabels: DecisionActionLabelMap): string =>
+  formatAdviceParts(item, actionLabels)[0];
 
 const summarizeView = (
   items: HistoryItem[],
   report: AnalysisReport,
   t: (key: UiTextKey, params?: Record<string, string | number>) => string,
+  actionLabels: DecisionActionLabelMap,
   currentId?: number,
 ) => {
   const scores = items
@@ -107,13 +113,13 @@ const summarizeView = (
   return {
     currentScore: current?.sentimentScore ?? report.summary.sentimentScore,
     currentAdvice: current
-      ? formatAdvice(current)
+      ? formatAdvice(current, actionLabels)
       : formatAdvice({
           operationAdvice: report.summary.operationAdvice,
           action: report.summary.action,
           actionLabel: report.summary.actionLabel,
           trendPrediction: report.summary.trendPrediction,
-        }),
+        }, actionLabels),
     averageScore,
     latestTime: formatDateTime(items[0]?.createdAt || report.meta.createdAt),
     modelSummary: modelEntries
@@ -183,9 +189,10 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
   const { t } = useUiLanguage();
   const currentRecordId = report.meta.id;
   const [selectedRecordId, setSelectedRecordId] = useState(currentRecordId);
+  const actionLabels = useMemo(() => buildDecisionActionLabelMap(t), [t]);
   const summary = useMemo(
-    () => summarizeView(items, report, t, currentRecordId),
-    [currentRecordId, items, report, t],
+    () => summarizeView(items, report, t, actionLabels, currentRecordId),
+    [actionLabels, currentRecordId, items, report, t],
   );
 
   useEffect(() => {
@@ -334,7 +341,7 @@ export const StockHistoryTrendDrawer: React.FC<StockHistoryTrendDrawerProps> = (
                             size="sm"
                             className="shadow-none"
                           >
-                            {formatAdvice(item)}
+                            {formatAdvice(item, actionLabels)}
                           </Badge>
                         </td>
                         <td

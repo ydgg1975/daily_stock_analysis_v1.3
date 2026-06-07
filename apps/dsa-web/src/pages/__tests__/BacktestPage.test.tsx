@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
+import { UI_LANGUAGE_STORAGE_KEY } from '../../utils/uiLanguage';
 import BacktestPage from '../BacktestPage';
 
 const {
@@ -70,6 +72,7 @@ const baseResultItem = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   mockGetOverallPerformance.mockResolvedValue(basePerformance);
   mockGetStockPerformance.mockResolvedValue(null);
   mockGetResults.mockResolvedValue({
@@ -88,6 +91,15 @@ beforeEach(() => {
 });
 
 describe('BacktestPage', () => {
+  function renderEnglishPage() {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');
+    render(
+      <UiLanguageProvider>
+        <BacktestPage />
+      </UiLanguageProvider>,
+    );
+  }
+
   it('renders shared surface inputs and prediction tracking outputs', async () => {
     render(<BacktestPage />);
 
@@ -140,6 +152,47 @@ describe('BacktestPage', () => {
     const rowScope = within(resultRow as HTMLElement);
     expect(rowScope.getByText('观望')).toBeInTheDocument();
     expect(rowScope.getByText('继续持有')).toBeInTheDocument();
+  });
+
+  it('localizes the taxonomy label when backtest actionLabel is missing in English UI mode', async () => {
+    mockGetResults.mockResolvedValueOnce({
+      total: 1,
+      page: 1,
+      limit: 20,
+      items: [
+        {
+          ...baseResultItem,
+          operationAdvice: 'continue holding',
+          action: 'watch',
+          actionLabel: null,
+          trendPrediction: 'range-bound',
+        },
+      ],
+    });
+
+    renderEnglishPage();
+
+    const codeCell = await screen.findByText('600519');
+    const resultRow = codeCell.closest('tr');
+    expect(resultRow).not.toBeNull();
+    const rowScope = within(resultRow as HTMLElement);
+    expect(rowScope.getByText('Watch')).toBeInTheDocument();
+    expect(rowScope.getByText('continue holding')).toBeInTheDocument();
+    expect(rowScope.queryByText('观望')).not.toBeInTheDocument();
+  });
+
+  it('renders backtest controls and result headings in English UI mode', async () => {
+    renderEnglishPage();
+
+    expect(await screen.findByPlaceholderText('Filter by stock code (leave empty for all)')).toBeInTheDocument();
+    expect(screen.getByText('Evaluation window')).toBeInTheDocument();
+    expect(screen.getAllByText('Phase').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Run backtest' })).toBeInTheDocument();
+    expect(screen.getByText('Window return')).toBeInTheDocument();
+    expect(screen.getByText('Direction match')).toBeInTheDocument();
+    expect(screen.getByText('Direction accuracy')).toBeInTheDocument();
+    expect(screen.queryByText('运行回测')).not.toBeInTheDocument();
+    expect(screen.queryByText('窗口收益')).not.toBeInTheDocument();
   });
 
   it('filters results with stock code, window, phase, and analysis date range when clicking Filter', async () => {

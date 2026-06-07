@@ -84,4 +84,24 @@ describe('StockBarItemComponent', () => {
     expect(within(actions).getByText('回避 28')).toBeInTheDocument();
     expect(within(actions).queryByText('买入 28')).not.toBeInTheDocument();
   });
+
+  it('does not render ambiguous English legacy advice as a buy action', () => {
+    render(
+      <StockBarItemComponent
+        item={{
+          ...issue1600Item,
+          action: null,
+          actionLabel: null,
+          operationAdvice: 'buy or sell',
+          sentimentScore: 28,
+        }}
+        isViewing={false}
+        onClick={vi.fn()}
+      />,
+    );
+
+    const actions = screen.getByTestId('history-card-actions');
+    expect(within(actions).queryByText('buy 28')).not.toBeInTheDocument();
+    expect(within(actions).queryByText(/28/)).not.toBeInTheDocument();
+  });
 });

@@ -257,7 +257,7 @@ def _word_or_substring_match(text: str, phrase: str) -> bool:
 def _english_negated_action_matches(text: str) -> set[DecisionAction]:
     matches: set[DecisionAction] = set()
     negation_prefix = (
-        r"(?:not\s+(?:a\s+|an\s+)?|"
+        r"(?:not\s+(?:a\s+|an\s+|to\s+)?|"
         r"no\s+(?:need\s+to\s+)?|"
         r"need\s+not\s+|"
         r"cannot\s+|can't\s+|cant\s+|"

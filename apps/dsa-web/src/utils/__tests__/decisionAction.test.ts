@@ -41,6 +41,8 @@ describe('decisionAction helpers', () => {
     expect(getLegacyDecisionActionLabel("can't buy before confirmation")).toBe('回避');
     expect(getLegacyDecisionActionLabel('not a buy yet')).toBe('回避');
     expect(getLegacyDecisionActionLabel('not a buy yet', englishLabels)).toBe('Avoid');
+    expect(getLegacyDecisionActionLabel('not to buy', englishLabels)).toBe('Avoid');
+    expect(getLegacyDecisionActionLabel('avoid buying', englishLabels)).toBe('Avoid');
     expect(getLegacyDecisionActionLabel('waiting to buy')).toBeNull();
   });
 
@@ -62,13 +64,21 @@ describe('decisionAction helpers', () => {
     expect(getLegacyDecisionActionLabel('cannot trim while trend holds')).toBe('持有');
     expect(getLegacyDecisionActionLabel('not a sell yet')).toBe('持有');
     expect(getLegacyDecisionActionLabel('not a trim yet')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('not to sell')).toBe('持有');
+    expect(getLegacyDecisionActionLabel('not to trim')).toBe('持有');
     expect(getLegacyDecisionActionLabel('not a trim yet', englishLabels)).toBe('Hold');
     expect(getDecisionActionTone(null, null, '不建议卖出，继续观察')).toBe('success');
+  });
+
+  it('does not turn ambiguous English advice into a badge action', () => {
+    expect(getLegacyDecisionActionLabel('buy or sell')).toBeNull();
+    expect(getDecisionActionLabel(null, null, 'buy or sell', 'Advice', englishLabels)).toBe('Advice');
   });
 
   it('maps action tone without reading legacy text when action is present', () => {
     expect(getDecisionActionTone('buy', null, '卖出')).toBe('success');
     expect(getDecisionActionTone('reduce', null, '买入')).toBe('danger');
     expect(getDecisionActionTone('alert', null, '买入')).toBe('warning');
+    expect(getDecisionActionTone(null, null, 'avoid buying')).toBe('warning');
   });
 });

@@ -117,6 +117,26 @@ describe('HistoryList', () => {
     expect(screen.queryByText('买入 28')).not.toBeInTheDocument();
   });
 
+  it('does not render ambiguous English legacy advice as a buy action', () => {
+    render(
+      <HistoryList
+        {...baseProps}
+        items={[
+          {
+            ...items[0],
+            action: null,
+            actionLabel: null,
+            operationAdvice: 'buy or sell',
+            sentimentScore: 28,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('情绪 28')).toBeInTheDocument();
+    expect(screen.queryByText('buy 28')).not.toBeInTheDocument();
+  });
+
   it('toggles select-all when clicking the label text', () => {
     const onToggleSelectAll = vi.fn();
 
