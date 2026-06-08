@@ -1457,6 +1457,105 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 1,
             )
 
+    def test_delete_analysis_history_records_keeps_signals_for_nonexistent_history_id(self) -> None:
+        """不存在的历史 ID 不应触发弱关联 DecisionSignal 清理。"""
+        missing_id = 987654321
+
+        with self.db.session_scope() as session:
+            session.add(DecisionSignalRecord(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                market="cn",
+                source_type="manual",
+                source_report_id=missing_id,
+                trace_id="trace-delete-missing-history",
+                market_phase="intraday",
+                trigger_source="api",
+                action="watch",
+                action_label="观望",
+                reason="manual signal with unverified report id",
+                plan_quality="minimal",
+                status="active",
+            ))
+
+        deleted = self.db.delete_analysis_history_records([missing_id])
+        self.assertEqual(deleted, 0)
+
+        with self.db.get_session() as session:
+            self.assertEqual(
+                session.query(DecisionSignalRecord).filter(
+                    DecisionSignalRecord.trace_id == "trace-delete-missing-history"
+                ).count(),
+                1,
+            )
+
+    def test_delete_analysis_history_records_cleans_only_existing_ids_in_mixed_batch(self) -> None:
+        """混合存在/不存在 ID 时，只清理实际存在历史记录的关联数据。"""
+        record_id = self._save_history("query_delete_mixed")
+        missing_id = record_id + 987654
+
+        with self.db.session_scope() as session:
+            session.add(BacktestResult(
+                analysis_history_id=record_id,
+                code="600519",
+                analysis_date=None,
+                eval_window_days=10,
+                engine_version="v1",
+                eval_status="pending",
+            ))
+            session.add(DecisionSignalRecord(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                market="cn",
+                source_type="analysis",
+                source_report_id=record_id,
+                trace_id="trace-delete-mixed-linked",
+                market_phase="intraday",
+                trigger_source="api",
+                action="buy",
+                action_label="买入",
+                reason="linked",
+                plan_quality="minimal",
+                status="active",
+            ))
+            session.add(DecisionSignalRecord(
+                stock_code="000001",
+                stock_name="平安银行",
+                market="cn",
+                source_type="manual",
+                source_report_id=missing_id,
+                trace_id="trace-delete-mixed-missing",
+                market_phase="intraday",
+                trigger_source="api",
+                action="watch",
+                action_label="观望",
+                reason="weak report id collision",
+                plan_quality="minimal",
+                status="active",
+            ))
+
+        deleted = self.db.delete_analysis_history_records([record_id, missing_id])
+        self.assertEqual(deleted, 1)
+
+        with self.db.get_session() as session:
+            self.assertIsNone(session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id).first())
+            self.assertEqual(
+                session.query(BacktestResult).filter(BacktestResult.analysis_history_id == record_id).count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(DecisionSignalRecord).filter(
+                    DecisionSignalRecord.trace_id == "trace-delete-mixed-linked"
+                ).count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(DecisionSignalRecord).filter(
+                    DecisionSignalRecord.trace_id == "trace-delete-mixed-missing"
+                ).count(),
+                1,
+            )
+
     @patch("src.auth.is_auth_enabled", return_value=False)
     def test_delete_history_api_deletes_selected_records(self, mock_auth) -> None:
         """DELETE /api/v1/history should remove only the requested records."""

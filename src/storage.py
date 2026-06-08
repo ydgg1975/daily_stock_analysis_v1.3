@@ -1707,14 +1707,22 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return 0
 
         with self.session_scope() as session:
+            existing_ids = sorted(
+                session.execute(
+                    select(AnalysisHistory.id).where(AnalysisHistory.id.in_(ids))
+                ).scalars().all()
+            )
+            if not existing_ids:
+                return 0
+
             session.execute(
-                delete(DecisionSignalRecord).where(DecisionSignalRecord.source_report_id.in_(ids))
+                delete(DecisionSignalRecord).where(DecisionSignalRecord.source_report_id.in_(existing_ids))
             )
             session.execute(
-                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(ids))
+                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(existing_ids))
             )
             result = session.execute(
-                delete(AnalysisHistory).where(AnalysisHistory.id.in_(ids))
+                delete(AnalysisHistory).where(AnalysisHistory.id.in_(existing_ids))
             )
             return result.rowcount or 0
 
