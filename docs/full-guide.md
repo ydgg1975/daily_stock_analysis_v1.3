@@ -1421,6 +1421,11 @@ FastAPI 提供 RESTful API 服务，支持配置管理和触发分析。
 | `/api/v1/alphasift/screen/tasks/{task_id}` | GET | 查询 AlphaSift 选股任务状态与完成结果 |
 | `/api/v1/history` | GET | 查询分析历史 |
 | `/api/v1/history/{record_id}/diagnostics` | GET | 查询历史报告运行诊断摘要与脱敏复制文本 |
+| `/api/v1/decision-signals` | POST | 显式创建或按同源键去重决策信号，返回 `{ item, created }` |
+| `/api/v1/decision-signals` | GET | 分页查询决策信号，支持股票、市场、动作、阶段、来源、状态、时间范围和 cache-only 持仓过滤 |
+| `/api/v1/decision-signals/{signal_id}` | GET | 查询单条决策信号，读取前执行懒过期 |
+| `/api/v1/decision-signals/{signal_id}/status` | PATCH | 更新决策信号状态和可选 metadata |
+| `/api/v1/decision-signals/latest/{stock_code}` | GET | 查询指定股票最新 active 决策信号 |
 | `/api/v1/usage/summary?period=today|month|all` | GET | 按调用类型与模型维度汇总 LLM 调用次数和 Token 用量 |
 | `/api/v1/backtest/run` | POST | 触发回测 |
 | `/api/v1/backtest/results` | GET | 查询回测结果（分页） |

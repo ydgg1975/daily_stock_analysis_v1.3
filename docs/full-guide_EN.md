@@ -1253,6 +1253,11 @@ For this feature, the product behavior is:
 | `/api/v1/alphasift/screen/tasks/{task_id}` | GET | Query AlphaSift screening task status and completed result |
 | `/api/v1/history` | GET | Query analysis history |
 | `/api/v1/history/{record_id}/diagnostics` | GET | Query a historical report run diagnostic summary and sanitized copy text |
+| `/api/v1/decision-signals` | POST | Explicitly create or deduplicate a decision signal and return `{ item, created }` |
+| `/api/v1/decision-signals` | GET | Paginated decision-signal query with stock, market, action, phase, source, status, time-range, and cache-only holdings filters |
+| `/api/v1/decision-signals/{signal_id}` | GET | Fetch one decision signal and apply lazy expiration before reading |
+| `/api/v1/decision-signals/{signal_id}/status` | PATCH | Update a decision signal status and optional metadata |
+| `/api/v1/decision-signals/latest/{stock_code}` | GET | Query the latest active decision signals for a stock |
 | `/api/v1/usage/summary?period=today|month|all` | GET | Query LLM call counts and token usage grouped by call type and model |
 | `/api/v1/backtest/run` | POST | Trigger backtest |
 | `/api/v1/backtest/results` | GET | Query backtest results (paginated) |
