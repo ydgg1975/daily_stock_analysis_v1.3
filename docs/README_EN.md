@@ -207,6 +207,16 @@ Up: 3920 | Down: 1349 | Limit up: 155 | Limit down: 3
 
 Full environment variables, model routing, notification channels, data-source priority, trading rules, fundamental P0 semantics, and deployment details are in the [Full Guide](./full-guide_EN.md).
 
+### Database Configuration
+
+| Method | Description | Use Case |
+|--------|-------------|----------|
+| SQLite (default) | No extra config needed; writes to `DATABASE_PATH` (`./data/stock_analysis.db`) | Single-node, light load |
+| Structured fields | Set `DATABASE_TYPE` + `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | Standard MySQL / PostgreSQL deployment |
+| Full connection URL | Set `DATABASE_URL` directly (highest priority), e.g. `mysql+pymysql://user:pass@host:3306/db` | When custom connection parameters are needed |
+
+Drivers `pymysql` (MySQL) and `psycopg2-binary` (PostgreSQL) are included in `requirements.txt`. Remove unused drivers for leaner deployments. See `.env.example` database section for full priority rules, field details, and examples.
+
 ## 🖥️ Web UI
 
 The Web workspace supports settings, task monitoring, manual analysis, history reports, full Markdown reports, Agent strategy chat, backtest, portfolio management, smart import, and light/dark themes.

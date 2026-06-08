@@ -841,7 +841,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 **engine_kwargs,
             )
             self._engine = created_engine
-            self._is_sqlite_engine = self._engine.url.get_backend_name() == 'sqlite'
+            self._db_backend_name = self._engine.url.get_backend_name()
+            self._is_sqlite_engine = self._db_backend_name == 'sqlite'
             self._sqlite_file_db = self._is_sqlite_engine and self._is_file_sqlite_database()
             self._install_sqlite_pragma_handler()
 
@@ -2453,13 +2454,30 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 "estimated_tokens": int(estimated_tokens or 0),
                 "updated_at": now,
             }
-            stmt = sqlite_insert(ConversationSummary).values(**values)
-            session.execute(
-                stmt.on_conflict_do_update(
+            backend = self._db_backend_name
+            if backend == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_conflict_do_update(
                     index_elements=["session_id"],
                     set_=values,
                 )
-            )
+            elif backend == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["session_id"],
+                    set_=values,
+                )
+            elif backend == "mysql":
+                from sqlalchemy.dialects.mysql import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_duplicate_key_update(**values)
+            else:
+                raise RuntimeError(
+                    f"Unsupported database backend for upsert: {backend}"
+                )
+            session.execute(stmt)
 
     def conversation_session_exists(self, session_id: str) -> bool:
         """Return True when at least one message exists for the given session."""

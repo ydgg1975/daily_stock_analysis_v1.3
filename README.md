@@ -219,6 +219,16 @@ python main.py --serve-only
 
 完整环境变量、模型渠道、通知渠道、数据源优先级、交易纪律、基本面 P0 语义和部署说明请参考 [完整配置指南](docs/full-guide.md)。
 
+### 数据库配置
+
+| 配置方式 | 说明 | 适用场景 |
+|---------|------|---------|
+| SQLite（默认） | 无需额外配置，默认写入 `DATABASE_PATH`（`./data/stock_analysis.db`） | 单机部署、低负载 |
+| 结构化字段 | 设置 `DATABASE_TYPE` + `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | MySQL / PostgreSQL 标准部署 |
+| 完整连接串 | 直接设置 `DATABASE_URL`（最高优先级），如 `mysql+pymysql://user:pass@host:3306/db` | 需要自定义连接参数时 |
+
+驱动 `pymysql`（MySQL）和 `psycopg2-binary`（PostgreSQL）已包含在 `requirements.txt` 中。如只使用 SQLite，可移除不需要的驱动以精简部署。完整优先级、字段说明和示例见 `.env.example` 数据库配置段。
+
 ## 🖥️ Web 界面
 
 Web 工作台提供配置管理、任务监控、手动分析、历史报告、完整 Markdown 报告、Agent 问股、回测、持仓管理、智能导入和浅色 / 深色主题。启动方式：

@@ -67,3 +67,8 @@ jinja2>=3.1.0               # Jinja2 template engine for report rendering
 fastapi>=0.109.0            # Modern Python Web framework
 uvicorn[standard]>=0.27.0   # ASGI server
 python-multipart>=0.0.6     # FastAPI File/Form upload support
+
+# Database drivers — both installed by default for multi-DB support.
+# Remove the one you don't need to keep the deployment lean.
+pymysql>=1.1.0            # MySQL/MariaDB driver
+psycopg2-binary>=2.9.0    # PostgreSQL driver
