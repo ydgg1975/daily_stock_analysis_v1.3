@@ -1315,7 +1315,7 @@ python main.py --debug
 - `PATCH /api/v1/decision-signals/{signal_id}/status`：更新合法状态和可选 `metadata`；传入 `metadata` 时按整包替换保存，不实现复杂状态机。
 - `GET /api/v1/decision-signals/latest/{stock_code}`：按股票查询最新 active 信号，默认 `limit=1`。
 
-读取入口会懒过期：列表、详情和 latest 查询前会把已到 `expires_at` 的 active 信号标为 expired。股票代码入库与查询统一归一化，`600519`、`SH600519`、`600519.SH` 等常见变体按同一代码匹配。`holding_only=true` 只读取 `portfolio_positions` 中 `quantity > 0` 的缓存持仓，可选 `account_id`；该查询不会调用组合 snapshot replay，无缓存时返回空结果，需先通过 portfolio snapshot API 刷新缓存。
+读取入口会懒过期：列表、详情和 latest 查询前会把已到 `expires_at` 的 active 信号标为 expired。股票代码入库与查询统一归一化，`600519`、`SH600519`、`600519.SH` 等常见变体按同一代码匹配。`holding_only=true` 只读取 active 账户下 `portfolio_positions` 中 `quantity > 0` 的缓存持仓，可选 active `account_id`；该查询不会调用组合 snapshot replay，无缓存时返回空结果，需先通过 portfolio snapshot API 刷新缓存。
 
 `source_report_id` 可为空且不强制校验历史记录存在；删除历史记录时会显式清理 `source_report_id` 命中的信号。`task_id`、`alert_trigger_id` 等后续关联字段先放入 `metadata`，P1 不新增独立列。JSON 字段和文本字段会在写入前执行信号专用脱敏，覆盖敏感 key、Bearer、token-like 字符串、敏感赋值、webhook URL、URL userinfo 以及带敏感 query/fragment 参数的 URL；普通证据 URL 会保留以保证来源可追溯，且长文本不会套用诊断文本的 300 字符截断。
 

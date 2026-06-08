@@ -841,7 +841,7 @@
           "DecisionSignals"
         ],
         "summary": "查询决策信号列表",
-        "description": "分页查询 DecisionSignal；读取前会懒过期已到 expires_at 的 active 信号。holding_only=true 只读取 portfolio_positions 缓存持仓，不触发 portfolio snapshot replay。",
+        "description": "分页查询 DecisionSignal；读取前会懒过期已到 expires_at 的 active 信号。holding_only=true 只读取 active 账户的 portfolio_positions 缓存持仓，不触发 portfolio snapshot replay。",
         "operationId": "listDecisionSignals",
         "parameters": [
           {
@@ -1048,11 +1048,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Filter to cached portfolio holdings only",
+              "description": "Filter to active cached portfolio holdings only",
               "default": false,
               "title": "Holding Only"
             },
-            "description": "Filter to cached portfolio holdings only"
+            "description": "Filter to active cached portfolio holdings only"
           },
           {
             "name": "account_id",
@@ -1067,10 +1067,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional portfolio account id for holding_only",
+              "description": "Optional active portfolio account id for holding_only",
               "title": "Account Id"
             },
-            "description": "Optional portfolio account id for holding_only"
+            "description": "Optional active portfolio account id for holding_only"
           },
           {
             "name": "page",

@@ -80,7 +80,7 @@ def create_signal(request: DecisionSignalCreateRequest) -> DecisionSignalMutatio
     summary="查询决策信号列表",
     description=(
         "分页查询 DecisionSignal；读取前会懒过期已到 expires_at 的 active 信号。"
-        "holding_only=true 只读取 portfolio_positions 缓存持仓，不触发 portfolio snapshot replay。"
+        "holding_only=true 只读取 active 账户的 portfolio_positions 缓存持仓，不触发 portfolio snapshot replay。"
     ),
     operation_id="listDecisionSignals",
 )
@@ -96,8 +96,11 @@ def list_signals(
     created_to: Optional[str] = Query(None, description="Inclusive created_at upper bound"),
     expires_from: Optional[str] = Query(None, description="Inclusive expires_at lower bound"),
     expires_to: Optional[str] = Query(None, description="Inclusive expires_at upper bound"),
-    holding_only: bool = Query(False, description="Filter to cached portfolio holdings only"),
-    account_id: Optional[int] = Query(None, description="Optional portfolio account id for holding_only"),
+    holding_only: bool = Query(False, description="Filter to active cached portfolio holdings only"),
+    account_id: Optional[int] = Query(
+        None,
+        description="Optional active portfolio account id for holding_only",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> DecisionSignalListResponse:

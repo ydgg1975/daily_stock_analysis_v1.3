@@ -268,9 +268,25 @@ def test_holding_only_uses_cached_positions_and_stock_code_variants(client_and_d
         ),
     )
     assert other_resp.status_code == 200, other_resp.text
+    inactive_resp = client.post(
+        "/api/v1/decision-signals",
+        json=_payload(
+            source_report_id=3203,
+            trace_id="trace-3203",
+            stock_code="TSLA",
+            stock_name="Tesla",
+            market="us",
+        ),
+    )
+    assert inactive_resp.status_code == 200, inactive_resp.text
 
     with db.session_scope() as session:
-        account = PortfolioAccount(name="Test account", market="cn", base_currency="CNY")
+        account = PortfolioAccount(
+            name="Test account",
+            market="cn",
+            base_currency="CNY",
+            is_active=True,
+        )
         session.add(account)
         session.flush()
         account_id = account.id
@@ -308,6 +324,27 @@ def test_holding_only_uses_cached_positions_and_stock_code_variants(client_and_d
                 total_cost=900,
             )
         )
+        inactive_account = PortfolioAccount(
+            name="Inactive account",
+            market="us",
+            base_currency="USD",
+            is_active=False,
+        )
+        session.add(inactive_account)
+        session.flush()
+        inactive_account_id = inactive_account.id
+        session.add(
+            PortfolioPosition(
+                account_id=inactive_account_id,
+                cost_method="fifo",
+                symbol="TSLA",
+                market="us",
+                currency="USD",
+                quantity=3,
+                avg_cost=200,
+                total_cost=600,
+            )
+        )
 
     with patch(
         "src.services.portfolio_service.PortfolioService.get_portfolio_snapshot",
@@ -322,6 +359,32 @@ def test_holding_only_uses_cached_positions_and_stock_code_variants(client_and_d
     payload = holding_resp.json()
     assert payload["total"] == 2
     assert {item["stock_code"] for item in payload["items"]} == {"600519", "AAPL"}
+
+    with patch(
+        "src.services.portfolio_service.PortfolioService.get_portfolio_snapshot",
+        side_effect=AssertionError("holding_only must not replay portfolio snapshots"),
+    ):
+        all_active_resp = client.get(
+            "/api/v1/decision-signals",
+            params={"holding_only": "true"},
+        )
+
+    assert all_active_resp.status_code == 200, all_active_resp.text
+    all_active_payload = all_active_resp.json()
+    assert all_active_payload["total"] == 2
+    assert {item["stock_code"] for item in all_active_payload["items"]} == {"600519", "AAPL"}
+
+    with patch(
+        "src.services.portfolio_service.PortfolioService.get_portfolio_snapshot",
+        side_effect=AssertionError("holding_only must not replay portfolio snapshots"),
+    ):
+        inactive_holding_resp = client.get(
+            "/api/v1/decision-signals",
+            params={"holding_only": "true", "account_id": inactive_account_id},
+        )
+    assert inactive_holding_resp.status_code == 200, inactive_holding_resp.text
+    assert inactive_holding_resp.json()["total"] == 0
+    assert inactive_holding_resp.json()["items"] == []
 
     variant_resp = client.get("/api/v1/decision-signals", params={"stock_code": "SH600519"})
     assert variant_resp.status_code == 200, variant_resp.text

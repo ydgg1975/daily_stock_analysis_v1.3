@@ -804,8 +804,13 @@ class PortfolioRepository:
     ) -> List[str]:
         """Return symbols from the cached non-zero position table only."""
         with self.db.get_session() as session:
-            query = select(PortfolioPosition.symbol).where(
-                PortfolioPosition.quantity > 0,
+            query = (
+                select(PortfolioPosition.symbol)
+                .join(PortfolioAccount, PortfolioPosition.account_id == PortfolioAccount.id)
+                .where(
+                    PortfolioPosition.quantity > 0,
+                    PortfolioAccount.is_active.is_(True),
+                )
             )
             if account_id is not None:
                 query = query.where(PortfolioPosition.account_id == account_id)
