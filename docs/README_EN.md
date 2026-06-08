@@ -207,6 +207,22 @@ Up: 3920 | Down: 1349 | Limit up: 155 | Limit down: 3
 
 Full environment variables, model routing, notification channels, data-source priority, trading rules, fundamental P0 semantics, and deployment details are in the [Full Guide](./full-guide_EN.md).
 
+### Database Configuration
+
+| Method | Description | Use Case |
+|--------|-------------|----------|
+| SQLite (default) | No extra config needed; writes to `DATABASE_PATH` (`./data/stock_analysis.db`) | Single-node, light load |
+| Structured fields | Set `DATABASE_TYPE` + `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | Standard MySQL / PostgreSQL deployment |
+| Full connection URL | Set `DATABASE_URL` directly (highest priority), e.g. `mysql+pymysql://user:pass@host:3306/db` | When custom connection parameters are needed |
+
+Drivers `pymysql` (MySQL) and `psycopg2-binary` (PostgreSQL) are included in `requirements.txt`. Remove unused drivers for leaner deployments. See `.env.example` database section for full priority rules, field details, and examples.
+
+> **MySQL compatibility note**: The app requires **MySQL 8.0+**. `NewsIntel` uses a `url_hash` column to avoid long-VARCHAR unique-index key-length limits; `agent_provider_turns` (composite index ~1297 bytes) and `alert_cooldowns.rule_key` (~1020 bytes) rely on InnoDB `DYNAMIC` row format (MySQL 8.0 default, 3072-byte limit). MySQL 5.7 / `COMPACT` row format (767-byte limit) may cause `CREATE TABLE` failures for these three indexes. Before enabling MySQL/PostgreSQL:
+> - MySQL 8.0+: `utf8mb4` charset + InnoDB `DYNAMIC` row format (both are 8.0 defaults)
+> - PostgreSQL any supported version: `UTF8` encoding
+> - Run a `create_all` dry-run on a staging database first
+> - When the password contains special characters (`@ : / % ? #` etc.), prefer structured fields (`DATABASE_TYPE` + `DATABASE_PASSWORD`) — `get_db_url()` automatically URL-encodes them via `sqlalchemy.engine.URL.create()`; if using `DATABASE_URL`, you must manually URL-encode special characters in the password (e.g. `p@ss` → `p%40ss`)
+
 ## 🖥️ Web UI
 
 The Web workspace supports settings, task monitoring, manual analysis, history reports, full Markdown reports, Agent strategy chat, backtest, portfolio management, smart import, and light/dark themes.

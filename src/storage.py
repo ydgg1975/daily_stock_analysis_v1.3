@@ -25,6 +25,8 @@ from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Callable, Ty
 import pandas as pd
 from sqlalchemy import (
     create_engine,
+    text,
+    inspect as _sa_inspect,
     Column,
     String,
     Float,
@@ -57,7 +59,7 @@ from src.config import get_config
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = "2026-06-05-create-all-baseline"
+CURRENT_SCHEMA_VERSION = "2026-06-09-multi-db-schema-v2"
 
 # SQLAlchemy ORM 基类
 Base = declarative_base()
@@ -175,6 +177,7 @@ class NewsIntel(Base):
     title = Column(String(300), nullable=False)
     snippet = Column(Text)
     url = Column(String(1000), nullable=False)
+    url_hash = Column(String(64), nullable=False)  # SHA-256 hex digest for cross-DB unique constraint
     source = Column(String(100))
     published_date = Column(DateTime, index=True)
 
@@ -189,7 +192,7 @@ class NewsIntel(Base):
     requester_query = Column(String(255))
 
     __table_args__ = (
-        UniqueConstraint('url', name='uix_news_url'),
+        UniqueConstraint('url_hash', name='uix_news_url_hash'),
         Index('ix_news_code_pub', 'code', 'published_date'),
     )
 
@@ -827,7 +830,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             self._sqlite_write_retry_base_delay = config.sqlite_write_retry_base_delay
 
             engine_kwargs = {
-                "echo": False,
+                "echo": config.sqlalchemy_echo,
                 "pool_pre_ping": True,
             }
             if str(db_url).startswith("sqlite:") and self._sqlite_busy_timeout_ms > 0:
@@ -841,7 +844,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 **engine_kwargs,
             )
             self._engine = created_engine
-            self._is_sqlite_engine = self._engine.url.get_backend_name() == 'sqlite'
+            self._db_backend_name = self._engine.url.get_backend_name()
+            self._is_sqlite_engine = self._db_backend_name == 'sqlite'
             self._sqlite_file_db = self._is_sqlite_engine and self._is_file_sqlite_database()
             self._install_sqlite_pragma_handler()
 
@@ -854,6 +858,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
             # 创建所有表
             Base.metadata.create_all(self._engine)
+            self._run_schema_migrations()
             self._ensure_schema_migration_record()
 
             self._initialized = True
@@ -873,6 +878,78 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             self.__class__._instance = None
             raise
 
+    def _run_schema_migrations(self) -> None:
+        """Run schema migrations for databases upgraded from older versions.
+
+        This handles the case where an existing database lacks columns or
+        constraints added after its initial creation.  ``create_all`` only
+        creates missing *tables*, so new columns on existing tables must be
+        added explicitly.
+        """
+        inspector = _sa_inspect(self._engine)
+        existing_tables = set(inspector.get_table_names())
+
+        if 'news_intel' not in existing_tables:
+            return  # Fresh database — create_all set up everything
+
+        columns = {col['name'] for col in inspector.get_columns('news_intel')}
+        if 'url_hash' in columns:
+            return  # Already migrated
+
+        logger.info("检测到旧版 news_intel 表缺少 url_hash 列，开始自动迁移...")
+
+        # Step 1: add the column with a temporary default.
+        with self._engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE news_intel ADD COLUMN url_hash VARCHAR(64) NOT NULL DEFAULT ''"
+            ))
+
+        # Step 2: backfill url_hash for every existing row.
+        session = self._SessionLocal()
+        try:
+            rows = session.execute(
+                select(NewsIntel.id, NewsIntel.url)
+            ).all()
+            for row in rows:
+                url_hash = self._compute_url_hash(row.url or '')
+                session.execute(
+                    text("UPDATE news_intel SET url_hash = :h WHERE id = :id"),
+                    {"h": url_hash, "id": row.id},
+                )
+            session.commit()
+            logger.info("url_hash 回填完成，已迁移 %d 行", len(rows))
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+        # Step 3: add the new unique constraint (best-effort — the old
+        # uix_news_url constraint still provides dedup on backends where it
+        # was created successfully).
+        try:
+            with self._engine.begin() as conn:
+                if self._db_backend_name == 'sqlite':
+                    conn.execute(text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uix_news_url_hash "
+                        "ON news_intel (url_hash)"
+                    ))
+                elif self._db_backend_name == 'postgresql':
+                    conn.execute(text(
+                        "ALTER TABLE news_intel ADD CONSTRAINT uix_news_url_hash "
+                        "UNIQUE (url_hash)"
+                    ))
+                elif self._db_backend_name == 'mysql':
+                    conn.execute(text(
+                        "ALTER TABLE news_intel ADD UNIQUE INDEX uix_news_url_hash "
+                        "(url_hash)"
+                    ))
+        except Exception as exc:
+            logger.warning(
+                "添加 url_hash 唯一约束失败（不影响功能，应用层去重仍生效）: %s",
+                exc,
+            )
+
     def _ensure_schema_migration_record(self) -> None:
         session = self._SessionLocal()
         values = {
@@ -883,6 +960,17 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             if self._is_sqlite_engine:
                 statement = sqlite_insert(DatabaseSchemaMigration).values(**values)
                 statement = statement.on_conflict_do_nothing(index_elements=["version"])
+                session.execute(statement)
+            elif self._db_backend_name == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as _dialect_insert
+                statement = _dialect_insert(DatabaseSchemaMigration).values(**values)
+                statement = statement.on_conflict_do_nothing(index_elements=["version"])
+                session.execute(statement)
+            elif self._db_backend_name == "mysql":
+                from sqlalchemy.dialects.mysql import insert as _dialect_insert
+                statement = _dialect_insert(DatabaseSchemaMigration).values(**values)
+                # ON DUPLICATE KEY UPDATE with a no-op assignment.
+                statement = statement.on_duplicate_key_update(version=DatabaseSchemaMigration.version)
                 session.execute(statement)
             else:
                 session.execute(DatabaseSchemaMigration.__table__.insert().values(**values))
@@ -1161,9 +1249,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     source=source,
                     published_date=published_date
                 )
+                url_hash = self._compute_url_hash(url_key)
 
                 existing = session.execute(
-                    select(NewsIntel).where(NewsIntel.url == url_key)
+                    select(NewsIntel).where(NewsIntel.url_hash == url_hash)
                 ).scalar_one_or_none()
 
                 if existing:
@@ -1213,6 +1302,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                             title=title,
                             snippet=snippet,
                             url=url_key,
+                            url_hash=url_hash,
                             source=source,
                             published_date=published_date,
                             fetched_at=datetime.now(),
@@ -1878,37 +1968,75 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     )
                 return len(new_records)
             else:
-                existing_rows = {
-                    row.date: row
-                    for row in session.execute(
-                        select(StockDaily).where(
-                            and_(
-                                StockDaily.code == code,
-                                StockDaily.date.in_(batch_dates),
-                            )
-                        )
-                    ).scalars().all()
-                }
-                new_count = 0
-                for record in records:
-                    existing = existing_rows.get(record['date'])
-                    if existing is None:
-                        session.add(StockDaily(**record))
-                        new_count += 1
+                # Pre-count new records (best-effort; consistent with SQLite branch).
+                existing_dates = set()
+                _COUNT_CHUNK = 500
+                for j in range(0, len(batch_dates), _COUNT_CHUNK):
+                    chunk_dates = batch_dates[j : j + _COUNT_CHUNK]
+                    if not chunk_dates:
                         continue
-                    existing.open = record['open']
-                    existing.high = record['high']
-                    existing.low = record['low']
-                    existing.close = record['close']
-                    existing.volume = record['volume']
-                    existing.amount = record['amount']
-                    existing.pct_chg = record['pct_chg']
-                    existing.ma5 = record['ma5']
-                    existing.ma10 = record['ma10']
-                    existing.ma20 = record['ma20']
-                    existing.volume_ratio = record['volume_ratio']
-                    existing.data_source = record['data_source']
-                    existing.updated_at = record['updated_at']
+                    existing_dates.update(
+                        session.execute(
+                            select(StockDaily.date).where(
+                                and_(
+                                    StockDaily.code == code,
+                                    StockDaily.date.in_(chunk_dates),
+                                )
+                            )
+                        ).scalars().all()
+                    )
+                new_count = sum(1 for r in records if r['date'] not in existing_dates)
+
+                # Atomic dialect-specific upsert in chunks.
+                _CHUNK = 50
+                backend = self._db_backend_name
+                for i in range(0, len(records), _CHUNK):
+                    chunk = records[i : i + _CHUNK]
+                    if backend == "postgresql":
+                        from sqlalchemy.dialects.postgresql import insert as _dialect_insert
+                        stmt = _dialect_insert(StockDaily).values(chunk)
+                        excluded = stmt.excluded
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=['code', 'date'],
+                            set_={
+                                'open': excluded.open,
+                                'high': excluded.high,
+                                'low': excluded.low,
+                                'close': excluded.close,
+                                'volume': excluded.volume,
+                                'amount': excluded.amount,
+                                'pct_chg': excluded.pct_chg,
+                                'ma5': excluded.ma5,
+                                'ma10': excluded.ma10,
+                                'ma20': excluded.ma20,
+                                'volume_ratio': excluded.volume_ratio,
+                                'data_source': excluded.data_source,
+                                'updated_at': excluded.updated_at,
+                            },
+                        )
+                    elif backend == "mysql":
+                        from sqlalchemy.dialects.mysql import insert as _dialect_insert
+                        stmt = _dialect_insert(StockDaily).values(chunk)
+                        stmt = stmt.on_duplicate_key_update(
+                            open=stmt.inserted.open,
+                            high=stmt.inserted.high,
+                            low=stmt.inserted.low,
+                            close=stmt.inserted.close,
+                            volume=stmt.inserted.volume,
+                            amount=stmt.inserted.amount,
+                            pct_chg=stmt.inserted.pct_chg,
+                            ma5=stmt.inserted.ma5,
+                            ma10=stmt.inserted.ma10,
+                            ma20=stmt.inserted.ma20,
+                            volume_ratio=stmt.inserted.volume_ratio,
+                            data_source=stmt.inserted.data_source,
+                            updated_at=stmt.inserted.updated_at,
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Unsupported database backend for daily data upsert: {backend}"
+                        )
+                    session.execute(stmt)
                 return new_count
 
         try:
@@ -2211,6 +2339,19 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         return None
 
     @staticmethod
+    def _compute_url_hash(url: str) -> str:
+        """
+        Compute a SHA-256 hex digest of the URL for cross-DB index compatibility.
+
+        MySQL/InnoDB utf8mb4 unique indexes have a maximum key length
+        (767 bytes for COMPACT/REDUNDANT, 3072 for DYNAMIC/COMPRESSED).
+        A VARCHAR(1000) utf8mb4 column can require up to 4000 bytes for the
+        index entry, exceeding even the DYNAMIC limit.  Hashing the URL into
+        a fixed 64-char hex digest avoids this limit.
+        """
+        return hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+    @staticmethod
     def _build_fallback_url_key(
         code: str,
         title: str,
@@ -2453,13 +2594,30 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 "estimated_tokens": int(estimated_tokens or 0),
                 "updated_at": now,
             }
-            stmt = sqlite_insert(ConversationSummary).values(**values)
-            session.execute(
-                stmt.on_conflict_do_update(
+            backend = self._db_backend_name
+            if backend == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_conflict_do_update(
                     index_elements=["session_id"],
                     set_=values,
                 )
-            )
+            elif backend == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["session_id"],
+                    set_=values,
+                )
+            elif backend == "mysql":
+                from sqlalchemy.dialects.mysql import insert as _dialect_insert
+                stmt = _dialect_insert(ConversationSummary).values(**values)
+                stmt = stmt.on_duplicate_key_update(**values)
+            else:
+                raise RuntimeError(
+                    f"Unsupported database backend for upsert: {backend}"
+                )
+            session.execute(stmt)
 
     def conversation_session_exists(self, session_id: str) -> bool:
         """Return True when at least one message exists for the given session."""

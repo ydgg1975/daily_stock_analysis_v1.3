@@ -33,6 +33,7 @@ daily_stock_analysis/
 - [Scheduled Task Configuration](#scheduled-task-configuration)
 - [Notification Channel Configuration](#notification-channel-configuration)
 - [Data Source Configuration](#data-source-configuration)
+- [Database Configuration](#database-configuration)
 - [Advanced Features](#advanced-features)
 - [Backtesting](#backtesting)
 - [Local WebUI Management Interface](#local-webui-management-interface)
@@ -362,6 +363,108 @@ For the notification baseline, diagnostics, and deployment notes, see [Notificat
 > - In scheduler mode, if runtime env explicitly sets `RUN_IMMEDIATELY` but does not set `SCHEDULE_RUN_IMMEDIATELY`, the scheduler keeps inheriting the legacy runtime override instead of being pulled back to a persisted `.env` alias value.
 > - CN market review reports now use a post-market workstation layout with market signal, index detail, sector Top tables, news catalysts, next-session plan, and risk sections. The market signal uses a plain-text score such as `66/100 (constructive, risk-on)` instead of block bars so it renders consistently across terminals and notification clients. News catalysts list only headline, source, and link instead of search snippets to reduce mixed-language noise. Missing data sources degrade by omitting or simplifying only the affected block.
 > - Per-stock analysis, realtime quote priority, and sector rankings fallback remain unchanged.
+
+### Database Configuration
+
+The system supports three database backends, with the following priority:
+
+**Priority:** `DATABASE_URL` (full connection string) > `DATABASE_TYPE` + structured fields > `DATABASE_PATH` (SQLite default)
+
+When no external database is configured, behavior is identical to previous versions — the system automatically uses a SQLite file database.
+
+#### Option 1: Full Connection String (Recommended for MySQL/PostgreSQL)
+
+```env
+DATABASE_URL=mysql+pymysql://user:password@host:3306/dbname
+DATABASE_URL=postgresql+psycopg2://user:password@host:5432/dbname
+```
+
+**Note**: `DATABASE_URL` is returned as-is with no encoding. When the password contains special characters (`@ : / % ? #` etc.), you must manually URL-encode them (e.g. `p@ss` → `p%40ss`), otherwise URL parsing will fail. For passwords with special characters, the structured fields method below is recommended.
+
+#### Option 2: Structured Fields
+
+```env
+DATABASE_TYPE=mysql          # mysql | postgresql | sqlite
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=3306           # Auto-selects default port by database type if not set
+DATABASE_NAME=stock
+DATABASE_USERNAME=stock
+DATABASE_PASSWORD=your_password
+```
+
+When the password contains special characters, `get_db_url()` automatically performs URL-safe encoding via `sqlalchemy.engine.URL.create()`.
+
+#### Option 3: SQLite (Default)
+
+```env
+DATABASE_PATH=./data/stock_analysis.db
+```
+
+No need to configure `DATABASE_URL` or `DATABASE_TYPE`.
+
+#### Full Field Reference
+
+| Variable | Description | Default |
+|--------|------|--------|
+| `DATABASE_URL` | Full SQLAlchemy connection string (highest priority) | (empty) |
+| `DATABASE_TYPE` | Database type: `sqlite` / `mysql` / `postgresql` | (empty) |
+| `DATABASE_HOST` | Database host address | `127.0.0.1` |
+| `DATABASE_PORT` | Database port; auto-selects 3306 for MySQL, 5432 for PostgreSQL when not set | `0` (auto) |
+| `DATABASE_NAME` | Database name | (empty) |
+| `DATABASE_USERNAME` | Database username | (empty) |
+| `DATABASE_PASSWORD` | Database password | (empty) |
+| `DATABASE_PATH` | SQLite file path (only for Option 3) | `./data/stock_analysis.db` |
+| `SQLITE_WAL_ENABLED` | Enable WAL journal mode for file-based SQLite | `true` |
+| `SQLITE_BUSY_TIMEOUT_MS` | SQLite lock wait timeout (milliseconds) | `5000` |
+| `SQLITE_WRITE_RETRY_MAX` | Maximum retries on SQLite write lock conflict | `3` |
+| `SQLITE_WRITE_RETRY_BASE_DELAY` | SQLite write retry base backoff (seconds) | `0.1` |
+| `SQLALCHEMY_ECHO` | Log all SQL statements (for debugging, not for production) | `false` |
+
+#### MySQL Compatibility Requirements
+
+**MySQL minimum version 8.0+.** Must use `utf8mb4` charset + InnoDB `DYNAMIC` row format (MySQL 8.0 defaults).
+
+Reason: InnoDB single-column/composite index maximum key length is affected by row format:
+
+- `COMPACT` / `REDUNDANT` row format: **767 bytes**
+- `DYNAMIC` / `COMPRESSED` row format: **3072 bytes**
+- `utf8mb4` charset: up to 4 bytes per character
+
+All 23 tables in this repository have passed the MySQL key-length compatibility audit:
+
+| Index | Columns | Max Key Length | COMPACT(767) | DYNAMIC(3072) |
+|------|--------|---------|-------------|---------------|
+| `uix_news_url_hash` | `VARCHAR(64)` SHA-256 | 256 | ✅ | ✅ |
+| `ix_agent_provider_turn_bucket` | `VARCHAR(100)+VARCHAR(64)+VARCHAR(160)+BOOL` | ~1297 | ❌ | ✅ |
+| `alert_cooldowns.rule_key` index | `VARCHAR(255)` | 1020 | ❌ | ✅ |
+| All other indexes/constraints | — | ≤516 | ✅ | ✅ |
+
+`NewsIntel`'s original `VARCHAR(1000)` unique index (4000 bytes) has been replaced by a `url_hash` (SHA-256 hex digest) column. The `agent_provider_turns` composite index and `alert_cooldowns.rule_key` single-column index depend on the DYNAMIC row format, which is safe under MySQL 8.0 defaults. MySQL 5.7 / non-default COMPACT row format will cause `CREATE TABLE` failures for these two indexes.
+
+#### PostgreSQL Compatibility
+
+No additional restrictions. `UTF8` encoding is sufficient; all index key lengths are within PostgreSQL's default limits.
+
+#### Drivers
+
+| Package | Purpose | Install |
+|--------|------|------|
+| `pymysql` | MySQL / MariaDB | `pip install pymysql` |
+| `psycopg2-binary` | PostgreSQL | `pip install psycopg2-binary` |
+
+Both drivers are included in `requirements.txt`. If using only SQLite, you can remove unused drivers for leaner deployments. If an external database is configured but the corresponding driver is not installed, the system will raise a `ImportError` with an install command提示 at startup.
+
+#### Falling Back to SQLite
+
+1. Remove or comment out `DATABASE_URL`, `DATABASE_TYPE`, `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` from `.env`
+2. Confirm `DATABASE_PATH` points to a valid SQLite path (defaults to `./data/stock_analysis.db` if unset)
+3. Restart the application; it will automatically create or reuse an existing SQLite file
+
+The `get_db_url()` priority chain guarantees that when all the above fields are empty, SQLite is always used. External database connection state does not affect rollback startup. If you need to migrate existing data from an external database to SQLite, you can use SQLAlchemy's built-in export tool chain or write a custom migration script.
+
+#### SQLite Write Stability Configuration
+
+See [SQLite Write Stability Configuration](#sqlite-write-stability-configuration) for WAL, busy_timeout, and write retry details.
 
 ---
 

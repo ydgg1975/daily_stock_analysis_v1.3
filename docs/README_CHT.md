@@ -207,6 +207,22 @@ python main.py --serve-only
 
 完整環境變數、模型渠道、通知渠道、數據源優先級、交易紀律、基本面 P0 語義和部署說明請參考 [完整配置指南](./full-guide.md)。
 
+### 資料庫配置
+
+| 配置方式 | 說明 | 適用場景 |
+|---------|------|---------|
+| SQLite（默認） | 無需額外配置，默認寫入 `DATABASE_PATH`（`./data/stock_analysis.db`） | 單機部署、低負載 |
+| 結構化字段 | 設置 `DATABASE_TYPE` + `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | MySQL / PostgreSQL 標準部署 |
+| 完整連接串 | 直接設置 `DATABASE_URL`（最高優先級），如 `mysql+pymysql://user:pass@host:3306/db` | 需要自定義連接參數時 |
+
+驅動 `pymysql`（MySQL）和 `psycopg2-binary`（PostgreSQL）已包含在 `requirements.txt` 中。如只使用 SQLite，可移除不需要的驅動以精簡部署。完整優先級、字段說明和示例見 `.env.example` 資料庫配置段。
+
+> **MySQL 相容性說明**：應用要求 **MySQL 8.0+**。`NewsIntel` 通過 `url_hash` 列規避長 VARCHAR 唯一索引鍵長限制；`agent_provider_turns`（複合索引 ~1297 位元組）和 `alert_cooldowns.rule_key`（~1020 位元組）依賴 InnoDB `DYNAMIC` 行格式（MySQL 8.0 預設，上限 3072 位元組）。MySQL 5.7 / `COMPACT` 行格式（上限 767 位元組）下這三處可能建表失敗。首次啟用 MySQL/PostgreSQL 前請確保：
+> - MySQL 8.0+：`utf8mb4` 字元集 + InnoDB `DYNAMIC` 行格式（均為 8.0 預設值）
+> - PostgreSQL：`UTF8` 編碼即可（無額外索引鍵長限制）
+> - 建議先在測試庫執行一次 `create_all` 驗證建表無報錯後再投入生產
+> - 連線密碼含特殊字元（`@ : / % ? #` 等）時推薦使用結構化欄位（`DATABASE_TYPE` + `DATABASE_PASSWORD`），`get_db_url()` 會透過 `sqlalchemy.engine.URL.create()` 自動進行 URL 安全編碼；若使用 `DATABASE_URL`，需手動對密碼中的特殊字元進行 URL 編碼（如 `p@ss` 寫作 `p%40ss`）
+
 ## 🖥️ Web 介面
 
 Web 工作台提供配置管理、任務監控、手動分析、歷史報告、完整 Markdown 報告、Agent 問股、回測、持倉管理、智能匯入和淺色 / 深色主題。啟動方式：

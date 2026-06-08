@@ -219,6 +219,22 @@ python main.py --serve-only
 
 完整环境变量、模型渠道、通知渠道、数据源优先级、交易纪律、基本面 P0 语义和部署说明请参考 [完整配置指南](docs/full-guide.md)。
 
+### 数据库配置
+
+| 配置方式 | 说明 | 适用场景 |
+|---------|------|---------|
+| SQLite（默认） | 无需额外配置，默认写入 `DATABASE_PATH`（`./data/stock_analysis.db`） | 单机部署、低负载 |
+| 结构化字段 | 设置 `DATABASE_TYPE` + `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USERNAME` / `DATABASE_PASSWORD` | MySQL / PostgreSQL 标准部署 |
+| 完整连接串 | 直接设置 `DATABASE_URL`（最高优先级），如 `mysql+pymysql://user:pass@host:3306/db` | 需要自定义连接参数时 |
+
+驱动 `pymysql`（MySQL）和 `psycopg2-binary`（PostgreSQL）已包含在 `requirements.txt` 中。如只使用 SQLite，可移除不需要的驱动以精简部署。完整优先级、字段说明和示例见 `.env.example` 数据库配置段。
+
+> **MySQL 兼容性说明**：应用要求 **MySQL 8.0+**。`NewsIntel` 通过 `url_hash` 列规避长 VARCHAR 唯一索引键长限制；`agent_provider_turns`（复合索引 ~1297 字节）和 `alert_cooldowns.rule_key`（~1020 字节）依赖 InnoDB `DYNAMIC` 行格式（MySQL 8.0 默认，上限 3072 字节）。MySQL 5.7 / COMPACT 行格式（上限 767 字节）下这三处可能建表失败。首次启用 MySQL/PostgreSQL 前请确保：
+> - MySQL 8.0+：`utf8mb4` 字符集 + InnoDB `DYNAMIC` 行格式（均为 8.0 默认值）
+> - PostgreSQL 任意支持版本：`UTF8` 编码即可
+> - 建议先在测试库执行一次 `create_all` 验证建表无报错后再投入生产
+> - 连接密码含特殊字符（`@ : / % ? #` 等）时推荐使用结构化字段（`DATABASE_TYPE` + `DATABASE_PASSWORD`），`get_db_url()` 会通过 `sqlalchemy.engine.URL.create()` 自动进行 URL 安全编码；若使用 `DATABASE_URL`，需手动对密码中的特殊字符进行 URL 编码（如 `p@ss` 写作 `p%40ss`）
+
 ## 🖥️ Web 界面
 
 Web 工作台提供配置管理、任务监控、手动分析、历史报告、完整 Markdown 报告、Agent 问股、回测、持仓管理、智能导入和浅色 / 深色主题。启动方式：

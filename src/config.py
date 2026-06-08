@@ -15,7 +15,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple
 from urllib.parse import unquote, urlparse
 from dotenv import load_dotenv, dotenv_values
 from dataclasses import dataclass, field
@@ -865,11 +865,22 @@ class Config:
     prefetch_realtime_quotes: bool = True
 
     # === 数据库配置 ===
+    # 通用：完整 SQLAlchemy 连接串（最高优先级，如 mysql+pymysql://user:pass@host:3306/db）
+    database_url: str = ""
+    # 结构化连接参数：未设置 database_url 时自动拼接
+    database_type: str = ""  # sqlite / mysql / postgresql
+    database_host: str = "127.0.0.1"
+    database_port: int = 0
+    database_name: str = ""
+    database_username: str = ""
+    database_password: str = ""
+    # SQLite 专有配置
     database_path: str = "./data/stock_analysis.db"
     sqlite_wal_enabled: bool = True
     sqlite_busy_timeout_ms: int = 5000
     sqlite_write_retry_max: int = 3
     sqlite_write_retry_base_delay: float = 0.1
+    sqlalchemy_echo: bool = False  # 输出所有 SQL 语句（调试用，生产勿开）
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -1654,6 +1665,13 @@ class Config:
             ),
             md2img_engine=cls._parse_md2img_engine(os.getenv('MD2IMG_ENGINE', 'wkhtmltoimage')),
             prefetch_realtime_quotes=os.getenv('PREFETCH_REALTIME_QUOTES', 'true').lower() == 'true',
+            database_url=(os.getenv('DATABASE_URL') or '').strip(),
+            database_type=(os.getenv('DATABASE_TYPE') or '').strip().lower(),
+            database_host=(os.getenv('DATABASE_HOST') or '127.0.0.1').strip(),
+            database_port=cls._parse_database_port(os.getenv('DATABASE_PORT')),
+            database_name=(os.getenv('DATABASE_NAME') or '').strip(),
+            database_username=(os.getenv('DATABASE_USERNAME') or '').strip(),
+            database_password=(os.getenv('DATABASE_PASSWORD') or ''),
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
             sqlite_wal_enabled=os.getenv('SQLITE_WAL_ENABLED', 'true').lower() == 'true',
             sqlite_busy_timeout_ms=parse_env_int(
@@ -1674,6 +1692,7 @@ class Config:
                 field_name='SQLITE_WRITE_RETRY_BASE_DELAY',
                 minimum=0.0,
             ),
+            sqlalchemy_echo=parse_env_bool(os.getenv('SQLALCHEMY_ECHO'), default=False),
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
             backtest_eval_window_days=parse_env_int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS'), 10, field_name='BACKTEST_EVAL_WINDOW_DAYS', minimum=1),
@@ -2862,12 +2881,74 @@ class Config:
         """
         return [issue.message for issue in self.validate_structured()]
     
-    def get_db_url(self) -> str:
+    _DEFAULT_DB_PORTS: ClassVar[Dict[str, int]] = {"mysql": 3306, "postgresql": 5432, "postgres": 5432}
+
+    @staticmethod
+    def _parse_database_port(raw: Optional[str]) -> int:
+        """Parse DATABASE_PORT env value; 0 means 'use type default'."""
+        val = (raw or "").strip()
+        if not val:
+            return 0
+        try:
+            p = int(val)
+        except (ValueError, TypeError):
+            logger.warning("DATABASE_PORT=%r is not a valid integer; using 0 (type default)", raw)
+            return 0
+        if 1 <= p <= 65535:
+            return p
+        logger.warning("DATABASE_PORT=%r out of range; using 0 (type default)", raw)
+        return 0
+
+    def get_db_url(self):
+        """获取 SQLAlchemy 数据库连接 URL。
+
+        优先级: DATABASE_URL > DATABASE_TYPE 结构化参数 > DATABASE_PATH (SQLite 默认)
         """
-        获取 SQLAlchemy 数据库连接 URL
-        
-        自动创建数据库目录（如果不存在）
-        """
+        from sqlalchemy.engine import URL
+
+        # 1) 完整连接串
+        db_url = (self.database_url or "").strip()
+        if db_url:
+            return db_url
+
+        # 2) 结构化参数（通过 SQLAlchemy URL.create 安全构造，避免特殊字符破坏 URL 解析）
+        db_type = (self.database_type or "").strip().lower()
+        if db_type and db_type != "sqlite":
+            host = (self.database_host or "127.0.0.1").strip()
+            port = self.database_port or self._DEFAULT_DB_PORTS.get(db_type, 0)
+            name = (self.database_name or "").strip()
+            user = (self.database_username or "").strip()
+            password = self.database_password or ""
+            if not name:
+                raise ValueError("DATABASE_NAME 未设置，结构化数据库配置不完整")
+            if db_type == "postgres":
+                db_type = "postgresql"
+            driver = "pymysql" if db_type == "mysql" else "psycopg2"
+            # 预检驱动可用性，避免连接时才报 ImportError
+            if driver == "pymysql":
+                try:
+                    import pymysql  # noqa: F401
+                except ImportError:
+                    raise ImportError(
+                        "MySQL 驱动 pymysql 未安装，请执行: pip install pymysql"
+                    )
+            elif driver == "psycopg2":
+                try:
+                    import psycopg2  # noqa: F401
+                except ImportError:
+                    raise ImportError(
+                        "PostgreSQL 驱动 psycopg2 未安装，请执行: pip install psycopg2-binary"
+                    )
+            return URL.create(
+                drivername=f"{db_type}+{driver}",
+                username=user or None,
+                password=password or None,
+                host=host,
+                port=port,
+                database=name,
+            ).render_as_string(hide_password=False)
+
+        # 3) SQLite 默认
         db_path = Path(self.database_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{db_path.absolute()}"

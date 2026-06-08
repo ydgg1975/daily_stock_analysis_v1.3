@@ -76,10 +76,63 @@ jobs:
       - name: ✅ Offline test suite
         run: ./scripts/ci_gate.sh offline-tests
 
+  cross-db-tests:
+    name: cross-db-tests
+    runs-on: ubuntu-latest
+    needs: [ai-governance]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_pass
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v5
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            .github/requirements-ci.txt
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          for attempt in 1 2 3; do
+            if python -m pip install -r .github/requirements-ci.txt; then break; fi
+            sleep 15
+          done
+      - name: 🧪 Cross-DB integration tests (MySQL + PostgreSQL)
+        env:
+          TEST_MYSQL_URL: mysql+pymysql://root:test_pass@127.0.0.1:3306/test_db
+          TEST_POSTGRESQL_URL: postgresql+psycopg2://postgres:test_pass@127.0.0.1:5432/test_db
+        run: python -m pytest tests/test_storage.py -k "TestMultiDatabaseIntegration" -v
+
   docker-build:
     name: docker-build
     runs-on: ubuntu-latest
-    needs: [backend-gate]
+    needs: [backend-gate, cross-db-tests]
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v5

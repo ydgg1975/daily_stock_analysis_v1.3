@@ -425,6 +425,108 @@ daily_stock_analysis/
 | `LOG_DIR` | 日志目录 | `./logs` |
 | `SAVE_CONTEXT_SNAPSHOT` | 保存分析历史 `context_snapshot`；设为 `false` 时新历史不保存 enhanced_context、market_phase_summary、AnalysisContextPack overview 或诊断快照，但不关闭当次 Prompt 低敏摘要 | `true` |
 
+### 数据库配置
+
+系统支持三种数据库后端，按优先级覆盖：
+
+**优先级：** `DATABASE_URL`（完整连接串） > `DATABASE_TYPE` + 结构化字段 > `DATABASE_PATH`（SQLite 默认）
+
+不设置任何外部数据库配置时，行为与现有版本完全一致，自动使用 SQLite 文件库。
+
+#### 方式一：完整连接串（推荐用于 MySQL/PostgreSQL）
+
+```env
+DATABASE_URL=mysql+pymysql://user:password@host:3306/dbname
+DATABASE_URL=postgresql+psycopg2://user:password@host:5432/dbname
+```
+
+**注意**：`DATABASE_URL` 会原样返回，不做任何编码。密码含特殊字符（`@ : / % ? #`）时需手动 URL 编码（如 `p@ss` 写作 `p%40ss`），否则 URL 解析会出错。特殊字符密码更推荐使用下方结构化字段方式。
+
+#### 方式二：结构化字段
+
+```env
+DATABASE_TYPE=mysql          # mysql | postgresql | sqlite
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=3306           # 不设则按数据库类型自动选择默认端口
+DATABASE_NAME=stock
+DATABASE_USERNAME=stock
+DATABASE_PASSWORD=your_password
+```
+
+密码含特殊字符时，`get_db_url()` 会通过 `sqlalchemy.engine.URL.create()` 自动进行 URL 安全编码。
+
+#### 方式三：SQLite（默认）
+
+```env
+DATABASE_PATH=./data/stock_analysis.db
+```
+
+无需配置 `DATABASE_URL` 或 `DATABASE_TYPE`。
+
+#### 完整字段表
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `DATABASE_URL` | 完整 SQLAlchemy 连接串（最高优先级） | （空） |
+| `DATABASE_TYPE` | 数据库类型：`sqlite` / `mysql` / `postgresql` | （空） |
+| `DATABASE_HOST` | 数据库主机地址 | `127.0.0.1` |
+| `DATABASE_PORT` | 数据库端口；不设时 MySQL 默认 3306，PostgreSQL 默认 5432 | `0`（自动选择） |
+| `DATABASE_NAME` | 数据库名称 | （空） |
+| `DATABASE_USERNAME` | 数据库用户名 | （空） |
+| `DATABASE_PASSWORD` | 数据库密码 | （空） |
+| `DATABASE_PATH` | SQLite 文件路径（仅方式三生效） | `./data/stock_analysis.db` |
+| `SQLITE_WAL_ENABLED` | 文件型 SQLite 启用 WAL 日志模式 | `true` |
+| `SQLITE_BUSY_TIMEOUT_MS` | SQLite 等锁超时（毫秒） | `5000` |
+| `SQLITE_WRITE_RETRY_MAX` | SQLite 写入锁冲突最大重试次数 | `3` |
+| `SQLITE_WRITE_RETRY_BASE_DELAY` | SQLite 写入重试基础退避（秒） | `0.1` |
+| `SQLALCHEMY_ECHO` | 输出所有 SQL 语句（调试用，生产勿开） | `false` |
+
+#### MySQL 兼容性要求
+
+**MySQL 最低版本 8.0+。** 必须使用 `utf8mb4` 字符集 + InnoDB `DYNAMIC` 行格式（MySQL 8.0 默认值）。
+
+原因：InnoDB 单列/复合索引最大键长受行格式影响：
+
+- `COMPACT` / `REDUNDANT` 行格式：**767 bytes**
+- `DYNAMIC` / `COMPRESSED` 行格式：**3072 bytes**
+- `utf8mb4` 字符集下每字符最多 4 字节
+
+本仓库 23 张表已全部通过 MySQL 键长兼容审计：
+
+| 索引 | 涉及列 | 最大键长 | COMPACT(767) | DYNAMIC(3072) |
+|------|--------|---------|-------------|---------------|
+| `uix_news_url_hash` | `VARCHAR(64)` SHA-256 | 256 | ✅ | ✅ |
+| `ix_agent_provider_turn_bucket` | `VARCHAR(100)+VARCHAR(64)+VARCHAR(160)+BOOL` | ~1297 | ❌ | ✅ |
+| `alert_cooldowns.rule_key` 索引 | `VARCHAR(255)` | 1020 | ❌ | ✅ |
+| 其余全部索引/约束 | — | ≤516 | ✅ | ✅ |
+
+`NewsIntel` 原 `VARCHAR(1000)` 唯一索引（4000 字节）已通过 `url_hash`（SHA-256 十六进制摘要）列替代。`agent_provider_turns` 复合索引和 `alert_cooldowns.rule_key` 单列索引依赖 DYNAMIC 行格式，在 MySQL 8.0 默认配置下安全。MySQL 5.7 / 非默认 COMPACT 行格式下这两处会建表失败。
+
+#### PostgreSQL 兼容性
+
+无额外限制。`UTF8` 编码即可，所有索引键长均在 PostgreSQL 默认限制内。
+
+#### 驱动
+
+| 驱动包 | 用途 | 安装 |
+|--------|------|------|
+| `pymysql` | MySQL / MariaDB | `pip install pymysql` |
+| `psycopg2-binary` | PostgreSQL | `pip install psycopg2-binary` |
+
+两驱动均已包含在 `requirements.txt` 中。如只使用 SQLite，可移除不需要的驱动以精简部署。启动时如果配置了外部数据库但未安装对应驱动，会抛出中文 `ImportError` 并提示安装命令。
+
+#### 回退到 SQLite
+
+1. 移除或注释 `.env` 中的 `DATABASE_URL`、`DATABASE_TYPE`、`DATABASE_HOST`、`DATABASE_PORT`、`DATABASE_NAME`、`DATABASE_USERNAME`、`DATABASE_PASSWORD`
+2. 确认 `DATABASE_PATH` 指向有效 SQLite 路径（不设则默认 `./data/stock_analysis.db`）
+3. 重启应用，自动创建或复用已有 SQLite 文件
+
+`get_db_url()` 优先级链保证上述字段全部为空时必然走 SQLite，外部数据库连接状态不影响回滚后的启动。如需从外部数据库迁移已有数据到 SQLite，可使用 SQLAlchemy 自带的导出工具链或自写迁移脚本。
+
+#### SQLite 写入稳态配置
+
+参见 [SQLite 写入稳态配置](#sqlite-写入稳态配置) 了解 WAL、busy_timeout 和写入重试的详细说明。
+
 ---
 
 ## Docker 部署

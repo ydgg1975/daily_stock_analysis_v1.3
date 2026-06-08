@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pandas as pd
 from sqlalchemy import and_, create_engine as sqlalchemy_create_engine, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.sql import func
 
 # Ensure src module can be imported
@@ -703,6 +704,469 @@ class TestStorage(unittest.TestCase):
         finally:
             temp_dir.cleanup()
             DatabaseManager.reset_instance()
+
+    # ------------------------------------------------------------------
+    # NewsIntel url_hash / cross-DB unique-constraint compatibility
+    # ------------------------------------------------------------------
+
+    def test_news_intel_schema_uses_url_hash_for_unique_constraint(self):
+        """uix_news_url on VARCHAR(1000) exceeds MySQL InnoDB key-length limit."""
+        from src.storage import NewsIntel
+        constraint_map = {
+            c.name: [col.name for col in c.columns]
+            for c in NewsIntel.__table__.constraints
+        }
+        self.assertNotIn('uix_news_url', constraint_map,
+                         'VARCHAR(1000) unique index incompatible with MySQL utf8mb4')
+        self.assertIn('uix_news_url_hash', constraint_map,
+                      'url_hash unique constraint required for cross-DB dedup')
+        self.assertIn('url_hash', constraint_map.get('uix_news_url_hash', []))
+
+    def test_compute_url_hash_deterministic_and_64_hex_chars(self):
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        try:
+            h1 = db._compute_url_hash("https://example.com/a")
+            h2 = db._compute_url_hash("https://example.com/a")
+            h3 = db._compute_url_hash("https://example.com/b")
+            self.assertEqual(h1, h2)
+            self.assertNotEqual(h1, h3)
+            self.assertEqual(len(h1), 64)
+            self.assertTrue(all(c in '0123456789abcdef' for c in h1))
+        finally:
+            DatabaseManager.reset_instance()
+
+    def test_save_news_intel_dedup_by_url_hash(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        class _R:
+            title = "T"; url = "https://x.com/1"; source = "S"
+            snippet = "s"; published_date = "2026-06-01"
+
+        class _Resp:
+            provider = "p"; results = [_R]
+
+        c1 = db.save_news_intel(code="600519", name="n", dimension="d",
+                                query="q", response=_Resp)
+        c2 = db.save_news_intel(code="600519", name="n", dimension="d",
+                                query="q", response=_Resp)
+        self.assertEqual(c1, 1)
+        self.assertEqual(c2, 0, "duplicate URL must be rejected by url_hash constraint")
+
+        from src.storage import NewsIntel
+        with db.get_session() as s:
+            rows = s.execute(select(NewsIntel).where(NewsIntel.code == "600519")).scalars().all()
+        self.assertEqual(len(rows), 1)
+        self.assertIsNotNone(rows[0].url_hash)
+        self.assertEqual(len(rows[0].url_hash), 64)
+        DatabaseManager.reset_instance()
+
+    def test_save_news_intel_fallback_key_also_hashed_for_mysql_compat(self):
+        """When url is empty, the fallback key is hashed so unique index stays short."""
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        class _R:
+            title = "NoUrl"; url = ""; source = "S"
+            snippet = "s"; published_date = "2026-06-01"
+
+        class _Resp:
+            provider = "p"; results = [_R]
+
+        c1 = db.save_news_intel(code="600519", name="n", dimension="d",
+                                query="q", response=_Resp)
+        c2 = db.save_news_intel(code="600519", name="n", dimension="d",
+                                query="q", response=_Resp)
+        self.assertEqual(c1, 1)
+        self.assertEqual(c2, 0)
+        DatabaseManager.reset_instance()
+
+    # ------------------------------------------------------------------
+    # save_daily_data cross-DB atomic upsert
+    # ------------------------------------------------------------------
+
+    def test_save_daily_data_atomic_upsert_replaces_existing_row(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        import pandas as pd
+        d = date(2026, 5, 15)
+        df1 = pd.DataFrame([{'date': d, 'open': 100, 'high': 105, 'low': 98,
+                              'close': 102, 'volume': 10000, 'amount': 1020000,
+                              'pct_chg': 2.0, 'ma5': 101, 'ma10': 100, 'ma20': 99,
+                              'volume_ratio': 1.1}])
+        self.assertEqual(db.save_daily_data(df1, code='000001', data_source='src_a'), 1)
+
+        df2 = pd.DataFrame([{'date': d, 'open': 102, 'high': 107, 'low': 100,
+                              'close': 104, 'volume': 12000, 'amount': 1248000,
+                              'pct_chg': 3.0, 'ma5': 103, 'ma10': 102, 'ma20': 101,
+                              'volume_ratio': 1.2}])
+        self.assertEqual(db.save_daily_data(df2, code='000001', data_source='src_b'), 0,
+                         'upsert of existing (code,date) should return 0 new rows')
+
+        with db.get_session() as s:
+            row = s.execute(
+                select(StockDaily).where(
+                    and_(StockDaily.code == '000001', StockDaily.date == d)
+                )
+            ).scalar_one()
+        self.assertEqual(row.close, 104)
+        self.assertEqual(row.data_source, 'src_b')
+        DatabaseManager.reset_instance()
+
+    def test_save_daily_data_batch_chunk_handles_large_volume(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+
+        import pandas as pd
+        base = date(2026, 1, 5)
+        rows = [{'date': base + pd.Timedelta(days=i),
+                 'open': 50 + i * 0.1, 'high': 55, 'low': 48, 'close': 52,
+                 'volume': 5000, 'amount': 260000, 'pct_chg': 0.5,
+                 'ma5': 51, 'ma10': 50, 'ma20': 49, 'volume_ratio': 1.0}
+                for i in range(120)]
+        count = db.save_daily_data(pd.DataFrame(rows), code='000001',
+                                   data_source='batch')
+        self.assertEqual(count, 120)
+
+        with db.get_session() as s:
+            total = s.execute(
+                select(func.count()).select_from(StockDaily).where(StockDaily.code == '000001')
+            ).scalar()
+        self.assertEqual(total, 120)
+        DatabaseManager.reset_instance()
+
+    # ------------------------------------------------------------------
+    # _ensure_schema_migration_record idempotency
+    # ------------------------------------------------------------------
+
+    def test_schema_migration_record_idempotent_across_calls(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        for _ in range(3):
+            db._ensure_schema_migration_record()
+        with db.get_session() as s:
+            cnt = s.execute(
+                select(func.count()).select_from(DatabaseSchemaMigration)
+            ).scalar_one()
+        self.assertEqual(cnt, 1)
+        DatabaseManager.reset_instance()
+
+
+# ---------------------------------------------------------------------------
+# Cross-database integration tests (require real MySQL / PostgreSQL)
+# ---------------------------------------------------------------------------
+# Set TEST_MYSQL_URL / TEST_POSTGRESQL_URL env vars to enable.
+#   TEST_MYSQL_URL=mysql+pymysql://root:pwd@127.0.0.1:3306/test_db
+#   TEST_POSTGRESQL_URL=postgresql+psycopg2://postgres:pwd@127.0.0.1:5432/test_db
+
+def _real_db_reachable(db_url: str) -> bool:
+    try:
+        from sqlalchemy import text as _text
+        eng = sqlalchemy_create_engine(db_url, pool_pre_ping=True)
+        with eng.connect() as conn:
+            conn.execute(_text("SELECT 1"))
+        eng.dispose()
+        return True
+    except Exception:
+        return False
+
+
+_MYSQL_URL = (os.environ.get("TEST_MYSQL_URL") or "").strip()
+_PG_URL = (os.environ.get("TEST_POSTGRESQL_URL") or "").strip()
+_MYSQL_OK = bool(_MYSQL_URL) and _real_db_reachable(_MYSQL_URL)
+_PG_OK = bool(_PG_URL) and _real_db_reachable(_PG_URL)
+
+_ALL_TABLES = {
+    'schema_migrations', 'stock_daily', 'news_intel',
+    'fundamental_snapshot', 'analysis_history', 'backtest_results',
+    'backtest_summaries', 'portfolio_accounts', 'portfolio_trades',
+    'portfolio_cash_ledger', 'portfolio_corporate_actions',
+    'portfolio_positions', 'portfolio_position_lots',
+    'portfolio_daily_snapshots', 'portfolio_fx_rates',
+    'conversation_messages', 'conversation_summaries',
+    'agent_provider_turns', 'llm_usage', 'alert_rules',
+    'alert_triggers', 'alert_notifications', 'alert_cooldowns',
+}
+
+
+class TestMultiDatabaseIntegration(unittest.TestCase):
+    """Real-database tests — skipped when TEST_{MYSQL,POSTGRESQL}_URL not set."""
+
+    @classmethod
+    def _table_names(cls, db):
+        from sqlalchemy import inspect as _inspect
+        with db.get_session() as s:
+            return set(_inspect(s.get_bind()).get_table_names())
+
+    # -- MySQL ---------------------------------------------------------------
+
+    @unittest.skipUnless(_MYSQL_OK, "TEST_MYSQL_URL not set or unreachable")
+    def test_mysql_create_all_produces_all_tables(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_MYSQL_URL)
+        try:
+            missing = _ALL_TABLES - self._table_names(db)
+            self.assertSetEqual(missing, set(),
+                f"Tables missing on MySQL: {missing}")
+        finally:
+            DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_MYSQL_OK, "TEST_MYSQL_URL not set or unreachable")
+    def test_mysql_save_daily_data_upsert(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_MYSQL_URL)
+        import pandas as pd
+        d = date(2026, 5, 20)
+        row = {'date': d, 'open': 50, 'high': 55, 'low': 48, 'close': 52,
+               'volume': 5000, 'amount': 260000, 'pct_chg': 1.0,
+               'ma5': 51, 'ma10': 50, 'ma20': 49, 'volume_ratio': 1.0}
+        self.assertEqual(db.save_daily_data(pd.DataFrame([row]), 'MYSQL001', 'v1'), 1)
+        row2 = dict(row, close=57, data_source='v2')
+        self.assertEqual(db.save_daily_data(pd.DataFrame([row2]), 'MYSQL001', 'v2'), 0)
+        with db.get_session() as s:
+            r = s.execute(select(StockDaily).where(
+                and_(StockDaily.code == 'MYSQL001', StockDaily.date == d)
+            )).scalar_one()
+        self.assertEqual(r.close, 57)
+        self.assertEqual(r.data_source, 'v2')
+        # cleanup
+        with db.get_session() as s:
+            from sqlalchemy import delete as _del
+            s.execute(_del(StockDaily).where(StockDaily.code == 'MYSQL001'))
+            s.commit()
+        DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_MYSQL_OK, "TEST_MYSQL_URL not set or unreachable")
+    def test_mysql_news_intel_url_hash_unique_constraint(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_MYSQL_URL)
+        from src.storage import NewsIntel
+
+        class _R:
+            title = "MySQL Test"; url = "https://x.com/mysql-unique-test"
+            source = "S"; snippet = "s"; published_date = "2026-06-01"
+        class _Resp:
+            provider = "p"; results = [_R]
+
+        c1 = db.save_news_intel("600519", "n", "d", "q", _Resp)
+        c2 = db.save_news_intel("600519", "n", "d", "q", _Resp)
+        self.assertEqual(c1, 1)
+        self.assertEqual(c2, 0)
+        with db.get_session() as s:
+            rows = s.execute(select(NewsIntel).where(NewsIntel.code == "600519")).scalars().all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].url, "https://x.com/mysql-unique-test")
+        self.assertEqual(len(rows[0].url_hash), 64)
+        with db.get_session() as s:
+            from sqlalchemy import delete as _del
+            s.execute(_del(NewsIntel).where(NewsIntel.code == "600519"))
+            s.commit()
+        DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_MYSQL_OK, "TEST_MYSQL_URL not set or unreachable")
+    def test_mysql_schema_migration_record_idempotent(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_MYSQL_URL)
+        for _ in range(3):
+            db._ensure_schema_migration_record()
+        with db.get_session() as s:
+            cnt = s.execute(
+                select(func.count()).select_from(DatabaseSchemaMigration)
+            ).scalar_one()
+        self.assertEqual(cnt, 1)
+        DatabaseManager.reset_instance()
+
+    # -- PostgreSQL ----------------------------------------------------------
+
+    @unittest.skipUnless(_PG_OK, "TEST_POSTGRESQL_URL not set or unreachable")
+    def test_postgresql_create_all_produces_all_tables(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_PG_URL)
+        try:
+            missing = _ALL_TABLES - self._table_names(db)
+            self.assertSetEqual(missing, set(),
+                f"Tables missing on PostgreSQL: {missing}")
+        finally:
+            DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_PG_OK, "TEST_POSTGRESQL_URL not set or unreachable")
+    def test_postgresql_save_daily_data_upsert(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_PG_URL)
+        import pandas as pd
+        d = date(2026, 5, 21)
+        row = {'date': d, 'open': 60, 'high': 65, 'low': 58, 'close': 62,
+               'volume': 7000, 'amount': 434000, 'pct_chg': 2.5,
+               'ma5': 61, 'ma10': 60, 'ma20': 59, 'volume_ratio': 1.2}
+        self.assertEqual(db.save_daily_data(pd.DataFrame([row]), 'PG0001', 'v1'), 1)
+        row2 = dict(row, close=67, data_source='v2')
+        self.assertEqual(db.save_daily_data(pd.DataFrame([row2]), 'PG0001', 'v2'), 0)
+        with db.get_session() as s:
+            r = s.execute(select(StockDaily).where(
+                and_(StockDaily.code == 'PG0001', StockDaily.date == d)
+            )).scalar_one()
+        self.assertEqual(r.close, 67)
+        self.assertEqual(r.data_source, 'v2')
+        with db.get_session() as s:
+            from sqlalchemy import delete as _del
+            s.execute(_del(StockDaily).where(StockDaily.code == 'PG0001'))
+            s.commit()
+        DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_PG_OK, "TEST_POSTGRESQL_URL not set or unreachable")
+    def test_postgresql_news_intel_url_hash_unique_constraint(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_PG_URL)
+        from src.storage import NewsIntel
+
+        class _R:
+            title = "PG Test"; url = "https://x.com/pg-unique-test"
+            source = "S"; snippet = "s"; published_date = "2026-06-02"
+        class _Resp:
+            provider = "p"; results = [_R]
+
+        c1 = db.save_news_intel("000001", "n", "d", "q", _Resp)
+        c2 = db.save_news_intel("000001", "n", "d", "q", _Resp)
+        self.assertEqual(c1, 1)
+        self.assertEqual(c2, 0)
+        with db.get_session() as s:
+            rows = s.execute(select(NewsIntel).where(NewsIntel.code == "000001")).scalars().all()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].url, "https://x.com/pg-unique-test")
+        with db.get_session() as s:
+            from sqlalchemy import delete as _del
+            s.execute(_del(NewsIntel).where(NewsIntel.code == "000001"))
+            s.commit()
+        DatabaseManager.reset_instance()
+
+    @unittest.skipUnless(_PG_OK, "TEST_POSTGRESQL_URL not set or unreachable")
+    def test_postgresql_schema_migration_record_idempotent(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url=_PG_URL)
+        for _ in range(3):
+            db._ensure_schema_migration_record()
+        with db.get_session() as s:
+            cnt = s.execute(
+                select(func.count()).select_from(DatabaseSchemaMigration)
+            ).scalar_one()
+        self.assertEqual(cnt, 1)
+        DatabaseManager.reset_instance()
+
+    # -- SQLite regression ---------------------------------------------------
+
+    def test_sqlite_regression_all_tables_still_created(self):
+        """Cross-DB refactoring must not break default SQLite path."""
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        names = self._table_names(db)
+        for tbl in ('stock_daily', 'news_intel', 'schema_migrations',
+                     'agent_provider_turns', 'alert_cooldowns'):
+            self.assertIn(tbl, names)
+        DatabaseManager.reset_instance()
+
+    # -- Driver-missing guard ------------------------------------------------
+
+    def test_missing_pymysql_raises_clear_install_hint(self):
+        real_import = __import__
+
+        def _block(name, *a, **kw):
+            if name == 'pymysql':
+                raise ImportError("No module named 'pymysql'")
+            return real_import(name, *a, **kw)
+
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        try:
+            for k, v in [('DATABASE_TYPE', 'mysql'), ('DATABASE_HOST', '127.0.0.1'),
+                          ('DATABASE_NAME', 'test'), ('DATABASE_USERNAME', 'u'),
+                          ('DATABASE_PASSWORD', 'p')]:
+                os.environ[k] = v
+            with patch('builtins.__import__', side_effect=_block):
+                with self.assertRaises(ImportError) as ctx:
+                    DatabaseManager.get_instance()
+                self.assertIn('pymysql', str(ctx.exception))
+                self.assertIn('pip install pymysql', str(ctx.exception))
+        finally:
+            DatabaseManager.reset_instance()
+            Config.reset_instance()
+            for k in ('DATABASE_TYPE', 'DATABASE_HOST', 'DATABASE_NAME',
+                      'DATABASE_USERNAME', 'DATABASE_PASSWORD'):
+                os.environ.pop(k, None)
+
+    def test_missing_psycopg2_raises_clear_install_hint(self):
+        real_import = __import__
+
+        def _block(name, *a, **kw):
+            if name == 'psycopg2':
+                raise ImportError("No module named 'psycopg2'")
+            return real_import(name, *a, **kw)
+
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        try:
+            for k, v in [('DATABASE_TYPE', 'postgresql'), ('DATABASE_HOST', '127.0.0.1'),
+                          ('DATABASE_NAME', 'test'), ('DATABASE_USERNAME', 'u'),
+                          ('DATABASE_PASSWORD', 'p')]:
+                os.environ[k] = v
+            with patch('builtins.__import__', side_effect=_block):
+                with self.assertRaises(ImportError) as ctx:
+                    DatabaseManager.get_instance()
+                self.assertIn('psycopg2', str(ctx.exception))
+                self.assertIn('pip install psycopg2-binary', str(ctx.exception))
+        finally:
+            DatabaseManager.reset_instance()
+            Config.reset_instance()
+            for k in ('DATABASE_TYPE', 'DATABASE_HOST', 'DATABASE_NAME',
+                      'DATABASE_USERNAME', 'DATABASE_PASSWORD'):
+                os.environ.pop(k, None)
+
+    # -- Special-character password URL encoding -----------------------------
+
+    def test_structured_config_encodes_password_special_chars(self):
+        """URL.create must safely encode @ : / ? # in passwords."""
+        DatabaseManager.reset_instance()
+        Config.reset_instance()
+        try:
+            for k, v in [('DATABASE_TYPE', 'mysql'), ('DATABASE_HOST', '127.0.0.1'),
+                          ('DATABASE_NAME', 'db'), ('DATABASE_USERNAME', 'u'),
+                          ('DATABASE_PASSWORD', 'p@ss:w/rd?#')]:
+                os.environ[k] = v
+            config = Config.get_instance()
+            url = config.get_db_url()
+            parsed = make_url(url)
+            self.assertEqual(parsed.password, 'p@ss:w/rd?#',
+                             f"Password not properly encoded/decoded in {url}")
+            self.assertEqual(parsed.host, '127.0.0.1')
+            self.assertEqual(parsed.database, 'db')
+            self.assertEqual(parsed.username, 'u')
+        finally:
+            DatabaseManager.reset_instance()
+            Config.reset_instance()
+            for k in ('DATABASE_TYPE', 'DATABASE_HOST', 'DATABASE_NAME',
+                      'DATABASE_USERNAME', 'DATABASE_PASSWORD'):
+                os.environ.pop(k, None)
+
+    # -- Unknown backend guard -----------------------------------------------
+
+    def test_save_daily_data_raises_on_unsupported_backend(self):
+        DatabaseManager.reset_instance()
+        db = DatabaseManager(db_url="sqlite:///:memory:")
+        db._is_sqlite_engine = False
+        db._db_backend_name = "oracle"
+
+        import pandas as pd
+        df = pd.DataFrame([{
+            'date': date(2026, 1, 1), 'open': 10, 'high': 11, 'low': 9,
+            'close': 10.5, 'volume': 100, 'amount': 1050, 'pct_chg': 1.0,
+            'ma5': 10, 'ma10': 10, 'ma20': 10, 'volume_ratio': 1.0,
+        }])
+        with self.assertRaises(RuntimeError) as ctx:
+            db.save_daily_data(df, code='TEST', data_source='test')
+        self.assertIn('Unsupported database backend', str(ctx.exception))
+        self.assertIn('oracle', str(ctx.exception))
+        DatabaseManager.reset_instance()
+
 
 if __name__ == '__main__':
     unittest.main()

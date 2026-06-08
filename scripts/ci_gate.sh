@@ -8,6 +8,7 @@ syntax_check() {
   python -m py_compile src/storage.py src/scheduler.py src/search_service.py
   python -m py_compile src/market_analyzer.py src/stock_analyzer.py
   python -m py_compile data_provider/*.py
+  python -m py_compile tests/test_storage.py tests/test_check_env_encoding.py
 }
 
 flake8_checks() {
