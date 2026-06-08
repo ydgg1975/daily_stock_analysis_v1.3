@@ -34,7 +34,7 @@ except ModuleNotFoundError:
     get_stock_bar = None
 
 from src.config import Config
-from src.storage import DatabaseManager, AnalysisHistory, BacktestResult
+from src.storage import DatabaseManager, AnalysisHistory, BacktestResult, DecisionSignalRecord
 from src.analyzer import AnalysisResult
 from src.services.history_service import HistoryService
 import src.auth as auth
@@ -1395,8 +1395,8 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIn("✅Safe", markdown)
         self.assertNotIn("🚨Safe", markdown)
 
-    def test_delete_analysis_history_records_also_cleans_backtests(self) -> None:
-        """删除历史记录时应一并清理关联回测结果。"""
+    def test_delete_analysis_history_records_also_cleans_backtests_and_decision_signals(self) -> None:
+        """删除历史记录时应一并清理关联回测结果和决策信号。"""
         record_id = self._save_history("query_delete_001")
 
         with self.db.session_scope() as session:
@@ -1408,6 +1408,36 @@ class AnalysisHistoryTestCase(unittest.TestCase):
                 engine_version="v1",
                 eval_status="pending",
             ))
+            session.add(DecisionSignalRecord(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                market="cn",
+                source_type="analysis",
+                source_report_id=record_id,
+                trace_id="trace-delete-linked",
+                market_phase="intraday",
+                trigger_source="api",
+                action="buy",
+                action_label="买入",
+                reason="linked",
+                plan_quality="minimal",
+                status="active",
+            ))
+            session.add(DecisionSignalRecord(
+                stock_code="000001",
+                stock_name="平安银行",
+                market="cn",
+                source_type="analysis",
+                source_report_id=record_id + 999,
+                trace_id="trace-delete-unrelated",
+                market_phase="intraday",
+                trigger_source="api",
+                action="watch",
+                action_label="观望",
+                reason="unrelated",
+                plan_quality="minimal",
+                status="active",
+            ))
 
         deleted = self.db.delete_analysis_history_records([record_id])
         self.assertEqual(deleted, 1)
@@ -1417,6 +1447,14 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             self.assertEqual(
                 session.query(BacktestResult).filter(BacktestResult.analysis_history_id == record_id).count(),
                 0,
+            )
+            self.assertEqual(
+                session.query(DecisionSignalRecord).filter(DecisionSignalRecord.source_report_id == record_id).count(),
+                0,
+            )
+            self.assertEqual(
+                session.query(DecisionSignalRecord).filter(DecisionSignalRecord.trace_id == "trace-delete-unrelated").count(),
+                1,
             )
 
     @patch("src.auth.is_auth_enabled", return_value=False)

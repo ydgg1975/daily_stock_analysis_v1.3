@@ -1128,7 +1128,27 @@ The `decision_type` bridge in the table only documents compatibility between the
 
 Unknown or ambiguous advice is not coerced into `watch` or `hold`; it returns empty `action/action_label`. Web history cards, StockBar, same-stock history drawers, and backtest result rows use `operation_advice` as a display-only fallback when old records do not have `action/action_label`; that fallback affects only the UI label and is not a stable API action or future signal asset. When Web receives both `action` and `action_label`, it first renders the label from `action` in the current UI language; API `action_label` remains report-language display metadata for non-Web clients or compatibility display when `action` is absent. Market review and other non-stock reports do not emit trading `action` values and keep only the `operation_advice` text. `dashboard.phase_decision.immediate_action` belongs to the market-phase guardrail report block and is not used by the #1390 P0 eight-state action derivation. The final market phase still comes from `report.meta.market_phase_summary.phase`.
 
-#1390 P0 does not define or emit future signal-asset fields. More granular plan fields such as `horizon`, `plan_quality`, and `status` are left for a separate follow-up design. This phase does not flatten them into current report summaries, history lists, StockBar rows, or backtest responses; it adds no DB migration, no historical backfill, and no new configuration.
+#1390 P0 does not flatten future signal-asset fields into current report summaries, history lists, StockBar rows, or backtest responses. #1390 P1 now carries more granular plan fields such as `horizon`, `plan_quality`, and `status` through an independent `DecisionSignal` resource; it still does not change the existing report contract, backfill history, or add configuration.
+
+### Decision Signal Asset (#1390 P1)
+
+`DecisionSignal` is an independent backend resource for persisting AI recommendations as queryable, deduplicated, status-updatable signal assets. It does not replace `operation_advice`, does not expand the legacy `decision_type=buy|hold|sell` contract, and does not auto-extract from existing reports yet; before P2, signals are written only through explicit API or service calls.
+
+Core fields include `stock_code`, `stock_name`, `market`, `source_type`, `source_agent`, `source_report_id`, `trace_id`, `market_phase`, `trigger_source`, `action`, `action_label`, `confidence`, `score`, `horizon`, `entry_low`, `entry_high`, `stop_loss`, `target_price`, `invalidation`, `watch_conditions`, `reason`, `risk_summary`, `catalyst_summary`, `evidence`, `data_quality_summary`, `plan_quality`, `status`, `expires_at`, `created_at`, `updated_at`, and `metadata`. `action` reuses the eight-state action taxonomy; `market_phase` reuses the market phase enum; `source_type` supports `analysis|agent|alert|market_review|manual`; `status` supports `active|expired|invalidated|closed|archived`; `horizon` supports `intraday|1d|3d|5d|10d|swing|long`.
+
+`confidence` is `0.0-1.0`, and `score` is `0-100`, separate from historical `sentiment_score`. `plan_quality` supports `complete|partial|minimal|unknown`: a valid explicit value is saved as-is; otherwise the service computes it. The entry range (`entry_low` or `entry_high`) counts as one slot, and `stop_loss`, `target_price`, `invalidation`, and `watch_conditions` each count as one slot. Two slots produce `partial`, four or more produce `complete`, and action/reason without enough slots produces `minimal`.
+
+New API endpoints:
+
+- `POST /api/v1/decision-signals`: create or deduplicate a signal and return `{ item, created }` with HTTP 200. Deduplication uses `(source_report_id, stock_code, action)` when `source_report_id` is present, or `(trace_id, stock_code, action)` when only `trace_id` is present. Signals without either source identifier are not deduplicated. P1 does not guarantee concurrent idempotency.
+- `GET /api/v1/decision-signals`: paginated query with `market`, `stock_code`, `action`, `market_phase`, `source_type`, `trigger_source`, `status`, time ranges, `holding_only`, and `account_id`.
+- `GET /api/v1/decision-signals/{signal_id}`: fetch one signal; missing IDs return 404.
+- `PATCH /api/v1/decision-signals/{signal_id}/status`: update a valid status and optional `metadata`; when `metadata` is provided it replaces the whole stored metadata object, and no complex state machine is enforced.
+- `GET /api/v1/decision-signals/latest/{stock_code}`: return latest active signals for a stock, default `limit=1`.
+
+Read paths lazily expire active signals whose `expires_at` has passed before list, detail, and latest queries. Stock codes are normalized on write and query, so common variants such as `600519`, `SH600519`, and `600519.SH` match the same stored code. `holding_only=true` reads only cached `portfolio_positions` rows with `quantity > 0`, optionally scoped by `account_id`; it does not call portfolio snapshot replay. When no cache exists, it returns an empty result and callers should refresh the cache through the portfolio snapshot API first.
+
+`source_report_id` is nullable and is not required to reference an existing history row; deleting history records explicitly removes signals whose `source_report_id` matches the deleted IDs. Follow-up association fields such as `task_id` and `alert_trigger_id` should be stored in `metadata` for P1. JSON and text fields are sanitized before persistence with a signal-specific sanitizer that redacts sensitive keys, URLs, Bearer values, and token-like strings without applying the diagnostics 300-character truncation.
 
 ## Backtesting
 

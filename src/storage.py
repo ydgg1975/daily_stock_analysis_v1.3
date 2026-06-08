@@ -774,6 +774,52 @@ class AlertCooldownRecord(Base):
     )
 
 
+class DecisionSignalRecord(Base):
+    """Persisted AI decision signal asset for Issue #1390 P1."""
+
+    __tablename__ = 'decision_signals'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stock_code = Column(String(16), nullable=False, index=True)
+    stock_name = Column(String(64))
+    market = Column(String(8), nullable=False, index=True)
+    source_type = Column(String(32), nullable=False, index=True)
+    source_agent = Column(String(64))
+    source_report_id = Column(Integer, index=True)
+    trace_id = Column(String(64), index=True)
+    market_phase = Column(String(24), index=True)
+    trigger_source = Column(String(64), nullable=False, index=True)
+    action = Column(String(16), nullable=False, index=True)
+    action_label = Column(String(32))
+    confidence = Column(Float)
+    score = Column(Integer)
+    horizon = Column(String(16), index=True)
+    entry_low = Column(Float)
+    entry_high = Column(Float)
+    stop_loss = Column(Float)
+    target_price = Column(Float)
+    invalidation = Column(Text)
+    watch_conditions = Column(Text)
+    reason = Column(Text)
+    risk_summary = Column(Text)
+    catalyst_summary = Column(Text)
+    evidence_json = Column(Text)
+    data_quality_summary_json = Column(Text)
+    plan_quality = Column(String(16), nullable=False, default='unknown', index=True)
+    status = Column(String(16), nullable=False, default='active', index=True)
+    expires_at = Column(DateTime, index=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    metadata_json = Column(Text)
+
+    __table_args__ = (
+        Index('ix_decision_signal_stock_status_time', 'stock_code', 'status', 'created_at'),
+        Index('ix_decision_signal_market_status_time', 'market', 'status', 'created_at'),
+        Index('ix_decision_signal_report_stock_action', 'source_report_id', 'stock_code', 'action'),
+        Index('ix_decision_signal_trace_stock_action', 'trace_id', 'stock_code', 'action'),
+    )
+
+
 class _DatabaseManagerMeta(type):
     """Serialize DatabaseManager construction across __new__ and __init__."""
 
@@ -1633,7 +1679,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         """
         删除指定的分析历史记录。
 
-        同时清理依赖这些历史记录的回测结果，避免外键约束失败。
+        同时清理依赖这些历史记录的回测结果和决策信号，避免
+        依赖历史记录的派生数据残留。
 
         Args:
             record_ids: 要删除的历史记录主键 ID 列表
@@ -1646,6 +1693,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return 0
 
         with self.session_scope() as session:
+            session.execute(
+                delete(DecisionSignalRecord).where(DecisionSignalRecord.source_report_id.in_(ids))
+            )
             session.execute(
                 delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(ids))
             )

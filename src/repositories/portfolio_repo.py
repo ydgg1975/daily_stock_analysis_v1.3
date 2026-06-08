@@ -797,6 +797,28 @@ class PortfolioRepository:
             cutoff_ordinal = as_of.toordinal() - lookback_days
             return [row for row in rows if row.snapshot_date.toordinal() >= cutoff_ordinal]
 
+    def list_cached_position_symbols(
+        self,
+        *,
+        account_id: Optional[int] = None,
+    ) -> List[str]:
+        """Return symbols from the cached non-zero position table only."""
+        with self.db.get_session() as session:
+            query = select(PortfolioPosition.symbol).where(
+                PortfolioPosition.quantity > 0,
+            )
+            if account_id is not None:
+                query = query.where(PortfolioPosition.account_id == account_id)
+            rows = session.execute(query.order_by(PortfolioPosition.symbol.asc())).scalars().all()
+            seen = set()
+            symbols: List[str] = []
+            for row in rows:
+                symbol = str(row or "").strip()
+                if symbol and symbol not in seen:
+                    seen.add(symbol)
+                    symbols.append(symbol)
+            return symbols
+
     # ------------------------------------------------------------------
     # Snapshot / position cache
     # ------------------------------------------------------------------
