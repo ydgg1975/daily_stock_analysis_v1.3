@@ -493,6 +493,24 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         self.assertEqual(payload["route"][0]["source"], "ths_summary")
         self.assertEqual(payload["stocks"][0]["name"], "顺络电子")
 
+    def test_fetch_ths_summary_event_ignores_missing_concept_name_column(self) -> None:
+        import pandas as pd
+
+        provider = alphasift_service.DsaEastMoneyHotspotProvider()
+        summary = pd.DataFrame([
+            {"日期": "2026-06-07", "驱动事件": "行业政策利好"},
+        ])
+
+        class _MockAkshare:
+            @staticmethod
+            def stock_board_concept_summary_ths():
+                return summary
+
+        with patch.dict("sys.modules", {"akshare": _MockAkshare()}):
+            text = provider._fetch_ths_summary_event("MLCC")
+
+        self.assertEqual(text, "")
+
     def test_strategies_rejects_when_enabled_but_adapter_missing(self) -> None:
         config = self._config(enabled=True)
 

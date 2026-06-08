@@ -1292,6 +1292,11 @@ class DsaEastMoneyHotspotProvider:
             return ""
         if df is None or df.empty:
             return ""
+        if "概念名称" not in df.columns:
+            logger.warning(
+                "AlphaSift THS summary missing required column '概念名称'; skip enrichment.",
+            )
+            return ""
         rows = df[df["概念名称"].astype(str) == topic]
         if rows.empty:
             rows = df[df["概念名称"].astype(str).str.contains(re.escape(topic), case=False, na=False)]
