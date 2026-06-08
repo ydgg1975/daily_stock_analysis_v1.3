@@ -279,6 +279,17 @@ def test_holding_only_uses_cached_positions_and_stock_code_variants(client_and_d
         ),
     )
     assert inactive_resp.status_code == 200, inactive_resp.text
+    zero_only_resp = client.post(
+        "/api/v1/decision-signals",
+        json=_payload(
+            source_report_id=3204,
+            trace_id="trace-3204",
+            stock_code="MSFT",
+            stock_name="Microsoft",
+            market="us",
+        ),
+    )
+    assert zero_only_resp.status_code == 200, zero_only_resp.text
 
     with db.session_scope() as session:
         account = PortfolioAccount(
@@ -307,6 +318,16 @@ def test_holding_only_uses_cached_positions_and_stock_code_variants(client_and_d
                 account_id=account_id,
                 cost_method="fifo",
                 symbol="AAPL",
+                market="us",
+                currency="USD",
+                quantity=0,
+            )
+        )
+        session.add(
+            PortfolioPosition(
+                account_id=account_id,
+                cost_method="fifo",
+                symbol="MSFT",
                 market="us",
                 currency="USD",
                 quantity=0,
