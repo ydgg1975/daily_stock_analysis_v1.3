@@ -348,7 +348,7 @@ def add_to_watchlist(
         codes = _read_watchlist_codes(service)
         normalized_existing = [normalize_stock_code(c) for c in codes]
         if validated not in normalized_existing:
-            codes.append(request.stock_code.strip())
+            codes.append(normalize_stock_code(request.stock_code.strip()))
             _write_watchlist_codes(service, codes)
         return WatchlistResponse(stock_codes=codes, message=f"已加入 {request.stock_code.strip()}")
     except HTTPException:
