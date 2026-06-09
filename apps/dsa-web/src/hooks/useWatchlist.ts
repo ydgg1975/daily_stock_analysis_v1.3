@@ -65,8 +65,11 @@ export function useWatchlist(): UseWatchlistReturn {
   }, []);
 
   const isInWatchlist = useCallback(
-    (stockCode: string) => codes.includes(normalizeStockCode(stockCode)),
-    [codes],
+      (stockCode: string) => {
+        const normalizedCodes = codes.map(normalizeStockCode);
+        return normalizedCodes.includes(normalizeStockCode(stockCode));
+      },
+      [codes],
   );
 
   const addToWatchlist = useCallback(async (stockCode: string) => {
