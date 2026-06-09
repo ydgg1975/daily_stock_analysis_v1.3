@@ -421,7 +421,8 @@ daily_stock_analysis/
 | `MARKET_REVIEW_COLOR_SCHEME` | 大盘复盘指数涨跌颜色：`green_up`=绿涨红跌（默认），`red_up`=红涨绿跌 | `green_up` |
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：默认 `true`，非交易日跳过执行；设为 `false` 或使用 `--force-run` 可强制执行（Issue #373） | `true` |
 | `SCHEDULE_ENABLED` | 启用定时任务 | `false` |
-| `SCHEDULE_TIME` | 定时执行时间 | `18:00` |
+| `SCHEDULE_TIME` | 定时执行时间（单时间兜底） | `18:00` |
+| `SCHEDULE_TIMES` | 多时间推送（逗号分隔 `HH:MM`，如 `09:20,12:30,15:10,18:00`；留空回退 `SCHEDULE_TIME`） | （空） |
 | `LOG_DIR` | 日志目录 | `./logs` |
 | `SAVE_CONTEXT_SNAPSHOT` | 保存分析历史 `context_snapshot`；设为 `false` 时新历史不保存 enhanced_context、market_phase_summary、AnalysisContextPack overview 或诊断快照，但不关闭当次 Prompt 低敏摘要 | `true` |
 
@@ -708,7 +709,8 @@ python main.py --schedule --no-run-immediately
 | 变量名 | 说明 | 默认值 | 示例 |
 |--------|------|:-------:|:-----:|
 | `SCHEDULE_ENABLED` | 是否启用定时任务 | `false` | `true` |
-| `SCHEDULE_TIME` | 每日执行时间 (HH:MM) | `18:00` | `09:30` |
+| `SCHEDULE_TIME` | 每日执行时间 (HH:MM，单时间兜底) | `18:00` | `09:30` |
+| `SCHEDULE_TIMES` | 多时间推送（逗号分隔 `HH:MM`，自动去重排序；留空回退 `SCHEDULE_TIME`） | （空） | `09:20,12:30,15:10,18:00` |
 | `SCHEDULE_RUN_IMMEDIATELY` | 定时模式启动时是否立即运行一次；未显式设置时沿用 `RUN_IMMEDIATELY` 的运行时覆盖语义 | `true` | `false` |
 | `RUN_IMMEDIATELY` | 非定时模式启动时是否立即运行一次；同时作为未显式设置 `SCHEDULE_RUN_IMMEDIATELY` 时的 legacy 回退 | `true` | `false` |
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查：非交易日跳过执行；设为 `false` 可强制执行 | `true` | `false` |
@@ -719,6 +721,8 @@ python main.py --schedule --no-run-immediately
 # 设置启动时不立即分析
 docker run -e SCHEDULE_ENABLED=true -e SCHEDULE_RUN_IMMEDIATELY=false ...
 ```
+
+**运行期调度（serve / 桌面端）**：以 `--serve` / `--serve-only` 启动或使用桌面端时，后端进程内置 `RuntimeSchedulerService`，会按 `SCHEDULE_ENABLED` 与 `SCHEDULE_TIMES`（或 `SCHEDULE_TIME`）注册多个每日任务。在 Web 设置页“系统 → 定时调度”保存这些字段后会自动 reconcile（无需重启），并可查看启用状态、有效时间点、下次/上次执行，或点击“立即执行一次”手动触发。相关 API：`GET /api/v1/system/scheduler/status`、`POST /api/v1/system/scheduler/run-now`。桌面端定时推送依赖应用保持运行，关闭后不再推送。
 
 > 兼容说明：如果运行时显式传入 `RUN_IMMEDIATELY`，但没有单独传 `SCHEDULE_RUN_IMMEDIATELY`，内置调度模式会继续继承前者，避免被 `.env` 中持久化的 `SCHEDULE_RUN_IMMEDIATELY` 旧值反向覆盖。
 

@@ -88,7 +88,14 @@ class SchedulerBackgroundTaskTestCase(unittest.TestCase):
             order = []
 
             class FakeScheduler:
-                def __init__(self, schedule_time="18:00", schedule_time_provider=None):
+                def __init__(
+                    self,
+                    schedule_time="18:00",
+                    schedule_time_provider=None,
+                    schedule_times=None,
+                    schedule_times_provider=None,
+                    install_signal_handlers=True,
+                ):
                     order.append(("init", schedule_time))
                     order.append(("provider", callable(schedule_time_provider)))
 
@@ -191,6 +198,89 @@ class SchedulerBackgroundTaskTestCase(unittest.TestCase):
 
         self.assertEqual(calls, [])
         self.assertEqual(fake_schedule.jobs, [])
+
+    def test_scheduler_registers_multiple_daily_jobs(self):
+        fake_schedule = _FakeScheduleModule()
+        with patch.dict(sys.modules, {"schedule": fake_schedule}):
+            from src.scheduler import Scheduler
+
+            scheduler = Scheduler(schedule_times=["15:10", "09:20", "09:20", "12:30"])
+            scheduler.set_daily_task(lambda: None, run_immediately=False)
+
+        self.assertEqual(scheduler.scheduled_times, ["09:20", "12:30", "15:10"])
+        self.assertEqual(
+            sorted(job.at_time for job in fake_schedule.jobs),
+            ["09:20", "12:30", "15:10"],
+        )
+        self.assertEqual(scheduler.schedule_time, "09:20")
+
+    def test_scheduler_reconfigures_multiple_times_via_provider(self):
+        fake_schedule = _FakeScheduleModule()
+        with patch.dict(sys.modules, {"schedule": fake_schedule}):
+            from src.scheduler import Scheduler
+
+            latest = {"times": ["09:20", "18:00"]}
+            scheduler = Scheduler(
+                schedule_times=["09:20", "18:00"],
+                schedule_times_provider=lambda: latest["times"],
+            )
+            scheduler.set_daily_task(lambda: None, run_immediately=False)
+            self.assertEqual(scheduler.scheduled_times, ["09:20", "18:00"])
+
+            latest["times"] = ["09:20", "12:30"]
+            scheduler._refresh_daily_schedule_if_needed()
+
+        self.assertEqual(scheduler.scheduled_times, ["09:20", "12:30"])
+        self.assertEqual(
+            sorted(job.at_time for job in fake_schedule.jobs), ["09:20", "12:30"]
+        )
+
+    def test_scheduler_keeps_times_when_provider_returns_all_invalid(self):
+        fake_schedule = _FakeScheduleModule()
+        with patch.dict(sys.modules, {"schedule": fake_schedule}):
+            from src.scheduler import Scheduler
+
+            scheduler = Scheduler(
+                schedule_times=["09:20", "12:30"],
+                schedule_times_provider=lambda: ["99:99", "nope"],
+            )
+            scheduler.set_daily_task(lambda: None, run_immediately=False)
+
+            scheduler._refresh_daily_schedule_if_needed()
+
+        self.assertEqual(scheduler.scheduled_times, ["09:20", "12:30"])
+
+    def test_scheduler_rejects_all_invalid_initial_times(self):
+        fake_schedule = _FakeScheduleModule()
+        with patch.dict(sys.modules, {"schedule": fake_schedule}):
+            from src.scheduler import Scheduler
+
+            scheduler = Scheduler(schedule_times=["25:00", "bogus"])
+            with self.assertRaises(ValueError):
+                scheduler.set_daily_task(lambda: None, run_immediately=False)
+
+        self.assertEqual(scheduler.scheduled_times, [])
+        self.assertEqual(fake_schedule.jobs, [])
+
+    def test_scheduler_skips_signal_handlers_off_main_thread(self):
+        fake_schedule = _FakeScheduleModule()
+        results = {}
+
+        def _worker():
+            with patch.dict(sys.modules, {"schedule": fake_schedule}):
+                from src.scheduler import Scheduler
+
+                scheduler = Scheduler(schedule_time="18:00")
+                results["installed"] = scheduler.shutdown_handler.signal_handlers_installed
+
+        import threading as _threading
+
+        thread = _threading.Thread(target=_worker)
+        thread.start()
+        thread.join()
+
+        self.assertIn("installed", results)
+        self.assertFalse(results["installed"])
 
 
 if __name__ == "__main__":

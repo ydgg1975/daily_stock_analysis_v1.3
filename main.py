@@ -253,8 +253,8 @@ def _reload_env_file_values_preserving_overrides() -> None:
     _RUNTIME_ENV_FILE_KEYS = managed_keys
 
 
-def parse_arguments() -> argparse.Namespace:
-    """解析命令行参数"""
+def build_arg_parser() -> argparse.ArgumentParser:
+    """构建命令行参数解析器（供 parse_arguments 与运行时调度服务默认参数复用）。"""
     parser = argparse.ArgumentParser(
         description='A股自选股智能分析系统',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -416,7 +416,12 @@ def parse_arguments() -> argparse.Namespace:
         help='强制回测（即使已有回测结果也重新计算）'
     )
 
-    return parser.parse_args()
+    return parser
+
+
+def parse_arguments() -> argparse.Namespace:
+    """解析命令行参数"""
+    return build_arg_parser().parse_args()
 
 
 def _compute_trading_day_filter(
@@ -807,6 +812,76 @@ def _build_schedule_time_provider(default_schedule_time: str):
     return _provider
 
 
+def _build_schedule_times_provider(
+    schedule_time_provider: Callable[[], str],
+) -> Callable[[], List[str]]:
+    """读取最新生效的多时间推送列表。
+
+    优先级：
+    1. 进程级 SCHEDULE_TIMES 覆盖（启动前设置）→ 解析后使用。
+    2. 持久化配置文件中的 SCHEDULE_TIMES（WebUI 写入）→ 解析后使用。
+    3. 以上均无合法多时间时，回退到单时间提供器
+       (``schedule_time_provider``)，保持未配置 SCHEDULE_TIMES 时行为不变。
+    """
+    from src.config import Config
+    from src.core.config_manager import ConfigManager
+
+    manager = ConfigManager()
+
+    def _provider() -> List[str]:
+        if "SCHEDULE_TIMES" in _INITIAL_PROCESS_ENV:
+            raw = os.getenv("SCHEDULE_TIMES", "")
+        else:
+            raw = manager.read_config_map().get("SCHEDULE_TIMES", "")
+
+        times = Config._parse_schedule_times(raw)
+        if times:
+            return times
+
+        single = (schedule_time_provider() or "").strip()
+        return [single] if single else []
+
+    return _provider
+
+
+def _build_schedule_enabled_provider() -> Callable[[], bool]:
+    """读取最新的 SCHEDULE_ENABLED（进程级覆盖优先，其次持久化配置文件）。
+
+    供运行时调度服务在不重启进程的前提下感知启停切换。
+    """
+    from src.core.config_manager import ConfigManager
+
+    manager = ConfigManager()
+
+    def _provider() -> bool:
+        if "SCHEDULE_ENABLED" in _INITIAL_PROCESS_ENV:
+            raw = os.getenv("SCHEDULE_ENABLED", "false")
+        else:
+            raw = manager.read_config_map().get("SCHEDULE_ENABLED", "false")
+        return (raw or "false").strip().lower() == "true"
+
+    return _provider
+
+
+def build_scheduled_task(
+    args: Optional[argparse.Namespace] = None,
+    stock_codes: Optional[List[str]] = None,
+) -> Callable[[], None]:
+    """构建可复用的定时分析任务（CLI schedule 模式与运行时调度服务共用）。
+
+    返回的无参回调会在每次调用时重新加载最新运行时配置，并复用完整的分析 +
+    报告 + 通知管线（``run_full_analysis``）。
+    """
+    resolved_args = args if args is not None else build_arg_parser().parse_args([])
+    scheduled_stock_codes = _resolve_scheduled_stock_codes(stock_codes)
+
+    def _task() -> None:
+        runtime_config = _reload_runtime_config()
+        run_full_analysis(runtime_config, resolved_args, scheduled_stock_codes)
+
+    return _task
+
+
 def main() -> int:
     """
     主入口函数
@@ -983,12 +1058,11 @@ def main() -> int:
             logger.info(f"启动时立即执行: {should_run_immediately}")
 
             from src.scheduler import run_with_schedule
-            scheduled_stock_codes = _resolve_scheduled_stock_codes(stock_codes)
             schedule_time_provider = _build_schedule_time_provider(config.schedule_time)
+            schedule_times_provider = _build_schedule_times_provider(schedule_time_provider)
+            effective_schedule_times = config.effective_schedule_times
 
-            def scheduled_task():
-                runtime_config = _reload_runtime_config()
-                run_full_analysis(runtime_config, args, scheduled_stock_codes)
+            scheduled_task = build_scheduled_task(args, stock_codes)
 
             background_tasks = []
             if getattr(config, 'agent_event_monitor_enabled', False):
@@ -1010,12 +1084,17 @@ def main() -> int:
                     "name": "agent_event_monitor",
                 })
 
+            if len(effective_schedule_times) > 1:
+                logger.info("每日执行时间（多时间）: %s", ", ".join(effective_schedule_times))
+
             run_with_schedule(
                 task=scheduled_task,
                 schedule_time=config.schedule_time,
                 run_immediately=should_run_immediately,
                 background_tasks=background_tasks,
                 schedule_time_provider=schedule_time_provider,
+                schedule_times=effective_schedule_times,
+                schedule_times_provider=schedule_times_provider,
             )
             return 0
 

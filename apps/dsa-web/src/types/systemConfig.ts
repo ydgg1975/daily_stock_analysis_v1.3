@@ -270,3 +270,24 @@ export interface SystemConfigConflictResponse {
   message: string;
   currentConfigVersion: string;
 }
+
+export interface SchedulerStatusResponse {
+  available: boolean;
+  enabled: boolean;
+  schedulerRunning: boolean;
+  taskRunning: boolean;
+  scheduleTimes: string[];
+  nextRun: string | null;
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  lastSuccess: boolean | null;
+  lastError: string | null;
+  runCount: number;
+  skippedCount: number;
+  lastSkippedReason: string | null;
+}
+
+export interface SchedulerRunNowResponse {
+  triggered: boolean;
+  message: string;
+}

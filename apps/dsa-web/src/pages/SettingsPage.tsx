@@ -12,6 +12,7 @@ import {
   IntelligentImport,
   LLMChannelEditor,
   NotificationTestPanel,
+  SchedulerStatusCard,
   SettingsCategoryNav,
   SettingsAlert,
   SettingsField,
@@ -731,6 +732,7 @@ const SettingsPage: React.FC = () => {
               </SettingsSectionCard>
             ) : null}
             {activeCategory === 'system' ? <AuthSettingsCard /> : null}
+            {activeCategory === 'system' ? <SchedulerStatusCard /> : null}
             {activeCategory === 'system' ? (
               <SettingsSectionCard
                 title={t('settings.versionInfo')}

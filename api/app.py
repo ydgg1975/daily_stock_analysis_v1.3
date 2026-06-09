@@ -180,14 +180,64 @@ def _schedule_stock_index_background_refresh(app: FastAPI, reason: str) -> None:
     )
 
 
+def _start_runtime_scheduler(app: FastAPI) -> None:
+    """在服务进程内启动运行时定时调度服务（best-effort）。
+
+    复用 CLI schedule 模式的分析任务与多时间配置；任一环节失败只记录日志，
+    不影响 API 服务本身启动。桌面端/Web 进程由此获得无需重启即可生效的
+    多时间定时推送能力。
+    """
+    app.state.runtime_scheduler = None
+    try:
+        from main import (
+            build_scheduled_task,
+            _build_schedule_time_provider,
+            _build_schedule_times_provider,
+            _build_schedule_enabled_provider,
+        )
+        from src.config import get_config
+        from src.services.runtime_scheduler_service import RuntimeSchedulerService
+
+        config = get_config()
+        schedule_time_provider = _build_schedule_time_provider(config.schedule_time)
+        service = RuntimeSchedulerService(
+            task=build_scheduled_task(),
+            schedule_times_provider=_build_schedule_times_provider(schedule_time_provider),
+            enabled_provider=_build_schedule_enabled_provider(),
+        )
+        app.state.runtime_scheduler = service
+        started = service.reconcile_from_config()
+        logger.info(
+            "[scheduler] runtime scheduler initialized (enabled=%s, running=%s)",
+            service.status().get("enabled"),
+            started,
+        )
+    except Exception as exc:  # noqa: BLE001 - scheduler must stay best-effort
+        logger.warning("[scheduler] runtime scheduler init failed (skipped): %s", exc)
+
+
+def _stop_runtime_scheduler(app: FastAPI) -> None:
+    service = getattr(app.state, "runtime_scheduler", None)
+    if service is None:
+        return
+    try:
+        service.stop()
+    except Exception as exc:  # noqa: BLE001 - best-effort shutdown
+        logger.warning("[scheduler] runtime scheduler stop failed: %s", exc)
+    finally:
+        app.state.runtime_scheduler = None
+
+
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
     app.state.system_config_service = SystemConfigService()
     _schedule_stock_index_background_refresh(app, "startup")
+    _start_runtime_scheduler(app)
     try:
         yield
     finally:
+        _stop_runtime_scheduler(app)
         refresh_task = getattr(app.state, "stock_index_refresh_task", None)
         if refresh_task is not None and not refresh_task.done():
             refresh_task.cancel()

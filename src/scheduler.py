@@ -28,22 +28,44 @@ class GracefulShutdown:
     """
     优雅退出处理器
 
-    捕获 SIGTERM/SIGINT 信号，确保任务完成后再退出
+    捕获 SIGTERM/SIGINT 信号，确保任务完成后再退出。
+
+    注意：``signal.signal`` 只能在主线程注册。当调度器运行在工作线程中
+    （例如 FastAPI lifespan 下的 RuntimeSchedulerService），需将
+    ``install_signal_handlers`` 设为 False，改由显式 :meth:`request_shutdown`
+    控制生命周期。
     """
 
-    def __init__(self):
+    def __init__(self, install_signal_handlers: bool = True):
         self.shutdown_requested = False
         self._lock = threading.Lock()
+        self.signal_handlers_installed = False
 
-        # 注册信号处理器
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        if install_signal_handlers:
+            self._install_signal_handlers()
+
+    def _install_signal_handlers(self) -> None:
+        """仅在主线程安装信号处理器；非主线程静默跳过。"""
+        if threading.current_thread() is not threading.main_thread():
+            logger.debug("非主线程，跳过信号处理器安装；由显式 stop()/request_shutdown() 控制退出")
+            return
+        try:
+            signal.signal(signal.SIGINT, self._signal_handler)
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            self.signal_handlers_installed = True
+        except ValueError as exc:  # pragma: no cover - 仅非主线程才会触发
+            logger.debug("安装信号处理器失败（非主线程？）：%s", exc)
 
     def _signal_handler(self, signum, frame):
         """信号处理函数"""
+        self.request_shutdown(reason=f"收到退出信号 ({signum})")
+
+    def request_shutdown(self, reason: Optional[str] = None) -> None:
+        """显式请求优雅退出（线程安全），供服务化场景调用。"""
         with self._lock:
             if not self.shutdown_requested:
-                logger.info(f"收到退出信号 ({signum})，等待当前任务完成...")
+                if reason:
+                    logger.info("%s，等待当前任务完成...", reason)
                 self.shutdown_requested = True
 
     @property
@@ -67,12 +89,21 @@ class Scheduler:
         self,
         schedule_time: str = "18:00",
         schedule_time_provider: Optional[Callable[[], str]] = None,
+        schedule_times: Optional[List[str]] = None,
+        schedule_times_provider: Optional[Callable[[], List[str]]] = None,
+        install_signal_handlers: bool = True,
     ):
         """
         初始化调度器
 
         Args:
-            schedule_time: 每日执行时间，格式 "HH:MM"
+            schedule_time: 单时间每日执行时间，格式 "HH:MM"（向后兼容/兜底）。
+            schedule_time_provider: 单时间热重载提供器，返回最新 "HH:MM"。
+            schedule_times: 多时间列表（"HH:MM"）；提供后优先于 schedule_time。
+            schedule_times_provider: 多时间热重载提供器，返回最新时间列表；每轮
+                轮询读取，变化时自动重建每日任务。
+            install_signal_handlers: 是否安装 SIGINT/SIGTERM 处理器。服务化运行在
+                工作线程时应设为 False（signal 仅能在主线程注册）。
         """
         try:
             import schedule
@@ -83,27 +114,44 @@ class Scheduler:
 
         self.schedule_time = schedule_time
         self._schedule_time_provider = schedule_time_provider
-        self.shutdown_handler = GracefulShutdown()
+        self._explicit_schedule_times: Optional[List[str]] = (
+            list(schedule_times) if schedule_times is not None else None
+        )
+        self._schedule_times_provider = schedule_times_provider
+        self.shutdown_handler = GracefulShutdown(
+            install_signal_handlers=install_signal_handlers
+        )
         self._task_callback: Optional[Callable] = None
-        self._daily_job: Optional[Any] = None
+        # 已注册的每日任务：执行时间(HH:MM) -> job 句柄
+        self._daily_jobs: Dict[str, Any] = {}
+        # 当前生效的执行时间列表（去重排序后）
+        self.scheduled_times: List[str] = []
         self._background_tasks: List[Dict[str, Any]] = []
         self._running = False
+        self._wake = threading.Event()
 
     def set_daily_task(self, task: Callable, run_immediately: bool = True):
         """
-        设置每日定时任务
+        设置每日定时任务（支持单个或多个执行时间）
 
         Args:
             task: 要执行的任务函数（无参数）
             run_immediately: 是否在设置后立即执行一次
         """
         self._task_callback = task
-        if not self._configure_daily_task(self.schedule_time):
-            raise ValueError(f"无效的定时执行时间: {self.schedule_time!r}")
+        target_times = self._resolve_target_times()
+        if not self._configure_daily_tasks(target_times):
+            raise ValueError(f"无效的定时执行时间: {target_times!r}")
 
         if run_immediately:
             logger.info("立即执行一次任务...")
             self._safe_run_task()
+
+    def _resolve_target_times(self) -> List[str]:
+        """解析初始目标执行时间：显式多时间优先，否则回退单时间。"""
+        if self._explicit_schedule_times is not None:
+            return list(self._explicit_schedule_times)
+        return [self.schedule_time]
 
     @staticmethod
     def _is_valid_schedule_time(schedule_time: str) -> bool:
@@ -113,61 +161,112 @@ class Scheduler:
             return False
         return True
 
-    def _cancel_daily_job(self) -> None:
-        """Remove the currently registered daily job if one exists."""
-        if self._daily_job is None:
-            return
+    @classmethod
+    def _normalize_times(cls, times: Optional[List[str]]) -> List[str]:
+        """校验、去重并排序时间列表，丢弃非法项（无副作用）。"""
+        seen: set = set()
+        out: List[str] = []
+        for raw in times or []:
+            candidate = (raw or "").strip()
+            if not cls._is_valid_schedule_time(candidate) or candidate in seen:
+                continue
+            seen.add(candidate)
+            out.append(candidate)
+        return sorted(out)
 
+    def _cancel_job(self, time_str: str) -> None:
+        """取消并移除指定时间的每日任务（若存在）。"""
+        job = self._daily_jobs.pop(time_str, None)
+        if job is None:
+            return
         if hasattr(self.schedule, "cancel_job"):
-            self.schedule.cancel_job(self._daily_job)
+            self.schedule.cancel_job(job)
         else:  # pragma: no cover - compatibility fallback
             jobs = getattr(self.schedule, "jobs", None)
-            if isinstance(jobs, list) and self._daily_job in jobs:
-                jobs.remove(self._daily_job)
+            if isinstance(jobs, list) and job in jobs:
+                jobs.remove(job)
 
-        self._daily_job = None
+    def _configure_daily_tasks(self, requested_times: List[str]) -> bool:
+        """(重新)注册每日任务，使已注册时间与目标列表一致。
 
-    def _configure_daily_task(self, schedule_time: str) -> bool:
-        """(Re)register the daily job at the requested time."""
-        candidate = (schedule_time or "").strip()
-        if not self._is_valid_schedule_time(candidate):
+        校验、去重、排序目标时间；取消不再需要的任务，新增缺失的任务，保留未变化
+        的任务。当目标列表无任何合法项时不做改动并返回 False（由调用方决定是初始
+        报错还是热重载阶段沿用旧配置）。
+        """
+        valid = self._normalize_times(requested_times)
+        invalid = [
+            (t or "").strip()
+            for t in (requested_times or [])
+            if (t or "").strip() and not self._is_valid_schedule_time((t or "").strip())
+        ]
+        if invalid:
             logger.warning(
-                "检测到无效的定时执行时间 %r，继续沿用当前时间 %s",
-                schedule_time,
-                self.schedule_time,
+                "检测到无效的定时执行时间 %s，已忽略；继续沿用 %s",
+                ", ".join(invalid),
+                self.scheduled_times or "(无)",
             )
+        if not valid:
             return False
 
-        previous_time = self.schedule_time
-        self._cancel_daily_job()
-        self._daily_job = self.schedule.every().day.at(candidate).do(self._safe_run_task)
-        self.schedule_time = candidate
+        previous = list(self.scheduled_times)
+        desired = set(valid)
+        for stale in set(self._daily_jobs.keys()) - desired:
+            self._cancel_job(stale)
+        for candidate in valid:
+            if candidate not in self._daily_jobs:
+                self._daily_jobs[candidate] = (
+                    self.schedule.every().day.at(candidate).do(self._safe_run_task)
+                )
 
-        if previous_time == candidate:
-            logger.info("已设置每日定时任务，执行时间: %s", self.schedule_time)
+        self.scheduled_times = valid
+        # 同步单时间视图（向后兼容）：取最早的执行时间作为代表
+        self.schedule_time = valid[0]
+
+        if previous == valid:
+            logger.info("已设置每日定时任务，执行时间: %s", ", ".join(valid))
         else:
             logger.info(
-                "检测到 SCHEDULE_TIME 变更，已将每日定时任务从 %s 更新为 %s",
-                previous_time,
-                self.schedule_time,
+                "检测到定时执行时间变更，已从 %s 更新为 %s",
+                previous or "(无)",
+                ", ".join(valid),
             )
         return True
 
     def _refresh_daily_schedule_if_needed(self) -> None:
-        """Reload daily schedule time from the latest runtime config if needed."""
-        if self._task_callback is None or self._schedule_time_provider is None:
+        """根据最新运行时配置重建每日任务（如有变化）。"""
+        if self._task_callback is None:
             return
 
-        try:
-            latest_schedule_time = (self._schedule_time_provider() or "").strip()
-        except Exception as exc:  # pragma: no cover - defensive branch
-            logger.warning("读取最新 SCHEDULE_TIME 失败，继续沿用 %s: %s", self.schedule_time, exc)
+        # 多时间提供器优先；否则回退单时间提供器（向后兼容）
+        if self._schedule_times_provider is not None:
+            try:
+                latest = list(self._schedule_times_provider() or [])
+            except Exception as exc:  # pragma: no cover - defensive branch
+                logger.warning(
+                    "读取最新 SCHEDULE_TIMES 失败，继续沿用 %s: %s",
+                    self.scheduled_times,
+                    exc,
+                )
+                return
+        elif self._schedule_time_provider is not None:
+            try:
+                value = (self._schedule_time_provider() or "").strip()
+            except Exception as exc:  # pragma: no cover - defensive branch
+                logger.warning(
+                    "读取最新 SCHEDULE_TIME 失败，继续沿用 %s: %s",
+                    self.schedule_time,
+                    exc,
+                )
+                return
+            latest = [value] if value else []
+        else:
             return
 
-        if not latest_schedule_time or latest_schedule_time == self.schedule_time:
+        normalized = self._normalize_times(latest)
+        if not normalized or normalized == self.scheduled_times:
             return
 
-        if self._configure_daily_task(latest_schedule_time):
+        if self._configure_daily_tasks(latest):
             logger.info("更新后的下次执行时间: %s", self._get_next_run_time())
 
     def _safe_run_task(self):
@@ -284,7 +383,10 @@ class Scheduler:
             self._refresh_daily_schedule_if_needed()
             self.schedule.run_pending()
             self._run_background_tasks()
-            time.sleep(30)  # 每30秒检查一次
+
+            # 每 30 秒检查一次；stop()/request_refresh() 通过事件立即唤醒
+            self._wake.wait(timeout=30)
+            self._wake.clear()
 
             # 每小时打印一次心跳
             if datetime.now().minute == 0 and datetime.now().second < 30:
@@ -300,9 +402,22 @@ class Scheduler:
             return next_run.strftime('%Y-%m-%d %H:%M:%S')
         return "未设置"
 
+    def get_next_run_time(self) -> str:
+        """获取下次执行时间（公开接口，供调度服务读取状态）。"""
+        return self._get_next_run_time()
+
+    def request_refresh(self) -> None:
+        """请求主循环立即重读调度配置（唤醒等待中的轮询）。
+
+        用于配置保存后让多时间列表变更尽快生效，而非等待下一轮轮询。
+        """
+        self._wake.set()
+
     def stop(self):
-        """停止调度器"""
+        """停止调度器（立即唤醒等待中的主循环）"""
         self._running = False
+        self.shutdown_handler.request_shutdown()
+        self._wake.set()
 
 
 def run_with_schedule(
@@ -311,23 +426,30 @@ def run_with_schedule(
     run_immediately: bool = True,
     background_tasks: Optional[List[Dict[str, Any]]] = None,
     schedule_time_provider: Optional[Callable[[], str]] = None,
+    schedule_times: Optional[List[str]] = None,
+    schedule_times_provider: Optional[Callable[[], List[str]]] = None,
 ):
     """
     便捷函数：使用定时调度运行任务
 
     Args:
         task: 要执行的任务函数
-        schedule_time: 每日执行时间
+        schedule_time: 每日执行时间（单时间兜底）
         run_immediately: 是否立即执行一次
         background_tasks: 可选的后台任务定义列表。每项为一个字典，
             需包含 `task` 与 `interval_seconds`，可选包含 `name`
             和 `run_immediately`。`interval_seconds` 单位为秒。
-        schedule_time_provider: 可选的时间提供器；调度器每轮检查前会读取，
+        schedule_time_provider: 可选的单时间提供器；调度器每轮检查前会读取，
             当返回值变化时自动重建 daily job。
+        schedule_times: 可选的多时间列表，提供后优先于 schedule_time。
+        schedule_times_provider: 可选的多时间提供器，返回最新时间列表；提供后
+            优先于 schedule_time_provider。
     """
     scheduler = Scheduler(
         schedule_time=schedule_time,
         schedule_time_provider=schedule_time_provider,
+        schedule_times=schedule_times,
+        schedule_times_provider=schedule_times_provider,
     )
     for entry in background_tasks or []:
         scheduler.add_background_task(

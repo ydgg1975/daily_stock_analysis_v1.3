@@ -1535,26 +1535,42 @@ class SystemConfigService:
                 )
             )
 
-        startup_only_schedule_keys = submitted_keys & {
-            "SCHEDULE_ENABLED",
-            "SCHEDULE_RUN_IMMEDIATELY",
-        }
-        if startup_only_schedule_keys:
+        # SCHEDULE_RUN_IMMEDIATELY 仍是启动期一次性行为，需与 run-now 区分
+        if "SCHEDULE_RUN_IMMEDIATELY" in submitted_keys:
             warnings.append(
                 (
-                    f"{', '.join(sorted(startup_only_schedule_keys))} 已写入 .env。"
-                    "这些属于启动期调度模式配置：当前已运行的 WebUI/API 进程不会因为本次保存启动、"
-                    "停止或重建 scheduler；请重启当前进程，并以 schedule 模式重新启动后生效。"
+                    "SCHEDULE_RUN_IMMEDIATELY 已写入 .env。"
+                    "它属于启动期调度行为：仅在调度服务启动时决定是否立即执行一次，"
+                    "不会对当前已运行的调度触发一次性执行；如需立即执行一次请使用 run-now。"
                 )
             )
 
-        if "SCHEDULE_TIME" in submitted_keys:
-            schedule_time = (current_map.get("SCHEDULE_TIME", "") or "").strip() or "18:00"
+        # SCHEDULE_ENABLED / SCHEDULE_TIME / SCHEDULE_TIMES 支持运行期 reconcile，无需重启
+        runtime_reconcile_keys = submitted_keys & {
+            "SCHEDULE_ENABLED",
+            "SCHEDULE_TIME",
+            "SCHEDULE_TIMES",
+        }
+        if runtime_reconcile_keys:
+            parts = []
+            for key in sorted(runtime_reconcile_keys):
+                if key == "SCHEDULE_TIME":
+                    # 清空时回报生效默认值，便于用户确认重置结果
+                    schedule_time = (current_map.get("SCHEDULE_TIME", "") or "").strip() or "18:00"
+                    parts.append(f"SCHEDULE_TIME={schedule_time}")
+                elif key == "SCHEDULE_TIMES":
+                    schedule_times = (current_map.get("SCHEDULE_TIMES", "") or "").strip()
+                    parts.append(
+                        f"SCHEDULE_TIMES={schedule_times}" if schedule_times else "SCHEDULE_TIMES（已清空，回退单时间）"
+                    )
+                else:
+                    parts.append(key)
             warnings.append(
                 (
-                    f"SCHEDULE_TIME={schedule_time} 已写入 .env。"
-                    "如果当前进程已经以 schedule 模式运行，scheduler 会在下一轮检查中自动重建 daily job；"
-                    "如果当前进程未以 schedule 模式运行，本次保存不会启动 scheduler。"
+                    f"{', '.join(parts)} 已写入 .env。"
+                    "运行了调度服务的进程（API/Web/Desktop serve 模式）会在保存后自动 reconcile 调度"
+                    "（按最新配置启停或重建多时间任务），无需重启；"
+                    "未运行调度服务的进程（例如纯 CLI 单次模式）本次保存不会启动调度。"
                 )
             )
 
@@ -1921,6 +1937,30 @@ class SystemConfigService:
                             "actual": value,
                         }
                     )
+
+        # SCHEDULE_TIMES：重复时间点给出非阻断提示，保存后自动去重（格式错误已由 pattern 拦截）
+        if key == "SCHEDULE_TIMES" and value.strip():
+            seen: set = set()
+            duplicates: List[str] = []
+            for raw_item in value.split(","):
+                candidate = raw_item.strip()
+                if not candidate:
+                    continue
+                if candidate in seen and candidate not in duplicates:
+                    duplicates.append(candidate)
+                else:
+                    seen.add(candidate)
+            if duplicates:
+                issues.append(
+                    {
+                        "key": key,
+                        "code": "duplicate_schedule_time",
+                        "message": "存在重复的定时时间点，保存后会自动去重",
+                        "severity": "warning",
+                        "expected": "去重后的时间点列表",
+                        "actual": ", ".join(duplicates),
+                    }
+                )
 
         return issues
 

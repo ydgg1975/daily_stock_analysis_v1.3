@@ -510,17 +510,18 @@ const settingsHelpZhCN: SettingsHelpMap = {
   },
   'settings.system.schedule': {
     title: '定时任务',
-    summary: '控制是否启用每日定时分析以及启动时是否立即执行一次。',
-    usage: 'SCHEDULE_TIME 使用 HH:MM 24 小时格式；SCHEDULE_ENABLED 和 SCHEDULE_RUN_IMMEDIATELY 控制定时模式启动行为。',
+    summary: '控制是否启用每日定时分析、单个或多个推送时间，以及启动时是否立即执行一次。',
+    usage: 'SCHEDULE_TIME 使用 HH:MM 24 小时格式；SCHEDULE_TIMES 为逗号分隔的多时间（如 09:20,12:30,15:10,18:00），留空回退 SCHEDULE_TIME；SCHEDULE_ENABLED 控制是否启用。',
     valueNotes: [
-      '已运行的 schedule 模式会在下一轮调度检查中读取新的 SCHEDULE_TIME 并重建 daily job。',
-      'SCHEDULE_ENABLED 和 SCHEDULE_RUN_IMMEDIATELY 属于启动期行为，保存后不会启动、停止或重建当前 scheduler。',
-      '定时任务触发时会读取当前保存的 STOCK_LIST。',
+      'SCHEDULE_TIMES 会自动校验、去重并排序；非法时间项会被忽略。',
+      '运行了调度服务的进程（serve / 桌面端）在保存 SCHEDULE_ENABLED / SCHEDULE_TIME / SCHEDULE_TIMES 后会自动 reconcile（启停或重建多时间任务），无需重启。',
+      'SCHEDULE_RUN_IMMEDIATELY 仅影响调度启动时是否立即执行一次；保存后或临时执行请使用“定时调度”卡片的“立即执行一次”。',
+      '定时任务触发时会读取当前保存的 STOCK_LIST 与通知配置。',
     ],
-    impact: ['影响 schedule 模式下自动分析频率、启动行为和通知推送时间。'],
+    impact: ['影响 serve / 桌面端运行期自动分析的时间点、启停行为和通知推送时间。'],
     notes: [
       '注意运行环境时区，容器和服务器时区可能与本地不同。',
-      '若当前进程未以 schedule 模式启动，保存这些字段不会自动创建调度器。',
+      '纯 CLI 单次模式（未运行调度服务）的进程保存这些字段不会自动创建调度器。',
     ],
   },
   'settings.system.RUN_IMMEDIATELY': {

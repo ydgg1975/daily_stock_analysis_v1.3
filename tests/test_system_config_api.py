@@ -246,9 +246,9 @@ class SystemConfigApiTestCase(unittest.TestCase):
 
         self.assertIn("非 schedule 模式", run_warning)
         self.assertNotIn("以 schedule 模式", run_warning)
-        self.assertIn("不会因为本次保存启动、停止或重建 scheduler", schedule_warning)
-        self.assertIn("以 schedule 模式重新启动后生效", schedule_warning)
-        self.assertNotIn("它属于启动期单次运行配置", schedule_warning)
+        self.assertIn("启动期调度行为", schedule_warning)
+        self.assertIn("run-now", schedule_warning)
+        self.assertNotIn("重启", schedule_warning)
 
     def test_put_config_returns_schedule_time_runtime_rebind_warning(self) -> None:
         current = system_config.get_system_config(include_schema=False, service=self.service).model_dump()
@@ -267,13 +267,105 @@ class SystemConfigApiTestCase(unittest.TestCase):
         schedule_time_warning = next(
             warning
             for warning in payload["warnings"]
-            if "SCHEDULE_TIME=09:30 已写入 .env" in warning
+            if "SCHEDULE_TIME" in warning and "已写入 .env" in warning
         )
 
-        self.assertIn("已经以 schedule 模式运行", schedule_time_warning)
-        self.assertIn("自动重建 daily job", schedule_time_warning)
-        self.assertIn("不会启动 scheduler", schedule_time_warning)
+        self.assertIn("自动 reconcile", schedule_time_warning)
+        self.assertIn("无需重启", schedule_time_warning)
         self.assertNotIn("重启当前进程", schedule_time_warning)
+
+    @staticmethod
+    def _request_with_scheduler(scheduler) -> SimpleNamespace:
+        return SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(runtime_scheduler=scheduler))
+        )
+
+    @staticmethod
+    def _stub_status() -> dict:
+        return {
+            "enabled": True,
+            "scheduler_running": True,
+            "task_running": False,
+            "schedule_times": ["09:20", "12:30"],
+            "next_run": "2026-06-09 12:30:00",
+            "last_started_at": None,
+            "last_finished_at": None,
+            "last_success": None,
+            "last_error": None,
+            "run_count": 0,
+            "skipped_count": 0,
+            "last_skipped_reason": None,
+        }
+
+    def test_scheduler_status_unavailable_when_not_initialized(self) -> None:
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        result = system_config.get_scheduler_status(request).model_dump()
+        self.assertFalse(result["available"])
+        self.assertFalse(result["scheduler_running"])
+
+    def test_scheduler_status_returns_service_snapshot(self) -> None:
+        scheduler = SimpleNamespace(status=self._stub_status)
+        request = self._request_with_scheduler(scheduler)
+        result = system_config.get_scheduler_status(request).model_dump()
+        self.assertTrue(result["available"])
+        self.assertEqual(result["schedule_times"], ["09:20", "12:30"])
+        self.assertEqual(result["next_run"], "2026-06-09 12:30:00")
+
+    def test_scheduler_run_now_triggers(self) -> None:
+        scheduler = SimpleNamespace(run_now=lambda: True)
+        request = self._request_with_scheduler(scheduler)
+        result = system_config.run_scheduler_now(request).model_dump()
+        self.assertTrue(result["triggered"])
+
+    def test_scheduler_run_now_skips_when_busy(self) -> None:
+        scheduler = SimpleNamespace(run_now=lambda: False)
+        request = self._request_with_scheduler(scheduler)
+        result = system_config.run_scheduler_now(request).model_dump()
+        self.assertFalse(result["triggered"])
+
+    def test_scheduler_run_now_503_when_unavailable(self) -> None:
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        with self.assertRaises(HTTPException) as ctx:
+            system_config.run_scheduler_now(request)
+        self.assertEqual(ctx.exception.status_code, 503)
+
+    def test_update_config_triggers_reconcile_on_schedule_keys(self) -> None:
+        calls = {"n": 0}
+        scheduler = SimpleNamespace(
+            reconcile_from_config=lambda: calls.__setitem__("n", calls["n"] + 1) or True
+        )
+        current = system_config.get_system_config(
+            include_schema=False, service=self.service
+        ).model_dump()
+        system_config.update_system_config(
+            request=UpdateSystemConfigRequest(
+                config_version=current["config_version"],
+                reload_now=True,
+                items=[{"key": "SCHEDULE_ENABLED", "value": "true"}],
+            ),
+            request_obj=self._request_with_scheduler(scheduler),
+            service=self.service,
+        )
+        self.assertEqual(calls["n"], 1)
+
+    def test_update_config_no_reconcile_on_non_schedule_keys(self) -> None:
+        calls = {"n": 0}
+        scheduler = SimpleNamespace(
+            reconcile_from_config=lambda: calls.__setitem__("n", calls["n"] + 1) or True
+        )
+        current = system_config.get_system_config(
+            include_schema=False, service=self.service
+        ).model_dump()
+        system_config.update_system_config(
+            request=UpdateSystemConfigRequest(
+                config_version=current["config_version"],
+                reload_now=True,
+                items=[{"key": "LOG_LEVEL", "value": "DEBUG"}],
+            ),
+            request_obj=self._request_with_scheduler(scheduler),
+            service=self.service,
+        )
+        self.assertEqual(calls["n"], 0)
 
     def test_export_system_config_returns_raw_env_content(self) -> None:
         self.env_path.write_text(

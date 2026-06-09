@@ -764,6 +764,30 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertFalse(validation["valid"])
         self.assertTrue(any(issue["code"] == "invalid_format" for issue in validation["issues"]))
 
+    def test_validate_reports_invalid_schedule_times_format(self) -> None:
+        validation = self.service.validate(
+            items=[{"key": "SCHEDULE_TIMES", "value": "09:20,25:00,bogus"}]
+        )
+        self.assertFalse(validation["valid"])
+        self.assertTrue(any(issue["code"] == "invalid_format" for issue in validation["issues"]))
+
+    def test_validate_accepts_valid_schedule_times(self) -> None:
+        validation = self.service.validate(
+            items=[{"key": "SCHEDULE_TIMES", "value": "09:20,12:30,15:10,18:00"}]
+        )
+        self.assertTrue(validation["valid"])
+
+    def test_validate_warns_on_duplicate_schedule_times(self) -> None:
+        validation = self.service.validate(
+            items=[{"key": "SCHEDULE_TIMES", "value": "09:20,12:30,09:20"}]
+        )
+        self.assertTrue(validation["valid"])
+        duplicate_issues = [
+            issue for issue in validation["issues"] if issue["code"] == "duplicate_schedule_time"
+        ]
+        self.assertTrue(duplicate_issues)
+        self.assertEqual(duplicate_issues[0]["severity"], "warning")
+
     def test_validate_reports_invalid_searxng_url(self) -> None:
         validation = self.service.validate(items=[{"key": "SEARXNG_BASE_URLS", "value": "searx.local,https://ok.example"}])
         self.assertFalse(validation["valid"])
@@ -2629,18 +2653,23 @@ class SystemConfigServiceTestCase(unittest.TestCase):
             for warning in response["warnings"]
             if "RUN_IMMEDIATELY 已写入 .env" in warning
         )
-        schedule_warning = next(
+        reconcile_warning = next(
             warning
             for warning in response["warnings"]
             if "SCHEDULE_ENABLED" in warning
         )
+        startup_warning = next(
+            warning
+            for warning in response["warnings"]
+            if "SCHEDULE_RUN_IMMEDIATELY" in warning
+        )
 
         self.assertIn("非 schedule 模式", run_warning)
         self.assertNotIn("以 schedule 模式", run_warning)
-        self.assertIn("SCHEDULE_RUN_IMMEDIATELY", schedule_warning)
-        self.assertIn("不会因为本次保存启动、停止或重建 scheduler", schedule_warning)
-        self.assertIn("以 schedule 模式重新启动后生效", schedule_warning)
-        self.assertNotIn("它属于启动期单次运行配置", schedule_warning)
+        self.assertIn("自动 reconcile", reconcile_warning)
+        self.assertIn("无需重启", reconcile_warning)
+        self.assertIn("启动期调度行为", startup_warning)
+        self.assertIn("run-now", startup_warning)
 
     def test_update_appends_schedule_time_runtime_rebind_warning(self) -> None:
         response = self.service.update(
@@ -2653,14 +2682,12 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         schedule_time_warning = next(
             warning
             for warning in response["warnings"]
-            if "SCHEDULE_TIME=09:30 已写入 .env" in warning
+            if "SCHEDULE_TIME" in warning and "已写入 .env" in warning
         )
 
-        self.assertIn("已经以 schedule 模式运行", schedule_time_warning)
-        self.assertIn("自动重建 daily job", schedule_time_warning)
-        self.assertIn("不会启动 scheduler", schedule_time_warning)
+        self.assertIn("自动 reconcile", schedule_time_warning)
+        self.assertIn("无需重启", schedule_time_warning)
         self.assertNotIn("重启当前进程", schedule_time_warning)
-        self.assertNotIn("不会因为本次保存启动、停止或重建 scheduler", schedule_time_warning)
 
     def test_update_schedule_time_blank_warning_reports_effective_default(self) -> None:
         response = self.service.update(

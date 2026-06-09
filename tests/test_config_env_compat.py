@@ -225,6 +225,82 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
 
     @patch("src.config.setup_env")
     @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_schedule_times_unset_falls_back_to_single_schedule_time(
+        self, _mock_parse_yaml, _mock_setup_env
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "SCHEDULE_TIME": "08:30",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.schedule_times, [])
+        self.assertEqual(config.effective_schedule_times, ["08:30"])
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_schedule_times_parsed_deduped_and_sorted(
+        self, _mock_parse_yaml, _mock_setup_env
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "SCHEDULE_TIME": "18:00",
+                "SCHEDULE_TIMES": "15:10, 09:20,12:30,09:20 ,15:10",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.schedule_times, ["09:20", "12:30", "15:10"])
+        self.assertEqual(
+            config.effective_schedule_times, ["09:20", "12:30", "15:10"]
+        )
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_schedule_times_drops_invalid_items(
+        self, _mock_parse_yaml, _mock_setup_env
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "SCHEDULE_TIME": "18:00",
+                "SCHEDULE_TIMES": "09:20,25:00,bogus,,12:30",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.schedule_times, ["09:20", "12:30"])
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
+    def test_schedule_times_all_invalid_falls_back_to_single_time(
+        self, _mock_parse_yaml, _mock_setup_env
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "STOCK_LIST": "600519",
+                "SCHEDULE_TIME": "18:00",
+                "SCHEDULE_TIMES": "99:99,nope",
+            },
+            clear=True,
+        ):
+            config = Config._load_from_env()
+
+        self.assertEqual(config.schedule_times, [])
+        self.assertEqual(config.effective_schedule_times, ["18:00"])
+
+    @patch("src.config.setup_env")
+    @patch.object(Config, "_parse_litellm_yaml", return_value=[])
     def test_report_language_prefers_preexisting_process_env_over_env_file(
         self,
         _mock_parse_yaml,

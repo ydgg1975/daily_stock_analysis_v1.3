@@ -893,7 +893,9 @@ class Config:
     
     # === 定时任务配置 ===
     schedule_enabled: bool = False            # 是否启用定时任务
-    schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
+    schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式，单时间兜底）
+    # 多时间推送（逗号分隔 HH:MM，如 09:20,12:30,15:10,18:00）；为空时回退到 schedule_time
+    schedule_times: List[str] = field(default_factory=list)
     schedule_run_immediately: bool = True     # 启动时是否立即执行一次
     run_immediately: bool = True              # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
@@ -1008,6 +1010,7 @@ class Config:
             "RUN_IMMEDIATELY",
             "SCHEDULE_ENABLED",
             "SCHEDULE_TIME",
+            "SCHEDULE_TIMES",
             "SCHEDULE_RUN_IMMEDIATELY",
         }
     )
@@ -1047,9 +1050,21 @@ class Config:
         if normalized_profile != self.agent_context_compression_profile:
             object.__setattr__(self, "agent_context_compression_profile", normalized_profile)
 
+    @property
+    def effective_schedule_times(self) -> List[str]:
+        """运行时实际生效的推送时间列表。
+
+        配置了多时间（SCHEDULE_TIMES）时返回其去重排序结果；否则回退到单时间
+        SCHEDULE_TIME，保持未配置 SCHEDULE_TIMES 时单时间行为不变。
+        """
+        if self.schedule_times:
+            return list(self.schedule_times)
+        single = (self.schedule_time or "").strip()
+        return [single] if single else []
+
     # 单例实例存储
     _instance: Optional['Config'] = None
-    
+
     @classmethod
     def get_instance(cls) -> 'Config':
         """
@@ -1417,6 +1432,12 @@ class Config:
             default='18:00',
             prefer_env_file=True,
         )
+        schedule_times_value = cls._resolve_env_value(
+            'SCHEDULE_TIMES',
+            default='',
+            prefer_env_file=True,
+        )
+        schedule_times = cls._parse_schedule_times(schedule_times_value)
 
         report_language_raw = cls._resolve_report_language_env_value(
             preexisting_report_language
@@ -1698,6 +1719,7 @@ class Config:
                 prefer_env_file=True,
             ).lower() == 'true',
             schedule_time=(schedule_time_value or '18:00').strip() or '18:00',
+            schedule_times=schedule_times,
             schedule_run_immediately=schedule_run_immediately,
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
@@ -2258,6 +2280,45 @@ class Config:
             news_max_age_days=self.news_max_age_days,
             news_strategy_profile=self.news_strategy_profile,
         )
+
+    _SCHEDULE_TIME_PATTERN = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+
+    @classmethod
+    def _parse_schedule_times(cls, value: Optional[str]) -> List[str]:
+        """解析多时间推送配置 SCHEDULE_TIMES。
+
+        逗号分隔的 HH:MM 列表，逐项校验 24 小时制格式；非法项记录警告后丢弃，
+        合法项去重并按时间升序排序。无合法项时返回空列表（由调用方回退到
+        单时间 SCHEDULE_TIME）。
+        """
+        import logging
+
+        if not value:
+            return []
+
+        seen: set = set()
+        valid: List[str] = []
+        invalid: List[str] = []
+        for raw in str(value).split(','):
+            candidate = (raw or "").strip()
+            if not candidate:
+                continue
+            if not cls._SCHEDULE_TIME_PATTERN.fullmatch(candidate):
+                invalid.append(candidate)
+                continue
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            valid.append(candidate)
+
+        if invalid:
+            logging.getLogger(__name__).warning(
+                "SCHEDULE_TIMES 含无效时间项 %s（需 HH:MM 24 小时制），已忽略；有效项：%s",
+                ", ".join(invalid),
+                ", ".join(sorted(valid)) or "(无)",
+            )
+
+        return sorted(valid)
 
     @classmethod
     def _parse_market_review_region(cls, value: str) -> str:

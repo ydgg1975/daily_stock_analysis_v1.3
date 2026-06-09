@@ -907,7 +907,7 @@ function startBackend({ port, envFile, dbPath, logDir }) {
     LOG_DIR: logDir,
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
-    SCHEDULE_ENABLED: 'false',
+    // SCHEDULE_ENABLED 不再强制为 false：由运行期 RuntimeSchedulerService 按用户保存的 .env 生效（默认仍 false）。issue #1581
     WEBUI_ENABLED: 'false',
     BOT_ENABLED: 'false',
     DINGTALK_STREAM_ENABLED: 'false',

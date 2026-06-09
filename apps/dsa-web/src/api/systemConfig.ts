@@ -6,6 +6,8 @@ import type {
   DiscoverLLMChannelModelsResponse,
   ExportSystemConfigResponse,
   ImportSystemConfigRequest,
+  SchedulerRunNowResponse,
+  SchedulerStatusResponse,
   SetupStatusResponse,
   SystemConfigConflictResponse,
   SystemConfigResponse,
@@ -265,5 +267,21 @@ export const systemConfigApi = {
     });
     const data = toCamelCase<{ stockCodes: string[] }>(response.data);
     return data.stockCodes || [];
+  },
+
+  /**
+   * 获取运行期定时调度状态
+   */
+  async getSchedulerStatus(): Promise<SchedulerStatusResponse> {
+    const response = await apiClient.get<Record<string, unknown>>('/api/v1/system/scheduler/status');
+    return toCamelCase<SchedulerStatusResponse>(response.data);
+  },
+
+  /**
+   * 手动立即执行一次定时分析
+   */
+  async runSchedulerNow(): Promise<SchedulerRunNowResponse> {
+    const response = await apiClient.post<Record<string, unknown>>('/api/v1/system/scheduler/run-now');
+    return toCamelCase<SchedulerRunNowResponse>(response.data);
   },
 };

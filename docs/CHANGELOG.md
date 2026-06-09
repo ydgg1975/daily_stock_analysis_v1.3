@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 - [修复] 桌面发布打包改用冻结可执行文件运行时探针校验 `alphasift.dsa_adapter`，避免 macOS PyInstaller 将模块内嵌进可执行文件时被文件系统/zip 扫描误判为缺失。
+- [新功能] #1581 支持客户端配置多时间定时推送：新增 `SCHEDULE_TIMES`（逗号分隔 `HH:MM`，自动校验/去重/排序，留空回退 `SCHEDULE_TIME`），并新增运行期 `RuntimeSchedulerService` 在 FastAPI/桌面后端进程内管理多个每日定时任务，支持 start/stop/reconcile/run-now/status。
+- [新功能] #1581 新增定时调度 API：`GET /api/v1/system/scheduler/status`、`POST /api/v1/system/scheduler/run-now`；Web 设置页“系统”分类新增“定时调度”状态卡片（启用状态、有效时间点、下次/上次执行、运行状态）与“立即执行一次”按钮。
+- [改进] #1581 保存 `SCHEDULE_ENABLED` / `SCHEDULE_TIME` / `SCHEDULE_TIMES` 后，运行中的 API/Web/Desktop 进程自动 reconcile 调度（无需重启）；桌面端不再以进程环境强制 `SCHEDULE_ENABLED=false`，用户保存的定时配置可在桌面应用运行期生效（关闭应用后不再推送）。
+- [改进] #1581 定时任务复用既有 `run_full_analysis` 完整分析与通知链路，并使用进程内锁避免并发重入：同一时刻只允许一个定时分析运行，重叠时间点记录为 suppressed 并在状态中可见。
 
 ## [3.21.0] - 2026-06-07
 

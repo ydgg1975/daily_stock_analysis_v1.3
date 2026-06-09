@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -14,6 +15,8 @@ from api.v1.schemas.system_config import (
     DiscoverLLMChannelModelsResponse,
     ExportSystemConfigResponse,
     ImportSystemConfigRequest,
+    SchedulerRunNowResponse,
+    SchedulerStatusResponse,
     SystemConfigConflictResponse,
     SystemConfigResponse,
     SystemConfigSchemaResponse,
@@ -159,6 +162,7 @@ def get_setup_status(
 )
 def update_system_config(
     request: UpdateSystemConfigRequest,
+    request_obj: Request = None,
     service: SystemConfigService = Depends(get_system_config_service),
 ) -> UpdateSystemConfigResponse:
     """Validate and persist system configuration updates."""
@@ -168,6 +172,9 @@ def update_system_config(
             items=[item.model_dump() for item in request.items],
             mask_token=request.mask_token,
             reload_now=request.reload_now,
+        )
+        _maybe_reconcile_scheduler(
+            request_obj, [item.key for item in request.items]
         )
         return UpdateSystemConfigResponse.model_validate(payload)
     except ConfigValidationError as exc:
@@ -507,3 +514,73 @@ def get_system_config_schema(
                 "message": "Failed to load system configuration schema",
             },
         )
+
+
+# ============================================================
+# 运行期定时调度（Runtime Scheduler）
+# ============================================================
+
+_SCHEDULER_RECONCILE_KEYS = {"SCHEDULE_ENABLED", "SCHEDULE_TIME", "SCHEDULE_TIMES"}
+
+
+def _get_runtime_scheduler(request: Request):
+    """Return the app-scoped RuntimeSchedulerService, or None if unavailable."""
+    return getattr(request.app.state, "runtime_scheduler", None)
+
+
+def _maybe_reconcile_scheduler(request: Optional[Request], submitted_keys) -> None:
+    """配置保存后，若涉及调度键则触发运行期 reconcile（无需重启）。"""
+    if request is None:
+        return
+    if not (_SCHEDULER_RECONCILE_KEYS & set(submitted_keys or [])):
+        return
+    service = _get_runtime_scheduler(request)
+    if service is None:
+        return
+    try:
+        running = service.reconcile_from_config()
+        logger.info("[scheduler] reconciled after config save (running=%s)", running)
+    except Exception as exc:  # noqa: BLE001 - reconcile must stay best-effort
+        logger.warning("[scheduler] reconcile after config save failed: %s", exc)
+
+
+@router.get(
+    "/scheduler/status",
+    response_model=SchedulerStatusResponse,
+    summary="Get runtime scheduler status",
+    description="返回运行期定时调度服务的启用状态、有效时间列表、下次/上次执行与运行状态。",
+)
+def get_scheduler_status(request: Request) -> SchedulerStatusResponse:
+    """Return runtime scheduler status snapshot."""
+    service = _get_runtime_scheduler(request)
+    if service is None:
+        return SchedulerStatusResponse(available=False)
+    try:
+        return SchedulerStatusResponse(available=True, **service.status())
+    except Exception as exc:
+        logger.error("Failed to read scheduler status: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "internal_error", "message": "Failed to read scheduler status"},
+        )
+
+
+@router.post(
+    "/scheduler/run-now",
+    response_model=SchedulerRunNowResponse,
+    summary="Trigger one scheduled analysis immediately",
+    description="手动立即执行一次定时分析（复用完整分析+通知链路）；若已有任务在执行则跳过。",
+)
+def run_scheduler_now(request: Request) -> SchedulerRunNowResponse:
+    """Manually trigger one scheduled run."""
+    service = _get_runtime_scheduler(request)
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "scheduler_unavailable", "message": "运行期调度服务未初始化"},
+        )
+    triggered = service.run_now()
+    return SchedulerRunNowResponse(
+        triggered=triggered,
+        message="已触发一次定时分析" if triggered else "已有任务在执行，已跳过本次触发",
+    )

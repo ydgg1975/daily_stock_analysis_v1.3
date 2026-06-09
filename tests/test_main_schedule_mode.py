@@ -22,6 +22,14 @@ class _DummyConfig(SimpleNamespace):
     def validate(self):
         return []
 
+    @property
+    def effective_schedule_times(self):
+        times = getattr(self, "schedule_times", None)
+        if times:
+            return list(times)
+        single = (getattr(self, "schedule_time", "") or "").strip()
+        return [single] if single else []
+
 
 class MainScheduleModeTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -123,6 +131,8 @@ class MainScheduleModeTestCase(unittest.TestCase):
             run_immediately,
             background_tasks=None,
             schedule_time_provider=None,
+            schedule_times=None,
+            schedule_times_provider=None,
         ):
             scheduled_call["schedule_time"] = schedule_time
             scheduled_call["run_immediately"] = run_immediately
@@ -169,6 +179,8 @@ class MainScheduleModeTestCase(unittest.TestCase):
             run_immediately,
             background_tasks=None,
             schedule_time_provider=None,
+            schedule_times=None,
+            schedule_times_provider=None,
         ):
             scheduled_call["schedule_time"] = schedule_time
             scheduled_call["resolved_schedule_time"] = (
@@ -209,6 +221,8 @@ class MainScheduleModeTestCase(unittest.TestCase):
             run_immediately,
             background_tasks=None,
             schedule_time_provider=None,
+            schedule_times=None,
+            schedule_times_provider=None,
         ):
             scheduled_call["schedule_time"] = schedule_time
             scheduled_call["run_immediately"] = run_immediately
@@ -263,6 +277,8 @@ class MainScheduleModeTestCase(unittest.TestCase):
             run_immediately,
             background_tasks=None,
             schedule_time_provider=None,
+            schedule_times=None,
+            schedule_times_provider=None,
         ):
             scheduled_call["background_tasks"] = background_tasks or []
 

@@ -307,3 +307,28 @@ class SystemConfigConflictResponse(BaseModel):
     error: str
     message: str
     current_config_version: str
+
+
+class SchedulerStatusResponse(BaseModel):
+    """运行期定时调度服务状态。"""
+
+    available: bool = Field(..., description="运行期调度服务是否已初始化")
+    enabled: bool = False
+    scheduler_running: bool = False
+    task_running: bool = False
+    schedule_times: List[str] = Field(default_factory=list)
+    next_run: Optional[str] = None
+    last_started_at: Optional[str] = None
+    last_finished_at: Optional[str] = None
+    last_success: Optional[bool] = None
+    last_error: Optional[str] = None
+    run_count: int = 0
+    skipped_count: int = 0
+    last_skipped_reason: Optional[str] = None
+
+
+class SchedulerRunNowResponse(BaseModel):
+    """手动触发一次定时分析的结果。"""
+
+    triggered: bool
+    message: str
