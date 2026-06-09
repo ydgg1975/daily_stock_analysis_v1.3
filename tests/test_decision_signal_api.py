@@ -1037,6 +1037,22 @@ def test_dedup_distinguishes_source_type_for_weak_report_ids(client_and_db) -> N
     assert manual_list_resp.json()["total"] == 1
 
 
+def test_stock_filter_codes_cover_market_optional_hk_without_widening_other_markets() -> None:
+    from src.services.decision_signal_service import DecisionSignalService
+
+    cases = [
+        ("00700", None, ["00700", "HK00700"]),
+        ("HK00700", None, ["HK00700"]),
+        ("00700.HK", None, ["HK00700"]),
+        ("00700", "hk", ["HK00700"]),
+        ("600519", None, ["600519"]),
+        ("600519.SH", None, ["600519"]),
+        ("AAPL", None, ["AAPL"]),
+    ]
+    for raw_code, market, expected_codes in cases:
+        assert DecisionSignalService._stock_filter_codes(raw_code, market=market) == expected_codes
+
+
 def test_hk_stock_identity_variants_deduplicate_and_latest_matches(client_and_db) -> None:
     client, _db = client_and_db
 
@@ -1078,6 +1094,35 @@ def test_hk_stock_identity_variants_deduplicate_and_latest_matches(client_and_db
     assert latest_resp.status_code == 200, latest_resp.text
     assert latest_resp.json()["total"] == 1
     assert latest_resp.json()["items"][0]["id"] == first["item"]["id"]
+
+    latest_cases = [
+        ("00700", {}),
+        ("HK00700", {}),
+        ("00700.HK", {}),
+        ("00700", {"market": "hk"}),
+    ]
+    for raw_code, params in latest_cases:
+        latest_resp = client.get(f"/api/v1/decision-signals/latest/{raw_code}", params=params)
+        assert latest_resp.status_code == 200, latest_resp.text
+        latest_payload = latest_resp.json()
+        assert latest_payload["total"] == 1
+        assert latest_payload["items"][0]["id"] == first["item"]["id"]
+
+    list_cases = [
+        ("00700", {}),
+        ("HK00700", {}),
+        ("00700.HK", {}),
+        ("00700", {"market": "hk"}),
+    ]
+    for raw_code, params in list_cases:
+        list_resp = client.get(
+            "/api/v1/decision-signals",
+            params={"stock_code": raw_code, **params},
+        )
+        assert list_resp.status_code == 200, list_resp.text
+        list_payload = list_resp.json()
+        assert list_payload["total"] == 1
+        assert list_payload["items"][0]["id"] == first["item"]["id"]
 
 
 def test_dedup_distinguishes_market_for_same_symbol(client_and_db) -> None:

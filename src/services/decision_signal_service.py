@@ -287,7 +287,12 @@ class DecisionSignalService:
     ) -> Optional[List[str]]:
         if not stock_code:
             return None
-        return [cls._normalize_stock_code(stock_code, market=market)]
+        normalized = cls._normalize_stock_code(stock_code, market=market)
+        if market is not None:
+            return [normalized]
+
+        hk_normalized = cls._normalize_hk_stock_code(str(stock_code).strip())
+        return list(dict.fromkeys([normalized, hk_normalized]))
 
     @classmethod
     def _normalize_stock_code(cls, value: Any, *, market: Optional[str] = None) -> str:
