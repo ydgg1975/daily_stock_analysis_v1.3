@@ -143,25 +143,35 @@
 # 克隆项目
 git clone https://github.com/ZhuLinsen/daily_stock_analysis.git && cd daily_stock_analysis
 
-# 安装依赖
-pip install -r requirements.txt
+# 安装依赖（二选一）
+uv sync                          # 推荐，使用 uv 管理（需先安装 uv: https://docs.astral.sh/uv/）
+pip install -r requirements.txt  # 或使用 pip
 
 # 配置环境变量
 cp .env.example .env && vim .env
 
 # 运行分析
-python main.py
+uv run python main.py            # 推荐，自动使用项目虚拟环境
+python main.py                   # 或手动激活 venv 后直接运行
 ```
 
-常用命令：
+#### 启动服务
 
 ```bash
-python main.py --debug
-python main.py --dry-run
-python main.py --stocks 600519,hk00700,AAPL
-python main.py --market-review
-python main.py --schedule
-python main.py --serve-only
+# 一次性分析（分析完自动退出）
+uv run python main.py                                 # 分析 .env 中的 STOCK_LIST
+uv run python main.py --stocks 600519,hk00700,AAPL    # 指定股票
+uv run python main.py --market-review                 # 仅大盘复盘
+uv run python main.py --dry-run                       # 试运行，不发送通知
+uv run python main.py --debug                         # 调试模式
+
+# Web 服务（启动后访问 http://127.0.0.1:8000）
+uv run python main.py --serve                         # 分析 + Web 服务
+uv run python main.py --serve-only                    # 仅启动 Web 服务，不执行分析
+uv run python -m uvicorn server:app --reload --host 0.0.0.0 --port 8000  # 直接启动 API 服务
+
+# 定时任务
+uv run python main.py --schedule                      # 每日定时分析（时间由 SCHEDULE_TIME 控制，默认 18:00）
 ```
 
 > Docker 部署、定时任务、云服务器访问请参考 [完整指南](docs/full-guide.md)；桌面客户端打包请参考 [桌面端打包说明](docs/desktop-package.md)。

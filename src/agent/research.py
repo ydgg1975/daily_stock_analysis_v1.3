@@ -284,6 +284,15 @@ class ResearchAgent:
         )
         if response.provider == "error":
             raise RuntimeError(response.content or "LLM completion failed")
+        try:
+            from src.storage import persist_llm_usage
+            persist_llm_usage(
+                response.usage,
+                response.model or response.provider,
+                call_type="agent",
+            )
+        except Exception:
+            pass
         return {
             "content": (response.content or "").strip(),
             "tokens": response.usage.get("total_tokens", 0),

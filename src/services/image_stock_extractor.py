@@ -276,6 +276,17 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
         litellm = litellm_module
     response = litellm.completion(**call_kwargs)
     if response and response.choices and response.choices[0].message.content:
+        try:
+            from src.storage import persist_llm_usage
+            usage = getattr(response, "usage", None)
+            if usage:
+                persist_llm_usage(
+                    dict(usage) if not isinstance(usage, dict) else usage,
+                    model,
+                    call_type="vision",
+                )
+        except Exception:
+            pass
         return response.choices[0].message.content
     raise ValueError("LiteLLM vision returned empty response")
 

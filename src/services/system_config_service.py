@@ -816,6 +816,17 @@ class SystemConfigService:
                 log_label="[LLM channel test]",
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
+            try:
+                from src.storage import persist_llm_usage
+                usage = getattr(response, "usage", None)
+                if usage:
+                    persist_llm_usage(
+                        dict(usage) if not isinstance(usage, dict) else usage,
+                        resolved_model,
+                        call_type="system_test",
+                    )
+            except Exception:
+                pass
             content, parse_error_code, parse_error, parse_reason = self._extract_llm_completion_content(response)
             if parse_error_code:
                 message = (
