@@ -179,6 +179,102 @@ class PortfolioApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(account_snapshot["total_market_value"], 11000.0, places=6)
         self.assertAlmostEqual(account_snapshot["total_equity"], 11000.0, places=6)
 
+    def test_delete_account_deactivates_without_hard_deleting(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Mistyped", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        delete_resp = self.client.delete(f"/api/v1/portfolio/accounts/{account_id}")
+        self.assertEqual(delete_resp.status_code, 200)
+        self.assertEqual(delete_resp.json()["deleted"], 1)
+
+        active_resp = self.client.get("/api/v1/portfolio/accounts")
+        self.assertEqual(active_resp.status_code, 200)
+        self.assertEqual(active_resp.json()["accounts"], [])
+
+        inactive_resp = self.client.get(
+            "/api/v1/portfolio/accounts",
+            params={"include_inactive": True},
+        )
+        self.assertEqual(inactive_resp.status_code, 200)
+        inactive_accounts = inactive_resp.json()["accounts"]
+        self.assertEqual(len(inactive_accounts), 1)
+        self.assertEqual(inactive_accounts[0]["id"], account_id)
+        self.assertFalse(inactive_accounts[0]["is_active"])
+
+        snapshot_resp = self.client.get(
+            "/api/v1/portfolio/snapshot",
+            params={"account_id": account_id, "as_of": "2026-01-03"},
+        )
+        self.assertEqual(snapshot_resp.status_code, 400)
+        self.assertEqual(snapshot_resp.json()["error"], "validation_error")
+
+    def test_event_lists_hide_archived_account_rows_by_default(self) -> None:
+        create_resp = self.client.post(
+            "/api/v1/portfolio/accounts",
+            json={"name": "Archived", "broker": "Demo", "market": "cn", "base_currency": "CNY"},
+        )
+        self.assertEqual(create_resp.status_code, 200)
+        account_id = create_resp.json()["id"]
+
+        cash_resp = self.client.post(
+            "/api/v1/portfolio/cash-ledger",
+            json={
+                "account_id": account_id,
+                "event_date": "2026-01-01",
+                "direction": "in",
+                "amount": 10000,
+                "currency": "CNY",
+            },
+        )
+        trade_resp = self.client.post(
+            "/api/v1/portfolio/trades",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "trade_date": "2026-01-02",
+                "side": "buy",
+                "quantity": 10,
+                "price": 100,
+                "fee": 0,
+                "tax": 0,
+                "market": "cn",
+                "currency": "CNY",
+            },
+        )
+        corp_resp = self.client.post(
+            "/api/v1/portfolio/corporate-actions",
+            json={
+                "account_id": account_id,
+                "symbol": "600519",
+                "effective_date": "2026-01-03",
+                "action_type": "cash_dividend",
+                "market": "cn",
+                "currency": "CNY",
+                "cash_dividend_per_share": 1.0,
+            },
+        )
+        self.assertEqual(cash_resp.status_code, 200)
+        self.assertEqual(trade_resp.status_code, 200)
+        self.assertEqual(corp_resp.status_code, 200)
+
+        delete_resp = self.client.delete(f"/api/v1/portfolio/accounts/{account_id}")
+        self.assertEqual(delete_resp.status_code, 200)
+
+        for endpoint in (
+            "/api/v1/portfolio/trades",
+            "/api/v1/portfolio/cash-ledger",
+            "/api/v1/portfolio/corporate-actions",
+        ):
+            list_resp = self.client.get(endpoint)
+            self.assertEqual(list_resp.status_code, 200, list_resp.text)
+            payload = list_resp.json()
+            self.assertEqual(payload["total"], 0)
+            self.assertEqual(payload["items"], [])
+
     def test_position_analysis_accepts_real_holding_and_passes_internal_context(self) -> None:
         account_id = self._create_position(quantity=10)
         accepted_task = SimpleNamespace(
