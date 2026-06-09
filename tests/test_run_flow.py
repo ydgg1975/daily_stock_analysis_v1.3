@@ -347,6 +347,45 @@ class RunFlowTestCase(unittest.TestCase):
         self.assertNotIn("provider_run", {event.type for event in snapshot.events})
         self.assertNotIn("llm_run", {event.type for event in snapshot.events})
 
+    def test_llm_model_provider_metadata_does_not_expose_runtime_config(self) -> None:
+        diagnostics = _diagnostics()
+        diagnostics["llm_runs"][0].update(
+            {
+                "provider": "litellm",
+                "model": "deepseek-chat",
+                "base_url": "https://llm.example.com/v1",
+                "api_key": "sk-runtime-secret",
+            }
+        )
+        context_snapshot = {
+            "diagnostics": diagnostics,
+            "analysis_context_pack_overview": _overview(
+                blocks=[
+                    {
+                        "key": "quote",
+                        "label": "行情",
+                        "status": "available",
+                        "source": "QuoteFetcher",
+                        "warnings": [],
+                        "missing_reasons": [],
+                    }
+                ]
+            ),
+        }
+
+        snapshot = build_history_run_flow_snapshot(_history_record(context_snapshot=context_snapshot))
+        payload = json.dumps(snapshot.model_dump(mode="json", by_alias=True), ensure_ascii=False)
+
+        self.assertIn("deepseek-chat", payload)
+        self.assertIn("litellm", payload)
+        for leaked in (
+            "base_url",
+            "api_key",
+            "llm.example.com",
+            "sk-runtime-secret",
+        ):
+            self.assertNotIn(leaked, payload)
+
     def test_flow_endpoints_return_404_for_missing_records(self) -> None:
         with self.assertRaises(HTTPException) as history_ctx:
             get_history_run_flow("404", db_manager=_FakeHistoryDb(None))
