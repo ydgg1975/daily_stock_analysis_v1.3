@@ -854,6 +854,33 @@ class TestStorage(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# PostgreSQL identifier-length regression (no real DB needed)
+# ---------------------------------------------------------------------------
+
+def test_all_index_names_fit_postgres_63_char_limit():
+    """PostgreSQL silently truncates identifiers >63 chars, causing collisions.
+
+    Verify every Index name declared in ORM metadata is ≤63 characters so
+    that fresh ``Base.metadata.create_all()`` on PostgreSQL will not fail
+    with ``IdentifierError`` or produce silent truncation collisions.
+    """
+    from src.storage import Base  # re-import to get metadata
+    PG_MAX_IDENTIFIER = 63
+    oversized = []
+    for table in Base.metadata.tables.values():
+        for idx in table.indexes:
+            if idx.name and len(idx.name) > PG_MAX_IDENTIFIER:
+                oversized.append((table.name, idx.name, len(idx.name)))
+    if oversized:
+        msg_lines = [
+            f"Index name exceeds PostgreSQL {PG_MAX_IDENTIFIER}-char limit:"
+        ]
+        for tbl, name, length in oversized:
+            msg_lines.append(f"  {tbl}.{name} ({length} chars)")
+        raise AssertionError("\n".join(msg_lines))
+
+
+# ---------------------------------------------------------------------------
 # Cross-database integration tests (require real MySQL / PostgreSQL)
 # ---------------------------------------------------------------------------
 # Set TEST_MYSQL_URL / TEST_POSTGRESQL_URL env vars to enable.

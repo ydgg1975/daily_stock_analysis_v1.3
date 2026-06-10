@@ -366,5 +366,5 @@ def test_create_all_is_idempotent_and_indexes_exist(isolated_db) -> None:
     }
     assert "ix_decision_signal_stock_status_time" in index_names
     assert "ix_decision_signal_market_status_time" in index_names
-    assert "ix_decision_signal_report_type_market_stock_action_horizon_phase" in index_names
+    assert "ix_decision_signal_rpt_type_market_stock_action_horizon_phase" in index_names
     assert "ix_decision_signal_trace_type_market_stock_action_horizon_phase" in index_names

@@ -831,7 +831,7 @@ class DecisionSignalRecord(Base):
         Index('ix_decision_signal_stock_status_time', 'stock_code', 'status', 'created_at'),
         Index('ix_decision_signal_market_status_time', 'market', 'status', 'created_at'),
         Index(
-            'ix_decision_signal_report_type_market_stock_action_horizon_phase',
+            'ix_decision_signal_rpt_type_market_stock_action_horizon_phase',
             'source_report_id',
             'source_type',
             'market',
