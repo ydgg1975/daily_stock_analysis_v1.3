@@ -52,6 +52,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
         report={report}
         recordId={recordId}
         reportLanguage={reportLanguage}
+        onOpenRunFlow={onOpenRunFlow}
       />
     );
   }
