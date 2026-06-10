@@ -336,7 +336,12 @@ def _load_usage_hmac_secret() -> Optional[bytes]:
                 f.write(new_secret)
             secret_path.chmod(0o600)
         except FileExistsError:
-            new_secret = secret_path.read_bytes()
+            data = secret_path.read_bytes()
+            if data:
+                _HMAC_SECRET_CACHE = data
+                return data
+            secret_path.write_bytes(new_secret)
+            secret_path.chmod(0o600)
         _HMAC_SECRET_CACHE = new_secret
         return new_secret
     except OSError as exc:

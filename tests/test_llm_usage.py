@@ -467,6 +467,19 @@ class TestLLMUsageHMAC(unittest.TestCase):
             self.assertEqual(len(fields["messages_hmac"]), 64)
             self.assertEqual(fields["hmac_key_version"], "local-v1")
 
+    def test_empty_generated_secret_file_is_regenerated(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "stock_analysis.db"
+            secret_path = Path(tmpdir) / ".llm_usage_hmac_secret"
+            secret_path.write_bytes(b"")
+            with patch.dict(os.environ, {"DATABASE_PATH": str(db_path)}, clear=True):
+                _reset_usage_hmac_secret_cache_for_tests()
+                fields = build_message_hmacs([{"role": "user", "content": "hello"}])
+
+            self.assertEqual(secret_path.stat().st_size, 32)
+            self.assertEqual(len(fields["messages_hmac"]), 64)
+            self.assertEqual(fields["hmac_key_version"], "local-v1")
+
     def test_key_version_is_part_of_hash_comparability_tuple(self):
         messages = [{"role": "user", "content": "same message"}]
         with patch.dict(
