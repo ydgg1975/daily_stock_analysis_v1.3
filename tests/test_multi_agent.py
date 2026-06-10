@@ -190,7 +190,7 @@ class TestExtractStockCode(unittest.TestCase):
         """Ensure critical finance terms are in _COMMON_WORDS."""
         expected_in_set = {
             "BUY", "SELL", "HOLD", "ETF", "IPO", "RSI", "MACD", "STOCK", "TREND",
-            "TTM", "PE", "YOY", "QOQ", "EBITDA", "DCF", "CAGR",
+            "TTM", "PE", "YOY", "QOQ", "EBITDA", "DCF", "CAGR", "KDJ",
             "IS", "WHAT", "HIGH",
         }
         self.assertTrue(expected_in_set.issubset(_COMMON_WORDS))
@@ -343,6 +343,8 @@ class TestStockScopeResolution(unittest.TestCase):
         cases = [
             "分析 MA 均线",
             "看看 MA 怎么排列",
+            "分析 KDJ 指标",
+            "KDJ 怎么看",
         ]
 
         for message in cases:
@@ -356,6 +358,16 @@ class TestStockScopeResolution(unittest.TestCase):
                 self.assertEqual(result.stock_scope.expected_stock_code, "600519")
                 self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519"})
                 self.assertEqual(result.effective_context["stock_code"], "600519")
+
+    def test_dotted_us_ticker_stays_intact_in_scope_resolution(self):
+        result = resolve_stock_scope(
+            "比较 BRK.B 和 AAPL",
+            {"stock_code": "600519", "stock_name": "匿名标的"},
+        )
+
+        self.assertEqual(result.stock_scope.mode, "compare")
+        self.assertEqual(result.stock_scope.allowed_stock_codes, {"600519", "BRK.B", "AAPL"})
+        self.assertEqual(result.effective_context["stock_code"], "600519")
 
     def test_invalid_context_exchange_token_is_not_trusted_as_current_stock(self):
         result = resolve_stock_scope(

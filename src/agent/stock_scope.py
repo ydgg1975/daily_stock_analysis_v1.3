@@ -35,7 +35,7 @@ _LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z.])([a-z]{2,5}(?:\.[a-z]{1,2
 _EXCHANGE_TOKEN_CANDIDATES = {"SH", "SZ", "BJ", "HK", "SS"}
 _CONTEXTUAL_INDICATOR_TOKENS = {"MA"}
 _INDICATOR_CONTEXT_PATTERN = re.compile(
-    r"均线|移动平均|排列|多头|空头|金叉|死叉|支撑|压力|MA\d|SMA|EMA",
+    r"指标|均线|移动平均|排列|多头|空头|金叉|死叉|支撑|压力|MA\d|SMA|EMA",
     re.IGNORECASE,
 )
 

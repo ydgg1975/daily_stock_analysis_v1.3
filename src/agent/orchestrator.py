@@ -1393,7 +1393,7 @@ _COMMON_WORDS: set[str] = {
     "STOCK", "TRADE", "PRICE", "INDEX", "FUND",
     "HIGH", "LOW", "OPEN", "CLOSE", "STOP", "LOSS",
     "TREND", "BULL", "BEAR", "RISK", "CASH", "BOND",
-    "MACD", "VWAP", "BOLL",
+    "MACD", "VWAP", "BOLL", "KDJ",
     "TTM", "LTM", "NTM", "FWD", "YOY", "QOQ", "YTD",
     "EBIT", "EBITDA", "DCF", "CAGR", "FCF", "NAV", "AUM",
     "PE", "PB",

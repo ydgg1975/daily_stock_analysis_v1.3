@@ -16,8 +16,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TOOL_NAMESPACE = "default_api"
-
 
 # ============================================================
 # Data classes
@@ -113,13 +111,8 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def resolve(self, name: str) -> Optional[ToolDefinition]:
-        """Return a tool definition, accepting colon-namespaced names."""
-        tool_def = self._tools.get(name)
-        if tool_def is None and ":" in name:
-            namespace, local_name = name.split(":", 1)
-            if namespace == _DEFAULT_TOOL_NAMESPACE and local_name:
-                tool_def = self._tools.get(local_name)
-        return tool_def
+        """Return a tool definition by exact registered name."""
+        return self._tools.get(name)
 
     def list_tools(self, category: Optional[str] = None) -> List[ToolDefinition]:
         """List all tools, optionally filtered by category."""
@@ -153,7 +146,7 @@ class ToolRegistry:
         Raises ``KeyError`` if tool not found.
         Raises the handler's exception on execution failure.
 
-        Supports colon-namespaced tool names (e.g. default_api:get_realtime_quote -> get_realtime_quote).
+        Tool names must match the registry exactly.
         """
         tool_def = self.resolve(name)
         if tool_def is None:

@@ -652,102 +652,120 @@ class TestAgentExecutor(unittest.TestCase):
                 self.assertEqual(len(tool_messages), 1)
                 self.assertIn("stock_scope_violation", tool_messages[0]["content"])
 
-    def test_run_agent_loop_blocks_moving_average_indicator_token_from_followup(self):
-        executed_calls = []
-        registry = _make_stock_registry(executed_calls)
-        adapter = _make_mock_adapter()
-        adapter.call_with_tools.side_effect = [
-            LLMResponse(
-                content="Need quote.",
-                tool_calls=[
-                    ToolCall(
-                        id="quote_1",
-                        name="get_realtime_quote",
-                        arguments={"stock_code": "MA"},
-                    ),
-                ],
-                usage={"total_tokens": 10},
-                provider="openai",
-            ),
-            LLMResponse(
-                content="Blocked indicator token.",
-                tool_calls=[],
-                usage={"total_tokens": 10},
-                provider="openai",
-            ),
+    def test_run_agent_loop_blocks_indicator_tokens_from_followup(self):
+        cases = [
+            ("分析 MA 均线", "MA"),
+            ("分析 KDJ 指标", "KDJ"),
         ]
-        scope = resolve_stock_scope("分析 MA 均线", {"stock_code": "600519"}).stock_scope
 
-        self.assertEqual(scope.allowed_stock_codes, {"600519"})
-        self.assertNotIn("MA", scope.allowed_stock_codes)
-        result = run_agent_loop(
-            messages=[
-                {"role": "system", "content": "system"},
-                {"role": "user", "content": "分析 MA 均线"},
-            ],
-            tool_registry=registry,
-            llm_adapter=adapter,
-            max_steps=3,
-            stock_scope=scope,
-        )
-
-        self.assertTrue(result.success)
-        self.assertEqual(executed_calls, [])
-        self.assertTrue(result.tool_calls_log[0]["guarded"])
-        self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], "MA")
-        tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
-        self.assertEqual(len(tool_messages), 1)
-        self.assertIn("stock_scope_violation", tool_messages[0]["content"])
-
-    def test_run_agent_loop_blocks_untrusted_context_exchange_token(self):
-        executed_calls = []
-        registry = _make_stock_registry(executed_calls)
-        adapter = _make_mock_adapter()
-        adapter.call_with_tools.side_effect = [
-            LLMResponse(
-                content="Need quote.",
-                tool_calls=[
-                    ToolCall(
-                        id="quote_1",
-                        name="get_realtime_quote",
-                        arguments={"stock_code": "HK"},
+        for message, requested_code in cases:
+            with self.subTest(message=message, requested_code=requested_code):
+                executed_calls = []
+                registry = _make_stock_registry(executed_calls)
+                adapter = _make_mock_adapter()
+                adapter.call_with_tools.side_effect = [
+                    LLMResponse(
+                        content="Need quote.",
+                        tool_calls=[
+                            ToolCall(
+                                id="quote_1",
+                                name="get_realtime_quote",
+                                arguments={"stock_code": requested_code},
+                            ),
+                        ],
+                        usage={"total_tokens": 10},
+                        provider="openai",
                     ),
-                ],
-                usage={"total_tokens": 10},
-                provider="openai",
-            ),
-            LLMResponse(
-                content="Blocked untrusted context.",
-                tool_calls=[],
-                usage={"total_tokens": 10},
-                provider="openai",
-            ),
+                    LLMResponse(
+                        content="Blocked indicator token.",
+                        tool_calls=[],
+                        usage={"total_tokens": 10},
+                        provider="openai",
+                    ),
+                ]
+                scope = resolve_stock_scope(message, {"stock_code": "600519"}).stock_scope
+
+                self.assertEqual(scope.allowed_stock_codes, {"600519"})
+                self.assertNotIn(requested_code, scope.allowed_stock_codes)
+                result = run_agent_loop(
+                    messages=[
+                        {"role": "system", "content": "system"},
+                        {"role": "user", "content": message},
+                    ],
+                    tool_registry=registry,
+                    llm_adapter=adapter,
+                    max_steps=3,
+                    stock_scope=scope,
+                )
+
+                self.assertTrue(result.success)
+                self.assertEqual(executed_calls, [])
+                self.assertTrue(result.tool_calls_log[0]["guarded"])
+                self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], requested_code)
+                tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
+                self.assertEqual(len(tool_messages), 1)
+                self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+
+    def test_run_agent_loop_blocks_untrusted_context_denied_token(self):
+        cases = [
+            ("继续看", "HK", "港股"),
+            ("继续看", "KDJ", "KDJ 指标"),
+            ("分析 MA 均线", "MA", "均线"),
         ]
-        scope_resolution = resolve_stock_scope("继续看", {"stock_code": "HK", "stock_name": "港股"})
-        scope = scope_resolution.stock_scope
 
-        self.assertEqual(scope.allowed_stock_codes, set())
-        self.assertNotIn("stock_code", scope_resolution.effective_context)
-        result = run_agent_loop(
-            messages=[
-                {"role": "system", "content": "system"},
-                {"role": "user", "content": "继续看"},
-            ],
-            tool_registry=registry,
-            llm_adapter=adapter,
-            max_steps=3,
-            stock_scope=scope,
-        )
+        for message, requested_code, stock_name in cases:
+            with self.subTest(message=message, requested_code=requested_code):
+                executed_calls = []
+                registry = _make_stock_registry(executed_calls)
+                adapter = _make_mock_adapter()
+                adapter.call_with_tools.side_effect = [
+                    LLMResponse(
+                        content="Need quote.",
+                        tool_calls=[
+                            ToolCall(
+                                id="quote_1",
+                                name="get_realtime_quote",
+                                arguments={"stock_code": requested_code},
+                            ),
+                        ],
+                        usage={"total_tokens": 10},
+                        provider="openai",
+                    ),
+                    LLMResponse(
+                        content="Blocked untrusted context.",
+                        tool_calls=[],
+                        usage={"total_tokens": 10},
+                        provider="openai",
+                    ),
+                ]
+                scope_resolution = resolve_stock_scope(
+                    message,
+                    {"stock_code": requested_code, "stock_name": stock_name},
+                )
+                scope = scope_resolution.stock_scope
 
-        self.assertTrue(result.success)
-        self.assertEqual(executed_calls, [])
-        self.assertTrue(result.tool_calls_log[0]["guarded"])
-        self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], "HK")
-        tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
-        self.assertEqual(len(tool_messages), 1)
-        self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+                self.assertEqual(scope.allowed_stock_codes, set())
+                self.assertNotIn("stock_code", scope_resolution.effective_context)
+                result = run_agent_loop(
+                    messages=[
+                        {"role": "system", "content": "system"},
+                        {"role": "user", "content": message},
+                    ],
+                    tool_registry=registry,
+                    llm_adapter=adapter,
+                    max_steps=3,
+                    stock_scope=scope,
+                )
 
-    def test_run_agent_loop_guards_namespaced_search_tool_stock_code_only(self):
+                self.assertTrue(result.success)
+                self.assertEqual(executed_calls, [])
+                self.assertTrue(result.tool_calls_log[0]["guarded"])
+                self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], requested_code)
+                tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
+                self.assertEqual(len(tool_messages), 1)
+                self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+
+    def test_run_agent_loop_rejects_namespaced_tool_name_without_executing_handler(self):
         executed_calls = []
         registry = _make_stock_registry(executed_calls)
         adapter = _make_mock_adapter()
@@ -785,11 +803,12 @@ class TestAgentExecutor(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(executed_calls, [])
-        self.assertTrue(result.tool_calls_log[0]["guarded"])
+        self.assertFalse(result.tool_calls_log[0]["success"])
+        self.assertNotIn("guarded", result.tool_calls_log[0])
         self.assertEqual(result.tool_calls_log[0]["tool"], "default_api:search_stock_news")
         tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
         self.assertEqual(len(tool_messages), 1)
-        self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+        self.assertIn("not found in registry", tool_messages[0]["content"])
 
     def test_parallel_tool_batch_guards_only_conflicting_stock_calls(self):
         executed_calls = []

@@ -49,6 +49,7 @@ describe('normalizeStockCode', () => {
     expect(normalizeStockCode('AAPL')).toBe('AAPL');
     expect(normalizeStockCode('TSLA')).toBe('TSLA');
     expect(normalizeStockCode('GOOGL')).toBe('GOOGL');
+    expect(normalizeStockCode('BRK.B')).toBe('BRK.B');
   });
 
   it('is case-insensitive for prefixes', () => {

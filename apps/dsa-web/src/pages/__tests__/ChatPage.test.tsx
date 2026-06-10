@@ -1435,6 +1435,7 @@ describe('extractStockCodeFromMessage', () => {
   it('returns US ticker like AAPL', () => {
     expect(extractStockCodeFromMessage('分析 AAPL 走势')).toBe('AAPL');
     expect(extractStockCodeFromMessage('TSLA')).toBe('TSLA');
+    expect(extractStockCodeFromMessage('分析 BRK.B')).toBe('BRK.B');
   });
 
   it('does NOT return finance abbreviations as tickers', () => {
@@ -1446,6 +1447,14 @@ describe('extractStockCodeFromMessage', () => {
     expect(extractStockCodeFromMessage('WHAT IS PE')).toBeNull();
     expect(extractStockCodeFromMessage('PE IS HIGH')).toBeNull();
     expect(extractStockCodeFromMessage('WHAT IS TTM')).toBeNull();
+  });
+
+  it('does NOT return contextual moving-average MA as a ticker', () => {
+    expect(extractStockCodeFromMessage('分析 MA 均线')).toBeNull();
+    expect(extractStockCodeFromMessage('看看 MA 怎么排列')).toBeNull();
+    expect(extractStockCodesFromMessage('MA 和 RSI 的指标怎么看')).toEqual([]);
+    expect(extractStockCodeFromMessage('分析 KDJ 指标')).toBeNull();
+    expect(extractStockCodeFromMessage('KDJ 怎么看')).toBeNull();
   });
 
   it('skips finance abbreviations before a real ticker', () => {
@@ -1481,6 +1490,7 @@ describe('extractStockCodeFromMessage', () => {
     expect(extractStockCodesFromMessage('分析 600519 和 AAPL 的差异')).toEqual(['600519', 'AAPL']);
     expect(extractStockCodesFromMessage('分析 AAPL 和 600519 的差异')).toEqual(['AAPL', '600519']);
     expect(extractStockCodesFromMessage('AAPL 和 TSLA 哪个更值得买')).toEqual(['AAPL', 'TSLA']);
+    expect(extractStockCodesFromMessage('比较 BRK.B 和 AAPL')).toEqual(['BRK.B', 'AAPL']);
   });
 
   it('extracts lowercase tickers only with explicit stock intent hints', () => {
@@ -1504,6 +1514,7 @@ describe('extractStockCodeFromMessage', () => {
   it('does not return denied abbreviations in multi-code extraction', () => {
     expect(extractStockCodesFromMessage('如果不考虑 TTM 和 PE')).toEqual([]);
     expect(extractStockCodesFromMessage('MACD AAPL 和 RSI')).toEqual(['AAPL']);
+    expect(extractStockCodesFromMessage('KDJ AAPL 怎么看')).toEqual(['AAPL']);
   });
 });
 
