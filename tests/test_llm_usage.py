@@ -106,6 +106,26 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertEqual(usage["cache_observation"], "partial_hit")
         self.assertEqual(usage["normalized_cache_hit_ratio"], 0.25)
 
+    def test_openai_impossible_cache_counts_are_marked_invalid(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 2000,
+                "completion_tokens": 10,
+                "total_tokens": 2010,
+                "prompt_tokens_details": {"cached_tokens": 5000},
+            },
+            model="openai/gpt-4o",
+        )
+
+        self.assertEqual(usage["provider_reported_prompt_tokens"], 2000)
+        self.assertEqual(usage["provider_reported_cached_tokens"], 5000)
+        self.assertEqual(usage["cache_capability"], "supported")
+        self.assertEqual(usage["cache_observation"], "invalid_provider_usage")
+        self.assertEqual(usage["eligibility_confidence"], "invalid")
+        self.assertIsNone(usage["normalized_cache_read_tokens"])
+        self.assertIsNone(usage["normalized_uncached_input_tokens"])
+        self.assertIsNone(usage["normalized_cache_hit_ratio"])
+
     def test_openai_below_threshold_does_not_fake_zero_hit(self):
         usage = normalize_litellm_usage(
             {
@@ -278,6 +298,116 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertEqual(usage["cache_capability"], "unknown")
         self.assertEqual(usage["cache_observation"], "unknown")
 
+    def test_provider_usage_json_preserves_allowlisted_usage_cache_shapes(self):
+        cases = [
+            (
+                "openai",
+                {
+                    "prompt_tokens": 2000,
+                    "completion_tokens": 100,
+                    "total_tokens": 2100,
+                    "prompt_tokens_details": {"cached_tokens": 500},
+                },
+                "openai/gpt-4o",
+                {"prompt_tokens": 2000, "prompt_tokens_details": {"cached_tokens": 500}},
+            ),
+            (
+                "anthropic",
+                {
+                    "input_tokens": 100,
+                    "output_tokens": 30,
+                    "cache_read_input_tokens": 10,
+                    "cache_creation_input_tokens": 20,
+                },
+                "anthropic/claude-3-5-sonnet",
+                {
+                    "input_tokens": 100,
+                    "output_tokens": 30,
+                    "cache_read_input_tokens": 10,
+                    "cache_creation_input_tokens": 20,
+                },
+            ),
+            (
+                "gemini",
+                {
+                    "prompt_token_count": 1000,
+                    "candidates_token_count": 50,
+                    "total_token_count": 1050,
+                    "cached_content_token_count": 32,
+                },
+                "gemini/gemini-2.5-flash",
+                {
+                    "prompt_token_count": 1000,
+                    "candidates_token_count": 50,
+                    "total_token_count": 1050,
+                    "cached_content_token_count": 32,
+                },
+            ),
+            (
+                "deepseek",
+                {
+                    "completion_tokens": 10,
+                    "prompt_cache_hit_tokens": 40,
+                    "prompt_cache_miss_tokens": 60,
+                },
+                "deepseek/deepseek-chat",
+                {
+                    "completion_tokens": 10,
+                    "prompt_cache_hit_tokens": 40,
+                    "prompt_cache_miss_tokens": 60,
+                },
+            ),
+            (
+                "stepfun",
+                {
+                    "prompt_tokens": 900,
+                    "completion_tokens": 100,
+                    "total_tokens": 1000,
+                    "cached_tokens": 300,
+                },
+                "stepfun/step-2",
+                {
+                    "prompt_tokens": 900,
+                    "completion_tokens": 100,
+                    "total_tokens": 1000,
+                    "cached_tokens": 300,
+                },
+            ),
+        ]
+
+        for name, payload, model, expected_subset in cases:
+            with self.subTest(name=name):
+                usage = normalize_litellm_usage(payload, model=model)
+                raw = usage["provider_usage_json"]
+                self.assertIsNotNone(raw)
+                parsed = json.loads(raw)
+                for key, expected in expected_subset.items():
+                    self.assertEqual(parsed[key], expected)
+
+    def test_raw_usage_drops_unmodeled_metadata_before_size_limit(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 1,
+                "prompt_tokens_details": {"cached_tokens": 1},
+                "metadata": {"plain_url": "https://example.test/path?token_count=2"},
+                "nested": {"safe_count": 2},
+                "headers": {"authorization": "Bearer secret"},
+                "large": "x" * 5000,
+            },
+            model="gateway/custom-model",
+            provider="gateway",
+        )
+
+        raw = usage["provider_usage_json"]
+        self.assertIsNotNone(raw)
+        parsed = json.loads(raw)
+        self.assertEqual(parsed, {"prompt_tokens": 1, "prompt_tokens_details": {"cached_tokens": 1}})
+        self.assertNotIn("_truncated", parsed)
+        self.assertNotIn("example.test", raw)
+        self.assertNotIn("safe_count", raw)
+        self.assertNotIn("authorization", raw)
+        self.assertNotIn("x" * 100, raw)
+
     def test_raw_usage_is_sanitized_and_size_limited(self):
         usage = normalize_litellm_usage(
             {
@@ -288,7 +418,7 @@ class TestLLMUsageNormalizer(unittest.TestCase):
                 "headers": {"authorization": "Bearer secret"},
                 "raw_prompt": "do not persist this prompt",
                 "nested": {"raw_user_input": "do not persist this user input"},
-                "large": "x" * 5000,
+                "tokenizer_name": "x" * 5000,
             },
             model="gateway/custom-model",
         )
@@ -302,6 +432,32 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertNotIn("do not persist this user input", raw)
         parsed = json.loads(raw)
         self.assertTrue(parsed["_truncated"])
+
+    def test_raw_usage_drops_unmodeled_prompt_message_content_fields(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 3,
+                "completion_tokens": 2,
+                "total_tokens": 5,
+                "prompt": "SECRET_PROMPT",
+                "messages": [{"role": "user", "content": "SECRET_MESSAGE"}],
+                "content": "SECRET_CONTENT",
+                "input": "SECRET_INPUT",
+                "output": "SECRET_OUTPUT",
+            },
+            model="gateway/custom-model",
+            provider="gateway",
+        )
+
+        raw = usage["provider_usage_json"]
+        self.assertIsNotNone(raw)
+        self.assertNotIn("SECRET_PROMPT", raw)
+        self.assertNotIn("SECRET_MESSAGE", raw)
+        self.assertNotIn("SECRET_CONTENT", raw)
+        self.assertNotIn("SECRET_INPUT", raw)
+        self.assertNotIn("SECRET_OUTPUT", raw)
+        parsed = json.loads(raw)
+        self.assertEqual(parsed, {"completion_tokens": 2, "prompt_tokens": 3, "total_tokens": 5})
 
     def test_raw_usage_sanitizes_forbidden_key_variants(self):
         usage = normalize_litellm_usage(
@@ -330,17 +486,14 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertNotIn("private user input", raw)
         parsed = json.loads(raw)
         self.assertEqual(parsed["prompt_tokens"], 1)
-        self.assertEqual(parsed["nested"]["safe_count"], 2)
+        self.assertNotIn("nested", parsed)
 
     def test_raw_usage_sanitizes_sensitive_string_values_without_dropping_safe_metrics(self):
         usage = normalize_litellm_usage(
             {
                 "prompt_tokens": 1,
-                "metadata": {
-                    "callback": "https://user:pass@example.test/cb?access_token=sk-secret&token_count=2&api_key=sk-query#refresh_token=sk-fragment",
-                    "note": "Authorization: Bearer sk-header api_key=sk-inline",
-                    "plain_url": "https://example.test/path?token_count=2&cached_tokens=10",
-                },
+                "tokenizer_name": "https://user:pass@example.test/cb?access_token=sk-secret&token_count=2&api_key=sk-query#refresh_token=sk-fragment",
+                "tokenizer_version": "Authorization: Bearer sk-header api_key=sk-inline",
             },
             model="gateway/custom-model",
             provider="gateway",
@@ -355,21 +508,20 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertNotIn("sk-header", raw)
         self.assertNotIn("sk-inline", raw)
         self.assertIn("token_count=2", raw)
-        self.assertIn("cached_tokens=10", raw)
 
     def test_raw_usage_redacts_webhook_urls_without_dropping_ordinary_urls(self):
         usage = normalize_litellm_usage(
             {
                 "prompt_tokens": 1,
-                "metadata": {
-                    "slack": "https://hooks.slack.com/services/T000/B000/secret",
-                    "feishu": "https://open.feishu.cn/open-apis/bot/v2/hook/secret",
-                    "lark": "https://open.larksuite.com/open-apis/bot/v2/hook/secret",
-                    "wecom": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
-                    "discord": "https://discord.com/api/webhooks/123/secret",
-                    "dingtalk": "https://oapi.dingtalk.com/robot/send?access_token=secret",
-                    "ordinary_services": "https://example.com/services/T000/B000/secret",
-                    "ordinary_robot": "https://example.com/robot/send?token_count=2",
+                "tokenizer_name": "https://hooks.slack.com/services/T000/B000/secret",
+                "tokenizer_version": "https://oapi.dingtalk.com/robot/send?access_token=secret",
+                "prompt_tokens_details": {
+                    "cached_tokens": "https://sctapi.ftqq.com/SCTSECRET.send?title=x",
+                    "audio_tokens": "https://hooks.internal.example/path/secret",
+                    "text_tokens": "https://example.com/services/T000/B000/secret",
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": "https://example.com/robot/send?token_count=2",
                 },
             },
             model="gateway/custom-model",
@@ -379,10 +531,8 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         raw = usage["provider_usage_json"]
         self.assertIsNotNone(raw)
         self.assertNotIn("hooks.slack.com", raw)
-        self.assertNotIn("open.feishu.cn", raw)
-        self.assertNotIn("open.larksuite.com", raw)
-        self.assertNotIn("qyapi.weixin.qq.com", raw)
-        self.assertNotIn("discord.com/api/webhooks", raw)
+        self.assertNotIn("sctapi.ftqq.com", raw)
+        self.assertNotIn("hooks.internal.example", raw)
         self.assertNotIn("oapi.dingtalk.com/robot/send", raw)
         self.assertNotIn("access_token=secret", raw)
         self.assertIn("https://example.com/services/T000/B000/secret", raw)
@@ -701,6 +851,35 @@ class TestPersistUsageHelper(unittest.TestCase):
             self.assertEqual(len(row.messages_hmac), 64)
             self.assertNotIn("system prompt", row.provider_usage_json)
             self.assertNotIn("user prompt", row.provider_usage_json)
+
+    def test_persist_usage_does_not_store_unmodeled_prompt_payload_fields(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 3,
+                "completion_tokens": 2,
+                "total_tokens": 5,
+                "prompt": "SECRET_PROMPT",
+                "messages": [{"role": "user", "content": "SECRET_MESSAGE"}],
+                "content": "SECRET_CONTENT",
+            },
+            model="gateway/custom-model",
+            provider="gateway",
+        )
+
+        persist_llm_usage(
+            usage,
+            "gateway/custom-model",
+            call_type="analysis",
+            stock_code="000001",
+        )
+
+        with self.db.session_scope() as session:
+            row = session.query(LLMUsage).one()
+            self.assertNotIn("SECRET_PROMPT", row.provider_usage_json)
+            self.assertNotIn("SECRET_MESSAGE", row.provider_usage_json)
+            self.assertNotIn("SECRET_CONTENT", row.provider_usage_json)
+            parsed = json.loads(row.provider_usage_json)
+            self.assertEqual(parsed, {"completion_tokens": 2, "prompt_tokens": 3, "total_tokens": 5})
 
     def test_persist_usage_never_raises(self):
         # Pass a deliberately bad db state by resetting the singleton

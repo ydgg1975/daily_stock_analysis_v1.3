@@ -26,40 +26,50 @@ DEFAULT_HASH_SCOPE = "deployment"
 DEFAULT_HMAC_KEY_VERSION = "local-v1"
 
 _HMAC_SECRET_CACHE: Optional[bytes] = None
-_FORBIDDEN_RAW_USAGE_KEYS = {
-    "headers",
-    "header",
-    "request_body",
-    "requestBody",
-    "response_text",
-    "responseText",
-    "api_key",
-    "apiKey",
-    "x-api-key",
-    "authorization",
-    "traceback",
-    "raw_prompt",
-    "rawPrompt",
-    "raw_user_input",
-    "rawUserInput",
-    "webhook",
-    "webhook_url",
-    "holdings",
-}
-_FORBIDDEN_RAW_USAGE_KEY_EXACT = {"header", "headers", "holdings"}
-_FORBIDDEN_RAW_USAGE_KEY_MARKERS = {
-    "apikey",
-    "authorization",
-    "requestbody",
-    "responsebody",
-    "responsetext",
-    "rawprompt",
-    "rawuserinput",
-    "traceback",
-    "webhook",
-}
+_DROP_RAW_USAGE_VALUE = object()
 _OPENAI_LITELLM_PROVIDER = "openai"
 _OPENAI_COMPATIBLE_PROVIDER = "openai_compatible"
+_ALLOWED_RAW_USAGE_SCALAR_KEYS = {
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "input_tokens",
+    "output_tokens",
+    "prompt_token_count",
+    "input_token_count",
+    "candidates_token_count",
+    "output_token_count",
+    "total_token_count",
+    "cached_tokens",
+    "cached_content_token_count",
+    "cache_read_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+    "prompt_cache_hit_tokens",
+    "prompt_cache_miss_tokens",
+    "estimated_prefix_tokens",
+    "tokenizer_name",
+    "tokenizer_version",
+}
+_ALLOWED_RAW_USAGE_DETAIL_KEYS = {
+    "prompt_tokens_details",
+    "completion_tokens_details",
+    "input_tokens_details",
+    "output_tokens_details",
+    "input_token_details",
+    "output_token_details",
+}
+_ALLOWED_RAW_USAGE_DETAIL_SCALAR_KEYS = {
+    "accepted_prediction_tokens",
+    "audio_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "cached_tokens",
+    "image_tokens",
+    "reasoning_tokens",
+    "rejected_prediction_tokens",
+    "text_tokens",
+}
 _SENSITIVE_VALUE_KEYS = {
     "access_token",
     "api_key",
@@ -226,6 +236,21 @@ def normalize_litellm_usage(
 
     result["cache_capability"] = capability
 
+    eligible_tokens = _eligible_input_tokens(prompt_tokens, provider_min_cache_tokens, capability)
+    invalid_cache_usage = _has_invalid_cache_usage(
+        prompt_tokens=prompt_tokens,
+        cache_read=cache_read,
+        cache_write=cache_write,
+        cache_miss=cache_miss,
+        capability=capability,
+    )
+    if invalid_cache_usage:
+        result["cache_eligibility"] = "unknown"
+        result["cache_observation"] = "invalid_provider_usage"
+        result["eligibility_confidence"] = "invalid"
+        result["normalized_uncached_input_tokens"] = None
+        return result
+
     result["normalized_cache_read_tokens"] = cache_read
     result["normalized_cache_write_tokens"] = cache_write
     result["normalized_cache_miss_tokens"] = cache_miss
@@ -233,7 +258,6 @@ def normalize_litellm_usage(
     if result["normalized_uncached_input_tokens"] is None and prompt_tokens is not None and cache_read is not None:
         result["normalized_uncached_input_tokens"] = max(prompt_tokens - cache_read - (cache_write or 0), 0)
 
-    eligible_tokens = _eligible_input_tokens(prompt_tokens, provider_min_cache_tokens, capability)
     result["normalized_cache_eligible_input_tokens"] = eligible_tokens
     result["cache_eligibility"] = _cache_eligibility(prompt_tokens, provider_min_cache_tokens, capability)
     result["eligibility_confidence"] = "exact" if prompt_tokens is not None else "unknown"
@@ -414,6 +438,8 @@ def _safe_provider_usage_json(usage: Mapping[str, Any]) -> Optional[str]:
     if not usage:
         return None
     sanitized = _sanitize_raw_usage(dict(usage))
+    if not sanitized:
+        return None
     payload = json.dumps(sanitized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     size = len(payload.encode("utf-8"))
     if size <= PROVIDER_USAGE_MAX_SIZE_BYTES:
@@ -438,27 +464,39 @@ def _sanitize_raw_usage(value: Any) -> Any:
         result = {}
         for key, item in value.items():
             key_text = str(key)
-            if _is_forbidden_raw_usage_key(key_text):
+            if key_text in _ALLOWED_RAW_USAGE_DETAIL_KEYS and isinstance(item, Mapping):
+                detail = _sanitize_raw_usage_detail(item)
+                if detail:
+                    result[key_text] = detail
                 continue
-            result[key_text] = _sanitize_raw_usage(item)
+            if key_text not in _ALLOWED_RAW_USAGE_SCALAR_KEYS:
+                continue
+            sanitized = _sanitize_raw_usage_scalar(item)
+            if sanitized is not _DROP_RAW_USAGE_VALUE:
+                result[key_text] = sanitized
         return result
-    if isinstance(value, list):
-        return [_sanitize_raw_usage(item) for item in value[:100]]
+    sanitized_value = _sanitize_raw_usage_scalar(value)
+    return None if sanitized_value is _DROP_RAW_USAGE_VALUE else sanitized_value
+
+
+def _sanitize_raw_usage_detail(value: Mapping[str, Any]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for key, item in value.items():
+        key_text = str(key)
+        if key_text not in _ALLOWED_RAW_USAGE_DETAIL_SCALAR_KEYS:
+            continue
+        sanitized = _sanitize_raw_usage_scalar(item)
+        if sanitized is not _DROP_RAW_USAGE_VALUE:
+            result[key_text] = sanitized
+    return result
+
+
+def _sanitize_raw_usage_scalar(value: Any) -> Any:
     if isinstance(value, str):
         return _sanitize_raw_usage_text(value)
     if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return _sanitize_raw_usage_text(str(value))
-
-
-def _is_forbidden_raw_usage_key(key: str) -> bool:
-    lower = key.lower()
-    if lower in _FORBIDDEN_RAW_USAGE_KEYS:
-        return True
-    normalized = "".join(ch for ch in lower if ch.isalnum())
-    if normalized in _FORBIDDEN_RAW_USAGE_KEY_EXACT:
-        return True
-    return any(marker in normalized for marker in _FORBIDDEN_RAW_USAGE_KEY_MARKERS)
+    return _DROP_RAW_USAGE_VALUE
 
 
 def _sanitize_raw_usage_text(text: str) -> str:
@@ -686,6 +724,33 @@ def _cache_observation(
     if miss > 0 or cache_field_observed:
         return "zero_hit"
     return "unknown"
+
+
+def _has_invalid_cache_usage(
+    *,
+    prompt_tokens: Optional[int],
+    cache_read: Optional[int],
+    cache_write: Optional[int],
+    cache_miss: Optional[int],
+    capability: str,
+) -> bool:
+    if capability != "supported":
+        return False
+    values = (prompt_tokens, cache_read, cache_write, cache_miss)
+    if any(value is not None and value < 0 for value in values):
+        return True
+    if prompt_tokens is None:
+        return False
+    read = cache_read or 0
+    write = cache_write or 0
+    miss = cache_miss or 0
+    if read > prompt_tokens or write > prompt_tokens or miss > prompt_tokens:
+        return True
+    if read + write > prompt_tokens:
+        return True
+    if cache_miss is not None and read + miss > prompt_tokens:
+        return True
+    return False
 
 
 def _ratio(numerator: Optional[int], denominator: Optional[int]) -> Optional[float]:
