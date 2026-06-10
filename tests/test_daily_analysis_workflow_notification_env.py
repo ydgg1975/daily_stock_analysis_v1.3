@@ -23,7 +23,6 @@ WORKFLOW_PATH = ROOT_DIR / ".github/workflows/00-daily-analysis.yml"
 NOTIFICATIONS_DOC_PATH = ROOT_DIR / "docs/notifications.md"
 
 P0_EXCLUDED_BEHAVIOR_SWITCHES = {
-    "MARKDOWN_TO_IMAGE_CHANNELS",
     "MERGE_EMAIL_NOTIFICATION",
 }
 
@@ -84,6 +83,13 @@ def test_daily_analysis_keeps_deferred_behavior_switches_unmapped() -> None:
 
     for key in P0_EXCLUDED_BEHAVIOR_SWITCHES:
         assert key not in env
+
+
+def test_daily_analysis_maps_markdown_to_image_channels() -> None:
+    """Fork 显式启用 Markdown→图片渠道，需要在 workflow 里映射该 env。"""
+    env = _load_daily_analysis_env()
+    assert "MARKDOWN_TO_IMAGE_CHANNELS" in env
+    assert "MD2IMG_ENGINE" in env
 
 
 def test_notification_actions_env_table_matches_generated_output() -> None:
