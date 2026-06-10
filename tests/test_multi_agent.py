@@ -353,6 +353,11 @@ class TestStockScopeResolution(unittest.TestCase):
             ("比较 BJ920748 和 AAPL", {"600519", "920748", "AAPL"}, {"BJ"}),
             ("比较 HK01810 和 AAPL", {"600519", "HK01810", "AAPL"}, {"HK"}),
             ("比较 hk01810 和 tsla", {"600519", "HK01810", "TSLA"}, {"HK"}),
+            ("比较 600519 SH 和 AAPL", {"600519", "AAPL"}, {"SH"}),
+            ("比较 000001 SZ 和 AAPL", {"600519", "000001", "AAPL"}, {"SZ"}),
+            ("比较 920748 BJ 和 AAPL", {"600519", "920748", "AAPL"}, {"BJ"}),
+            ("比较 01810 HK 和 AAPL", {"600519", "HK01810", "AAPL"}, {"HK"}),
+            ("比较 600519 SS 和 AAPL", {"600519", "AAPL"}, {"SS"}),
         ]
 
         for message, expected_allowed, forbidden_tokens in cases:

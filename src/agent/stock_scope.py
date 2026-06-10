@@ -32,6 +32,7 @@ _LINKED_COMPARE_PATTERN = re.compile(
 )
 _SWITCH_PATTERN = re.compile(r"换成|改看|分析|看看|研究|诊断")
 _LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z.])([a-z]{2,5}(?:\.[a-z]{1,2})?)(?![a-zA-Z0-9])")
+_EXCHANGE_TOKEN_CANDIDATES = {"SH", "SZ", "BJ", "HK", "SS"}
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,8 @@ def _normalize_stock_code(value: Any) -> str:
 
 
 def _is_denied_candidate(candidate: str) -> bool:
+    if candidate.strip().upper() in _EXCHANGE_TOKEN_CANDIDATES:
+        return True
     try:
         from src.agent.orchestrator import _COMMON_WORDS
 

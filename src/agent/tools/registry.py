@@ -111,12 +111,10 @@ class ToolRegistry:
         return self._tools.get(name)
 
     def resolve(self, name: str) -> Optional[ToolDefinition]:
-        """Return a tool definition, accepting provider-namespaced names."""
+        """Return a tool definition, accepting colon-namespaced names."""
         tool_def = self._tools.get(name)
         if tool_def is None and ":" in name:
             tool_def = self._tools.get(name.split(":", 1)[-1])
-        if tool_def is None and "." in name:
-            tool_def = self._tools.get(name.rsplit(".", 1)[-1])
         return tool_def
 
     def list_tools(self, category: Optional[str] = None) -> List[ToolDefinition]:
@@ -151,7 +149,7 @@ class ToolRegistry:
         Raises ``KeyError`` if tool not found.
         Raises the handler's exception on execution failure.
 
-        Supports Gemini namespaced tool names (e.g. default_api:get_realtime_quote -> get_realtime_quote).
+        Supports colon-namespaced tool names (e.g. default_api:get_realtime_quote -> get_realtime_quote).
         """
         tool_def = self.resolve(name)
         if tool_def is None:

@@ -565,6 +565,11 @@ class TestAgentExecutor(unittest.TestCase):
             ("比较 SZ000001 和 AAPL", "SZ"),
             ("比较 BJ920748 和 AAPL", "BJ"),
             ("比较 HK01810 和 AAPL", "HK"),
+            ("比较 600519 SH 和 AAPL", "SH"),
+            ("比较 000001 SZ 和 AAPL", "SZ"),
+            ("比较 920748 BJ 和 AAPL", "BJ"),
+            ("比较 01810 HK 和 AAPL", "HK"),
+            ("比较 600519 SS 和 AAPL", "SS"),
         ]
 
         for message, requested_code in cases:
@@ -624,7 +629,7 @@ class TestAgentExecutor(unittest.TestCase):
                 tool_calls=[
                     ToolCall(
                         id="news_1",
-                        name="gemini_api.search_stock_news",
+                        name="default_api:search_stock_news",
                         arguments={"stock_code": "AAPL", "stock_name": "贵州茅台"},
                     ),
                 ],
@@ -653,7 +658,7 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(executed_calls, [])
         self.assertTrue(result.tool_calls_log[0]["guarded"])
-        self.assertEqual(result.tool_calls_log[0]["tool"], "gemini_api.search_stock_news")
+        self.assertEqual(result.tool_calls_log[0]["tool"], "default_api:search_stock_news")
         tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
         self.assertEqual(len(tool_messages), 1)
         self.assertIn("stock_scope_violation", tool_messages[0]["content"])
