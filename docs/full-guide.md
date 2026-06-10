@@ -491,13 +491,14 @@ DATABASE_PATH=./data/stock_analysis.db
 - `DYNAMIC` / `COMPRESSED` 行格式：**3072 bytes**
 - `utf8mb4` 字符集下每字符最多 4 字节
 
-本仓库 23 张表已全部通过 MySQL 键长兼容审计：
+本仓库 24 张表已全部通过 MySQL 键长兼容审计：
 
 | 索引 | 涉及列 | 最大键长 | COMPACT(767) | DYNAMIC(3072) |
 |------|--------|---------|-------------|---------------|
 | `uix_news_url_hash` | `VARCHAR(64)` SHA-256 | 256 | ✅ | ✅ |
 | `ix_agent_provider_turn_bucket` | `VARCHAR(100)+VARCHAR(64)+VARCHAR(160)+BOOL` | ~1297 | ❌ | ✅ |
 | `alert_cooldowns.rule_key` 索引 | `VARCHAR(255)` | 1020 | ❌ | ✅ |
+| `ix_decision_signal_trace_…_phase` | `VARCHAR(64)+VARCHAR(32)+VARCHAR(8)+VARCHAR(16)×3+VARCHAR(24)` | ~704 | ✅ | ✅ |
 | 其余全部索引/约束 | — | ≤516 | ✅ | ✅ |
 
 `NewsIntel` 原 `VARCHAR(1000)` 唯一索引（4000 字节）已通过 `url_hash`（SHA-256 十六进制摘要）列替代。`agent_provider_turns` 复合索引和 `alert_cooldowns.rule_key` 单列索引依赖 DYNAMIC 行格式，在 MySQL 8.0 默认配置下安全。MySQL 5.7 / 非默认 COMPACT 行格式下这两处会建表失败。

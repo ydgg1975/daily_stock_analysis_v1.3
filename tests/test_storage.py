@@ -887,6 +887,7 @@ _ALL_TABLES = {
     'conversation_messages', 'conversation_summaries',
     'agent_provider_turns', 'llm_usage', 'alert_rules',
     'alert_triggers', 'alert_notifications', 'alert_cooldowns',
+    'decision_signals',
 }
 
 

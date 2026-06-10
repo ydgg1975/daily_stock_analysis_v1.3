@@ -430,13 +430,14 @@ Reason: InnoDB single-column/composite index maximum key length is affected by r
 - `DYNAMIC` / `COMPRESSED` row format: **3072 bytes**
 - `utf8mb4` charset: up to 4 bytes per character
 
-All 23 tables in this repository have passed the MySQL key-length compatibility audit:
+All 24 tables in this repository have passed the MySQL key-length compatibility audit:
 
 | Index | Columns | Max Key Length | COMPACT(767) | DYNAMIC(3072) |
 |------|--------|---------|-------------|---------------|
 | `uix_news_url_hash` | `VARCHAR(64)` SHA-256 | 256 | ✅ | ✅ |
 | `ix_agent_provider_turn_bucket` | `VARCHAR(100)+VARCHAR(64)+VARCHAR(160)+BOOL` | ~1297 | ❌ | ✅ |
 | `alert_cooldowns.rule_key` index | `VARCHAR(255)` | 1020 | ❌ | ✅ |
+| `ix_decision_signal_trace_…_phase` | `VARCHAR(64)+VARCHAR(32)+VARCHAR(8)+VARCHAR(16)×3+VARCHAR(24)` | ~704 | ✅ | ✅ |
 | All other indexes/constraints | — | ≤516 | ✅ | ✅ |
 
 `NewsIntel`'s original `VARCHAR(1000)` unique index (4000 bytes) has been replaced by a `url_hash` (SHA-256 hex digest) column. The `agent_provider_turns` composite index and `alert_cooldowns.rule_key` single-column index depend on the DYNAMIC row format, which is safe under MySQL 8.0 defaults. MySQL 5.7 / non-default COMPACT row format will cause `CREATE TABLE` failures for these two indexes.
