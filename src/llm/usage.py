@@ -84,6 +84,7 @@ _ASSIGNMENT_SECRET_RE = re.compile(
     r")(\s*[=:]\s*)[^\s,;&]+"
 )
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+_REDACTED_URL = "[REDACTED_URL]"
 
 
 def extract_usage_payload(response: Any) -> Any:
@@ -477,6 +478,9 @@ def _sanitize_url_match(match: re.Match[str]) -> str:
     except ValueError:
         return match.group(0)
 
+    if _is_webhook_url(parts.netloc, parts.path):
+        return _REDACTED_URL + trailing
+
     netloc = parts.netloc
     if "@" in netloc:
         netloc = f"[REDACTED]@{netloc.rsplit('@', 1)[1]}"
@@ -485,6 +489,25 @@ def _sanitize_url_match(match: re.Match[str]) -> str:
     fragment = _sanitize_fragment(parts.fragment)
     redacted = urlunsplit((parts.scheme, netloc, parts.path, query, fragment))
     return redacted + trailing
+
+
+def _is_webhook_url(netloc: str, path: str) -> bool:
+    host = str(netloc or "").rsplit("@", 1)[-1].split(":", 1)[0].lower().strip(".")
+    normalized_path = f"/{str(path or '').lstrip('/').lower()}"
+
+    if host == "hooks.slack.com" and normalized_path.startswith("/services/"):
+        return True
+    if host in {"discord.com", "discordapp.com"} and "/api/webhooks/" in normalized_path:
+        return True
+    if host in {"open.feishu.cn", "open.larksuite.com"}:
+        return "/open-apis/bot/" in normalized_path and "/hook/" in normalized_path
+    if host == "qyapi.weixin.qq.com" and normalized_path.startswith("/cgi-bin/webhook/send"):
+        return True
+    if host == "oapi.dingtalk.com" and normalized_path.startswith("/robot/send"):
+        return True
+    if host in {"sctapi.ftqq.com", "sc.ftqq.com"}:
+        return True
+    return host.startswith("hooks.")
 
 
 def _sanitize_query_string(query: str) -> str:

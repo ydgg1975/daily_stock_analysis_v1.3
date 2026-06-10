@@ -357,6 +357,37 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertIn("token_count=2", raw)
         self.assertIn("cached_tokens=10", raw)
 
+    def test_raw_usage_redacts_webhook_urls_without_dropping_ordinary_urls(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 1,
+                "metadata": {
+                    "slack": "https://hooks.slack.com/services/T000/B000/secret",
+                    "feishu": "https://open.feishu.cn/open-apis/bot/v2/hook/secret",
+                    "lark": "https://open.larksuite.com/open-apis/bot/v2/hook/secret",
+                    "wecom": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
+                    "discord": "https://discord.com/api/webhooks/123/secret",
+                    "dingtalk": "https://oapi.dingtalk.com/robot/send?access_token=secret",
+                    "ordinary_services": "https://example.com/services/T000/B000/secret",
+                    "ordinary_robot": "https://example.com/robot/send?token_count=2",
+                },
+            },
+            model="gateway/custom-model",
+            provider="gateway",
+        )
+
+        raw = usage["provider_usage_json"]
+        self.assertIsNotNone(raw)
+        self.assertNotIn("hooks.slack.com", raw)
+        self.assertNotIn("open.feishu.cn", raw)
+        self.assertNotIn("open.larksuite.com", raw)
+        self.assertNotIn("qyapi.weixin.qq.com", raw)
+        self.assertNotIn("discord.com/api/webhooks", raw)
+        self.assertNotIn("oapi.dingtalk.com/robot/send", raw)
+        self.assertNotIn("access_token=secret", raw)
+        self.assertIn("https://example.com/services/T000/B000/secret", raw)
+        self.assertIn("https://example.com/robot/send?token_count=2", raw)
+
 
 class TestLLMUsageHMAC(unittest.TestCase):
     def tearDown(self):
