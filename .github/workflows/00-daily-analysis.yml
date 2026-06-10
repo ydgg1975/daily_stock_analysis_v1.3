@@ -51,7 +51,30 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-      
+
+      - name: 安装 Markdown→图片 工具（可选）
+        if: ${{ vars.MARKDOWN_TO_IMAGE_CHANNELS != '' || secrets.MARKDOWN_TO_IMAGE_CHANNELS != '' }}
+        env:
+          MD2IMG_ENGINE: ${{ vars.MD2IMG_ENGINE || secrets.MD2IMG_ENGINE || 'wkhtmltoimage' }}
+        run: |
+          set -e
+          case "$MD2IMG_ENGINE" in
+            markdown-to-file)
+              echo "📦 安装 markdown-to-file (npm)"
+              npm install -g markdown-to-file
+              which m2f && m2f --version || true
+              ;;
+            wkhtmltoimage|"")
+              echo "📦 安装 wkhtmltopdf (apt) — 提供 wkhtmltoimage 二进制"
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends wkhtmltopdf
+              which wkhtmltoimage && wkhtmltoimage --version || true
+              ;;
+            *)
+              echo "⚠️ 未知 MD2IMG_ENGINE='$MD2IMG_ENGINE'，跳过安装；运行时将回退为文本发送"
+              ;;
+          esac
+
       - name: 创建必要目录
         run: |
           mkdir -p data logs reports
@@ -333,6 +356,15 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
 
+          # ==========================================
+          # 通知形态开关（fork 显式开启）
+          # ==========================================
+          # 将 Markdown 报告转图片发送的渠道；用逗号分隔，例如：slack,telegram,wechat,custom,email
+          # 默认为空 → 全部按文本发送；若设置了非空值，下方的"安装 Markdown→图片 工具"步骤会自动安装依赖
+          MARKDOWN_TO_IMAGE_CHANNELS: ${{ vars.MARKDOWN_TO_IMAGE_CHANNELS || secrets.MARKDOWN_TO_IMAGE_CHANNELS }}
+          # 转图引擎，可选 wkhtmltoimage（默认）或 markdown-to-file
+          MD2IMG_ENGINE: ${{ vars.MD2IMG_ENGINE || secrets.MD2IMG_ENGINE || 'wkhtmltoimage' }}
+
           # 通知路由策略（留空时保持全部已配置渠道）
           NOTIFICATION_REPORT_CHANNELS: ${{ vars.NOTIFICATION_REPORT_CHANNELS || secrets.NOTIFICATION_REPORT_CHANNELS }}
           NOTIFICATION_ALERT_CHANNELS: ${{ vars.NOTIFICATION_ALERT_CHANNELS || secrets.NOTIFICATION_ALERT_CHANNELS }}
@@ -451,6 +483,11 @@ jobs:
           echo "  Discord: $([ -n "$DISCORD_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  AstrBot: $([ -n "$ASTRBOT_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Slack: $(([ -n "$SLACK_WEBHOOK_URL" ] || ([ -n "$SLACK_BOT_TOKEN" ] && [ -n "$SLACK_CHANNEL_ID" ])) && echo '✅ 已配置' || echo '⚪ 未配置')"
+          if [ -n "$MARKDOWN_TO_IMAGE_CHANNELS" ]; then
+            echo "  Markdown→图片: ✅ 渠道=$MARKDOWN_TO_IMAGE_CHANNELS, 引擎=${MD2IMG_ENGINE:-wkhtmltoimage}"
+          else
+            echo "  Markdown→图片: ⚪ 未启用"
+          fi
           echo "=========================================="
           echo ""
           
