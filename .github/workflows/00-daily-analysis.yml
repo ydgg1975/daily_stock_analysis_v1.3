@@ -33,7 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     # 添加超时限制，防止任务卡死
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
-    
+    # 暴露给 step 级 if 使用（GitHub Actions 不允许在 if 条件中直接引用 secrets）
+    env:
+      MARKDOWN_TO_IMAGE_CHANNELS: ${{ vars.MARKDOWN_TO_IMAGE_CHANNELS || secrets.MARKDOWN_TO_IMAGE_CHANNELS }}
+
     steps:
       - name: 随机延迟（避免固定时间访问）
         run: sleep $((RANDOM % 60))  # 随机延迟0-60秒启动
@@ -53,7 +56,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: 安装 Markdown→图片 工具（可选）
-        if: ${{ vars.MARKDOWN_TO_IMAGE_CHANNELS != '' || secrets.MARKDOWN_TO_IMAGE_CHANNELS != '' }}
+        if: ${{ env.MARKDOWN_TO_IMAGE_CHANNELS != '' }}
         env:
           MD2IMG_ENGINE: ${{ vars.MD2IMG_ENGINE || secrets.MD2IMG_ENGINE || 'wkhtmltoimage' }}
         run: |
