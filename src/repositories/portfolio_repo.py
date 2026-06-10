@@ -798,10 +798,18 @@ class PortfolioRepository:
     ) -> List[PortfolioDailySnapshot]:
         """Load snapshot rows in ascending date order for risk monitoring."""
         with self.db.get_session() as session:
-            query = select(PortfolioDailySnapshot).where(
-                and_(
-                    PortfolioDailySnapshot.snapshot_date <= as_of,
-                    PortfolioDailySnapshot.cost_method == cost_method,
+            query = (
+                select(PortfolioDailySnapshot)
+                .join(
+                    PortfolioAccount,
+                    PortfolioAccount.id == PortfolioDailySnapshot.account_id,
+                )
+                .where(
+                    and_(
+                        PortfolioDailySnapshot.snapshot_date <= as_of,
+                        PortfolioDailySnapshot.cost_method == cost_method,
+                        PortfolioAccount.is_active.is_(True),
+                    )
                 )
             )
             if account_id is not None:
