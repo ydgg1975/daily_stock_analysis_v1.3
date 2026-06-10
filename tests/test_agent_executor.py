@@ -273,6 +273,39 @@ class TestAgentExecutor(unittest.TestCase):
         self.assertEqual(captured["stock_scope"].expected_stock_code, "AAPL")
         self.assertEqual(captured["stock_scope"].allowed_stock_codes, {"AAPL"})
 
+    def test_chat_does_not_trust_exchange_token_from_public_context(self):
+        registry = _make_registry_with_echo()
+        adapter = _make_mock_adapter()
+        adapter._config = MagicMock()
+        executor = AgentExecutor(registry, adapter, max_steps=2)
+        captured = {}
+
+        def fake_run_loop(messages, tool_decls, parse_dashboard, progress_callback=None, stock_scope=None):
+            captured["messages"] = messages
+            captured["stock_scope"] = stock_scope
+            return AgentResult(success=True, content="assistant reply")
+
+        with patch.object(executor, "_run_loop", side_effect=fake_run_loop):
+            with patch(
+                "src.agent.executor.build_agent_chat_context_bundle",
+                return_value=SimpleNamespace(context_messages=[], diagnostics={}),
+            ):
+                with patch("src.agent.conversation.conversation_manager.get_or_create"):
+                    with patch("src.agent.conversation.conversation_manager.add_message"):
+                        executor.chat(
+                            "继续看",
+                            "session-1",
+                            context={"stock_code": "HK", "stock_name": "港股"},
+                        )
+
+        history_context = "\n".join(
+            msg["content"] for msg in captured["messages"] if msg["role"] == "user"
+        )
+        self.assertNotIn("股票代码: HK", history_context)
+        self.assertNotIn("股票名称: 港股", history_context)
+        self.assertEqual(captured["stock_scope"].expected_stock_code, "")
+        self.assertEqual(captured["stock_scope"].allowed_stock_codes, set())
+
     def test_run_does_not_pass_stock_scope_to_dashboard_path(self):
         registry = _make_registry_with_echo()
         adapter = _make_mock_adapter()
@@ -618,6 +651,101 @@ class TestAgentExecutor(unittest.TestCase):
                 tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
                 self.assertEqual(len(tool_messages), 1)
                 self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+
+    def test_run_agent_loop_blocks_moving_average_indicator_token_from_followup(self):
+        executed_calls = []
+        registry = _make_stock_registry(executed_calls)
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.side_effect = [
+            LLMResponse(
+                content="Need quote.",
+                tool_calls=[
+                    ToolCall(
+                        id="quote_1",
+                        name="get_realtime_quote",
+                        arguments={"stock_code": "MA"},
+                    ),
+                ],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+            LLMResponse(
+                content="Blocked indicator token.",
+                tool_calls=[],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+        ]
+        scope = resolve_stock_scope("分析 MA 均线", {"stock_code": "600519"}).stock_scope
+
+        self.assertEqual(scope.allowed_stock_codes, {"600519"})
+        self.assertNotIn("MA", scope.allowed_stock_codes)
+        result = run_agent_loop(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "分析 MA 均线"},
+            ],
+            tool_registry=registry,
+            llm_adapter=adapter,
+            max_steps=3,
+            stock_scope=scope,
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(executed_calls, [])
+        self.assertTrue(result.tool_calls_log[0]["guarded"])
+        self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], "MA")
+        tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
+        self.assertEqual(len(tool_messages), 1)
+        self.assertIn("stock_scope_violation", tool_messages[0]["content"])
+
+    def test_run_agent_loop_blocks_untrusted_context_exchange_token(self):
+        executed_calls = []
+        registry = _make_stock_registry(executed_calls)
+        adapter = _make_mock_adapter()
+        adapter.call_with_tools.side_effect = [
+            LLMResponse(
+                content="Need quote.",
+                tool_calls=[
+                    ToolCall(
+                        id="quote_1",
+                        name="get_realtime_quote",
+                        arguments={"stock_code": "HK"},
+                    ),
+                ],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+            LLMResponse(
+                content="Blocked untrusted context.",
+                tool_calls=[],
+                usage={"total_tokens": 10},
+                provider="openai",
+            ),
+        ]
+        scope_resolution = resolve_stock_scope("继续看", {"stock_code": "HK", "stock_name": "港股"})
+        scope = scope_resolution.stock_scope
+
+        self.assertEqual(scope.allowed_stock_codes, set())
+        self.assertNotIn("stock_code", scope_resolution.effective_context)
+        result = run_agent_loop(
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "继续看"},
+            ],
+            tool_registry=registry,
+            llm_adapter=adapter,
+            max_steps=3,
+            stock_scope=scope,
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(executed_calls, [])
+        self.assertTrue(result.tool_calls_log[0]["guarded"])
+        self.assertEqual(result.tool_calls_log[0]["requested_stock_code"], "HK")
+        tool_messages = [msg for msg in result.messages if msg.get("role") == "tool"]
+        self.assertEqual(len(tool_messages), 1)
+        self.assertIn("stock_scope_violation", tool_messages[0]["content"])
 
     def test_run_agent_loop_guards_namespaced_search_tool_stock_code_only(self):
         executed_calls = []

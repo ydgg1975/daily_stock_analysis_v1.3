@@ -33,6 +33,11 @@ _LINKED_COMPARE_PATTERN = re.compile(
 _SWITCH_PATTERN = re.compile(r"换成|改看|分析|看看|研究|诊断")
 _LOWERCASE_TICKER_PATTERN = re.compile(r"(?<![a-zA-Z.])([a-z]{2,5}(?:\.[a-z]{1,2})?)(?![a-zA-Z0-9])")
 _EXCHANGE_TOKEN_CANDIDATES = {"SH", "SZ", "BJ", "HK", "SS"}
+_CONTEXTUAL_INDICATOR_TOKENS = {"MA"}
+_INDICATOR_CONTEXT_PATTERN = re.compile(
+    r"均线|移动平均|排列|多头|空头|金叉|死叉|支撑|压力|MA\d|SMA|EMA",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -75,20 +80,23 @@ def _normalize_stock_code(value: Any) -> str:
     return normalized if isinstance(normalized, str) else str(normalized)
 
 
-def _is_denied_candidate(candidate: str) -> bool:
-    if candidate.strip().upper() in _EXCHANGE_TOKEN_CANDIDATES:
+def _is_denied_candidate(candidate: str, text: str = "") -> bool:
+    token = candidate.strip().upper()
+    if token in _EXCHANGE_TOKEN_CANDIDATES:
+        return True
+    if token in _CONTEXTUAL_INDICATOR_TOKENS and _INDICATOR_CONTEXT_PATTERN.search(text or ""):
         return True
     try:
         from src.agent.orchestrator import _COMMON_WORDS
 
-        return candidate.strip().upper() in _COMMON_WORDS
+        return token in _COMMON_WORDS
     except Exception:
         return False
 
 
-def _append_candidate(candidates: List[str], candidate: str) -> None:
+def _append_candidate(candidates: List[str], candidate: str, text: str = "") -> None:
     normalized = _normalize_stock_code(candidate)
-    if not normalized or _is_denied_candidate(normalized):
+    if not normalized or _is_denied_candidate(normalized, text):
         return
     if normalized not in candidates:
         candidates.append(normalized)
@@ -111,7 +119,7 @@ def extract_stock_codes(text: str) -> List[str]:
     ):
         for match in re.finditer(pattern, text, flags):
             raw = match.group(1) if match.lastindex else match.group(0)
-            _append_candidate(candidates, raw)
+            _append_candidate(candidates, raw, text)
 
     if (
         _SWITCH_PATTERN.search(text)
@@ -120,7 +128,7 @@ def extract_stock_codes(text: str) -> List[str]:
         or _CHOICE_COMPARE_PATTERN.search(text)
     ):
         for match in _LOWERCASE_TICKER_PATTERN.finditer(text):
-            _append_candidate(candidates, match.group(1))
+            _append_candidate(candidates, match.group(1), text)
 
     return candidates
 
@@ -175,26 +183,49 @@ def resolve_stock_scope(
 ) -> StockScopeResolution:
     """Resolve the effective context and stock tool scope for one chat turn."""
     original_context = dict(context or {})
+    message_text = message or ""
     current_code = _normalize_stock_code(original_context.get("stock_code"))
+    invalid_context_code = bool(current_code and _is_denied_candidate(current_code, message_text))
     original_context.pop("allowed_stock_codes", None)
+    if invalid_context_code:
+        original_context.pop("stock_code", None)
+        original_context.pop("stock_name", None)
+        current_code = ""
 
     if not current_code:
+        if invalid_context_code:
+            candidates = extract_stock_codes(message_text)
+            allowed = set(candidates)
+            expected = candidates[0] if len(candidates) == 1 else ""
+            effective_context = dict(original_context)
+            mode = "switch" if expected else ("compare" if len(candidates) > 1 else "maintain")
+            if expected:
+                effective_context["stock_code"] = expected
+                effective_context["stock_name"] = ""
+            return StockScopeResolution(
+                effective_context=_with_skills(effective_context, skills),
+                stock_scope=StockScope(
+                    expected_stock_code=expected,
+                    allowed_stock_codes=allowed,
+                    mode=mode,
+                ),
+            )
         return StockScopeResolution(
             effective_context=_with_skills(original_context, skills),
             stock_scope=None,
         )
 
-    candidates = extract_stock_codes(message or "")
+    candidates = extract_stock_codes(message_text)
     new_candidates = [code for code in candidates if code != current_code]
     mode = "maintain"
     effective_context = dict(original_context)
     expected = current_code
     allowed = {current_code}
 
-    if _is_compare_message(message or "", candidates, current_code):
+    if _is_compare_message(message_text, candidates, current_code):
         mode = "compare"
         allowed.update(candidates)
-    elif _SWITCH_PATTERN.search(message or "") and len(new_candidates) == 1:
+    elif _SWITCH_PATTERN.search(message_text) and len(new_candidates) == 1:
         mode = "switch"
         expected = new_candidates[0]
         allowed = {expected}

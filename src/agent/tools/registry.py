@@ -16,6 +16,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_TOOL_NAMESPACE = "default_api"
+
 
 # ============================================================
 # Data classes
@@ -114,7 +116,9 @@ class ToolRegistry:
         """Return a tool definition, accepting colon-namespaced names."""
         tool_def = self._tools.get(name)
         if tool_def is None and ":" in name:
-            tool_def = self._tools.get(name.split(":", 1)[-1])
+            namespace, local_name = name.split(":", 1)
+            if namespace == _DEFAULT_TOOL_NAMESPACE and local_name:
+                tool_def = self._tools.get(local_name)
         return tool_def
 
     def list_tools(self, category: Optional[str] = None) -> List[ToolDefinition]:
