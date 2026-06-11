@@ -519,6 +519,45 @@ class TestAnalyzerGenerateText:
         assert usage["normalized_cache_write_tokens"] == 20
         assert usage["cache_observation"] == "read_and_write"
 
+    def test_call_litellm_preserves_anthropic_litellm_prompt_tokens_without_input_tokens(self):
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            litellm_model="claude-router",
+            litellm_fallback_models=[],
+            llm_model_list=[
+                {
+                    "model_name": "claude-router",
+                    "litellm_params": {"model": "anthropic/claude-sonnet-test"},
+                }
+            ],
+        )
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            usage=SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=20,
+                total_tokens=120,
+                cache_read_input_tokens=0,
+                cache_creation_input_tokens=0,
+            ),
+        )
+
+        with patch.object(analyzer, "_dispatch_litellm_completion", return_value=response):
+            text, model_used, usage = analyzer._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+            )
+
+        assert text == "ok"
+        assert model_used == "claude-router"
+        assert usage["prompt_tokens"] == 100
+        assert usage["completion_tokens"] == 20
+        assert usage["total_tokens"] == 120
+        assert usage["normalized_prompt_tokens"] == 100
+        assert usage["normalized_uncached_input_tokens"] == 100
+        assert usage["cache_observation"] == "zero_hit"
+        assert usage["messages_hmac"] and len(usage["messages_hmac"]) == 64
+
     def test_call_litellm_stream_resolves_glm_alias_for_usage_normalization(self):
         analyzer = self._make_analyzer()
         analyzer._config_override = SimpleNamespace(

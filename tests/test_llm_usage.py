@@ -231,6 +231,48 @@ class TestLLMUsageNormalizer(unittest.TestCase):
         self.assertEqual(usage["normalized_uncached_input_tokens"], 100)
         self.assertEqual(usage["cache_observation"], "read_and_write")
 
+    def test_anthropic_litellm_normalized_usage_keeps_prompt_tokens_without_input_tokens(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            model="anthropic/claude-3-5-sonnet",
+        )
+
+        self.assertEqual(usage["prompt_tokens"], 100)
+        self.assertEqual(usage["completion_tokens"], 20)
+        self.assertEqual(usage["total_tokens"], 120)
+        self.assertEqual(usage["normalized_prompt_tokens"], 100)
+        self.assertEqual(usage["normalized_cache_read_tokens"], 0)
+        self.assertEqual(usage["normalized_cache_write_tokens"], 0)
+        self.assertEqual(usage["normalized_uncached_input_tokens"], 100)
+        self.assertEqual(usage["cache_observation"], "zero_hit")
+
+    def test_anthropic_litellm_normalized_usage_derives_uncached_tokens_without_input_tokens(self):
+        usage = normalize_litellm_usage(
+            {
+                "prompt_tokens": 115,
+                "completion_tokens": 20,
+                "total_tokens": 135,
+                "cache_read_input_tokens": 10,
+                "cache_creation_input_tokens": 5,
+            },
+            model="anthropic/claude-3-5-sonnet",
+        )
+
+        self.assertEqual(usage["prompt_tokens"], 115)
+        self.assertEqual(usage["completion_tokens"], 20)
+        self.assertEqual(usage["total_tokens"], 135)
+        self.assertEqual(usage["normalized_prompt_tokens"], 115)
+        self.assertEqual(usage["normalized_cache_read_tokens"], 10)
+        self.assertEqual(usage["normalized_cache_write_tokens"], 5)
+        self.assertEqual(usage["normalized_uncached_input_tokens"], 100)
+        self.assertEqual(usage["cache_observation"], "read_and_write")
+
     def test_gemini_usage_metadata(self):
         payload = {
             "usage_metadata": {

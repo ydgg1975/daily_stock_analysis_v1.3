@@ -230,8 +230,9 @@ def normalize_litellm_usage(
             cache_write = creation_tokens or 0
             cache_field_observed = True
             capability = "supported"
-            prompt_tokens = (input_tokens or 0) + (cache_read or 0) + (cache_write or 0)
-            result["normalized_uncached_input_tokens"] = input_tokens
+            if input_tokens is not None:
+                prompt_tokens = input_tokens + (cache_read or 0) + (cache_write or 0)
+                result["normalized_uncached_input_tokens"] = input_tokens
     elif provider_name == "gemini":
         cached = _first_int(usage, "cached_content_token_count", "cache_read_tokens")
         if cached is not None:
