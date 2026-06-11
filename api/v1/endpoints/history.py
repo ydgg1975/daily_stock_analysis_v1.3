@@ -60,6 +60,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_ALLOWED_SORT_BY = frozenset({"created_at", "sentiment_score", "stock_code", "stock_name"})
+_ALLOWED_SORT_ORDER = frozenset({"asc", "desc"})
+
 
 def _normalize_code_for_grouping(code: str) -> str:
     """Normalize stock code for deduplication grouping.
@@ -88,13 +91,15 @@ def get_history_list(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
+    sort_by: Optional[str] = Query(None, description="排序字段：created_at / sentiment_score / stock_code / stock_name"),
+    sort_order: Optional[str] = Query(None, description="排序方向：asc / desc"),
     db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> HistoryListResponse:
     """
     获取历史分析列表
-    
+
     分页获取历史分析记录摘要，支持按股票代码和日期范围筛选
-    
+
     Args:
         stock_code: 股票代码筛选
         report_type: 报告类型筛选
@@ -102,14 +107,19 @@ def get_history_list(
         end_date: 结束日期
         page: 页码
         limit: 每页数量
+        sort_by: 排序字段
+        sort_order: 排序方向
         db_manager: 数据库管理器依赖
-        
+
     Returns:
         HistoryListResponse: 历史记录列表
     """
+    effective_sort_by = sort_by if sort_by in _ALLOWED_SORT_BY else "created_at"
+    effective_sort_order = sort_order if sort_order in _ALLOWED_SORT_ORDER else "desc"
+
     try:
         service = HistoryService(db_manager)
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(
             stock_code=stock_code,
@@ -117,10 +127,12 @@ def get_history_list(
             start_date=start_date,
             end_date=end_date,
             page=page,
-            limit=limit
+            limit=limit,
+            sort_by=effective_sort_by,
+            sort_order=effective_sort_order,
         )
-        
-        # 转换为响应模型
+
+        # 转换为响应模型 — 不捕获单条异常，让 schema 回归以 500 暴露
         items = [
             HistoryItem(
                 id=item.get("id"),
@@ -141,15 +153,20 @@ def get_history_list(
                 model_used=item.get("model_used"),
                 created_at=item.get("created_at"),
                 market_phase_summary=item.get("market_phase_summary"),
+                time_sensitivity=item.get("time_sensitivity"),
+                ideal_buy=item.get("ideal_buy"),
+                secondary_buy=item.get("secondary_buy"),
+                stop_loss=item.get("stop_loss"),
+                take_profit=item.get("take_profit"),
             )
             for item in result.get("items", [])
         ]
-        
+
         return HistoryListResponse(
             total=result.get("total", 0),
             page=page,
             limit=limit,
-            items=items
+            items=items,
         )
         
     except Exception as e:

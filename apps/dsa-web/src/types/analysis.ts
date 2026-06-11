@@ -414,6 +414,11 @@ export interface HistoryItem {
   turnoverRate?: number;
   modelUsed?: string;  // Display-only model snapshot from persisted history; runtime provider/model/base URL still come from analyzer configuration
   marketPhaseSummary?: MarketPhaseSummary | null;
+  timeSensitivity?: string;
+  idealBuy?: number;
+  secondaryBuy?: number;
+  stopLoss?: number;
+  takeProfit?: number;
   createdAt: string;
 }
 

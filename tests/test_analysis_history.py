@@ -1700,5 +1700,606 @@ class HistoryItemSchemaNegativeSentimentTest(unittest.TestCase):
         self.assertIsNone(summary.sentiment_score)
 
 
+class TestRecordToListItemDictRobustness(unittest.TestCase):
+    """Regression: _record_to_list_item_dict / get_history_list must survive non-dict raw_result sub-structures."""
+
+    def setUp(self) -> None:
+        auth._auth_enabled = False
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = os.path.join(self._temp_dir.name, "test_robustness.db")
+        os.environ["DATABASE_PATH"] = self._db_path
+
+        Config._instance = None
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager.get_instance()
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
+
+    def _save_record(self, query_id: str, **overrides) -> int:
+        result = AnalysisResult(
+            code=overrides.get("code", "600519"),
+            name=overrides.get("name", "贵州茅台"),
+            sentiment_score=overrides.get("sentiment_score", 78),
+            trend_prediction=overrides.get("trend_prediction", "看多"),
+            operation_advice=overrides.get("operation_advice", "持有"),
+            analysis_summary=overrides.get("analysis_summary", "基本面稳健"),
+        )
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id=query_id,
+            report_type="simple",
+            news_content="正文",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        self.assertEqual(saved, 1)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            if row is None:
+                self.fail(f"未找到 query_id={query_id}")
+            return row.id
+
+    def _set_raw_result(self, record_id: int, value) -> None:
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == record_id).first()
+            row.raw_result = value
+            session.commit()
+
+    # --- _record_to_list_item_dict: non-dict dashboard ---
+
+    def test_list_item_dashboard_is_string(self) -> None:
+        """dashboard as str should not raise; time_sensitivity=None."""
+        rid = self._save_record("q_str_dash")
+        self._set_raw_result(rid, json.dumps({"dashboard": "not a dict"}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+        self.assertEqual(item["stock_code"], "600519")
+
+    def test_list_item_dashboard_is_list(self) -> None:
+        """dashboard as list should not raise; time_sensitivity=None."""
+        rid = self._save_record("q_list_dash")
+        self._set_raw_result(rid, json.dumps({"dashboard": [1, 2, 3]}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_dashboard_is_nonempty_string(self) -> None:
+        """dashboard as non-empty str must not trigger .get() AttributeError."""
+        rid = self._save_record("q_nes_dash")
+        self._set_raw_result(rid, json.dumps({"dashboard": "some string"}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_dashboard_is_none(self) -> None:
+        """dashboard=None should not raise."""
+        rid = self._save_record("q_none_dash")
+        self._set_raw_result(rid, json.dumps({"dashboard": None}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_core_conclusion_is_string(self) -> None:
+        """core_conclusion as str should not raise; time_sensitivity=None."""
+        rid = self._save_record("q_str_core")
+        self._set_raw_result(rid, json.dumps({"dashboard": {"core_conclusion": "oops"}}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_core_conclusion_is_list(self) -> None:
+        """core_conclusion as list should not raise; time_sensitivity=None."""
+        rid = self._save_record("q_list_core")
+        self._set_raw_result(rid, json.dumps({"dashboard": {"core_conclusion": ["a", "b"]}}))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_raw_result_is_string(self) -> None:
+        """raw_result as plain string (not JSON dict) should not raise."""
+        rid = self._save_record("q_raw_str")
+        self._set_raw_result(rid, "not json at all")
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+        self.assertIsNone(item["model_used"])
+
+    def test_list_item_raw_result_is_list(self) -> None:
+        """raw_result as JSON list should not raise."""
+        rid = self._save_record("q_raw_list")
+        self._set_raw_result(rid, json.dumps([1, 2, 3]))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_valid_time_sensitivity(self) -> None:
+        """Happy path: time_sensitivity extracted from valid nested dict."""
+        rid = self._save_record("q_valid_ts")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {
+                "core_conclusion": {
+                    "time_sensitivity": "今日内",
+                    "sentiment": "偏多",
+                }
+            }
+        }))
+
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+
+        self.assertEqual(item["time_sensitivity"], "今日内")
+
+    # --- get_history_list: per-record error isolation ---
+
+    def test_get_history_list_isolates_bad_record(self) -> None:
+        """One malformed raw_result should not kill the entire list."""
+        good_id = self._save_record("q_good")
+        bad_id = self._save_record("q_bad", code="000001", name="坏数据")
+
+        # bad record: raw_result is a non-JSON string that parse_json_field returns as-is,
+        # then .get() on it would fail if not isinstance-guarded.
+        # Actually parse_json_field returns the string itself for non-JSON.
+        # The isinstance guard in _record_to_list_item_dict handles this.
+        # To simulate a real crash, we make raw_result a dict with dashboard as dict
+        # but then corrupt it so _decision_action_fields_for_record or similar raises.
+        # Simplest: set raw_result to a value that causes an unexpected error inside the method.
+        # We'll use a mock approach — but simpler: just verify the good record still shows up.
+        self._set_raw_result(bad_id, json.dumps({"dashboard": "string_value"}))
+        self._set_raw_result(good_id, json.dumps({
+            "dashboard": {
+                "core_conclusion": {"time_sensitivity": "本周内"}
+            }
+        }))
+
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10)
+
+        # Both records should be returned (bad one doesn't crash, just gets None time_sensitivity)
+        self.assertEqual(payload["total"], 2)
+        codes = {item["stock_code"] for item in payload["items"]}
+        self.assertIn("600519", codes)
+        self.assertIn("000001", codes)
+
+        # Verify the good record has correct time_sensitivity
+        good_item = next(i for i in payload["items"] if i["stock_code"] == "600519")
+        self.assertEqual(good_item["time_sensitivity"], "本周内")
+
+        # Bad record should have None time_sensitivity, not a crash
+        bad_item = next(i for i in payload["items"] if i["stock_code"] == "000001")
+        self.assertIsNone(bad_item["time_sensitivity"])
+
+    def test_list_item_time_sensitivity_is_int(self) -> None:
+        """time_sensitivity as int should be normalized to None."""
+        rid = self._save_record("q_ts_int")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": 42}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_time_sensitivity_is_list(self) -> None:
+        """time_sensitivity as list should be normalized to None."""
+        rid = self._save_record("q_ts_list")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": ["今日内", "本周内"]}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_time_sensitivity_is_dict(self) -> None:
+        """time_sensitivity as dict should be normalized to None."""
+        rid = self._save_record("q_ts_dict")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": {"level": "high"}}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_time_sensitivity_is_empty_string(self) -> None:
+        """time_sensitivity as empty string should be normalized to None."""
+        rid = self._save_record("q_ts_empty")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": ""}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_list_item_time_sensitivity_is_bool(self) -> None:
+        """time_sensitivity as bool should be normalized to None."""
+        rid = self._save_record("q_ts_bool")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": True}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_get_history_list_sort_by_sentiment_score_asc(self) -> None:
+        """Server-side sort by sentiment_score asc should order items globally."""
+        for code, score in [("600519", 90), ("000001", 30), ("600036", 60)]:
+            result = AnalysisResult(
+                code=code, name=f"Stock{code}", sentiment_score=score,
+                trend_prediction="看多", operation_advice="持有", analysis_summary="test",
+            )
+            self.db.save_analysis_history(
+                result=result, query_id=f"q_sort_{code}", report_type="simple",
+                news_content="正文", context_snapshot=None, save_snapshot=False,
+            )
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10, sort_by="sentiment_score", sort_order="asc")
+        scores = [item["sentiment_score"] for item in payload["items"]]
+        self.assertEqual(scores, [30, 60, 90])
+
+    def test_get_history_list_sort_by_sentiment_score_desc(self) -> None:
+        """Server-side sort by sentiment_score desc should reverse the order."""
+        for code, score in [("600519", 90), ("000001", 30), ("600036", 60)]:
+            result = AnalysisResult(
+                code=code, name=f"Stock{code}", sentiment_score=score,
+                trend_prediction="看多", operation_advice="持有", analysis_summary="test",
+            )
+            self.db.save_analysis_history(
+                result=result, query_id=f"q_sort_desc_{code}", report_type="simple",
+                news_content="正文", context_snapshot=None, save_snapshot=False,
+            )
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10, sort_by="sentiment_score", sort_order="desc")
+        scores = [item["sentiment_score"] for item in payload["items"]]
+        self.assertEqual(scores, [90, 60, 30])
+
+    def test_get_history_list_sort_defaults_to_created_at_desc(self) -> None:
+        """Default sort should be created_at desc (newest first)."""
+        import time
+        for code in ["600519", "000001"]:
+            result = AnalysisResult(
+                code=code, name=f"Stock{code}", sentiment_score=50,
+                trend_prediction="看多", operation_advice="持有", analysis_summary="test",
+            )
+            self.db.save_analysis_history(
+                result=result, query_id=f"q_default_sort_{code}", report_type="simple",
+                news_content="正文", context_snapshot=None, save_snapshot=False,
+            )
+            time.sleep(0.01)
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10)
+        self.assertEqual(payload["items"][0]["stock_code"], "000001")
+        self.assertEqual(payload["items"][1]["stock_code"], "600519")
+
+    def test_sort_deterministic_with_tied_values(self) -> None:
+        """Records with same sentiment_score should have stable order via secondary id sort."""
+        for code in ["600519", "000001", "600036"]:
+            result = AnalysisResult(
+                code=code, name=f"Stock{code}", sentiment_score=50,
+                trend_prediction="看多", operation_advice="持有", analysis_summary="test",
+            )
+            self.db.save_analysis_history(
+                result=result, query_id=f"q_tied_{code}", report_type="simple",
+                news_content="正文", context_snapshot=None, save_snapshot=False,
+            )
+        service = HistoryService(self.db)
+        page1 = service.get_history_list(page=1, limit=2, sort_by="sentiment_score", sort_order="desc")
+        page2 = service.get_history_list(page=2, limit=2, sort_by="sentiment_score", sort_order="desc")
+        ids_page1 = [item["id"] for item in page1["items"]]
+        ids_page2 = [item["id"] for item in page2["items"]]
+        self.assertEqual(len(set(ids_page1) & set(ids_page2)), 0, "tied records overlap across pages")
+        all_ids = set(ids_page1) | set(ids_page2)
+        self.assertEqual(len(all_ids), 3)
+
+    # --- time_sensitivity: additional edge cases ---
+
+    def test_time_sensitivity_none_explicit(self) -> None:
+        """time_sensitivity key present with null value → None."""
+        rid = self._save_record("q_ts_none")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": None}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_time_sensitivity_float(self) -> None:
+        """time_sensitivity as float → None (not a str)."""
+        rid = self._save_record("q_ts_float")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": 3.14}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_time_sensitivity_whitespace_only(self) -> None:
+        """time_sensitivity as whitespace-only string → None after strip."""
+        rid = self._save_record("q_ts_ws")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": "   "}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_time_sensitivity_missing_key(self) -> None:
+        """core_conclusion exists but time_sensitivity key absent → None."""
+        rid = self._save_record("q_ts_missing")
+        self._set_raw_result(rid, json.dumps({
+            "dashboard": {"core_conclusion": {"sentiment": "偏多"}}
+        }))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_dashboard_none_core_conclusion_missing(self) -> None:
+        """dashboard=None → time_sensitivity=None, no crash."""
+        rid = self._save_record("q_dash_none")
+        self._set_raw_result(rid, json.dumps({"dashboard": None}))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_raw_result_empty_dict(self) -> None:
+        """raw_result={} → time_sensitivity=None, no crash."""
+        rid = self._save_record("q_raw_empty")
+        self._set_raw_result(rid, json.dumps({}))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_raw_result_false(self) -> None:
+        """raw_result=False (falsy non-dict) → time_sensitivity=None."""
+        rid = self._save_record("q_raw_false")
+        self._set_raw_result(rid, json.dumps(False))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_raw_result_integer(self) -> None:
+        """raw_result=0 (int, non-dict) → time_sensitivity=None."""
+        rid = self._save_record("q_raw_int")
+        self._set_raw_result(rid, json.dumps(0))
+        service = HistoryService(self.db)
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.id == rid).first()
+            item = service._record_to_list_item_dict(row)
+        self.assertIsNone(item["time_sensitivity"])
+
+    def test_mixed_records_time_sensitivity_via_list(self) -> None:
+        """Multiple records with mixed valid/invalid time_sensitivity — each returns correct value."""
+        configs = [
+            ("q_mix_valid", {"dashboard": {"core_conclusion": {"time_sensitivity": "今日内"}}}, "今日内"),
+            ("q_mix_int", {"dashboard": {"core_conclusion": {"time_sensitivity": 99}}}, None),
+            ("q_mix_list", {"dashboard": {"core_conclusion": {"time_sensitivity": ["a"]}}}, None),
+            ("q_mix_missing", {"dashboard": {"core_conclusion": {}}}, None),
+            ("q_mix_str", {"dashboard": {"core_conclusion": {"time_sensitivity": "不急"}}}, "不急"),
+        ]
+        for qid, raw, _expected in configs:
+            rid = self._save_record(qid)
+            self._set_raw_result(rid, json.dumps(raw))
+
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10)
+        self.assertEqual(payload["total"], len(configs))
+
+        for item in payload["items"]:
+            qid = item["query_id"]
+            expected = next(e for q, _, e in configs if q == qid)
+            self.assertEqual(
+                item["time_sensitivity"], expected,
+                f"query_id={qid}: expected {expected!r}, got {item['time_sensitivity']!r}"
+            )
+
+    def test_time_sensitivity_preserves_chinese_unicode(self) -> None:
+        """Chinese time_sensitivity strings survive full round-trip."""
+        for val in ["立即行动", "今日内", "本周内", "不急"]:
+            rid = self._save_record(f"q_cn_{val}")
+            self._set_raw_result(rid, json.dumps({
+                "dashboard": {"core_conclusion": {"time_sensitivity": val}}
+            }))
+        service = HistoryService(self.db)
+        payload = service.get_history_list(page=1, limit=10)
+        values = {item["time_sensitivity"] for item in payload["items"]}
+        self.assertEqual(values, {"立即行动", "今日内", "本周内", "不急"})
+
+    def test_get_history_list_degrades_crashing_record_via_mock(self) -> None:
+        """A record that crashes during parsing returns degraded data, not a skip."""
+        good_id = self._save_record("q_iso_good")
+        bad_id = self._save_record("q_iso_bad", code="000001", name="坏数据")
+        self._set_raw_result(good_id, json.dumps({
+            "dashboard": {"core_conclusion": {"time_sensitivity": "本周内"}}
+        }))
+
+        service = HistoryService(self.db)
+        original_inner = service._record_to_list_item_dict_inner
+
+        def _selective_crash(record):
+            if record.id == bad_id:
+                raise RuntimeError("simulated corruption")
+            return original_inner(record)
+
+        with patch.object(service, "_record_to_list_item_dict_inner", side_effect=_selective_crash):
+            payload = service.get_history_list(page=1, limit=10)
+
+        # Both records present — bad one degraded, not skipped
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual(len(payload["items"]), 2)
+
+        good_item = next(i for i in payload["items"] if i["stock_code"] == "600519")
+        self.assertEqual(good_item["time_sensitivity"], "本周内")
+
+        bad_item = next(i for i in payload["items"] if i["stock_code"] == "000001")
+        self.assertEqual(bad_item["stock_name"], "坏数据")
+        self.assertIsNone(bad_item["sentiment_score"])
+        self.assertIsNone(bad_item["time_sensitivity"])
+
+    def test_get_history_list_total_is_db_count_not_page_count(self) -> None:
+        """total must reflect DB row count, not len(items) on the current page."""
+        for i in range(5):
+            self._save_record(f"q_pg_{i}", code=f"00000{i}")
+
+        service = HistoryService(self.db)
+        page1 = service.get_history_list(page=1, limit=2)
+
+        self.assertEqual(page1["total"], 5)
+        self.assertEqual(len(page1["items"]), 2)
+
+
+@unittest.skipUnless(TestClient, "fastapi / httpx not installed")
+class TestHistoryListEndpointContract(unittest.TestCase):
+    """Endpoint-level regression: HistoryItem schema mismatch must surface as 500, not silently drop records."""
+
+    def setUp(self) -> None:
+        auth._auth_enabled = False
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._db_path = os.path.join(self._temp_dir.name, "test_endpoint.db")
+        os.environ["DATABASE_PATH"] = self._db_path
+
+        Config._instance = None
+        DatabaseManager.reset_instance()
+        self.db = DatabaseManager.get_instance()
+
+        static_dir = Path(self._temp_dir.name) / "empty-static"
+        static_dir.mkdir(exist_ok=True)
+        self.client = TestClient(create_app(static_dir=static_dir))
+
+    def tearDown(self) -> None:
+        DatabaseManager.reset_instance()
+        self._temp_dir.cleanup()
+
+    def _insert_record(self, query_id: str, **overrides) -> int:
+        result = AnalysisResult(
+            code=overrides.get("code", "600519"),
+            name=overrides.get("name", "贵州茅台"),
+            sentiment_score=overrides.get("sentiment_score", 78),
+            trend_prediction=overrides.get("trend_prediction", "看多"),
+            operation_advice=overrides.get("operation_advice", "持有"),
+            analysis_summary=overrides.get("analysis_summary", "基本面稳健"),
+        )
+        self.db.save_analysis_history(
+            result=result,
+            query_id=query_id,
+            report_type="simple",
+            news_content="",
+            context_snapshot=None,
+            save_snapshot=False,
+        )
+        with self.db.get_session() as session:
+            row = session.query(AnalysisHistory).filter(AnalysisHistory.query_id == query_id).first()
+            return row.id
+
+    def test_schema_mismatch_surfaces_500_not_silent_drop(self) -> None:
+        """If service returns a dict with invalid types, endpoint returns 500."""
+        self._insert_record("q_ok")
+
+        # Patch HistoryService.get_history_list to return a good item + a bad item
+        # with sentiment_score="not_an_int" — Pydantic must reject it.
+        original_get = HistoryService.get_history_list
+
+        def _patched_get(self_svc, **kwargs):
+            real = original_get(self_svc, **kwargs)
+            real["items"].append({
+                "id": 999,
+                "query_id": "q_bad",
+                "stock_code": "BAD",
+                "sentiment_score": "not_an_int",
+            })
+            real["total"] = len(real["items"])
+            return real
+
+        with patch.object(HistoryService, "get_history_list", _patched_get):
+            response = self.client.get("/api/v1/history")
+
+        # Must NOT return 200 with partial data — schema regression must be loud
+        self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 500)
+        body = response.json()
+        # FastAPI may wrap in {"detail": ...} or return the error dict directly
+        error_payload = body.get("detail", body)
+        self.assertIn("error", error_payload)
+
+    def test_total_matches_items_when_all_fit_one_page(self) -> None:
+        """total equals len(items) when all records fit on a single page."""
+        for i in range(3):
+            self._insert_record(f"q_total_{i}")
+
+        response = self.client.get("/api/v1/history")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total"], 3)
+        self.assertEqual(body["total"], len(body["items"]))
+
+    def test_total_is_db_count_when_paginated(self) -> None:
+        """total must be the DB row count, not len(items), when results span multiple pages."""
+        for i in range(25):
+            self._insert_record(f"q_pg_{i}", code=f"0000{i:02d}")
+
+        response = self.client.get("/api/v1/history", params={"limit": 20, "page": 1})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total"], 25, "total must be DB count, not page item count")
+        self.assertEqual(len(body["items"]), 20, "first page should have 20 items")
+
+
 if __name__ == "__main__":
     unittest.main()

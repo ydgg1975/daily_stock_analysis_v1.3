@@ -46,6 +46,11 @@ class HistoryItem(BaseModel):
         None,
         description="本次分析市场阶段低敏摘要",
     )
+    time_sensitivity: Optional[str] = Field(None, description="时效性（立即行动/今日内/本周内/不急）")
+    ideal_buy: Optional[float] = Field(None, description="理想买入价")
+    secondary_buy: Optional[float] = Field(None, description="第二买入价")
+    stop_loss: Optional[float] = Field(None, description="止损价")
+    take_profit: Optional[float] = Field(None, description="止盈价")
     created_at: Optional[str] = Field(None, description="创建时间")
     
     model_config = ConfigDict(json_schema_extra={

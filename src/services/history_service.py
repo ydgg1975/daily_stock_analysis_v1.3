@@ -140,11 +140,13 @@ class HistoryService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> Dict[str, Any]:
         """
         Get history analysis list.
-        
+
         Args:
             stock_code: Stock code filter
             report_type: Report type filter
@@ -152,7 +154,9 @@ class HistoryService:
             end_date: End date (YYYY-MM-DD)
             page: Page number
             limit: Items per page
-            
+            sort_by: Sort field (created_at / sentiment_score / stock_code / stock_name)
+            sort_order: Sort direction (asc / desc)
+
         Returns:
             Dictionary containing total count and items
         """
@@ -186,14 +190,14 @@ class HistoryService:
                 start_date=start_dt,
                 end_date=end_dt,
                 offset=offset,
-                limit=limit
+                limit=limit,
+                sort_by=sort_by,
+                sort_order=sort_order,
             )
             
             # Convert to response format
-            items = []
-            for record in records:
-                items.append(self._record_to_list_item_dict(record))
-            
+            items = [self._record_to_list_item_dict(record) for record in records]
+
             return {
                 "total": total,
                 "items": items,
@@ -257,7 +261,31 @@ class HistoryService:
             "turnover_rate": self._safe_float(turnover_rate),
         }
 
+    _DEGRADED_ITEM_KEYS = (
+        "report_type", "trend_prediction", "analysis_summary",
+        "sentiment_score", "operation_advice", "action", "action_label",
+        "model_used", "created_at", "market_phase_summary",
+        "time_sensitivity", "ideal_buy", "secondary_buy",
+        "stop_loss", "take_profit",
+        "current_price", "change_pct", "volume_ratio", "turnover_rate",
+    )
+
     def _record_to_list_item_dict(self, record) -> Dict[str, Any]:
+        try:
+            return self._record_to_list_item_dict_inner(record)
+        except Exception as e:
+            logger.warning(f"记录 id={getattr(record, 'id', '?')} 解析失败，返回降级数据: {e}")
+            item: Dict[str, Any] = {
+                "id": getattr(record, "id", None),
+                "query_id": getattr(record, "query_id", None),
+                "stock_code": getattr(record, "code", None),
+                "stock_name": getattr(record, "name", None),
+            }
+            for key in self._DEGRADED_ITEM_KEYS:
+                item[key] = None
+            return item
+
+    def _record_to_list_item_dict_inner(self, record) -> Dict[str, Any]:
         raw_result = parse_json_field(getattr(record, "raw_result", None))
         model_used = raw_result.get("model_used") if isinstance(raw_result, dict) else None
         market_fields = self._extract_history_market_fields(
@@ -265,6 +293,17 @@ class HistoryService:
         )
         market_phase_summary = extract_market_phase_summary(getattr(record, "context_snapshot", None))
         action_fields = self._decision_action_fields_for_record(record, raw_result)
+
+        # Extract time_sensitivity from raw_result dashboard
+        time_sensitivity = None
+        if isinstance(raw_result, dict):
+            dashboard = raw_result.get("dashboard")
+            if isinstance(dashboard, dict):
+                core = dashboard.get("core_conclusion")
+                if isinstance(core, dict):
+                    raw_ts = core.get("time_sensitivity")
+                    if isinstance(raw_ts, str) and raw_ts.strip():
+                        time_sensitivity = raw_ts.strip()
 
         return {
             "id": record.id,
@@ -281,6 +320,11 @@ class HistoryService:
             "model_used": normalize_model_used(model_used),
             "created_at": record.created_at.isoformat() if record.created_at else None,
             "market_phase_summary": market_phase_summary,
+            "time_sensitivity": time_sensitivity,
+            "ideal_buy": record.ideal_buy,
+            "secondary_buy": record.secondary_buy,
+            "stop_loss": record.stop_loss,
+            "take_profit": record.take_profit,
             **market_fields,
         }
 

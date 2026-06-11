@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 - [修复] 桌面发布打包改用冻结可执行文件运行时探针校验 `alphasift.dsa_adapter`，避免 macOS PyInstaller 将模块内嵌进可执行文件时被文件系统/zip 扫描误判为缺失。
+- [新功能] #1661 新增 History 独立历史分析记录页面，支持按日期筛选、情绪评分/操作建议/趋势/时效性/买入止损止盈等字段表格展示、服务端排序（情绪评分/创建时间），后端 HistoryItem API 新增 time_sensitivity/ideal_buy/secondary_buy/stop_loss/take_profit 字段。
 
 ## [3.21.0] - 2026-06-07
 

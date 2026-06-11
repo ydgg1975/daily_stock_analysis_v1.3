@@ -1630,11 +1630,13 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
-        
+
         Args:
             code: 股票代码筛选
             report_type: 报告类型筛选
@@ -1642,7 +1644,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             end_date: 结束日期（含）
             offset: 偏移量（跳过前 N 条）
             limit: 每页数量
-            
+            sort_by: 排序字段（created_at / sentiment_score / stock_code / stock_name）
+            sort_order: 排序方向（asc / desc）
+
         Returns:
             Tuple[List[AnalysisHistory], int]: (记录列表, 总数)
         """
@@ -1675,10 +1679,21 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             total = session.execute(total_query).scalar() or 0
             
             # 查询分页数据
+            _SORTABLE_COLUMNS = {
+                "created_at": AnalysisHistory.created_at,
+                "sentiment_score": AnalysisHistory.sentiment_score,
+                "stock_code": AnalysisHistory.code,
+                "stock_name": AnalysisHistory.name,
+            }
+            sort_col = _SORTABLE_COLUMNS.get(sort_by, AnalysisHistory.created_at)
+            if sort_order == "asc":
+                order_clauses = (sort_col.asc(), AnalysisHistory.id.asc())
+            else:
+                order_clauses = (sort_col.desc(), AnalysisHistory.id.desc())
             data_query = (
                 select(AnalysisHistory)
                 .where(where_clause)
-                .order_by(desc(AnalysisHistory.created_at))
+                .order_by(*order_clauses)
                 .offset(offset)
                 .limit(limit)
             )

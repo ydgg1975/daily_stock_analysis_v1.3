@@ -13,9 +13,14 @@ import type {
 
 // ============ API 接口 ============
 
+export type HistorySortBy = 'created_at' | 'sentiment_score' | 'stock_code' | 'stock_name';
+export type HistorySortOrder = 'asc' | 'desc';
+
 export interface GetHistoryListParams extends HistoryFilters {
   page?: number;
   limit?: number;
+  sortBy?: HistorySortBy;
+  sortOrder?: HistorySortOrder;
 }
 
 export const historyApi = {
@@ -24,13 +29,15 @@ export const historyApi = {
    * @param params 筛选和分页参数
    */
   getList: async (params: GetHistoryListParams = {}): Promise<HistoryListResponse> => {
-    const { stockCode, reportType, startDate, endDate, page = 1, limit = 20 } = params;
+    const { stockCode, reportType, startDate, endDate, page = 1, limit = 20, sortBy, sortOrder } = params;
 
     const queryParams: Record<string, string | number> = { page, limit };
     if (stockCode) queryParams.stock_code = stockCode;
     if (reportType) queryParams.report_type = reportType;
     if (startDate) queryParams.start_date = startDate;
     if (endDate) queryParams.end_date = endDate;
+    if (sortBy) queryParams.sort_by = sortBy;
+    if (sortOrder) queryParams.sort_order = sortOrder;
 
     const response = await apiClient.get<Record<string, unknown>>('/api/v1/history', {
       params: queryParams,
