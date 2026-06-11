@@ -52,6 +52,10 @@ vi.mock('./pages/AlertsPage', () => ({
   default: () => <div data-testid="alerts-page">Alerts</div>,
 }));
 
+vi.mock('./pages/TokenUsagePage', () => ({
+  default: () => <div data-testid="token-usage-page">Usage</div>,
+}));
+
 vi.mock('./pages/SettingsPage', () => ({
   default: () => <div data-testid="settings-page">Settings</div>,
 }));
