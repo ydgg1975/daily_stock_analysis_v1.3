@@ -32,7 +32,10 @@ function toDecisionSignalMutationResponse(data: Record<string, unknown>): Decisi
 
 function toDecisionSignalListResponse(data: Record<string, unknown>): DecisionSignalListResponse {
   const response = toCamelCase<DecisionSignalListResponse>(data);
-  response.items = ((data.items ?? []) as Record<string, unknown>[]).map(toDecisionSignalItem);
+  if (!Array.isArray(data.items)) {
+    throw new Error('DecisionSignal list response items must be an array');
+  }
+  response.items = data.items.map((item) => toDecisionSignalItem(item as Record<string, unknown>));
   return response;
 }
 

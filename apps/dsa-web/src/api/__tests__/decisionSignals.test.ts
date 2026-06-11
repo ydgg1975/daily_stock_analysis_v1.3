@@ -201,6 +201,20 @@ describe('decisionSignalsApi', () => {
     expect(response.items[0].stockCode).toBe('HK00700');
   });
 
+  it('rejects malformed list responses instead of treating missing items as empty', async () => {
+    get.mockResolvedValueOnce({
+      data: {
+        total: 0,
+        page: 1,
+        page_size: 20,
+      },
+    });
+
+    await expect(decisionSignalsApi.list()).rejects.toThrow(
+      'DecisionSignal list response items must be an array',
+    );
+  });
+
   it('gets latest signals with a backend-supported stock code path', async () => {
     get.mockResolvedValueOnce({
       data: {
@@ -269,7 +283,7 @@ describe('decisionSignalsApi', () => {
     expect(updated.metadata).toEqual({ closed_by: 'tester' });
   });
 
-  it('passes API errors through to the shared client interceptor behavior', async () => {
+  it('passes API client errors through unchanged', async () => {
     const error = new Error('network failed');
     get.mockRejectedValueOnce(error);
 
