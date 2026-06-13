@@ -746,8 +746,8 @@ def get_task_run_flow(task_id: str) -> RunFlowSnapshot:
 
     if task:
         if task.status == TaskStatusEnum.COMPLETED:
-            task_report_type = _safe_text(getattr(task, "report_type", None), max_length=64)
-            task_stock_code = _safe_text(getattr(task, "stock_code", None), max_length=32)
+            task_report_type = _safe_task_flow_text(getattr(task, "report_type", None), max_length=64)
+            task_stock_code = _safe_task_flow_text(getattr(task, "stock_code", None), max_length=32)
             if task_report_type == "market_review":
                 task_stock_code = "MARKET"
             history_snapshot = _load_history_run_flow_by_query_id(
@@ -769,6 +769,15 @@ def get_task_run_flow(task_id: str) -> RunFlowSnapshot:
         raise api_error(500, "internal_error", f"查询任务运行流失败: {str(e)}")
 
     raise api_error(404, "not_found", f"任务 {task_id} 不存在或已过期")
+
+
+def _safe_task_flow_text(value: Any, *, max_length: int) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_length]
 
 
 def _datetime_to_iso(value: Any) -> Optional[str]:

@@ -907,6 +907,31 @@ class RunFlowTestCase(unittest.TestCase):
                 get_task_run_flow("missing-task")
         self.assertEqual(task_ctx.exception.status_code, 404)
 
+    def test_completed_task_flow_refresh_uses_history_filters_without_name_error(self) -> None:
+        task = TaskInfo(
+            task_id="query-flow",
+            trace_id="trace-flow",
+            stock_code="600519",
+            stock_name="贵州茅台",
+            status=TaskStatus.COMPLETED,
+            report_type="detailed",
+        )
+        queue = SimpleNamespace(get_task=lambda task_id: task)
+
+        with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue), patch(
+            "api.v1.endpoints.analysis._load_history_run_flow_by_query_id",
+            return_value=None,
+        ) as load_history:
+            snapshot = get_task_run_flow("query-flow")
+
+        self.assertEqual(snapshot.task_id, "query-flow")
+        load_history.assert_called_once_with(
+            "query-flow",
+            code="600519",
+            report_type="detailed",
+            fail_open=True,
+        )
+
     def test_run_flow_payload_redacts_errors_metadata_and_sensitive_paths(self) -> None:
         context_snapshot = {
             "diagnostics": _diagnostics(unsafe=True),
