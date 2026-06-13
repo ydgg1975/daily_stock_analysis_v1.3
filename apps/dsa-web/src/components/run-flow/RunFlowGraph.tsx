@@ -67,13 +67,14 @@ const LANE_METRICS: Record<string, LaneMetrics> = {
 const NODE_HEIGHT = 112;
 const COMPACT_NODE_HEIGHT = 96;
 const HEADER_HEIGHT = 42;
-const ROW_HEIGHT = 130;
-const ENTRY_ROW_HEIGHT = 172;
+const ROW_HEIGHT = 152;
+const ENTRY_ROW_HEIGHT = 152;
+const ARTIFACT_ROW_HEIGHT = 152;
 const DATA_SOURCE_ATTEMPT_GAP = 42;
-const DATA_SOURCE_BLOCK_GAP = 72;
+const DATA_SOURCE_BLOCK_GAP = 40;
 const DATA_SOURCE_GROUP_X_PADDING = 18;
 const DATA_SOURCE_GROUP_TOP_PADDING = 18;
-const DATA_SOURCE_GROUP_BOTTOM_PADDING = 44;
+const DATA_SOURCE_GROUP_BOTTOM_PADDING = 18
 const LEFT_PADDING = 20;
 const TOP_PADDING = 18;
 const BOTTOM_PADDING = 30;
@@ -142,7 +143,7 @@ const getLaneMetrics = (laneId: string): LaneMetrics => (
 );
 
 const getLaneRowHeight = (laneId: string): number => (
-  laneId === 'entry' ? ENTRY_ROW_HEIGHT : ROW_HEIGHT
+  laneId === 'entry' ? ENTRY_ROW_HEIGHT : (laneId === 'artifact' ? ARTIFACT_ROW_HEIGHT : ROW_HEIGHT)
 );
 
 const isExpandableNode = (node: RunFlowNode): boolean => node.metadata?.topologyGroup === 'provider_attempts';

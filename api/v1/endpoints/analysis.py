@@ -746,7 +746,9 @@ def get_task_run_flow(task_id: str) -> RunFlowSnapshot:
 
     if task:
         if task.status == TaskStatusEnum.COMPLETED:
-            task_report_type = _safe_task_flow_text(getattr(task, "report_type", None), max_length=64)
+            task_report_type = _history_report_type_for_task_flow(
+                getattr(task, "report_type", None)
+            )
             task_stock_code = _safe_task_flow_text(getattr(task, "stock_code", None), max_length=32)
             if task_report_type == "market_review":
                 task_stock_code = "MARKET"
@@ -778,6 +780,22 @@ def _safe_task_flow_text(value: Any, *, max_length: int) -> Optional[str]:
     if not text:
         return None
     return text[:max_length]
+
+
+def _history_report_type_for_task_flow(value: Any) -> Optional[str]:
+    text = _safe_task_flow_text(value, max_length=64)
+    if text is None:
+        return None
+    normalized = text.lower().strip().replace("-", "_")
+    aliases = {
+        "detailed": "full",
+        "simple": "simple",
+        "full": "full",
+        "brief": "brief",
+        "market": "market_review",
+        "market_review": "market_review",
+    }
+    return aliases.get(normalized, normalized)
 
 
 def _datetime_to_iso(value: Any) -> Optional[str]:

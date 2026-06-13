@@ -1106,7 +1106,7 @@ class RunFlowTestCase(unittest.TestCase):
                 get_task_run_flow("missing-task")
         self.assertEqual(task_ctx.exception.status_code, 404)
 
-    def test_completed_task_flow_refresh_uses_history_filters_without_name_error(self) -> None:
+    def test_completed_task_flow_refresh_uses_persisted_history_report_type_alias(self) -> None:
         task = TaskInfo(
             task_id="query-flow",
             trace_id="trace-flow",
@@ -1127,7 +1127,32 @@ class RunFlowTestCase(unittest.TestCase):
         load_history.assert_called_once_with(
             "query-flow",
             code="600519",
-            report_type="detailed",
+            report_type="full",
+            fail_open=True,
+        )
+
+    def test_completed_market_review_task_flow_uses_market_history_filters(self) -> None:
+        task = TaskInfo(
+            task_id="market-query-flow",
+            trace_id="trace-market-flow",
+            stock_code="cn",
+            stock_name="大盘复盘",
+            status=TaskStatus.COMPLETED,
+            report_type="market-review",
+        )
+        queue = SimpleNamespace(get_task=lambda task_id: task)
+
+        with patch("api.v1.endpoints.analysis.get_task_queue", return_value=queue), patch(
+            "api.v1.endpoints.analysis._load_history_run_flow_by_query_id",
+            return_value=None,
+        ) as load_history:
+            snapshot = get_task_run_flow("market-query-flow")
+
+        self.assertEqual(snapshot.task_id, "market-query-flow")
+        load_history.assert_called_once_with(
+            "market-query-flow",
+            code="MARKET",
+            report_type="market_review",
             fail_open=True,
         )
 
