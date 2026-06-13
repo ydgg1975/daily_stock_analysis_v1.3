@@ -489,6 +489,53 @@ class RunFlowTestCase(unittest.TestCase):
         self.assertIn("provider_run_started", {event.type for event in snapshot.events})
         self.assertIn("llm_run_started", {event.type for event in snapshot.events})
 
+    def test_active_chip_started_event_updates_same_provider_node(self) -> None:
+        flow_events: list[dict] = []
+        token = activate_run_diagnostic_context(
+            trace_id="trace-chip-started",
+            task_id="task-chip-started",
+            query_id="query-chip-started",
+            stock_code="600519",
+            trigger_source="api",
+            event_sink=flow_events.append,
+        )
+        try:
+            record_provider_run_started(
+                data_type="chip",
+                provider="ChipFetcher",
+                operation="get_chip_distribution",
+            )
+            record_provider_run(
+                data_type="chip",
+                provider="ChipFetcher",
+                operation="get_chip_distribution",
+                success=True,
+                latency_ms=80,
+                record_count=1,
+            )
+        finally:
+            reset_run_diagnostic_context(token)
+
+        snapshot = build_task_run_flow_snapshot(
+            TaskInfo(
+                task_id="task-chip-started",
+                trace_id="trace-chip-started",
+                stock_code="600519",
+                stock_name="贵州茅台",
+                status=TaskStatus.PROCESSING,
+                created_at=datetime(2026, 6, 8, 10, 0, 0),
+                flow_events=flow_events,
+            )
+        )
+
+        chip_nodes = [node for node in snapshot.nodes if node.id == "provider_chip_chipfetcher_1"]
+
+        self.assertEqual(len(chip_nodes), 1)
+        self.assertEqual(chip_nodes[0].status, "success")
+        self.assertEqual(chip_nodes[0].record_count, 1)
+        self.assertEqual(chip_nodes[0].label, "筹码结构 · ChipFetcher")
+        self.assertIn("provider_run_started", {event.type for event in snapshot.events})
+
     def test_task_queue_stores_bounded_flow_events_and_broadcasts_task_progress(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)
         queue._max_flow_events_per_task = 2

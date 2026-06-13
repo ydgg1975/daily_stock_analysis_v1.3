@@ -1941,12 +1941,13 @@ class DataFetcherManager:
 
         circuit_breaker = get_chip_circuit_breaker()
 
+        candidate_fetchers = []
         # 直接遍历管理器已经按 priority 排好序的数据源列表
         for fetcher in self._get_fetchers_snapshot():
             # 只处理实现了筹码分布逻辑的数据源
             if not hasattr(fetcher, 'get_chip_distribution'):
                 continue
-            
+
             fetcher_name = fetcher.name
             # 动态生成熔断器的 key，例如 "TushareFetcher" -> "tushare_chip"
             source_key = f"{fetcher_name.replace('Fetcher', '').lower()}_chip"
@@ -1956,13 +1957,47 @@ class DataFetcherManager:
                 logger.debug(f"[熔断] {fetcher_name} 筹码接口处于熔断状态，尝试下一个")
                 continue
 
+            candidate_fetchers.append((fetcher, fetcher_name, source_key))
+
+        for index, (fetcher, fetcher_name, source_key) in enumerate(candidate_fetchers):
+            fallback_to = (
+                candidate_fetchers[index + 1][1]
+                if index + 1 < len(candidate_fetchers)
+                else None
+            )
+            attempt_start = time.time()
             try:
+                record_provider_run_started(
+                    data_type="chip",
+                    provider=fetcher_name,
+                    operation="get_chip_distribution",
+                )
                 chip = self._call_fetcher_method(fetcher, 'get_chip_distribution', stock_code)
+                latency_ms = int((time.time() - attempt_start) * 1000)
                 if _is_meaningful_chip_distribution(chip):
+                    record_provider_run(
+                        data_type="chip",
+                        provider=fetcher_name,
+                        operation="get_chip_distribution",
+                        success=True,
+                        latency_ms=latency_ms,
+                        record_count=1,
+                    )
                     circuit_breaker.record_success(source_key)
                     logger.info(f"[筹码分布] {stock_code} 成功获取 (来源: {fetcher_name})")
                     return chip
                 else:
+                    record_provider_run(
+                        data_type="chip",
+                        provider=fetcher_name,
+                        operation="get_chip_distribution",
+                        success=False,
+                        latency_ms=latency_ms,
+                        error_type="empty",
+                        error_message="empty or incomplete chip distribution",
+                        fallback_to=fallback_to,
+                        record_count=0,
+                    )
                     if chip is not None:
                         logger.warning(
                             "[筹码分布] %s 返回字段不完整或占位值，继续尝试下一个数据源",
@@ -1971,6 +2006,17 @@ class DataFetcherManager:
                     # 空结果或占位结果：释放 HALF_OPEN 探测名额，避免卡死
                     circuit_breaker.record_inconclusive(source_key)
             except Exception as e:
+                error_type, error_reason = summarize_exception(e)
+                record_provider_run(
+                    data_type="chip",
+                    provider=fetcher_name,
+                    operation="get_chip_distribution",
+                    success=False,
+                    latency_ms=int((time.time() - attempt_start) * 1000),
+                    error_type=error_type,
+                    error_message=error_reason,
+                    fallback_to=fallback_to,
+                )
                 logger.warning(f"[筹码分布] {fetcher_name} 获取 {stock_code} 失败: {e}")
                 circuit_breaker.record_failure(source_key, str(e))
                 continue
