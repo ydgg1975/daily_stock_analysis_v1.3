@@ -333,6 +333,7 @@ class RunDiagnosticContext:
     provider_pending_attempt_index_by_key: Dict[str, List[int]] = field(default_factory=dict)
     llm_attempt_index_by_type: Dict[str, int] = field(default_factory=dict)
     llm_pending_attempt_index_by_key: Dict[str, List[int]] = field(default_factory=dict)
+    llm_pending_attempt_index_by_call_type: Dict[str, List[int]] = field(default_factory=dict)
 
     def record_provider_run(self, provider_run: ProviderRun) -> None:
         self.provider_runs.append(provider_run)
@@ -389,10 +390,40 @@ class RunDiagnosticContext:
                 self.llm_pending_attempt_index_by_key[pending_key] = pending_indexes
             else:
                 self.llm_pending_attempt_index_by_key.pop(pending_key, None)
+            self._remove_llm_pending_call_type_index(call_type_key, attempt_index)
         else:
-            attempt_index = self.llm_attempt_index_by_type.get(call_type_key, 0) + 1
-            self.llm_attempt_index_by_type[call_type_key] = attempt_index
+            call_type_pending_indexes = self.llm_pending_attempt_index_by_call_type.get(call_type_key) or []
+            if call_type_pending_indexes:
+                attempt_index = call_type_pending_indexes.pop(0)
+                if call_type_pending_indexes:
+                    self.llm_pending_attempt_index_by_call_type[call_type_key] = call_type_pending_indexes
+                else:
+                    self.llm_pending_attempt_index_by_call_type.pop(call_type_key, None)
+                self._remove_llm_pending_exact_index(attempt_index)
+            else:
+                attempt_index = self.llm_attempt_index_by_type.get(call_type_key, 0) + 1
+                self.llm_attempt_index_by_type[call_type_key] = attempt_index
         self._emit_flow_event(_llm_flow_event(self, llm_run, attempt_index))
+
+    def _remove_llm_pending_call_type_index(self, call_type_key: str, attempt_index: int) -> None:
+        pending_indexes = self.llm_pending_attempt_index_by_call_type.get(call_type_key) or []
+        if attempt_index not in pending_indexes:
+            return
+        pending_indexes = [index for index in pending_indexes if index != attempt_index]
+        if pending_indexes:
+            self.llm_pending_attempt_index_by_call_type[call_type_key] = pending_indexes
+        else:
+            self.llm_pending_attempt_index_by_call_type.pop(call_type_key, None)
+
+    def _remove_llm_pending_exact_index(self, attempt_index: int) -> None:
+        for pending_key, pending_indexes in list(self.llm_pending_attempt_index_by_key.items()):
+            if attempt_index not in pending_indexes:
+                continue
+            pending_indexes = [index for index in pending_indexes if index != attempt_index]
+            if pending_indexes:
+                self.llm_pending_attempt_index_by_key[pending_key] = pending_indexes
+            else:
+                self.llm_pending_attempt_index_by_key.pop(pending_key, None)
 
     def record_llm_run_started(
         self,
@@ -408,6 +439,9 @@ class RunDiagnosticContext:
         pending_indexes = self.llm_pending_attempt_index_by_key.get(pending_key) or []
         pending_indexes.append(attempt_index)
         self.llm_pending_attempt_index_by_key[pending_key] = pending_indexes
+        call_type_pending_indexes = self.llm_pending_attempt_index_by_call_type.get(call_type_key) or []
+        call_type_pending_indexes.append(attempt_index)
+        self.llm_pending_attempt_index_by_call_type[call_type_key] = call_type_pending_indexes
         self._emit_flow_event(
             _llm_started_flow_event(
                 self,
@@ -509,6 +543,7 @@ _DATA_TYPE_LABELS = {
     "news_search": "新闻舆情",
     "fundamental": "基本面",
     "fundamentals": "基本面",
+    "belong_boards": "所属板块",
     "chip": "筹码结构",
 }
 

@@ -363,11 +363,34 @@ const rememberFlowEvent = (events: RunFlowEvent[], flowEvent: RunFlowEvent): Run
     .slice(-MAX_BUFFERED_FLOW_EVENTS);
 };
 
+const ACTIVE_NODE_STATUSES = new Set(['pending', 'running', 'cancel_requested']);
+
+const replayEventNodeId = (flowEvent: RunFlowEvent): string | null => {
+  const nodeCandidate = flowEvent.metadata?.node;
+  if (isRunFlowNode(nodeCandidate)) {
+    return nodeCandidate.id;
+  }
+  return flowEvent.nodeId || null;
+};
+
+const shouldReplayFlowEvent = (snapshot: RunFlowSnapshot, flowEvent: RunFlowEvent): boolean => {
+  const nodeId = replayEventNodeId(flowEvent);
+  if (!nodeId) {
+    return true;
+  }
+  const existingNode = snapshot.nodes.find((node) => node.id === nodeId);
+  return !existingNode || ACTIVE_NODE_STATUSES.has(existingNode.status);
+};
+
 const replayFlowEvents = (
   snapshot: RunFlowSnapshot,
   flowEvents: RunFlowEvent[],
 ): RunFlowSnapshot => flowEvents.reduce(
-  (currentSnapshot, flowEvent) => mergeFlowEventIntoSnapshot(currentSnapshot, flowEvent),
+  (currentSnapshot, flowEvent) => (
+    shouldReplayFlowEvent(currentSnapshot, flowEvent)
+      ? mergeFlowEventIntoSnapshot(currentSnapshot, flowEvent)
+      : currentSnapshot
+  ),
   snapshot,
 );
 

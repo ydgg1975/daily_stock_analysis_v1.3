@@ -2103,16 +2103,60 @@ class DataFetcherManager:
         stock_code = normalize_stock_code(stock_code)
         if _market_tag(stock_code) != "cn":
             return []
-        for fetcher in self._fetchers:
-            if not hasattr(fetcher, "get_belong_board"):
-                continue
+        candidate_fetchers = [
+            fetcher
+            for fetcher in self._fetchers
+            if hasattr(fetcher, "get_belong_board")
+        ]
+        for index, fetcher in enumerate(candidate_fetchers):
+            fallback_to = (
+                candidate_fetchers[index + 1].name
+                if index + 1 < len(candidate_fetchers)
+                else None
+            )
+            start = time.time()
             try:
+                record_provider_run_started(
+                    data_type="belong_boards",
+                    provider=fetcher.name,
+                    operation="get_belong_board",
+                )
                 raw_data = fetcher.get_belong_board(stock_code)
                 boards = self._normalize_belong_boards(raw_data)
                 if boards:
+                    record_provider_run(
+                        data_type="belong_boards",
+                        provider=fetcher.name,
+                        operation="get_belong_board",
+                        success=True,
+                        latency_ms=int((time.time() - start) * 1000),
+                        record_count=len(boards),
+                    )
                     logger.info(f"[{fetcher.name}] 获取所属板块成功: {stock_code}, count={len(boards)}")
                     return boards
+                record_provider_run(
+                    data_type="belong_boards",
+                    provider=fetcher.name,
+                    operation="get_belong_board",
+                    success=False,
+                    latency_ms=int((time.time() - start) * 1000),
+                    error_type="empty",
+                    error_message="empty belong boards",
+                    fallback_to=fallback_to,
+                    record_count=0,
+                )
             except Exception as e:
+                error_type, error_reason = summarize_exception(e)
+                record_provider_run(
+                    data_type="belong_boards",
+                    provider=fetcher.name,
+                    operation="get_belong_board",
+                    success=False,
+                    latency_ms=int((time.time() - start) * 1000),
+                    error_type=error_type,
+                    error_message=error_reason,
+                    fallback_to=fallback_to,
+                )
                 logger.debug(f"[{fetcher.name}] 获取所属板块失败: {e}")
                 continue
         return []

@@ -651,4 +651,100 @@ describe('useRunFlowSnapshot', () => {
     expect(lateEvent?.metadata).not.toHaveProperty('node');
     expect(result.current.snapshot?.nodes.some((node) => node.id === 'provider_news_1')).toBe(true);
   });
+
+  it('skips replaying buffered events when refreshed snapshot already has a completed node', async () => {
+    const initialRequest = createDeferred<RunFlowSnapshot>();
+    const refreshedRequest = createDeferred<RunFlowSnapshot>();
+    vi.mocked(analysisApi.getTaskFlow)
+      .mockReturnValueOnce(initialRequest.promise)
+      .mockReturnValueOnce(refreshedRequest.promise);
+
+    const { result } = renderHook(() => useRunFlowSnapshot({
+      source: { type: 'task', taskId: 'task-1' },
+      enabled: true,
+    }));
+
+    act(() => {
+      initialRequest.resolve(snapshot);
+    });
+
+    await waitFor(() => expect(result.current.snapshot?.events).toHaveLength(1));
+
+    const liveNotificationEvent = {
+      id: 'flow-live-notification',
+      timestamp: '2026-06-08T08:00:02Z',
+      severity: 'warning' as const,
+      type: 'notification_run' as const,
+      nodeId: 'notification_report_1',
+      title: '通知跳过',
+      metadata: {
+        channel: 'report',
+        node: {
+          id: 'notification_report_1',
+          lane: 'artifact',
+          kind: 'notification',
+          label: '推送通知 · report',
+          status: 'skipped',
+        },
+      },
+    };
+
+    act(() => {
+      taskStreamCalls.at(-1)?.onTaskFlowEvent?.(
+        {
+          taskId: 'task-1',
+          stockCode: '600519',
+          status: 'processing',
+          progress: 99,
+          reportType: 'detailed',
+          createdAt: '2026-06-08T08:00:00Z',
+        },
+        liveNotificationEvent,
+      );
+      taskStreamCalls.at(-1)?.onTaskCompleted?.({
+        taskId: 'task-1',
+        stockCode: '600519',
+        status: 'completed',
+        progress: 100,
+        reportType: 'detailed',
+        createdAt: '2026-06-08T08:00:00Z',
+      });
+    });
+
+    await waitFor(() => expect(analysisApi.getTaskFlow).toHaveBeenCalledTimes(2));
+
+    act(() => {
+      refreshedRequest.resolve({
+        ...snapshot,
+        status: 'success',
+        nodes: [
+          ...snapshot.nodes,
+          {
+            id: 'notification_report_1',
+            lane: 'artifact',
+            kind: 'notification',
+            label: '推送通知 · report',
+            status: 'skipped',
+          },
+        ],
+        events: [
+          ...snapshot.events,
+          {
+            id: 'history-notification',
+            timestamp: '2026-06-08T08:00:02Z',
+            severity: 'warning',
+            type: 'notification_run',
+            nodeId: 'notification_report_1',
+            title: '通知跳过',
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => expect(result.current.snapshot?.status).toBe('success'));
+
+    expect(result.current.snapshot?.events.some((event) => event.id === 'history-notification')).toBe(true);
+    expect(result.current.snapshot?.events.some((event) => event.id === 'flow-live-notification')).toBe(false);
+    expect(result.current.snapshot?.nodes.filter((node) => node.id === 'notification_report_1')).toHaveLength(1);
+  });
 });

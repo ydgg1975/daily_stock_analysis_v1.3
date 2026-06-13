@@ -46,6 +46,7 @@ _DATA_TYPE_LABELS = {
     "news_search": "新闻舆情",
     "fundamental": "基本面",
     "fundamentals": "基本面",
+    "belong_boards": "所属板块",
     "chip": "筹码结构",
 }
 
@@ -58,6 +59,7 @@ _DATA_TYPE_TO_BLOCK_KEY = {
     "news_search": "news",
     "fundamental": "fundamentals",
     "fundamentals": "fundamentals",
+    "belong_boards": "fundamentals",
     "chip": "chip",
 }
 
@@ -153,6 +155,7 @@ def build_task_run_flow_snapshot(
         _as_list(getattr(task, "flow_events", None)),
         flow_status=flow_status,
     )
+    _prune_active_skeleton_tail(nodes, edges)
 
     summary = _build_summary(
         nodes,
@@ -729,6 +732,7 @@ _STOCK_CONTEXT_PROVIDER_DATA_TYPES = {
     "technical",
     "fundamental",
     "fundamentals",
+    "belong_boards",
     "chip",
 }
 
@@ -854,6 +858,26 @@ def _put_skeleton_tail(
     _append_edge(edges, "context_pack", "llm", "data", downstream_status, label="生成")
     _append_edge(edges, "llm", "history_save", "data", downstream_status, label="保存")
     _append_edge(edges, "history_save", "notification", "control", downstream_status, label="通知")
+
+
+def _prune_active_skeleton_tail(
+    nodes: Dict[str, Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+) -> None:
+    remove_node_ids = set()
+    if "llm" in nodes and any(node_id.startswith("llm_") for node_id in nodes):
+        remove_node_ids.add("llm")
+    if "notification" in nodes and any(node_id.startswith("notification_") for node_id in nodes):
+        remove_node_ids.add("notification")
+    if not remove_node_ids:
+        return
+    for node_id in remove_node_ids:
+        nodes.pop(node_id, None)
+    edges[:] = [
+        edge
+        for edge in edges
+        if edge.get("from") not in remove_node_ids and edge.get("to") not in remove_node_ids
+    ]
 
 
 def _append_task_events(events: List[Dict[str, Any]], task: Any, flow_status: str) -> None:

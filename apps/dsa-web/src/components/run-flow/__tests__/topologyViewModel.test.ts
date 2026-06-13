@@ -375,4 +375,32 @@ describe('buildRunFlowTopologyModel', () => {
       topologyOrder: 2,
     });
   });
+
+  it('keeps provider group running while any provider attempt is still running', () => {
+    const runningSnapshot: RunFlowSnapshot = {
+      ...baseSnapshot,
+      status: 'running',
+      nodes: baseSnapshot.nodes.map((node) => {
+        if (node.id === 'provider_news_search_tavily_1') {
+          return {
+            ...node,
+            status: 'success',
+          };
+        }
+        if (node.id === 'provider_news_search_searxng_2') {
+          return {
+            ...node,
+            status: 'running',
+            endedAt: null,
+          };
+        }
+        return node;
+      }),
+    };
+
+    const model = buildRunFlowTopologyModel(runningSnapshot);
+    const newsGroup = model.nodes.find((node) => node.id === 'topology_data_news_search');
+
+    expect(newsGroup?.status).toBe('running');
+  });
 });

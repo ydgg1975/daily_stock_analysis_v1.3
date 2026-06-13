@@ -107,6 +107,8 @@ const labelForDataType = (dataType: string, nodes: RunFlowNode[]): string => {
 const groupStatus = (nodes: RunFlowNode[], edges: RunFlowEdge[]): RunFlowStatus => {
   const statuses = nodes.map((node) => node.status);
   if (statuses.length === 0) return 'unknown';
+  if (statuses.includes('cancel_requested')) return 'cancel_requested';
+  if (statuses.some((status) => status === 'running' || status === 'pending')) return 'running';
   if (statuses.every((status) => status === 'success')) return 'success';
   const hasSuccess = statuses.includes('success');
   const hasFailedOrTimeout = statuses.some((status) => status === 'failed' || status === 'timeout');

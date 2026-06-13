@@ -26,6 +26,7 @@ from src.services.run_diagnostics import (
     current_diagnostic_snapshot,
     record_llm_run,
     record_llm_run_started,
+    record_notification_run,
     record_provider_run,
     record_provider_run_started,
     reset_run_diagnostic_context,
@@ -535,6 +536,94 @@ class RunFlowTestCase(unittest.TestCase):
         self.assertEqual(chip_nodes[0].record_count, 1)
         self.assertEqual(chip_nodes[0].label, "筹码结构 · ChipFetcher")
         self.assertIn("provider_run_started", {event.type for event in snapshot.events})
+
+    def test_llm_started_and_result_match_by_call_type_when_model_alias_differs(self) -> None:
+        flow_events: list[dict] = []
+        token = activate_run_diagnostic_context(
+            trace_id="trace-llm-alias",
+            task_id="task-llm-alias",
+            query_id="query-llm-alias",
+            stock_code="600519",
+            trigger_source="api",
+            event_sink=flow_events.append,
+        )
+        try:
+            record_llm_run_started(
+                model="deepseek-chat",
+                call_type="agent_analysis",
+            )
+            record_llm_run(
+                success=True,
+                model="deepseek/deepseek-chat",
+                call_type="agent_analysis",
+                duration_ms=98000,
+            )
+        finally:
+            reset_run_diagnostic_context(token)
+
+        snapshot = build_task_run_flow_snapshot(
+            TaskInfo(
+                task_id="task-llm-alias",
+                trace_id="trace-llm-alias",
+                stock_code="600519",
+                stock_name="贵州茅台",
+                status=TaskStatus.PROCESSING,
+                created_at=datetime(2026, 6, 8, 10, 0, 0),
+                flow_events=flow_events,
+            )
+        )
+
+        llm_nodes = [node for node in snapshot.nodes if node.id.startswith("llm_agent_analysis")]
+
+        self.assertEqual([node.id for node in llm_nodes], ["llm_agent_analysis_1"])
+        self.assertEqual(llm_nodes[0].status, "success")
+        self.assertIn("llm_run_started", {event.type for event in snapshot.events})
+        self.assertIn("llm_run", {event.type for event in snapshot.events})
+
+    def test_completed_active_snapshot_prunes_skeleton_tail_when_live_nodes_exist(self) -> None:
+        flow_events: list[dict] = []
+        token = activate_run_diagnostic_context(
+            trace_id="trace-completed-live",
+            task_id="task-completed-live",
+            query_id="query-completed-live",
+            stock_code="600519",
+            trigger_source="api",
+            event_sink=flow_events.append,
+        )
+        try:
+            record_llm_run(
+                success=True,
+                model="deepseek/deepseek-chat",
+                call_type="agent_analysis",
+                duration_ms=98000,
+            )
+            record_notification_run(
+                channel="report",
+                status="not_configured",
+                success=False,
+                attempts=0,
+            )
+        finally:
+            reset_run_diagnostic_context(token)
+
+        snapshot = build_task_run_flow_snapshot(
+            TaskInfo(
+                task_id="task-completed-live",
+                trace_id="trace-completed-live",
+                stock_code="600519",
+                stock_name="贵州茅台",
+                status=TaskStatus.COMPLETED,
+                created_at=datetime(2026, 6, 8, 10, 0, 0),
+                completed_at=datetime(2026, 6, 8, 10, 2, 0),
+                flow_events=flow_events,
+            )
+        )
+        node_ids = {node.id for node in snapshot.nodes}
+
+        self.assertIn("llm_agent_analysis_1", node_ids)
+        self.assertIn("notification_report_1", node_ids)
+        self.assertNotIn("llm", node_ids)
+        self.assertNotIn("notification", node_ids)
 
     def test_task_queue_stores_bounded_flow_events_and_broadcasts_task_progress(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)
