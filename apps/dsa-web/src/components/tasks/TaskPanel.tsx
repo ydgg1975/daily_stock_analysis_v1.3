@@ -51,7 +51,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onOpenRunFlow }) => {
 
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="max-w-full truncate text-sm font-medium text-foreground" title={task.stockName || task.stockCode}>
+              <span className="max-w-full truncate text-sm font-medium text-foreground">
                 {task.stockName || task.stockCode}
               </span>
               <span className="shrink-0 text-xs text-muted-text">
@@ -95,7 +95,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onOpenRunFlow }) => {
       </div>
 
       {task.message ? (
-        <p className="min-w-0 truncate text-xs text-secondary-text" title={task.message}>
+        <p className="min-w-0 truncate text-xs text-secondary-text">
           {task.message}
         </p>
       ) : null}
@@ -127,7 +127,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onOpenRunFlow }) => {
             data-testid="task-panel-diagnostics-summary"
           >
             <span className="whitespace-nowrap">{t('taskPanel.diagnostics')}</span>
-            <span className="min-w-0 truncate font-mono text-[11px] text-secondary-text" title={traceId}>
+            <span className="min-w-0 truncate font-mono text-[11px] text-secondary-text">
               {traceId.length > 18 ? `${traceId.slice(0, 10)}...` : traceId}
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open/task:rotate-180" aria-hidden="true" />
