@@ -959,7 +959,7 @@ def _append_active_flow_events(
 
         event_type = _safe_key(event.get("type")) or "event"
         if node_id and node_id in nodes and node_id not in known_node_ids:
-            if event_type == "provider_run":
+            if event_type in {"provider_run", "provider_run_started"}:
                 provider_data_type = _safe_key(metadata.get("data_type") or "provider")
                 provider_run = {
                     "provider": metadata.get("provider") or nodes[node_id].get("provider"),
@@ -982,7 +982,7 @@ def _append_active_flow_events(
                 else:
                     _append_edge(edges, "task_queue", node_id, "control", nodes[node_id].get("status", "unknown"), label="调用")
                 last_provider_node_by_type[provider_data_type] = (node_id, provider_run)
-            elif event_type == "llm_run":
+            elif event_type in {"llm_run", "llm_run_started"}:
                 anchor = "analysis_pipeline" if "analysis_pipeline" in nodes else "task_queue"
                 _append_edge(edges, anchor, node_id, "data", nodes[node_id].get("status", "unknown"), label="生成")
                 last_llm_node = node_id

@@ -140,6 +140,92 @@ describe('useRunFlowSnapshot', () => {
     await waitFor(() => expect(analysisApi.getTaskFlow).toHaveBeenCalledTimes(2));
   });
 
+  it('updates started live flow nodes in place when finish events arrive', async () => {
+    vi.mocked(analysisApi.getTaskFlow).mockResolvedValue(snapshot);
+
+    const { result } = renderHook(() => useRunFlowSnapshot({
+      source: { type: 'task', taskId: 'task-1' },
+      enabled: true,
+    }));
+
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+
+    act(() => {
+      taskStreamCalls.at(-1)?.onTaskFlowEvent?.(
+        {
+          taskId: 'task-1',
+          stockCode: '600519',
+          status: 'processing',
+          progress: 30,
+          reportType: 'detailed',
+          createdAt: '2026-06-08T08:00:00Z',
+        },
+        {
+          id: 'flow-provider-started',
+          timestamp: '2026-06-08T08:00:01Z',
+          severity: 'info',
+          type: 'provider_run_started',
+          nodeId: 'provider_daily_data_dailyfetcher_1',
+          title: '日线K线开始',
+          metadata: {
+            provider: 'DailyFetcher',
+            dataType: 'daily_data',
+            node: {
+              id: 'provider_daily_data_dailyfetcher_1',
+              lane: 'data_source',
+              kind: 'data_source',
+              label: '日线K线 · DailyFetcher',
+              status: 'running',
+              provider: 'DailyFetcher',
+              metadata: { dataType: 'daily_data' },
+            },
+          },
+        },
+      );
+      taskStreamCalls.at(-1)?.onTaskFlowEvent?.(
+        {
+          taskId: 'task-1',
+          stockCode: '600519',
+          status: 'processing',
+          progress: 35,
+          reportType: 'detailed',
+          createdAt: '2026-06-08T08:00:00Z',
+        },
+        {
+          id: 'flow-provider-finished',
+          timestamp: '2026-06-08T08:00:02Z',
+          severity: 'success',
+          type: 'provider_run',
+          nodeId: 'provider_daily_data_dailyfetcher_1',
+          title: '日线K线成功',
+          metadata: {
+            provider: 'DailyFetcher',
+            dataType: 'daily_data',
+            node: {
+              id: 'provider_daily_data_dailyfetcher_1',
+              lane: 'data_source',
+              kind: 'data_source',
+              label: '日线K线 · DailyFetcher',
+              status: 'success',
+              provider: 'DailyFetcher',
+              recordCount: 30,
+              metadata: { dataType: 'daily_data' },
+            },
+          },
+        },
+      );
+    });
+
+    const providerNodes = result.current.snapshot?.nodes.filter((node) => (
+      node.id === 'provider_daily_data_dailyfetcher_1'
+    ));
+    expect(providerNodes).toHaveLength(1);
+    expect(providerNodes?.[0]).toEqual(expect.objectContaining({
+      status: 'success',
+      recordCount: 30,
+    }));
+  });
+
   it('does not enable task stream for history snapshots', async () => {
     vi.mocked(historyApi.getRecordFlow).mockResolvedValue({ ...snapshot, status: 'success' });
 

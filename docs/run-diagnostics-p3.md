@@ -31,6 +31,7 @@ GET /api/v1/analysis/tasks/stream
 - 原有 task payload 字段保持不变。
 - 当本次进度更新来自运行诊断时，可选追加 `flow_event` 字段；旧客户端忽略该字段即可。
 - `flow_event` 使用与 `RunFlowSnapshot.events[]` 相同的脱敏事件结构：`id`、`timestamp`、`severity`、`type`、`node_id`、`title`、`message`、`metadata`。
+- active task 可追加 `provider_run_started` / `llm_run_started` 实时事件；这些事件只用于运行中的 running 卡片展示，完成后由同 `node_id` 的 `provider_run` / `llm_run` 结果事件覆盖状态，历史诊断仍以最终结果为准。
 - 后端 TaskQueue 只为每个 active task 保留最近 N 条运行流事件，避免内存无限增长；完整历史仍以 `context_snapshot.diagnostics` 和历史 RunFlowSnapshot 为准。
 
 示例：

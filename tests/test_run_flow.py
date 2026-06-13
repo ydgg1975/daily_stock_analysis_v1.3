@@ -24,7 +24,10 @@ from src.services.run_flow import (
 from src.services.run_diagnostics import (
     activate_run_diagnostic_context,
     current_diagnostic_snapshot,
+    record_llm_run,
+    record_llm_run_started,
     record_provider_run,
+    record_provider_run_started,
     reset_run_diagnostic_context,
 )
 from src.services.task_queue import AnalysisTaskQueue, TaskInfo, TaskStatus
@@ -425,6 +428,66 @@ class RunFlowTestCase(unittest.TestCase):
                     getattr(history_provider, field),
                     f"{node_id}.{field}",
                 )
+
+    def test_active_started_events_update_same_provider_and_llm_nodes(self) -> None:
+        flow_events: list[dict] = []
+        token = activate_run_diagnostic_context(
+            trace_id="trace-started",
+            task_id="task-started",
+            query_id="query-started",
+            stock_code="600519",
+            trigger_source="api",
+            event_sink=flow_events.append,
+        )
+        try:
+            record_provider_run_started(
+                data_type="daily_data",
+                provider="DailyFetcher",
+                operation="get_daily_data",
+            )
+            record_provider_run(
+                data_type="daily_data",
+                provider="DailyFetcher",
+                operation="get_daily_data",
+                success=True,
+                latency_ms=120,
+                record_count=30,
+            )
+            record_llm_run_started(
+                model="deepseek-chat",
+                call_type="analysis",
+            )
+            record_llm_run(
+                success=True,
+                model="deepseek-chat",
+                call_type="analysis",
+                duration_ms=900,
+            )
+        finally:
+            reset_run_diagnostic_context(token)
+
+        snapshot = build_task_run_flow_snapshot(
+            TaskInfo(
+                task_id="task-started",
+                trace_id="trace-started",
+                stock_code="600519",
+                stock_name="贵州茅台",
+                status=TaskStatus.PROCESSING,
+                created_at=datetime(2026, 6, 8, 10, 0, 0),
+                flow_events=flow_events,
+            )
+        )
+
+        provider_nodes = [node for node in snapshot.nodes if node.id == "provider_daily_data_dailyfetcher_1"]
+        llm_nodes = [node for node in snapshot.nodes if node.id == "llm_analysis_1"]
+
+        self.assertEqual(len(provider_nodes), 1)
+        self.assertEqual(provider_nodes[0].status, "success")
+        self.assertEqual(provider_nodes[0].record_count, 30)
+        self.assertEqual(len(llm_nodes), 1)
+        self.assertEqual(llm_nodes[0].status, "success")
+        self.assertIn("provider_run_started", {event.type for event in snapshot.events})
+        self.assertIn("llm_run_started", {event.type for event in snapshot.events})
 
     def test_task_queue_stores_bounded_flow_events_and_broadcasts_task_progress(self) -> None:
         queue = AnalysisTaskQueue(max_workers=1)

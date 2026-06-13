@@ -330,17 +330,93 @@ class RunDiagnosticContext:
     event_sink: Optional[Callable[[Dict[str, Any]], None]] = None
     flow_event_index: int = 0
     provider_attempt_index_by_type: Dict[str, int] = field(default_factory=dict)
+    provider_pending_attempt_index_by_key: Dict[str, List[int]] = field(default_factory=dict)
+    llm_attempt_index_by_type: Dict[str, int] = field(default_factory=dict)
+    llm_pending_attempt_index_by_key: Dict[str, List[int]] = field(default_factory=dict)
 
     def record_provider_run(self, provider_run: ProviderRun) -> None:
         self.provider_runs.append(provider_run)
         data_type_key = _safe_event_key(provider_run.data_type) or "provider"
+        pending_key = _provider_pending_key(
+            provider_run.data_type,
+            provider_run.provider,
+            provider_run.operation,
+        )
+        pending_indexes = self.provider_pending_attempt_index_by_key.get(pending_key) or []
+        if pending_indexes:
+            attempt_index = pending_indexes.pop(0)
+            if pending_indexes:
+                self.provider_pending_attempt_index_by_key[pending_key] = pending_indexes
+            else:
+                self.provider_pending_attempt_index_by_key.pop(pending_key, None)
+        else:
+            attempt_index = self.provider_attempt_index_by_type.get(data_type_key, 0) + 1
+            self.provider_attempt_index_by_type[data_type_key] = attempt_index
+        self._emit_flow_event(_provider_flow_event(self, provider_run, attempt_index))
+
+    def record_provider_run_started(
+        self,
+        *,
+        data_type: str,
+        provider: str,
+        operation: str,
+    ) -> None:
+        data_type_key = _safe_event_key(data_type) or "provider"
         attempt_index = self.provider_attempt_index_by_type.get(data_type_key, 0) + 1
         self.provider_attempt_index_by_type[data_type_key] = attempt_index
-        self._emit_flow_event(_provider_flow_event(self, provider_run, attempt_index))
+        pending_key = _provider_pending_key(data_type, provider, operation)
+        pending_indexes = self.provider_pending_attempt_index_by_key.get(pending_key) or []
+        pending_indexes.append(attempt_index)
+        self.provider_pending_attempt_index_by_key[pending_key] = pending_indexes
+        self._emit_flow_event(
+            _provider_started_flow_event(
+                self,
+                data_type=data_type,
+                provider=provider,
+                operation=operation,
+                index=attempt_index,
+            )
+        )
 
     def record_llm_run(self, llm_run: LLMRun) -> None:
         self.llm_runs.append(llm_run)
-        self._emit_flow_event(_llm_flow_event(self, llm_run, len(self.llm_runs)))
+        call_type_key = _safe_event_key(llm_run.call_type) or "analysis"
+        pending_key = _llm_pending_key(llm_run.call_type, llm_run.provider, llm_run.model)
+        pending_indexes = self.llm_pending_attempt_index_by_key.get(pending_key) or []
+        if pending_indexes:
+            attempt_index = pending_indexes.pop(0)
+            if pending_indexes:
+                self.llm_pending_attempt_index_by_key[pending_key] = pending_indexes
+            else:
+                self.llm_pending_attempt_index_by_key.pop(pending_key, None)
+        else:
+            attempt_index = self.llm_attempt_index_by_type.get(call_type_key, 0) + 1
+            self.llm_attempt_index_by_type[call_type_key] = attempt_index
+        self._emit_flow_event(_llm_flow_event(self, llm_run, attempt_index))
+
+    def record_llm_run_started(
+        self,
+        *,
+        call_type: str = "analysis",
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        call_type_key = _safe_event_key(call_type) or "analysis"
+        attempt_index = self.llm_attempt_index_by_type.get(call_type_key, 0) + 1
+        self.llm_attempt_index_by_type[call_type_key] = attempt_index
+        pending_key = _llm_pending_key(call_type, provider, model)
+        pending_indexes = self.llm_pending_attempt_index_by_key.get(pending_key) or []
+        pending_indexes.append(attempt_index)
+        self.llm_pending_attempt_index_by_key[pending_key] = pending_indexes
+        self._emit_flow_event(
+            _llm_started_flow_event(
+                self,
+                call_type=call_type,
+                provider=provider,
+                model=model,
+                index=attempt_index,
+            )
+        )
 
     def record_notification_run(self, notification_run: NotificationRun) -> None:
         self.notification_runs.append(notification_run)
@@ -449,6 +525,21 @@ def _clean_metadata(value: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _provider_pending_key(data_type: Any, provider: Any, operation: Any) -> str:
+    return "|".join(
+        (
+            _safe_event_key(data_type) or "provider",
+            _safe_event_key(provider) or "unknown",
+            _safe_event_key(operation) or "operation",
+        )
+    )
+
+
+def _llm_pending_key(call_type: Any, provider: Any, model: Any) -> str:
+    _ = (provider, model)
+    return _safe_event_key(call_type) or "analysis"
+
+
 def _flow_status_for_success(success: bool, *, fallback: bool = False, skipped: bool = False) -> str:
     if skipped:
         return "skipped"
@@ -471,6 +562,49 @@ def _started_at_from_end_and_duration(end: Any, duration_ms: Optional[int]) -> O
     else:
         return None
     return (parsed - timedelta(milliseconds=duration_ms)).isoformat()
+
+
+def _provider_started_flow_event(
+    context: RunDiagnosticContext,
+    *,
+    data_type: str,
+    provider: str,
+    operation: str,
+    index: int,
+) -> Dict[str, Any]:
+    data_type_key = _safe_event_key(data_type) or "provider"
+    provider_key = _safe_event_key(provider) or "unknown"
+    label = _DATA_TYPE_LABELS.get(data_type_key, data_type_key)
+    node_id = f"provider_{data_type_key}_{provider_key}_{index}"
+    timestamp = datetime.now().isoformat()
+    message = f"{label} {provider} 调用中"
+    return {
+        "timestamp": timestamp,
+        "severity": "info",
+        "type": "provider_run_started",
+        "node_id": node_id,
+        "title": f"{label}开始",
+        "message": sanitize_diagnostic_text(message, max_length=220),
+        "metadata": _clean_metadata(
+            {
+                "trace_id": context.trace_id,
+                "provider": provider,
+                "data_type": data_type,
+                "operation": operation,
+                "node": {
+                    "id": node_id,
+                    "lane": "data_source",
+                    "kind": "data_source",
+                    "label": f"{label} · {provider}",
+                    "status": "running",
+                    "provider": provider,
+                    "started_at": timestamp,
+                    "attempts": 1,
+                    "message": message,
+                },
+            }
+        ),
+    }
 
 
 def _provider_flow_event(
@@ -519,6 +653,48 @@ def _provider_flow_event(
                     "ended_at": run.created_at,
                     "duration_ms": run.latency_ms,
                     "record_count": run.record_count,
+                    "message": message,
+                },
+            }
+        ),
+    }
+
+
+def _llm_started_flow_event(
+    context: RunDiagnosticContext,
+    *,
+    call_type: str,
+    provider: Optional[str],
+    model: Optional[str],
+    index: int,
+) -> Dict[str, Any]:
+    call_type_key = _safe_event_key(call_type) or "analysis"
+    display_model = model or provider or "unknown"
+    node_id = f"llm_{call_type_key}_{index}"
+    timestamp = datetime.now().isoformat()
+    message = f"LLM {display_model} 调用中"
+    return {
+        "timestamp": timestamp,
+        "severity": "info",
+        "type": "llm_run_started",
+        "node_id": node_id,
+        "title": "LLM 开始",
+        "message": sanitize_diagnostic_text(message, max_length=220),
+        "metadata": _clean_metadata(
+            {
+                "trace_id": context.trace_id,
+                "provider": provider,
+                "model": model,
+                "call_type": call_type,
+                "node": {
+                    "id": node_id,
+                    "lane": "analysis",
+                    "kind": "model",
+                    "label": "LLM 生成",
+                    "status": "running",
+                    "provider": display_model,
+                    "started_at": timestamp,
+                    "attempts": 1,
                     "message": message,
                 },
             }
@@ -696,6 +872,27 @@ def record_provider_run(
         logger.warning("provider diagnostic record failed: %s", exc)
 
 
+def record_provider_run_started(
+    *,
+    data_type: str,
+    provider: str,
+    operation: str,
+) -> None:
+    """Emit a live provider-start event without changing persisted diagnostics."""
+    context = get_current_diagnostic_context()
+    if context is None:
+        return
+
+    try:
+        context.record_provider_run_started(
+            data_type=data_type,
+            provider=provider,
+            operation=operation,
+        )
+    except Exception as exc:  # pragma: no cover - defensive fail-open guard
+        logger.warning("provider started diagnostic record failed: %s", exc)
+
+
 def record_llm_run(
     *,
     success: bool,
@@ -730,6 +927,27 @@ def record_llm_run(
         )
     except Exception as exc:  # pragma: no cover - defensive fail-open guard
         logger.warning("llm diagnostic record failed: %s", exc)
+
+
+def record_llm_run_started(
+    *,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    call_type: str = "analysis",
+) -> None:
+    """Emit a live LLM-start event without changing persisted diagnostics."""
+    context = get_current_diagnostic_context()
+    if context is None:
+        return
+
+    try:
+        context.record_llm_run_started(
+            provider=provider,
+            model=model,
+            call_type=call_type,
+        )
+    except Exception as exc:  # pragma: no cover - defensive fail-open guard
+        logger.warning("llm started diagnostic record failed: %s", exc)
 
 
 def record_notification_run(
