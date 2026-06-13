@@ -35,6 +35,7 @@ describe('RunFlowNodeDetails', () => {
       label: 'ContextPack',
       status: 'degraded',
       metadata: {
+        topologyGroup: 'context_pack',
         packVersion: '1.0',
         counts: {
           available: 4,

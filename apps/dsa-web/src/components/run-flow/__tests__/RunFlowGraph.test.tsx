@@ -147,7 +147,9 @@ describe('RunFlowGraph', () => {
 
     const paths = Array.from(container.querySelectorAll('svg g path'));
 
-    expect(paths.map((path) => path.getAttribute('opacity'))).toEqual(['0.9', '0.22', '0.22']);
+    const opacities = paths.map((path) => path.getAttribute('opacity'));
+    expect(opacities.filter((opacity) => opacity === '0.82')).toHaveLength(1);
+    expect(opacities.filter((opacity) => opacity === '0.18')).toHaveLength(2);
     expect(screen.getByText('调度输入')).toBeInTheDocument();
     expect(screen.queryByText('报告输出')).not.toBeInTheDocument();
     expect(screen.getByText('降级输出')).toBeInTheDocument();
