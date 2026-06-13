@@ -481,12 +481,24 @@ class RunFlowTestCase(unittest.TestCase):
 
         provider_nodes = [node for node in snapshot.nodes if node.id == "provider_daily_data_dailyfetcher_1"]
         llm_nodes = [node for node in snapshot.nodes if node.id == "llm_analysis_1"]
+        provider_edges = [
+            edge for edge in snapshot.edges
+            if edge.to_node == "provider_daily_data_dailyfetcher_1"
+        ]
+        llm_edges = [
+            edge for edge in snapshot.edges
+            if edge.to_node == "llm_analysis_1"
+        ]
 
         self.assertEqual(len(provider_nodes), 1)
         self.assertEqual(provider_nodes[0].status, "success")
         self.assertEqual(provider_nodes[0].record_count, 30)
+        self.assertTrue(provider_edges)
+        self.assertTrue(all(edge.status == "success" for edge in provider_edges))
         self.assertEqual(len(llm_nodes), 1)
         self.assertEqual(llm_nodes[0].status, "success")
+        self.assertTrue(llm_edges)
+        self.assertTrue(all(edge.status == "success" for edge in llm_edges))
         self.assertIn("provider_run_started", {event.type for event in snapshot.events})
         self.assertIn("llm_run_started", {event.type for event in snapshot.events})
 

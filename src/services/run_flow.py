@@ -982,15 +982,28 @@ def _append_active_flow_events(
                 )
 
         event_type = _safe_key(event.get("type")) or "event"
+        provider_data_type = None
+        provider_run = None
+        if event_type in {"provider_run", "provider_run_started"} and node_id and node_id in nodes:
+            provider_data_type = _safe_key(metadata.get("data_type") or "provider")
+            provider_run = {
+                "provider": metadata.get("provider") or nodes[node_id].get("provider"),
+                "success": event.get("severity") == "success" or nodes[node_id].get("status") in {"success", "fallback"},
+                "fallback_from": metadata.get("fallback_from"),
+                "fallback_to": metadata.get("fallback_to"),
+            }
+
+        if node_id and node_id in nodes and node_id in known_node_ids:
+            _refresh_incoming_edge_status(edges, node_id, nodes[node_id].get("status"))
+            if provider_data_type and provider_run:
+                last_provider_node_by_type[provider_data_type] = (node_id, provider_run)
+            elif event_type in {"llm_run", "llm_run_started"}:
+                last_llm_node = node_id
+            elif event_type == "history_run":
+                last_history_node = node_id
+
         if node_id and node_id in nodes and node_id not in known_node_ids:
-            if event_type in {"provider_run", "provider_run_started"}:
-                provider_data_type = _safe_key(metadata.get("data_type") or "provider")
-                provider_run = {
-                    "provider": metadata.get("provider") or nodes[node_id].get("provider"),
-                    "success": event.get("severity") == "success" or nodes[node_id].get("status") in {"success", "fallback"},
-                    "fallback_from": metadata.get("fallback_from"),
-                    "fallback_to": metadata.get("fallback_to"),
-                }
+            if provider_data_type and provider_run:
                 previous_provider = last_provider_node_by_type.get(provider_data_type)
                 if previous_provider:
                     previous_provider_node, previous_provider_run = previous_provider
@@ -1276,7 +1289,19 @@ def _append_edge(
     metadata: Optional[Any] = None,
 ) -> None:
     edge_id = f"{from_node}_to_{to_node}_{kind}"
-    if any(edge["id"] == edge_id for edge in edges):
+    for edge in edges:
+        if edge["id"] != edge_id:
+            continue
+        edge["status"] = _valid_status(status)
+        safe_label = _safe_text(label, max_length=40)
+        if safe_label:
+            edge["label"] = safe_label
+        safe_message = _safe_text(message, max_length=180)
+        if safe_message:
+            edge["message"] = safe_message
+        safe_metadata = _sanitize_metadata(metadata or {})
+        if safe_metadata:
+            edge["metadata"] = safe_metadata
         return
     edges.append(
         {
@@ -1290,6 +1315,19 @@ def _append_edge(
             "metadata": _sanitize_metadata(metadata or {}),
         }
     )
+
+
+def _refresh_incoming_edge_status(
+    edges: List[Dict[str, Any]],
+    node_id: Optional[str],
+    status: Optional[Any],
+) -> None:
+    if not node_id or status is None:
+        return
+    valid_status = _valid_status(status)
+    for edge in edges:
+        if edge.get("to") == node_id:
+            edge["status"] = valid_status
 
 
 def _append_event(

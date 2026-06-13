@@ -261,7 +261,7 @@ describe('RunFlowGraph', () => {
 
     expect(heightFor('run-flow-node-request')).toBe(112);
     expect(heightFor('run-flow-node-task_queue')).toBe(112);
-    expect(topFor('run-flow-node-task_queue')).toBe(topFor('run-flow-node-request') + 172);
+    expect(topFor('run-flow-node-task_queue')).toBe(topFor('run-flow-node-request') + 152);
     expect(nodeStyleFor('run-flow-node-request').height).toBe('112px');
   });
 
@@ -699,14 +699,14 @@ describe('RunFlowGraph', () => {
       topFor('run-flow-node-provider_realtime_tushare_1') + 96 + 42,
     );
     expect(topFor('run-flow-node-daily')).toBe(
-      topFor('run-flow-node-provider_realtime_akshare_2') + 96 + 72,
+      topFor('run-flow-node-provider_realtime_akshare_2') + 96 + 40,
     );
     const groupBackground = screen.getByTestId('run-flow-expanded-group-topology_data_realtime_quote');
     const groupBackgroundTop = parseFloat(groupBackground.style.top);
     const groupBackgroundBottom = groupBackgroundTop + parseFloat(groupBackground.style.height);
     expect(groupBackgroundTop).toBe(topFor('run-flow-node-topology_data_realtime_quote') - 18);
     expect(groupBackgroundBottom).toBe(
-      topFor('run-flow-node-provider_realtime_akshare_2') + heightFor('run-flow-node-provider_realtime_akshare_2') + 44,
+      topFor('run-flow-node-provider_realtime_akshare_2') + heightFor('run-flow-node-provider_realtime_akshare_2') + 18,
     );
     const canvasMinHeight = parseFloat((groupBackground.parentElement as HTMLElement).style.minHeight);
     expect(canvasMinHeight).toBeGreaterThan(groupBackgroundBottom);

@@ -149,6 +149,28 @@ const appendEdge = (
   ];
 };
 
+const refreshIncomingEdgeStatus = (
+  edges: RunFlowEdge[],
+  nodeId: string | null,
+  status?: RunFlowEdge['status'],
+): RunFlowEdge[] => {
+  if (!nodeId || !status) {
+    return edges;
+  }
+  let changed = false;
+  const refreshed = edges.map((edge) => {
+    if (edge.to !== nodeId || edge.status === status) {
+      return edge;
+    }
+    changed = true;
+    return {
+      ...edge,
+      status,
+    };
+  });
+  return changed ? refreshed : edges;
+};
+
 const providerTransitionKind = (
   previous: { provider: string | null; success: boolean; fallbackTo: string | null },
   current: { provider: string | null; success: boolean; fallbackFrom: string | null },
@@ -335,12 +357,16 @@ const mergeFlowEventIntoSnapshot = (
   const nodes = upsertNode(snapshot.nodes, node);
   const edges = eventAlreadyPresent
     ? snapshot.edges
-    : appendDerivedEdge(
-      nodes,
-      snapshot.edges,
-      events,
-      displayEvent,
+    : refreshIncomingEdgeStatus(
+      appendDerivedEdge(
+        nodes,
+        snapshot.edges,
+        events,
+        displayEvent,
+        eventNodeId(displayEvent, node),
+      ),
       eventNodeId(displayEvent, node),
+      node?.status,
     );
 
   return {
