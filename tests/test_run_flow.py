@@ -191,7 +191,13 @@ class _FakeHistoryDb:
     def get_analysis_history_by_id(self, record_id: int):
         return self.record if self.record is not None and record_id == self.record.id else None
 
-    def get_latest_analysis_by_query_id(self, query_id: str):
+    def get_latest_analysis_by_query_id(self, query_id: str, *, code: str | None = None, report_type: str | None = None):
+        if self.record is None or query_id != self.record.query_id:
+            return None
+        if code is not None and self.record.code != code:
+            return None
+        if report_type is not None and self.record.report_type != report_type:
+            return None
         return self.record if self.record is not None and query_id == self.record.query_id else None
 
 
@@ -204,6 +210,10 @@ class _FakeMarketReviewDb:
     def save_analysis_history(self, **kwargs):
         self.saved_context_snapshot = kwargs.get("context_snapshot")
         return self.save_result
+
+    def get_latest_analysis_by_query_id(self, query_id: str, *, code: str | None = None, report_type: str | None = None):
+        _ = (query_id, code, report_type)
+        return SimpleNamespace(id=42)
 
     def update_analysis_history_diagnostics(self, *, query_id: str, code: str, diagnostics: dict) -> None:
         _ = (query_id, code)
@@ -713,7 +723,142 @@ class RunFlowTestCase(unittest.TestCase):
         self.assertEqual(snapshot.stock_code, "MARKET")
         self.assertEqual(snapshot.task_id, "task-market")
         self.assertIn("history_run", {event.type for event in snapshot.events})
+        notification = next(node for node in snapshot.nodes if node.id.startswith("notification_report"))
+        self.assertEqual(notification.attempts, 0)
         self.assertTrue(snapshot.lanes)
+
+    def test_market_review_run_flow_filters_leaked_stock_provider_runs(self) -> None:
+        context_snapshot = {
+            "report_kind": "market_review",
+            "diagnostics": {
+                "trace_id": "trace-market",
+                "query_id": "query-flow",
+                "stock_code": "688521.SH",
+                "provider_runs": [
+                    {
+                        "data_type": "daily_data",
+                        "provider": "StockFetcher",
+                        "success": True,
+                        "created_at": "2026-06-13T16:00:57",
+                    },
+                    {
+                        "data_type": "news_search",
+                        "provider": "Tavily",
+                        "success": True,
+                        "created_at": "2026-06-13T16:01:00",
+                    },
+                ],
+                "llm_runs": [],
+                "history_runs": [],
+                "notification_runs": [],
+            },
+        }
+
+        snapshot = build_history_run_flow_snapshot(
+            _history_record(
+                context_snapshot=context_snapshot,
+                code="MARKET",
+                name="大盘复盘",
+                report_type="market_review",
+            )
+        )
+
+        provider_labels = {node.label for node in snapshot.nodes if node.kind == "data_source"}
+        self.assertEqual(snapshot.stock_code, "MARKET")
+        self.assertNotIn("日线K线 · StockFetcher", provider_labels)
+        self.assertIn("新闻舆情 · Tavily", provider_labels)
+
+    def test_stock_run_flow_filters_nested_market_context_artifacts(self) -> None:
+        context_snapshot = {
+            "diagnostics": {
+                "trace_id": "trace-stock",
+                "query_id": "query-flow",
+                "stock_code": "688521.SH",
+                "provider_runs": [
+                    {
+                        "data_type": "news_search",
+                        "provider": "MarketNews",
+                        "success": True,
+                        "created_at": "2026-06-13T16:01:00",
+                    },
+                    {
+                        "data_type": "realtime_quote",
+                        "provider": "Akshare",
+                        "success": True,
+                        "created_at": "2026-06-13T16:01:51",
+                    },
+                    {
+                        "data_type": "news_search",
+                        "provider": "StockNews",
+                        "success": True,
+                        "created_at": "2026-06-13T16:02:25",
+                    },
+                ],
+                "llm_runs": [
+                    {
+                        "call_type": "analysis",
+                        "success": True,
+                        "created_at": "2026-06-13T16:03:54",
+                    }
+                ],
+                "history_runs": [
+                    {
+                        "report_saved": True,
+                        "metadata_saved": True,
+                        "created_at": "2026-06-13T16:01:51",
+                    },
+                    {
+                        "report_saved": True,
+                        "metadata_saved": True,
+                        "created_at": "2026-06-13T16:04:12",
+                    },
+                ],
+                "notification_runs": [
+                    {
+                        "channel": "report",
+                        "status": "skipped",
+                        "success": False,
+                        "attempts": 0,
+                        "created_at": "2026-06-13T16:01:51",
+                    },
+                    {
+                        "channel": "report",
+                        "status": "not_configured",
+                        "success": False,
+                        "attempts": 0,
+                        "created_at": "2026-06-13T16:04:12",
+                    },
+                ],
+            },
+            "analysis_context_pack_overview": _overview(
+                blocks=[
+                    {
+                        "key": "quote",
+                        "label": "行情",
+                        "status": "available",
+                        "source": "Akshare",
+                        "warnings": [],
+                        "missing_reasons": [],
+                    }
+                ]
+            ),
+        }
+
+        snapshot = build_history_run_flow_snapshot(_history_record(context_snapshot=context_snapshot))
+
+        self.assertEqual(
+            [node.label for node in snapshot.nodes if node.label == "保存报告"],
+            ["保存报告"],
+        )
+        self.assertEqual(
+            [node.label for node in snapshot.nodes if node.label.startswith("推送通知")],
+            ["推送通知 · report"],
+        )
+        provider_labels = {node.label for node in snapshot.nodes if node.kind == "data_source"}
+        self.assertNotIn("新闻舆情 · MarketNews", provider_labels)
+        self.assertIn("新闻舆情 · StockNews", provider_labels)
+        notification = next(node for node in snapshot.nodes if node.id.startswith("notification_report"))
+        self.assertEqual(notification.attempts, 0)
 
     def test_market_review_persist_records_diagnostics_without_bool_history_id(self) -> None:
         from src.core.market_review import _persist_market_review_history
@@ -742,10 +887,11 @@ class RunFlowTestCase(unittest.TestCase):
         self.assertTrue(saved)
         self.assertIsNotNone(fake_db.saved_context_snapshot)
         self.assertIn("diagnostics", fake_db.saved_context_snapshot)
+        self.assertIn("analysis_context_pack_overview", fake_db.saved_context_snapshot)
         self.assertIsNotNone(fake_db.updated_diagnostics)
         history_runs = fake_db.updated_diagnostics["history_runs"]
         self.assertTrue(history_runs)
-        self.assertNotEqual(history_runs[-1].get("analysis_history_id"), True)
+        self.assertEqual(history_runs[-1].get("analysis_history_id"), 42)
 
     def test_flow_endpoints_return_404_for_missing_records(self) -> None:
         with self.assertRaises(HTTPException) as history_ctx:

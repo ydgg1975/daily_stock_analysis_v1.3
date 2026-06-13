@@ -188,6 +188,7 @@ def build_history_run_flow_snapshot(
     snapshot = _as_mapping(context_snapshot if context_snapshot is not None else getattr(record, "context_snapshot", None))
     raw = _as_mapping(raw_result if raw_result is not None else getattr(record, "raw_result", None))
     diagnostics = _as_mapping(snapshot.get("diagnostics")) if snapshot else {}
+    diagnostics = _normalize_history_diagnostics_for_record(record, snapshot, diagnostics)
     overview = extract_analysis_context_pack_overview(snapshot) if snapshot else None
     overview_metadata = overview.get("metadata") if isinstance((overview or {}).get("metadata"), Mapping) else {}
 
@@ -694,7 +695,7 @@ def _append_notification_runs(
             status=status,
             provider=channel,
             ended_at=timestamp,
-            attempts=_safe_int(run.get("attempts")) or 1,
+            attempts=_safe_int(run.get("attempts")) if _safe_int(run.get("attempts")) is not None else 1,
             message=message,
             metadata={
                 "channel": channel,
@@ -719,6 +720,90 @@ def _append_notification_runs(
             },
         )
     return count
+
+
+_STOCK_CONTEXT_PROVIDER_DATA_TYPES = {
+    "realtime_quote",
+    "daily_data",
+    "daily_bars",
+    "technical",
+    "fundamental",
+    "fundamentals",
+    "chip",
+}
+
+
+def _normalize_history_diagnostics_for_record(
+    record: Any,
+    snapshot: Dict[str, Any],
+    diagnostics: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not diagnostics:
+        return diagnostics
+
+    normalized = dict(diagnostics)
+    report_type = _safe_key(getattr(record, "report_type", None))
+    code = _safe_text(getattr(record, "code", None), max_length=32)
+    report_kind = _safe_key(snapshot.get("report_kind")) if snapshot else ""
+
+    if report_type == "market_review" or report_kind == "market_review" or (code or "").upper() == "MARKET":
+        normalized["stock_code"] = "MARKET"
+        normalized.setdefault("scope", "market_review")
+        normalized["provider_runs"] = [
+            run
+            for run in _as_list(normalized.get("provider_runs"))
+            if _safe_key(_as_mapping(run).get("data_type")) not in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
+        ]
+        return normalized
+
+    first_llm_at = _first_timestamp(_as_list(normalized.get("llm_runs")))
+    if first_llm_at is not None:
+        normalized["history_runs"] = [
+            run
+            for run in _as_list(normalized.get("history_runs"))
+            if not _timestamp_before(_as_mapping(run).get("created_at"), first_llm_at)
+        ]
+        normalized["notification_runs"] = [
+            run
+            for run in _as_list(normalized.get("notification_runs"))
+            if not _timestamp_before(_as_mapping(run).get("created_at"), first_llm_at)
+        ]
+
+    first_stock_data_at = _first_timestamp(
+        [
+            run
+            for run in _as_list(normalized.get("provider_runs"))
+            if _safe_key(_as_mapping(run).get("data_type")) in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
+        ]
+    )
+    if first_stock_data_at is not None:
+        normalized["provider_runs"] = [
+            run
+            for run in _as_list(normalized.get("provider_runs"))
+            if _safe_key(_as_mapping(run).get("data_type")) != "news_search"
+            or not _timestamp_before(_as_mapping(run).get("created_at"), first_stock_data_at)
+        ]
+    return normalized
+
+
+def _first_timestamp(items: List[Any]) -> Optional[datetime]:
+    timestamps = [
+        parsed
+        for parsed in (_datetime_for_elapsed(_as_mapping(item).get("created_at")) for item in items)
+        if parsed is not None
+    ]
+    return min(timestamps) if timestamps else None
+
+
+def _timestamp_before(value: Any, boundary: datetime) -> bool:
+    parsed = _datetime_for_elapsed(value)
+    if parsed is None:
+        return False
+    if parsed.tzinfo is None and boundary.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=boundary.tzinfo)
+    elif parsed.tzinfo is not None and boundary.tzinfo is None:
+        boundary = boundary.replace(tzinfo=parsed.tzinfo)
+    return parsed < boundary
 
 
 def _put_skeleton_tail(

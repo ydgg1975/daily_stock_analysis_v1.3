@@ -698,6 +698,8 @@ def _format_sse_event(event_type: str, data: Dict[str, Any]) -> str:
 def _load_history_run_flow_by_query_id(
     query_id: str,
     *,
+    code: Optional[str] = None,
+    report_type: Optional[str] = None,
     fail_open: bool = False,
 ) -> Optional[RunFlowSnapshot]:
     try:
@@ -705,7 +707,11 @@ def _load_history_run_flow_by_query_id(
         from src.services.history_service import HistoryService
 
         service = HistoryService(DatabaseManager.get_instance())
-        return service.resolve_and_get_run_flow(query_id)
+        return service.resolve_and_get_run_flow(
+            query_id,
+            code=code,
+            report_type=report_type,
+        )
     except Exception as e:
         if fail_open:
             logger.debug(
@@ -740,8 +746,14 @@ def get_task_run_flow(task_id: str) -> RunFlowSnapshot:
 
     if task:
         if task.status == TaskStatusEnum.COMPLETED:
+            task_report_type = _safe_text(getattr(task, "report_type", None), max_length=64)
+            task_stock_code = _safe_text(getattr(task, "stock_code", None), max_length=32)
+            if task_report_type == "market_review":
+                task_stock_code = "MARKET"
             history_snapshot = _load_history_run_flow_by_query_id(
                 task_id,
+                code=task_stock_code,
+                report_type=task_report_type,
                 fail_open=True,
             )
             if history_snapshot is not None:

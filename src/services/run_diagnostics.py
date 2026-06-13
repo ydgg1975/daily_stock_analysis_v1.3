@@ -322,6 +322,7 @@ class RunDiagnosticContext:
     query_id: Optional[str] = None
     stock_code: Optional[str] = None
     trigger_source: Optional[str] = None
+    scope: Optional[str] = None
     provider_runs: List[ProviderRun] = field(default_factory=list)
     llm_runs: List[LLMRun] = field(default_factory=list)
     notification_runs: List[NotificationRun] = field(default_factory=list)
@@ -368,6 +369,7 @@ class RunDiagnosticContext:
             "query_id": self.query_id,
             "stock_code": self.stock_code,
             "trigger_source": self.trigger_source,
+            "scope": self.scope,
             "provider_runs": [run.to_dict() for run in self.provider_runs],
             "llm_runs": [run.to_dict() for run in self.llm_runs],
             "notification_runs": [run.to_dict() for run in self.notification_runs],
@@ -386,6 +388,7 @@ def activate_run_diagnostic_context(
     query_id: Optional[str] = None,
     stock_code: Optional[str] = None,
     trigger_source: Optional[str] = None,
+    scope: Optional[str] = None,
     event_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Token:
     """Activate a diagnostic context and return its reset token."""
@@ -395,6 +398,7 @@ def activate_run_diagnostic_context(
         query_id=query_id,
         stock_code=stock_code,
         trigger_source=trigger_source,
+        scope=scope,
         event_sink=event_sink,
     )
     return _CURRENT_CONTEXT.set(context)

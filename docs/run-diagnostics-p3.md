@@ -96,6 +96,9 @@ GET /api/v1/history/{record_id}/flow
 
 - `tasks/{task_id}/flow` 面向活跃任务。任务仍在内存队列中时优先返回当前任务快照；任务已完成时可按同一 `task_id/query_id` 尝试读取历史诊断。缺少诊断时返回 skeleton flow，不伪造 provider、LLM 或通知事件。
 - `history/{record_id}/flow` 面向历史报告，支持历史记录主键 ID 或可解析的 `query_id`。普通个股分析与 `MARKET/market_review` 大盘复盘复用同一 `RunFlowSnapshot` 契约。
+- 同一页面触发个股分析时，个股流程可按需生成或复用当日大盘上下文；这不是独立的个股分析步骤，而是 Prompt 背景生成。后台会用独立 `market_context_*` query_id 与 `scope=daily_market_context` 保存该大盘上下文，避免与个股报告共用 query_id。
+- 为兼容早期已写入的混合诊断，运行流会在读取历史时按报告类型做低风险过滤：`MARKET/market_review` 记录隐藏个股行情、日线、技术、基本面与筹码 provider 节点；个股记录隐藏首次个股行情前的大盘新闻搜索，以及首次个股 LLM 前的大盘保存/通知节点。
+- 通知跳过或未配置时允许 `attempts=0`，运行流展示为 skipped，不再因 Pydantic 校验失败导致 `/flow` 返回 500。
 - 快照顶层包含 `summary`、`lanes`、`nodes`、`edges`、`events` 和 `generated_at`。节点状态使用 `pending/running/success/failed/degraded/fallback/timeout/cancel_requested/cancelled/skipped/unknown`，其中用户取消类状态不会被映射成 `failed`。
 - 旧历史、缺失 `context_snapshot.diagnostics` 或证据不足时，后端返回 `unknown` 或 skeleton 节点；Web 端按空/未知状态展示，不影响报告详情读取。
 
