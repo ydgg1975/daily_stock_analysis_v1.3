@@ -21,6 +21,35 @@ _CST = timezone(timedelta(hours=8))  # Beijing time (UTC+8)
 router = APIRouter()
 
 _VALID_PERIODS = {"today", "month", "all"}
+_KNOWN_PROVIDER_PREFIXES = {
+    "ai21",
+    "aihubmix",
+    "anthropic",
+    "azure",
+    "bedrock",
+    "cerebras",
+    "cohere",
+    "dashscope",
+    "deepseek",
+    "fireworks_ai",
+    "gemini",
+    "github",
+    "groq",
+    "huggingface",
+    "mistral",
+    "moonshot",
+    "ollama",
+    "openai",
+    "openrouter",
+    "perplexity",
+    "replicate",
+    "siliconflow",
+    "together_ai",
+    "vertex_ai",
+    "volcengine",
+    "xai",
+    "zhipuai",
+}
 
 
 def _date_range(period: str):
@@ -43,7 +72,10 @@ def _provider_from_model(model: str) -> Optional[str]:
     if not model or "/" not in model:
         return None
     provider, _ = model.split("/", 1)
-    return provider or None
+    normalized_provider = provider.strip().lower()
+    if normalized_provider in _KNOWN_PROVIDER_PREFIXES:
+        return normalized_provider
+    return None
 
 
 def _positive_int(value: Any) -> Optional[int]:
@@ -57,7 +89,7 @@ def _positive_int(value: Any) -> Optional[int]:
 def _context_window_from_info(info: Any) -> Optional[int]:
     if not isinstance(info, dict):
         return None
-    for key in ("max_input_tokens", "max_tokens", "context_window"):
+    for key in ("context_window", "max_input_tokens"):
         value = _positive_int(info.get(key))
         if value is not None:
             return value

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tests for LLM usage dashboard API."""
 
+import sys
 import tempfile
+import types
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +56,40 @@ class FakeUsageDbManager:
                 "total_tokens": 60,
             }
         ]
+
+
+class UsageMetadataHelpersTestCase(unittest.TestCase):
+    def tearDown(self):
+        from api.v1.endpoints import usage as usage_endpoint
+
+        usage_endpoint._resolve_context_window.cache_clear()
+
+    def test_context_window_prefers_window_metadata_over_output_limit(self):
+        from api.v1.endpoints import usage as usage_endpoint
+
+        fake_litellm = types.SimpleNamespace(
+            model_cost={
+                "MiniMax-M3": {"context_window": 512000, "max_tokens": 128000},
+                "custom-router": {"context_window": 100000, "max_tokens": 10000},
+                "max-only-model": {"max_tokens": 10000},
+            }
+        )
+
+        with patch.dict(sys.modules, {"litellm": fake_litellm}):
+            usage_endpoint._resolve_context_window.cache_clear()
+
+            self.assertEqual(usage_endpoint._resolve_context_window("openai/MiniMax-M3"), 512000)
+            self.assertEqual(usage_endpoint._resolve_context_window("openai/custom-router"), 100000)
+            self.assertIsNone(usage_endpoint._resolve_context_window("openai/max-only-model"))
+
+    def test_provider_inference_ignores_model_organization_prefixes(self):
+        from api.v1.endpoints import usage as usage_endpoint
+
+        self.assertEqual(usage_endpoint._provider_from_model("openai/gpt-4.1-mini"), "openai")
+        self.assertEqual(usage_endpoint._provider_from_model("deepseek/deepseek-chat"), "deepseek")
+        self.assertIsNone(usage_endpoint._provider_from_model("Qwen/Qwen3-8B"))
+        self.assertIsNone(usage_endpoint._provider_from_model("deepseek-ai/DeepSeek-V3"))
+        self.assertIsNone(usage_endpoint._provider_from_model("custom-router"))
 
 
 class UsageDashboardApiTestCase(unittest.TestCase):
