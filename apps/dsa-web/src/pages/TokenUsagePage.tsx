@@ -1,9 +1,8 @@
-import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Clock3, Cpu, Database, Gauge, RefreshCw } from 'lucide-react';
 import { usageApi, type UsageDashboard, type UsageModelBreakdown, type UsagePeriod } from '../api/usage';
 import type { ParsedApiError } from '../api/error';
-import { ApiErrorAlert, AppPage, Card, EmptyState, InlineAlert, PageHeader, StatCard } from '../components/common';
+import { ApiErrorAlert, AppPage, Card, EmptyState, PageHeader, StatCard } from '../components/common';
 import { cn } from '../utils/cn';
 
 const PERIOD_OPTIONS: Array<{ value: UsagePeriod; label: string }> = [
@@ -20,13 +19,6 @@ const CALL_TYPE_LABELS: Record<string, string> = {
 
 function formatNumber(value: number | null | undefined): string {
   return new Intl.NumberFormat('zh-CN').format(value ?? 0);
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return '未知';
-  }
-  return `${Math.round(value * 100)}%`;
 }
 
 function formatDateTime(value: string): string {
@@ -66,81 +58,30 @@ function buildParsedError(error: unknown): ParsedApiError {
   };
 }
 
-const ContextRing: React.FC<{ model: UsageModelBreakdown }> = ({ model }) => {
-  const ratio = model.contextUsageRatio ?? null;
-  const clamped = Math.max(0, Math.min(ratio ?? 0, 1));
-  const size = 96;
-  const stroke = 9;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - clamped);
-
-  return (
-    <div className="relative h-24 w-24 shrink-0" aria-label={`${model.model} context usage ${formatPercent(ratio)}`}>
-      <svg width={size} height={size} className="-rotate-90 overflow-visible">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          className="text-border/70"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth={stroke}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className={cn(ratio === null ? 'text-secondary-text/50' : ratio > 0.8 ? 'text-warning' : 'text-cyan')}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-base font-semibold text-foreground">{formatPercent(ratio)}</span>
-        <span className="text-[10px] uppercase tracking-[0.12em] text-secondary-text">context</span>
-      </div>
-    </div>
-  );
-};
-
 const ModelUsageCard: React.FC<{ model: UsageModelBreakdown }> = ({ model }) => {
   return (
     <Card padding="sm" className="rounded-lg">
-      <div className="flex items-start gap-4">
-        <ContextRing model={model} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold text-foreground">{model.model}</h3>
-              <p className="mt-1 text-xs text-secondary-text">{model.provider || '未知 provider'} · {formatNumber(model.calls)} 次调用</p>
-            </div>
-            <span className="rounded-full border border-cyan/20 bg-cyan/10 px-2 py-1 text-xs text-cyan">
-              {formatNumber(model.totalTokens)} tokens
-            </span>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-            <div>
-              <p className="text-xs text-secondary-text">Prompt</p>
-              <p className="mt-1 font-medium text-foreground">{formatNumber(model.promptTokens)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-secondary-text">Completion</p>
-              <p className="mt-1 font-medium text-foreground">{formatNumber(model.completionTokens)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-secondary-text">单次峰值</p>
-              <p className="mt-1 font-medium text-foreground">{formatNumber(model.maxTotalTokens)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-secondary-text">上下文窗口</p>
-              <p className="mt-1 font-medium text-foreground">{model.contextWindow ? formatNumber(model.contextWindow) : '未知'}</p>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-base font-semibold text-foreground">{model.model}</h3>
+          <p className="mt-1 text-xs text-secondary-text">{formatNumber(model.calls)} 次调用</p>
+        </div>
+        <span className="rounded-full border border-cyan/20 bg-cyan/10 px-2 py-1 text-xs text-cyan">
+          {formatNumber(model.totalTokens)} tokens
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <p className="text-xs text-secondary-text">Prompt</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.promptTokens)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-secondary-text">Completion</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.completionTokens)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-secondary-text">单次峰值</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.maxTotalTokens)}</p>
         </div>
       </div>
     </Card>
@@ -180,7 +121,7 @@ const TokenUsagePage: React.FC = () => {
         <PageHeader
           eyebrow="Usage"
           title="Token 用量监控"
-          description="查看 LLM 调用次数、Prompt/Completion Token 消耗、模型上下文占用和最近调用明细。"
+          description="查看 LLM 调用次数、Prompt/Completion Token 消耗、模型用量和最近调用明细。"
           actions={(
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex rounded-xl border border-border/70 bg-card/70 p-1">
@@ -237,11 +178,9 @@ const TokenUsagePage: React.FC = () => {
             ) : (
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
                 <section className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-lg font-semibold text-foreground">模型用量</h2>
-                      <p className="mt-1 text-sm text-secondary-text">按模型聚合，圆环显示单次峰值相对上下文窗口的占用。</p>
-                    </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">模型用量</h2>
+                    <p className="mt-1 text-sm text-secondary-text">按模型聚合 Token 消耗、调用次数和单次峰值。</p>
                   </div>
                   <div className="grid gap-4">
                     {dashboard.byModel.map((model) => (
@@ -272,14 +211,6 @@ const TokenUsagePage: React.FC = () => {
                       ))}
                     </div>
                   </Card>
-
-                  {dashboard.byModel.some((model) => !model.contextWindow) ? (
-                    <InlineAlert
-                      variant="info"
-                      title="部分模型缺少上下文窗口"
-                      message="当 LiteLLM 元数据无法识别模型时，圆环仅展示 Token 数字，不计算百分比。"
-                    />
-                  ) : null}
                 </section>
               </div>
             )}
@@ -303,7 +234,6 @@ const TokenUsagePage: React.FC = () => {
                         <th className="px-4 py-3 text-right font-medium">Prompt</th>
                         <th className="px-4 py-3 text-right font-medium">Completion</th>
                         <th className="px-4 py-3 text-right font-medium">Total</th>
-                        <th className="px-4 py-3 text-right font-medium">Context</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
@@ -313,16 +243,15 @@ const TokenUsagePage: React.FC = () => {
                           <td className="whitespace-nowrap px-4 py-3 text-foreground">{getCallTypeLabel(item.callType)}</td>
                           <td className="min-w-56 px-4 py-3">
                             <div className="max-w-[18rem] truncate font-medium text-foreground">{item.model}</div>
-                            <div className="text-xs text-secondary-text">{item.provider || '未知 provider'}{item.stockCode ? ` · ${item.stockCode}` : ''}</div>
+                            {item.stockCode ? <div className="text-xs text-secondary-text">{item.stockCode}</div> : null}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.promptTokens)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.completionTokens)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-foreground">{formatNumber(item.totalTokens)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatPercent(item.contextUsageRatio)}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-secondary-text">暂无最近调用记录</td>
+                          <td colSpan={6} className="px-4 py-8 text-center text-secondary-text">暂无最近调用记录</td>
                         </tr>
                       )}
                     </tbody>

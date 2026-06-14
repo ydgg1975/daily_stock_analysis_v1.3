@@ -2634,9 +2634,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         """Return aggregated token usage between from_dt and to_dt.
 
         Returns a dict with keys:
-          total_calls, total_tokens,
-          by_call_type: list of {call_type, calls, total_tokens},
-          by_model:     list of {model, calls, total_tokens}
+          total_calls, total_prompt_tokens, total_completion_tokens, total_tokens,
+          by_call_type: list of {call_type, calls, prompt_tokens,
+            completion_tokens, total_tokens},
+          by_model: list of {model, calls, prompt_tokens, completion_tokens,
+            total_tokens, max_total_tokens}
         """
         with self.session_scope() as session:
             base_filter = and_(
@@ -2717,7 +2719,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         to_dt: datetime,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """Return recent LLM usage audit rows between from_dt and to_dt."""
+        """Return recent LLM usage audit rows between from_dt and to_dt.
+
+        Each row contains id, call_type, model, stock_code, prompt_tokens,
+        completion_tokens, total_tokens, and called_at. Results are ordered by
+        newest call first, and limit is clamped to the public API range.
+        """
         normalized_limit = max(1, min(int(limit or 50), 200))
         with self.session_scope() as session:
             rows = session.execute(

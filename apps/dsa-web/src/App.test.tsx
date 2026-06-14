@@ -128,6 +128,16 @@ describe('App routing behavior', () => {
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
   });
 
+  it('routes /usage to the token usage page after auth is ready', async () => {
+    window.history.pushState({}, '', '/usage');
+
+    render(<App />);
+
+    expect(await screen.findByTestId('token-usage-page')).toBeInTheDocument();
+    expect(setCurrentRoute).toHaveBeenCalledWith('/usage');
+    expect(screen.queryByTestId('home-page')).not.toBeInTheDocument();
+  });
+
   it('redirects authenticated login visits back to the home page', async () => {
     vi.mocked(AuthContext.useAuth).mockReturnValue(makeAuthState({
       authEnabled: true,

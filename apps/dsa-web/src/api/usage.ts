@@ -13,14 +13,11 @@ export type UsageCallTypeBreakdown = {
 
 export type UsageModelBreakdown = {
   model: string;
-  provider?: string | null;
   calls: number;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
   maxTotalTokens: number;
-  contextWindow?: number | null;
-  contextUsageRatio?: number | null;
 };
 
 export type UsageCallRecord = {
@@ -28,13 +25,10 @@ export type UsageCallRecord = {
   calledAt: string;
   callType: string;
   model: string;
-  provider?: string | null;
   stockCode?: string | null;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  contextWindow?: number | null;
-  contextUsageRatio?: number | null;
 };
 
 export type UsageDashboard = {

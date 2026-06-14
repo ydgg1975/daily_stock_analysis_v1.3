@@ -18,17 +18,11 @@ class CallTypeBreakdown(BaseModel):
 
 class ModelBreakdown(BaseModel):
     model: str
-    provider: Optional[str] = None
     calls: int
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int
     max_total_tokens: int = 0
-    context_window: Optional[int] = None
-    context_usage_ratio: Optional[float] = Field(
-        default=None,
-        description="total_tokens / context_window when model metadata is available",
-    )
 
 
 class UsageCallRecord(BaseModel):
@@ -36,13 +30,10 @@ class UsageCallRecord(BaseModel):
     called_at: str = Field(..., description="ISO datetime string")
     call_type: str
     model: str
-    provider: Optional[str] = None
     stock_code: Optional[str] = None
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-    context_window: Optional[int] = None
-    context_usage_ratio: Optional[float] = None
 
 
 class UsageSummaryResponse(BaseModel):

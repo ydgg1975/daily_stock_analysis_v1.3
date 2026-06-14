@@ -5,8 +5,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -21,35 +20,6 @@ _CST = timezone(timedelta(hours=8))  # Beijing time (UTC+8)
 router = APIRouter()
 
 _VALID_PERIODS = {"today", "month", "all"}
-_KNOWN_PROVIDER_PREFIXES = {
-    "ai21",
-    "aihubmix",
-    "anthropic",
-    "azure",
-    "bedrock",
-    "cerebras",
-    "cohere",
-    "dashscope",
-    "deepseek",
-    "fireworks_ai",
-    "gemini",
-    "github",
-    "groq",
-    "huggingface",
-    "mistral",
-    "moonshot",
-    "ollama",
-    "openai",
-    "openrouter",
-    "perplexity",
-    "replicate",
-    "siliconflow",
-    "together_ai",
-    "vertex_ai",
-    "volcengine",
-    "xai",
-    "zhipuai",
-}
 
 
 def _date_range(period: str):
@@ -68,90 +38,7 @@ def _normalize_period(period: str) -> str:
     return period if period in _VALID_PERIODS else "month"
 
 
-def _provider_from_model(model: str) -> Optional[str]:
-    if not model or "/" not in model:
-        return None
-    provider, _ = model.split("/", 1)
-    normalized_provider = provider.strip().lower()
-    if normalized_provider in _KNOWN_PROVIDER_PREFIXES:
-        return normalized_provider
-    return None
-
-
-def _positive_int(value: Any) -> Optional[int]:
-    try:
-        normalized = int(value)
-    except (TypeError, ValueError):
-        return None
-    return normalized if normalized > 0 else None
-
-
-def _context_window_from_info(info: Any) -> Optional[int]:
-    if not isinstance(info, dict):
-        return None
-    for key in ("context_window", "max_input_tokens"):
-        value = _positive_int(info.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-@lru_cache(maxsize=256)
-def _resolve_context_window(model: str) -> Optional[int]:
-    if not model:
-        return None
-
-    try:
-        import litellm  # type: ignore
-    except Exception:
-        return None
-
-    model_keys = [model]
-    if "/" in model:
-        model_keys.append(model.split("/", 1)[1])
-
-    get_model_info = getattr(litellm, "get_model_info", None)
-    if callable(get_model_info):
-        for key in model_keys:
-            try:
-                context_window = _context_window_from_info(get_model_info(key))
-            except Exception:
-                context_window = None
-            if context_window is not None:
-                return context_window
-
-    model_cost = getattr(litellm, "model_cost", {})
-    if isinstance(model_cost, dict):
-        for key in model_keys:
-            context_window = _context_window_from_info(model_cost.get(key))
-            if context_window is not None:
-                return context_window
-
-    return None
-
-
-def _context_usage_ratio(total_tokens: int, context_window: Optional[int]) -> Optional[float]:
-    if not context_window:
-        return None
-    return round((total_tokens or 0) / context_window, 4)
-
-
-def _enrich_model_row(row: dict[str, Any]) -> dict[str, Any]:
-    model = str(row.get("model") or "unknown")
-    context_window = _resolve_context_window(model)
-    max_total_tokens = int(row.get("max_total_tokens") or row.get("total_tokens") or 0)
-    return {
-        **row,
-        "provider": _provider_from_model(model),
-        "max_total_tokens": max_total_tokens,
-        "context_window": context_window,
-        "context_usage_ratio": _context_usage_ratio(max_total_tokens, context_window),
-    }
-
-
 def _enrich_call_record(row: dict[str, Any]) -> dict[str, Any]:
-    model = str(row.get("model") or "unknown")
-    context_window = _resolve_context_window(model)
     called_at = row.get("called_at")
     if isinstance(called_at, datetime):
         called_at_value = called_at.isoformat()
@@ -160,9 +47,6 @@ def _enrich_call_record(row: dict[str, Any]) -> dict[str, Any]:
     return {
         **row,
         "called_at": called_at_value,
-        "provider": _provider_from_model(model),
-        "context_window": context_window,
-        "context_usage_ratio": _context_usage_ratio(int(row.get("total_tokens") or 0), context_window),
     }
 
 
@@ -176,7 +60,7 @@ def _build_summary_payload(period: str, from_dt: datetime, to_dt: datetime, data
         "total_completion_tokens": data.get("total_completion_tokens", 0),
         "total_tokens": data.get("total_tokens", 0),
         "by_call_type": data.get("by_call_type", []),
-        "by_model": [_enrich_model_row(row) for row in data.get("by_model", [])],
+        "by_model": data.get("by_model", []),
     }
 
 
@@ -200,7 +84,7 @@ def get_usage_summary(
     "/dashboard",
     response_model=UsageDashboardResponse,
     summary="LLM token usage monitoring dashboard",
-    description="Return token totals, model/context breakdowns, and recent LLM call records.",
+    description="Return token totals, model breakdowns, and recent LLM call records.",
 )
 def get_usage_dashboard(
     period: str = Query("month", description="'today' | 'month' | 'all'"),

@@ -2,96 +2,87 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TokenUsagePage from '../TokenUsagePage';
 
-const { getDashboard } = vi.hoisted(() => ({
-  getDashboard: vi.fn(),
+const { get } = vi.hoisted(() => ({
+  get: vi.fn(),
 }));
 
-vi.mock('../../api/usage', () => ({
-  usageApi: { getDashboard },
+vi.mock('../../api/index', () => ({
+  default: { get },
 }));
 
-const dashboard = {
-  period: 'month' as const,
-  fromDate: '2026-06-01',
-  toDate: '2026-06-11',
-  totalCalls: 3,
-  totalPromptTokens: 120,
-  totalCompletionTokens: 280,
-  totalTokens: 400,
-  byCallType: [
+const dashboardResponse = {
+  period: 'month',
+  from_date: '2026-06-01',
+  to_date: '2026-06-11',
+  total_calls: 3,
+  total_prompt_tokens: 120,
+  total_completion_tokens: 280,
+  total_tokens: 400,
+  by_call_type: [
     {
-      callType: 'analysis',
+      call_type: 'analysis',
       calls: 2,
-      promptTokens: 100,
-      completionTokens: 200,
-      totalTokens: 300,
+      prompt_tokens: 100,
+      completion_tokens: 200,
+      total_tokens: 300,
     },
     {
-      callType: 'agent',
+      call_type: 'agent',
       calls: 1,
-      promptTokens: 20,
-      completionTokens: 80,
-      totalTokens: 100,
+      prompt_tokens: 20,
+      completion_tokens: 80,
+      total_tokens: 100,
     },
   ],
-  byModel: [
+  by_model: [
     {
       model: 'openai/gpt-test',
-      provider: 'openai',
       calls: 2,
-      promptTokens: 100,
-      completionTokens: 200,
-      totalTokens: 300,
-      maxTotalTokens: 240,
-      contextWindow: 1000,
-      contextUsageRatio: 0.24,
+      prompt_tokens: 100,
+      completion_tokens: 200,
+      total_tokens: 300,
+      max_total_tokens: 240,
     },
     {
       model: 'custom-router',
-      provider: null,
       calls: 1,
-      promptTokens: 20,
-      completionTokens: 80,
-      totalTokens: 100,
-      maxTotalTokens: 100,
-      contextWindow: null,
-      contextUsageRatio: null,
+      prompt_tokens: 20,
+      completion_tokens: 80,
+      total_tokens: 100,
+      max_total_tokens: 100,
     },
   ],
-  recentCalls: [
+  recent_calls: [
     {
       id: 1,
-      calledAt: '2026-06-11T09:30:00',
-      callType: 'analysis',
+      called_at: '2026-06-11T09:30:00',
+      call_type: 'analysis',
       model: 'openai/gpt-test',
-      provider: 'openai',
-      stockCode: '600519',
-      promptTokens: 40,
-      completionTokens: 200,
-      totalTokens: 240,
-      contextWindow: 1000,
-      contextUsageRatio: 0.24,
+      stock_code: '600519',
+      prompt_tokens: 40,
+      completion_tokens: 200,
+      total_tokens: 240,
     },
   ],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getDashboard.mockResolvedValue(dashboard);
+  get.mockResolvedValue({ data: dashboardResponse });
 });
 
 describe('TokenUsagePage', () => {
-  it('renders token summary, model rings, breakdowns, and recent calls', async () => {
+  it('renders token summary, model breakdowns, and recent calls from the dashboard API shape', async () => {
     render(<TokenUsagePage />);
 
     expect(await screen.findByRole('heading', { name: 'Token 用量监控' })).toBeInTheDocument();
     expect(await screen.findByText('400')).toBeInTheDocument();
     expect(screen.getAllByText('openai/gpt-test')).toHaveLength(2);
-    expect(screen.getByLabelText(/openai\/gpt-test context usage 24%/)).toBeInTheDocument();
-    expect(screen.getByText('部分模型缺少上下文窗口')).toBeInTheDocument();
     expect(screen.getAllByText('个股分析')).toHaveLength(2);
     expect(screen.getByText(/600519/)).toBeInTheDocument();
-    expect(getDashboard).toHaveBeenCalledWith({ period: 'month', limit: 50 });
+    expect(get).toHaveBeenCalledWith('/api/v1/usage/dashboard', {
+      params: { period: 'month', limit: 50 },
+    });
   });
 
   it('reloads dashboard when period changes', async () => {
@@ -101,7 +92,9 @@ describe('TokenUsagePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '今日' }));
 
     await waitFor(() => {
-      expect(getDashboard).toHaveBeenLastCalledWith({ period: 'today', limit: 50 });
+      expect(get).toHaveBeenLastCalledWith('/api/v1/usage/dashboard', {
+        params: { period: 'today', limit: 50 },
+      });
     });
   });
 });

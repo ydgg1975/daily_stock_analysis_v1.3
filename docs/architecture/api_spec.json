@@ -1645,7 +1645,7 @@
           "Usage"
         ],
         "summary": "LLM token usage monitoring dashboard",
-        "description": "Return token totals, model/context breakdowns, and recent LLM call records.",
+        "description": "Return token totals, model breakdowns, and recent LLM call records.",
         "operationId": "get_usage_dashboard_api_v1_usage_dashboard_get",
         "parameters": [
           {
@@ -4159,17 +4159,6 @@
             "type": "string",
             "title": "Model"
           },
-          "provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider"
-          },
           "stock_code": {
             "anyOf": [
               {
@@ -4192,28 +4181,6 @@
           "total_tokens": {
             "type": "integer",
             "title": "Total Tokens"
-          },
-          "context_window": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Window"
-          },
-          "context_usage_ratio": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Usage Ratio"
           }
         },
         "type": "object",
@@ -4268,17 +4235,6 @@
             "type": "string",
             "title": "Model"
           },
-          "provider": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider"
-          },
           "calls": {
             "type": "integer",
             "title": "Calls"
@@ -4301,29 +4257,6 @@
             "type": "integer",
             "title": "Max Total Tokens",
             "default": 0
-          },
-          "context_window": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Window"
-          },
-          "context_usage_ratio": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Context Usage Ratio",
-            "description": "total_tokens / context_window when model metadata is available"
           }
         },
         "type": "object",
