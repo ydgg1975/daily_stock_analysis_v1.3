@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Clock3, Cpu, Database, Gauge, RefreshCw } from 'lucide-react';
 import { usageApi, type UsageDashboard, type UsageModelBreakdown, type UsagePeriod } from '../api/usage';
 import type { ParsedApiError } from '../api/error';
@@ -93,22 +93,36 @@ const TokenUsagePage: React.FC = () => {
   const [dashboard, setDashboard] = useState<UsageDashboard | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestSeqRef = useRef(0);
 
   const loadDashboard = useCallback(async () => {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
     setLoading(true);
     setError(null);
     try {
       const data = await usageApi.getDashboard({ period, limit: 50 });
+      if (requestSeq !== requestSeqRef.current) {
+        return;
+      }
       setDashboard(data);
     } catch (err) {
+      if (requestSeq !== requestSeqRef.current) {
+        return;
+      }
       setError(buildParsedError(err));
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [period]);
 
   useEffect(() => {
     void loadDashboard();
+    return () => {
+      requestSeqRef.current += 1;
+    };
   }, [loadDashboard]);
 
   const largestCallTypeTotal = useMemo(() => {

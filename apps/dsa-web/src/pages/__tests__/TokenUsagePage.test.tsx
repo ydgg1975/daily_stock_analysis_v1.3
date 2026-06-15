@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TokenUsagePage from '../TokenUsagePage';
 
@@ -66,6 +66,23 @@ const dashboardResponse = {
   ],
 };
 
+function makeDashboardResponse(overrides: Partial<typeof dashboardResponse> = {}) {
+  return {
+    ...dashboardResponse,
+    ...overrides,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   get.mockResolvedValue({ data: dashboardResponse });
@@ -83,6 +100,83 @@ describe('TokenUsagePage', () => {
     expect(get).toHaveBeenCalledWith('/api/v1/usage/dashboard', {
       params: { period: 'month', limit: 50 },
     });
+  });
+
+
+  it('keeps the newest period data when dashboard requests resolve out of order', async () => {
+    const monthRequest = createDeferred<{ data: typeof dashboardResponse }>();
+    const todayRequest = createDeferred<{ data: typeof dashboardResponse }>();
+    const todayResponse = makeDashboardResponse({
+      period: 'today',
+      from_date: '2026-06-15',
+      to_date: '2026-06-15',
+      total_calls: 9,
+      total_prompt_tokens: 700,
+      total_completion_tokens: 200,
+      total_tokens: 900,
+      by_call_type: [
+        {
+          call_type: 'analysis',
+          calls: 9,
+          prompt_tokens: 700,
+          completion_tokens: 200,
+          total_tokens: 900,
+        },
+      ],
+      by_model: [
+        {
+          model: 'openai/gpt-test',
+          calls: 9,
+          prompt_tokens: 700,
+          completion_tokens: 200,
+          total_tokens: 900,
+          max_total_tokens: 300,
+        },
+      ],
+      recent_calls: [],
+    });
+
+    get.mockImplementation((_url, config) => {
+      const period = config?.params?.period;
+      if (period === 'month') {
+        return monthRequest.promise;
+      }
+      if (period === 'today') {
+        return todayRequest.promise;
+      }
+      return Promise.resolve({ data: dashboardResponse });
+    });
+
+    render(<TokenUsagePage />);
+
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/api/v1/usage/dashboard', {
+        params: { period: 'month', limit: 50 },
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '今日' }));
+
+    await waitFor(() => {
+      expect(get).toHaveBeenLastCalledWith('/api/v1/usage/dashboard', {
+        params: { period: 'today', limit: 50 },
+      });
+    });
+
+    await act(async () => {
+      todayRequest.resolve({ data: todayResponse });
+    });
+
+    expect(await screen.findByText('900')).toBeInTheDocument();
+
+    await act(async () => {
+      monthRequest.resolve({ data: dashboardResponse });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('900')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('400')).not.toBeInTheDocument();
   });
 
   it('reloads dashboard when period changes', async () => {
