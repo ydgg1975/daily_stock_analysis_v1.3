@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UiLanguageProvider } from '../../contexts/UiLanguageContext';
 import TokenUsagePage from '../TokenUsagePage';
 
 const { get } = vi.hoisted(() => ({
@@ -83,14 +84,24 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function renderPage() {
+  return render(
+    <UiLanguageProvider>
+      <TokenUsagePage />
+    </UiLanguageProvider>
+  );
+}
+
 beforeEach(() => {
+  window.localStorage.clear();
+  window.localStorage.setItem('dsa.uiLanguage', 'zh');
   vi.clearAllMocks();
   get.mockResolvedValue({ data: dashboardResponse });
 });
 
 describe('TokenUsagePage', () => {
   it('renders token summary, model breakdowns, and recent calls from the dashboard API shape', async () => {
-    render(<TokenUsagePage />);
+    renderPage();
 
     expect(await screen.findByRole('heading', { name: 'Token 用量监控' })).toBeInTheDocument();
     expect(await screen.findByText('400')).toBeInTheDocument();
@@ -102,6 +113,17 @@ describe('TokenUsagePage', () => {
     });
   });
 
+  it('renders English copy when the UI language is English', async () => {
+    window.localStorage.setItem('dsa.uiLanguage', 'en');
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Token usage' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
+    expect(screen.getAllByText('Stock analysis')).toHaveLength(2);
+    expect(screen.getByText('Latest 50 LLM token audit records.')).toBeInTheDocument();
+    expect(screen.queryByText('Token 用量监控')).not.toBeInTheDocument();
+  });
 
   it('keeps the newest period data when dashboard requests resolve out of order', async () => {
     const monthRequest = createDeferred<{ data: typeof dashboardResponse }>();
@@ -147,7 +169,7 @@ describe('TokenUsagePage', () => {
       return Promise.resolve({ data: dashboardResponse });
     });
 
-    render(<TokenUsagePage />);
+    renderPage();
 
     await waitFor(() => {
       expect(get).toHaveBeenCalledWith('/api/v1/usage/dashboard', {
@@ -180,7 +202,7 @@ describe('TokenUsagePage', () => {
   });
 
   it('reloads dashboard when period changes', async () => {
-    render(<TokenUsagePage />);
+    renderPage();
 
     await screen.findByRole('heading', { name: 'Token 用量监控' });
     fireEvent.click(screen.getByRole('button', { name: '今日' }));

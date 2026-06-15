@@ -3,25 +3,35 @@ import { Activity, Clock3, Cpu, Database, Gauge, RefreshCw } from 'lucide-react'
 import { usageApi, type UsageDashboard, type UsageModelBreakdown, type UsagePeriod } from '../api/usage';
 import type { ParsedApiError } from '../api/error';
 import { ApiErrorAlert, AppPage, Card, EmptyState, PageHeader, StatCard } from '../components/common';
+import { useUiLanguage } from '../contexts/UiLanguageContext';
+import type { UiLanguage, UiTextKey, UiTextParams } from '../i18n/uiText';
 import { cn } from '../utils/cn';
 
-const PERIOD_OPTIONS: Array<{ value: UsagePeriod; label: string }> = [
-  { value: 'today', label: '今日' },
-  { value: 'month', label: '本月' },
-  { value: 'all', label: '全部' },
-];
+type Translate = (key: UiTextKey, params?: UiTextParams) => string;
 
-const CALL_TYPE_LABELS: Record<string, string> = {
-  analysis: '个股分析',
-  agent: '问股 Agent',
-  market_review: '大盘复盘',
+const PERIOD_OPTIONS: UsagePeriod[] = ['today', 'month', 'all'];
+
+const PERIOD_LABEL_KEYS: Record<UsagePeriod, UiTextKey> = {
+  today: 'usage.period.today',
+  month: 'usage.period.month',
+  all: 'usage.period.all',
 };
 
-function formatNumber(value: number | null | undefined): string {
-  return new Intl.NumberFormat('zh-CN').format(value ?? 0);
+const CALL_TYPE_LABEL_KEYS: Record<string, UiTextKey> = {
+  analysis: 'usage.callType.analysis',
+  agent: 'usage.callType.agent',
+  market_review: 'usage.callType.marketReview',
+};
+
+function getLocale(language: UiLanguage): string {
+  return language === 'en' ? 'en-US' : 'zh-CN';
 }
 
-function formatDateTime(value: string): string {
+function formatNumber(value: number | null | undefined, language: UiLanguage): string {
+  return new Intl.NumberFormat(getLocale(language)).format(value ?? 0);
+}
+
+function formatDateTime(value: string, language: UiLanguage): string {
   if (!value) {
     return '-';
   }
@@ -29,7 +39,7 @@ function formatDateTime(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getLocale(language), {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -37,11 +47,12 @@ function formatDateTime(value: string): string {
   }).format(date);
 }
 
-function getCallTypeLabel(callType: string): string {
-  return CALL_TYPE_LABELS[callType] ?? callType;
+function getCallTypeLabel(callType: string, t: Translate): string {
+  const key = CALL_TYPE_LABEL_KEYS[callType];
+  return key ? t(key) : t('usage.callType.unknown', { type: callType || '-' });
 }
 
-function buildParsedError(error: unknown): ParsedApiError {
+function buildParsedError(error: unknown, t: Translate): ParsedApiError {
   if (error && typeof error === 'object' && 'parsedError' in error) {
     const parsedError = (error as { parsedError?: ParsedApiError }).parsedError;
     if (parsedError) {
@@ -49,39 +60,39 @@ function buildParsedError(error: unknown): ParsedApiError {
     }
   }
 
-  const message = error instanceof Error ? error.message : 'Token 用量数据加载失败';
+  const message = error instanceof Error ? error.message : t('usage.error.message');
   return {
-    title: 'Token 用量加载失败',
+    title: t('usage.error.title'),
     message,
     rawMessage: message,
     category: 'http_error',
   };
 }
 
-const ModelUsageCard: React.FC<{ model: UsageModelBreakdown }> = ({ model }) => {
+const ModelUsageCard: React.FC<{ model: UsageModelBreakdown; language: UiLanguage; t: Translate }> = ({ model, language, t }) => {
   return (
     <Card padding="sm" className="rounded-lg">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate text-base font-semibold text-foreground">{model.model}</h3>
-          <p className="mt-1 text-xs text-secondary-text">{formatNumber(model.calls)} 次调用</p>
+          <p className="mt-1 text-xs text-secondary-text">{t('usage.calls', { count: formatNumber(model.calls, language) })}</p>
         </div>
         <span className="rounded-full border border-cyan/20 bg-cyan/10 px-2 py-1 text-xs text-cyan">
-          {formatNumber(model.totalTokens)} tokens
+          {formatNumber(model.totalTokens, language)} tokens
         </span>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
         <div>
           <p className="text-xs text-secondary-text">Prompt</p>
-          <p className="mt-1 font-medium text-foreground">{formatNumber(model.promptTokens)}</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.promptTokens, language)}</p>
         </div>
         <div>
           <p className="text-xs text-secondary-text">Completion</p>
-          <p className="mt-1 font-medium text-foreground">{formatNumber(model.completionTokens)}</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.completionTokens, language)}</p>
         </div>
         <div>
-          <p className="text-xs text-secondary-text">单次峰值</p>
-          <p className="mt-1 font-medium text-foreground">{formatNumber(model.maxTotalTokens)}</p>
+          <p className="text-xs text-secondary-text">{t('usage.maxSingleCall')}</p>
+          <p className="mt-1 font-medium text-foreground">{formatNumber(model.maxTotalTokens, language)}</p>
         </div>
       </div>
     </Card>
@@ -89,6 +100,7 @@ const ModelUsageCard: React.FC<{ model: UsageModelBreakdown }> = ({ model }) => 
 };
 
 const TokenUsagePage: React.FC = () => {
+  const { language, t } = useUiLanguage();
   const [period, setPeriod] = useState<UsagePeriod>('month');
   const [dashboard, setDashboard] = useState<UsageDashboard | null>(null);
   const [error, setError] = useState<ParsedApiError | null>(null);
@@ -110,13 +122,13 @@ const TokenUsagePage: React.FC = () => {
       if (requestSeq !== requestSeqRef.current) {
         return;
       }
-      setError(buildParsedError(err));
+      setError(buildParsedError(err, t));
     } finally {
       if (requestSeq === requestSeqRef.current) {
         setLoading(false);
       }
     }
-  }, [period]);
+  }, [period, t]);
 
   useEffect(() => {
     void loadDashboard();
@@ -133,25 +145,25 @@ const TokenUsagePage: React.FC = () => {
     <AppPage>
       <div className="space-y-5">
         <PageHeader
-          eyebrow="Usage"
-          title="Token 用量监控"
-          description="查看 LLM 调用次数、Prompt/Completion Token 消耗、模型用量和最近调用明细。"
+          eyebrow={t('usage.eyebrow')}
+          title={t('usage.title')}
+          description={t('usage.description')}
           actions={(
             <div className="flex flex-wrap items-center gap-2">
               <div className="inline-flex rounded-xl border border-border/70 bg-card/70 p-1">
                 {PERIOD_OPTIONS.map((option) => (
                   <button
-                    key={option.value}
+                    key={option}
                     type="button"
-                    onClick={() => setPeriod(option.value)}
+                    onClick={() => setPeriod(option)}
                     className={cn(
                       'rounded-lg px-3 py-1.5 text-sm transition-colors',
-                      period === option.value
+                      period === option
                         ? 'bg-cyan text-background shadow-soft-card'
                         : 'text-secondary-text hover:bg-hover hover:text-foreground'
                     )}
                   >
-                    {option.label}
+                    {t(PERIOD_LABEL_KEYS[option])}
                   </button>
                 ))}
               </div>
@@ -162,13 +174,13 @@ const TokenUsagePage: React.FC = () => {
                 disabled={loading}
               >
                 <RefreshCw className={cn('h-4 w-4', loading ? 'animate-spin' : '')} />
-                刷新
+                {t('usage.refresh')}
               </button>
             </div>
           )}
         />
 
-        {error ? <ApiErrorAlert error={error} actionLabel="重试" onAction={() => void loadDashboard()} /> : null}
+        {error ? <ApiErrorAlert error={error} actionLabel={t('common.retry')} onAction={() => void loadDashboard()} /> : null}
 
         {loading && !dashboard ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -181,36 +193,36 @@ const TokenUsagePage: React.FC = () => {
         {dashboard ? (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <StatCard label="总 tokens" value={formatNumber(dashboard.totalTokens)} hint={`${dashboard.fromDate} 至 ${dashboard.toDate}`} icon={<Database className="h-5 w-5" />} tone="primary" />
-              <StatCard label="调用次数" value={formatNumber(dashboard.totalCalls)} hint="已记录的 LLM 调用" icon={<Activity className="h-5 w-5" />} />
-              <StatCard label="Prompt tokens" value={formatNumber(dashboard.totalPromptTokens)} hint="输入上下文消耗" icon={<Cpu className="h-5 w-5" />} />
-              <StatCard label="Completion tokens" value={formatNumber(dashboard.totalCompletionTokens)} hint="模型输出消耗" icon={<Gauge className="h-5 w-5" />} />
+              <StatCard label={t('usage.totalTokens')} value={formatNumber(dashboard.totalTokens, language)} hint={t('usage.dateRange', { from: dashboard.fromDate, to: dashboard.toDate })} icon={<Database className="h-5 w-5" />} tone="primary" />
+              <StatCard label={t('usage.totalCalls')} value={formatNumber(dashboard.totalCalls, language)} hint={t('usage.totalCallsHint')} icon={<Activity className="h-5 w-5" />} />
+              <StatCard label={t('usage.promptTokens')} value={formatNumber(dashboard.totalPromptTokens, language)} hint={t('usage.promptTokensHint')} icon={<Cpu className="h-5 w-5" />} />
+              <StatCard label={t('usage.completionTokens')} value={formatNumber(dashboard.totalCompletionTokens, language)} hint={t('usage.completionTokensHint')} icon={<Gauge className="h-5 w-5" />} />
             </div>
 
             {dashboard.totalCalls === 0 ? (
-              <EmptyState title="暂无 Token 用量记录" description="完成一次分析、大盘复盘或问股调用后，这里会显示模型用量。" />
+              <EmptyState title={t('usage.emptyTitle')} description={t('usage.emptyDescription')} />
             ) : (
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
                 <section className="space-y-4">
                   <div>
-                    <h2 className="text-lg font-semibold text-foreground">模型用量</h2>
-                    <p className="mt-1 text-sm text-secondary-text">按模型聚合 Token 消耗、调用次数和单次峰值。</p>
+                    <h2 className="text-lg font-semibold text-foreground">{t('usage.modelUsage')}</h2>
+                    <p className="mt-1 text-sm text-secondary-text">{t('usage.modelUsageDescription')}</p>
                   </div>
                   <div className="grid gap-4">
                     {dashboard.byModel.map((model) => (
-                      <ModelUsageCard key={model.model} model={model} />
+                      <ModelUsageCard key={model.model} model={model} language={language} t={t} />
                     ))}
                   </div>
                 </section>
 
                 <section className="space-y-4">
-                  <Card title="调用类型" subtitle="Breakdown" className="rounded-lg">
+                  <Card title={t('usage.callTypeTitle')} subtitle={t('usage.breakdown')} className="rounded-lg">
                     <div className="space-y-4">
                       {dashboard.byCallType.map((item) => (
                         <div key={item.callType}>
                           <div className="flex items-center justify-between gap-3 text-sm">
-                            <span className="font-medium text-foreground">{getCallTypeLabel(item.callType)}</span>
-                            <span className="text-secondary-text">{formatNumber(item.totalTokens)} tokens</span>
+                            <span className="font-medium text-foreground">{getCallTypeLabel(item.callType, t)}</span>
+                            <span className="text-secondary-text">{formatNumber(item.totalTokens, language)} tokens</span>
                           </div>
                           <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/70">
                             <div
@@ -219,7 +231,11 @@ const TokenUsagePage: React.FC = () => {
                             />
                           </div>
                           <p className="mt-1 text-xs text-secondary-text">
-                            {formatNumber(item.calls)} 次 · Prompt {formatNumber(item.promptTokens)} · Completion {formatNumber(item.completionTokens)}
+                            {t('usage.callTypeDetail', {
+                              calls: formatNumber(item.calls, language),
+                              prompt: formatNumber(item.promptTokens, language),
+                              completion: formatNumber(item.completionTokens, language),
+                            })}
                           </p>
                         </div>
                       ))}
@@ -232,8 +248,8 @@ const TokenUsagePage: React.FC = () => {
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">最近调用</h2>
-                  <p className="mt-1 text-sm text-secondary-text">最近 50 条 LLM token 审计记录。</p>
+                  <h2 className="text-lg font-semibold text-foreground">{t('usage.recentCalls')}</h2>
+                  <p className="mt-1 text-sm text-secondary-text">{t('usage.recentCallsDescription')}</p>
                 </div>
                 <Clock3 className="h-5 w-5 text-secondary-text" />
               </div>
@@ -242,9 +258,9 @@ const TokenUsagePage: React.FC = () => {
                   <table className="min-w-full divide-y divide-border/70 text-sm">
                     <thead className="bg-surface-2/70 text-left text-xs uppercase tracking-[0.16em] text-secondary-text">
                       <tr>
-                        <th className="px-4 py-3 font-medium">时间</th>
-                        <th className="px-4 py-3 font-medium">类型</th>
-                        <th className="px-4 py-3 font-medium">模型</th>
+                        <th className="px-4 py-3 font-medium">{t('usage.table.time')}</th>
+                        <th className="px-4 py-3 font-medium">{t('usage.table.type')}</th>
+                        <th className="px-4 py-3 font-medium">{t('usage.table.model')}</th>
                         <th className="px-4 py-3 text-right font-medium">Prompt</th>
                         <th className="px-4 py-3 text-right font-medium">Completion</th>
                         <th className="px-4 py-3 text-right font-medium">Total</th>
@@ -253,19 +269,19 @@ const TokenUsagePage: React.FC = () => {
                     <tbody className="divide-y divide-border/60">
                       {dashboard.recentCalls.length ? dashboard.recentCalls.map((item) => (
                         <tr key={item.id} className="hover:bg-hover/60">
-                          <td className="whitespace-nowrap px-4 py-3 text-secondary-text">{formatDateTime(item.calledAt)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-foreground">{getCallTypeLabel(item.callType)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-secondary-text">{formatDateTime(item.calledAt, language)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-foreground">{getCallTypeLabel(item.callType, t)}</td>
                           <td className="min-w-56 px-4 py-3">
                             <div className="max-w-[18rem] truncate font-medium text-foreground">{item.model}</div>
                             {item.stockCode ? <div className="text-xs text-secondary-text">{item.stockCode}</div> : null}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.promptTokens)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.completionTokens)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-foreground">{formatNumber(item.totalTokens)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.promptTokens, language)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right text-secondary-text">{formatNumber(item.completionTokens, language)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-medium text-foreground">{formatNumber(item.totalTokens, language)}</td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-secondary-text">暂无最近调用记录</td>
+                          <td colSpan={6} className="px-4 py-8 text-center text-secondary-text">{t('usage.noRecentCalls')}</td>
                         </tr>
                       )}
                     </tbody>
