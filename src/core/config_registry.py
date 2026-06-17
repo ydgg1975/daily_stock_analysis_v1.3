@@ -144,6 +144,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "label": "完整指南：AI 模型配置",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
             },
+            {
+                "label": "LiteLLM Providers（官方）",
+                "href": "https://docs.litellm.ai/docs/providers",
+            },
+            {
+                "label": "LiteLLM OpenAI-compatible（官方）",
+                "href": "https://docs.litellm.ai/docs/providers/openai_compatible",
+            },
+            {
+                "label": "LiteLLM model_list（官方）",
+                "href": "https://docs.litellm.ai/docs/proxy/configs#the-model_list-key",
+            },
         ],
         "warning_codes": ["provider_prefix_required"],
     },
@@ -204,6 +216,14 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "label": "完整指南：AI 模型配置",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#ai-模型配置",
             },
+            {
+                "label": "LiteLLM Providers（官方）",
+                "href": "https://docs.litellm.ai/docs/providers",
+            },
+            {
+                "label": "LiteLLM config（官方）",
+                "href": "https://docs.litellm.ai/docs/proxy/configs",
+            },
         ],
         "warning_codes": ["fallback_models_must_be_available"],
     },
@@ -231,6 +251,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {
                 "label": "LLM 配置指南：YAML 模式",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/LLM_CONFIG_GUIDE.md#方式三litellm-原生-yaml-配置适合专家或复杂路由",
+            },
+            {
+                "label": "LiteLLM proxy config（官方）",
+                "href": "https://docs.litellm.ai/docs/proxy/configs",
             },
         ],
         "warning_codes": ["yaml_config_overrides_channel_editor"],
@@ -263,6 +287,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {
                 "label": "LLM 服务商配置速查",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/llm-providers.md",
+            },
+            {
+                "label": "LiteLLM OpenAI-compatible（官方）",
+                "href": "https://docs.litellm.ai/docs/providers/openai_compatible",
             },
         ],
         "warning_codes": ["channels_override_legacy_keys"],
@@ -482,7 +510,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ALPHASIFT_ENABLED": {
         "title": "AlphaSift Screening",
-        "description": "Enable the optional AlphaSift stock screening tab. Disabled by default.",
+        "description": "Enable the built-in AlphaSift stock screening tab. Disabled by default. This switch only affects the AlphaSift screening path; it does not migrate, sanitize, or clear existing LLM/runtime fields in `.env`.",
         "category": "data_source",
         "data_type": "boolean",
         "ui_control": "switch",
@@ -500,6 +528,18 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "docs": [
             {
+                "label": "LiteLLM Providers（官方）",
+                "href": "https://docs.litellm.ai/docs/providers",
+            },
+            {
+                "label": "LiteLLM OpenAI-compatible（官方）",
+                "href": "https://docs.litellm.ai/docs/providers/openai_compatible",
+            },
+            {
+                "label": "OpenAI 请求与鉴权（官方）",
+                "href": "https://platform.openai.com/docs/api-reference/authentication",
+            },
+            {
                 "label": "AlphaSift 集成说明",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/alphasift-integration.md",
             },
@@ -507,7 +547,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ALPHASIFT_INSTALL_SPEC": {
         "title": "AlphaSift Install Spec",
-        "description": "Pinned AlphaSift pip install spec used by source deployments and desktop packaging.",
+        "description": "Pinned AlphaSift pip source used for explicit repair installs and source verification. It is not used for normal runtime calls after startup dependency installation; runtime compatibility is built from DSA's resolved LLM/runtime context.",
         "category": "data_source",
         "data_type": "string",
         "ui_control": "password",
@@ -523,6 +563,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             f"ALPHASIFT_INSTALL_SPEC={DEFAULT_ALPHASIFT_INSTALL_SPEC}",
         ],
         "docs": [
+            {
+                "label": "requirements.txt（版本与依赖边界）",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/requirements.txt",
+            },
             {
                 "label": "AlphaSift 集成说明",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/alphasift-integration.md",
@@ -1538,6 +1582,81 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             },
         ],
         "warning_codes": ["not_webhook_delivery", "restart_required"],
+    },
+    "FEISHU_CHAT_ID": {
+        "title": "Feishu Chat ID",
+        "description": "Target chat_id (group mode, oc_xxx) or open_id (P2P mode, ou_xxx) for Feishu App Bot notification delivery. Requires FEISHU_APP_ID + FEISHU_APP_SECRET.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": None,
+        "options": [],
+        "validation": {},
+        "display_order": 18,
+        "help_key": "settings.notification.FEISHU_CHAT_ID",
+        "examples": [
+            "FEISHU_CHAT_ID=oc_xxxxxxxxxxxxx",
+            "FEISHU_CHAT_ID=ou_xxxxxxxxxxxxx",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：飞书通知配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#飞书",
+            },
+        ],
+    },
+    "FEISHU_RECEIVE_ID_TYPE": {
+        "title": "Feishu Receive ID Type",
+        "description": "Type of FEISHU_CHAT_ID: 'chat_id' for group chat, 'open_id' for P2P private message.",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "chat_id",
+        "options": [{"label": "chat_id (群聊)", "value": "chat_id"}, {"label": "open_id (私聊)", "value": "open_id"}],
+        "validation": {"enum": ["chat_id", "open_id"]},
+        "display_order": 19,
+        "help_key": "settings.notification.FEISHU_RECEIVE_ID_TYPE",
+        "examples": [
+            "FEISHU_RECEIVE_ID_TYPE=chat_id",
+            "FEISHU_RECEIVE_ID_TYPE=open_id",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：飞书通知配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#飞书",
+            },
+        ],
+    },
+    "FEISHU_DOMAIN": {
+        "title": "Feishu Domain",
+        "description": "Feishu API domain: 'feishu' (feishu.cn for mainland China) or 'lark' (larksuite.com for international).",
+        "category": "notification",
+        "data_type": "string",
+        "ui_control": "select",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "feishu",
+        "options": [{"label": "feishu (飞书国内)", "value": "feishu"}, {"label": "lark (国际版)", "value": "lark"}],
+        "validation": {"enum": ["feishu", "lark"]},
+        "display_order": 20,
+        "help_key": "settings.notification.FEISHU_DOMAIN",
+        "examples": [
+            "FEISHU_DOMAIN=feishu",
+            "FEISHU_DOMAIN=lark",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：飞书通知配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#飞书",
+            },
+        ],
     },
     # ------------------------------------------------------------------
     # Notification – Telegram
@@ -2874,6 +2993,32 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "warning_codes": [],
     },
+    "DAILY_MARKET_CONTEXT_ENABLED": {
+        "title": "Daily Market Context Enabled",
+        "description": "Inject daily market context into stock-analysis prompts and apply conservative decision guardrails.",
+        "category": "system",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "true",
+        "options": [],
+        "validation": {},
+        "display_order": 47,
+        "help_key": "settings.system.market_review",
+        "examples": [
+            "DAILY_MARKET_CONTEXT_ENABLED=true",
+            "DAILY_MARKET_CONTEXT_ENABLED=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
+    },
     "MARKET_REVIEW_REGION": {
         "title": "Market Review Region",
         "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), or both (all markets).",
@@ -2886,7 +3031,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "cn",
         "options": ["cn", "hk", "us", "both"],
         "validation": {"enum": ["cn", "hk", "us", "both"]},
-        "display_order": 47,
+        "display_order": 48,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_REGION=cn",
@@ -2915,7 +3060,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"label": "Red Up / Green Down", "value": "red_up"},
         ],
         "validation": {"enum": ["green_up", "red_up"]},
-        "display_order": 48,
+        "display_order": 49,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_COLOR_SCHEME=green_up",
