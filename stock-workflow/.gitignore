@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/sim_state.json
+data/sim_trades.json
+data/daily_run.log
+data/candidates.json
+data/cache/
+*.xlsx
+*.csv
+miaoxiang/

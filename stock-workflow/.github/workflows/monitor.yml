@@ -1,0 +1,84 @@
+name: 7x24全自动交易系统
+
+on:
+  schedule:
+    - cron: '30,35,40,45,50,55 1 * * *'
+    - cron: '*/5 2-6 * * *'
+    - cron: '0,5 7 * * *'
+    - cron: '15 1 * * *'
+    - cron: '10 7 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, monitor, full, review]
+
+jobs:
+  trading:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装依赖
+        run: pip install -q requests pyyaml pandas numpy httpx openpyxl
+
+      - name: 判断运行模式
+        id: mode
+        run: |
+          HOUR=$(date -u +%H)
+          MINUTE=$(date -u +%M)
+          MODE="${{ inputs.mode }}"
+          if [ "$MODE" = "monitor" ]; then echo "action=monitor" >> $GITHUB_OUTPUT
+          elif [ "$MODE" = "full" ]; then echo "action=full" >> $GITHUB_OUTPUT
+          elif [ "$MODE" = "review" ]; then echo "action=review" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "01" ] && [ "$MINUTE" = "15" ]; then echo "action=full" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "05" ] && [ "$MINUTE" = "05" ]; then echo "action=full" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "07" ] && [ "$MINUTE" = "10" ]; then echo "action=review" >> $GITHUB_OUTPUT
+          else echo "action=monitor" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 交易日检查
+        id: trading
+        run: python -c "from datetime import datetime; wd=datetime.now().weekday(); exit(0 if wd<5 else 0)" && echo "ok=1" >> $GITHUB_OUTPUT || echo "ok=0" >> $GITHUB_OUTPUT
+
+      - name: 盘中实时监控
+        if: steps.trading.outputs.ok == '1' && steps.mode.outputs.action == 'monitor'
+        run: python monitor_continuous.py
+
+      - name: 九步闭环全流程
+        if: steps.trading.outputs.ok == '1' && steps.mode.outputs.action == 'full'
+        run: python daily_run.py --now
+
+      - name: 盘后复盘
+        if: steps.trading.outputs.ok == '1' && steps.mode.outputs.action == 'review'
+        run: |
+          python -c "
+          import sys; sys.path.insert(0,'.')
+          from steps.review import Reviewer
+          rv=Reviewer(); report=rv.review(period='daily')
+          print(rv.format_report(report)); rv.save_report(report)
+          "
+
+      - name: 上传候选池
+        if: always() && steps.trading.outputs.ok == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidates-${{ github.run_id }}
+          path: data/candidates.json
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: 上传持仓
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-${{ github.run_id }}
+          path: data/sim_state.json
+          retention-days: 1
+          if-no-files-found: ignore
