@@ -103,12 +103,12 @@ def _payload(**overrides):
     return payload
 
 
-def _seed_bars(db: DatabaseManager) -> None:
+def _seed_bars(db: DatabaseManager, *, code: str = "600519") -> None:
     with db.session_scope() as session:
-        session.add(StockDaily(code="600519", date=date(2024, 1, 2), open=100, high=101, low=99, close=100))
-        session.add(StockDaily(code="600519", date=date(2024, 1, 3), open=103, high=104, low=102, close=103))
-        session.add(StockDaily(code="600519", date=date(2024, 1, 4), open=104, high=105, low=103, close=104))
-        session.add(StockDaily(code="600519", date=date(2024, 1, 5), open=105, high=106, low=104, close=105))
+        session.add(StockDaily(code=code, date=date(2024, 1, 2), open=100, high=101, low=99, close=100))
+        session.add(StockDaily(code=code, date=date(2024, 1, 3), open=103, high=104, low=102, close=103))
+        session.add(StockDaily(code=code, date=date(2024, 1, 4), open=104, high=105, low=103, close=104))
+        session.add(StockDaily(code=code, date=date(2024, 1, 5), open=105, high=106, low=104, close=105))
 
 
 def test_outcome_run_list_stats_signal_outcomes_and_feedback(client_and_db) -> None:
@@ -237,3 +237,41 @@ def test_outcome_run_retries_transient_unable_by_default(client_and_db) -> None:
     assert second_data["skipped"] == 0
     assert second_data["items"][0]["eval_status"] == "completed"
     assert second_data["items"][0]["stock_return_pct"] == 5.0
+
+
+def test_outcome_run_uses_hk_alias_stock_code_filter(client_and_db) -> None:
+    client, db = client_and_db
+    created_resp = client.post(
+        "/api/v1/decision-signals",
+        json=_payload(
+            stock_code="00700",
+            stock_name="Tencent",
+            market="hk",
+            horizon="1d",
+            trace_id="trace-outcome-api-hk",
+        ),
+    )
+    assert created_resp.status_code == 200, created_resp.text
+    signal_id = created_resp.json()["item"]["id"]
+    assert created_resp.json()["item"]["stock_code"] == "HK00700"
+    _seed_bars(db, code="HK00700")
+
+    run_resp = client.post(
+        "/api/v1/decision-signals/outcomes/run",
+        json={"stock_code": "00700", "horizons": ["1d"]},
+    )
+    assert run_resp.status_code == 200, run_resp.text
+    run_data = run_resp.json()
+    assert run_data["evaluated"] == 1
+    assert run_data["created"] == 1
+    assert run_data["items"][0]["signal_id"] == signal_id
+
+    force_resp = client.post(
+        "/api/v1/decision-signals/outcomes/run",
+        json={"stock_code": "00700", "horizons": ["1d"], "force": True},
+    )
+    assert force_resp.status_code == 200, force_resp.text
+    force_data = force_resp.json()
+    assert force_data["evaluated"] == 1
+    assert force_data["updated"] == 1
+    assert force_data["items"][0]["signal_id"] == signal_id

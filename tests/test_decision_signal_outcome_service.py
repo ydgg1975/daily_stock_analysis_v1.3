@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
 from src.config import Config
 from src.services.decision_signal_outcome_service import DecisionSignalOutcomeService
-from src.storage import DatabaseManager, DecisionSignalRecord, StockDaily
+from src.storage import DatabaseManager, DecisionSignalOutcomeRecord, DecisionSignalRecord, StockDaily
 
 
 @pytest.fixture()
@@ -37,6 +37,7 @@ def _add_signal(
     db: DatabaseManager,
     *,
     code: str = "600519",
+    market: str = "cn",
     action: str = "buy",
     horizon: str = "3d",
     session_date: str = "2024-01-02",
@@ -46,10 +47,10 @@ def _add_signal(
         row = DecisionSignalRecord(
             stock_code=code,
             stock_name="贵州茅台",
-            market="cn",
+            market=market,
             source_type="analysis",
             source_report_id=1001,
-            trace_id=f"trace-{action}-{horizon}-{session_date}",
+            trace_id=f"trace-{market}-{code}-{action}-{horizon}-{session_date}",
             market_phase="postmarket",
             trigger_source="api",
             action=action,
@@ -90,6 +91,23 @@ def _seed_bars(
                     close=close,
                 )
             )
+
+
+def _set_outcome_updated_at(
+    db: DatabaseManager,
+    *,
+    signal_id: int,
+    horizon: str,
+    updated_at: datetime,
+) -> None:
+    with db.session_scope() as session:
+        row = (
+            session.query(DecisionSignalOutcomeRecord)
+            .filter_by(signal_id=signal_id, horizon=horizon)
+            .one()
+        )
+        row.created_at = updated_at
+        row.updated_at = updated_at
 
 
 def test_run_outcomes_evaluates_supported_horizons_and_stats(isolated_db) -> None:
@@ -137,6 +155,23 @@ def test_stats_default_statuses_exclude_archived(isolated_db) -> None:
     assert default_stats["hit"] == 4
     assert archived_stats["statuses"] == ["archived"]
     assert archived_stats["total"] == 1
+
+
+def test_stock_code_filter_uses_hk_aliases_without_widening_market_filter(isolated_db) -> None:
+    hk_id = _add_signal(isolated_db, code="HK00700", market="hk", horizon="1d")
+    cn_id = _add_signal(isolated_db, code="00700", market="cn", horizon="1d")
+    _seed_bars(isolated_db, code="HK00700", closes=[104.0])
+    _seed_bars(isolated_db, code="00700", closes=[102.0])
+    service = DecisionSignalOutcomeService(db_manager=isolated_db)
+
+    broad = service.run_outcomes(stock_code="00700", horizons=["1d"], limit=10)
+    forced = service.run_outcomes(stock_code="00700", horizons=["1d"], force=True, limit=10)
+    hk_only = service.run_outcomes(stock_code="00700", market="hk", horizons=["1d"], force=True, limit=10)
+
+    assert {item["signal_id"] for item in broad["items"]} == {hk_id, cn_id}
+    assert {item["signal_id"] for item in forced["items"]} == {hk_id, cn_id}
+    assert [item["signal_id"] for item in hk_only["items"]] == [hk_id]
+    assert hk_only["evaluated"] == 1
 
 
 def test_not_up_uses_defensive_direction_not_down_direction(isolated_db) -> None:
@@ -281,3 +316,99 @@ def test_batch_prioritizes_missing_before_retryable_unable(isolated_db) -> None:
     assert second_batch["updated"] == 1
     assert second_batch["items"][0]["signal_id"] == newer_retryable_id
     assert second_batch["items"][0]["unable_reason"] == "insufficient_forward_bars"
+
+
+def test_batch_rotates_retryable_unable_by_oldest_retry_timestamp(isolated_db) -> None:
+    oldest_retryable_id = _add_signal(
+        isolated_db,
+        code="000030",
+        action="buy",
+        horizon="3d",
+        session_date="2024-01-10",
+    )
+    newer_retryable_id = _add_signal(
+        isolated_db,
+        code="000031",
+        action="buy",
+        horizon="3d",
+        session_date="2024-01-10",
+    )
+    for code in ("000030", "000031"):
+        with isolated_db.session_scope() as session:
+            session.add(StockDaily(code=code, date=date(2024, 1, 10), close=100.0, high=101.0, low=99.0))
+            session.add(StockDaily(code=code, date=date(2024, 1, 11), close=103.0, high=104.0, low=102.0))
+    service = DecisionSignalOutcomeService(db_manager=isolated_db)
+    service.run_outcomes(signal_id=oldest_retryable_id)
+    service.run_outcomes(signal_id=newer_retryable_id)
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=oldest_retryable_id,
+        horizon="3d",
+        updated_at=datetime(2024, 1, 1, 12, 0, 0),
+    )
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=newer_retryable_id,
+        horizon="3d",
+        updated_at=datetime(2024, 1, 2, 12, 0, 0),
+    )
+
+    first_batch = service.run_outcomes(limit=1)
+    second_batch = service.run_outcomes(limit=1)
+
+    assert first_batch["updated"] == 1
+    assert first_batch["items"][0]["signal_id"] == oldest_retryable_id
+    assert second_batch["updated"] == 1
+    assert second_batch["items"][0]["signal_id"] == newer_retryable_id
+
+
+def test_batch_uses_oldest_retryable_horizon_timestamp_for_signal_order(isolated_db) -> None:
+    multi_horizon_id = _add_signal(
+        isolated_db,
+        code="000040",
+        action="buy",
+        horizon="1d",
+        session_date="2024-01-10",
+    )
+    newer_retryable_id = _add_signal(
+        isolated_db,
+        code="000041",
+        action="buy",
+        horizon="1d",
+        session_date="2024-01-10",
+    )
+    for code in ("000040", "000041"):
+        with isolated_db.session_scope() as session:
+            session.add(StockDaily(code=code, date=date(2024, 1, 10), close=100.0, high=101.0, low=99.0))
+    service = DecisionSignalOutcomeService(db_manager=isolated_db)
+    service.run_outcomes(signal_id=multi_horizon_id, horizons=["1d", "3d"])
+    service.run_outcomes(signal_id=newer_retryable_id, horizons=["1d", "3d"])
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=multi_horizon_id,
+        horizon="1d",
+        updated_at=datetime(2024, 1, 5, 12, 0, 0),
+    )
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=multi_horizon_id,
+        horizon="3d",
+        updated_at=datetime(2024, 1, 1, 12, 0, 0),
+    )
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=newer_retryable_id,
+        horizon="1d",
+        updated_at=datetime(2024, 1, 3, 12, 0, 0),
+    )
+    _set_outcome_updated_at(
+        isolated_db,
+        signal_id=newer_retryable_id,
+        horizon="3d",
+        updated_at=datetime(2024, 1, 4, 12, 0, 0),
+    )
+
+    result = service.run_outcomes(horizons=["1d", "3d"], limit=1)
+
+    assert result["updated"] == 2
+    assert {item["signal_id"] for item in result["items"]} == {multi_horizon_id}

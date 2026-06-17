@@ -26,7 +26,7 @@ class DecisionSignalOutcomeRepository:
         self,
         *,
         signal_id: Optional[int] = None,
-        stock_code: Optional[str] = None,
+        stock_codes: Optional[List[str]] = None,
         market: Optional[str] = None,
         action: Optional[str] = None,
         source_type: Optional[str] = None,
@@ -39,8 +39,8 @@ class DecisionSignalOutcomeRepository:
         conditions = []
         if signal_id is not None:
             conditions.append(DecisionSignalRecord.id == signal_id)
-        if stock_code:
-            conditions.append(DecisionSignalRecord.stock_code == stock_code)
+        if stock_codes:
+            conditions.append(DecisionSignalRecord.stock_code.in_(stock_codes))
         if market:
             conditions.append(DecisionSignalRecord.market == market)
         if action:

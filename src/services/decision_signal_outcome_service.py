@@ -88,11 +88,7 @@ class DecisionSignalOutcomeService:
         action_norm = DecisionSignalService._normalize_optional_action(action)
         source_type_norm = self._normalize_optional_enum(source_type, SOURCE_TYPES, "source_type")
         status_norm = self._normalize_optional_enum(status, SIGNAL_STATUSES, "status")
-        stock_code_norm = (
-            DecisionSignalService._normalize_stock_code(stock_code, market=market_norm)
-            if stock_code
-            else None
-        )
+        stock_codes_norm = DecisionSignalService._stock_filter_codes(stock_code, market=market_norm)
         horizons_norm = self._normalize_horizons(horizons)
         safe_limit = max(1, min(int(limit), 500))
 
@@ -102,7 +98,7 @@ class DecisionSignalOutcomeService:
 
         if signal_id_norm is None and not force:
             signals = self._list_actionable_candidate_signals(
-                stock_code=stock_code_norm,
+                stock_codes=stock_codes_norm,
                 market=market_norm,
                 action=action_norm,
                 source_type=source_type_norm,
@@ -113,7 +109,7 @@ class DecisionSignalOutcomeService:
         else:
             signals = self.repo.list_candidate_signals(
                 signal_id=signal_id_norm,
-                stock_code=stock_code_norm,
+                stock_codes=stock_codes_norm,
                 market=market_norm,
                 action=action_norm,
                 source_type=source_type_norm,
@@ -160,7 +156,7 @@ class DecisionSignalOutcomeService:
     def _list_actionable_candidate_signals(
         self,
         *,
-        stock_code: Optional[str],
+        stock_codes: Optional[List[str]],
         market: Optional[str],
         action: Optional[str],
         source_type: Optional[str],
@@ -170,13 +166,13 @@ class DecisionSignalOutcomeService:
     ) -> List[DecisionSignalRecord]:
         selected: List[DecisionSignalRecord] = []
         selected_ids = set()
-        retryable_reserve: List[DecisionSignalRecord] = []
+        retryable_reserve: List[Tuple[datetime, int, DecisionSignalRecord]] = []
         retryable_ids = set()
         offset = 0
 
         while len(selected) < limit:
             page = self.repo.list_candidate_signals(
-                stock_code=stock_code,
+                stock_codes=stock_codes,
                 market=market,
                 action=action,
                 source_type=source_type,
@@ -197,7 +193,7 @@ class DecisionSignalOutcomeService:
             }
 
             for signal in page:
-                actionability = self._candidate_actionability(
+                actionability, retryable_at = self._candidate_actionability(
                     signal,
                     requested_horizons=requested_horizons,
                     outcomes_by_key=outcomes_by_key,
@@ -210,7 +206,7 @@ class DecisionSignalOutcomeService:
                     if len(selected) >= limit:
                         break
                 elif actionability == "retryable" and signal_id not in retryable_ids:
-                    retryable_reserve.append(signal)
+                    retryable_reserve.append((retryable_at, signal_id, signal))
                     retryable_ids.add(signal_id)
 
             offset += len(page)
@@ -218,7 +214,8 @@ class DecisionSignalOutcomeService:
                 break
 
         if len(selected) < limit:
-            for signal in retryable_reserve:
+            retryable_reserve.sort(key=lambda item: (item[0], item[1]))
+            for _retryable_at, signal_id, signal in retryable_reserve:
                 signal_id = int(signal.id)
                 if signal_id in selected_ids:
                     continue
@@ -235,16 +232,22 @@ class DecisionSignalOutcomeService:
         *,
         requested_horizons: Optional[List[str]],
         outcomes_by_key: Dict[Tuple[int, str], DecisionSignalOutcomeRecord],
-    ) -> Optional[str]:
-        has_retryable = False
+    ) -> Tuple[Optional[str], Optional[datetime]]:
+        retryable_times: List[datetime] = []
         signal_id = int(signal.id)
         for horizon in self._horizons_for_signal(signal, requested_horizons):
             existing = outcomes_by_key.get((signal_id, horizon))
             if existing is None:
-                return "missing"
+                return "missing", None
             if self._should_recompute_outcome(existing):
-                has_retryable = True
-        return "retryable" if has_retryable else None
+                retryable_times.append(self._outcome_retryable_sort_time(existing))
+        if retryable_times:
+            return "retryable", min(retryable_times)
+        return None, None
+
+    @staticmethod
+    def _outcome_retryable_sort_time(row: DecisionSignalOutcomeRecord) -> datetime:
+        return row.updated_at or row.created_at or datetime.min
 
     @staticmethod
     def _should_recompute_outcome(row: DecisionSignalOutcomeRecord) -> bool:
