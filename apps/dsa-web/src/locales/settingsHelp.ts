@@ -13,6 +13,26 @@ export interface SettingsHelpContent {
 type SettingsHelpMap = Record<string, SettingsHelpContent>;
 
 const settingsHelpZhCN: SettingsHelpMap = {
+  'settings.system.PRE_TRADE_REVIEW_ENABLED': {
+    title: '启用盘前审查',
+    summary: '可选、默认关闭。开启后为每条建议附加一个资本规模感知的 advisory 结论（approve / approve_with_concerns / reject），仅作为附加字段，绝不改写 BUY/SELL 结论，绝不阻断主流程。',
+    usage: '默认关闭。开启需同时配置 PRE_TRADE_REVIEW_API_KEY。失败/超时统一降级为 review_unavailable。',
+  },
+  'settings.system.PRE_TRADE_REVIEW_ENDPOINT': {
+    title: '盘前审查 Endpoint',
+    summary: '盘前审查服务的 HTTP 端点，默认指向 invinoveritas 公开 API（https://api.babyblueviper.com/review）。',
+    usage: '一般保持默认；任何接受相同 POST {artifact, artifact_type, context?, sign?} 契约并返回 {verdict, confidence?, issues?, proof?} 的端点都可替换（自建或代理）。',
+  },
+  'settings.system.PRE_TRADE_REVIEW_API_KEY': {
+    title: '盘前审查 API Key',
+    summary: '盘前审查服务的 Bearer API Key，仅在 PRE_TRADE_REVIEW_ENABLED=true 时需要。',
+    usage: '敏感字段，仅在开启该功能时填写。',
+  },
+  'settings.system.PRE_TRADE_REVIEW_TIMEOUT': {
+    title: '盘前审查超时（秒）',
+    summary: 'advisory 调用的短超时，默认 8 秒。刻意保持较小，确保审查永不拖慢分析流水线。',
+    usage: '失败/超时统一降级为 review_unavailable，主流程继续运行。',
+  },
   'settings.base.STOCK_LIST': {
     title: '自选股列表',
     summary: '配置需要分析的股票代码列表，是手动分析、定时任务和通知报告的基础输入。',
@@ -1047,6 +1067,26 @@ const settingsHelpZhCN: SettingsHelpMap = {
 };
 
 const settingsHelpEnUS: SettingsHelpMap = {
+  'settings.system.PRE_TRADE_REVIEW_ENABLED': {
+    title: 'Enable Pre-Trade Review',
+    summary: 'Optional, default-off. Appends a capital-aware advisory verdict (approve / approve_with_concerns / reject) to each recommendation as an additional field. Never overrides the BUY/SELL conclusion and never blocks the pipeline.',
+    usage: 'Off by default. When enabled, also set PRE_TRADE_REVIEW_API_KEY. Any failure/timeout degrades to review_unavailable.',
+  },
+  'settings.system.PRE_TRADE_REVIEW_ENDPOINT': {
+    title: 'Pre-Trade Review Endpoint',
+    summary: 'HTTP endpoint of the pre-trade review service. Defaults to the invinoveritas public API at https://api.babyblueviper.com/review.',
+    usage: 'Usually left at the default; any endpoint honoring the same POST {artifact, artifact_type, context?, sign?} contract and returning {verdict, confidence?, issues?, proof?} can be substituted (self-hosted or proxied).',
+  },
+  'settings.system.PRE_TRADE_REVIEW_API_KEY': {
+    title: 'Pre-Trade Review API Key',
+    summary: 'Bearer API key for the pre-trade review service. Required only when PRE_TRADE_REVIEW_ENABLED=true.',
+    usage: 'Sensitive field; set only when the feature is enabled.',
+  },
+  'settings.system.PRE_TRADE_REVIEW_TIMEOUT': {
+    title: 'Pre-Trade Review Timeout (Seconds)',
+    summary: 'Short request timeout for the advisory call (default 8s). Kept small on purpose so the advisory never stalls the analysis pipeline.',
+    usage: 'On any failure/timeout the result degrades to review_unavailable and the pipeline continues.',
+  },
   'settings.base.STOCK_LIST': {
     title: 'Watchlist',
     summary: 'Defines the stock codes used by analysis jobs and notification reports.',

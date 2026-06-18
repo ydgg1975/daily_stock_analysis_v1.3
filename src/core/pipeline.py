@@ -55,6 +55,7 @@ from src.services.daily_market_context import (
     format_daily_market_context_prompt_section,
 )
 from src.services.social_sentiment_service import SocialSentimentService
+from src.services.pretrade_review_service import PreTradeReviewService
 from src.services.analysis_context_builder import (
     AnalysisContextBuilder,
     PipelineAnalysisArtifacts,
@@ -206,6 +207,84 @@ class StockAnalysisPipeline:
                 exc_info=True,
             )
             self.social_sentiment_service = None
+
+        # 初始化盘前审查服务（可选，默认关闭；仅 advisory，绝不阻断主分析流程）。
+        # 关键契约：当 PRE_TRADE_REVIEW_ENABLED=true 时，即使未配置 API key 也要构造 service —
+        # 此时 service.is_available=False 且 review() 返回 not_configured，使“已开启但未配置”能被
+        # 显式降级为 review_unavailable，而不是与“功能关闭”混淆（功能关闭时不挂 pretrade_review 字段）。
+        self._pretrade_review_enabled = bool(getattr(self.config, "pretrade_review_enabled", False))
+        self.pretrade_review_service = None
+        if self._pretrade_review_enabled:
+            try:
+                self.pretrade_review_service = PreTradeReviewService(
+                    api_key=getattr(self.config, "pretrade_review_api_key", None),
+                    endpoint=getattr(self.config, "pretrade_review_endpoint",
+                                     "https://api.babyblueviper.com/review"),
+                    timeout=getattr(self.config, "pretrade_review_timeout", 8),
+                )
+                if self.pretrade_review_service.is_available:
+                    logger.info("Pre-trade review enabled (advisory-only, default-off feature)")
+                else:
+                    logger.warning("盘前审查已开启但未配置 PRE_TRADE_REVIEW_API_KEY，将降级为 review_unavailable(not_configured)")
+            except Exception as exc:
+                logger.warning("盘前审查服务初始化失败，将降级为 review_unavailable: %s", exc, exc_info=True)
+                self.pretrade_review_service = None
+
+    def _apply_pretrade_review(self, result, code, stock_name, report_type) -> None:
+        """Optional, advisory-only pre-trade review. Shared by BOTH the standard analysis path and
+        the agent path so an enabled config yields the same `result.pretrade_review` contract
+        regardless of entry point.
+
+        Contract:
+          - feature OFF (PRE_TRADE_REVIEW_ENABLED=false) → no `pretrade_review` attached (zero impact).
+          - feature ON, key missing or service init failed → attach
+            {"status":"review_unavailable","reason":"not_configured"} (distinguishable from OFF).
+          - feature ON, key present → attach the service's result: status=ok with the verdict, or
+            review_unavailable with a reason on any failure.
+        Attaches additive metadata ONLY — never overrides the BUY/SELL conclusion — and NEVER raises."""
+        if not result or not getattr(self, "_pretrade_review_enabled", False):
+            return
+        try:
+            service = getattr(self, "pretrade_review_service", None)
+            if service is None:
+                # enabled but the service failed to initialize → surface it, don't silently drop
+                result.pretrade_review = {"status": "review_unavailable", "reason": "not_configured"}
+                return
+            decision = (
+                getattr(result, "decision_action", None)
+                or getattr(result, "operation_advice", None)
+                or getattr(result, "recommendation", None)
+                or "review proposed action"
+            )
+            price = getattr(result, "current_price", None)
+            report_type_value = getattr(report_type, "value", str(report_type))
+            action_str = f"{stock_name} ({code}): {decision}"
+            if price is not None:
+                action_str += f"; current price {price}"
+            # review() returns not_configured when the key is missing, review_unavailable on any
+            # failure, or status=ok on success — so the enabled path always yields a consistent field.
+            advisory = service.review(
+                action=action_str,
+                context=f"report_type={report_type_value}; source=daily_stock_analysis",
+            )
+            result.pretrade_review = advisory
+            if advisory.get("status") == "ok":
+                logger.info(
+                    "[pretrade_review] %s verdict=%s confidence=%s",
+                    code, advisory.get("verdict"), advisory.get("confidence"),
+                )
+            else:
+                logger.info(
+                    "[pretrade_review] %s review_unavailable (%s)",
+                    code, advisory.get("reason"),
+                )
+        except Exception as exc:
+            # the advisory layer must never break the pipeline
+            logger.warning("[pretrade_review] skipped for %s: %s", code, exc)
+            try:
+                result.pretrade_review = {"status": "review_unavailable", "reason": "exception"}
+            except Exception:
+                pass
 
     def _emit_progress(self, progress: int, message: str) -> None:
         """Best-effort bridge from pipeline stages to task SSE progress."""
@@ -693,6 +772,10 @@ class StockAnalysisPipeline:
                     report_type=report_type.value,
                     previous_operation_advice=action_source_advice,
                 )
+
+            # Step 7.8: 盘前审查（可选，advisory-only）。普通分析路径与 agent 路径共用同一 helper，
+            # 确保开启后两条入口返回结构一致（见 _apply_pretrade_review）。
+            self._apply_pretrade_review(result, code, stock_name, report_type)
 
             # Step 8: 保存分析历史记录
             if result and result.success:
@@ -1251,6 +1334,10 @@ class StockAnalysisPipeline:
                 )
 
             resolved_stock_name = result.name if result and result.name else stock_name
+
+            # 盘前审查（可选，advisory-only）— 与标准分析路径共用同一 helper，确保 agent 路径
+            # 在开启配置时同样附加 result.pretrade_review（修复 agent 路径静默失效的契约不一致）。
+            self._apply_pretrade_review(result, code, resolved_stock_name, report_type)
 
             # 保存新闻情报到数据库（Agent 工具结果仅用于 LLM 上下文，未持久化，Fixes #396）
             # 使用 search_stock_news（与 Agent 工具调用逻辑一致），仅 1 次 API 调用，无额外延迟

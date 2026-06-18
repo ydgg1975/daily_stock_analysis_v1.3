@@ -677,5 +677,43 @@ class TestMarketReviewFieldsRegistered(unittest.TestCase):
         self.assertIn("DAILY_MARKET_CONTEXT_ENABLED", field_keys)
 
 
+class TestPreTradeReviewFieldsRegistered(unittest.TestCase):
+    """The optional pre-trade review config keys must be registered."""
+
+    _KEYS = (
+        "PRE_TRADE_REVIEW_ENABLED",
+        "PRE_TRADE_REVIEW_ENDPOINT",
+        "PRE_TRADE_REVIEW_API_KEY",
+        "PRE_TRADE_REVIEW_TIMEOUT",
+    )
+
+    def test_field_definitions_exist_under_system(self):
+        for key in self._KEYS:
+            field = get_field_definition(key)
+            self.assertEqual(field["category"], "system", f"{key} category")
+            self.assertNotEqual(
+                field["display_order"], 9000,
+                f"{key} should be explicitly registered, not inferred",
+            )
+
+    def test_enabled_defaults_off(self):
+        field = get_field_definition("PRE_TRADE_REVIEW_ENABLED")
+        self.assertEqual(field["data_type"], "boolean")
+        self.assertEqual(field["default_value"], "false")
+
+    def test_api_key_is_sensitive(self):
+        field = get_field_definition("PRE_TRADE_REVIEW_API_KEY")
+        self.assertTrue(field["is_sensitive"])
+        self.assertEqual(field["ui_control"], "password")
+
+    def test_schema_response_includes_pretrade_review(self):
+        schema = build_schema_response()
+        system_cat = next((c for c in schema["categories"] if c["category"] == "system"), None)
+        self.assertIsNotNone(system_cat, "system category missing")
+        field_keys = {f["key"] for f in system_cat["fields"]}
+        for key in self._KEYS:
+            self.assertIn(key, field_keys)
+
+
 if __name__ == "__main__":
     unittest.main()

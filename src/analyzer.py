@@ -1567,9 +1567,12 @@ class AnalysisResult:
     # ========== 基本面上下文（仅运行时，用于通知拼装；不持久化到 to_dict）==========
     fundamental_context: Optional[Dict[str, Any]] = None
 
+    # ========== 盘前审查（可选，advisory-only；默认 None=未启用，启用时贯通 to_dict/历史/API）==========
+    pretrade_review: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
-        return {
+        data = {
             'code': self.code,
             'name': self.name,
             'sentiment_score': self.sentiment_score,
@@ -1606,6 +1609,11 @@ class AnalysisResult:
             'change_pct': self.change_pct,
             'model_used': self.model_used,
         }
+        # 盘前审查（可选）：仅在启用并产生 advisory 时附加该键，保持默认关闭时输出零变化。
+        # 贯通到历史 raw_result 与 API 响应（二者都经由 to_dict）。
+        if self.pretrade_review is not None:
+            data['pretrade_review'] = self.pretrade_review
+        return data
 
     def get_core_conclusion(self) -> str:
         """获取核心结论（一句话）"""

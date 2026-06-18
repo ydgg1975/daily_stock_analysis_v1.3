@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 - [修复] AlphaSift 热点题材刷新在 EastMoney 瞬断且无缓存时返回友好空态，并让桌面更新保留 AlphaSift 热点缓存。
+- [新功能] #1659 新增可选的盘前审查（Pre-Trade Review，默认关闭）：开启后在 BUY/SELL 候选结论生成之后、报告输出之前，向独立封装的 `PreTradeReviewService` 请求一个资本规模感知的 advisory 结论（approve / approve_with_concerns / reject）+ 问题列表 + 可独立验证的签名 proof，作为附加 `pretrade_review` 字段挂在结果上并贯通 `to_dict()` / 历史 raw_result / API 响应，绝不改写 BUY/SELL 结论。新增配置 `PRE_TRADE_REVIEW_ENABLED`（默认 false）/`PRE_TRADE_REVIEW_ENDPOINT`/`PRE_TRADE_REVIEW_API_KEY`/`PRE_TRADE_REVIEW_TIMEOUT`，同步 `config.py`、`config_registry.py`（system 类目，API key 标记敏感）与 `.env.example`。未配置 / 超时 / 异常 / 非 2xx / 响应格式不合法 / verdict 非法统一降级为 `review_unavailable`，短超时，绝不阻断分析流水线。HTTP 细节封装在 service 内；审查逻辑收敛为共享 helper `_apply_pretrade_review`，标准分析路径与 `AGENT_MODE=true` 的 agent 路径统一调用，确保开启配置后两条入口返回结构一致。默认端点为 invinoveritas 公开 API（`api.babyblueviper.com/review`）。
 - [修复] 问股从历史报告进入后的追问会持续携带当前标的，切回或重载已有会话时可从历史消息恢复基础当前标的，并由后端阻断未明确切换时的错误股票工具调用、交易所片段和指标缩写误路由。
 - [修复] 自选股加入和删除按等价股票代码匹配港股及大小写美股变体，避免 `00700`、`HK00700`、`00700.HK` 或 `aapl`、`AAPL` 被误判为不同标的。
 - [改进] #1390 P0 为个股分析与历史/回测展示新增可选八态 `action` / `action_label` 建议动作字段，保留 `operation_advice` 自由文本和 `decision_type=buy|hold|sell` 统计口径，不新增迁移或配置项。

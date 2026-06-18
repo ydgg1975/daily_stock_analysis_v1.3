@@ -712,6 +712,14 @@ class Config:
     social_sentiment_api_key: Optional[str] = None
     social_sentiment_api_url: str = "https://api.adanos.org"
 
+    # === Pre-Trade Review (optional, advisory-only; default OFF) ===
+    # Appends a capital-aware advisory verdict (approve/approve_with_concerns/reject)
+    # to a recommendation; never overrides the BUY/SELL conclusion, never blocks the pipeline.
+    pretrade_review_enabled: bool = False
+    pretrade_review_endpoint: str = "https://api.babyblueviper.com/review"
+    pretrade_review_api_key: Optional[str] = None
+    pretrade_review_timeout: int = 8
+
     # === 新闻与分析筛选配置 ===
     news_max_age_days: int = 3   # 新闻最大时效（天）
     news_strategy_profile: str = "short"  # 新闻窗口策略档位：ultra_short/short/medium/long
@@ -1495,6 +1503,10 @@ class Config:
             searxng_public_instances_enabled=searxng_public_instances_enabled,
             social_sentiment_api_key=os.getenv('SOCIAL_SENTIMENT_API_KEY') or None,
             social_sentiment_api_url=os.getenv('SOCIAL_SENTIMENT_API_URL', 'https://api.adanos.org').rstrip('/'),
+            pretrade_review_enabled=os.getenv('PRE_TRADE_REVIEW_ENABLED', 'false').lower() == 'true',
+            pretrade_review_endpoint=os.getenv('PRE_TRADE_REVIEW_ENDPOINT', 'https://api.babyblueviper.com/review').rstrip('/'),
+            pretrade_review_api_key=os.getenv('PRE_TRADE_REVIEW_API_KEY') or None,
+            pretrade_review_timeout=parse_env_int(os.getenv('PRE_TRADE_REVIEW_TIMEOUT'), 8, field_name='PRE_TRADE_REVIEW_TIMEOUT', minimum=1),
             news_max_age_days=parse_env_int(os.getenv('NEWS_MAX_AGE_DAYS'), 3, field_name='NEWS_MAX_AGE_DAYS', minimum=1),
             news_strategy_profile=cls._parse_news_strategy_profile(
                 os.getenv('NEWS_STRATEGY_PROFILE', 'short')

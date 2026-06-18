@@ -829,6 +829,10 @@ class HistoryService:
                 current_price=raw_result.get("current_price"),
                 change_pct=raw_result.get("change_pct"),
                 model_used=raw_result.get("model_used"),
+                # carry the optional pre-trade advisory back through history restore so the rebuilt
+                # object / regenerated Markdown keep the pretrade_review field (None when the feature
+                # was off, so this is a no-op for existing records).
+                pretrade_review=raw_result.get("pretrade_review"),
             )
         except Exception as e:
             logger.error(f"Failed to rebuild AnalysisResult: {e}", exc_info=True)
