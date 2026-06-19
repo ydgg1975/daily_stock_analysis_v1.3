@@ -243,6 +243,54 @@ class TestStockIndexLoader(unittest.TestCase):
 
             self.assertEqual(load_payload.call_count, 1)
 
+    def test_resolve_index_stock_code_skips_inactive_jp_kr_entries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundled_path = Path(temp_dir) / "stocks.index.json"
+            bundled_path.write_text(
+                json.dumps(
+                    [
+                        [
+                            "005930.KS",
+                            "005930.KS",
+                            "三星电子",
+                            "samsung",
+                            "ss",
+                            [],
+                            "KR",
+                            "stock",
+                            False,
+                            100,
+                        ],
+                        [
+                            "7203.T",
+                            "7203.T",
+                            "丰田汽车",
+                            "toyota",
+                            "tyt",
+                            [],
+                            "JP",
+                            "stock",
+                            False,
+                            100,
+                        ],
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                stock_index_loader,
+                "get_remote_stock_index_cache_path",
+                return_value=Path(temp_dir) / "missing.json",
+            ), patch.object(
+                stock_index_loader,
+                "get_stock_index_candidate_paths",
+                return_value=(bundled_path,),
+            ):
+                self.assertIsNone(stock_index_loader.resolve_index_stock_code("005930"))
+                self.assertIsNone(stock_index_loader.resolve_index_stock_code("7203"))
+
 
 if __name__ == "__main__":
     unittest.main()

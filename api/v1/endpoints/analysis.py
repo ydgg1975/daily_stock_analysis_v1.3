@@ -70,12 +70,14 @@ from src.analysis_context_pack_overview import (
     extract_analysis_context_pack_overview,
     sanitize_context_snapshot_for_api,
 )
-from src.market_phase_summary import extract_market_phase_summary
-from src.core.trading_calendar import get_market_for_stock
+from src.market_phase_summary import (
+    extract_market_phase_summary,
+    rebuild_market_phase_summary_for_stock_code,
+)
+from src.services.stock_code_utils import is_code_like, resolve_index_stock_code_for_analysis
 from src.report_language import get_localized_stock_name, normalize_report_language
 from src.schemas.decision_action import build_action_fields
 from src.services.name_to_code_resolver import resolve_name_to_code
-from src.services.stock_code_utils import is_code_like
 from src.services.task_queue import (
     get_task_queue,
     DuplicateTaskError,
@@ -200,12 +202,8 @@ def _resolve_and_normalize_input(raw_value: str) -> str:
     if not text:
         return ""
 
-    indexed_code = resolve_index_stock_code(text)
-    if indexed_code:
-        return canonical_stock_code(indexed_code)
-
     if is_code_like(text):
-        return canonical_stock_code(text)
+        return resolve_index_stock_code_for_analysis(text)
 
     if _is_obviously_invalid_analysis_input(text):
         raise _invalid_analysis_input_error()
@@ -832,18 +830,10 @@ def _display_stock_code_from_index(stock_code: Any) -> str:
 
 
 def _display_market_phase_summary(stock_code: Any, context_snapshot: Any) -> Any:
-    summary = extract_market_phase_summary(context_snapshot)
-    display_code = _display_stock_code_from_index(stock_code)
-    if not display_code or display_code == str(stock_code or "").strip():
-        return summary
-
-    market = get_market_for_stock(display_code)
-    if market not in {"jp", "kr"}:
-        return summary
-
-    if not isinstance(summary, dict):
-        return summary
-    return {**summary, "market": market}
+    return rebuild_market_phase_summary_for_stock_code(
+        _display_stock_code_from_index(stock_code),
+        context_snapshot,
+    )
 
 
 def _prepare_report_for_task_enrichment(

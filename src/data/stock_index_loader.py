@@ -138,6 +138,8 @@ def _build_stock_code_lookup(raw_items: list) -> Dict[str, str]:
             continue
         if not _is_jp_kr_index_code(canonical_code):
             continue
+        if len(item) > 8 and item[8] is False:
+            continue
 
         _add_code_lookup(exact_lookup, canonical_code, canonical_code)
         _add_code_lookup(exact_lookup, display_code, canonical_code)

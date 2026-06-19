@@ -226,6 +226,7 @@ class AnalysisHistoryTestCase(unittest.TestCase):
             "warnings": ["legacy_snapshot"],
         }
         expected_phase_summary = {**persisted_phase_summary, "market": "kr"}
+        expected_phase_summary["minutes_to_open"] = None
 
         saved = self.db.save_analysis_history(
             result=result,
@@ -247,6 +248,47 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertEqual(detail["stock_code"], "005930.KS")
         self.assertEqual(detail["market_phase_summary"], expected_phase_summary)
+
+    def test_history_display_rebuilds_market_phase_summary_for_legacy_cn_snapshot(self) -> None:
+        result = self._build_result()
+        result.code = "005930"
+        result.name = "Samsung Electronics"
+        persisted_phase_summary = {
+            **_market_phase_summary(),
+            "phase": "postmarket",
+            "market_local_time": "2026-01-01T10:00:00+08:00",
+            "session_date": "2026-01-01",
+            "effective_daily_bar_date": "2025-12-31",
+            "is_market_open_now": False,
+            "is_partial_bar": False,
+            "minutes_to_open": 900,
+            "minutes_to_close": None,
+            "trigger_source": "scheduled_job",
+            "analysis_intent": "postmarket",
+            "warnings": ["legacy_snapshot"],
+        }
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_kr_legacy_snapshot",
+            report_type="simple",
+            news_content="news",
+            context_snapshot={"market_phase_summary": persisted_phase_summary},
+            save_snapshot=True,
+        )
+        self.assertGreater(saved, 0)
+
+        service = HistoryService(self.db)
+        with patch("src.services.history_service.resolve_index_stock_code", return_value="005930.KS"):
+            items = service.get_history_list(page=1, limit=5)["items"]
+
+        self.assertEqual(items[0]["stock_code"], "005930.KS")
+        rebuilt = items[0]["market_phase_summary"]
+        self.assertIsNotNone(rebuilt)
+        self.assertEqual(rebuilt["market"], "kr")
+        self.assertEqual(rebuilt["market_local_time"], "2026-01-01T11:00:00+09:00")
+        self.assertEqual(rebuilt["effective_daily_bar_date"], "2025-12-30")
+        self.assertIsNone(rebuilt["minutes_to_open"])
 
     def test_history_filter_and_stock_bar_merge_bare_and_resolved_jp_kr_codes(self) -> None:
         if get_stock_bar is None:

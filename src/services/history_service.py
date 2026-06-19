@@ -16,7 +16,6 @@ from datetime import date, datetime, timedelta
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
 from src.config import get_config, resolve_news_window_days
-from src.core.trading_calendar import get_market_for_stock
 from src.data.stock_index_loader import resolve_index_stock_code
 from src.report_language import (
     get_bias_status_emoji,
@@ -33,7 +32,10 @@ from src.report_language import (
 )
 from src.storage import DatabaseManager
 from src.services.run_diagnostics import build_run_diagnostic_summary
-from src.market_phase_summary import extract_market_phase_summary
+from src.market_phase_summary import (
+    extract_market_phase_summary,
+    rebuild_market_phase_summary_for_stock_code,
+)
 from src.schemas.decision_action import build_action_fields
 from src.utils.sniper_points import find_sniper_points
 from src.utils.data_processing import (
@@ -281,18 +283,10 @@ class HistoryService:
         return resolve_index_stock_code(code) or code
 
     def _display_market_phase_summary(self, stock_code: str, context_snapshot: Any) -> Any:
-        summary = extract_market_phase_summary(context_snapshot)
-        display_code = self._display_stock_code(stock_code)
-        if not display_code or display_code == str(stock_code or "").strip():
-            return summary
-
-        market = get_market_for_stock(display_code)
-        if market not in {"jp", "kr"}:
-            return summary
-
-        if not isinstance(summary, dict):
-            return summary
-        return {**summary, "market": market}
+        return rebuild_market_phase_summary_for_stock_code(
+            self._display_stock_code(stock_code),
+            context_snapshot,
+        )
 
     def _record_to_list_item_dict(self, record) -> Dict[str, Any]:
         raw_result = parse_json_field(getattr(record, "raw_result", None))

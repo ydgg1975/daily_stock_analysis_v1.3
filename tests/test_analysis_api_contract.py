@@ -1527,6 +1527,43 @@ class AnalysisApiContractTestCase(unittest.TestCase):
         self.assertEqual(report.meta.market_phase_summary.trigger_source, "scheduled_job")
         self.assertEqual(report.meta.market_phase_summary.analysis_intent, "postmarket")
 
+    def test_build_analysis_report_rebuilds_legacy_cn_market_summary_for_kr_code(self) -> None:
+        if _build_analysis_report is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        legacy_cn_summary = {
+            **_market_phase_summary(),
+            "market": "cn",
+            "phase": "intraday",
+            "market_local_time": "2026-03-27T10:00:00+08:00",
+            "session_date": "2026-03-27",
+            "effective_daily_bar_date": "2026-03-26",
+            "analysis_intent": "intraday",
+            "trigger_source": "history_snapshot",
+            "warnings": ["legacy_cn_snapshot"],
+        }
+
+        with patch("api.v1.endpoints.analysis.resolve_index_stock_code", return_value="005930.KS"):
+            report = _build_analysis_report(
+                report_data={
+                    "meta": {"stock_code": "005930"},
+                    "summary": {},
+                    "strategy": {},
+                    "details": {},
+                },
+                query_id="q-kr-legacy-cn",
+                stock_code="005930",
+                stock_name="三星电子",
+                context_snapshot={"market_phase_summary": legacy_cn_summary},
+                fallback_fundamental_payload=None,
+            )
+
+        self.assertIsNotNone(report.meta.market_phase_summary)
+        self.assertEqual(report.meta.stock_code, "005930.KS")
+        self.assertEqual(report.meta.market_phase_summary.market, "kr")
+        self.assertTrue(report.meta.market_phase_summary.market_local_time.endswith("+09:00"))
+        self.assertIn("legacy_cn_snapshot", report.meta.market_phase_summary.warnings)
+
     def test_build_analysis_report_merges_partial_top_level_context_with_fallback(self) -> None:
         if _build_analysis_report is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")
