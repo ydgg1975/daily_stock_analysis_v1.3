@@ -139,7 +139,7 @@ from api.v1.schemas.common import HealthResponse
 from src.auth import is_auth_enabled
 from src.data.stock_index_loader import find_existing_stock_index_path
 from src.services.system_config_service import SystemConfigService
-from src.services.runtime_scheduler import RuntimeSchedulerService
+from src.services.runtime_scheduler import CLI_SCHEDULER_OWNER_ENV, RuntimeSchedulerService
 from src.services.stock_index_remote_service import (
     get_remote_stock_index_cache_path,
     refresh_remote_stock_index_cache,
@@ -184,7 +184,15 @@ def _schedule_stock_index_background_refresh(app: FastAPI, reason: str) -> None:
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     """Initialize and release shared services for the app lifecycle."""
-    app.state.runtime_scheduler_service = RuntimeSchedulerService()
+    runtime_owns_schedule = os.getenv(CLI_SCHEDULER_OWNER_ENV, "").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    app.state.runtime_scheduler_service = RuntimeSchedulerService(
+        owns_schedule=runtime_owns_schedule,
+    )
     app.state.runtime_scheduler_service.reconcile_from_config()
     app.state.system_config_service = SystemConfigService(
         runtime_scheduler=app.state.runtime_scheduler_service,

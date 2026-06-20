@@ -450,6 +450,38 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertEqual(scheduled_call["background_tasks"], [])
         error_log.assert_called_once()
 
+    def test_serve_with_enabled_schedule_marks_cli_scheduler_owner(self) -> None:
+        from src.services.runtime_scheduler import CLI_SCHEDULER_OWNER_ENV
+
+        args = self._make_args(serve=True, schedule=False, host="127.0.0.1", port=8000)
+        config = self._make_config(webui_enabled=False, schedule_enabled=True)
+        marker_seen_by_server = []
+
+        def fake_start_api_server(host, port, config):
+            marker_seen_by_server.append(os.getenv(CLI_SCHEDULER_OWNER_ENV))
+
+        def fake_run_with_schedule(
+            task,
+            schedule_time,
+            run_immediately,
+            background_tasks=None,
+            schedule_time_provider=None,
+        ):
+            return None
+
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}, clear=False), \
+             patch("main.parse_arguments", return_value=args), \
+             patch("main.get_config", return_value=config), \
+             patch("main._build_schedule_time_provider", return_value=lambda: "18:00"), \
+             patch("main.prepare_webui_frontend_assets", return_value=True), \
+             patch("main.start_api_server", side_effect=fake_start_api_server), \
+             patch("main.start_bot_stream_clients"), \
+             patch("src.scheduler.run_with_schedule", side_effect=fake_run_with_schedule):
+            exit_code = main.main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(marker_seen_by_server, ["true"])
+
     def test_reload_runtime_config_preserves_process_env_overrides(self) -> None:
         self.env_path.write_text(
             "OPENAI_API_KEY=stale-file\nSCHEDULE_TIME=09:30\n",

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import datetime
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from src.config import Config, get_config
 from src.scheduler import Scheduler, normalize_schedule_times
 
 logger = logging.getLogger(__name__)
+CLI_SCHEDULER_OWNER_ENV = "DSA_CLI_SCHEDULER_OWNS_SCHEDULE"
 
 
 class RuntimeSchedulerService:
@@ -23,9 +25,18 @@ class RuntimeSchedulerService:
         *,
         config_provider: Callable[[], Config] = get_config,
         task_runner: Optional[Callable[[Config, Any, Optional[List[str]]], None]] = None,
+        owns_schedule: Optional[bool] = None,
     ) -> None:
         self._config_provider = config_provider
         self._task_runner = task_runner
+        if owns_schedule is None:
+            owns_schedule = os.getenv(CLI_SCHEDULER_OWNER_ENV, "").strip().lower() not in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+        self._owns_schedule = owns_schedule
         self._lock = threading.RLock()
         self._run_lock = threading.Lock()
         self._scheduler: Optional[Scheduler] = None
@@ -52,6 +63,7 @@ class RuntimeSchedulerService:
             serve=False,
             serve_only=True,
             stocks=None,
+            workers=None,
         )
 
     def _reload_config(self) -> Config:
@@ -92,6 +104,9 @@ class RuntimeSchedulerService:
 
     def start(self) -> None:
         with self._lock:
+            if not self._owns_schedule:
+                self.stop()
+                return
             config = self._config_provider()
             if not getattr(config, "schedule_enabled", False):
                 self.stop()
@@ -127,6 +142,9 @@ class RuntimeSchedulerService:
         self._enabled = False
 
     def reconcile_from_config(self) -> None:
+        if not self._owns_schedule:
+            self.stop()
+            return
         config = self._config_provider()
         if getattr(config, "schedule_enabled", False):
             self.start()

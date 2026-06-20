@@ -411,6 +411,7 @@ class Scheduler:
     def stop(self):
         """停止调度器"""
         self._running = False
+        self._cancel_daily_job()
 
 
 def run_with_schedule(

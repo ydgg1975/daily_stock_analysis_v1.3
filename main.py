@@ -1204,6 +1204,10 @@ def main() -> int:
 
     bot_clients_started = False
     if start_serve:
+        if not args.serve_only and (args.schedule or config.schedule_enabled):
+            from src.services.runtime_scheduler import CLI_SCHEDULER_OWNER_ENV
+
+            os.environ[CLI_SCHEDULER_OWNER_ENV] = "true"
         if not prepare_webui_frontend_assets():
             logger.warning("前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）")
         try:
