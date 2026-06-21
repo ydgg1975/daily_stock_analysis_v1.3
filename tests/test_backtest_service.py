@@ -263,6 +263,45 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertIsNotNone(summary)
         self.assertEqual(summary["code"], "600519.SH")
 
+    def test_run_backtest_bare_code_query_matches_dotted_history_records(self) -> None:
+        self._seed_analysis(
+            query_id="q_match_dot",
+            code="600519.SH",
+            analysis_date=date(2024, 2, 1),
+            created_at=datetime(2024, 2, 1, 0, 0, 0),
+            operation_advice="买入",
+            trend_prediction="看多",
+            start_close=100.0,
+            forward_bars=[
+                StockDaily(code="600519.SH", date=date(2024, 2, 2), high=101.0, low=95.0, close=96.0),
+            ],
+        )
+
+        service = BacktestService(self.db)
+        stats = service.run_backtest(
+            code="600519",
+            force=False,
+            eval_window_days=1,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 2, 1),
+            limit=20,
+        )
+
+        self.assertEqual(stats["processed"], 2)
+        self.assertEqual(stats["saved"], 2)
+        self.assertEqual(stats["completed"], 2)
+
+        matched = service.get_recent_evaluations(
+            code="600519",
+            eval_window_days=1,
+            limit=20,
+            page=1,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 2, 1),
+        )
+        self.assertEqual({row["code"] for row in matched["items"]}, {"600519", "600519.SH"})
+
     def test_run_backtest_supports_us_suffix_code_shape_when_run_with_suffix(self) -> None:
         self._seed_analysis(
             query_id="q_aapl",

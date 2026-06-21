@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy import and_, delete, desc, func, or_, select
 
-from data_provider.base import normalize_stock_code
+from data_provider.base import is_bse_code, normalize_stock_code
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE
 
 from src.storage import BacktestResult, BacktestSummary, DatabaseManager, AnalysisHistory
@@ -459,9 +459,51 @@ class BacktestRepository:
         candidates = [raw_code]
         if normalized_code and normalized_code != raw_code:
             candidates.append(normalized_code)
+        candidates.extend(BacktestRepository._build_market_code_variants(raw_code, normalized_code))
 
         if len(candidates) == 1:
             return [column == candidates[0]]
 
         unique = list(dict.fromkeys(candidates))
         return [or_(*[column == candidate for candidate in unique])]
+
+    @staticmethod
+    def _build_market_code_variants(raw_code: str, normalized_code: str) -> List[str]:
+        """Return additional market-formatted variants for safe stock-code matching."""
+        variants: List[str] = []
+        if not raw_code:
+            return variants
+
+        raw_code_upper = raw_code.upper()
+        normalized_upper = normalized_code.upper() if normalized_code else ""
+
+        if normalized_upper.isdigit() and len(normalized_upper) == 6:
+            if raw_code_upper.startswith(("SH", "SS")) or raw_code_upper.endswith(".SH") or raw_code_upper.endswith(".SS"):
+                exchange = "SH"
+            elif raw_code_upper.startswith("SZ") or raw_code_upper.endswith(".SZ"):
+                exchange = "SZ"
+            elif raw_code_upper.startswith("BJ") or raw_code_upper.endswith(".BJ") or is_bse_code(normalized_upper):
+                exchange = "BJ"
+            elif normalized_upper.startswith(("5", "6", "9")):
+                exchange = "SH"
+            else:
+                exchange = "SZ"
+
+            variants.append(f"{normalized_upper}.{exchange}")
+            variants.append(f"{exchange}.{normalized_upper}")
+            if exchange == "SH":
+                variants.append(f"{normalized_upper}.SS")
+                variants.append(f"SS.{normalized_upper}")
+
+        if normalized_upper.startswith("HK") and len(normalized_upper) > 2 and normalized_upper[2:].isdigit():
+            digits = normalized_upper[2:]
+            variants.append(f"{digits}.HK")
+            if raw_code_upper.endswith(".HK") and raw_code_upper != f"{digits}.HK":
+                variants.append(raw_code_upper)
+
+        if "." in raw_code_upper and raw_code_upper.endswith(".HK"):
+            hk_digits = raw_code_upper.rsplit(".", 1)[0]
+            if hk_digits.isdigit():
+                variants.append(f"HK{hk_digits.zfill(5)}")
+
+        return variants
