@@ -22,7 +22,13 @@ import {
 } from '../components/settings';
 import { WEB_BUILD_INFO } from '../utils/constants';
 import { getCategoryDescription } from '../utils/systemConfigI18n';
-import type { ConfigValidationIssue, SchedulerStatusResponse, SystemConfigCategory, SystemConfigItem } from '../types/systemConfig';
+import type {
+  ConfigValidationIssue,
+  SchedulerStatusResponse,
+  SystemConfigCategory,
+  SystemConfigItem,
+  SystemConfigUpdateItem,
+} from '../types/systemConfig';
 import type { UiLanguage, UiTextKey } from '../i18n/uiText';
 
 type DesktopWindow = Window & {
@@ -270,6 +276,10 @@ type SchedulerSettingsCardProps = {
   issueByKey: Record<string, ConfigValidationIssue[]>;
   statusRefreshToken: number;
   onChange: (key: string, value: string) => void;
+  onSchedulerStateChange?: (payload: {
+    runtimeEnabled: boolean | null;
+    overrideEnabled: boolean | null;
+  }) => void;
   t: (key: UiTextKey, params?: Record<string, string | number>) => string;
   language: UiLanguage;
 };
@@ -280,6 +290,7 @@ const SchedulerSettingsCard: React.FC<SchedulerSettingsCardProps> = ({
   issueByKey,
   statusRefreshToken,
   onChange,
+  onSchedulerStateChange,
   t,
   language,
 }) => {
@@ -318,6 +329,18 @@ const SchedulerSettingsCard: React.FC<SchedulerSettingsCardProps> = ({
   useEffect(() => {
     setScheduleEnabledOverride(null);
   }, [scheduleEnabledItem?.value, statusRefreshToken]);
+
+  useEffect(() => {
+    if (!onSchedulerStateChange) {
+      return;
+    }
+
+    const runtimeEnabled = status?.enabled ?? null;
+    onSchedulerStateChange({
+      runtimeEnabled,
+      overrideEnabled: scheduleEnabledOverride,
+    });
+  }, [onSchedulerStateChange, status?.enabled, scheduleEnabledOverride]);
 
   if (!hasSchedulerSettings) {
     return null;
@@ -543,6 +566,8 @@ const SettingsPage: React.FC = () => {
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const [isCheckingDesktopUpdate, setIsCheckingDesktopUpdate] = useState(false);
   const [schedulerStatusRefreshToken, setSchedulerStatusRefreshToken] = useState(0);
+  const [schedulerRuntimeEnabled, setSchedulerRuntimeEnabled] = useState<boolean | null>(null);
+  const [schedulerOverrideFromUi, setSchedulerOverrideFromUi] = useState<boolean | null>(null);
   const envBackupImportRef = useRef<HTMLInputElement | null>(null);
   const desktopRuntimeApi = getDesktopRuntimeApi();
   const isDesktopRuntime = Boolean(desktopRuntimeApi);
@@ -582,6 +607,8 @@ const SettingsPage: React.FC = () => {
     configVersion,
     maskToken,
   } = useSystemConfig();
+
+  const currentChangedItems = getChangedItems();
 
   useEffect(() => {
     void load();
@@ -651,6 +678,22 @@ const SettingsPage: React.FC = () => {
   const alphasiftEnabled = String(alphasiftItem?.value ?? '').trim().toLowerCase() === 'true';
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
+  const hasRuntimeSchedulerMismatch =
+    schedulerRuntimeEnabled !== null
+    && schedulerOverrideFromUi !== null
+    && schedulerOverrideFromUi !== schedulerRuntimeEnabled;
+  const hasRuntimeSchedulerMismatchInDraft = hasRuntimeSchedulerMismatch
+    && !currentChangedItems.some((item) => item.key === 'SCHEDULE_ENABLED');
+  const effectiveHasDirty = hasDirty || hasRuntimeSchedulerMismatchInDraft;
+  const effectiveDirtyCount = dirtyCount + (hasRuntimeSchedulerMismatchInDraft ? 1 : 0);
+
+  const handleSchedulerRuntimeStateChange = useCallback(({ runtimeEnabled, overrideEnabled }: {
+    runtimeEnabled: boolean | null;
+    overrideEnabled: boolean | null;
+  }) => {
+    setSchedulerRuntimeEnabled(runtimeEnabled);
+    setSchedulerOverrideFromUi(overrideEnabled);
+  }, []);
 
   // UI rendering rule only: hide channel-managed and legacy provider-specific
   // LLM keys from generic fields when channel mode is active. This does not
@@ -841,9 +884,18 @@ const SettingsPage: React.FC = () => {
 
   const handleSaveConfig = async () => {
     const changedItems = getChangedItems();
+    const syncRuntimeSchedulerState =
+      schedulerOverrideFromUi !== null
+      && schedulerRuntimeEnabled !== null
+      && schedulerOverrideFromUi !== schedulerRuntimeEnabled
+      && !changedItems.some((item) => item.key === 'SCHEDULE_ENABLED');
+    const schedulerSyncItem: SystemConfigUpdateItem[] = syncRuntimeSchedulerState
+      ? [{ key: 'SCHEDULE_ENABLED', value: schedulerOverrideFromUi ? 'true' : 'false' }]
+      : [];
+    const changedItemsToSave = [...changedItems, ...schedulerSyncItem];
     const changedAlphaSiftItem = changedItems.find((item) => item.key === 'ALPHASIFT_ENABLED');
-    const changedSchedulerSettings = changedItems.some((item) => SCHEDULER_SETTING_KEYS.has(item.key));
-    const result = await save();
+    const changedSchedulerSettings = changedItemsToSave.some((item) => SCHEDULER_SETTING_KEYS.has(item.key));
+    const result = await save(changedItemsToSave);
     if (!result.success) {
       return;
     }
@@ -960,20 +1012,20 @@ const SettingsPage: React.FC = () => {
             >
               {t('settings.reset')}
             </Button>
-            <Button
-              type="button"
-              variant="settings-primary"
-              onClick={() => void handleSaveConfig()}
-              disabled={!hasDirty || isSaving || isLoading}
-              isLoading={isSaving}
-              loadingText={t('settings.saving')}
-            >
-              {isSaving
-                ? t('settings.saving')
-                : dirtyCount
-                  ? t('settings.saveConfigWithCount', { count: dirtyCount })
-                  : t('settings.saveConfig')}
-            </Button>
+              <Button
+                type="button"
+                variant="settings-primary"
+                onClick={() => void handleSaveConfig()}
+                disabled={!effectiveHasDirty || isSaving || isLoading}
+                isLoading={isSaving}
+                loadingText={t('settings.saving')}
+              >
+                {isSaving
+                  ? t('settings.saving')
+                  : effectiveDirtyCount
+                    ? t('settings.saveConfigWithCount', { count: effectiveDirtyCount })
+                    : t('settings.saveConfig')}
+              </Button>
           </div>
         </div>
 
@@ -1066,6 +1118,7 @@ const SettingsPage: React.FC = () => {
                 disabled={isSaving || isLoading}
                 issueByKey={issueByKey}
                 statusRefreshToken={schedulerStatusRefreshToken}
+                onSchedulerStateChange={handleSchedulerRuntimeStateChange}
                 onChange={setDraftValue}
                 t={t}
                 language={uiLanguage}

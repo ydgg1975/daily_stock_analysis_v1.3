@@ -288,8 +288,16 @@ export function useSystemConfig() {
       });
   }, [dirtyKeys, draftValues, serverItemByKey]);
 
-  const save = useCallback(async (): Promise<SaveResult> => {
-    if (!hasDirty) {
+  const save = useCallback(async (changedItems?: SystemConfigUpdateItem[]): Promise<SaveResult> => {
+    const explicitItems = changedItems ?? [];
+    const resolvedChangedItems = explicitItems.length > 0 ? explicitItems : getChangedItems();
+
+    if (!explicitItems.length && !hasDirty) {
+      setToast({ type: 'success', message: '当前没有可保存的修改。' });
+      return { success: true, message: '当前没有可保存的修改' };
+    }
+
+    if (!resolvedChangedItems.length) {
       setToast({ type: 'success', message: '当前没有可保存的修改。' });
       return { success: true, message: '当前没有可保存的修改' };
     }
@@ -301,7 +309,7 @@ export function useSystemConfig() {
     const changedItems = getChangedItems();
 
     try {
-      const validateResult = await systemConfigApi.validate({ items: changedItems });
+      const validateResult = await systemConfigApi.validate({ items: resolvedChangedItems });
       setValidationIssues(validateResult.issues || []);
 
       if (!validateResult.valid) {
@@ -323,7 +331,7 @@ export function useSystemConfig() {
         configVersion,
         maskToken,
         reloadNow: true,
-        items: changedItems,
+        items: resolvedChangedItems,
       });
 
       const refreshed = await systemConfigApi.getConfig(true);

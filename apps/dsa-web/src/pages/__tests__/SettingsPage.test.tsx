@@ -1285,6 +1285,162 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(enabledCheckbox).not.toBeChecked());
   });
 
+  it('can reconcile runtime scheduler state when runtime is enabled but saved value is disabled', async () => {
+    save.mockResolvedValue({ success: true });
+    getChangedItems.mockReturnValue([]);
+    const configState = buildSystemConfigState();
+    getSchedulerStatus.mockResolvedValueOnce({
+      enabled: true,
+      running: false,
+      scheduleTimes: ['18:00'],
+      nextRunAt: null,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      lastError: null,
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+      hasDirty: false,
+      dirtyCount: 0,
+      getChangedItems: () => [],
+      itemsByCategory: {
+        ...configState.itemsByCategory,
+        system: [
+          ...configState.itemsByCategory.system,
+          {
+            key: 'SCHEDULE_ENABLED',
+            value: 'false',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'SCHEDULE_ENABLED',
+              category: 'system',
+              dataType: 'boolean',
+              uiControl: 'switch',
+              isSensitive: false,
+              isRequired: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 8,
+            },
+          },
+          {
+            key: 'SCHEDULE_TIMES',
+            value: '18:00',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'SCHEDULE_TIMES',
+              category: 'system',
+              dataType: 'string',
+              uiControl: 'text',
+              isSensitive: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 11,
+            },
+          },
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const saveButton = screen.getByRole('button', { name: /保存配置/ });
+    expect(saveButton).toBeDisabled();
+
+    const enabledCheckbox = await screen.findByTestId('scheduler-enabled-checkbox');
+    expect(enabledCheckbox).toBeChecked();
+    fireEvent.click(enabledCheckbox);
+
+    await waitFor(() => expect(enabledCheckbox).not.toBeChecked());
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await waitFor(() => expect(saveButton).toHaveTextContent('保存配置 (1)'));
+
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(save).toHaveBeenCalledWith([{ key: 'SCHEDULE_ENABLED', value: 'false' }]));
+  });
+
+  it('can reconcile runtime scheduler state when runtime is disabled but saved value is enabled', async () => {
+    save.mockResolvedValue({ success: true });
+    getChangedItems.mockReturnValue([]);
+    const configState = buildSystemConfigState();
+    getSchedulerStatus.mockResolvedValueOnce({
+      enabled: false,
+      running: false,
+      scheduleTimes: ['18:00'],
+      nextRunAt: null,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      lastError: null,
+    });
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'system',
+      hasDirty: false,
+      dirtyCount: 0,
+      getChangedItems: () => [],
+      itemsByCategory: {
+        ...configState.itemsByCategory,
+        system: [
+          ...configState.itemsByCategory.system,
+          {
+            key: 'SCHEDULE_ENABLED',
+            value: 'true',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'SCHEDULE_ENABLED',
+              category: 'system',
+              dataType: 'boolean',
+              uiControl: 'switch',
+              isSensitive: false,
+              isRequired: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 8,
+            },
+          },
+          {
+            key: 'SCHEDULE_TIMES',
+            value: '18:00',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'SCHEDULE_TIMES',
+              category: 'system',
+              dataType: 'string',
+              uiControl: 'text',
+              isSensitive: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 11,
+            },
+          },
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    const saveButton = screen.getByRole('button', { name: /保存配置/ });
+    expect(saveButton).toBeDisabled();
+
+    const enabledCheckbox = await screen.findByTestId('scheduler-enabled-checkbox');
+    expect(enabledCheckbox).not.toBeChecked();
+    fireEvent.click(enabledCheckbox);
+
+    await waitFor(() => expect(enabledCheckbox).toBeChecked());
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await waitFor(() => expect(saveButton).toHaveTextContent('保存配置 (1)'));
+
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(save).toHaveBeenCalledWith([{ key: 'SCHEDULE_ENABLED', value: 'true' }]));
+  });
+
   it('refreshes scheduler status after saving scheduler settings', async () => {
     const configState = buildSystemConfigState();
     getSchedulerStatus
