@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import and_, select
 
+from data_provider.base import normalize_stock_code
 from src.config import get_config
 from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
 from src.market_phase_summary import extract_market_phase_summary, normalize_analysis_phase_bucket
@@ -39,9 +40,16 @@ class BacktestService:
         force: bool = False,
         eval_window_days: Optional[int] = None,
         min_age_days: Optional[int] = None,
+        analysis_date_from: Optional[date] = None,
+        analysis_date_to: Optional[date] = None,
         limit: int = 200,
     ) -> Dict[str, Any]:
         config = get_config()
+
+        if analysis_date_from and analysis_date_to and analysis_date_from > analysis_date_to:
+            raise ValueError("analysis_date_from cannot be after analysis_date_to")
+
+        normalized_code = self._normalize_code(code)
 
         if eval_window_days is None:
             eval_window_days = getattr(config, "backtest_eval_window_days", 10)
@@ -57,14 +65,25 @@ class BacktestService:
             engine_version=str(engine_version),
         )
 
+        limit_int = int(limit)
+        has_analysis_date_filter = analysis_date_from is not None or analysis_date_to is not None
+        candidate_query_limit = min(max(limit_int * 5, limit_int), 10000) if has_analysis_date_filter else limit_int
+
         candidates = self.repo.get_candidates(
-            code=code,
+            code=normalized_code,
             min_age_days=int(min_age_days),
-            limit=int(limit),
+            limit=candidate_query_limit,
             eval_window_days=int(eval_window_days),
             engine_version=str(engine_version),
             force=force,
         )
+        candidates = self._filter_candidates_by_analysis_date(
+            candidates,
+            analysis_date_from=analysis_date_from,
+            analysis_date_to=analysis_date_to,
+        )
+        if has_analysis_date_filter:
+            candidates = candidates[:limit_int]
 
         processed = 0
         completed = 0
@@ -208,13 +227,98 @@ class BacktestService:
                 engine_version=str(engine_version),
             )
 
+        diagnostics = self._build_run_diagnostics(
+            code=normalized_code,
+            eval_window_days=int(eval_window_days),
+            min_age_days=int(min_age_days),
+            limit=limit_int,
+            analysis_date_from=analysis_date_from,
+            analysis_date_to=analysis_date_to,
+            processed=processed,
+            saved=saved,
+            completed=completed,
+            insufficient=insufficient,
+            errors=errors,
+        )
+
         return {
             "processed": processed,
             "saved": saved,
             "completed": completed,
             "insufficient": insufficient,
             "errors": errors,
+            "message": diagnostics.get("message"),
+            "diagnostics": diagnostics,
         }
+
+    def _filter_candidates_by_analysis_date(
+        self,
+        candidates: List[Any],
+        *,
+        analysis_date_from: Optional[date],
+        analysis_date_to: Optional[date],
+    ) -> List[Any]:
+        if analysis_date_from is None and analysis_date_to is None:
+            return candidates
+
+        filtered: List[Any] = []
+        for analysis in candidates:
+            analysis_date = self._resolve_analysis_date(analysis)
+            if analysis_date is None:
+                continue
+            if analysis_date_from is not None and analysis_date < analysis_date_from:
+                continue
+            if analysis_date_to is not None and analysis_date > analysis_date_to:
+                continue
+            filtered.append(analysis)
+        return filtered
+
+    @staticmethod
+    def _normalize_code(code: Optional[str]) -> Optional[str]:
+        normalized = normalize_stock_code(str(code).strip()) if code else None
+        return normalized or None
+
+    @staticmethod
+    def _build_run_diagnostics(
+        *,
+        code: Optional[str],
+        eval_window_days: int,
+        min_age_days: int,
+        limit: int,
+        analysis_date_from: Optional[date],
+        analysis_date_to: Optional[date],
+        processed: int,
+        saved: int,
+        completed: int,
+        insufficient: int,
+        errors: int,
+    ) -> Dict[str, Any]:
+        diagnostics: Dict[str, Any] = {
+            "code": code,
+            "eval_window_days": eval_window_days,
+            "min_age_days": min_age_days,
+            "limit": limit,
+            "analysis_date_from": analysis_date_from.isoformat() if analysis_date_from else None,
+            "analysis_date_to": analysis_date_to.isoformat() if analysis_date_to else None,
+        }
+
+        message: Optional[str] = None
+        if processed == 0:
+            diagnostics["empty_reason"] = "no_matching_analysis"
+            message = "未找到符合条件的历史分析记录，请检查股票代码、分析日期范围、最小天龄或是否已生成历史分析。"
+        elif completed == 0 and insufficient > 0 and errors == 0:
+            diagnostics["empty_reason"] = "insufficient_daily_data"
+            message = "已找到历史分析记录，但可用日线行情不足，无法完成回测。"
+        elif completed == 0 and errors > 0:
+            diagnostics["empty_reason"] = "evaluation_error"
+            message = "已找到历史分析记录，但回测计算失败，请查看后端日志或放宽筛选条件。"
+        elif saved == 0 and completed == 0:
+            diagnostics["empty_reason"] = "no_new_results"
+            message = "没有写入新的回测结果；如需覆盖已有结果，请启用强制重跑。"
+
+        if message:
+            diagnostics["message"] = message
+        return diagnostics
 
     def get_recent_evaluations(
         self,
@@ -229,6 +333,7 @@ class BacktestService:
     ) -> Dict[str, Any]:
         config = get_config()
         engine_version = str(getattr(config, "backtest_engine_version", "v1"))
+        code = self._normalize_code(code)
 
         phase_bucket = self._normalize_phase_filter(analysis_phase)
         if eval_window_days is None and (analysis_date_from is not None or analysis_date_to is not None or phase_bucket is not None):
@@ -289,6 +394,7 @@ class BacktestService:
     ) -> Optional[Dict[str, Any]]:
         config = get_config()
         engine_version = str(getattr(config, "backtest_engine_version", "v1"))
+        code = self._normalize_code(code)
         lookup_code = OVERALL_SENTINEL_CODE if scope == "overall" else code
 
         phase_bucket = self._normalize_phase_filter(analysis_phase)

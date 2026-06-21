@@ -24,6 +24,7 @@ import type {
 } from '../types/backtest';
 import { buildDecisionActionLabelMap, getDecisionActionLabel } from '../utils/decisionAction';
 import { getMarketPhaseSummaryLabel } from '../utils/marketPhase';
+import { normalizeStockCode } from '../utils/stockCode';
 
 const BACKTEST_INPUT_CLASS =
   'input-surface input-focus-glow h-11 w-full rounded-xl border bg-transparent px-4 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60';
@@ -47,6 +48,12 @@ function phaseLabel(row: BacktestResultItem, language: UiLanguage): string {
       .replace('Market phase: ', '');
   }
   return (row.marketPhase ? BACKTEST_PHASE_LABELS[language][row.marketPhase] : undefined) || row.marketPhase || '--';
+}
+
+function normalizeBacktestCode(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return normalizeStockCode(trimmed).toUpperCase();
 }
 
 function labelFromMap(value: string | null | undefined, labels: Record<string, string>): string {
@@ -214,6 +221,9 @@ const RunSummary: React.FC<{ data: BacktestRunResponse; language: UiLanguage }> 
     {data.errors > 0 && (
       <span className="label">{text.errors} <span className="value danger">{data.errors}</span></span>
     )}
+    {data.message && (
+      <span className="label message">{data.message}</span>
+    )}
   </div>
   );
 };
@@ -350,18 +360,22 @@ const BacktestPage: React.FC = () => {
     setRunResult(null);
     setRunError(null);
     try {
-      const code = codeFilter.trim() || undefined;
+      const code = normalizeBacktestCode(codeFilter);
       const evalWindowDays = evalDays ? parseInt(evalDays, 10) : undefined;
+      const dateFrom = analysisDateFrom || undefined;
+      const dateTo = analysisDateTo || undefined;
       const response = await backtestApi.run({
         code,
         force: forceRerun || undefined,
         minAgeDays: forceRerun ? 0 : undefined,
         evalWindowDays,
+        analysisDateFrom: dateFrom,
+        analysisDateTo: dateTo,
       });
       setRunResult(response);
       // Refresh data with same eval_window_days
-      fetchResults(1, codeFilter.trim() || undefined, evalWindowDays, analysisDateFrom, analysisDateTo, phaseFilter);
-      fetchPerformance(codeFilter.trim() || undefined, evalWindowDays, analysisDateFrom, analysisDateTo, phaseFilter);
+      fetchResults(1, code, evalWindowDays, dateFrom, dateTo, phaseFilter);
+      fetchPerformance(code, evalWindowDays, dateFrom, dateTo, phaseFilter);
     } catch (err) {
       setRunError(getParsedApiError(err));
     } finally {
@@ -371,7 +385,7 @@ const BacktestPage: React.FC = () => {
 
   // Filter by code
   const handleFilter = () => {
-    const code = codeFilter.trim() || undefined;
+    const code = normalizeBacktestCode(codeFilter);
     const windowDays = evalDays ? parseInt(evalDays, 10) : undefined;
     setCurrentPage(1);
     fetchResults(1, code, windowDays, analysisDateFrom, analysisDateTo, phaseFilter);
@@ -385,7 +399,7 @@ const BacktestPage: React.FC = () => {
   };
 
   const handleShowNextDay = () => {
-    const code = codeFilter.trim() || undefined;
+    const code = normalizeBacktestCode(codeFilter);
     setEvalDays('1');
     setCurrentPage(1);
     fetchResults(1, code, 1, analysisDateFrom, analysisDateTo, phaseFilter);
@@ -396,7 +410,7 @@ const BacktestPage: React.FC = () => {
   const totalPages = Math.ceil(totalResults / pageSize);
   const handlePageChange = (page: number) => {
     const windowDays = evalDays ? parseInt(evalDays, 10) : undefined;
-    fetchResults(page, codeFilter.trim() || undefined, windowDays, analysisDateFrom, analysisDateTo, phaseFilter);
+    fetchResults(page, normalizeBacktestCode(codeFilter), windowDays, analysisDateFrom, analysisDateTo, phaseFilter);
   };
 
   return (

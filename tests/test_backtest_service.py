@@ -185,6 +185,135 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats3["saved"], 1)
         self.assertEqual(self._count_results(), 1)
 
+    def test_run_backtest_normalizes_code_and_filters_analysis_date_range(self) -> None:
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(
+            code="600519.SH",
+            force=False,
+            eval_window_days=3,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 1, 1),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["saved"], 1)
+        self.assertEqual(stats["completed"], 1)
+        self.assertIsNone(stats["message"])
+        self.assertEqual(stats["diagnostics"]["code"], "600519")
+        self.assertEqual(stats["diagnostics"]["analysis_date_from"], "2024-01-01")
+        self.assertEqual(stats["diagnostics"]["analysis_date_to"], "2024-01-01")
+
+        data = service.get_recent_evaluations(code="600519.SH", eval_window_days=3, limit=10, page=1)
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["items"][0]["code"], "600519")
+
+        summary = service.get_summary(scope="stock", code="600519.SH", eval_window_days=3)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["code"], "600519")
+        self.assertEqual(summary["completed_count"], 1)
+
+    def test_run_backtest_filters_by_snapshot_analysis_date_not_created_at(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q-created-at-mismatch",
+                    code="000003",
+                    name="测试股票",
+                    report_type="simple",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="created_at differs from analysis date",
+                    stop_loss=None,
+                    take_profit=None,
+                    created_at=datetime(2024, 1, 10, 0, 0, 0),
+                    context_snapshot='{"enhanced_context": {"date": "2024-01-01"}}',
+                )
+            )
+            session.add(
+                StockDaily(code="000003", date=date(2024, 1, 1), open=10.0, high=10.0, low=10.0, close=10.0)
+            )
+            session.add_all(
+                [
+                    StockDaily(code="000003", date=date(2024, 1, 2), high=10.5, low=9.8, close=10.2),
+                    StockDaily(code="000003", date=date(2024, 1, 3), high=10.8, low=10.1, close=10.5),
+                    StockDaily(code="000003", date=date(2024, 1, 4), high=11.0, low=10.4, close=10.8),
+                ]
+            )
+            session.commit()
+
+        service = BacktestService(self.db)
+        stats = service.run_backtest(
+            code="000003",
+            force=False,
+            eval_window_days=3,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 1, 1),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["completed"], 1)
+        with self.db.get_session() as session:
+            result = session.query(BacktestResult).filter(BacktestResult.code == "000003").one()
+            self.assertEqual(result.analysis_date, date(2024, 1, 1))
+
+    def test_run_backtest_reports_no_matching_candidates(self) -> None:
+        service = BacktestService(self.db)
+
+        stats = service.run_backtest(
+            code="600519",
+            force=False,
+            eval_window_days=3,
+            min_age_days=0,
+            analysis_date_from=date(2024, 2, 1),
+            analysis_date_to=date(2024, 2, 2),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 0)
+        self.assertEqual(stats["saved"], 0)
+        self.assertEqual(stats["diagnostics"]["empty_reason"], "no_matching_analysis")
+        self.assertIn("未找到符合条件的历史分析记录", stats["message"])
+
+    def test_run_backtest_reports_insufficient_daily_data(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q-insufficient",
+                    code="000002",
+                    name="万科A",
+                    report_type="simple",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="insufficient daily bars",
+                    stop_loss=None,
+                    take_profit=None,
+                    created_at=datetime(2024, 1, 1, 0, 0, 0),
+                    context_snapshot='{"enhanced_context": {"date": "2024-01-01"}}',
+                )
+            )
+            session.add(
+                StockDaily(code="000002", date=date(2024, 1, 1), open=10.0, high=10.0, low=10.0, close=10.0)
+            )
+            session.commit()
+
+        service = BacktestService(self.db)
+        with patch.object(BacktestService, "_try_fill_daily_data", return_value=None):
+            stats = service.run_backtest(code="000002", force=False, eval_window_days=3, min_age_days=0, limit=10)
+
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["saved"], 1)
+        self.assertEqual(stats["completed"], 0)
+        self.assertEqual(stats["insufficient"], 1)
+        self.assertEqual(stats["diagnostics"]["empty_reason"], "insufficient_daily_data")
+        self.assertIn("可用日线行情不足", stats["message"])
+
     def _run_and_get_result(self) -> BacktestResult:
         """Helper: run backtest and return the single BacktestResult row."""
         service = BacktestService(self.db)
