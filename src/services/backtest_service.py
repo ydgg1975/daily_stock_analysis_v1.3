@@ -88,7 +88,9 @@ class BacktestService:
 
         for analysis in candidates:
             processed += 1
-            touched_codes.add(analysis.code)
+            normalized_code = self._normalize_summary_code(analysis.code)
+            if normalized_code:
+                touched_codes.add(normalized_code)
 
             try:
                 analysis_date = self._resolve_analysis_date(analysis)
@@ -220,6 +222,17 @@ class BacktestService:
                 engine_version=str(engine_version),
             )
 
+        has_matching_analysis = False
+        if not force and processed == 0:
+            has_matching_analysis = self._has_matching_analysis_for_run(
+                code=query_code,
+                min_age_days=int(min_age_days),
+                eval_window_days=int(eval_window_days),
+                engine_version=str(engine_version),
+                analysis_date_from=analysis_date_from,
+                analysis_date_to=analysis_date_to,
+            )
+
         diagnostics = self._build_run_diagnostics(
             code=diagnostic_code,
             eval_window_days=int(eval_window_days),
@@ -232,6 +245,7 @@ class BacktestService:
             completed=completed,
             insufficient=insufficient,
             errors=errors,
+            has_matching_analysis=has_matching_analysis,
         )
 
         return {
@@ -299,6 +313,42 @@ class BacktestService:
 
         return matched[:limit]
 
+    def _has_matching_analysis_for_run(
+        self,
+        *,
+        code: Optional[str],
+        min_age_days: int,
+        eval_window_days: int,
+        engine_version: str,
+        analysis_date_from: Optional[date],
+        analysis_date_to: Optional[date],
+    ) -> bool:
+        """Check if historical analysis rows match the same run filters, ignoring backtest history."""
+        if analysis_date_from is None and analysis_date_to is None:
+            return bool(
+                self.repo.get_candidates(
+                    code=code,
+                    min_age_days=min_age_days,
+                    limit=1,
+                    eval_window_days=eval_window_days,
+                    engine_version=engine_version,
+                    force=True,
+                )
+            )
+
+        return len(
+            self._get_run_candidates(
+                code=code,
+                min_age_days=min_age_days,
+                limit=1,
+                eval_window_days=eval_window_days,
+                engine_version=engine_version,
+                force=True,
+                analysis_date_from=analysis_date_from,
+                analysis_date_to=analysis_date_to,
+            )
+        ) > 0
+
     def _filter_candidates_by_analysis_date(
         self,
         candidates: List[Any],
@@ -327,6 +377,13 @@ class BacktestService:
         return normalized or None
 
     @staticmethod
+    def _normalize_summary_code(code: Optional[str]) -> Optional[str]:
+        if not code:
+            return None
+        normalized = normalize_stock_code(str(code).strip())
+        return canonical_stock_code(normalized or code)
+
+    @staticmethod
     def _normalize_code_for_display(code: Optional[str]) -> Optional[str]:
         if not code:
             return None
@@ -348,6 +405,7 @@ class BacktestService:
         completed: int,
         insufficient: int,
         errors: int,
+        has_matching_analysis: bool = False,
     ) -> Dict[str, Any]:
         diagnostics: Dict[str, Any] = {
             "code": code,
@@ -360,8 +418,12 @@ class BacktestService:
 
         message: Optional[str] = None
         if processed == 0:
-            diagnostics["empty_reason"] = "no_matching_analysis"
-            message = "未找到符合条件的历史分析记录，请检查股票代码、分析日期范围、最小天龄或是否已生成历史分析。"
+            if has_matching_analysis:
+                diagnostics["empty_reason"] = "no_new_results"
+                message = "历史分析记录已存在，当前筛选条件下没有新的回测任务可执行。"
+            else:
+                diagnostics["empty_reason"] = "no_matching_analysis"
+                message = "未找到符合条件的历史分析记录，请检查股票代码、分析日期范围、最小天龄或是否已生成历史分析。"
         elif completed == 0 and insufficient > 0 and errors == 0:
             diagnostics["empty_reason"] = "insufficient_daily_data"
             message = "已找到历史分析记录，但可用日线行情不足，无法完成回测。"
@@ -747,10 +809,15 @@ class BacktestService:
             self.repo.upsert_summary(overall_summary)
 
             for code in touched_codes:
+                normalized_code = self._normalize_summary_code(code)
+                if not normalized_code:
+                    continue
+
+                code_conditions = BacktestRepository._build_code_conditions(BacktestResult.code, normalized_code)
                 rows = session.execute(
                     select(BacktestResult).where(
                         and_(
-                            BacktestResult.code == code,
+                            *code_conditions,
                             BacktestResult.eval_window_days == eval_window_days,
                             BacktestResult.engine_version == engine_version,
                         )
@@ -759,7 +826,7 @@ class BacktestService:
                 data = BacktestEngine.compute_summary(
                     results=rows,
                     scope="stock",
-                    code=code,
+                    code=normalized_code,
                     eval_window_days=eval_window_days,
                     engine_version=engine_version,
                 )

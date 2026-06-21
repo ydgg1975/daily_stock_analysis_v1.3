@@ -189,6 +189,8 @@ class BacktestServiceTestCase(unittest.TestCase):
         stats2 = service.run_backtest(code="600519", force=False, eval_window_days=3, min_age_days=0, limit=10)
         self.assertEqual(stats2["saved"], 0)
         self.assertEqual(self._count_results(), 1)
+        self.assertEqual(stats2["diagnostics"]["empty_reason"], "no_new_results")
+        self.assertIn("历史分析记录已存在", stats2["message"] or "")
 
         # Force should replace existing result without unique constraint errors
         stats3 = service.run_backtest(code="600519", force=True, eval_window_days=3, min_age_days=0, limit=10)
@@ -261,7 +263,7 @@ class BacktestServiceTestCase(unittest.TestCase):
 
         summary = service.get_summary(scope="stock", code="600519.SH", eval_window_days=3)
         self.assertIsNotNone(summary)
-        self.assertEqual(summary["code"], "600519.SH")
+        self.assertEqual(summary["code"], "600519")
 
     def test_run_backtest_bare_code_query_matches_dotted_history_records(self) -> None:
         self._seed_analysis(
@@ -291,6 +293,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats["processed"], 2)
         self.assertEqual(stats["saved"], 2)
         self.assertEqual(stats["completed"], 2)
+        summary = service.get_summary(scope="stock", code="600519", eval_window_days=1)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["code"], "600519")
+        self.assertEqual(summary["total_evaluations"], 2)
+        self.assertEqual(summary["completed_count"], 2)
 
         matched = service.get_recent_evaluations(
             code="600519",
