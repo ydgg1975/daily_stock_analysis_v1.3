@@ -27,6 +27,7 @@ from src.config import Config, get_config
 from src.enums import ReportType
 from src.market_phase_summary import format_public_market_status_line, format_public_phase_pack_excerpt
 from src.services.decision_signal_summary import format_decision_signal_excerpt
+from src.services.trading_observation import build_trading_observation_summary
 from src.notification_routing import (
     get_notification_route_config,
     split_notification_route_channels,
@@ -373,6 +374,56 @@ class NotificationService(
         if status_line:
             lines.extend([status_line, ""])
         elif lines and lines[-1] != "":
+            lines.append("")
+
+    def _append_trading_observation_section(
+        self,
+        lines: List[str],
+        results: List[AnalysisResult],
+    ) -> None:
+        summary = build_trading_observation_summary(results)
+        if not summary:
+            return
+
+        lines.extend(["## 🧭 交易观察清单", "", f"> {summary['disclaimer']}", ""])
+
+        if summary.get("top_focus"):
+            lines.append("**今日最值得关注 3 只**")
+            for item in summary["top_focus"]:
+                lines.append(
+                    f"- {item['name']} | {item['operation']} | 评分 {item['score']} | {item['reason']}"
+                )
+            lines.append("")
+
+        if summary.get("not_recommended"):
+            lines.append("**今日不建议操作名单**")
+            for item in summary["not_recommended"]:
+                lines.append(f"- {item['name']} | {item['operation']} | {item['reason']}")
+            lines.append("")
+
+        if summary.get("tomorrow_watch"):
+            lines.append("**明日观察清单**")
+            for item in summary["tomorrow_watch"]:
+                lines.append(f"- {item['name']} | {item['operation']} | {item['battle_line']}")
+            lines.append("")
+
+        reminders = [
+            ("放量上涨", summary.get("volume_up") or []),
+            ("放量下跌", summary.get("volume_down") or []),
+            ("突破提醒", summary.get("breakout") or []),
+            ("跌破提醒", summary.get("breakdown") or []),
+        ]
+        if any(items for _, items in reminders):
+            lines.append("**放量/突破提醒**")
+            for label, items in reminders:
+                for item in items:
+                    lines.append(f"- {label}: {item['name']} | {item['operation']}")
+            lines.append("")
+
+        if summary.get("trade_pool"):
+            lines.append("**自选股交易观察池**")
+            for item in summary["trade_pool"]:
+                lines.append(f"- {item['name']} | {item['operation']} | {item['battle_line']}")
             lines.append("")
 
     def _should_show_llm_model(self) -> bool:
@@ -1108,6 +1159,8 @@ class NotificationService(
                 signal_excerpt = self._decision_signal_excerpt(r, report_language)
                 if signal_excerpt:
                     report_lines.append(signal_excerpt)
+            report_lines.append("")
+            self._append_trading_observation_section(report_lines, sorted_results)
             report_lines.extend([
                 "",
                 "---",

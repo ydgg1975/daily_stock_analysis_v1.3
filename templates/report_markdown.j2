@@ -16,6 +16,55 @@
 {% endif %}
 {% endfor %}
 
+{% if trading_observation %}
+## 🧭 交易观察清单
+
+> {{ trading_observation.disclaimer }}
+
+{% if trading_observation.top_focus %}
+**今日最值得关注 3 只**
+{% for item in trading_observation.top_focus %}
+- {{ item.name }} | {{ item.operation }} | 评分 {{ item.score }} | {{ item.reason }}
+{% endfor %}
+{% endif %}
+
+{% if trading_observation.not_recommended %}
+**今日不建议操作名单**
+{% for item in trading_observation.not_recommended %}
+- {{ item.name }} | {{ item.operation }} | {{ item.reason }}
+{% endfor %}
+{% endif %}
+
+{% if trading_observation.tomorrow_watch %}
+**明日观察清单**
+{% for item in trading_observation.tomorrow_watch %}
+- {{ item.name }} | {{ item.operation }} | {{ item.battle_line }}
+{% endfor %}
+{% endif %}
+
+{% if trading_observation.volume_up or trading_observation.volume_down or trading_observation.breakout or trading_observation.breakdown %}
+**放量/突破提醒**
+{% for item in trading_observation.volume_up %}
+- 放量上涨: {{ item.name }} | {{ item.operation }}
+{% endfor %}
+{% for item in trading_observation.volume_down %}
+- 放量下跌: {{ item.name }} | {{ item.operation }}
+{% endfor %}
+{% for item in trading_observation.breakout %}
+- 突破提醒: {{ item.name }} | {{ item.operation }}
+{% endfor %}
+{% for item in trading_observation.breakdown %}
+- 跌破提醒: {{ item.name }} | {{ item.operation }}
+{% endfor %}
+{% endif %}
+
+**自选股交易观察池**
+{% for item in trading_observation.trade_pool %}
+- {{ item.name }} | {{ item.operation }} | {{ item.battle_line }}
+{% endfor %}
+
+{% endif %}
+
 ---
 {% if not summary_only %}
 {% for e in enriched %}
@@ -27,6 +76,18 @@
 {% set data_persp = dashboard.get('data_perspective') or {} %}
 
 ## {{ e.signal_emoji }} {{ e.stock_name }} ({{ result.code }})
+
+{% set data_sources = dashboard.get('data_sources') or {} %}
+{% if data_sources %}
+{% set market_source = data_sources.get('market') or {} %}
+{% set news_source = data_sources.get('news') or {} %}
+{% set fundamental_source = data_sources.get('fundamental') or {} %}
+**数据源**:
+{% if market_source %}行情={{ market_source.get('source_name', '不足') }}{% if market_source.get('data_timestamp') %} @ {{ market_source.get('data_timestamp') }}{% endif %}{% if market_source.get('insufficient_reason') %}（{{ market_source.get('insufficient_reason') }}）{% endif %}{% endif %}
+{% if fundamental_source %}；基本面/资金={{ fundamental_source.get('source_name', '不足') }}{% if fundamental_source.get('status') %}({{ fundamental_source.get('status') }}){% endif %}{% endif %}
+{% if news_source %}；新闻={{ news_source.get('source_name', '不足') }}{% if news_source.get('result_count') is not none %} {{ news_source.get('result_count') }}条{% endif %}{% if news_source.get('insufficient_reason') %}（{{ news_source.get('insufficient_reason') }}）{% endif %}{% endif %}
+
+{% endif %}
 
 {% if intel %}
 ### 📰 {{ labels.info_heading }}

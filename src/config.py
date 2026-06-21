@@ -713,6 +713,12 @@ class Config:
     social_sentiment_api_url: str = "https://api.adanos.org"
 
     # === 新闻与分析筛选配置 ===
+    news_enabled: bool = True  # 是否启用新闻/公告/舆情增强
+    news_lookback_hours: int = 48  # 新闻搜索提示窗口（小时，兼容日级搜索实现）
+    news_max_items_per_stock: int = 8  # 每只股票最多纳入新闻条数
+    news_max_items_market: int = 12  # 大盘新闻最多纳入条数
+    news_require_source: bool = True  # 新闻证据必须带来源
+    news_dedup_enabled: bool = True  # 新闻去重开关（搜索层已做相关过滤）
     news_max_age_days: int = 3   # 新闻最大时效（天）
     news_strategy_profile: str = "short"  # 新闻窗口策略档位：ultra_short/short/medium/long
     news_intel_retention_days: int = 30  # 本地资讯池保留天数
@@ -1499,6 +1505,30 @@ class Config:
             searxng_public_instances_enabled=searxng_public_instances_enabled,
             social_sentiment_api_key=os.getenv('SOCIAL_SENTIMENT_API_KEY') or None,
             social_sentiment_api_url=os.getenv('SOCIAL_SENTIMENT_API_URL', 'https://api.adanos.org').rstrip('/'),
+            news_enabled=parse_env_bool(os.getenv('NEWS_ENABLED'), default=True),
+            news_lookback_hours=parse_env_int(
+                os.getenv('NEWS_LOOKBACK_HOURS'),
+                48,
+                field_name='NEWS_LOOKBACK_HOURS',
+                minimum=1,
+                maximum=24 * 30,
+            ),
+            news_max_items_per_stock=parse_env_int(
+                os.getenv('NEWS_MAX_ITEMS_PER_STOCK'),
+                8,
+                field_name='NEWS_MAX_ITEMS_PER_STOCK',
+                minimum=1,
+                maximum=50,
+            ),
+            news_max_items_market=parse_env_int(
+                os.getenv('NEWS_MAX_ITEMS_MARKET'),
+                12,
+                field_name='NEWS_MAX_ITEMS_MARKET',
+                minimum=1,
+                maximum=100,
+            ),
+            news_require_source=parse_env_bool(os.getenv('NEWS_REQUIRE_SOURCE'), default=True),
+            news_dedup_enabled=parse_env_bool(os.getenv('NEWS_DEDUP_ENABLED'), default=True),
             news_max_age_days=parse_env_int(os.getenv('NEWS_MAX_AGE_DAYS'), 3, field_name='NEWS_MAX_AGE_DAYS', minimum=1),
             news_strategy_profile=cls._parse_news_strategy_profile(
                 os.getenv('NEWS_STRATEGY_PROFILE', 'short')

@@ -28,6 +28,7 @@ from src.storage import get_db
 from data_provider import DataFetcherManager
 from data_provider.base import is_bse_code, normalize_stock_code
 from data_provider.realtime_types import ChipDistribution
+from src.data_sources import MarketDataRouter, NewsDataRouter
 from src.analyzer import (
     GeminiAnalyzer,
     AnalysisResult,
@@ -240,6 +241,12 @@ class StockAnalysisPipeline:
         except Exception as exc:
             logger.warning("搜索服务初始化失败，将以无搜索模式运行: %s", exc, exc_info=True)
             self.search_service = None
+        self.market_data_router = MarketDataRouter(self.fetcher_manager)
+        self.news_data_router = NewsDataRouter(
+            self.search_service,
+            enabled=bool(getattr(self.config, "news_enabled", True)),
+            max_items_per_stock=int(getattr(self.config, "news_max_items_per_stock", 8) or 8),
+        )
         
         logger.info(f"调度器初始化完成，最大并发数: {self.max_workers}")
         logger.info("已启用技术分析引擎（均线/趋势/量价指标）")
@@ -274,6 +281,24 @@ class StockAnalysisPipeline:
                 exc_info=True,
             )
             self.social_sentiment_service = None
+
+    def _get_market_data_router(self) -> MarketDataRouter:
+        router = getattr(self, "market_data_router", None)
+        if router is None:
+            router = MarketDataRouter(self.fetcher_manager)
+            self.market_data_router = router
+        return router
+
+    def _get_news_data_router(self) -> NewsDataRouter:
+        router = getattr(self, "news_data_router", None)
+        if router is None:
+            router = NewsDataRouter(
+                getattr(self, "search_service", None),
+                enabled=bool(getattr(self.config, "news_enabled", True)),
+                max_items_per_stock=int(getattr(self.config, "news_max_items_per_stock", 8) or 8),
+            )
+            self.news_data_router = router
+        return router
 
     def _emit_progress(self, progress: int, message: str) -> None:
         """Best-effort bridge from pipeline stages to task SSE progress."""
@@ -337,10 +362,12 @@ class StockAnalysisPipeline:
 
             # 从数据源获取数据
             logger.info(f"{stock_name}({code}) 开始从数据源获取数据...")
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=30)
+            daily_bundle = self._get_market_data_router().get_daily_data(code, days=30)
+            df = daily_bundle.kline_daily
+            source_name = daily_bundle.source_name or "unknown"
 
             if df is None or df.empty:
-                return False, "获取数据为空"
+                return False, daily_bundle.insufficient_reason or "获取数据为空"
 
             # 保存到数据库
             saved_count = self.db.save_daily_data(df, code, source_name)
@@ -415,9 +442,11 @@ class StockAnalysisPipeline:
 
             # Step 1: 获取实时行情（量比、换手率等）- 使用统一入口，自动故障切换
             realtime_quote = None
+            realtime_bundle = None
             try:
                 if self.config.enable_realtime_quote:
-                    realtime_quote = self.fetcher_manager.get_realtime_quote(code, log_final_failure=False)
+                    realtime_bundle = self._get_market_data_router().get_realtime_quote(code, log_final_failure=False)
+                    realtime_quote = realtime_bundle.realtime_quote
                     if realtime_quote:
                         # 使用实时行情返回的真实股票名称
                         if realtime_quote.name:
@@ -427,9 +456,14 @@ class StockAnalysisPipeline:
                         turnover_rate = getattr(realtime_quote, 'turnover_rate', None)
                         logger.info(f"{stock_name}({code}) 实时行情: 价格={realtime_quote.price}, "
                                   f"量比={volume_ratio}, 换手率={turnover_rate}% "
-                                  f"(来源: {realtime_quote.source.value if hasattr(realtime_quote, 'source') else 'unknown'})")
+                                  f"(来源: {realtime_bundle.source_name or (realtime_quote.source.value if hasattr(realtime_quote, 'source') else 'unknown')}, "
+                                  f"时间: {realtime_bundle.data_timestamp})")
                     else:
-                        logger.warning(f"{stock_name}({code}) 所有实时行情数据源均不可用，已降级为历史收盘价继续分析")
+                        reason = getattr(realtime_bundle, "insufficient_reason", None) if realtime_bundle else None
+                        logger.warning(
+                            f"{stock_name}({code}) 所有实时行情数据源均不可用，已降级为历史收盘价继续分析"
+                            f"{'：' + reason if reason else ''}"
+                        )
                 else:
                     logger.info(f"{stock_name}({code}) 实时行情已禁用，使用历史收盘价继续分析")
             except Exception as e:
@@ -474,8 +508,9 @@ class StockAnalysisPipeline:
             # - 失败时返回 partial/failed，不影响既有技术面/新闻链路
             # - 关闭开关时仍返回 not_supported 结构
             fundamental_context = None
+            fundamental_bundle = None
             try:
-                fundamental_context = self.fetcher_manager.get_fundamental_context(
+                fundamental_bundle = self._get_market_data_router().get_fundamental_context(
                     code,
                     budget_seconds=getattr(
                         self.config,
@@ -483,6 +518,7 @@ class StockAnalysisPipeline:
                         FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT,
                     ),
                 )
+                fundamental_context = fundamental_bundle.fundamental_context
             except Exception as e:
                 logger.warning(f"{stock_name}({code}) 基本面聚合失败: {e}")
                 fundamental_context = self.fetcher_manager.build_failed_fundamental_context(code, str(e))
@@ -551,24 +587,28 @@ class StockAnalysisPipeline:
             )
             news_result_count: Optional[int] = None
             self._emit_progress(46, f"{stock_name}：正在检索新闻与舆情")
-            if self.search_service is not None and self.search_service.is_available:
+            news_bundle = None
+            news_router = self._get_news_data_router()
+            if news_router.is_available:
                 logger.info(f"{stock_name}({code}) 开始多维度情报搜索...")
 
                 # 使用多维度搜索（最多5次搜索）
-                intel_results = self.search_service.search_comprehensive_intel(
+                news_bundle = news_router.search_stock_intel(
                     stock_code=code,
                     stock_name=stock_name,
                     max_searches=5
                 )
+                intel_results = news_bundle.responses
 
                 # 格式化情报报告
                 if intel_results:
-                    news_context = self.search_service.format_intel_report(intel_results, stock_name)
-                    total_results = sum(
-                        len(r.results) for r in intel_results.values() if r.success
-                    )
+                    news_context = news_bundle.context_text
+                    total_results = news_bundle.result_count
                     news_result_count = total_results
-                    logger.info(f"{stock_name}({code}) 情报搜索完成: 共 {total_results} 条结果")
+                    logger.info(
+                        f"{stock_name}({code}) 情报搜索完成: 共 {total_results} 条结果 "
+                        f"(来源: {news_bundle.source_name or 'none'}, 时间: {news_bundle.data_timestamp})"
+                    )
                     logger.debug(f"{stock_name}({code}) 情报搜索结果:\n{news_context}")
 
                     # 保存新闻情报到数据库（用于后续复盘与查询）
@@ -587,7 +627,15 @@ class StockAnalysisPipeline:
                     except Exception as e:
                         logger.warning(f"{stock_name}({code}) 保存新闻情报失败: {e}")
             else:
-                logger.info(f"{stock_name}({code}) 搜索服务不可用，跳过情报搜索")
+                news_bundle = news_router.search_stock_intel(
+                    stock_code=code,
+                    stock_name=stock_name,
+                    max_searches=0,
+                )
+                logger.info(
+                    f"{stock_name}({code}) 搜索服务不可用或已关闭，跳过情报搜索: "
+                    f"{news_bundle.insufficient_reason or news_bundle.status.value}"
+                )
 
             # Step 4.5: Social sentiment intelligence (US stocks only)
             if self.social_sentiment_service is not None and self.social_sentiment_service.is_available and is_us_stock_code(code):
@@ -638,6 +686,11 @@ class StockAnalysisPipeline:
                 market_phase_context=market_phase_context_dict,
                 portfolio_context=portfolio_context,
             )
+            enhanced_context["data_source_meta"] = {
+                "market": realtime_bundle.to_context_metadata() if realtime_bundle else None,
+                "fundamental": fundamental_bundle.to_context_metadata() if fundamental_bundle else None,
+                "news": news_bundle.to_context_metadata() if news_bundle else None,
+            }
             enhanced_context["market_phase_context"] = market_phase_context_dict
             self._attach_daily_market_context(
                 enhanced_context,
@@ -733,6 +786,7 @@ class StockAnalysisPipeline:
                 realtime_data = enhanced_context.get('realtime', {})
                 result.current_price = realtime_data.get('price')
                 result.change_pct = realtime_data.get('change_pct')
+                self._attach_data_source_dashboard(result, enhanced_context.get("data_source_meta"))
 
             # Step 7.6: chip_structure fallback (Issue #589) and unavailable collapse
             if result:
@@ -1047,6 +1101,28 @@ class StockAnalysisPipeline:
 
         return enhanced
 
+    @staticmethod
+    def _attach_data_source_dashboard(result: Any, data_source_meta: Any) -> None:
+        if not isinstance(data_source_meta, dict):
+            return
+        dashboard = getattr(result, "dashboard", None)
+        if not isinstance(dashboard, dict):
+            dashboard = {}
+            result.dashboard = dashboard
+        compact: Dict[str, Any] = {}
+        for key in ("market", "fundamental", "news"):
+            item = data_source_meta.get(key)
+            if not isinstance(item, dict):
+                continue
+            compact[key] = {
+                k: v
+                for k, v in item.items()
+                if k in {"source_name", "data_timestamp", "status", "result_count", "insufficient_reason"}
+                and v not in (None, "")
+            }
+        if compact:
+            dashboard["data_sources"] = compact
+
     def _attach_belong_boards_to_fundamental_context(
         self,
         code: str,
@@ -1115,7 +1191,9 @@ class StockAnalysisPipeline:
             logger.debug("[%s] Agent history: %d bars in DB, sufficient", code, len(bars))
             return
         try:
-            df, source = self.fetcher_manager.get_daily_data(code, days=min_days)
+            daily_bundle = self._get_market_data_router().get_daily_data(code, days=min_days)
+            df = daily_bundle.kline_daily
+            source = daily_bundle.source_name or "unknown"
             if df is not None and not df.empty:
                 self.db.save_daily_data(df, code, source)
                 logger.info("[%s] Prefetched %d rows of history for agent (source: %s)", code, len(df), source)
@@ -1472,7 +1550,9 @@ class StockAnalysisPipeline:
             return context
 
         try:
-            df, source_name = self.fetcher_manager.get_daily_data(code, days=60)
+            daily_bundle = self._get_market_data_router().get_daily_data(code, days=60)
+            df = daily_bundle.kline_daily
+            source_name = daily_bundle.source_name or "unknown"
         except Exception as exc:
             logger.warning("[%s] JP/KR daily fallback fetch failed: %s", code, exc)
             return context

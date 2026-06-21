@@ -17,6 +17,7 @@ from src.analyzer import AnalysisResult
 from src.config import get_config
 from src.market_phase_summary import format_public_market_status_line, format_public_phase_pack_excerpt
 from src.services.decision_signal_summary import format_decision_signal_excerpt
+from src.services.trading_observation import build_trading_observation_summary
 from src.report_language import (
     get_localized_stock_name,
     get_report_labels,
@@ -200,6 +201,7 @@ def render(
         "localize_operation_advice": localize_operation_advice,
         "localize_trend_prediction": localize_trend_prediction,
         "localize_chip_health": localize_chip_health,
+        "trading_observation": build_trading_observation_summary(sorted_results),
     }
     if extra_context:
         safe_extra_context = dict(extra_context)

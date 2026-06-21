@@ -3,6 +3,8 @@ name: 每日股票分析
 on:
   # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
   schedule:
+    - cron: '45 1 * * 1-5'      # 周一到周五，UTC 01:45 = 北京时间 09:45（盘中观察）
+    - cron: '30 5 * * 1-5'      # 周一到周五，UTC 05:30 = 北京时间 13:30（盘中观察）
     - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
   
   # 手动触发
@@ -263,6 +265,12 @@ jobs:
           BRAVE_API_KEYS: ${{ secrets.BRAVE_API_KEYS }}
           SEARXNG_BASE_URLS: ${{ vars.SEARXNG_BASE_URLS || secrets.SEARXNG_BASE_URLS }}
           SEARXNG_PUBLIC_INSTANCES_ENABLED: ${{ vars.SEARXNG_PUBLIC_INSTANCES_ENABLED || secrets.SEARXNG_PUBLIC_INSTANCES_ENABLED }}
+          NEWS_ENABLED: ${{ vars.NEWS_ENABLED || secrets.NEWS_ENABLED || 'true' }}
+          NEWS_LOOKBACK_HOURS: ${{ vars.NEWS_LOOKBACK_HOURS || secrets.NEWS_LOOKBACK_HOURS || '48' }}
+          NEWS_MAX_ITEMS_PER_STOCK: ${{ vars.NEWS_MAX_ITEMS_PER_STOCK || secrets.NEWS_MAX_ITEMS_PER_STOCK || '8' }}
+          NEWS_MAX_ITEMS_MARKET: ${{ vars.NEWS_MAX_ITEMS_MARKET || secrets.NEWS_MAX_ITEMS_MARKET || '12' }}
+          NEWS_REQUIRE_SOURCE: ${{ vars.NEWS_REQUIRE_SOURCE || secrets.NEWS_REQUIRE_SOURCE || 'true' }}
+          NEWS_DEDUP_ENABLED: ${{ vars.NEWS_DEDUP_ENABLED || secrets.NEWS_DEDUP_ENABLED || 'true' }}
           
           # ==========================================
           # 通知渠道（可同时配置多个，全部推送）
@@ -389,6 +397,14 @@ jobs:
 
           # 判断运行模式
           MODE="${{ github.event.inputs.mode || 'full' }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case "${{ github.event.schedule }}" in
+              "45 1 * * 1-5"|"30 5 * * 1-5")
+                MODE="stocks-only"
+                echo "📡 盘中观察定时任务：仅运行自选股与交易观察提醒"
+                ;;
+            esac
+          fi
           
           echo "=========================================="
           echo "🚀 A股自选股智能分析系统"
@@ -425,6 +441,14 @@ jobs:
           fi
           echo ""
           echo "【搜索引擎】"
+          case "${NEWS_ENABLED,,}" in
+            0|false|no|off)
+              echo "  新闻增强: ❌ 已关闭"
+              ;;
+            *)
+              echo "  新闻增强: ✅ 已开启（lookback=${NEWS_LOOKBACK_HOURS}h, stock_items=${NEWS_MAX_ITEMS_PER_STOCK}）"
+              ;;
+          esac
           echo "  Bocha API Keys: $([ -n "$BOCHA_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Tavily API Keys: $([ -n "$TAVILY_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  SerpAPI Keys: $([ -n "$SERPAPI_API_KEYS" ] && echo '✅ 已配置' || echo '⚪ 未配置')"

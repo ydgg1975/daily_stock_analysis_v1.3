@@ -14,6 +14,28 @@
 {{ signal_excerpt }}
 {% endif %}
 {% endfor %}
+{% if trading_observation %}
+**🧭 交易观察**
+> {{ trading_observation.disclaimer }}
+{% if trading_observation.top_focus %}
+**今日关注**
+{% for item in trading_observation.top_focus %}
+- {{ item.name }} | {{ item.operation }} | {{ item.reason[:60] }}
+{% endfor %}
+{% endif %}
+{% if trading_observation.not_recommended %}
+**不建议操作**
+{% for item in trading_observation.not_recommended %}
+- {{ item.name }} | {{ item.operation }}
+{% endfor %}
+{% endif %}
+{% if trading_observation.tomorrow_watch %}
+**明日观察**
+{% for item in trading_observation.tomorrow_watch %}
+- {{ item.name }} | {{ item.battle_line[:80] }}
+{% endfor %}
+{% endif %}
+{% endif %}
 {% else %}
 {% for e in enriched %}
 {% set result = e.result %}
