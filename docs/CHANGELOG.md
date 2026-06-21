@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] Web/API runtime scheduler 接管 `--serve --schedule` 后保留 `--dry-run`、`--no-notify` 等启动参数语义。
 - [改进] Web 历史报告详情不再内嵌展示 AI 建议卡片，结构化决策信号集中在 AI 建议页查询，并保留按来源报告 ID 筛选或 URL 参数精确定位入口。
 - [修复] 修复 Web 回测运行未传分析日期范围、股票代码未归一化导致后端成功返回但结果为空的问题，并为空候选和行情不足返回诊断信息。
-- [文档] 同步更新 `docs/full-guide.md` 与 `docs/full-guide_EN.md` 的回测 API 行为说明（分析日期范围参数、空结果诊断返回、`400 invalid_params` 语义），并补齐对应示例；仓储筛选/归一化链路变更同步在 `src/repositories/backtest_repo.py`，范围文件为 `api/v1/endpoints/backtest.py`、`api/v1/schemas/backtest.py`、`apps/dsa-web/src/api/backtest.ts`、`apps/dsa-web/src/pages/BacktestPage.tsx`、`docs/full-guide*.md`、`tests/test_backtest_service.py`、`src/services/backtest_service.py`。
+- [文档] 同步更新 `docs/full-guide.md` 与 `docs/full-guide_EN.md` 的回测 API 行为说明（分析日期范围参数、空结果诊断返回、`400 invalid_params` 语义），并补齐对应示例；仓储筛选/归一化链路变更同步在 `src/repositories/backtest_repo.py`，涉及文件范围为 `api/v1/endpoints/backtest.py`、`api/v1/schemas/backtest.py`、`apps/dsa-web/src/api/backtest.ts`、`apps/dsa-web/src/index.css`、`apps/dsa-web/src/pages/BacktestPage.tsx`、`apps/dsa-web/src/pages/__tests__/BacktestPage.test.tsx`、`apps/dsa-web/src/types/backtest.ts`、`docs/full-guide.md`、`docs/full-guide_EN.md`、`src/repositories/backtest_repo.py`、`src/services/backtest_service.py`、`tests/test_backtest_service.py`。
 
 ## [3.23.0] - 2026-06-20
 
