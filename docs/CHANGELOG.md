@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 避免 runtime scheduler 重建定时任务时重复立即运行事件监控，减少重复告警和后台任务状态丢失。
 - [修复] Web/API runtime scheduler 接管 `--serve --schedule` 后保留 `--dry-run`、`--no-notify` 等启动参数语义。
 - [改进] Web 历史报告详情不再内嵌展示 AI 建议卡片，结构化决策信号集中在 AI 建议页查询，并保留按来源报告 ID 筛选或 URL 参数精确定位入口。
+- [改进] 新增 GenerationBackend Phase 1 抽象与 LiteLLM backend 配置，默认保持普通分析、`generate_text()` 和 Agent Chat 的 LiteLLM 行为不变。
 
 ## [3.23.0] - 2026-06-20
 

@@ -12,6 +12,8 @@ const requiredLocalizedKeys = [
   'PYTDX_PORT',
   'PYTDX_SERVERS',
   'BIAS_THRESHOLD',
+  'GENERATION_BACKEND',
+  'GENERATION_FALLBACK_BACKEND',
   'LLM_USAGE_HMAC_SECRET',
   'LLM_USAGE_HMAC_KEY_VERSION',
   'TELEGRAM_BOT_TOKEN',
@@ -71,6 +73,7 @@ const requiredLocalizedKeys = [
   'ANALYSIS_DELAY',
   'SAVE_CONTEXT_SNAPSHOT',
   'DEBUG',
+  'AGENT_GENERATION_BACKEND',
   'AGENT_NL_ROUTING',
   'AGENT_DEEP_RESEARCH_BUDGET',
   'AGENT_DEEP_RESEARCH_TIMEOUT',
@@ -132,6 +135,10 @@ describe('systemConfigI18n option label localization', () => {
     ['MARKET_REVIEW_REGION', 'both', undefined, '全部市场'],
     ['MARKET_REVIEW_COLOR_SCHEME', 'green_up', 'Green Up / Red Down', '绿涨红跌'],
     ['MARKET_REVIEW_COLOR_SCHEME', 'red_up', 'Red Up / Green Down', '红涨绿跌'],
+    ['GENERATION_BACKEND', 'litellm', undefined, 'LiteLLM'],
+    ['GENERATION_FALLBACK_BACKEND', 'litellm', undefined, 'LiteLLM'],
+    ['AGENT_GENERATION_BACKEND', 'auto', 'Auto', '自动'],
+    ['AGENT_GENERATION_BACKEND', 'litellm', undefined, 'LiteLLM'],
     ['AGENT_ARCH', 'single', 'Single Agent', '单 Agent'],
     ['AGENT_ARCH', 'multi', 'Multi Agent (Orchestrator)', '多 Agent（编排）'],
     ['AGENT_ORCHESTRATOR_MODE', 'quick', 'Quick', '快速'],
@@ -170,6 +177,100 @@ describe('SAVE_CONTEXT_SNAPSHOT settings help contract', () => {
     expect(text).toContain('不关闭当次 AnalysisContextPack 构建');
     expect(text).toContain('不关闭 LLM Prompt');
     expect(text).not.toContain('旧记录');
+  });
+});
+
+describe('generation backend settings help contract', () => {
+  it('uses user-facing generation channel copy instead of implementation terms', () => {
+    const zhInlineText = [
+      getFieldTitleZh('GENERATION_BACKEND', ''),
+      getFieldDescriptionZh('GENERATION_BACKEND', ''),
+      getFieldTitleZh('GENERATION_FALLBACK_BACKEND', ''),
+      getFieldDescriptionZh('GENERATION_FALLBACK_BACKEND', ''),
+      getFieldTitleZh('AGENT_GENERATION_BACKEND', ''),
+      getFieldDescriptionZh('AGENT_GENERATION_BACKEND', ''),
+    ].join('\n');
+    const zhBackend = getSettingsHelpContent('settings.ai_model.GENERATION_BACKEND', undefined, 'zh-CN');
+    const enBackend = getSettingsHelpContent('settings.ai_model.GENERATION_BACKEND', undefined, 'en');
+    const zhFallback = getSettingsHelpContent('settings.ai_model.GENERATION_FALLBACK_BACKEND', undefined, 'zh-CN');
+    const enFallback = getSettingsHelpContent('settings.ai_model.GENERATION_FALLBACK_BACKEND', undefined, 'en');
+    const zhAgent = getSettingsHelpContent('settings.agent.AGENT_GENERATION_BACKEND', undefined, 'zh-CN');
+    const enAgent = getSettingsHelpContent('settings.agent.AGENT_GENERATION_BACKEND', undefined, 'en');
+    const zhText = [
+      zhBackend?.title,
+      zhBackend?.summary,
+      zhBackend?.usage,
+      ...(zhBackend?.valueNotes ?? []),
+      ...(zhBackend?.impact ?? []),
+      ...(zhBackend?.notes ?? []),
+      zhFallback?.title,
+      zhFallback?.summary,
+      zhFallback?.usage,
+      ...(zhFallback?.valueNotes ?? []),
+      ...(zhFallback?.impact ?? []),
+      ...(zhFallback?.notes ?? []),
+      zhAgent?.title,
+      zhAgent?.summary,
+      zhAgent?.usage,
+      ...(zhAgent?.valueNotes ?? []),
+      ...(zhAgent?.impact ?? []),
+      ...(zhAgent?.notes ?? []),
+    ].join('\n');
+    const enText = [
+      enBackend?.title,
+      enBackend?.summary,
+      enBackend?.usage,
+      ...(enBackend?.valueNotes ?? []),
+      ...(enBackend?.impact ?? []),
+      ...(enBackend?.notes ?? []),
+      enFallback?.title,
+      enFallback?.summary,
+      enFallback?.usage,
+      ...(enFallback?.valueNotes ?? []),
+      ...(enFallback?.impact ?? []),
+      ...(enFallback?.notes ?? []),
+      enAgent?.title,
+      enAgent?.summary,
+      enAgent?.usage,
+      ...(enAgent?.valueNotes ?? []),
+      ...(enAgent?.impact ?? []),
+      ...(enAgent?.notes ?? []),
+    ].join('\n');
+
+    expect(zhBackend?.title).toBe('分析生成通道');
+    expect(zhFallback?.title).toBe('备用生成通道');
+    expect(zhAgent?.title).toBe('问股生成通道');
+    expect(zhBackend?.showFieldKey).toBe(false);
+    expect(zhFallback?.showFieldKey).toBe(false);
+    expect(zhAgent?.showFieldKey).toBe(false);
+    expect(zhBackend?.examples).toEqual([]);
+    expect(zhFallback?.examples).toEqual([]);
+    expect(zhAgent?.examples).toEqual([]);
+    expect(zhInlineText).toContain('个股分析');
+    expect(zhInlineText).toContain('问股助手');
+    expect(zhInlineText).not.toContain('Phase 1');
+    expect(zhInlineText).not.toContain('backend');
+    expect(zhInlineText).not.toContain('tool_calls');
+    expect(zhText).toContain('个股分析');
+    expect(zhText).toContain('大盘复盘');
+    expect(zhText).toContain('自动');
+    expect(zhText).not.toContain('Phase 1');
+    expect(zhText).not.toContain('backend');
+    expect(zhText).not.toContain('tool_calls');
+    expect(zhText).not.toContain('unsupported_tool_calling');
+    expect(zhText).not.toContain('run_agent_loop');
+
+    expect(enBackend?.title).toBe('Analysis Generation Channel');
+    expect(enFallback?.title).toBe('Fallback Generation Channel');
+    expect(enAgent?.title).toBe('Ask-Stock Generation Channel');
+    expect(enText).toContain('stock analysis');
+    expect(enText).toContain('market reviews');
+    expect(enText).toContain('Auto');
+    expect(enText).not.toContain('Phase 1');
+    expect(enText).not.toContain('backend');
+    expect(enText).not.toContain('tool_calls');
+    expect(enText).not.toContain('unsupported_tool_calling');
+    expect(enText).not.toContain('run_agent_loop');
   });
 });
 

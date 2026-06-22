@@ -182,6 +182,90 @@ class TestAnalyzerGenerateText:
             assert gen_cfg["max_tokens"] == 2048
             assert gen_cfg["temperature"] == 0.7
 
+    def test_call_litellm_wrapper_uses_generation_backend_tuple_contract(self):
+        analyzer = self._make_analyzer()
+        backend = MagicMock()
+        backend.generate.return_value = SimpleNamespace(
+            text="backend response",
+            model="gemini/gemini-3.1-pro-preview",
+            usage={"provider": "gemini", "total_tokens": 9},
+        )
+
+        with patch.object(analyzer, "_get_generation_backend", return_value=backend):
+            result = analyzer._call_litellm(
+                "prompt",
+                {"max_tokens": 128, "temperature": 0.2},
+                system_prompt="system",
+                stream=True,
+                stream_progress_callback=lambda _chars: None,
+                response_validator=lambda _text: None,
+                audit_context={"call_type": "analysis"},
+            )
+
+        assert result == (
+            "backend response",
+            "gemini/gemini-3.1-pro-preview",
+            {"provider": "gemini", "total_tokens": 9},
+        )
+        backend.generate.assert_called_once()
+        _, generation_config = backend.generate.call_args.args
+        assert generation_config == {"max_tokens": 128, "temperature": 0.2}
+        assert backend.generate.call_args.kwargs["system_prompt"] == "system"
+        assert backend.generate.call_args.kwargs["stream"] is True
+        assert callable(backend.generate.call_args.kwargs["stream_progress_callback"])
+        assert callable(backend.generate.call_args.kwargs["response_validator"])
+        assert backend.generate.call_args.kwargs["audit_context"] == {"call_type": "analysis"}
+
+    def test_call_litellm_rejects_unknown_generation_backend_without_litellm_fallback(self):
+        from src.llm.generation_backend import GenerationError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            generation_backend="codex",
+            generation_fallback_backend="litellm",
+        )
+
+        with pytest.raises(GenerationError) as exc_info:
+            analyzer._call_litellm("prompt", {"max_tokens": 128})
+
+        assert exc_info.value.details["requested_backend"] == "codex"
+
+    def test_call_litellm_rejects_unknown_generation_fallback_backend(self):
+        from src.llm.generation_backend import GenerationError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            generation_backend="litellm",
+            generation_fallback_backend="codex",
+        )
+
+        with pytest.raises(GenerationError) as exc_info:
+            analyzer._call_litellm("prompt", {"max_tokens": 128})
+
+        assert exc_info.value.details["field"] == "GENERATION_FALLBACK_BACKEND"
+        assert exc_info.value.details["requested_backend"] == "codex"
+
+    def test_analyze_reports_generation_backend_config_error_instead_of_api_key_missing(self):
+        analyzer = self._make_analyzer()
+        analyzer._litellm_available = True
+        analyzer._config_override = SimpleNamespace(
+            generation_backend="codex",
+            generation_fallback_backend="litellm",
+            report_language="zh",
+            gemini_request_delay=0,
+        )
+
+        with patch.object(analyzer, "_get_analysis_system_prompt", return_value="system"), \
+             patch.object(analyzer, "_get_skill_prompt_sections", return_value=(None, None, True)):
+            result = analyzer.analyze({"code": "AAPL", "stock_name": "Apple"})
+
+        assert result.success is False
+        assert "backend_not_configured" in result.error_message
+        assert "GENERATION_BACKEND" in result.error_message
+        assert "codex" in result.error_message
+        assert "API Key" not in result.error_message
+        assert "API Key" not in result.analysis_summary
+
     def test_call_litellm_stream_aggregates_chunks_and_reports_progress(self):
         analyzer = self._make_analyzer()
         analyzer._config_override = SimpleNamespace(
