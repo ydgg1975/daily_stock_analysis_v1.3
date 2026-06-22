@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 避免 runtime scheduler 重建定时任务时重复立即运行事件监控，减少重复告警和后台任务状态丢失。
 - [修复] Web/API runtime scheduler 接管 `--serve --schedule` 后保留 `--dry-run`、`--no-notify` 等启动参数语义。
 - [改进] Web 历史报告详情不再内嵌展示 AI 建议卡片，结构化决策信号集中在 AI 建议页查询，并保留按来源报告 ID 筛选或 URL 参数精确定位入口。
+- [修复] `main.py --serve-only` 在低配主机上因 uvicorn 在 3.0s 启动自检窗口内才惰性 import 应用（litellm + 整个 app 树）导致超时退出、容器反复重启；改为在计时前于调用线程预先 import app 对象再交给 uvicorn，启动自检不再误杀慢启动。
 
 ## [3.23.0] - 2026-06-20
 
