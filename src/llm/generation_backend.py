@@ -96,4 +96,3 @@ class GenerationBackend(Protocol):
         audit_context: Optional[Dict[str, Any]] = None,
     ) -> GenerationResult:
         """Generate text with the backend."""
-

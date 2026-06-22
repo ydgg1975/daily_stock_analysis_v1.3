@@ -1683,6 +1683,44 @@ class TestMarketAnalyzerBypassFix:
         assert diagnostic["error_type"] == "GenerationError"
         assert "backend_not_configured" in str(diagnostic["error_message"])
 
+    def test_generation_backend_config_error_without_analyzer_does_not_template_fallback(self):
+        from src.llm.generation_backend import GenerationError
+        from src.market_analyzer import MarketOverview, MarketIndex
+
+        overview = MarketOverview(
+            date="2026-03-05",
+            indices=[
+                MarketIndex(
+                    code="000001",
+                    name="上证指数",
+                    current=3300.0,
+                    change=5.0,
+                    change_pct=0.15,
+                )
+            ],
+        )
+        cases = [
+            ("generation_backend", "GENERATION_BACKEND"),
+            ("generation_fallback_backend", "GENERATION_FALLBACK_BACKEND"),
+        ]
+
+        for attr_name, expected_field in cases:
+            ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+            ma.analyzer = None
+            ma.config.generation_backend = "litellm"
+            ma.config.generation_fallback_backend = "litellm"
+            setattr(ma.config, attr_name, "codex")
+
+            with patch.object(ma, "_generate_template_review", wraps=ma._generate_template_review) as template_review, \
+                 patch("src.market_analyzer.record_llm_run") as mock_record_llm_run:
+                with pytest.raises(GenerationError) as exc_info:
+                    ma.generate_market_review(overview, [])
+
+            assert exc_info.value.details["field"] == expected_field
+            assert exc_info.value.details["requested_backend"] == "codex"
+            template_review.assert_not_called()
+            mock_record_llm_run.assert_called_once()
+
     def test_market_review_uses_8192_max_tokens(self):
         """generate_market_review() should request a larger output budget to avoid truncation."""
         from src.market_analyzer import MarketOverview, MarketIndex

@@ -69,4 +69,3 @@ class LiteLLMGenerationBackend(GenerationBackend):
             raw=None,
             diagnostics={},
         )
-

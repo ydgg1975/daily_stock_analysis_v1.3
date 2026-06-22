@@ -25,6 +25,10 @@ from src.report_language import normalize_report_language
 from src.search_service import SearchService
 from src.core.market_profile import get_profile, MarketProfile
 from src.core.market_strategy import get_market_strategy_blueprint
+from src.llm.backend_registry import (
+    resolve_generation_backend_id,
+    resolve_generation_fallback_backend_id,
+)
 from src.llm.generation_backend import GenerationError
 from src.schemas.market_light import MarketLightSnapshot
 from src.services.run_diagnostics import record_llm_run, record_llm_run_started
@@ -617,6 +621,11 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     def _get_analyzer_generation_backend_config_error(self) -> Optional[GenerationError]:
         """Return analyzer backend config errors without relying on dynamic mock attributes."""
         if self.analyzer is None:
+            try:
+                resolve_generation_backend_id(self.config)
+                resolve_generation_fallback_backend_id(self.config)
+            except GenerationError as exc:
+                return exc
             return None
         missing = object()
         if getattr_static(self.analyzer, "get_generation_backend_config_error", missing) is missing:
