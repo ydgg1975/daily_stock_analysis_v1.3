@@ -248,15 +248,14 @@ describe('generation backend settings help contract', () => {
     expect(zhAgent?.examples).toEqual([]);
     expect(zhInlineText).toContain('个股分析');
     expect(zhInlineText).toContain('问股助手');
-    expect(zhInlineText).not.toContain('Phase 1');
-    expect(zhInlineText).not.toContain('backend');
-    expect(zhInlineText).not.toContain('tool_calls');
+    expect(zhInlineText).toContain('“自动”当前使用 LiteLLM 工具调用路径');
+    expect(zhInlineText).not.toContain('沿用当前可用的模型通道');
     expect(zhText).toContain('个股分析');
     expect(zhText).toContain('大盘复盘');
     expect(zhText).toContain('自动');
-    expect(zhText).not.toContain('Phase 1');
-    expect(zhText).not.toContain('backend');
-    expect(zhText).not.toContain('tool_calls');
+    expect(zhAgent?.usage).toContain('“自动”当前使用 LiteLLM 工具调用路径');
+    expect(zhAgent?.valueNotes).toContain('“自动”和 LiteLLM 当前都会走 LiteLLM 工具调用路径。');
+    expect(zhText).not.toContain('优先选择当前可用');
     expect(zhText).not.toContain('unsupported_tool_calling');
     expect(zhText).not.toContain('run_agent_loop');
 
@@ -266,9 +265,9 @@ describe('generation backend settings help contract', () => {
     expect(enText).toContain('stock analysis');
     expect(enText).toContain('market reviews');
     expect(enText).toContain('Auto');
-    expect(enText).not.toContain('Phase 1');
-    expect(enText).not.toContain('backend');
-    expect(enText).not.toContain('tool_calls');
+    expect(enAgent?.usage).toContain('Auto currently uses the LiteLLM tool-capable path');
+    expect(enAgent?.valueNotes).toContain('Auto and LiteLLM currently both use the LiteLLM assistant tool path.');
+    expect(enText).not.toContain('current available model channel');
     expect(enText).not.toContain('unsupported_tool_calling');
     expect(enText).not.toContain('run_agent_loop');
   });

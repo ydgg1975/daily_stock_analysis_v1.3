@@ -3,7 +3,8 @@
 
 Covers:
 - generate_text() returns the LLM response on success
-- generate_text() returns None and logs on failure (no exception propagated)
+- generate_text() returns None and logs on ordinary failures
+- generation backend configuration errors propagate explicitly
 - market_analyzer calls generate_text(), not private analyzer attributes
 - Any provider configuration (Gemini / Anthropic / OpenAI / LLM_CHANNELS)
   does NOT trigger AttributeError (regression guard for the old bypass bug)
@@ -103,10 +104,14 @@ class TestAnalyzerGenerateText:
             cfg.deepseek_api_keys = []
             cfg.llm_model_list = []
             cfg.openai_base_url = None
+            cfg.generation_backend = "litellm"
+            cfg.generation_fallback_backend = "litellm"
             mock_cfg.return_value = cfg
             from src.analyzer import GeminiAnalyzer
             analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
             analyzer._router = None
+            analyzer._litellm_available = True
+            analyzer._config_override = cfg
             return analyzer
 
     def test_legacy_market_group_normalizes_supported_markets(self):
@@ -172,6 +177,21 @@ class TestAnalyzerGenerateText:
         with patch.object(analyzer, "_call_litellm", side_effect=Exception("LLM error")):
             result = analyzer.generate_text("prompt")
             assert result is None  # must not raise
+
+    def test_generate_text_raises_generation_error_for_unsupported_backend(self):
+        from src.llm.generation_backend import GenerationError
+
+        analyzer = self._make_analyzer()
+        analyzer._config_override = SimpleNamespace(
+            generation_backend="codex",
+            generation_fallback_backend="litellm",
+        )
+
+        with pytest.raises(GenerationError) as exc_info:
+            analyzer.generate_text("prompt")
+
+        assert exc_info.value.details["field"] == "GENERATION_BACKEND"
+        assert exc_info.value.details["requested_backend"] == "codex"
 
     def test_generate_text_default_params(self):
         analyzer = self._make_analyzer()
@@ -1573,6 +1593,8 @@ class TestMarketAnalyzerBypassFix:
             cfg.market_review_region = "cn"
             cfg.market_review_color_scheme = "green_up"
             cfg.report_language = "zh"
+            cfg.generation_backend = "litellm"
+            cfg.generation_fallback_backend = "litellm"
             mock_cfg.return_value = cfg
             mock_cfg2.return_value = cfg
 
@@ -1582,6 +1604,7 @@ class TestMarketAnalyzerBypassFix:
             analyzer = GeminiAnalyzer.__new__(GeminiAnalyzer)
             analyzer._router = None
             analyzer._litellm_available = True
+            analyzer._config_override = cfg
             analyzer.generate_text = MagicMock(return_value=return_value)
 
             ma = MarketAnalyzer.__new__(MarketAnalyzer)
@@ -1624,6 +1647,41 @@ class TestMarketAnalyzerBypassFix:
         result = ma.generate_market_review(overview, [])
         assert isinstance(result, str) and len(result) > 0
         ma.analyzer.generate_text.assert_called_once()
+
+    def test_generation_backend_config_error_does_not_template_fallback(self):
+        from src.llm.generation_backend import GenerationError
+        from src.market_analyzer import MarketOverview, MarketIndex
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
+        ma.analyzer._config_override.generation_backend = "codex"
+        overview = MarketOverview(
+            date="2026-03-05",
+            indices=[
+                MarketIndex(
+                    code="000001",
+                    name="上证指数",
+                    current=3300.0,
+                    change=5.0,
+                    change_pct=0.15,
+                )
+            ],
+        )
+
+        with patch.object(ma, "_generate_template_review", wraps=ma._generate_template_review) as template_review, \
+             patch("src.market_analyzer.record_llm_run") as mock_record_llm_run:
+            with pytest.raises(GenerationError) as exc_info:
+                ma.generate_market_review(overview, [])
+
+        assert exc_info.value.details["field"] == "GENERATION_BACKEND"
+        assert exc_info.value.details["requested_backend"] == "codex"
+        template_review.assert_not_called()
+        ma.analyzer.generate_text.assert_not_called()
+        mock_record_llm_run.assert_called_once()
+        diagnostic = mock_record_llm_run.call_args.kwargs
+        assert diagnostic["success"] is False
+        assert diagnostic["call_type"] == "market_review"
+        assert diagnostic["error_type"] == "GenerationError"
+        assert "backend_not_configured" in str(diagnostic["error_message"])
 
     def test_market_review_uses_8192_max_tokens(self):
         """generate_market_review() should request a larger output budget to avoid truncation."""

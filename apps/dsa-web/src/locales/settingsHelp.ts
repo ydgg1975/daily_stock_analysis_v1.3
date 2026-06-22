@@ -703,9 +703,9 @@ const settingsHelpZhCN: SettingsHelpMap = {
     title: '问股生成通道',
     showFieldKey: false,
     summary: '决定问股助手用哪条模型调用通道来生成回复，并配合工具查询行情、新闻和历史数据。',
-    usage: '通常保持“自动”。系统会优先选择当前可用、并能配合工具查询的模型通道；当前配置下会沿用 LiteLLM。',
+    usage: '通常保持“自动”。“自动”当前使用 LiteLLM 工具调用路径；如果没有明确要固定通道，无需调整。',
     valueNotes: [
-      '如果不确定，选择“自动”即可。',
+      '“自动”和 LiteLLM 当前都会走 LiteLLM 工具调用路径。',
       '只有当你明确要固定使用 LiteLLM 时，才改为 LiteLLM。',
     ],
     impact: ['影响问股助手的回复生成和工具调用入口，不改变它能使用哪些工具。'],
@@ -1727,9 +1727,9 @@ const settingsHelpEnUS: SettingsHelpMap = {
     title: 'Ask-Stock Generation Channel',
     showFieldKey: false,
     summary: 'Chooses the model-call channel used by the ask-stock assistant to generate replies and query market, news, and history tools.',
-    usage: 'Usually keep Auto. The system chooses the current available model channel that can work with assistant tools; with the current settings this uses LiteLLM.',
+    usage: 'Usually keep Auto. Auto currently uses the LiteLLM tool-capable path; change it only when you need to pin the assistant channel.',
     valueNotes: [
-      'Choose Auto if you are unsure.',
+      'Auto and LiteLLM currently both use the LiteLLM assistant tool path.',
       'Choose LiteLLM only when you explicitly want to pin the assistant to LiteLLM.',
     ],
     impact: ['Affects the assistant reply path and tool entry point. It does not change which tools the assistant can use.'],

@@ -491,6 +491,47 @@ describe('SettingsField', () => {
     expect(dialog).not.toHaveTextContent('backend');
   });
 
+  it('describes agent auto generation as the current LiteLLM tool path', () => {
+    render(
+      <SettingsField
+        item={{
+          key: 'AGENT_GENERATION_BACKEND',
+          value: 'auto',
+          rawValueExists: true,
+          isMasked: false,
+          schema: {
+            key: 'AGENT_GENERATION_BACKEND',
+            title: 'Agent Generation Backend',
+            category: 'agent',
+            dataType: 'string',
+            uiControl: 'select',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            options: [
+              { label: 'Auto', value: 'auto' },
+              { label: 'LiteLLM', value: 'litellm' },
+            ],
+            validation: { enum: ['auto', 'litellm'] },
+            displayOrder: 1,
+            helpKey: 'settings.agent.AGENT_GENERATION_BACKEND',
+            examples: [],
+            warningCodes: [],
+          },
+        }}
+        value="auto"
+        onChange={() => undefined}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '查看 问股生成通道 配置说明' }));
+
+    const dialog = screen.getByRole('dialog', { name: '问股生成通道' });
+    expect(dialog).toHaveTextContent('“自动”当前使用 LiteLLM 工具调用路径');
+    expect(dialog).toHaveTextContent('“自动”和 LiteLLM 当前都会走 LiteLLM 工具调用路径');
+    expect(dialog).not.toHaveTextContent('优先选择当前可用');
+  });
+
   it('uses per-field schema titles even when helpKey is shared by multiple fields', () => {
     const restoreLanguage = localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
     localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en');

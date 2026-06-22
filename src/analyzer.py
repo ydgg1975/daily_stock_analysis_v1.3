@@ -2348,26 +2348,31 @@ class GeminiAnalyzer:
 
     def is_available(self) -> bool:
         """Check whether the configured generation backend is available."""
-        if self._generation_backend_config_error() is not None:
+        if self.get_generation_backend_config_error() is not None:
             return False
         return self._router is not None or self._litellm_available
 
-    def _generation_backend_config_error(self) -> Optional[GenerationError]:
-        """Return a structured backend config error, if Phase 1 cannot run it."""
-        try:
-            config = self._get_runtime_config()
-            backend_id = resolve_generation_backend_id(config)
-            resolve_generation_fallback_backend_id(config)
-        except GenerationError as exc:
-            return exc
+    def _resolve_generation_backend_config(self) -> Tuple[str, Optional[str]]:
+        """Resolve and validate Phase 1 generation backend settings."""
+        config = self._get_runtime_config()
+        backend_id = resolve_generation_backend_id(config)
+        fallback_backend_id = resolve_generation_fallback_backend_id(config)
         if backend_id != LITELLM_BACKEND_ID:
-            return GenerationError(
+            raise GenerationError(
                 error_code=GenerationErrorCode.CAPABILITY_UNSUPPORTED,
                 stage="generation",
                 retryable=False,
                 fallbackable=False,
                 backend=backend_id,
             )
+        return backend_id, fallback_backend_id
+
+    def get_generation_backend_config_error(self) -> Optional[GenerationError]:
+        """Return a structured backend config error, if Phase 1 cannot run it."""
+        try:
+            self._resolve_generation_backend_config()
+        except GenerationError as exc:
+            return exc
         return None
 
     def _dispatch_litellm_completion(
@@ -2563,17 +2568,7 @@ class GeminiAnalyzer:
 
     def _get_generation_backend(self) -> LiteLLMGenerationBackend:
         """Return the configured Phase 1 generation backend."""
-        config = self._get_runtime_config()
-        backend_id = resolve_generation_backend_id(config)
-        resolve_generation_fallback_backend_id(config)
-        if backend_id != LITELLM_BACKEND_ID:
-            raise GenerationError(
-                error_code=GenerationErrorCode.CAPABILITY_UNSUPPORTED,
-                stage="generation",
-                retryable=False,
-                fallbackable=False,
-                backend=backend_id,
-            )
+        self._resolve_generation_backend_config()
         return LiteLLMGenerationBackend(self._call_litellm_impl)
 
     def _call_litellm(
@@ -2839,6 +2834,8 @@ class GeminiAnalyzer:
                 persist_llm_usage(usage, model_used, call_type="market_review")
                 return text
             return result
+        except GenerationError:
+            raise
         except Exception as exc:
             logger.error("[generate_text] LLM call failed: %s", exc)
             return None
@@ -2898,7 +2895,7 @@ class GeminiAnalyzer:
                 # 最后从映射表获取
                 name = STOCK_NAME_MAP.get(code, f'股票{code}')
 
-        backend_error = self._generation_backend_config_error()
+        backend_error = self.get_generation_backend_config_error()
         if backend_error is not None:
             details = backend_error.details or {}
             field = str(details.get("field") or "GENERATION_BACKEND")
