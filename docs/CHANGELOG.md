@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [修复] 避免 runtime scheduler 重建定时任务时重复立即运行事件监控，减少重复告警和后台任务状态丢失。
 - [修复] Web/API runtime scheduler 接管 `--serve --schedule` 后保留 `--dry-run`、`--no-notify` 等启动参数语义。
 - [改进] Web 历史报告详情不再内嵌展示 AI 建议卡片，结构化决策信号集中在 AI 建议页查询，并保留按来源报告 ID 筛选或 URL 参数精确定位入口。
+- [修复] 修复 Web 回测运行未传分析日期范围、股票代码未归一化导致后端成功返回但结果为空的问题，并为空候选和行情不足返回诊断信息。
+- [文档] 补充回测请求链路说明：`analysis_date_from/analysis_date_to` 与 `code` 的输入边界、归一化与筛选顺序，以及历史行情不足或候选集为空时回测返回成功响应，在 `message` 与 `diagnostics`（含 `empty_reason`）中提供可诊断信息，并同步更新 `docs/full-guide.md`、`docs/full-guide_EN.md` 示例。
+- [修复] 回测代码匹配新增非法市场后缀/长度兜底：如 `600519.HK` 不再回落到 `600519`，并补齐回归用例覆盖合法港股形态与非法跨市场混淆。
 
 ## [3.23.0] - 2026-06-20
 
