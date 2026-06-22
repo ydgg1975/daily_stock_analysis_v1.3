@@ -354,6 +354,70 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["items"][0]["code"], "SS600519")
 
+    def test_run_backtest_uses_bare_daily_bars_and_summary_for_compact_ss_history(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q_compact_ss_history_bare_daily",
+                    code="SS600519",
+                    name="贵州茅台",
+                    report_type="simple",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="compact ss history with bare daily data",
+                    stop_loss=None,
+                    take_profit=None,
+                    created_at=datetime(2024, 2, 25, 0, 0, 0),
+                    context_snapshot=json.dumps({"enhanced_context": {"date": "2024-02-25"}}),
+                )
+            )
+            session.add(
+                StockDaily(
+                    code="600519",
+                    date=date(2024, 2, 25),
+                    open=100.0,
+                    high=100.0,
+                    low=100.0,
+                    close=100.0,
+                )
+            )
+            session.add(
+                StockDaily(code="600519", date=date(2024, 2, 26), high=104.0, low=99.0, close=103.0)
+            )
+            session.commit()
+
+        service = BacktestService(self.db)
+        stats = service.run_backtest(
+            code="600519",
+            force=False,
+            eval_window_days=1,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 2, 25),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 2)
+        self.assertEqual(stats["saved"], 2)
+        self.assertEqual(stats["completed"], 2)
+        self.assertEqual(stats["insufficient"], 0)
+
+        summary = service.get_summary(scope="stock", code="600519", eval_window_days=1)
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["code"], "600519")
+        self.assertEqual(summary["total_evaluations"], 2)
+
+        matched = service.get_recent_evaluations(
+            code="600519",
+            eval_window_days=1,
+            limit=10,
+            page=1,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 2, 25),
+        )
+        self.assertEqual({row["code"] for row in matched["items"]}, {"600519", "SS600519"})
+
     def test_run_backtest_uses_compact_forward_bars_when_analysis_history_is_bare_code(self) -> None:
         with self.db.get_session() as session:
             session.add(

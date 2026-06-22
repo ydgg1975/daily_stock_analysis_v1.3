@@ -425,10 +425,13 @@ class BacktestService:
 
         raw_code = raw_code.upper()
         normalized_code = normalize_stock_code(raw_code)
+        backtest_normalized_code = normalize_backtest_code(raw_code)
         candidates = [raw_code]
-        if normalized_code and normalized_code != raw_code:
-            candidates.append(normalized_code)
-        candidates.extend(BacktestRepository._build_market_code_variants(raw_code, normalized_code))
+        for candidate in (normalized_code, backtest_normalized_code):
+            if candidate and candidate != raw_code:
+                candidates.append(candidate)
+        for candidate in list(candidates):
+            candidates.extend(BacktestRepository._build_market_code_variants(raw_code, candidate))
         return list(dict.fromkeys(candidate for candidate in candidates if candidate))
 
     @staticmethod
@@ -445,8 +448,12 @@ class BacktestService:
     def _normalize_summary_code(code: Optional[str]) -> Optional[str]:
         if not code:
             return None
-        normalized = normalize_stock_code(str(code).strip())
-        return canonical_stock_code(normalized or code)
+        raw_code = str(code).strip()
+        normalized = normalize_stock_code(raw_code)
+        backtest_normalized = normalize_backtest_code(raw_code)
+        if raw_code.upper().startswith("SS") and backtest_normalized and backtest_normalized != normalized:
+            normalized = backtest_normalized
+        return canonical_stock_code(normalized or raw_code)
 
     @staticmethod
     def _normalize_code_for_display(code: Optional[str]) -> Optional[str]:
