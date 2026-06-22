@@ -7,6 +7,8 @@ export interface SettingsHelpContent {
   valueNotes?: string[];
   impact?: string[];
   notes?: string[];
+  examples?: string[];
+  showFieldKey?: boolean;
   docs?: SystemConfigDocLink[];
 }
 
@@ -29,6 +31,32 @@ const settingsHelpZhCN: SettingsHelpMap = {
       '股票代码之间不要使用中文逗号。',
       '修改后保存配置即可供后续任务读取。',
     ],
+  },
+  'settings.ai_model.GENERATION_BACKEND': {
+    title: '分析生成通道',
+    showFieldKey: false,
+    summary: '决定系统用哪条模型调用通道来生成个股分析、大盘复盘和普通文本回复。',
+    usage: '通常保持 LiteLLM。系统会继续使用你在本页配置的主模型、备选模型、渠道和用量记录。',
+    valueNotes: [
+      '当前页面只开放 LiteLLM 作为可选通道，看到更多选项前无需调整。',
+      '如果通过环境变量手动填写了其他值，系统会提示配置错误，避免误以为已经切换成功。',
+    ],
+    impact: ['影响普通分析、大盘复盘和文本生成的模型调用入口，不改变问股助手的工具执行规则。'],
+    notes: ['想恢复默认行为，选择 LiteLLM 并保存配置。'],
+    examples: [],
+  },
+  'settings.ai_model.GENERATION_FALLBACK_BACKEND': {
+    title: '备用生成通道',
+    showFieldKey: false,
+    summary: '为以后多个生成通道之间的备用切换预留；当前主要用于明确保持默认行为。',
+    usage: '通常保持 LiteLLM。主通道也是 LiteLLM 时，不会额外重复调用一次。',
+    valueNotes: [
+      '如果只是想设置主模型失败后的备用模型，请使用“备选模型”，不是这个字段。',
+      '当前页面只开放 LiteLLM，保存默认值即可。',
+    ],
+    impact: ['不改变现有模型备用顺序，也不会影响渠道编辑器里的模型配置。'],
+    notes: ['想恢复默认行为，选择 LiteLLM 并保存配置。'],
+    examples: [],
   },
   'settings.ai_model.LITELLM_MODEL': {
     title: '主模型',
@@ -671,6 +699,19 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['影响个股分析流程、报告生成质量和 LLM 调用次数。'],
     notes: ['Agent 模式会消耗更多 token 和时间，适合需要深度推理的场景。'],
   },
+  'settings.agent.AGENT_GENERATION_BACKEND': {
+    title: '问股生成通道',
+    showFieldKey: false,
+    summary: '决定问股助手用哪条模型调用通道来生成回复，并配合工具查询行情、新闻和历史数据。',
+    usage: '通常保持“自动”。“自动”当前使用 LiteLLM 工具调用路径；如果没有明确要固定通道，无需调整。',
+    valueNotes: [
+      '“自动”和 LiteLLM 当前都会走 LiteLLM 工具调用路径。',
+      '只有当你明确要固定使用 LiteLLM 时，才改为 LiteLLM。',
+    ],
+    impact: ['影响问股助手的回复生成和工具调用入口，不改变它能使用哪些工具。'],
+    notes: ['想恢复默认行为，选择“自动”并保存配置。'],
+    examples: [],
+  },
   'settings.agent.AGENT_MAX_STEPS': {
     title: 'Agent 最大推理步数',
     summary: '控制 Agent 推理链路的最大步数上限。',
@@ -1058,6 +1099,32 @@ const settingsHelpEnUS: SettingsHelpMap = {
     ],
     impact: ['Affects analysis scope, notification content, and saved history reports.'],
     notes: ['Use English commas between symbols.', 'Save the setting before later tasks can read it.'],
+  },
+  'settings.ai_model.GENERATION_BACKEND': {
+    title: 'Analysis Generation Channel',
+    showFieldKey: false,
+    summary: 'Chooses the model-call channel used to generate stock analysis, market reviews, and regular text responses.',
+    usage: 'Usually keep LiteLLM. The system will continue to use the primary model, fallback models, channels, and usage tracking configured on this page.',
+    valueNotes: [
+      'The settings page currently exposes LiteLLM as the available channel, so most users do not need to change this.',
+      'If another value is set manually through environment variables, the system reports a configuration error instead of pretending the switch worked.',
+    ],
+    impact: ['Affects model calls for regular analysis, market reviews, and text generation. It does not change how the ask-stock assistant runs tools.'],
+    notes: ['To restore the default behavior, choose LiteLLM and save.'],
+    examples: [],
+  },
+  'settings.ai_model.GENERATION_FALLBACK_BACKEND': {
+    title: 'Fallback Generation Channel',
+    showFieldKey: false,
+    summary: 'Reserved for switching between multiple generation channels later; today it mainly records the default behavior explicitly.',
+    usage: 'Usually keep LiteLLM. When the main channel is already LiteLLM, the system does not make an extra duplicate call.',
+    valueNotes: [
+      'If you want a backup model after the primary model fails, use “Fallback models” instead of this field.',
+      'The settings page currently exposes LiteLLM only, so saving the default is enough.',
+    ],
+    impact: ['Does not change the current fallback model order or the model-channel editor configuration.'],
+    notes: ['To restore the default behavior, choose LiteLLM and save.'],
+    examples: [],
   },
   'settings.ai_model.LITELLM_MODEL': {
     title: 'Primary Model',
@@ -1655,6 +1722,19 @@ const settingsHelpEnUS: SettingsHelpMap = {
     ],
     impact: ['Affects stock analysis flow, report quality, and LLM call count.'],
     notes: ['Agent mode consumes more tokens and time; best for scenarios requiring deep reasoning.'],
+  },
+  'settings.agent.AGENT_GENERATION_BACKEND': {
+    title: 'Ask-Stock Generation Channel',
+    showFieldKey: false,
+    summary: 'Chooses the model-call channel used by the ask-stock assistant to generate replies and query market, news, and history tools.',
+    usage: 'Usually keep Auto. Auto currently uses the LiteLLM tool-capable path; change it only when you need to pin the assistant channel.',
+    valueNotes: [
+      'Auto and LiteLLM currently both use the LiteLLM assistant tool path.',
+      'Choose LiteLLM only when you explicitly want to pin the assistant to LiteLLM.',
+    ],
+    impact: ['Affects the assistant reply path and tool entry point. It does not change which tools the assistant can use.'],
+    notes: ['To restore the default behavior, choose Auto and save.'],
+    examples: [],
   },
   'settings.agent.AGENT_MAX_STEPS': {
     title: 'Agent Max Steps',

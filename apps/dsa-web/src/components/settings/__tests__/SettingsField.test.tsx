@@ -161,6 +161,40 @@ describe('SettingsField', () => {
     expect(onChange).toHaveBeenCalledWith('NOTIFICATION_MIN_SEVERITY', '');
   });
 
+  it('shows the schema default for select fields when no explicit env value exists', () => {
+    const onChange = vi.fn();
+
+    render(
+      <SettingsField
+        item={{
+          key: 'GENERATION_BACKEND',
+          value: '',
+          rawValueExists: false,
+          isMasked: false,
+          schema: {
+            key: 'GENERATION_BACKEND',
+            title: 'Generation Backend',
+            category: 'ai_model',
+            dataType: 'string',
+            uiControl: 'select',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            defaultValue: 'litellm',
+            options: [{ label: 'LiteLLM', value: 'litellm' }],
+            validation: { enum: ['litellm'] },
+            displayOrder: 1,
+          },
+        }}
+        value=""
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByLabelText('分析生成通道')).toHaveValue('litellm');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('renders localized labels for real system config select options', () => {
     const selectCases = [
       {
@@ -415,6 +449,87 @@ describe('SettingsField', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '自选股列表' })).not.toBeInTheDocument();
+  });
+
+  it('keeps generation channel help user-facing without env key or examples', () => {
+    render(
+      <SettingsField
+        item={{
+          key: 'GENERATION_BACKEND',
+          value: 'litellm',
+          rawValueExists: true,
+          isMasked: false,
+          schema: {
+            key: 'GENERATION_BACKEND',
+            title: 'Generation Backend',
+            category: 'ai_model',
+            dataType: 'string',
+            uiControl: 'select',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            options: [{ label: 'LiteLLM', value: 'litellm' }],
+            validation: { enum: ['litellm'] },
+            displayOrder: 1,
+            helpKey: 'settings.ai_model.GENERATION_BACKEND',
+            examples: ['GENERATION_BACKEND=litellm'],
+            warningCodes: [],
+          },
+        }}
+        value="litellm"
+        onChange={() => undefined}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '查看 分析生成通道 配置说明' }));
+
+    const dialog = screen.getByRole('dialog', { name: '分析生成通道' });
+    expect(dialog).toHaveTextContent('决定系统用哪条模型调用通道');
+    expect(dialog).not.toHaveTextContent('GENERATION_BACKEND');
+    expect(dialog).not.toHaveTextContent('配置样例');
+    expect(dialog).not.toHaveTextContent('Phase 1');
+    expect(dialog).not.toHaveTextContent('backend');
+  });
+
+  it('describes agent auto generation as the current LiteLLM tool path', () => {
+    render(
+      <SettingsField
+        item={{
+          key: 'AGENT_GENERATION_BACKEND',
+          value: 'auto',
+          rawValueExists: true,
+          isMasked: false,
+          schema: {
+            key: 'AGENT_GENERATION_BACKEND',
+            title: 'Agent Generation Backend',
+            category: 'agent',
+            dataType: 'string',
+            uiControl: 'select',
+            isSensitive: false,
+            isRequired: false,
+            isEditable: true,
+            options: [
+              { label: 'Auto', value: 'auto' },
+              { label: 'LiteLLM', value: 'litellm' },
+            ],
+            validation: { enum: ['auto', 'litellm'] },
+            displayOrder: 1,
+            helpKey: 'settings.agent.AGENT_GENERATION_BACKEND',
+            examples: [],
+            warningCodes: [],
+          },
+        }}
+        value="auto"
+        onChange={() => undefined}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '查看 问股生成通道 配置说明' }));
+
+    const dialog = screen.getByRole('dialog', { name: '问股生成通道' });
+    expect(dialog).toHaveTextContent('“自动”当前使用 LiteLLM 工具调用路径');
+    expect(dialog).toHaveTextContent('“自动”和 LiteLLM 当前都会走 LiteLLM 工具调用路径');
+    expect(dialog).not.toHaveTextContent('优先选择当前可用');
   });
 
   it('uses per-field schema titles even when helpKey is shared by multiple fields', () => {
