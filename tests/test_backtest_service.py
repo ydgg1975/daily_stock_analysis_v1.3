@@ -454,6 +454,126 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(data["items"][0]["code"], "AAPL.US")
         self.assertEqual(data["items"][0]["analysis_date"], "2024-01-03")
 
+    def test_run_backtest_matches_hk_different_code_shapes_in_analysis_history_and_daily(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q_hk_history_dot",
+                    code="01810.HK",
+                    name="恒生指数成份股",
+                    report_type="simple",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="HK history is dotted, daily is canonical",
+                    stop_loss=None,
+                    take_profit=None,
+                    created_at=datetime(2024, 1, 1, 0, 0, 0),
+                    context_snapshot=json.dumps({"enhanced_context": {"date": "2024-01-01"}}),
+                )
+            )
+            session.add(
+                StockDaily(
+                    code="HK01810",
+                    date=date(2024, 1, 1),
+                    open=100.0,
+                    high=100.0,
+                    low=100.0,
+                    close=100.0,
+                )
+            )
+            session.add(
+                StockDaily(
+                    code="HK01810",
+                    date=date(2024, 1, 2),
+                    high=102.0,
+                    low=95.0,
+                    close=101.0,
+                )
+            )
+            session.commit()
+
+        service = BacktestService(self.db)
+        stats = service.run_backtest(
+            code="1810.HK",
+            force=False,
+            eval_window_days=1,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 1, 1),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["saved"], 1)
+        self.assertEqual(stats["completed"], 1)
+
+        data = service.get_recent_evaluations(code="1810.HK", eval_window_days=1, limit=10, page=1)
+        self.assertEqual(data["total"], 1)
+
+        query_by_bare = service.get_recent_evaluations(code="01810", eval_window_days=1, limit=10, page=1)
+        self.assertEqual(query_by_bare["total"], 1)
+
+    def test_run_backtest_matches_hk_daily_shape_variants_for_prefixed_history(self) -> None:
+        with self.db.get_session() as session:
+            session.add(
+                AnalysisHistory(
+                    query_id="q_hk_history_prefixed",
+                    code="HK01810",
+                    name="恒生指数成份股",
+                    report_type="simple",
+                    sentiment_score=60,
+                    operation_advice="买入",
+                    trend_prediction="看多",
+                    analysis_summary="HK history is prefixed, daily is dotted",
+                    stop_loss=None,
+                    take_profit=None,
+                    created_at=datetime(2024, 1, 1, 0, 0, 0),
+                    context_snapshot=json.dumps({"enhanced_context": {"date": "2024-01-01"}}),
+                )
+            )
+            session.add(
+                StockDaily(
+                    code="01810.HK",
+                    date=date(2024, 1, 1),
+                    open=120.0,
+                    high=120.0,
+                    low=120.0,
+                    close=120.0,
+                )
+            )
+            session.add(
+                StockDaily(
+                    code="01810.HK",
+                    date=date(2024, 1, 2),
+                    high=122.0,
+                    low=118.0,
+                    close=121.0,
+                )
+            )
+            session.commit()
+
+        service = BacktestService(self.db)
+        stats = service.run_backtest(
+            code="01810",
+            force=False,
+            eval_window_days=1,
+            min_age_days=0,
+            analysis_date_from=date(2024, 1, 1),
+            analysis_date_to=date(2024, 1, 1),
+            limit=10,
+        )
+
+        self.assertEqual(stats["processed"], 1)
+        self.assertEqual(stats["saved"], 1)
+        self.assertEqual(stats["completed"], 1)
+
+        data = service.get_recent_evaluations(code="01810.HK", eval_window_days=1, limit=10, page=1)
+        self.assertEqual(data["total"], 1)
+
+        query_by_prefixed = service.get_recent_evaluations(code="HK01810", eval_window_days=1, limit=10, page=1)
+        self.assertEqual(query_by_prefixed["total"], 1)
+
     def test_run_backtest_filters_by_snapshot_analysis_date_not_created_at(self) -> None:
         with self.db.get_session() as session:
             session.add(

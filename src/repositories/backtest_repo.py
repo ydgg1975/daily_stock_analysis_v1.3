@@ -468,6 +468,32 @@ class BacktestRepository:
         return [or_(*[column == candidate for candidate in unique])]
 
     @staticmethod
+    def _build_hk_market_variants(hk_digits: str) -> List[str]:
+        """Build normalized HK variants for padded/unpadded code shapes."""
+        if not hk_digits.isdigit() or not hk_digits:
+            return []
+
+        padded = hk_digits.zfill(5)
+        unpadded = padded.lstrip("0") or "0"
+
+        variants: List[str] = [
+            f"HK{padded}",
+            f"{padded}.HK",
+            padded,
+            f"HK{unpadded}",
+            f"{unpadded}.HK",
+        ]
+        if unpadded == padded:
+            variants.pop(3)
+            variants.pop(3)
+
+        # Keep legacy no-leading-zero bare form for 1-3 digit inputs.
+        if len(unpadded) <= 3 and unpadded != padded:
+            variants.append(unpadded)
+
+        return variants
+
+    @staticmethod
     def _build_market_code_variants(raw_code: str, normalized_code: str) -> List[str]:
         """Return additional market-formatted variants for safe stock-code matching."""
         variants: List[str] = []
@@ -496,14 +522,16 @@ class BacktestRepository:
                 variants.append(f"SS.{normalized_upper}")
 
         if normalized_upper.startswith("HK") and len(normalized_upper) > 2 and normalized_upper[2:].isdigit():
-            digits = normalized_upper[2:]
-            variants.append(f"{digits}.HK")
-            if raw_code_upper.endswith(".HK") and raw_code_upper != f"{digits}.HK":
-                variants.append(raw_code_upper)
+            variants.extend(BacktestRepository._build_hk_market_variants(normalized_upper[2:]))
 
-        if "." in raw_code_upper and raw_code_upper.endswith(".HK"):
+        if raw_code_upper.startswith("HK.") and raw_code_upper[3:].isdigit():
+            variants.extend(BacktestRepository._build_hk_market_variants(raw_code_upper[3:]))
+
+        if raw_code_upper.endswith(".HK"):
             hk_digits = raw_code_upper.rsplit(".", 1)[0]
-            if hk_digits.isdigit():
-                variants.append(f"HK{hk_digits.zfill(5)}")
+            variants.extend(BacktestRepository._build_hk_market_variants(hk_digits))
+
+        if raw_code_upper.isdigit() and len(raw_code_upper) in (4, 5):
+            variants.extend(BacktestRepository._build_hk_market_variants(raw_code_upper))
 
         return variants
