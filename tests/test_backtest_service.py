@@ -198,11 +198,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats3["saved"], 1)
         self.assertEqual(self._count_results(), 1)
 
-    def test_run_backtest_normalizes_code_and_filters_analysis_date_range(self) -> None:
+    def test_run_backtest_accepts_dotted_exchange_prefix_and_filters_analysis_date_range(self) -> None:
         service = BacktestService(self.db)
 
         stats = service.run_backtest(
-            code="600519.SH",
+            code="SH.600519",
             force=False,
             eval_window_days=3,
             min_age_days=0,
@@ -219,11 +219,11 @@ class BacktestServiceTestCase(unittest.TestCase):
         self.assertEqual(stats["diagnostics"]["analysis_date_from"], "2024-01-01")
         self.assertEqual(stats["diagnostics"]["analysis_date_to"], "2024-01-01")
 
-        data = service.get_recent_evaluations(code="600519.SH", eval_window_days=3, limit=10, page=1)
+        data = service.get_recent_evaluations(code="SH.600519", eval_window_days=3, limit=10, page=1)
         self.assertEqual(data["total"], 1)
         self.assertEqual(data["items"][0]["code"], "600519")
 
-        summary = service.get_summary(scope="stock", code="600519.SH", eval_window_days=3)
+        summary = service.get_summary(scope="stock", code="SH.600519", eval_window_days=3)
         self.assertIsNotNone(summary)
         self.assertEqual(summary["code"], "600519")
         self.assertEqual(summary["completed_count"], 1)

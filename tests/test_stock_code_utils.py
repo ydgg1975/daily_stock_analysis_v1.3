@@ -86,6 +86,14 @@ class TestIsCodeLike:
     def test_prefix_hk_rejects_6_digit_base(self):
         assert is_code_like("HK600519") is False
 
+    def test_dotted_prefix_cn(self):
+        assert is_code_like("SH.600519") is True
+        assert is_code_like("SZ.000001") is True
+        assert is_code_like("BJ.920493") is True
+
+    def test_dotted_prefix_bj_rejects_non_bse_base(self):
+        assert is_code_like("BJ.600519") is False
+
     # --- US tickers ---
     def test_us_ticker(self):
         assert is_code_like("AAPL") is True
@@ -173,6 +181,14 @@ class TestNormalizeCode:
 
     def test_prefix_hk_rejects_6_digit_base(self):
         assert normalize_code("HK600519") is None
+
+    def test_dotted_prefix_cn_strips(self):
+        assert normalize_code("SH.600519") == "600519"
+        assert normalize_code("SZ.000001") == "000001"
+        assert normalize_code("BJ.920493") == "920493"
+
+    def test_dotted_prefix_bj_rejects_non_bse_base(self):
+        assert normalize_code("BJ.600519") is None
 
     # --- US tickers ---
     def test_us_ticker(self):

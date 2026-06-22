@@ -46,6 +46,11 @@ def _valid_exchange_code(exchange: str, base: str, digit_lens: tuple[int, ...]) 
 def _strip_exchange_prefix(text: str) -> Optional[str]:
     """Strip leading exchange prefix (SH/SZ/HK etc.) and return the bare digits, or None."""
     for prefix, digit_lens in _PREFIX_DIGIT_LENS.items():
+        dotted_prefix = f"{prefix}."
+        if text.startswith(dotted_prefix):
+            base = text[len(dotted_prefix):]
+            if _valid_exchange_code(prefix, base, digit_lens):
+                return base.zfill(5) if prefix == "HK" else base
         if text.startswith(prefix):
             base = text[len(prefix):]
             if _valid_exchange_code(prefix, base, digit_lens):
@@ -87,7 +92,7 @@ def normalize_code(raw: str) -> Optional[str]:
     Supports:
     - Plain digit codes: 600519, 00700
     - Suffix format: 600519.SH, 600519.SZ, 920493.BJ, 00700.HK
-    - Prefix format: SH600519, SZ000001, BJ920493, HK00700 (case-insensitive)
+    - Prefix format: SH600519, SH.600519, SZ000001, BJ920493, HK00700 (case-insensitive)
     - US ticker symbols: AAPL, TSLA
     """
     text = raw.strip().upper()
