@@ -1414,6 +1414,21 @@ class TestTelegramSender(unittest.TestCase):
         self.assertNotIn("# 日报", rendered)
 
     @mock.patch("src.notification_sender.telegram_sender.requests.post")
+    def test_send_splits_single_oversized_section(self, mock_post):
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
+        sender = TelegramSender(cfg)
+        content = "标题\n\n" + ("超长段落" * 900)
+
+        result = sender.send_to_telegram(content)
+
+        self.assertTrue(result)
+        self.assertGreater(mock_post.call_count, 1)
+        for call in mock_post.call_args_list:
+            payload = call.kwargs["json"]
+            self.assertLessEqual(len(payload["text"]), 4096)
+
+    @mock.patch("src.notification_sender.telegram_sender.requests.post")
     def test_send_plain_text_fallback_handles_non_json_200(self, mock_post):
         markdown_error = _response(400)
         markdown_error.text = (

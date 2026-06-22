@@ -1,11 +1,19 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
+  # 定时触发：
+  # - 盘中：覆盖 A 股主要交易时段，用于买点/卖点候选提醒
+  # - 日报：北京时间 18:00，用于完整日报与大盘复盘
   schedule:
-    - cron: '45 1 * * 1-5'      # 周一到周五，UTC 01:45 = 北京时间 09:45（盘中观察）
-    - cron: '30 5 * * 1-5'      # 周一到周五，UTC 05:30 = 北京时间 13:30（盘中观察）
-    - cron: '0 10 * * 1-5'     # 周一到周五，UTC 10:00 = 北京时间 18:00
+    - cron: '40 1 * * 1-5'      # 周一到周五，UTC 01:40 = 北京时间 09:40（早盘买卖点）
+    - cron: '10 2 * * 1-5'      # 周一到周五，UTC 02:10 = 北京时间 10:10（早盘买卖点）
+    - cron: '40 2 * * 1-5'      # 周一到周五，UTC 02:40 = 北京时间 10:40（早盘买卖点）
+    - cron: '10 3 * * 1-5'      # 周一到周五，UTC 03:10 = 北京时间 11:10（午前买卖点）
+    - cron: '10 5 * * 1-5'      # 周一到周五，UTC 05:10 = 北京时间 13:10（午后买卖点）
+    - cron: '40 5 * * 1-5'      # 周一到周五，UTC 05:40 = 北京时间 13:40（午后买卖点）
+    - cron: '10 6 * * 1-5'      # 周一到周五，UTC 06:10 = 北京时间 14:10（尾盘前买卖点）
+    - cron: '40 6 * * 1-5'      # 周一到周五，UTC 06:40 = 北京时间 14:40（尾盘买卖点）
+    - cron: '0 10 * * 1-5'      # 周一到周五，UTC 10:00 = 北京时间 18:00（日报）
   
   # 手动触发
   workflow_dispatch:
@@ -368,6 +376,8 @@ jobs:
           REPORT_LANGUAGE: ${{ vars.REPORT_LANGUAGE || secrets.REPORT_LANGUAGE || '' }}
           REPORT_SHOW_LLM_MODEL: ${{ vars.REPORT_SHOW_LLM_MODEL || secrets.REPORT_SHOW_LLM_MODEL || 'true' }}
           SINGLE_STOCK_NOTIFY: ${{ vars.SINGLE_STOCK_NOTIFY || secrets.SINGLE_STOCK_NOTIFY || 'false' }}
+          INTRADAY_SIGNAL_ALERT_ONLY: ${{ vars.INTRADAY_SIGNAL_ALERT_ONLY || secrets.INTRADAY_SIGNAL_ALERT_ONLY || 'false' }}
+          INTRADAY_BUY_SIGNAL_MIN_SCORE: ${{ vars.INTRADAY_BUY_SIGNAL_MIN_SCORE || secrets.INTRADAY_BUY_SIGNAL_MIN_SCORE || '60' }}
           MARKET_REVIEW_ENABLED: ${{ vars.MARKET_REVIEW_ENABLED || secrets.MARKET_REVIEW_ENABLED || 'true' }}
           ANALYSIS_DELAY: ${{ vars.ANALYSIS_DELAY || secrets.ANALYSIS_DELAY || '0' }}
           TRADING_DAY_CHECK_ENABLED: ${{ vars.TRADING_DAY_CHECK_ENABLED || secrets.TRADING_DAY_CHECK_ENABLED || 'true' }}
@@ -399,9 +409,10 @@ jobs:
           MODE="${{ github.event.inputs.mode || 'full' }}"
           if [ "${{ github.event_name }}" = "schedule" ]; then
             case "${{ github.event.schedule }}" in
-              "45 1 * * 1-5"|"30 5 * * 1-5")
+              "40 1 * * 1-5"|"10 2 * * 1-5"|"40 2 * * 1-5"|"10 3 * * 1-5"|"10 5 * * 1-5"|"40 5 * * 1-5"|"10 6 * * 1-5"|"40 6 * * 1-5")
                 MODE="stocks-only"
-                echo "📡 盘中观察定时任务：仅运行自选股与交易观察提醒"
+                export INTRADAY_SIGNAL_ALERT_ONLY="true"
+                echo "📡 盘中买卖点定时任务：仅运行自选股，若出现买点/卖点候选则发送提醒"
                 ;;
             esac
           fi
@@ -413,6 +424,8 @@ jobs:
           echo "🎯 运行模式: $MODE"
           echo "📊 自选股: $STOCK_LIST"
           echo "📝 报告类型: $REPORT_TYPE"
+          echo "🔔 盘中信号提醒: $INTRADAY_SIGNAL_ALERT_ONLY"
+          echo "🎯 买点提醒最低评分: $INTRADAY_BUY_SIGNAL_MIN_SCORE"
           echo ""
           echo "=========================================="
           echo "📋 配置检查"

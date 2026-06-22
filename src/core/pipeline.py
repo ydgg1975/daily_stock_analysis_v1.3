@@ -12,6 +12,7 @@ A股自选股智能分析系统 - 核心分析流水线
 """
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -2897,6 +2898,7 @@ class StockAnalysisPipeline:
         if not dry_run:
             self.fetcher_manager.prefetch_stock_names(stock_codes, use_bulk=False)
 
+        intraday_signal_alert_only = self._is_intraday_signal_alert_only()
         # 单股推送模式（#55）：从配置读取
         single_stock_notify = getattr(self.config, 'single_stock_notify', False)
         # Issue #119: 从配置读取报告类型
@@ -2910,11 +2912,17 @@ class StockAnalysisPipeline:
         # Issue #128: 从配置读取分析间隔
         analysis_delay = getattr(self.config, 'analysis_delay', 0)
 
+        if intraday_signal_alert_only and single_stock_notify:
+            logger.info("盘中信号提醒模式已启用：本轮关闭逐股报告推送，只推送买点/卖点候选")
+            single_stock_notify = False
+
         if single_stock_notify:
             logger.info(
                 "已启用单股推送模式：分析仍并发执行，通知改为在结果收集侧串行发送（报告类型: %s）",
                 report_type_str,
             )
+        elif intraday_signal_alert_only:
+            logger.info("已启用盘中信号提醒模式：仅当自选股出现买点/卖点候选时推送 alert")
         
         results: List[AnalysisResult] = []
         
@@ -2996,7 +3004,10 @@ class StockAnalysisPipeline:
 
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:
-            if single_stock_notify:
+            if intraday_signal_alert_only:
+                self._send_intraday_signal_alerts(results)
+                self._send_notifications(results, report_type, skip_push=True)
+            elif single_stock_notify:
                 # 单股推送模式：只保存汇总报告，不再重复推送
                 logger.info("单股推送模式：跳过汇总推送，仅保存报告到本地")
                 self._send_notifications(results, report_type, skip_push=True)
@@ -3008,6 +3019,157 @@ class StockAnalysisPipeline:
                 self._send_notifications(results, report_type)
         
         return results
+
+    @staticmethod
+    def _env_flag_enabled(name: str, default: str = "false") -> bool:
+        value = os.getenv(name, default)
+        return str(value or "").strip().lower() not in {"", "0", "false", "no", "off"}
+
+    def _is_intraday_signal_alert_only(self) -> bool:
+        return self._env_flag_enabled("INTRADAY_SIGNAL_ALERT_ONLY")
+
+    @staticmethod
+    def _env_int(name: str, default: int) -> int:
+        try:
+            return int(str(os.getenv(name, str(default))).strip())
+        except (TypeError, ValueError):
+            return default
+
+    def _classify_intraday_signal(self, result: AnalysisResult) -> Optional[str]:
+        decision_type = str(getattr(result, "decision_type", "") or "").strip().lower()
+        score = getattr(result, "sentiment_score", 0) or 0
+        try:
+            numeric_score = int(score)
+        except (TypeError, ValueError):
+            numeric_score = 0
+        min_buy_score = self._env_int("INTRADAY_BUY_SIGNAL_MIN_SCORE", 60)
+
+        if decision_type in {"buy", "strong_buy"} and numeric_score >= min_buy_score:
+            return "buy"
+        if decision_type in {"sell", "strong_sell"}:
+            return "sell"
+
+        advice = str(getattr(result, "operation_advice", "") or "").strip().lower()
+        if not advice:
+            return None
+
+        sell_markers = (
+            "卖出",
+            "减仓",
+            "止损",
+            "止盈",
+            "离场",
+            "sell",
+            "reduce",
+            "take profit",
+            "stop loss",
+        )
+        if any(marker in advice for marker in sell_markers):
+            return "sell"
+
+        buy_blockers = ("不买", "勿追", "观望", "等待", "暂不", "avoid", "wait", "watch")
+        buy_markers = (
+            "买入",
+            "加仓",
+            "低吸",
+            "回踩",
+            "突破",
+            "建仓",
+            "buy",
+            "accumulate",
+            "entry",
+            "breakout",
+            "pullback",
+        )
+        if numeric_score >= min_buy_score and any(marker in advice for marker in buy_markers) and not any(
+            blocker in advice for blocker in buy_blockers
+        ):
+            return "buy"
+
+        return None
+
+    @staticmethod
+    def _format_intraday_signal_line(result: AnalysisResult, signal: str) -> str:
+        name = getattr(result, "name", "") or getattr(result, "code", "")
+        code = getattr(result, "code", "")
+        action = getattr(result, "operation_advice", "") or "--"
+        score = getattr(result, "sentiment_score", None)
+        trend = getattr(result, "trend_prediction", "") or "--"
+        price = getattr(result, "current_price", None)
+        change_pct = getattr(result, "change_pct", None)
+        summary = str(getattr(result, "analysis_summary", "") or "").strip()
+        if len(summary) > 120:
+            summary = summary[:117] + "..."
+
+        signal_label = "买点候选" if signal == "buy" else "卖点/风控候选"
+        parts = [f"- {signal_label}: {name}({code})", f"建议: {action}"]
+        if score is not None:
+            parts.append(f"评分: {score}")
+        parts.append(f"趋势: {trend}")
+        if price is not None:
+            price_text = f"现价: {price}"
+            if change_pct is not None:
+                price_text += f" ({change_pct:+.2f}%)"
+            parts.append(price_text)
+        if summary:
+            parts.append(f"理由: {summary}")
+        return " | ".join(parts)
+
+    def _send_intraday_signal_alerts(self, results: List[AnalysisResult]) -> None:
+        if not self.notifier.is_available():
+            logger.warning("盘中信号提醒跳过：未配置有效通知渠道")
+            return
+
+        candidates: List[Tuple[str, AnalysisResult]] = []
+        for result in results:
+            signal = self._classify_intraday_signal(result)
+            if signal:
+                candidates.append((signal, result))
+
+        if not candidates:
+            logger.info("盘中信号提醒：本轮未发现买点/卖点候选，不发送 alert")
+            return
+
+        candidates.sort(
+            key=lambda item: (
+                0 if item[0] == "sell" else 1,
+                -int(getattr(item[1], "sentiment_score", 0) or 0),
+                str(getattr(item[1], "code", "") or ""),
+            )
+        )
+        now_cn = datetime.now(timezone(timedelta(hours=8)))
+        min_buy_score = self._env_int("INTRADAY_BUY_SIGNAL_MIN_SCORE", 60)
+        lines = [
+            "# 盘中买卖点提醒",
+            "",
+            f"时间: {now_cn.strftime('%Y-%m-%d %H:%M')} 北京时间",
+            f"买点最低评分: {min_buy_score}",
+            "",
+        ]
+        lines.extend(
+            self._format_intraday_signal_line(result, signal)
+            for signal, result in candidates
+        )
+        lines.extend([
+            "",
+            "提示: 这是基于当前自选股盘中行情与分析结果生成的候选提醒，最终下单前仍需结合仓位和风险控制。",
+        ])
+
+        codes_key = ",".join(
+            f"{signal}:{getattr(result, 'code', '')}"
+            for signal, result in candidates
+        )
+        sent = self.notifier.send(
+            "\n".join(lines),
+            route_type="alert",
+            severity="warning",
+            dedup_key=f"intraday-signal:{now_cn.strftime('%Y%m%d%H%M')}:{codes_key}",
+            cooldown_key=f"intraday-signal:{codes_key}",
+        )
+        if sent:
+            logger.info("盘中买卖点提醒已发送：%d 个候选", len(candidates))
+        else:
+            logger.warning("盘中买卖点提醒发送失败：%d 个候选", len(candidates))
 
     def _send_single_stock_notification(
         self,

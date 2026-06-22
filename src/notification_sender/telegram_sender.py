@@ -81,8 +81,9 @@ class TelegramSender:
             # Telegram API 端点
             api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
-            # Telegram 消息最大长度 4096 字符
-            max_length = 4096
+            # Telegram sendMessage limit is 4096 chars. Keep a safety margin
+            # because Markdown escaping can expand the final payload.
+            max_length = 3900
 
             if len(content) <= max_length:
                 # 单条消息发送
@@ -242,41 +243,69 @@ class TelegramSender:
         timeout_seconds: Optional[float] = None,
     ) -> bool:
         """分段发送长 Telegram 消息"""
-        # 按段落分割
-        sections = content.split("\n---\n")
-
-        current_chunk = []
-        current_length = 0
+        chunks = self._build_telegram_chunks(content, max_length)
         all_success = True
-        chunk_index = 1
-
-        for section in sections:
-            section_length = len(section) + 5  # +5 for "\n---\n"
-
-            if current_length + section_length > max_length:
-                # 发送当前块
-                if current_chunk:
-                    chunk_content = "\n---\n".join(current_chunk)
-                    logger.info(f"发送 Telegram 消息块 {chunk_index}...")
-                    if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id, timeout_seconds=timeout_seconds):
-                        all_success = False
-                    chunk_index += 1
-
-                # 重置
-                current_chunk = [section]
-                current_length = section_length
-            else:
-                current_chunk.append(section)
-                current_length += section_length
-
-        # 发送最后一块
-        if current_chunk:
-            chunk_content = "\n---\n".join(current_chunk)
+        for chunk_index, chunk_content in enumerate(chunks, 1):
             logger.info(f"发送 Telegram 消息块 {chunk_index}...")
-            if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id, timeout_seconds=timeout_seconds):
+            if not self._send_telegram_message(
+                api_url,
+                chat_id,
+                chunk_content,
+                message_thread_id,
+                timeout_seconds=timeout_seconds,
+            ):
                 all_success = False
 
         return all_success
+
+    @classmethod
+    def _build_telegram_chunks(cls, content: str, max_length: int) -> list[str]:
+        """Build chunks whose raw length stays under Telegram's message limit."""
+        separator = "\n---\n"
+        chunks: list[str] = []
+        current_sections: list[str] = []
+
+        def flush() -> None:
+            nonlocal current_sections
+            if current_sections:
+                chunks.append(separator.join(current_sections))
+                current_sections = []
+
+        for section in content.split(separator):
+            for part in cls._split_telegram_section(section, max_length):
+                candidate = separator.join(current_sections + [part]) if current_sections else part
+                if len(candidate) > max_length:
+                    flush()
+                    current_sections = [part]
+                else:
+                    current_sections.append(part)
+        flush()
+        return chunks
+
+    @staticmethod
+    def _split_telegram_section(section: str, max_length: int) -> list[str]:
+        """Split one section by lines, then by hard length as a final guard."""
+        if len(section) <= max_length:
+            return [section]
+
+        parts: list[str] = []
+        current = ""
+        for line in section.splitlines(keepends=True):
+            if len(line) > max_length:
+                if current:
+                    parts.append(current.rstrip("\n"))
+                    current = ""
+                for start in range(0, len(line), max_length):
+                    parts.append(line[start:start + max_length].rstrip("\n"))
+                continue
+            if len(current) + len(line) > max_length:
+                parts.append(current.rstrip("\n"))
+                current = line
+            else:
+                current += line
+        if current:
+            parts.append(current.rstrip("\n"))
+        return parts
 
     def _send_telegram_photo(self, image_bytes: bytes) -> bool:
         """Send image via Telegram sendPhoto API (Issue #289)."""
