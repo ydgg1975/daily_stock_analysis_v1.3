@@ -1,0 +1,46 @@
+# V1.3 操盘核心策略体系
+name: "v1_3_core"
+description: "多均线共振突破建仓与三级优先级风控策略"
+
+# 一、买入触发条件 (T日收盘需同时满足全部8个条件)
+entry_rules:
+  conditions:
+    - condition: "MA3 > MA11"
+      description: "短期均线在中期均线上方"
+    - condition: "MA5 > MA11"
+      description: "均线多头排列，锁定趋势启动点"
+    - condition: "MA11 >= MA11_prev"
+      description: "中期均线保持平缓或向上，不逆势"
+    - condition: "Close > Close_prev"
+      description: "当日收涨"
+    - condition: "Close > MA5"
+      description: "价格站稳短线支撑"
+    - condition: "Volume > Volume_5d_avg * 1.2"
+      description: "温和放量组合1：确保资金活跃"
+    - condition: "Volume > Volume_prev"
+      description: "温和放量组合2：过滤极端缩量陷阱"
+    - condition: "Close > MA55"
+      description: "长期趋势确认，大底盘支撑改善"
+  execution:
+    price_type: "close"
+    timing: "T+1"
+    description: "T日满足全部条件后，建议以(T+1)日的均时线下建仓。系统后台及回测中统一直接以(T+1)日收盘价(Entry_Close)作为理论买入成本基准。"
+
+# 二、离场条件 (持仓后，每日收盘判定，三重优先级，触发即清仓)
+exit_rules:
+  priority:
+    - level: 1
+      name: "硬性止损"
+      trigger: "Close <= Entry_Close * 0.95" 
+      action: "sell_at_close"
+      description: "相对(T+1)日建仓收盘价浮亏>=5%直接斩仓"
+    - level: 2
+      name: "防守离场"
+      trigger: "Close < MA8"
+      action: "sell_at_close"
+      description: "收盘价跌破当日MA8"
+    - level: 3
+      name: "趋势终结"
+      trigger: "MA3 < MA11"
+      action: "sell_at_close"
+      description: "MA3与MA11发生死叉"
