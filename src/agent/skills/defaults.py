@@ -71,6 +71,10 @@ following default risk controls as the shared baseline:
 - Bias from MA5 < 2% -> ideal buy zone; 2-5% -> small position; > 5% -> no chase
 - Shrink-pullback to MA5 is the preferred entry rhythm
 - Below MA20 -> hold off unless the active skill explicitly proves a better setup
+- V1.3 Core Strategy Evaluation: Integrate `v1_3_core.yaml` rules.
+- Append a dedicated block named [V1.3 Strategy Quantitative Conclusion].
+- Check all 8 entry conditions based on MA3, MA5, MA8, MA11, MA55, and Volume.
+- Verify the 3-level exit priorities for existing holdings.
 """
 
 
