@@ -1,3 +1,7 @@
+name: "v1_3_core"
+display_name: "V1.3 核心量化策略"
+instructions: "严格执行 V1.3 均线趋势过滤与三重离场优先级风控管理"
+
 # V1.3 操盘核心策略体系
 name: "v1_3_core"
 description: "多均线共振突破建仓与三级优先级风控策略"
