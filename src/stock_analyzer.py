@@ -262,16 +262,40 @@ class StockTrendAnalyzer:
         return result
     
     def _calculate_mas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """计算均线"""
-        df = df.copy()
-        df['MA5'] = df['close'].rolling(window=5).mean()
-        df['MA10'] = df['close'].rolling(window=10).mean()
-        df['MA20'] = df['close'].rolling(window=20).mean()
-        if len(df) >= 60:
-            df['MA60'] = df['close'].rolling(window=60).mean()
-        else:
-            df['MA60'] = df['MA20']  # 数据不足时使用 MA20 替代
-        return df
+     """计算均线"""
+     df = df.copy()
+
+     # 1. 系统原有基础均线
+     df['MA5'] = df['close'].rolling(window=5).mean()
+     df['MA10'] = df['close'].rolling(window=10).mean()
+     df['MA20'] = df['close'].rolling(window=20).mean()
+     if len(df) >= 60:
+         df['MA60'] = df['close'].rolling(window=60).mean()
+     else:
+         df['MA60'] = df['MA20']  # 数据不足时使用 MA20 替代
+
+     # ========================================================
+     # 2. V1.3 策略专属均线与辅助指标植入
+     # ========================================================
+     df['MA3'] = df['close'].rolling(window=3).mean()
+     df['MA8'] = df['close'].rolling(window=8).mean()
+     df['MA11'] = df['close'].rolling(window=11).mean()
+
+     if len(df) >= 55:
+         df['MA55'] = df['close'].rolling(window=55).mean()
+     else:
+         df['MA55'] = df['MA20']  # 数据不足时使用 MA20 替代
+
+     # 昨日均线、昨日收盘价、昨日成交量（用于 T日 与 T-1日 对比判定）
+     df['MA11_prev'] = df['MA11'].shift(1)
+     df['Close_prev'] = df['close'].shift(1)
+     df['Volume_prev'] = df['volume'].shift(1)
+
+     # 5日均量（用于判定温和放量）
+     df['Volume_5d_avg'] = df['volume'].rolling(window=5).mean()
+     # ========================================================
+
+     return df
 
     def _calculate_macd(self, df: pd.DataFrame) -> pd.DataFrame:
         """
