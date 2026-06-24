@@ -284,7 +284,8 @@ class StockTrendAnalyzer:
      if len(df) >= 55:
          df['MA55'] = df['close'].rolling(window=55).mean()
      else:
-         df['MA55'] = df['MA20']  # 数据不足时使用 MA20 替代
+         df['MA55'] = np.nan
+         logger.warning(f"数据不足55条（实际{len(df)}条），MA55无法计算，已置为NaN")
 
      # 昨日均线、昨日收盘价、昨日成交量（用于 T日 与 T-1日 对比判定）
      df['MA11_prev'] = df['MA11'].shift(1)
