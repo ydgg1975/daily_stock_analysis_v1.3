@@ -427,6 +427,80 @@ class StockTrendAnalyzer:
             result.trend_status = TrendStatus.CONSOLIDATION
             result.ma_alignment = "均线缠绕，趋势不明"
             result.trend_strength = 50
+    def _analyze_v13_strategy(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """
+        V1.3 策略信号检验（叠加层，不参与原有评分）
+        买入条件1/2/3/4/5/6/7/10 全部满足才算 v13_buy_ready=True
+        离场条件按优先级2、3检查（优先级1硬性止损需持仓成本价，在此层不处理）
+        """
+        latest = df.iloc[-1]
+        conditions: Dict[str, bool] = {}
+
+        # 条件1: T日MA3 > T日MA11
+        conditions['条件1_MA3大于MA11'] = result.ma3 > result.ma11
+
+        # 条件2: T日MA5 > T日MA11
+        conditions['条件2_MA5大于MA11'] = result.ma5 > result.ma11
+
+        # 条件3: T日MA11 >= T-1日MA11
+        ma11_prev = latest.get('MA11_prev')
+        if pd.notna(ma11_prev):
+            conditions['条件3_MA11不逆势'] = result.ma11 >= float(ma11_prev)
+        else:
+            conditions['条件3_MA11不逆势'] = False
+
+        # 条件4: T日收盘价 > T-1日收盘价
+        close_prev = latest.get('Close_prev')
+        if pd.notna(close_prev):
+            conditions['条件4_当日收涨'] = result.current_price > float(close_prev)
+        else:
+            conditions['条件4_当日收涨'] = False
+
+        # 条件5: T日收盘价 > T日MA5
+        conditions['条件5_价格站稳MA5'] = result.current_price > result.ma5
+
+        # 条件6: T日总手 > 5日均量 * 1.2
+        volume_5d_avg = latest.get('Volume_5d_avg')
+        curr_volume = latest.get('volume')
+        if pd.notna(volume_5d_avg) and pd.notna(curr_volume) and volume_5d_avg > 0:
+            conditions['条件6_温和放量组合1'] = float(curr_volume) > float(volume_5d_avg) * 1.2
+        else:
+            conditions['条件6_温和放量组合1'] = False
+
+        # 条件7: T日总手 > T-1日总手
+        volume_prev = latest.get('Volume_prev')
+        if pd.notna(volume_prev) and pd.notna(curr_volume):
+            conditions['条件7_温和放量组合2'] = float(curr_volume) > float(volume_prev)
+        else:
+            conditions['条件7_温和放量组合2'] = False
+
+        # 条件10: T日收盘价 > MA55（数据不足时MA55为None，保守判False）
+        if result.ma55 is not None:
+            conditions['条件10_长期趋势确认'] = result.current_price > result.ma55
+        else:
+            conditions['条件10_长期趋势确认'] = False
+
+        # 离场条件（优先级2/3，优先级1硬性止损需持仓成本价，此处不处理）
+        conditions['离场_防守离场_收盘破MA8'] = result.current_price < result.ma8
+        conditions['离场_趋势终结_MA3死叉MA11'] = result.ma3 < result.ma11
+
+        result.v13_conditions = conditions
+
+        # 买入条件1/2/3/4/5/6/7/10 全部满足才算ready
+        buy_keys = [
+            '条件1_MA3大于MA11', '条件2_MA5大于MA11', '条件3_MA11不逆势',
+            '条件4_当日收涨', '条件5_价格站稳MA5', '条件6_温和放量组合1',
+            '条件7_温和放量组合2', '条件10_长期趋势确认'
+        ]
+        result.v13_buy_ready = all(conditions[k] for k in buy_keys)
+
+        # 离场原因（优先级2先判，再判优先级3）
+        if conditions['离场_防守离场_收盘破MA8']:
+            result.v13_exit_reason = '防守离场：收盘价低于当日MA8'
+        elif conditions['离场_趋势终结_MA3死叉MA11']:
+            result.v13_exit_reason = '趋势终结：MA3死叉MA11'
+        else:
+            result.v13_exit_reason = None
     
     def _calculate_bias(self, result: TrendAnalysisResult) -> None:
         """
