@@ -272,6 +272,9 @@ class StockTrendAnalyzer:
         # 7. 生成买入信号
         self._generate_signal(result)
 
+        # 8. V1.3 策略信号检验（叠加层）
+        self._analyze_v13_strategy(df, result)
+        
         return result
     
     def _calculate_mas(self, df: pd.DataFrame) -> pd.DataFrame:
