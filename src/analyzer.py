@@ -3269,6 +3269,34 @@ class GeminiAnalyzer:
             v13_table = "\n".join(v13_lines) if v13_lines else "| 暂无数据 | - |"
             v13_buy_ready_text = "✅ 全部满足" if trend.get('v13_buy_ready') else "❌ 未全部满足"
             v13_exit_reason_text = trend.get('v13_exit_reason') or "无"
+            buy_check_labels = {
+                '条件1_MA3大于MA11': 'MA3 > MA11',
+                '条件2_MA5大于MA11': 'MA5 > MA11',
+                '条件3_MA11不逆势': 'MA11 ≥ T-1日MA11',
+                '条件4_当日收涨': 'T日收盘价 > T-1日收盘价',
+                '条件5_价格站稳MA5': 'T日收盘价 > MA5',
+                '条件6_温和放量组合1': 'T日总手 > 5日均量×1.2',
+                '条件7_温和放量组合2': 'T日总手 > T-1日总手',
+                '条件10_长期趋势确认': 'T日收盘价 > MA55',
+            }
+            v13_checklist_lines = []
+            for k, label in buy_check_labels.items():
+                val = v13_conditions_dict.get(k)
+                mark = "✅" if val else "❌"
+                v13_checklist_lines.append(f'                    "{mark} {label}"')
+            v13_checklist_str = ",\n".join(v13_checklist_lines) if v13_checklist_lines else '                    "⚠️ V1.3数据缺失"'
+
+            exit_check_labels = {
+                '离场_防守离场_收盘破MA8': '收盘价 < 当日MA8（防守离场）',
+                '离场_趋势终结_MA3死叉MA11': 'MA3 < MA11（趋势终结/死叉）',
+            }
+            v13_exit_checklist_lines = []
+            for k, label in exit_check_labels.items():
+                val = v13_conditions_dict.get(k)
+                mark = "⚠️" if val else "✅"
+                v13_exit_checklist_lines.append(f'                    "{mark} {label}"')
+            v13_exit_checklist_str = ",\n".join(v13_exit_checklist_lines) if v13_exit_checklist_lines else '                    "⚠️ V1.3离场数据缺失"'
+            
 
             if use_legacy_default_prompt:
                 bias_warning = "🚨 超过5%，严禁追高！" if trend.get('bias_ma5', 0) > 5 else "✅ 安全范围"
