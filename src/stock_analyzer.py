@@ -174,6 +174,13 @@ class TrendAnalysisResult:
             'rsi_24': self.rsi_24,
             'rsi_status': self.rsi_status.value,
             'rsi_signal': self.rsi_signal,
+            'ma3': self.ma3,
+            'ma8': self.ma8,
+            'ma11': self.ma11,
+            'ma55': self.ma55,
+            'v13_conditions': self.v13_conditions,
+            'v13_buy_ready': self.v13_buy_ready,
+            'v13_exit_reason': self.v13_exit_reason,
         }
 
 
