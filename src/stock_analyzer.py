@@ -94,6 +94,10 @@ class TrendAnalysisResult:
     ma10: float = 0.0
     ma20: float = 0.0
     ma60: float = 0.0
+    ma3: float = 0.0
+    ma8: float = 0.0
+    ma11: float = 0.0
+    ma55: Optional[float] = None
     current_price: float = 0.0
     
     # 乖离率（与 MA5 的偏离度）
