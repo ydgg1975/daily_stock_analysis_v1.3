@@ -136,6 +136,11 @@ class TrendAnalysisResult:
     signal_reasons: List[str] = field(default_factory=list)
     risk_factors: List[str] = field(default_factory=list)
     
+    # V1.3 策略信号（叠加层，不参与评分）
+    v13_conditions: Dict[str, bool] = field(default_factory=dict)
+    v13_buy_ready: bool = False
+    v13_exit_reason: Optional[str] = None
+    
     def to_dict(self) -> Dict[str, Any]:
         return {
             'code': self.code,
