@@ -927,6 +927,9 @@ class StockAnalysisPipeline:
                 'signal_score': trend_result.signal_score,
                 'signal_reasons': trend_result.signal_reasons,
                 'risk_factors': trend_result.risk_factors,
+                'v13_conditions': trend_result.v13_conditions,
+                'v13_buy_ready': trend_result.v13_buy_ready,
+                'v13_exit_reason': trend_result.v13_exit_reason,
             }
 
         # Issue #234：盘中分析使用实时 OHLC 与趋势 MA 覆盖 today。
