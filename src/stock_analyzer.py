@@ -237,7 +237,11 @@ class StockTrendAnalyzer:
         result.ma10 = float(latest['MA10'])
         result.ma20 = float(latest['MA20'])
         result.ma60 = float(latest.get('MA60', 0))
-
+        result.ma3 = float(latest.get('MA3', 0))
+        result.ma8 = float(latest.get('MA8', 0))
+        result.ma11 = float(latest.get('MA11', 0))
+        result.ma55 = float(latest['MA55']) if pd.notna(latest.get('MA55')) else None
+        
         # 1. 趋势判断
         self._analyze_trend(df, result)
 
