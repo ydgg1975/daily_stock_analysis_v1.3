@@ -3261,6 +3261,15 @@ class GeminiAnalyzer:
                 volume_change_ratio=context.get('volume_change_ratio'),
             )
             consistency_notes = trend.get('prompt_consistency_notes', [])
+            v13_conditions_dict = trend.get('v13_conditions', {}) or {}
+            v13_lines = []
+            for cond_name, cond_result in v13_conditions_dict.items():
+              mark = "✅" if cond_result else "❌"
+              v13_lines.append(f"| {cond_name} | {mark} |")
+            v13_table = "\n".join(v13_lines) if v13_lines else "| 暂无数据 | - |"
+            v13_buy_ready_text = "✅ 全部满足" if trend.get('v13_buy_ready') else "❌ 未全部满足"
+            v13_exit_reason_text = trend.get('v13_exit_reason') or "无"
+
             if use_legacy_default_prompt:
                 bias_warning = "🚨 超过5%，严禁追高！" if trend.get('bias_ma5', 0) > 5 else "✅ 安全范围"
                 prompt += f"""
@@ -3275,6 +3284,13 @@ class GeminiAnalyzer:
 | 量能状态 | {trend.get('volume_status', unknown_text)} | {trend.get('volume_trend', '')} |
 | 系统信号 | {trend.get('buy_signal', unknown_text)} | |
 | 系统评分 | {trend.get('signal_score', 0)}/100 | |
+#### V1.3 策略信号检验（叠加层，不参与系统评分，仅供参考）
+| 条件 | 结果 |
+|------|------|
+{v13_table}
+ 
+**V1.3 买入条件（1/2/3/4/5/6/7/10）是否全部满足**：{v13_buy_ready_text}
+**V1.3 离场提示**：{v13_exit_reason_text}
 
 #### 系统分析理由
 **买入理由**：
