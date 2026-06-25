@@ -3320,6 +3320,9 @@ class GeminiAnalyzer:
  
 **V1.3 买入条件（1/2/3/4/5/6/7/10）是否全部满足**：{v13_buy_ready_text}
 **V1.3 离场提示**：{v13_exit_reason_text}
+**重要指令**：生成 action_checklist 时，除了原有的检查项1-6，必须在后面追加以下10条内容，逐条照抄、禁止改写或省略：
+{v13_checklist_str}
+{v13_exit_checklist_str}
 
 #### 系统分析理由
 **买入理由**：
