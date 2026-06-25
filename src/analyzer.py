@@ -3269,7 +3269,36 @@ class GeminiAnalyzer:
             v13_table = "\n".join(v13_lines) if v13_lines else "| 暂无数据 | - |"
             v13_buy_ready_text = "✅ 全部满足" if trend.get('v13_buy_ready') else "❌ 未全部满足"
             v13_exit_reason_text = trend.get('v13_exit_reason') or "无"            
+                 buy_check_items = [
+                    ('条件1_MA3大于MA11', '条件1：MA3 > MA11'),
+                    ('条件2_MA5大于MA11', '条件2：MA5 > MA11'),
+                    ('条件3_MA11不逆势', '条件3：MA11 ≥ T-1日MA11'),
+                    ('条件4_当日收涨', '条件4：T日收盘价 > T-1日收盘价'),
+                    ('条件5_价格站稳MA5', '条件5：T日收盘价 > MA5'),
+                    ('条件6_温和放量组合1', '条件6：T日总手 > 5日均量×1.2'),
+                    ('条件7_温和放量组合2', '条件7：T日总手 > T-1日总手'),
+                    ('条件10_长期趋势确认', '条件10：T日收盘价 > MA55'),
+                ]
+                v13_checklist_lines = []
+                for k, label in buy_check_items:
+                    val = v13_conditions_dict.get(k)
+                    mark = "✅" if val else "❌"
+                    status = "满足" if val else "不满足"
+                    v13_checklist_lines.append(f'                    "{label} —— 结果：{mark} {status}"')
+                v13_checklist_str = ",\n".join(v13_checklist_lines) if v13_checklist_lines else '                    "⚠️ V1.3数据缺失"'
 
+                exit_check_items = [
+                    ('离场_防守离场_收盘破MA8', '防守离场条件：收盘价 < 当日MA8'),
+                    ('离场_趋势终结_MA3死叉MA11', '趋势终结条件：MA3 < MA11（死叉）'),
+                ]
+                v13_exit_checklist_lines = []
+                for k, label in exit_check_items:
+                    val = v13_conditions_dict.get(k)
+                    mark = "⚠️" if val else "✅"
+                    status = "已触发" if val else "未触发"
+                    v13_exit_checklist_lines.append(f'                    "{label} —— 结果：{mark} {status}"')
+                v13_exit_checklist_str = ",\n".join(v13_exit_checklist_lines) if v13_exit_checklist_lines else '                    "⚠️ V1.3离场数据缺失"'           
+            
             if use_legacy_default_prompt:
                 bias_warning = "🚨 超过5%，严禁追高！" if trend.get('bias_ma5', 0) > 5 else "✅ 安全范围"
                 prompt += f"""
